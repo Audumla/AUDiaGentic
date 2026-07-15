@@ -2,6 +2,17 @@
 # Toolchain-based install (npm), custom probe, MCP JSON + LSP config, VS Code extension
 
 provider_id: qwen
+automation_capabilities:
+  - family_id: cli-lifecycle
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-cli-lifecycle-payload/v1
+    result_contract: provider-cli-lifecycle-result/v1
+    ownership_scope_required: false
+  - family_id: managed-mcp
+    supported_modes: [apply, prune, status]
+    payload_contract: provider-managed-mcp-payload/v1
+    result_contract: provider-managed-mcp-result/v1
+    ownership_scope_required: true
 display_name: "Qwen (Alibaba)"
 description: "Alibaba Cloud's Qwen Code CLI. Open-source coding agent built on the Qwen model family."
 url: "https://github.com/QwenLM/qwen-code"
@@ -22,6 +33,120 @@ host_capabilities:
   - host: vscode
     capability_id: "qwenlm.qwen-code-vscode-ide-companion"
     display_name: "Qwen Code Companion"
+
+capability_facts:
+  - capability_id: cli-install
+    subject: cli_install
+    mechanism: "npm install: @qwen-code/qwen-code with shell probe qwen --version"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/qwen.yaml#cli_install"
+      review_state: verified
+  - capability_id: host-extension
+    subject: host_capabilities
+    mechanism: "vscode extension qwenlm.qwen-code-vscode-ide-companion"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/qwen.yaml#host_capabilities"
+      review_state: verified
+  - capability_id: mcp-config
+    subject: mcp_config
+    mechanism: "reader/writer/remover over .mcp.json"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/qwen.yaml#mcp_config"
+      review_state: verified
+  - capability_id: lsp-config
+    subject: language_servers_config
+    mechanism: "reader/writer/remover over .lsp.json"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/qwen.yaml#language_servers_config"
+      review_state: verified
+  - capability_id: surfaces
+    subject: surfaces
+    mechanism: "flat-skill renderer with QWEN.md instruction file"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/qwen.yaml#surfaces"
+      review_state: verified
+  - capability_id: exec-adapter
+    subject: execution
+    mechanism: "mode: cli with qwen executable, yolo and auto-edit approval modes"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/qwen.yaml#execution"
+      review_state: verified
+  - capability_id: perm-declaration
+    subject: permissions
+    mechanism: "ProviderPermissions boolean flags"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/qwen.yaml#permissions"
+      review_state: verified
+  - capability_id: vendor-key-injection
+    subject: "external:vendor-key-injection"
+    mechanism: "--auth-type with env vars: OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY"
+    constraints:
+      - "only one auth-type active at a time"
+    limitations:
+      - "cannot have multiple vendors enabled concurrently"
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: execution
+      tool_version: "0.13.1"
+      fact_anchor: "docs/reference/model-source-evidence/qwen.md#qwen-evidence"
+      review_state: verified
+  - capability_id: model-config-surface
+    subject: "external:model-config-surface"
+    mechanism: "~/.qwen/settings.json with security.auth.selectedType and model.name"
+    constraints:
+      - "user-global, home-scoped"
+    limitations:
+      - "project-local config path not verified"
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: execution
+      tool_version: "0.13.1"
+      fact_anchor: "docs/reference/model-source-evidence/qwen.md#qwen-evidence"
+      review_state: verified
 
 permissions:
   can_write_files: true

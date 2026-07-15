@@ -2,6 +2,17 @@
 # Explicit shell steps for install/uninstall, custom YAML MCP format
 
 provider_id: goose
+automation_capabilities:
+  - family_id: cli-lifecycle
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-cli-lifecycle-payload/v1
+    result_contract: provider-cli-lifecycle-result/v1
+    ownership_scope_required: false
+  - family_id: managed-mcp
+    supported_modes: [apply, prune, status]
+    payload_contract: provider-managed-mcp-payload/v1
+    result_contract: provider-managed-mcp-result/v1
+    ownership_scope_required: true
 display_name: "Goose (Block)"
 description: "Open-source AI agent by Block. Extensible toolkit of MCP extensions for dev workflows."
 url: "https://block.github.io/goose"
@@ -30,6 +41,68 @@ cli_install:
       - "rm -f \"$HOME/.local/bin/goose\""
 
 host_capabilities: []
+
+capability_facts:
+  - capability_id: cli-install
+    subject: cli_install
+    mechanism: "curl-based install script with shell probe goose --version"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/goose.yaml#cli_install"
+      review_state: verified
+  - capability_id: mcp-config
+    subject: mcp_config
+    mechanism: "reader/writer/remover over .goose/config.yaml (YAML format, stdio-only)"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/goose.yaml#mcp_config"
+      review_state: verified
+  - capability_id: surfaces
+    subject: surfaces
+    mechanism: "renderer: none with AGENTS.md contribution file"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/goose.yaml#surfaces"
+      review_state: verified
+  - capability_id: exec-adapter
+    subject: execution
+    mechanism: "mode: stub"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/goose.yaml#execution"
+      review_state: verified
+  - capability_id: perm-declaration
+    subject: permissions
+    mechanism: "ProviderPermissions boolean flags"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/goose.yaml#permissions"
+      review_state: verified
 
 permissions:
   can_write_files: true

@@ -50,7 +50,7 @@ def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:
         return 0 if result.get("ok", True) else 1
 
     match = re.fullmatch(
-        r"\s*(install|uninstall|repair)\s+(?:the\s+)?([a-z0-9_.-]+)(?:\s+(?:provider|provider\s+cli))?\s*",
+        r"\s*(install|uninstall|repair)\s+(?:the\s+)?([a-z0-9_.-]+)(?:\s+(?:provider|provider\s+cli))\s*",
         prompt,
         flags=re.IGNORECASE,
     )
@@ -68,23 +68,23 @@ def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:
         print_error("providers component not available")
         return 1
 
-    from audiagentic.components.providers.services.lifecycle import (
-        install_provider_cli,
-        repair_provider_cli,
-        uninstall_provider_cli,
-    )
+    from typing import cast
 
-    handlers = {
-        "install": install_provider_cli,
-        "uninstall": uninstall_provider_cli,
-        "repair": repair_provider_cli,
+    from audiagentic.components.providers.contracts.cli_lifecycle import CliLifecycleMode
+
+    mode_map = {
+        "install": "apply",
+        "uninstall": "prune",
+        "repair": "apply",
     }
+    mode = cast(CliLifecycleMode, mode_map[action])
 
-    handler = handlers[action]
-    result = handler(
-        provider_id,
-        dry_run=False,
-        project_root=project_root,
+    import asyncio
+
+    from audiagentic.components.providers import providers_api
+
+    result = asyncio.run(
+        providers_api.manage_cli_lifecycle(project_root, provider_id, mode=mode)
     )
     print_json(result)
-    return 0 if result.get("status") in {"installed", "uninstalled", "repaired", "skipped"} else 1
+    return 0 if result.get("ok") else 1

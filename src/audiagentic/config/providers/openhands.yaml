@@ -2,6 +2,17 @@
 # Toolchain-based install (uv), custom probe, no MCP config
 
 provider_id: openhands
+automation_capabilities:
+  - family_id: cli-lifecycle
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-cli-lifecycle-payload/v1
+    result_contract: provider-cli-lifecycle-result/v1
+    ownership_scope_required: false
+  - family_id: managed-mcp
+    supported_modes: [apply, prune, status]
+    payload_contract: provider-managed-mcp-payload/v1
+    result_contract: provider-managed-mcp-result/v1
+    ownership_scope_required: true
 display_name: "OpenHands"
 description: "Open-source autonomous AI agent (formerly OpenDevin). Runs tasks in sandboxed Docker containers with full shell, browser, and file access."
 url: "https://www.all-hands.dev"
@@ -20,6 +31,96 @@ cli_install:
   probe_fn: "audiagentic.components.providers.adapters.openhands.hooks:_openhands_probe"
 
 host_capabilities: []
+
+capability_facts:
+  - capability_id: cli-install
+    subject: cli_install
+    mechanism: "uv install: openhands with shell probe openhands --version"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/openhands.yaml#cli_install"
+      review_state: verified
+  - capability_id: mcp-config
+    subject: mcp_config
+    mechanism: "reader/writer/remover over .openhands/config.toml (TOML format)"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/openhands.yaml#mcp_config"
+      review_state: verified
+  - capability_id: surfaces
+    subject: surfaces
+    mechanism: "renderer: none with AGENTS.md contribution file"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/openhands.yaml#surfaces"
+      review_state: verified
+  - capability_id: exec-adapter
+    subject: execution
+    mechanism: "mode: stub"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/openhands.yaml#execution"
+      review_state: verified
+  - capability_id: perm-declaration
+    subject: permissions
+    mechanism: "ProviderPermissions boolean flags"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/openhands.yaml#permissions"
+      review_state: verified
+  - capability_id: vendor-key-injection
+    subject: "external:vendor-key-injection"
+    mechanism: "LLM_API_KEY, LLM_BASE_URL, LLM_MODEL env vars with --override-with-envs"
+    constraints:
+      - "single model at a time per session"
+    limitations:
+      - "env var recognition verified; execution proof requires authenticated launch test"
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: execution
+      tool_version: "1.16.0"
+      fact_anchor: "docs/reference/model-source-evidence/openhands.md#openhands-evidence"
+      review_state: verified
+  - capability_id: model-config-surface
+    subject: "external:model-config-surface"
+    mechanism: ".openhands/config.toml with [llm] section (model, api_key, base_url)"
+    constraints:
+      - "project-local"
+    limitations:
+      - "[llm] key names inferred from SDK docs, not verified against installed version"
+    support_assessment: blocked
+    action_needed: "Verify [llm] section key names and SDK acceptance against installed version."
+    evidence:
+      evidence_tier: unverified
+      tool_version: "1.16.0"
+      fact_anchor: "docs/reference/model-source-evidence/openhands.md#openhands-evidence"
+      review_state: pending-review
 
 permissions:
   can_write_files: true

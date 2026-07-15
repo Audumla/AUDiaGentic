@@ -1,9 +1,10 @@
 """AUDiaGentic providers component MCP server."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from audiagentic.components.providers import providers_api
+from audiagentic.components.providers.contracts.cli_lifecycle import CliLifecycleMode
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
 from audiagentic.foundation.mcp.component_server import (
     FastMCP,
@@ -59,38 +60,65 @@ def build_server() -> FastMCP:
 
     @mcp.tool()
     @log_tool_call
-    async def install_provider(provider_id: str, dry_run: bool = False) -> dict[str, Any]:
-        return await providers_api.install_provider(
-            project_root_from_env(), provider_id, dry_run=dry_run
+    async def manage_cli_lifecycle(provider_id: str, mode: str) -> dict[str, Any]:
+        return await providers_api.manage_cli_lifecycle(
+            project_root_from_env(), provider_id, mode=cast(CliLifecycleMode, mode)
         )
 
     @mcp.tool()
     @log_tool_call
-    async def uninstall_provider(provider_id: str, dry_run: bool = False) -> dict[str, Any]:
-        return await providers_api.uninstall_provider(
-            project_root_from_env(), provider_id, dry_run=dry_run
+    def operate_provider_surface(
+        provider_id: str,
+        mode: str,
+        contribution_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        from audiagentic.components.providers.contracts.generated_surface import (
+            GeneratedSurfaceRequest,
         )
+
+        if contribution_ids is None or len(contribution_ids) == 0:
+            from audiagentic.components.providers.surfaces.contributions import (
+                load_surface_contributions,
+            )
+
+            contributions = load_surface_contributions(
+                project_root=project_root_from_env()
+            )
+            contribution_ids = [c.contribution_id for c in contributions]
+
+        request = GeneratedSurfaceRequest(
+            ownership_scope=provider_id,
+            contribution_ids=tuple(contribution_ids),
+        )
+        result = providers_api.operate_provider_surface(
+            project_root_from_env(),
+            provider_id,
+            mode=mode,
+            request=request,
+        )
+        return result.to_mapping()
 
     @mcp.tool()
     @log_tool_call
-    async def repair_provider(provider_id: str, dry_run: bool = False) -> dict[str, Any]:
-        return await providers_api.repair_provider(
-            project_root_from_env(), provider_id, dry_run=dry_run
+    def operate_provider_surfaces(
+        mode: str,
+        provider_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Operate on generated surfaces for one or all active providers."""
+        from audiagentic.components.providers.contracts.generated_surface import (
+            GeneratedSurfaceResult,
         )
 
-    @mcp.tool()
-    @log_tool_call
-    async def apply_provider_surfaces(provider_id: str | None = None) -> dict[str, Any]:
-        return await providers_api.apply_provider_surfaces(
-            project_root_from_env(), provider_id=provider_id
+        results = providers_api.operate_provider_surfaces(
+            project_root_from_env(),
+            provider_id=provider_id,
+            mode=mode,
         )
-
-    @mcp.tool()
-    @log_tool_call
-    async def prune_provider_surfaces(provider_id: str | None = None) -> dict[str, Any]:
-        return await providers_api.prune_provider_surfaces(
-            project_root_from_env(), provider_id=provider_id
-        )
+        if isinstance(results, GeneratedSurfaceResult):
+            return results.to_mapping()
+        return {
+            "results": [r.to_mapping() if hasattr(r, "to_mapping") else r for r in results],
+        }
 
     @mcp.tool()
     @log_tool_call

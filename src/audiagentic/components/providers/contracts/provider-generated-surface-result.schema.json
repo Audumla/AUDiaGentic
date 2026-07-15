@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://audiagentic.dev/schemas/providers/provider-generated-surface-result.schema.json",
+  "title": "Generated Provider Surface Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ok", "supported", "changed", "planned", "written_paths", "removed_paths", "managed_block_ids", "collision_ids", "action_needed", "error_code"],
+  "properties": {
+    "ok": {"type": "boolean"},
+    "supported": {"type": "boolean"},
+    "changed": {"type": "boolean"},
+    "planned": {"type": "boolean"},
+    "written_paths": {"type": "array", "items": {"type": "string"}},
+    "removed_paths": {"type": "array", "items": {"type": "string"}},
+    "managed_block_ids": {"type": "array", "items": {"type": "string"}},
+    "collision_ids": {"type": "array", "items": {"type": "string"}},
+    "action_needed": {"type": ["string", "null"]},
+    "error_code": {"type": ["string", "null"]}
+  }
+}

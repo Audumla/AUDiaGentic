@@ -2,6 +2,22 @@
 # Common case: npm install, MCP JSON config, VS Code extension, callable hooks
 
 provider_id: claude
+automation_capabilities:
+  - family_id: cli-lifecycle
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-cli-lifecycle-payload/v1
+    result_contract: provider-cli-lifecycle-result/v1
+    ownership_scope_required: false
+  - family_id: managed-mcp
+    supported_modes: [apply, prune, status]
+    payload_contract: provider-managed-mcp-payload/v1
+    result_contract: provider-managed-mcp-result/v1
+    ownership_scope_required: true
+  - family_id: generated-surfaces
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-generated-surface-payload/v1
+    result_contract: provider-generated-surface-result/v1
+    ownership_scope_required: true
 display_name: "Claude (Anthropic)"
 description: "Anthropic's Claude Code CLI. Agentic coding assistant with deep codebase understanding and MCP tool use."
 url: "https://claude.ai/code"
@@ -21,6 +37,80 @@ host_capabilities:
   - host: vscode
     capability_id: "anthropic.claude-code"
     display_name: "Claude Code"
+
+capability_facts:
+  - capability_id: cli-install
+    subject: cli_install
+    mechanism: "npm install: @anthropic-ai/claude-code with shell probe claude --version"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/claude.yaml#cli_install"
+      review_state: verified
+  - capability_id: host-extension
+    subject: host_capabilities
+    mechanism: "vscode extension anthropic.claude-code"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/claude.yaml#host_capabilities"
+      review_state: verified
+  - capability_id: mcp-config
+    subject: mcp_config
+    mechanism: "reader/writer/remover over ~/.claude/mcp.json"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/claude.yaml#mcp_config"
+      review_state: verified
+  - capability_id: model-catalog-refresh
+    subject: fetch_catalog_fn
+    mechanism: "_fetch_claude_catalog callable"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/claude.yaml#fetch_catalog_fn"
+      review_state: verified
+  - capability_id: surfaces
+    subject: skill_surface_path
+    mechanism: ".claude/skills/{tag}/SKILL.md skill path with CLAUDE.md instruction file"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/claude.yaml#skill_surface_path"
+      review_state: verified
+  - capability_id: perm-declaration
+    subject: permissions
+    mechanism: "ProviderPermissions boolean flags"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/claude.yaml#permissions"
+      review_state: verified
 
 permissions:
   can_write_files: true

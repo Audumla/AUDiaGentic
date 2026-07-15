@@ -16,6 +16,15 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.providers.contracts.generated_surface import (
+    GeneratedSurfaceMode,
+    GeneratedSurfaceRequest,
+    GeneratedSurfaceResult,
+)
+from audiagentic.components.providers.contracts.cli_lifecycle import (
+    CliLifecycleMode,
+    CliLifecycleRequest,
+)
 from audiagentic.components.providers.contracts.managed_mcp import (
     ManagedMcpEntry as ManagedMcpEntry,
 )
@@ -62,6 +71,75 @@ def manage_mcp_entries(
     )
 
 
+def operate_provider_surface(
+    project_root: Path,
+    provider_id: str,
+    *,
+    mode: GeneratedSurfaceMode,
+    request: GeneratedSurfaceRequest,
+) -> GeneratedSurfaceResult:
+    """Operate on generated provider surfaces through the recipe family."""
+    from audiagentic.components.providers.services.generated_surface_family import (
+        _make_handler,
+    )
+
+    handler = _make_handler(project_root)
+    result = handler(mode, request, provider_id)
+    if isinstance(result, GeneratedSurfaceResult):
+        return result
+    return GeneratedSurfaceResult(
+        ok=False,
+        supported=False,
+        error_code="RES-PREC-001",
+    )
+
+
+def operate_provider_surfaces(
+    project_root: Path,
+    provider_id: str | None = None,
+    *,
+    mode: GeneratedSurfaceMode,
+) -> GeneratedSurfaceResult | list[GeneratedSurfaceResult]:
+    """Operate on generated surfaces for one or all active providers.
+
+    When *provider_id* is given, a single typed operation is performed.
+    When omitted, the operation is applied to every active surface provider
+    and a list of results is returned.
+    """
+    from audiagentic.components.providers.surfaces.contributions import (
+        load_surface_contributions,
+    )
+    from audiagentic.components.providers.surfaces.registry import (
+        load_contribution_renderer_registry,
+    )
+
+    if provider_id:
+        contributions = load_surface_contributions(project_root=project_root)
+        contribution_ids = tuple(c.contribution_id for c in contributions)
+        request = GeneratedSurfaceRequest(
+            ownership_scope=provider_id,
+            contribution_ids=contribution_ids or ("__all__",),
+        )
+        return operate_provider_surface(
+            project_root,
+            provider_id,
+            mode=mode,
+            request=request,
+        )
+
+    renderers = load_contribution_renderer_registry()
+    results: list[GeneratedSurfaceResult] = []
+    for pid in sorted(renderers):
+        single = operate_provider_surfaces(
+            project_root,
+            provider_id=pid,
+            mode=mode,
+        )
+        if isinstance(single, GeneratedSurfaceResult):
+            results.append(single)
+    return results
+
+
 def list_providers(project_root: Path) -> dict[str, Any]:
     from audiagentic.components.providers.services.status import build_provider_status
     return build_provider_status(project_root, include_probes=False)
@@ -96,6 +174,16 @@ def list_provider_descriptors() -> list[dict[str, Any]]:
             "has_cli": descriptor.cli_probe is not None,
             "cli_probe": descriptor.cli_probe,
             "supports_catalog_fetch": descriptor.fetch_catalog_fn is not None,
+            "automation_capabilities": [
+                {
+                    "family_id": capability.family_id,
+                    "supported_modes": list(capability.supported_modes),
+                    "payload_contract": capability.payload_contract,
+                    "result_contract": capability.result_contract,
+                    "ownership_scope_required": capability.ownership_scope_required,
+                }
+                for capability in descriptor.automation_capabilities
+            ],
             "host_capabilities": [
                 {
                     "host": capability.host,
@@ -562,44 +650,27 @@ async def refresh_all_catalogs(project_root: Path) -> dict[str, Any]:
     return await asyncio.to_thread(_refresh, project_root=project_root)
 
 
-async def install_provider(project_root: Path, provider_id: str, *, dry_run: bool) -> dict[str, Any]:
-    from audiagentic.components.providers.services.lifecycle import install_provider_cli
-
-    return await asyncio.to_thread(
-        install_provider_cli, provider_id, dry_run=dry_run, project_root=project_root
+async def manage_cli_lifecycle(
+    project_root: Path, provider_id: str, *, mode: CliLifecycleMode
+) -> dict[str, Any]:
+    from audiagentic.components.providers.services.automation_registry import (
+        build_automation_registry,
     )
 
-
-async def uninstall_provider(project_root: Path, provider_id: str, *, dry_run: bool) -> dict[str, Any]:
-    from audiagentic.components.providers.services.lifecycle import uninstall_provider_cli
-
-    return await asyncio.to_thread(
-        uninstall_provider_cli, provider_id, dry_run=dry_run, project_root=project_root
+    registry = build_automation_registry(project_root)
+    result = registry.dispatch(
+        provider_id,
+        "cli-lifecycle",
+        mode,
+        CliLifecycleRequest(),
     )
+    from audiagentic.components.providers.contracts.cli_lifecycle import CliLifecycleResult
 
-
-async def repair_provider(project_root: Path, provider_id: str, *, dry_run: bool) -> dict[str, Any]:
-    from audiagentic.components.providers.services.lifecycle import repair_provider_cli
-
-    return await asyncio.to_thread(
-        repair_provider_cli, provider_id, dry_run=dry_run, project_root=project_root
-    )
-
-
-async def apply_provider_surfaces(project_root: Path, provider_id: str | None = None) -> dict[str, Any]:
-    from audiagentic.components.providers.surfaces.manager import (
-        apply_provider_surfaces as _apply,
-    )
-
-    return await asyncio.to_thread(_apply, project_root, provider_id=provider_id)
-
-
-async def prune_provider_surfaces(project_root: Path, provider_id: str | None = None) -> dict[str, Any]:
-    from audiagentic.components.providers.surfaces.manager import (
-        prune_provider_surfaces as _prune,
-    )
-
-    return await asyncio.to_thread(_prune, project_root, provider_id=provider_id)
+    if isinstance(result, CliLifecycleResult):
+        return result.to_mapping()
+    if isinstance(result, dict):
+        return result
+    return {"ok": False, "supported": False, "state": "failed"}
 
 
 async def reconcile_provider(project_root: Path, provider_id: str, *, fetch_catalog: bool) -> dict[str, Any]:
@@ -640,12 +711,10 @@ __all__ = [
     "reload_provider_models",
     "refresh_all_catalogs",
     # Provider lifecycle
-    "install_provider",
-    "uninstall_provider",
-    "repair_provider",
+    "manage_cli_lifecycle",
     "reconcile_provider",
     "reconcile_all_providers",
     # Surfaces
-    "apply_provider_surfaces",
-    "prune_provider_surfaces",
+    "operate_provider_surface",
+    "operate_provider_surfaces",
 ]

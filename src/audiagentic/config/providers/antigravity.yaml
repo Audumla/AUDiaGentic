@@ -3,6 +3,17 @@
 # All claims verified via live CLI execution
 
 provider_id: antigravity
+automation_capabilities:
+  - family_id: cli-lifecycle
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-cli-lifecycle-payload/v1
+    result_contract: provider-cli-lifecycle-result/v1
+    ownership_scope_required: false
+  - family_id: managed-mcp
+    supported_modes: [apply, prune, status]
+    payload_contract: provider-managed-mcp-payload/v1
+    result_contract: provider-managed-mcp-result/v1
+    ownership_scope_required: true
 display_name: "Antigravity"
 description: "Google's Antigravity CLI and IDE. AI-first development platform with code execution and browser tools."
 url: "https://antigravity.google"
@@ -34,21 +45,9 @@ cli_install:
       - "rm -f $(which agy) 2>/dev/null; rm -rf ~/.gemini/antigravity 2>/dev/null; true"
 
 capability_facts:
-  - capability_id: cli-probe
-    subject: cli_probe
-    mechanism: "shell probe: agy --version"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/antigravity.yaml#cli_probe"
-      review_state: verified
   - capability_id: cli-install
     subject: cli_install
-    mechanism: "curl-based install script"
+    mechanism: "curl-based install script with shell probe agy --version"
     constraints: []
     limitations: []
     support_assessment: verified
@@ -70,9 +69,9 @@ capability_facts:
       tool_version: repository
       fact_anchor: "config/providers/antigravity.yaml#mcp_config"
       review_state: verified
-  - capability_id: surface-render
+  - capability_id: surfaces
     subject: surfaces
-    mechanism: "flat-skill renderer, AGENTS.md contribution"
+    mechanism: "flat-skill renderer with .agents/skills/{tag}/SKILL.md skill path and AGENTS.md instruction file"
     constraints: []
     limitations: []
     support_assessment: verified
@@ -81,30 +80,6 @@ capability_facts:
       evidence_tier: installed-artifact
       tool_version: repository
       fact_anchor: "config/providers/antigravity.yaml#surfaces"
-      review_state: verified
-  - capability_id: surface-skill
-    subject: skill_surface_path
-    mechanism: ".agents/skills/{tag}/SKILL.md path template"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/antigravity.yaml#skill_surface_path"
-      review_state: verified
-  - capability_id: surface-instruction
-    subject: instruction_file
-    mechanism: "AGENTS.md managed file in project root"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/antigravity.yaml#instruction_file"
       review_state: verified
   - capability_id: exec-adapter
     subject: execution
@@ -129,18 +104,6 @@ capability_facts:
       evidence_tier: installed-artifact
       tool_version: repository
       fact_anchor: "config/providers/antigravity.yaml#permissions"
-      review_state: verified
-  - capability_id: file-agent
-    subject: agent_files
-    mechanism: "tuple of AgentFile"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/antigravity.yaml#agent_files"
       review_state: verified
 
 permissions:

@@ -3,6 +3,17 @@
 # DEPRECATED — replaced by Antigravity (agy v2.2.1+)
 
 provider_id: gemini
+automation_capabilities:
+  - family_id: cli-lifecycle
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-cli-lifecycle-payload/v1
+    result_contract: provider-cli-lifecycle-result/v1
+    ownership_scope_required: false
+  - family_id: managed-mcp
+    supported_modes: [apply, prune, status]
+    payload_contract: provider-managed-mcp-payload/v1
+    result_contract: provider-managed-mcp-result/v1
+    ownership_scope_required: true
 display_name: "Gemini (Google)"
 description: "Google's Gemini CLI. Agentic coding assistant with large context window and Google tool integrations."
 url: "https://github.com/google-gemini/gemini-cli"
@@ -30,21 +41,9 @@ host_capabilities:
     display_name: "Gemini CLI Companion"
 
 capability_facts:
-  - capability_id: cli-probe
-    subject: cli_probe
-    mechanism: "shell probe: gemini --version"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/gemini.yaml#cli_probe"
-      review_state: verified
   - capability_id: cli-install
     subject: cli_install
-    mechanism: "npm install: @google/gemini-cli"
+    mechanism: "npm install: @google/gemini-cli with shell probe gemini --version"
     constraints: []
     limitations: []
     support_assessment: verified
@@ -54,9 +53,9 @@ capability_facts:
       tool_version: repository
       fact_anchor: "config/providers/gemini.yaml#cli_install"
       review_state: verified
-  - capability_id: ext-declaration
+  - capability_id: host-extension
     subject: host_capabilities
-    mechanism: "tuple of HostCapability"
+    mechanism: "vscode extension google.gemini-cli-vscode-ide-companion"
     constraints: []
     limitations: []
     support_assessment: verified
@@ -78,9 +77,9 @@ capability_facts:
       tool_version: repository
       fact_anchor: "config/providers/gemini.yaml#mcp_config"
       review_state: verified
-  - capability_id: surface-render
+  - capability_id: surfaces
     subject: surfaces
-    mechanism: "flat-skill renderer, GEMINI.md contribution"
+    mechanism: "flat-skill renderer with .gemini/commands/{tag}.md skill path and GEMINI.md instruction file"
     constraints: []
     limitations: []
     support_assessment: verified
@@ -89,30 +88,6 @@ capability_facts:
       evidence_tier: installed-artifact
       tool_version: repository
       fact_anchor: "config/providers/gemini.yaml#surfaces"
-      review_state: verified
-  - capability_id: surface-skill
-    subject: skill_surface_path
-    mechanism: ".gemini/commands/{tag}.md path template"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/gemini.yaml#skill_surface_path"
-      review_state: verified
-  - capability_id: surface-instruction
-    subject: instruction_file
-    mechanism: "GEMINI.md managed file in project root"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/gemini.yaml#instruction_file"
       review_state: verified
   - capability_id: depr-status
     subject: deprecated
@@ -137,18 +112,6 @@ capability_facts:
       evidence_tier: installed-artifact
       tool_version: repository
       fact_anchor: "config/providers/gemini.yaml#permissions"
-      review_state: verified
-  - capability_id: file-agent
-    subject: agent_files
-    mechanism: "tuple of AgentFile"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/gemini.yaml#agent_files"
       review_state: verified
 
 permissions:

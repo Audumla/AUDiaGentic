@@ -2,6 +2,22 @@
 # Toolchain-based install (npm), MCP JSON config, VS Code extension
 
 provider_id: cline
+automation_capabilities:
+  - family_id: cli-lifecycle
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-cli-lifecycle-payload/v1
+    result_contract: provider-cli-lifecycle-result/v1
+    ownership_scope_required: false
+  - family_id: managed-mcp
+    supported_modes: [apply, prune, status]
+    payload_contract: provider-managed-mcp-payload/v1
+    result_contract: provider-managed-mcp-result/v1
+    ownership_scope_required: true
+  - family_id: generated-surfaces
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-generated-surface-payload/v1
+    result_contract: provider-generated-surface-result/v1
+    ownership_scope_required: true
 display_name: "Cline"
 description: "Autonomous coding agent VS Code extension. Supports any model via OpenRouter, Anthropic, OpenAI and others."
 url: "https://cline.bot"
@@ -21,6 +37,96 @@ host_capabilities:
   - host: vscode
     capability_id: "saoudrizwan.claude-dev"
     display_name: "Cline"
+
+capability_facts:
+  - capability_id: cli-install
+    subject: cli_install
+    mechanism: "npm install: cline with shell probe cline --version"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/cline.yaml#cli_install"
+      review_state: verified
+  - capability_id: host-extension
+    subject: host_capabilities
+    mechanism: "vscode extension saoudrizwan.claude-dev"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/cline.yaml#host_capabilities"
+      review_state: verified
+  - capability_id: mcp-config
+    subject: mcp_config
+    mechanism: "reader/writer/remover over .cline/mcp.json"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/cline.yaml#mcp_config"
+      review_state: verified
+  - capability_id: surfaces
+    subject: skill_surface_path
+    mechanism: ".clinerules/skills/{tag}.md skill path"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/cline.yaml#skill_surface_path"
+      review_state: verified
+  - capability_id: perm-declaration
+    subject: permissions
+    mechanism: "ProviderPermissions boolean flags"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/cline.yaml#permissions"
+      review_state: verified
+  - capability_id: vendor-key-injection
+    subject: "external:vendor-key-injection"
+    mechanism: "cline auth --provider <id> --apikey <key> for openai-compatible, anthropic, gemini"
+    constraints:
+      - "single active model per session"
+    limitations:
+      - "no project-local config surface; all state in ~/.cline/ (user-global)"
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: execution
+      tool_version: "3.0.3"
+      fact_anchor: "docs/reference/model-source-evidence/cline.md#cline-evidence"
+      review_state: verified
+  - capability_id: model-config-surface
+    subject: "external:model-config-surface"
+    mechanism: "~/.cline/ directory with per-provider auth state, cron, data, kanban, worktrees"
+    constraints:
+      - "user-global, home-scoped"
+    limitations:
+      - "no project-local config surface discovered"
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: execution
+      tool_version: "3.0.3"
+      fact_anchor: "docs/reference/model-source-evidence/cline.md#cline-evidence"
+      review_state: verified
 
 permissions:
   can_write_files: true
