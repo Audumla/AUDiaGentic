@@ -1,91 +1,73 @@
-# Provider operation semantics
+# Provider API contract
 
-**Current planning authority:** MA16, MA17, and RV444 (2026-07-15).
+**Authority:** MA16. This document is the implementation contract for
+`audiagentic.components.providers.providers_api`.
 
-This document defines caller semantics only. It is not a capability catalog
-schema, Python object model, closed taxonomy, handler registry, or provider
-configuration format.
+## API categories
 
-## Boundary and authority
+Every public entry belongs to exactly one category.
 
-- Provider capability facts, evidence, and reference views belong to
-  `components.providers` configuration/tooling (MA19). They are soft knowledge:
-  they cannot register, select, or enable runtime behavior.
-- Runtime provider behavior is enabled only by explicit provider registration.
-- Requesters import only `audiagentic.components.providers.providers_api`.
-  They never import provider recipes, adapters, catalog loaders, or serializers.
-- Foundation owns no capability abstraction, facade, port, or compatibility
-  re-export.
+| Category | Purpose | Operation mode |
+|---|---|---|
+| Resource/query | Manage or read AUDiaGentic-owned provider resources, descriptors, catalogs, and evidence | No |
+| Automation family | Apply provider-specific automation to declared desired state | Supported subset of `plan`, `apply`, `prune`, `status` |
+| Agent execution | Run an explicitly composed provider execution adapter | No |
 
-## One caller vocabulary
+Resource CRUD is not forced into operation semantics. Agent execution is not an
+automation family. No universal gateway joins these categories.
 
-Every public provider operation uses one semantic mode:
+## Automation modes
 
-| Mode | Caller meaning | Durable mutation |
-| --- | --- | --- |
-| `plan` | Preview how desired state would be made real or removed. | Never |
-| `apply` | Make desired state real. | May mutate |
-| `prune` | Remove only state owned by this operation's scope. | May mutate, owned state only |
-| `status` | Read current state/check readiness. | Never |
+| Mode | Contract |
+|---|---|
+| `plan` | Preview without durable mutation. |
+| `apply` | Make declared desired state real. |
+| `prune` | Remove only state owned by supplied scope. |
+| `status` | Read without durable mutation. |
 
-`plan` and `status` are side-effect free by contract. `apply` is idempotent
-where its provider operation supports idempotency. `prune` must preserve
-unmanaged and other-scope state.
+A family exposes only modes it supports. No other public mode exists.
+`probe`, `install`, `configure`, `verify`, `uninstall`, `dry_run`, and repair
+selection are private mechanics. `apply` selects those mechanics from observed
+state.
 
-Public functions may retain family-specific payloads: model projection,
-language-server desired entries, CLI desired state, MCP entries, hooks, and
-plugins do not need one universal request shape. Each function receives the
-payload it actually needs plus the semantic mode when more than one operation
-is exposed. Do not create `CapabilityRecord`, universal `CapabilityRequest`,
-or a field taxonomy merely to make these calls look uniform.
+## Current automation families
 
-## Recipe mechanics are private
+| Family | Clients | Family input |
+|---|---|---|
+| CLI desired state | providers MCP; runtime/harness composition | CLI-specific desired state and options |
+| Managed MCP entries | memory/Hindsight; coding-LSP; runtime/harness composition | Desired MCP entries and opaque ownership scope |
+| Rules/hooks | memory/Hindsight | Desired contributions and opaque ownership scope |
+| Plugin configuration | memory/Hindsight | Plugin-specific desired configuration and scope |
+| Provider-specific configuration | memory/Hindsight; runtime/harness composition | Provider-family desired configuration and scope |
+| Language-server projection | coding-LSP | Serializable language-server entries and scope |
+| Generic LSP-MCP projection | coding-LSP | Serializable MCP entries and scope |
+| Self-provided LSP support | coding-LSP | Support-specific desired state |
+| Model projection | model management; runtime composition | Model-specific desired state and scope |
+| Generated provider surfaces | runtime/composition callers | Desired contributions and scope |
 
-Provider recipes choose mechanics. `probe`, `install`, `configure`, `verify`,
-`uninstall`, `dry_run`, and internal `prune`/`status` are not caller verbs.
+Each family has its own public function, payload, result, and explicitly
+registered provider implementation. Providers know provider and family, never
+requester identity. Adding a family requires a current caller and an MA16
+update.
 
-- A CLI `apply` may probe, install, settle PATH, and verify.
-- A managed-config `apply` may probe, diff, configure through MO06, report a
-  collision, and request reload.
-- A `prune` may remove an owned config entry or uninstall a wholly owned CLI
-  artifact.
-- A `status` may probe an executable or inspect managed ownership.
+## Boundary rules
 
-Current `ProviderRecipeRegistry` is an internal provisioning engine. It must
-not leak its hard-coded lifecycle as public semantics. If a public operation
-uses it, a providers-owned adapter maps semantic modes to that recipe's safe
-mechanics. Config-mutation recipes can use the same adapter while delegating
-diff/collision/reload to the MO06 managed-config core.
+- Requesters import only `providers_api`; providers import no requester domain.
+- Foundation owns no provider capability, operation, or compatibility facade.
+- Payload and result fields require current callers. No universal request,
+  result, capability record, action taxonomy, `desired_present`, public
+  `repair`, binding id, requester id, or recipe kind.
+- Provider facts and evidence remain rich configuration, but cannot register,
+  select, or enable automation. Explicit provider+family registration is sole
+  authority.
+- Duplicate registration fails deterministically; it never silently replaces a
+  binding.
+- Agent execution uses a separate provider-owned entry and explicit execution
+  adapter composition. It has no operation mode or ownership scope.
 
-`ProviderRecipeKind` classifies implementation behavior only. It is not a
-public capability universe and must not become a provider-fact taxonomy.
+## Migration rule
 
-## Results
-
-Results are shaped by current consumers, not by a universal envelope. When a
-caller needs them, provider results expose structured outcomes such as:
-
-- whether work changed state or was skipped;
-- owned artifacts/actions and changed paths;
-- collisions without overwriting unrelated state; and
-- `reload_required` or action-needed guidance.
-
-Provider-specific diagnostics remain provider-owned and redacted. Add a
-first-class result field only when a current requester needs structured access;
-otherwise retain detail in the provider result/details surface.
-
-## Guardrails
-
-- Config describes; explicit registration executes.
-- No generated Python taxonomy from provider research.
-- No caller chooses `install`, `configure`, `verify`, or `uninstall`.
-- No catalog string can resolve a handler or execution transport.
-- Agent execution is separate from provider operations; it has no operation
-  mode, ownership scope, or catalog selection path.
-
-## Historical material
-
-The prior catalog schema and gateway algorithm were intentionally removed from
-this reference. They described closed vocabularies, catalog-driven dispatch,
-and foundation ownership now rejected by RV401/RV404/RV444. Preserve detailed
-provider facts in MA19-owned configuration and evidence, not here.
+Backward compatibility is not maintained by default. Migrate every repository
+caller and delete the obsolete function, alias, shim, dual route, and
+compatibility test in the same family change. An exception requires a documented
+external obligation approved before implementation.
