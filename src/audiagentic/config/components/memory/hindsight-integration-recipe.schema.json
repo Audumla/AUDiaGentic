@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hindsight-integration-recipe/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["integration_id", "provider_id", "install", "uninstall", "status_command", "verified", "source_label", "gate_action"],
+  "properties": {
+    "integration_id": {"type": "string", "minLength": 1},
+    "provider_id": {"type": "string", "minLength": 1},
+    "install": {"$ref": "#/$defs/commands"},
+    "uninstall": {"$ref": "#/$defs/commands"},
+    "status_command": {"type": "array", "items": {"type": "string"}},
+    "verified": {"type": "boolean"},
+    "source_label": {"type": "string"},
+    "gate_action": {"type": "string"}
+  },
+  "$defs": {
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "command", "shell"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "command": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "shell": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}
