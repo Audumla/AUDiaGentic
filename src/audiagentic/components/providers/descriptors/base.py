@@ -8,12 +8,38 @@ from typing import Any
 from audiagentic.foundation.steps import CallableStep, SequenceStep, ShellStep
 from audiagentic.foundation.toolchains.managed_config import ManagedConfigSpec
 
+from .plugin_config import PluginConfigSpec
+
 
 @dataclass(frozen=True)
 class HostCapability:
     host: str
     capability_id: str
     display_name: str
+
+
+@dataclass(frozen=True)
+class CapabilityEvidence:
+    """Evidence supporting one provider capability fact."""
+
+    evidence_tier: str = "unverified"
+    tool_version: str | None = None
+    fact_anchor: str | None = None
+    review_state: str = "pending-review"
+
+
+@dataclass(frozen=True)
+class ProviderCapabilityFact:
+    """Provider-owned capability knowledge; never execution authority."""
+
+    capability_id: str
+    subject: str
+    mechanism: str | None = None
+    constraints: tuple[str, ...] = field(default_factory=tuple)
+    limitations: tuple[str, ...] = field(default_factory=tuple)
+    support_assessment: str | None = None
+    action_needed: str | None = None
+    evidence: CapabilityEvidence = field(default_factory=CapabilityEvidence)
 
 
 @dataclass(frozen=True)
@@ -85,6 +111,9 @@ class ProviderDescriptor:
     cli_probe: list[str] | None = None
     cli_install: CliInstallRecipe | None = None
     host_capabilities: tuple[HostCapability, ...] = field(default_factory=tuple)
+    # Provider-owned knowledge/evidence. These records describe declared or
+    # externally documented capabilities; they never register or execute them.
+    capability_facts: tuple[ProviderCapabilityFact, ...] = field(default_factory=tuple)
     permissions: ProviderPermissions = field(default_factory=ProviderPermissions)
     agent_files: tuple[AgentFile, ...] = field(default_factory=tuple)
     # access-mode written to providers.yaml when this provider is first enabled.
@@ -107,6 +136,9 @@ class ProviderDescriptor:
     # format can express url-form (remote) entries — consulted by capabilities
     # (e.g. hindsight) before projecting a remote entry.
     mcp_config: ManagedConfigSpec | None = None
+    # Generic named plugin-entry config capability. Requesters supply an entry
+    # identity/options; this descriptor owns native format/path mechanics.
+    plugin_config: PluginConfigSpec | None = None
     # Language server config spec — None means this provider doesn't accept LSP config sync.
     # kind="language-servers"; refresh_mode stays at the "none" default (no reload concept).
     language_servers_config: ManagedConfigSpec | None = None

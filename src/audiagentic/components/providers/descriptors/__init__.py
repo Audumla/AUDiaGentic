@@ -8,7 +8,9 @@ from __future__ import annotations
 
 from .base import (
     AgentFile,
+    CapabilityEvidence,
     HostCapability,
+    ProviderCapabilityFact,
     ProviderDescriptor,
     ProviderPermissions,
 )
@@ -16,7 +18,9 @@ from .registry import all_descriptors, get_descriptor, interrogate, provider_ali
 
 __all__ = [
     "AgentFile",
+    "CapabilityEvidence",
     "HostCapability",
+    "ProviderCapabilityFact",
     "ProviderDescriptor",
     "ProviderPermissions",
     "register",
