@@ -2,6 +2,22 @@
 # Toolchain-based install (vscode), custom probe, MCP JSON config, VS Code extension
 
 provider_id: roo
+automation_capabilities:
+  - family_id: cli-lifecycle
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-cli-lifecycle-payload/v1
+    result_contract: provider-cli-lifecycle-result/v1
+    ownership_scope_required: false
+  - family_id: managed-mcp
+    supported_modes: [apply, prune, status]
+    payload_contract: provider-managed-mcp-payload/v1
+    result_contract: provider-managed-mcp-result/v1
+    ownership_scope_required: true
+  - family_id: generated-surfaces
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-generated-surface-payload/v1
+    result_contract: provider-generated-surface-result/v1
+    ownership_scope_required: true
 display_name: "Roo Code"
 description: "VS Code extension for AI-assisted coding with multi-model support and custom modes."
 url: "https://roocode.com"
@@ -21,6 +37,68 @@ host_capabilities:
   - host: vscode
     capability_id: "RooVeterinaryInc.roo-cline"
     display_name: "Roo Code"
+
+capability_facts:
+  - capability_id: cli-install
+    subject: cli_install
+    mechanism: "vscode install: RooVeterinaryInc.roo-cline with shell probe code --list-extensions"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/roo.yaml#cli_install"
+      review_state: verified
+  - capability_id: host-extension
+    subject: host_capabilities
+    mechanism: "vscode extension RooVeterinaryInc.roo-cline"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/roo.yaml#host_capabilities"
+      review_state: verified
+  - capability_id: mcp-config
+    subject: mcp_config
+    mechanism: "reader/writer/remover over .mcp.json"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/roo.yaml#mcp_config"
+      review_state: verified
+  - capability_id: exec-adapter
+    subject: execution
+    mechanism: "mode: unsupported (VS Code extension, no CLI execution adapter)"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/roo.yaml#execution"
+      review_state: verified
+  - capability_id: perm-declaration
+    subject: permissions
+    mechanism: "ProviderPermissions boolean flags"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/roo.yaml#permissions"
+      review_state: verified
 
 permissions:
   can_write_files: true

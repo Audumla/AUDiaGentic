@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "provider-cli-lifecycle-payload/v1",
+  "title": "Provider CLI Lifecycle Payload",
+  "description": "Desired-state payload for the cli-lifecycle automation family. Empty — project_root and provider_id are invocation context, not serialized payload.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
