@@ -390,6 +390,10 @@ class TestProviderRecipeTests:
         """manage_config_writes rows should not try to shell-exec prose install instructions."""
         from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
         from audiagentic.components.memory.hindsight.matrix import HindsightRecipeRow
+        from audiagentic.components.memory.hindsight.plugin_definition import (
+            HindsightPluginDefinition,
+            HindsightPluginDesired,
+        )
         from audiagentic.components.memory.hindsight.plugin_recipes import PluginConfigRecipe
         from audiagentic.components.providers.services.recipes import ProviderRecipeKind
 
@@ -406,8 +410,8 @@ class TestProviderRecipeTests:
             audia_action="manage_config_writes",
         )
         recipe = PluginConfigRecipe(
-            row,
-            HindsightBackendConfig(base_url="https://hindsight.example.com"),
+            HindsightPluginDefinition.from_row(row),
+            HindsightPluginDesired.from_backend(HindsightBackendConfig(base_url="https://hindsight.example.com")),
             tmp_path / "opencode.json",
         )
 
