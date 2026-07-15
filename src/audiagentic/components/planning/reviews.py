@@ -186,18 +186,24 @@ def list_reviews_page(
     limit: int = 50,
     offset: int = 0,
 ) -> dict[str, Any]:
-    """Paginated, bounded review listing — the shape the plan_list_reviews MCP tool returns.
+    """Paginated, bounded review listing - the shape the plan_list_reviews MCP tool returns.
 
     Mirrors list_items_page: state defaults to 'open' (created/considered,
     i.e. not yet closed) rather than everything, and results are capped by
     limit/offset with a total count.
+
+    When ``id_prefix`` is provided and no reviews match within the current
+    state filter, a secondary search across all states is performed. If
+    matching reviews exist outside the requested state bucket, they are
+    returned as ``overflow_items`` with an explanatory note so callers know
+    the review exists but is in a different state (e.g., closed instead of open).
     """
     effective_state = state if state is not None else "open"
     query_state = None if effective_state == "all" else effective_state
     reviews = list_reviews(project_root, query_state, plan, review_of, id_prefix)
     total = len(reviews)
     page = reviews[offset:offset + limit] if limit else reviews[offset:]
-    return {
+    result: dict[str, Any] = {
         "items": page,
         "total": total,
         "returned": len(page),
@@ -205,6 +211,23 @@ def list_reviews_page(
         "limit": limit,
         "has_more": offset + len(page) < total,
     }
+
+    # If id_prefix was provided and no reviews matched, check if matching
+    # reviews exist in other state buckets so callers aren't left thinking
+    # the review doesn't exist at all.
+    if id_prefix and not reviews:
+        overflow = list_reviews(project_root, None, plan, review_of, id_prefix)
+        if overflow:
+            result["overflow_items"] = overflow
+            states = {it["state"] for it in overflow}
+            state_label = "/".join(sorted(states))
+            result["note"] = (
+                f"No reviews match the current filter (state={effective_state}), "
+                f"but {len(overflow)} review(s) with prefix '{id_prefix.upper()}' "
+                f"exist in state(s): {state_label}. Use state='all' to include them."
+            )
+
+    return result
 
 
 def get_review(project_root: Path, review_id: str) -> dict[str, Any]:

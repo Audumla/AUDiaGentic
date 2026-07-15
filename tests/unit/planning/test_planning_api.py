@@ -273,6 +273,40 @@ def test_list_items_page_paginates_with_limit_and_offset(tmp_path):
     assert page3["has_more"] is False
 
 
+def test_list_items_page_overflow_when_completed_item_matches_prefix(tmp_path):
+    """When id_prefix matches only a completed item, overflow_items surface it."""
+    planning_api.create_item(tmp_path, _make_item(id="MA31", plan="ml-tasks"))
+    planning_api.set_state(tmp_path, "MA31", "completed")
+
+    page = planning_api.list_items_page(tmp_path, id_prefix="MA31")
+    assert page["items"] == []
+    assert page["total"] == 0
+    overflow = page["overflow_items"]
+    assert len(overflow) == 1
+    assert overflow[0]["id"] == "MA31"
+    assert overflow[0]["state"] == "completed"
+    assert "MA31" in page["note"]
+    assert "completed" in page["note"]
+
+
+def test_list_items_page_no_overflow_when_prefix_matches_active_item(tmp_path):
+    """No overflow_items when the prefix match is within the active filter."""
+    planning_api.create_item(tmp_path, _make_item(id="MA31", plan="ml-tasks"))
+
+    page = planning_api.list_items_page(tmp_path, id_prefix="MA31")
+    assert len(page["items"]) == 1
+    assert "overflow_items" not in page
+
+
+def test_list_items_page_no_overflow_when_prefix_has_no_matches_at_all(tmp_path):
+    """No overflow_items when the prefix matches nothing anywhere."""
+    planning_api.create_item(tmp_path, _make_item(id="MA31", plan="ml-tasks"))
+
+    page = planning_api.list_items_page(tmp_path, id_prefix="Z99")
+    assert page["items"] == []
+    assert "overflow_items" not in page
+
+
 # ---------------------------------------------------------------------------
 # get_item
 # ---------------------------------------------------------------------------

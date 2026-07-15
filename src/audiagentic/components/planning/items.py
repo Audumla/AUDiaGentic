@@ -150,13 +150,19 @@ def list_items_page(
     Two changes from list_items: state defaults to 'active' (open work only —
     pass state='all' to include completed items), and results are capped by
     limit/offset with a total count so a caller can page through the rest.
+
+    When ``id_prefix`` is provided and no items match within the current state
+    filter, a secondary search across all states is performed. If matching
+    items exist outside the requested state bucket, they are returned as
+    ``overflow_items`` with an explanatory note so callers know the item exists
+    but is in a different state (e.g., completed instead of active).
     """
     effective_state = state if state is not None else "active"
     query_state = None if effective_state == "all" else effective_state
     items = list_items(project_root, query_state, plan, id_prefix)
     total = len(items)
     page = items[offset:offset + limit] if limit else items[offset:]
-    return {
+    result: dict[str, Any] = {
         "items": page,
         "total": total,
         "returned": len(page),
@@ -164,6 +170,23 @@ def list_items_page(
         "limit": limit,
         "has_more": offset + len(page) < total,
     }
+
+    # If id_prefix was provided and no items matched, check if matching items
+    # exist in other state buckets so callers aren't left thinking the item
+    # doesn't exist at all.
+    if id_prefix and not items:
+        overflow = list_items(project_root, None, plan, id_prefix)
+        if overflow:
+            result["overflow_items"] = overflow
+            states = {it["state"] for it in overflow}
+            state_label = "/".join(sorted(states))
+            result["note"] = (
+                f"No items match the current filter (state={effective_state}), "
+                f"but {len(overflow)} item(s) with prefix '{id_prefix.upper()}' "
+                f"exist in state(s): {state_label}. Use state='all' to include them."
+            )
+
+    return result
 
 
 def list_items_grouped(
