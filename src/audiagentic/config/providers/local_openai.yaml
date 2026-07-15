@@ -13,6 +13,44 @@ cli_probe: null
 
 host_capabilities: []
 
+capability_facts:
+  - capability_id: model-catalog-refresh
+    subject: fetch_catalog_fn
+    mechanism: "_fetch_catalog callable returning model list"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/local_openai.yaml#fetch_catalog_fn"
+      review_state: verified
+  - capability_id: model-connectors
+    subject: supported_connectors
+    mechanism: "tuple of connector ids: openai-compatible"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/local_openai.yaml#supported_connectors"
+      review_state: verified
+  - capability_id: perm-declaration
+    subject: permissions
+    mechanism: "ProviderPermissions boolean flags"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/local_openai.yaml#permissions"
+      review_state: verified
+
 permissions:
   can_write_files: false
   can_execute_shell: false

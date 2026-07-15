@@ -25,6 +25,92 @@ cli_install:
 
 host_capabilities: []
 
+capability_facts:
+  - capability_id: cli-probe
+    subject: cli_install
+    mechanism: "callable probe_fn"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/pi.yaml#cli_probe"
+      review_state: verified
+  - capability_id: cli-install
+    subject: cli_install
+    mechanism: "pi-harness with callable install/uninstall"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/pi.yaml#cli_install"
+      review_state: verified
+  - capability_id: mcp-config
+    subject: mcp_config
+    mechanism: "reader/writer/remover over .mcp.json"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/pi.yaml#mcp_config"
+      review_state: verified
+  - capability_id: lsp-self-support
+    subject: on_lsp_enabled
+    mechanism: "_pi_ensure_lens hook installs LSP support"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/pi.yaml#on_lsp_enabled"
+      review_state: verified
+  - capability_id: hook-lsp-enabled
+    subject: on_lsp_enabled
+    mechanism: "callable hook on LSP enable"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/pi.yaml#on_lsp_enabled"
+      review_state: verified
+  - capability_id: perm-declaration
+    subject: permissions
+    mechanism: "ProviderPermissions boolean flags"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/pi.yaml#permissions"
+      review_state: verified
+  - capability_id: file-agent
+    subject: agent_files
+    mechanism: "tuple of AgentFile"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/pi.yaml#agent_files"
+      review_state: verified
+
 permissions:
   can_write_files: true
   can_execute_shell: true
