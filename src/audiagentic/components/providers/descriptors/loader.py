@@ -13,6 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.paths.names import get_package_providers_config_dir
 from audiagentic.foundation.refs import resolve_ref
 from audiagentic.foundation.toolchains.managed_config import (
@@ -23,11 +24,15 @@ from audiagentic.foundation.workflow.invocation.from_spec import build_step_from
 
 from .base import (
     AgentFile,
+    CapabilityEvidence,
     CliInstallRecipe,
     HostCapability,
+    ProviderCapabilityFact,
     ProviderDescriptor,
     ProviderPermissions,
 )
+from .capability_facts import validate_provider_capability_facts
+from .plugin_config import PluginConfigSpec
 from .spec import DescriptorSpec, iter_descriptor_files, load_descriptor
 
 
@@ -59,6 +64,89 @@ def _build_host_capabilities(data: list[dict[str, Any]]) -> tuple[HostCapability
         )
         for item in data
     )
+
+
+def _build_capability_facts(
+    data: list[dict[str, Any]],
+) -> tuple[ProviderCapabilityFact, ...]:
+    """Build provider-owned capability facts from a YAML list."""
+    if not isinstance(data, list):
+        raise AudiaGenticError(
+            code="VAL-PCAP-009",
+            kind="providers",
+            message="capability_facts must be a list",
+        )
+    fact_fields = {
+        "capability_id",
+        "subject",
+        "mechanism",
+        "constraints",
+        "limitations",
+        "support_assessment",
+        "action_needed",
+        "evidence",
+    }
+    evidence_fields = {
+        "evidence_tier",
+        "tool_version",
+        "fact_anchor",
+        "review_state",
+    }
+    facts: list[ProviderCapabilityFact] = []
+    for item in data:
+        if not isinstance(item, dict):
+            raise AudiaGenticError(
+                code="VAL-PCAP-009",
+                kind="providers",
+                message="each capability fact must be a mapping",
+            )
+        unknown_fact_fields = sorted(set(item) - fact_fields)
+        if unknown_fact_fields:
+            raise AudiaGenticError(
+                code="VAL-PCAP-009",
+                kind="providers",
+                message="unknown capability fact fields",
+                details={"fields": unknown_fact_fields},
+            )
+        if not item.get("capability_id") or not item.get("subject"):
+            raise AudiaGenticError(
+                code="VAL-PCAP-009",
+                kind="providers",
+                message="capability fact requires capability_id and subject",
+            )
+        evidence_data = item.get("evidence") or {}
+        if not isinstance(evidence_data, dict):
+            raise AudiaGenticError(
+                code="VAL-PCAP-009",
+                kind="providers",
+                message="capability fact evidence must be a mapping",
+            )
+        unknown_evidence_fields = sorted(set(evidence_data) - evidence_fields)
+        if unknown_evidence_fields:
+            raise AudiaGenticError(
+                code="VAL-PCAP-009",
+                kind="providers",
+                message="unknown capability evidence fields",
+                details={"fields": unknown_evidence_fields},
+            )
+        facts.append(
+            ProviderCapabilityFact(
+                capability_id=item["capability_id"],
+                subject=item["subject"],
+                mechanism=item.get("mechanism"),
+                constraints=tuple(item.get("constraints") or ()),
+                limitations=tuple(item.get("limitations") or ()),
+                support_assessment=item.get("support_assessment"),
+                action_needed=item.get("action_needed"),
+                evidence=CapabilityEvidence(
+                    evidence_tier=evidence_data.get("evidence_tier", "unverified"),
+                    tool_version=evidence_data.get("tool_version"),
+                    fact_anchor=evidence_data.get("fact_anchor"),
+                    review_state=evidence_data.get("review_state", "pending-review"),
+                ),
+            )
+        )
+    return tuple(facts)
 
 
 def _build_agent_files(data: list[dict[str, Any]]) -> tuple[AgentFile, ...]:
@@ -153,8 +241,24 @@ def _build_model_config(data: dict[str, Any]) -> ManagedConfigSpec:
     )
 
 
+def _build_plugin_config(data: dict[str, Any]) -> PluginConfigSpec:
+    return PluginConfigSpec(
+        config_path=data["config_path"],
+        reader=resolve_ref(data["reader"]),
+        writer=resolve_ref(data["writer"]),
+        remover=resolve_ref(data["remover"]),
+        format=data.get("format", ""),
+    )
+
+
+def _construct_provider_descriptor(**values: Any) -> ProviderDescriptor:
+    descriptor = ProviderDescriptor(**values)
+    validate_provider_capability_facts(descriptor)
+    return descriptor
+
+
 # Provider descriptor field specification
-PROVIDER_SPEC = DescriptorSpec(constructor=ProviderDescriptor)
+PROVIDER_SPEC = DescriptorSpec(constructor=_construct_provider_descriptor)
 
 PROVIDER_SPEC.add("provider_id", yaml_key="provider_id", kind="data", required=True)
 PROVIDER_SPEC.add("display_name", yaml_key="display_name", kind="data", required=True)
@@ -164,6 +268,7 @@ PROVIDER_SPEC.add("prompt_aliases", yaml_key="prompt_aliases", kind="data", defa
 PROVIDER_SPEC.add("cli_probe", yaml_key="cli_probe", kind="data", default=None)
 PROVIDER_SPEC.add("cli_install", yaml_key="cli_install", kind="nested", builder=_build_cli_install, default=None)
 PROVIDER_SPEC.add("host_capabilities", yaml_key="host_capabilities", kind="nested", builder=_build_host_capabilities, default=tuple())
+PROVIDER_SPEC.add("capability_facts", yaml_key="capability_facts", kind="nested", builder=_build_capability_facts, default=tuple())
 PROVIDER_SPEC.add("permissions", yaml_key="permissions", kind="nested", builder=_build_permissions, default=ProviderPermissions())
 PROVIDER_SPEC.add("agent_files", yaml_key="agent_files", kind="nested", builder=_build_agent_files, default=tuple())
 PROVIDER_SPEC.add("access_mode", yaml_key="access_mode", kind="data", default="cli")
@@ -171,6 +276,7 @@ PROVIDER_SPEC.add("skill_surface_path", yaml_key="skill_surface_path", kind="dat
 PROVIDER_SPEC.add("instruction_file", yaml_key="instruction_file", kind="data", default=None)
 PROVIDER_SPEC.add("fetch_catalog_fn", yaml_key="fetch_catalog_fn", kind="ref", default=None)
 PROVIDER_SPEC.add("mcp_config", yaml_key="mcp_config", kind="nested", builder=_build_mcp_config, default=None)
+PROVIDER_SPEC.add("plugin_config", yaml_key="plugin_config", kind="nested", builder=_build_plugin_config, default=None)
 PROVIDER_SPEC.add("language_servers_config", yaml_key="language_servers_config", kind="nested", builder=_build_language_servers_config, default=None)
 PROVIDER_SPEC.add("model_config", yaml_key="model_config", kind="nested", builder=_build_model_config, default=None)
 PROVIDER_SPEC.add("model_entry_renderer", yaml_key="model_entry_renderer", kind="ref", default=None)
@@ -217,6 +323,13 @@ def load_providers_from_directory(directory: Path) -> dict[str, ProviderDescript
     providers: dict[str, ProviderDescriptor] = {}
     for path in iter_descriptor_files(directory):
         descriptor = load_descriptor(path, PROVIDER_SPEC)
+        if descriptor.provider_id in providers:
+            raise AudiaGenticError(
+                code="VAL-PCAP-006",
+                kind="providers",
+                message=f"duplicate provider descriptor id: {descriptor.provider_id}",
+                details={"provider-id": descriptor.provider_id},
+            )
         providers[descriptor.provider_id] = descriptor
     return providers
 
