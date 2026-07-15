@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import inspect
 from types import SimpleNamespace
 
 from audiagentic.components.providers import providers_api
+from audiagentic.components.providers.providers_mcp import build_server
 from audiagentic.components.providers.services.models import resolve_model_selection
 from audiagentic.components.providers.services.provider_catalog import (
     build_model_catalog,
@@ -28,6 +30,43 @@ def test_list_provider_models_distinguishes_unsupported_catalog(monkeypatch, tmp
         "catalog_present": False,
         "stale": False,
     }
+
+
+def test_list_provider_models_has_no_refresh_mode() -> None:
+    signature = inspect.signature(providers_api.list_provider_models)
+
+    assert tuple(signature.parameters) == ("project_root", "provider_id")
+
+
+def test_list_provider_models_does_not_fetch_catalog(monkeypatch, tmp_path) -> None:
+    from audiagentic.components.providers.descriptors import registry
+    from audiagentic.components.providers.services import catalog
+
+    monkeypatch.setattr(
+        registry,
+        "all_descriptors",
+        lambda: {"fixture": SimpleNamespace(fetch_catalog_fn=lambda _: [])},
+    )
+
+    def _unexpected_fetch(*args, **kwargs):
+        raise AssertionError("query attempted remote catalog fetch")
+
+    monkeypatch.setattr(catalog, "fetch_provider_catalog", _unexpected_fetch)
+
+    result = providers_api.list_provider_models(tmp_path, "fixture")
+
+    assert result["reason"] == "no-catalog-found"
+    assert not tmp_path.exists() or not any(tmp_path.rglob("*"))
+
+
+def test_mcp_list_provider_models_has_no_refresh_argument() -> None:
+    server = build_server()
+    tool = server._tool_manager._tools["list_provider_models"]
+
+    assert tool.parameters["properties"] == {
+        "provider_id": {"title": "Provider Id", "type": "string"}
+    }
+    assert tool.parameters["required"] == ["provider_id"]
 
 
 def test_build_model_catalog_validates_shape() -> None:

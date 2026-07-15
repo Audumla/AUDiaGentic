@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "provider-managed-mcp-result/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ok", "supported", "changed", "managed_ids", "removed_ids", "collision_ids", "auto_refreshed", "action_needed", "error_code"],
+  "properties": {
+    "ok": {"type": "boolean"},
+    "supported": {"type": "boolean"},
+    "changed": {"type": "boolean"},
+    "managed_ids": {"type": "array", "items": {"type": "string"}},
+    "removed_ids": {"type": "array", "items": {"type": "string"}},
+    "collision_ids": {"type": "array", "items": {"type": "string"}},
+    "auto_refreshed": {"type": "boolean"},
+    "action_needed": {"type": ["string", "null"]},
+    "error_code": {"type": ["string", "null"]}
+  }
+}
