@@ -29,6 +29,128 @@ host_capabilities:
     capability_id: "google.gemini-cli-vscode-ide-companion"
     display_name: "Gemini CLI Companion"
 
+capability_facts:
+  - capability_id: cli-probe
+    subject: cli_probe
+    mechanism: "shell probe: gemini --version"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/gemini.yaml#cli_probe"
+      review_state: verified
+  - capability_id: cli-install
+    subject: cli_install
+    mechanism: "npm install: @google/gemini-cli"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/gemini.yaml#cli_install"
+      review_state: verified
+  - capability_id: ext-declaration
+    subject: host_capabilities
+    mechanism: "tuple of HostCapability"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/gemini.yaml#host_capabilities"
+      review_state: verified
+  - capability_id: mcp-config
+    subject: mcp_config
+    mechanism: "reader/writer/remover over .gemini/settings.json"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/gemini.yaml#mcp_config"
+      review_state: verified
+  - capability_id: surface-render
+    subject: surfaces
+    mechanism: "flat-skill renderer, GEMINI.md contribution"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/gemini.yaml#surfaces"
+      review_state: verified
+  - capability_id: surface-skill
+    subject: skill_surface_path
+    mechanism: ".gemini/commands/{tag}.md path template"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/gemini.yaml#skill_surface_path"
+      review_state: verified
+  - capability_id: surface-instruction
+    subject: instruction_file
+    mechanism: "GEMINI.md managed file in project root"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/gemini.yaml#instruction_file"
+      review_state: verified
+  - capability_id: depr-status
+    subject: deprecated
+    mechanism: "boolean with annotations, replaced by antigravity"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/gemini.yaml#deprecated"
+      review_state: verified
+  - capability_id: perm-declaration
+    subject: permissions
+    mechanism: "ProviderPermissions boolean flags"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/gemini.yaml#permissions"
+      review_state: verified
+  - capability_id: file-agent
+    subject: agent_files
+    mechanism: "tuple of AgentFile"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/gemini.yaml#agent_files"
+      review_state: verified
+
 permissions:
   can_write_files: true
   can_execute_shell: true
