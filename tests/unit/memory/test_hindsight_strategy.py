@@ -8,7 +8,6 @@ from audiagentic.components.memory.hindsight.matrix import (
     get_rows_by_kind,
     get_rows_for_provider,
 )
-from audiagentic.components.memory.hindsight.recipe_spec import _AssembledBase
 from audiagentic.components.memory.hindsight.strategies import (
     build_hindsight_recipe,
     resolve_hindsight_strategy,
@@ -90,8 +89,12 @@ class TestSourceGate:
 
         backend = HindsightBackendConfig(base_url="http://test")
         recipe = build_hindsight_recipe(row, backend, "test")
-        # After SL15: GuidanceOnly is assembled via RecipeSpec
-        assert isinstance(recipe, _AssembledBase)
+        from audiagentic.components.memory.hindsight.declared_integration import (
+            DeclaredHindsightIntegrationRecipe,
+        )
+
+        assert isinstance(recipe, DeclaredHindsightIntegrationRecipe)
+        assert recipe.install({}).success is False
 
 
 class TestBuilder:
@@ -227,7 +230,7 @@ class TestHM10Validation:
         assert not hasattr(mcp_recipe, "HindsightTarget")
         # Only payload builder functions should be public
         assert hasattr(mcp_recipe, "build_hindsight_entry")
-        assert hasattr(mcp_recipe, "build_hindsight_mcp_entry")
+        assert hasattr(mcp_recipe, "build_hindsight_managed_entry")
 
     def test_invalid_recipe_kind_fallback(self):
         """Invalid recipe kind falls back to GUIDANCE_ONLY without raising."""
@@ -269,9 +272,8 @@ class TestHM10Validation:
 
                     matrix_module._CONFIG_PATH = original
 
-    def test_build_hindsight_mcp_entry_stdio(self):
-        """McpServerEntry built directly from backend for stdio transport."""
-        from audiagentic.components.memory.hindsight.mcp_recipe import build_hindsight_mcp_entry
+    def test_build_hindsight_managed_entry_stdio(self):
+        from audiagentic.components.memory.hindsight.mcp_recipe import build_hindsight_managed_entry
 
         backend = HindsightBackendConfig(
             base_url="http://localhost:8888",
@@ -279,24 +281,24 @@ class TestHM10Validation:
             api_key="sk-test",
             bank_id="my-bank",
         )
-        entry = build_hindsight_mcp_entry(backend)
+        entry = build_hindsight_managed_entry(backend)
         assert entry.command == "hindsight-mcp"
         assert "--base-url" in entry.args
-        assert entry.env.get("HINDSIGHT_API_KEY") == "sk-test"
-        assert entry.env.get("HINDSIGHT_BANK_ID") == "my-bank"
+        assert dict(entry.env)["HINDSIGHT_API_KEY"] == "sk-test"
+        assert dict(entry.env)["HINDSIGHT_BANK_ID"] == "my-bank"
 
-    def test_build_hindsight_mcp_entry_http(self):
+    def test_build_hindsight_managed_entry_http(self):
         """McpServerEntry built directly from backend for HTTP transport."""
-        from audiagentic.components.memory.hindsight.mcp_recipe import build_hindsight_mcp_entry
+        from audiagentic.components.memory.hindsight.mcp_recipe import build_hindsight_managed_entry
 
         backend = HindsightBackendConfig(
             base_url="http://localhost:8888",
             transport="http",
             api_key="sk-test",
         )
-        entry = build_hindsight_mcp_entry(backend)
+        entry = build_hindsight_managed_entry(backend)
         assert entry.url == "http://localhost:8888/mcp"
-        assert entry.headers.get("Authorization") == "Bearer sk-test"
+        assert dict(entry.headers)["Authorization"] == "Bearer sk-test"
 
 
 class TestPlatformGateFallback:
@@ -367,7 +369,9 @@ class TestBuildRecipeDispatchesByKind:
     """RS11: build_hindsight_recipe dispatches to the correct factory for all 6 _RECIPE_FACTORIES kinds."""
 
     def test_dispatch_hooks(self):
-        from audiagentic.components.memory.hindsight.recipe_spec import _AssembledBase
+        from audiagentic.components.memory.hindsight.declared_integration import (
+            DeclaredHindsightIntegrationRecipe,
+        )
 
         row = HindsightRecipeRow(
             provider_id="test-hooks",
@@ -379,10 +383,12 @@ class TestBuildRecipeDispatchesByKind:
             install_steps=[{"type": "shell", "id": "step1", "command": ["echo", "test"]}],
         )
         recipe = build_hindsight_recipe(row, HindsightBackendConfig(base_url="http://t"), "test-hooks")
-        assert isinstance(recipe, _AssembledBase)
+        assert isinstance(recipe, DeclaredHindsightIntegrationRecipe)
 
     def test_dispatch_wrapper_cli(self):
-        from audiagentic.components.memory.hindsight.recipe_spec import _AssembledBase
+        from audiagentic.components.memory.hindsight.declared_integration import (
+            DeclaredHindsightIntegrationRecipe,
+        )
 
         row = HindsightRecipeRow(
             provider_id="test-wrapper",
@@ -394,7 +400,7 @@ class TestBuildRecipeDispatchesByKind:
             install_steps=[{"type": "shell", "id": "step1", "command": ["echo", "test"]}],
         )
         recipe = build_hindsight_recipe(row, HindsightBackendConfig(base_url="http://t"), "test-wrapper")
-        assert isinstance(recipe, _AssembledBase)
+        assert isinstance(recipe, DeclaredHindsightIntegrationRecipe)
 
     def test_dispatch_plugin_config_fallback(self):
         from audiagentic.components.memory.hindsight.recipe_spec import _AssembledBase

@@ -17,14 +17,18 @@ from typing import Any
 from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
 from audiagentic.components.memory.hindsight.matrix import HindsightRecipeRow
 from audiagentic.components.memory.hindsight.mcp_recipe import (
-    build_hindsight_mcp_entry,
+    build_hindsight_managed_entry,
+    hindsight_ownership_scope,
+)
+from audiagentic.components.memory.hindsight.plugin_definition import (
+    HindsightPluginDefinition,
+    HindsightPluginDesired,
 )
 from audiagentic.components.memory.hindsight.recipes import _hindsight_params, _RowRecipe
 from audiagentic.components.providers.services.recipes import (
     ProviderRecipeResult,
     RecipeState,
 )
-from audiagentic.foundation.refs import resolve_ref
 from audiagentic.foundation.steps import build_step
 from audiagentic.foundation.toolchains.recipe_contract import run_steps
 
@@ -97,20 +101,23 @@ class PluginConfigRecipe(_RowRecipe):
         super().__init__(row)
         self._backend = backend
         self._server_name = backend.server_name
-        self._entry = build_hindsight_mcp_entry(backend)
+        self._managed_entry = build_hindsight_managed_entry(backend)
+        self._ownership_scope = hindsight_ownership_scope(backend)
         self._config_path = config_path
 
     def _mcp_status(self) -> dict[str, Any]:
-        from audiagentic.components.providers.services.mcp import (
-            get_managed_entry_status,
+        from audiagentic.components.providers.providers_api import (
+            ManagedMcpRequest,
+            manage_mcp_entries,
         )
-
-        return get_managed_entry_status(
-            self.provider_id,
-            Path.cwd(),
-            self._server_name,
-            self._entry,
+        result = manage_mcp_entries(
+            Path.cwd(), self.provider_id, mode="status",
+            request=ManagedMcpRequest(
+                ownership_scope=self._ownership_scope,
+                entries=(self._managed_entry,),
+            ),
         )
+        return {"ok": result.supported, "present": result.ok, "matches": result.ok, "reason": result.error_code}
 
     def probe(self, context: dict[str, Any]) -> ProviderRecipeResult:
         if self._config_path:
@@ -145,20 +152,24 @@ class PluginConfigRecipe(_RowRecipe):
 
     def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
         if self._config_path:
-            from audiagentic.components.memory.hindsight.recipes import (
-                _sync_hindsight_mcp_entry,
+            from audiagentic.components.providers.providers_api import (
+                ManagedMcpRequest,
+                manage_mcp_entries,
             )
-
-            sync = _sync_hindsight_mcp_entry(
-                self.provider_id, None, self._backend
+            sync = manage_mcp_entries(
+                Path.cwd(), self.provider_id, mode="apply",
+                request=ManagedMcpRequest(
+                    ownership_scope=self._ownership_scope,
+                    entries=(self._managed_entry,),
+                ),
             )
-            if not sync.get("ok"):
+            if not sync.ok:
                 return self._stamp(ProviderRecipeResult.fail(
-                    f"managed MCP sync refused: {sync.get('collisions')}",
+                    f"managed MCP sync refused: {sync.collision_ids}",
                 ))
             return self._stamp(ProviderRecipeResult.ok(
                 RecipeState.CONFIGURING,
-                artifacts=[f"{sync.get('config_path')}::{self._server_name}"],
+                artifacts=[self._server_name],
                 status="entry written (managed)",
             ))
         return self._stamp(ProviderRecipeResult.ok(
@@ -206,12 +217,13 @@ class PluginConfigRecipe(_RowRecipe):
                     RecipeState.ABSENT,
                     status="no registered provider config to prune",
                 ))
-            from audiagentic.components.memory.hindsight.recipes import (
-                _sync_hindsight_mcp_entry,
+            from audiagentic.components.providers.providers_api import (
+                ManagedMcpRequest,
+                manage_mcp_entries,
             )
-
-            _sync_hindsight_mcp_entry(
-                self.provider_id, None, self._backend, remove=True
+            manage_mcp_entries(
+                Path.cwd(), self.provider_id, mode="prune",
+                request=ManagedMcpRequest(ownership_scope=self._ownership_scope),
             )
             return self._stamp(ProviderRecipeResult.ok(
                 RecipeState.ABSENT, status="entry removed (managed)",
@@ -245,7 +257,7 @@ class PluginConfigRecipe(_RowRecipe):
 # does not create or own; no shared primitive (WriteFileStep/ArtifactRegistry) applies.
 def _repair_windows_plugin_mcp(
     backend: HindsightBackendConfig,
-    row: HindsightRecipeRow | None = None,
+    definition: HindsightPluginDefinition | None = None,
 ) -> tuple[bool, str]:
     """On Windows, patch the installed hindsight plugin's .mcp.json to use python.exe.
 
@@ -260,14 +272,14 @@ def _repair_windows_plugin_mcp(
     import os
 
     # Empty metadata = no-op
-    cache_pattern_str = getattr(row, "plugin_repair_cache_pattern", "") if row else ""
+    cache_pattern_str = definition.repair_cache_pattern if definition else ""
     if not cache_pattern_str:
         return False, "no plugin repair metadata configured"
 
     expanded_pattern = Path(cache_pattern_str).expanduser()
-    data_dir_str = getattr(row, "plugin_repair_data_dir", "") if row else ""
-    venv_python_rel = getattr(row, "plugin_repair_venv_python", "") if row else ""
-    server_script_rel = getattr(row, "plugin_repair_server_script", "") if row else ""
+    data_dir_str = definition.repair_data_dir if definition else ""
+    venv_python_rel = definition.repair_venv_python if definition else ""
+    server_script_rel = definition.repair_server_script if definition else ""
 
     mcp_files = glob.glob(str(expanded_pattern))
     if not mcp_files:
@@ -333,12 +345,7 @@ def _build_plugin_url_config(backend: HindsightBackendConfig) -> dict[str, Any]:
     only included when the backend has a value — the plugin's own defaults apply
     for absent keys, and empty strings are not written.
     """
-    config: dict[str, Any] = {"hindsightApiUrl": backend.base_url}
-    if backend.api_key:
-        config["hindsightApiToken"] = backend.api_key
-    if backend.bank_id:
-        config["bankId"] = backend.bank_id
-    return config
+    return HindsightPluginDesired.from_backend(backend).options()
 
 
 class _PluginUrlConfigRecipe(_RowRecipe):
@@ -369,11 +376,13 @@ class _PluginUrlConfigRecipe(_RowRecipe):
     ) -> None:
         super().__init__(row)
         self._backend = backend
+        self._definition = HindsightPluginDefinition.from_row(row)
+        self._desired = HindsightPluginDesired.from_backend(backend)
         self._url_config_path = Path(url_config_path).expanduser()
         self._harness_config_path = Path(harness_config_path) if harness_config_path else None
 
     def _expected_config(self) -> dict[str, Any]:
-        return _build_plugin_url_config(self._backend)
+        return self._desired.options()
 
     def _current_config(self) -> dict[str, Any]:
         try:
@@ -406,7 +415,7 @@ class _PluginUrlConfigRecipe(_RowRecipe):
         if all(current.get(k) == v for k, v in expected.items()):
             artifacts = [str(self._url_config_path)]
             if os.name == "nt":
-                ok, detail = _repair_windows_plugin_mcp(self._backend, self._row)
+                ok, detail = _repair_windows_plugin_mcp(self._backend, self._definition)
                 if ok and "patched" in detail:
                     artifacts.append(detail)
             return self._stamp(ProviderRecipeResult.ok(
@@ -454,7 +463,7 @@ class _PluginUrlConfigRecipe(_RowRecipe):
         step.run(context)
         artifacts = [str(self._url_config_path)]
         if os.name == "nt":
-            ok, detail = _repair_windows_plugin_mcp(self._backend, self._row)
+            ok, detail = _repair_windows_plugin_mcp(self._backend, self._definition)
             if ok and "patched" in detail:
                 artifacts.append(detail)
         return self._stamp(ProviderRecipeResult.ok(
@@ -503,28 +512,29 @@ class _PluginArrayRecipe(_RowRecipe):
         self,
         row: HindsightRecipeRow,
         backend: HindsightBackendConfig,
-        config_path: str | Path,
+        project_root: Path,
     ) -> None:
         super().__init__(row)
         self._backend = backend
-        self._path = Path(config_path).expanduser()
+        self._project_root = Path(project_root)
         self._package = row.plugin_array_package
-        self._reader = resolve_ref(row.plugin_array_reader) if row.plugin_array_reader else None
-        self._writer = resolve_ref(row.plugin_array_writer) if row.plugin_array_writer else None
-        self._remover = resolve_ref(row.plugin_array_remover) if row.plugin_array_remover else None
 
     def _expected_options(self) -> dict[str, Any]:
         return _build_plugin_url_config(self._backend)
 
     def probe(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        if not self._reader:
+        from audiagentic.components.providers.providers_api import (
+            PluginEntryRequest,
+            manage_plugin_entry,
+        )
+
+        result = manage_plugin_entry(
+            self._project_root, self.provider_id, mode="status",
+            request=PluginEntryRequest(self._package, tuple(self._expected_options().items())),
+        )
+        if result.ok and result.present:
             return self._stamp(ProviderRecipeResult.ok(
-                RecipeState.ABSENT, status="no reader configured for plugin array",
-            ))
-        current = self._reader(self._path, self._package)
-        if current is not None and current == self._expected_options():
-            return self._stamp(ProviderRecipeResult.ok(
-                RecipeState.VERIFIED, artifacts=[str(self._path)], status="plugin entry present",
+                RecipeState.VERIFIED, status="plugin entry present",
             ))
         return self._stamp(ProviderRecipeResult.ok(
             RecipeState.ABSENT, status="plugin entry absent or stale",
@@ -536,11 +546,19 @@ class _PluginArrayRecipe(_RowRecipe):
         ))
 
     def configure(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        if not self._writer:
-            return self._stamp(ProviderRecipeResult.fail("no writer configured for plugin array"))
-        self._writer(self._path, self._package, self._expected_options())
+        from audiagentic.components.providers.providers_api import (
+            PluginEntryRequest,
+            manage_plugin_entry,
+        )
+
+        result = manage_plugin_entry(
+            self._project_root, self.provider_id, mode="apply",
+            request=PluginEntryRequest(self._package, tuple(self._expected_options().items())),
+        )
+        if not result.ok:
+            return self._stamp(ProviderRecipeResult.fail(result.error_code or "plugin entry write failed"))
         return self._stamp(ProviderRecipeResult.ok(
-            RecipeState.CONFIGURING, artifacts=[str(self._path)], status="plugin array entry written",
+            RecipeState.CONFIGURING, status="plugin array entry written",
         ))
 
     def verify(self, context: dict[str, Any]) -> ProviderRecipeResult:
@@ -553,8 +571,15 @@ class _PluginArrayRecipe(_RowRecipe):
         return self.prune(context)
 
     def prune(self, context: dict[str, Any]) -> ProviderRecipeResult:
-        if self._remover:
-            self._remover(self._path, self._package)
+        from audiagentic.components.providers.providers_api import (
+            PluginEntryRequest,
+            manage_plugin_entry,
+        )
+
+        manage_plugin_entry(
+            self._project_root, self.provider_id, mode="prune",
+            request=PluginEntryRequest(self._package),
+        )
         return self._stamp(ProviderRecipeResult.ok(
             RecipeState.ABSENT, status="plugin array entry removed",
         ))
@@ -564,7 +589,7 @@ class _PluginArrayRecipe(_RowRecipe):
         if probed.state is RecipeState.VERIFIED:
             return probed
         return self._stamp(ProviderRecipeResult.ok(
-            RecipeState.ABSENT, status=f"would write {self._package} to {self._path} (dry-run)",
+            RecipeState.ABSENT, status=f"would write {self._package} plugin entry (dry-run)",
         ))
 
 

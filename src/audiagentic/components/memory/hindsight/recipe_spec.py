@@ -4,7 +4,7 @@ Replaces per-kind recipe classes that are purely configuration binding +
 provenance stamping (GuidanceOnly, HooksInstaller) with a declarative RecipeSpec
 (pattern + param bindings + status overrides) assembled at strategy-selection
 time into a _RowRecipe subclass. Strategy logic, platform/source/remote-MCP
-fallbacks, and genuinely-custom kinds (_McpConfigAdapter, plugin recipes) remain
+fallbacks and genuinely-custom plugin recipes remain
 in code — see the SL15 classification table.
 
 Scope (SL15): the only migrated patterns are ``no_automation`` (guidance) and
