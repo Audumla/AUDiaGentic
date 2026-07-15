@@ -3,14 +3,60 @@
   "$id": "hindsight-plugin-definition/v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["provider_id", "plugin_id", "settings_path", "repair_cache_pattern", "repair_data_dir", "repair_venv_python", "repair_server_script"],
+  "required": ["provider_id"],
   "properties": {
     "provider_id": {"type": "string", "minLength": 1},
     "plugin_id": {"type": ["string", "null"]},
+    "display_name": {"type": "string"},
+    "source_url": {"type": "string"},
+    "source_date": {"type": "string"},
+    "audia_action": {"type": "string"},
+    "source_status": {"type": "string"},
+    "notes": {"type": "string"},
     "settings_path": {"type": ["string", "null"]},
     "repair_cache_pattern": {"type": "string"},
     "repair_data_dir": {"type": "string"},
     "repair_venv_python": {"type": "string"},
-    "repair_server_script": {"type": "string"}
+    "repair_server_script": {"type": "string"},
+    "plugin_array_package": {"type": ["string", "null"]},
+    "install_steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "command"],
+        "properties": {
+          "id": {"type": "string"},
+          "command": {"type": "array", "items": {"type": "string"}},
+          "shell": {"type": "boolean"},
+          "type": {"type": "string"}
+        }
+      }
+    },
+    "configure_steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "command"],
+        "properties": {
+          "id": {"type": "string"},
+          "command": {"type": "array", "items": {"type": "string"}},
+          "shell": {"type": "boolean"},
+          "type": {"type": "string"}
+        }
+      }
+    },
+    "uninstall_steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "command"],
+        "properties": {
+          "id": {"type": "string"},
+          "command": {"type": "array", "items": {"type": "string"}},
+          "shell": {"type": "boolean"},
+          "type": {"type": "string"}
+        }
+      }
+    }
   }
 }
