@@ -2,6 +2,17 @@
 # Toolchain-based install (uv), no MCP config
 
 provider_id: aider
+automation_capabilities:
+  - family_id: cli-lifecycle
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-cli-lifecycle-payload/v1
+    result_contract: provider-cli-lifecycle-result/v1
+    ownership_scope_required: false
+  - family_id: generated-surfaces
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-generated-surface-payload/v1
+    result_contract: provider-generated-surface-result/v1
+    ownership_scope_required: true
 display_name: "Aider"
 description: "AI pair programming in your terminal. Edit code directly in your git repo via chat."
 url: "https://aider.chat"
@@ -25,21 +36,9 @@ cli_install:
 host_capabilities: []
 
 capability_facts:
-  - capability_id: cli-probe
-    subject: cli_probe
-    mechanism: "shell probe: aider --version"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/aider.yaml#cli_probe"
-      review_state: verified
   - capability_id: cli-install
     subject: cli_install
-    mechanism: "uv install: aider-chat@latest"
+    mechanism: "uv install: aider-chat@latest with shell probe aider --version"
     constraints: []
     limitations: []
     support_assessment: verified
@@ -72,18 +71,6 @@ capability_facts:
       evidence_tier: installed-artifact
       tool_version: repository
       fact_anchor: "config/providers/aider.yaml#permissions"
-      review_state: verified
-  - capability_id: file-agent
-    subject: agent_files
-    mechanism: "tuple of AgentFile"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/aider.yaml#agent_files"
       review_state: verified
 
 permissions:

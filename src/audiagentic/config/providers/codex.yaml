@@ -2,6 +2,22 @@
 # Toolchain-based install (npm), TOML MCP/LSP config, VS Code extension
 
 provider_id: codex
+automation_capabilities:
+  - family_id: cli-lifecycle
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-cli-lifecycle-payload/v1
+    result_contract: provider-cli-lifecycle-result/v1
+    ownership_scope_required: false
+  - family_id: managed-mcp
+    supported_modes: [apply, prune, status]
+    payload_contract: provider-managed-mcp-payload/v1
+    result_contract: provider-managed-mcp-result/v1
+    ownership_scope_required: true
+  - family_id: generated-surfaces
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-generated-surface-payload/v1
+    result_contract: provider-generated-surface-result/v1
+    ownership_scope_required: true
 display_name: "Codex (OpenAI)"
 description: "OpenAI's CLI coding agent. Runs tasks autonomously in a sandboxed environment."
 url: "https://github.com/openai/codex"
@@ -21,6 +37,94 @@ host_capabilities:
   - host: vscode
     capability_id: "openai.chatgpt"
     display_name: "ChatGPT / OpenAI"
+
+capability_facts:
+  - capability_id: cli-install
+    subject: cli_install
+    mechanism: "npm install: @openai/codex with shell probe codex --version"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/codex.yaml#cli_install"
+      review_state: verified
+  - capability_id: host-extension
+    subject: host_capabilities
+    mechanism: "vscode extension openai.chatgpt"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/codex.yaml#host_capabilities"
+      review_state: verified
+  - capability_id: mcp-config
+    subject: mcp_config
+    mechanism: "reader/writer/remover over .codex/config.toml (TOML format, stdio-only)"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/codex.yaml#mcp_config"
+      review_state: verified
+  - capability_id: lsp-config
+    subject: language_servers_config
+    mechanism: "reader/writer/remover over .codex/config.toml (TOML format)"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/codex.yaml#language_servers_config"
+      review_state: verified
+  - capability_id: surfaces
+    subject: skill_surface_path
+    mechanism: ".agents/skills/{tag}/SKILL.md skill path with AGENTS.md instruction file"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/codex.yaml#skill_surface_path"
+      review_state: verified
+  - capability_id: perm-declaration
+    subject: permissions
+    mechanism: "ProviderPermissions boolean flags"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "config/providers/codex.yaml#permissions"
+      review_state: verified
+  - capability_id: model-config-surface
+    subject: "external:model-config-surface"
+    mechanism: "~/.codex/config.toml with [model_providers.<id>] blocks (name, base_url, env_key, wire_api)"
+    constraints:
+      - "user-global primary authority; project-local .codex/config.toml also present"
+    limitations:
+      - "project-scope precedence over global config NOT verified — key blocker for automation"
+    support_assessment: blocked
+    action_needed: "Verify project-scope .codex/config.toml precedence over ~/.codex/config.toml."
+    evidence:
+      evidence_tier: unverified
+      tool_version: "0.87.0"
+      fact_anchor: "docs/reference/model-source-evidence/codex.md#codex-evidence"
+      review_state: pending-review
 
 permissions:
   can_write_files: true

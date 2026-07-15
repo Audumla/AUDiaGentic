@@ -2,6 +2,12 @@
 # No CLI, no MCP, no LSP — REST endpoint only
 
 provider_id: local-openai
+automation_capabilities:
+  - family_id: generated-surfaces
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-generated-surface-payload/v1
+    result_contract: provider-generated-surface-result/v1
+    ownership_scope_required: true
 display_name: "Local OpenAI Bridge"
 description: "Generic OpenAI-compatible REST endpoint. Points to any locally hosted model server (llama.cpp, Ollama, vLLM, etc.). Requires api-base-url and model-id in config."
 url: "https://platform.openai.com/docs/api-reference"

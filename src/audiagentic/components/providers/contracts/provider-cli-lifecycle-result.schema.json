@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "provider-cli-lifecycle-result/v1",
+  "title": "Provider CLI Lifecycle Result",
+  "description": "Semantic-only result for the cli-lifecycle automation family. No mechanic-named fields (command, returncode, stdout, stderr, workflow-events, probe).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ok", "supported", "changed", "state", "action_needed", "error_code"],
+  "properties": {
+    "ok": {"type": "boolean"},
+    "supported": {"type": "boolean"},
+    "changed": {"type": "boolean"},
+    "state": {
+      "type": "string",
+      "enum": ["installed", "uninstalled", "skipped", "failed"]
+    },
+    "action_needed": {"type": ["string", "null"]},
+    "error_code": {"type": ["string", "null"]}
+  }
+}

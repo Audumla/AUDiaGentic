@@ -2,6 +2,17 @@
 # Custom case: callable install/uninstall, custom probe, on_lsp_enabled hook
 
 provider_id: pi
+automation_capabilities:
+  - family_id: cli-lifecycle
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-cli-lifecycle-payload/v1
+    result_contract: provider-cli-lifecycle-result/v1
+    ownership_scope_required: false
+  - family_id: managed-mcp
+    supported_modes: [apply, prune, status]
+    payload_contract: provider-managed-mcp-payload/v1
+    result_contract: provider-managed-mcp-result/v1
+    ownership_scope_required: true
 display_name: "Pi Coding Agent"
 description: "Lightweight local coding agent TUI by Earendil Works. Supports MCP tool use via the pi-mcp-adapter extension."
 url: "https://www.earendilworks.com/pi"
@@ -26,21 +37,9 @@ cli_install:
 host_capabilities: []
 
 capability_facts:
-  - capability_id: cli-probe
-    subject: cli_install
-    mechanism: "callable probe_fn"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/pi.yaml#cli_probe"
-      review_state: verified
   - capability_id: cli-install
     subject: cli_install
-    mechanism: "pi-harness with callable install/uninstall"
+    mechanism: "pi-harness with callable probe_fn, install, uninstall"
     constraints: []
     limitations: []
     support_assessment: verified
@@ -64,19 +63,7 @@ capability_facts:
       review_state: verified
   - capability_id: lsp-self-support
     subject: on_lsp_enabled
-    mechanism: "_pi_ensure_lens hook installs LSP support"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/pi.yaml#on_lsp_enabled"
-      review_state: verified
-  - capability_id: hook-lsp-enabled
-    subject: on_lsp_enabled
-    mechanism: "callable hook on LSP enable"
+    mechanism: "_pi_ensure_lens hook — callable hook on LSP enable that installs LSP support"
     constraints: []
     limitations: []
     support_assessment: verified
@@ -98,17 +85,34 @@ capability_facts:
       tool_version: repository
       fact_anchor: "config/providers/pi.yaml#permissions"
       review_state: verified
-  - capability_id: file-agent
-    subject: agent_files
-    mechanism: "tuple of AgentFile"
-    constraints: []
-    limitations: []
+  - capability_id: vendor-key-injection
+    subject: "external:vendor-key-injection"
+    mechanism: "native env var key injection (OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY, etc.)"
+    constraints:
+      - "env vars effective at launch time"
+      - "custom endpoints require models.json write"
+    limitations:
+      - "user-home write requires consent if global scope"
     support_assessment: verified
     action_needed: null
     evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/pi.yaml#agent_files"
+      evidence_tier: execution
+      tool_version: "0.79.8"
+      fact_anchor: "docs/reference/model-source-evidence/pi.md#pi-evidence"
+      review_state: verified
+  - capability_id: model-config-surface
+    subject: "external:model-config-surface"
+    mechanism: "~/.pi/agent/models.json with providers/models[]/baseUrl/apiKey/compat shape"
+    constraints:
+      - "home-scoped, not project-local"
+    limitations:
+      - "for custom/local endpoints only, not required for native vendors"
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: execution
+      tool_version: "0.79.8"
+      fact_anchor: "docs/reference/model-source-evidence/pi.md#pi-evidence"
       review_state: verified
 
 permissions:
