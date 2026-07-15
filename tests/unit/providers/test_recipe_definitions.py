@@ -4,6 +4,9 @@ from typing import Any
 
 import pytest
 
+from audiagentic.components.providers.descriptors.automation_capabilities import (
+    ProviderAutomationCapability,
+)
 from audiagentic.components.providers.services.recipe_definitions import (
     ProviderAutomationRegistry,
     RecipeDefinition,
@@ -33,6 +36,22 @@ def _payload(
         "recipe-version": "1",
         "ownership-scope-required": ownership_scope_required,
         "provenance-ref": "docs/reference/provider-evidence.md#fixture",
+    }
+
+
+def _capabilities(
+    definition: RecipeDefinition,
+) -> dict[str, tuple[ProviderAutomationCapability, ...]]:
+    return {
+        definition.provider_id: (
+            ProviderAutomationCapability(
+                family_id=definition.family_id,
+                supported_modes=definition.supported_modes,
+                payload_contract=definition.payload_contract,
+                result_contract=definition.result_contract,
+                ownership_scope_required=definition.ownership_scope_required,
+            ),
+        )
     }
 
 
@@ -94,6 +113,7 @@ def test_definition_alone_cannot_enable_execution() -> None:
     registry = ProviderAutomationRegistry(
         known_provider_ids={"fixture"},
         family_contracts={"cli": (definition.payload_contract, definition.result_contract)},
+        provider_capabilities=_capabilities(definition),
     )
 
     with pytest.raises(AudiaGenticError, match="RES-PREC-001"):
@@ -106,6 +126,7 @@ def test_explicit_registration_enables_provider_family_only() -> None:
     registry = ProviderAutomationRegistry(
         known_provider_ids={"fixture"},
         family_contracts={"cli": (definition.payload_contract, definition.result_contract)},
+        provider_capabilities=_capabilities(definition),
     )
 
     def implementation(mode: str, payload: Any, scope: Any) -> dict[str, Any]:
@@ -129,6 +150,7 @@ def test_duplicate_provider_family_registration_fails() -> None:
     registry = ProviderAutomationRegistry(
         known_provider_ids={"fixture"},
         family_contracts={"cli": (definition.payload_contract, definition.result_contract)},
+        provider_capabilities=_capabilities(definition),
     )
     def implementation(mode, payload, scope):
         return None
@@ -144,6 +166,7 @@ def test_unknown_provider_and_family_fail_registration() -> None:
     unknown_provider_registry = ProviderAutomationRegistry(
         known_provider_ids=set(),
         family_contracts={"cli": (definition.payload_contract, definition.result_contract)},
+        provider_capabilities=_capabilities(definition),
     )
     with pytest.raises(AudiaGenticError, match="VAL-PREC-003"):
         unknown_provider_registry.register(definition, lambda mode, payload, scope: None)
@@ -151,6 +174,7 @@ def test_unknown_provider_and_family_fail_registration() -> None:
     unknown_family_registry = ProviderAutomationRegistry(
         known_provider_ids={"fixture"},
         family_contracts={},
+        provider_capabilities=_capabilities(definition),
     )
     with pytest.raises(AudiaGenticError, match="VAL-PREC-004"):
         unknown_family_registry.register(definition, lambda mode, payload, scope: None)
@@ -162,6 +186,7 @@ def test_non_automation_categories_cannot_register(family_id: str) -> None:
     registry = ProviderAutomationRegistry(
         known_provider_ids={"fixture"},
         family_contracts={},
+        provider_capabilities=_capabilities(definition),
     )
 
     with pytest.raises(AudiaGenticError, match="VAL-PREC-004"):
@@ -175,6 +200,7 @@ def test_supported_modes_and_ownership_scope_are_enforced() -> None:
     registry = ProviderAutomationRegistry(
         known_provider_ids={"fixture"},
         family_contracts={"cli": (definition.payload_contract, definition.result_contract)},
+        provider_capabilities=_capabilities(definition),
     )
     registry.register(
         definition,
@@ -200,7 +226,39 @@ def test_family_contract_mismatch_fails_registration() -> None:
     registry = ProviderAutomationRegistry(
         known_provider_ids={"fixture"},
         family_contracts={"cli": ("different-payload/v1", "different-result/v1")},
+        provider_capabilities=_capabilities(definition),
     )
 
     with pytest.raises(AudiaGenticError, match="VAL-PREC-005"):
+        registry.register(definition, lambda mode, payload, scope: None)
+
+
+def test_undeclared_capability_cannot_register() -> None:
+    definition = load_recipe_definition(_payload())
+    registry = ProviderAutomationRegistry(
+        known_provider_ids={"fixture"},
+        family_contracts={"cli": (definition.payload_contract, definition.result_contract)},
+        provider_capabilities={"fixture": ()},
+    )
+
+    with pytest.raises(AudiaGenticError, match="VAL-PREC-008"):
+        registry.register(definition, lambda mode, payload, scope: None)
+
+
+def test_declaration_must_match_definition_contract_and_modes() -> None:
+    definition = load_recipe_definition(_payload())
+    mismatched = ProviderAutomationCapability(
+        family_id="cli",
+        supported_modes=("status",),
+        payload_contract=definition.payload_contract,
+        result_contract=definition.result_contract,
+        ownership_scope_required=False,
+    )
+    registry = ProviderAutomationRegistry(
+        known_provider_ids={"fixture"},
+        family_contracts={"cli": (definition.payload_contract, definition.result_contract)},
+        provider_capabilities={"fixture": (mismatched,)},
+    )
+
+    with pytest.raises(AudiaGenticError, match="VAL-PREC-009"):
         registry.register(definition, lambda mode, payload, scope: None)

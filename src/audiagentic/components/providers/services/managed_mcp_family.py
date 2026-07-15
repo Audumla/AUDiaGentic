@@ -53,7 +53,11 @@ def manage_mcp_entries(
 ) -> ManagedMcpResult:
     """Reconcile typed caller-owned MCP entries using descriptor capabilities."""
     descriptor = get_descriptor(provider_id)
-    if descriptor is None or descriptor.mcp_config is None:
+    if (
+        descriptor is None
+        or descriptor.mcp_config is None
+        or descriptor.automation_capability("managed-mcp") is None
+    ):
         return _result(ok=False, supported=False, error_code="RES-PREC-001")
     if mode not in _SUPPORTED_MODES:
         return _result(ok=False, error_code="CON-PREC-002")

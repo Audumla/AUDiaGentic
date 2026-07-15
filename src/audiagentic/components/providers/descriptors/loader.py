@@ -22,6 +22,10 @@ from audiagentic.foundation.toolchains.managed_config import (
 )
 from audiagentic.foundation.workflow.invocation.from_spec import build_step_from_spec
 
+from .automation_capabilities import (
+    ProviderAutomationCapability,
+    validate_automation_capabilities,
+)
 from .base import (
     AgentFile,
     CapabilityEvidence,
@@ -149,6 +153,51 @@ def _build_capability_facts(
     return tuple(facts)
 
 
+def _build_automation_capabilities(
+    data: list[dict[str, Any]],
+) -> tuple[ProviderAutomationCapability, ...]:
+    if not isinstance(data, list):
+        raise AudiaGenticError(
+            code="VAL-PCAP-010",
+            kind="providers",
+            message="automation_capabilities must be a list",
+        )
+    fields = {
+        "family_id",
+        "supported_modes",
+        "payload_contract",
+        "result_contract",
+        "ownership_scope_required",
+    }
+    capabilities: list[ProviderAutomationCapability] = []
+    for item in data:
+        if not isinstance(item, dict):
+            raise AudiaGenticError(
+                code="VAL-PCAP-010",
+                kind="providers",
+                message="each automation capability must be a mapping",
+            )
+        unknown = sorted(set(item) - fields)
+        if unknown:
+            raise AudiaGenticError(
+                code="VAL-PCAP-010",
+                kind="providers",
+                message="unknown automation capability fields",
+                details={"fields": unknown},
+            )
+        capabilities.append(
+            ProviderAutomationCapability(
+                family_id=str(item.get("family_id") or ""),
+                supported_modes=tuple(item.get("supported_modes") or ()),
+                payload_contract=str(item.get("payload_contract") or ""),
+                result_contract=str(item.get("result_contract") or ""),
+                ownership_scope_required=bool(item.get("ownership_scope_required")),
+            )
+        )
+    validate_automation_capabilities(capabilities)
+    return tuple(capabilities)
+
+
 def _build_agent_files(data: list[dict[str, Any]]) -> tuple[AgentFile, ...]:
     """Build AgentFile tuple from YAML list."""
     return tuple(
@@ -254,6 +303,7 @@ def _build_plugin_config(data: dict[str, Any]) -> PluginConfigSpec:
 def _construct_provider_descriptor(**values: Any) -> ProviderDescriptor:
     descriptor = ProviderDescriptor(**values)
     validate_provider_capability_facts(descriptor)
+    validate_automation_capabilities(descriptor.automation_capabilities)
     return descriptor
 
 
@@ -269,6 +319,7 @@ PROVIDER_SPEC.add("cli_probe", yaml_key="cli_probe", kind="data", default=None)
 PROVIDER_SPEC.add("cli_install", yaml_key="cli_install", kind="nested", builder=_build_cli_install, default=None)
 PROVIDER_SPEC.add("host_capabilities", yaml_key="host_capabilities", kind="nested", builder=_build_host_capabilities, default=tuple())
 PROVIDER_SPEC.add("capability_facts", yaml_key="capability_facts", kind="nested", builder=_build_capability_facts, default=tuple())
+PROVIDER_SPEC.add("automation_capabilities", yaml_key="automation_capabilities", kind="nested", builder=_build_automation_capabilities, default=tuple())
 PROVIDER_SPEC.add("permissions", yaml_key="permissions", kind="nested", builder=_build_permissions, default=ProviderPermissions())
 PROVIDER_SPEC.add("agent_files", yaml_key="agent_files", kind="nested", builder=_build_agent_files, default=tuple())
 PROVIDER_SPEC.add("access_mode", yaml_key="access_mode", kind="data", default="cli")
