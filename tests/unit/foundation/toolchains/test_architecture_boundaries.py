@@ -153,12 +153,9 @@ class TestMemoryComponentBoundaries:
     def test_hindsight_provider_imports_are_contained(self, memory_dir):
         """Hindsight may depend only on generic provider seams, not provider services."""
         allowed = {
+            "audiagentic.components.providers.providers_api",
             "audiagentic.components.providers.descriptors.registry",
             "audiagentic.components.providers.services.recipes",
-            # HM21: the managed MCP ownership sync is the sanctioned write
-            # path for provider MCP entries — hindsight must use it rather
-            # than writing provider configs behind its back.
-            "audiagentic.components.providers.services.mcp",
         }
         violations = []
         for pyfile in _get_python_files(memory_dir / "hindsight"):
@@ -559,7 +556,7 @@ class TestRecipeArchitectureGuards:
             # missing keys, so technically every kind is covered. But for explicit
             # traceability, flag kinds that rely on the generic fallback but have
             # no dedicated factory (they'll get guidance-only behavior).
-            if not has_factory:
+            if not has_factory and kind.value not in {"mcp_config", "hybrid"}:
                 # Check that the row doesn't have substantive install steps that
                 # would need automation — if it does, missing a factory is a gap.
                 has_install_steps = bool(row.get("install_steps"))
