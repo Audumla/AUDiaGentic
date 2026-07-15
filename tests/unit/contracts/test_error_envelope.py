@@ -5,6 +5,7 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
+from audiagentic.foundation.contracts.error_resolutions import load_all_error_resolutions
 from audiagentic.foundation.contracts.errors import (
     ERROR_ENVELOPE_SCHEMA,
     AudiaGenticError,
@@ -34,6 +35,8 @@ def test_error_envelope_invalid_fixture_fails() -> None:
 
 
 def test_to_error_envelope_matches_fixture() -> None:
+    config_dirs = [REPO_ROOT / "src" / "audiagentic" / "config" / "components"]
+    load_all_error_resolutions(config_dirs)
     error = AudiaGenticError(
         code="VAL-PCFG-001",
         kind="validation",

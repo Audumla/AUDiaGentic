@@ -81,6 +81,8 @@ class _Error(Exception):
         if not self.message:
             raise ValueError("error message must not be empty")
         object.__setattr__(self, "details", redact_details(self.details))
+        if _ERROR_RESOLUTIONS_LOADED and self.code not in _ERROR_RESOLUTIONS:
+            _error_code_blocker(self.code)
 
     def __str__(self) -> str:
         base = f"{self.code}: {self.message}"
@@ -174,6 +176,28 @@ def get_error_message(code: str) -> str:
     return _ERROR_RESOLUTIONS.get(code, code)
 
 
+_ERROR_RESOLUTIONS_LOADED = False
+
+
+def _error_code_blocker(code: str) -> None:
+    """Raise a ValueError when an error code is used without being registered.
+
+    This enforces Standard 8 (ARCHITECTURE_STANDARDS.md §4) and the
+    ARCHITECTURE_GUIDELINES.md §3 rule: register each public error code in
+    the owning component's error-resolutions.yaml before use.
+    """
+    raise ValueError(
+        f"Error code {code!r} is not registered in any component's error-resolutions.yaml. "
+        f"Before use, add it to src/audiagentic/config/components/<component>/error-resolutions.yaml. "
+        f"See ARCHITECTURE_STANDARDS.md §4 and ARCHITECTURE_GUIDELINES.md §3."
+    )
+
+
+def _mark_error_resolutions_loaded() -> None:
+    global _ERROR_RESOLUTIONS_LOADED
+    _ERROR_RESOLUTIONS_LOADED = True
+
+
 ERROR_ENVELOPE_SCHEMA = {
     "type": "object",
     "required": [
@@ -187,7 +211,7 @@ ERROR_ENVELOPE_SCHEMA = {
     "properties": {
         "contract-version": {"const": "v1"},
         "ok": {"const": False},
-        "error-code": {"type": "string", "pattern": "^[A-Z]{2,}-[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-\\d{3}$"},
+        "error-code": {"type": "string", "pattern": "^[A-Z]{2,}-[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-\d{3}$"},
         "error-kind": {"type": "string", "pattern": "^[a-z][a-z0-9]{0,38}([a-z0-9]+-[a-z0-9]+)*$"},
         "message": {"type": "string"},
         "details": {"type": "object"},

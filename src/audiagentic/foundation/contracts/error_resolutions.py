@@ -15,7 +15,10 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from audiagentic.foundation.contracts.errors import register_error_resolution
+from audiagentic.foundation.contracts.errors import (
+    _mark_error_resolutions_loaded,
+    register_error_resolution,
+)
 from audiagentic.foundation.io import load_yaml_file
 from audiagentic.foundation.paths.names import get_component_config_dirs
 
@@ -69,3 +72,5 @@ def load_all_error_resolutions(config_dirs: list[Path] | None = None) -> None:
                     "Failed to load error resolutions for %s", component_id,
                     exc_info=True,
                 )
+
+    _mark_error_resolutions_loaded()
