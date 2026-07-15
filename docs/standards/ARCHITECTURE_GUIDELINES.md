@@ -121,9 +121,11 @@ needs preservation and failure tests plus a documented reason.
 
 For a move, rename, or deletion, search production code, tests, configuration,
 decorators, dynamic imports, patches, and dotted-path strings for the old path.
-Remove obsolete compatibility paths unless explicitly required. Run the relevant
-unit, integration, contract, and architecture checks; state the exact validation
-scope in the change record.
+Update all callers and remove obsolete compatibility paths in the same change.
+Do not add an alias, shim, dual route, fallback, or compatibility test unless an
+approved external obligation is recorded first. Run relevant unit, integration,
+contract, and architecture checks; state exact validation scope in the change
+record.
 
 ## 10. Provider Platform API
 
