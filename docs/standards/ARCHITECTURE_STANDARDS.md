@@ -70,6 +70,10 @@ shared lower-layer seams, not general component-to-component exceptions.
 
 ## 4. Public Contracts and Safety
 
+- Backward compatibility is not maintained by default. A migration updates all
+  callers and deletes the obsolete API, alias, shim, dual route, and
+  compatibility test. An exception requires a documented external obligation
+  approved before implementation.
 - Public domain failures use `AudiaGenticError` with a stable, owning-component
   error code. Internal control flow may use native exceptions where they do not
   cross a public boundary.
@@ -103,8 +107,8 @@ shared lower-layer seams, not general component-to-component exceptions.
 
 - Architecture rules must have proportionate automated checks and focused tests.
 - Migrations remove obsolete paths and verify affected production and test
-  references. Validation scope matches the change; do not call a subset the
-  full suite.
+  references in the same change. Validation scope matches the change; do not
+  call a subset the full suite.
 - Exceptions require an explicit, documented rationale and bounded scope.
 
 ## Related guidance
