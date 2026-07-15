@@ -35,7 +35,7 @@ def test_describe_provider_full_composition(tmp_path: Path) -> None:
     assert result["ok"] is True
     assert result["descriptor"]["provider_id"] == "opencode"
     assert result["execution"]["mode"] in {"adapter", "descriptor"}
-    # models section is the MO10 read surface, refresh=False
+    # models section is the mutation-free MO10 read surface
     assert result["models"]["provider_id"] == "opencode"
     assert "ok" in result["models"]
     # config surfaces serialize with the pinned shape
