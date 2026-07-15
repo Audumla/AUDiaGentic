@@ -5,22 +5,16 @@ requester components (memory, coding-lsp, runtime bootstrap, release) may use.
 Never import adapters, services internals, serializers, capability config,
 or handlers from a requester component — they are forbidden by architecture §18.
 
-Re-exports recipe contract types and registry so callers can build and dispatch
-provider operations without importing providers internals.
+This module exposes provider-owned public operations and reads only. Recipes,
+recipe kinds, registries, and their lifecycle methods are provider internals.
+Requesters express semantic intent through the relevant family operation; they
+never construct or dispatch a recipe.
 """
 from __future__ import annotations
 
 import asyncio
 from pathlib import Path
 from typing import Any
-
-# Sanctioned re-exports for requester components (arch §18)
-from audiagentic.components.providers.services.recipes import (
-    ProviderCapabilityRecipe,
-    ProviderRecipeKind,
-    ProviderRecipeRegistry,
-    ProviderRecipeResult,
-)  # noqa: F401 — sanctioned re-export
 
 
 def list_providers(project_root: Path) -> dict[str, Any]:
@@ -635,9 +629,4 @@ __all__ = [
     # Surfaces
     "apply_provider_surfaces",
     "prune_provider_surfaces",
-    # Recipe contract — sanctioned re-exports for requester components (arch §18)
-    "ProviderCapabilityRecipe",
-    "ProviderRecipeKind",
-    "ProviderRecipeRegistry",
-    "ProviderRecipeResult",
 ]

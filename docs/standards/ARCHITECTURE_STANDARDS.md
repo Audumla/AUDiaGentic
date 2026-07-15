@@ -1,399 +1,114 @@
 # AUDiaGentic Architecture Standards
 
-Non-negotiable. Violation = architectural defect, not style.
+These are durable architectural invariants. A violation is an architectural
+defect, not a style issue. Concrete APIs, paths, schemas, detector behaviour,
+and component-specific rules belong in
+[Architecture Implementation Guidelines](ARCHITECTURE_GUIDELINES.md).
 
-## 1. Layer Boundaries
+## 1. Dependency Boundaries
 
-```
-CLI / composition root
-Components --consume--> Foundation (capabilities) --may read--> Runtime environment
-Runtime (orchestration) --bootstraps/wires via seams--> Foundation capabilities
-```
+The composition root wires the application. Dependencies otherwise point toward
+shared or platform capabilities, never toward a requesting product domain.
 
-- CLI/composition root (`audiagentic/launcher.py`, `audiagentic/commands/*`): wire app; may import any layer, including optional components.
-- Components: product capabilities; may import foundation and runtime.
-- Foundation: shared capabilities: errors, events, IO, toolchains, workflow, MCP, lifecycle (`foundation/lifecycle`). May read `runtime/system` to adapt (for example platform tool selection).
-- `runtime/system`: read-only live facts: platform, process identity, paths. Importable by all.
-- Runtime orchestration (`runtime/harness`, `rig`, `update`, `build`): bootstrap, lifecycle, durable state. May call foundation during bootstrap; after startup prefer events/contribution registries. Guidance only.
+| Layer | May depend on | Must not depend on |
+|---|---|---|
+| Foundation | Foundation; read-only `runtime/system` facts | Components; runtime orchestration |
+| Platform components | Foundation; `runtime/system` | Requester/product components |
+| Product components | Foundation; `runtime/system`; approved platform public APIs | Other component internals |
+| Runtime orchestration | Foundation; `runtime/system`; approved platform public APIs; composition-root registrations | Optional component internals after wiring |
+| Composition root | Any layer, to wire the application | — |
 
-**Rules:**
-- Foundation never imports components or runtime orchestration; `runtime/system` allowed.
-- `runtime/system`: facts only; no orchestration or imports from foundation, components, or other runtime.
-- Runtime never imports optional component internals; use events/contribution registries.
-- Tests exempt from production import rules.
-- Foundation modules/functions/event strings/registry keys must be domain-neutral; component vocabulary = layering violation.
-- Composition roots exempt from import direction.
-- Do not use `get_capability`/`register_capability` callbacks for direct imports: use events, no indirection, or composition-root registry check + import.
+- `runtime/system` contains read-only live facts only. It imports no foundation,
+  component, or runtime-orchestration code.
+- Tests may cross production boundaries when needed to validate behaviour,
+  migration safety, or architecture rules.
+- Foundation names, event names, and extension keys are domain-neutral. Move a
+  component-specific concept to its owning component.
+- A registry does not remove a dependency. Resolved registry bindings remain
+  dependency edges for architecture review and tests.
 
-### 1.1 Registries Are Extension Points, Not Hidden Coupling
+### Approved cross-component APIs
 
-A string key does not remove a dependency. Registries may select among implementations
-only when all of these are explicit and machine-checked:
+Cross-component imports are forbidden unless they target an approved platform
+public API. Approval is explicit: record the owning platform component, public
+module, permitted callers, and boundary constraints here. It does not permit
+imports of the platform component's internals.
 
-- one owning layer/component defines the typed protocol and key namespace;
-- declarations identify support/capability, while handler binding occurs in that owner
-  or an approved composition root;
-- callers depend on the protocol and receive typed results, never retrieve arbitrary
-  services or call foreign implementation symbols;
-- keys carry no foreign removable-domain vocabulary or policy;
-- registration, replacement, lifetime, duplicate-key behavior, and unknown-key failure
-  are deterministic and tested.
-
-Forbidden: service-locator APIs, arbitrary `dict[str, Callable]` used to conceal a
-component call, string/dotpath lookup introduced only to evade an import boundary,
-requester-owned handler names, or a registry that makes a forbidden dependency appear
-indirect. Use a direct import for allowed same-layer dependencies, a typed event for
-decoupled notification, or composition-root wiring for optional implementations.
-
-Architecture graph checks follow resolved registry bindings as dependency edges. A
-registry never grants an exemption from layer, ownership, vocabulary, or mutation rules.
-
-## 2. Config Over Code
-
-- Extensibility never requires Python edits.
-- Entity lists (components, providers, tools, states, policies, capabilities) live in YAML/JSON, never Python.
-- No entity-name `if/elif`; use config lookup or a §1.1-compliant typed extension registry.
-- New capability: config file or registry contribution.
-
-## 3. Logic Containment
-
-- Shared logic in 2+ files: extract to foundation immediately.
-- God object: >350 lines or >3 responsibilities: split by concern unless one cohesive unit.
-- Dataclasses with >80% field overlap: one canonical type.
-
-## 4. Platform Independence
-
-- No editor-specific CLI, binary, or paths; use pluggable host adapter.
-- Resolve host behavior (extensions, workspace detection) at runtime via config-driven adapter.
-- No local folders, network, or environment details in code; use uncommitted config/env.
-
-## 5. Component Discovery
-
-- No Python import list or `__all__` for pluggable modules; use `pkgutil.iter_modules()` or config discovery.
-- IDs come from loaded descriptors, never parallel Python constants.
-
-## 6. MCP Server Construction
-
-- Use `mcp_server(__name__)` from `foundation.mcp.component_server`; never `FastMCP` directly.
-- `main()` uses `run_mcp_server(server_factory, label)`.
-
-## 6.1 MCP Metadata Standard
-
-All MCP-facing text metadata — tool descriptions, server instructions, parameter docs — lives in component config YAML under `mcp-servers` / `tool-descriptions`. Zero hardcoded descriptions in Python code.
-
-**Schema:**
-- `instructions`: str — server-level instruction block agents see on connect
-- `tool-descriptions`: mapping of tool-name → value; value is a plain string (description only) or a dict with known standard keys: `description` (str), `parameters` (dict of param-name → description). Additional keys are provider/component-owned extension; foundation passes them through unchanged.
-
-**Construction rules:**
-- Use `mcp_server(__name__, instructions=server_instructions(decl))`; never hardcode instruction text.
-- Tools register via `@mcp.tool(description=tool_description(decl, "name"))` or rely on `_AutoDescFastMCP` auto-inject when no explicit description is given.
-- Parameter annotations (`@param(name, description)`) may be added to tool decorators; the foundation does not validate them against YAML — they are caller-owned enrichment.
-
-**No exceptions:** every `@mcp.tool()` decorator must resolve its description from YAML or have none (not a hardcoded string literal).
-
-## 7. Virtual Assets
-
-- Generated assets: `(path_pattern, generator_fn)` registry; components register via lifecycle hooks.
-- Runtime iterates registry; never branches on asset paths.
-
-## 8. Error Handling
-
-- Only domain exception: `AudiaGenticError`; no parallel hierarchies or raw `ValueError`/`RuntimeError` at public boundaries.
-- Every error has stable `PREFIX-COMPONENT-NNN` code (example `VAL-PCFG-001`). Prefer `make_error()` from `foundation.contracts.errors`, module-bound `make_error_factory(...)`, or thin helper.
-- Before using code, add it to owning `config/components/<component>/error-resolutions.yaml`; component segment determines owner. Audits cover every `code=` in `AudiaGenticError(...)` under `src/`; missing entries become plan items before release.
-- `code`: canonical identity. `message`: concise operator statement. Config-only optional `resolution`: remediation/checks, not message repeat. `details`: context only.
-- `except Exception:` only at external boundaries. Every `except`: log `exc_info=True`, wrap `AudiaGenticError`, or safe default. Silent `pass` only harmless expected teardown.
-- Never place raw stdout/stderr, API keys, tokens, or prompts in error details; redact/summarize.
-
-### 8.1 External-service failures
-
-External services include remote APIs, catalog/discovery endpoints, and
-connectivity probes. Classify every failure as exactly one of:
-
-| Class | Examples | Retry | Fallback |
+| Owner | Public module | Permitted callers | Boundary |
 |---|---|---|---|
-| `transient` | timeout, unreachable service, HTTP 429, HTTP 5xx | One bounded retry | Last-known-good cache when available |
-| `configuration` | invalid base URL, unsupported wire API, invalid local setup | Never | None |
-| `authorization` | HTTP 401/403, expired or absent credential | Never | None |
-| `contract` | malformed or incompatible response | Never | None |
-
-- Best-effort background work, including catalog refresh and connectivity
-  probes, degrades to cached state when available. It reports `action_needed`
-  and must not fail enclosing sync or reconcile solely for that remote failure.
-- Explicit user-invoked operations may return the owning component's canonical
-  `CON-*` error. Error details contain failure class and safe structural
-  context only.
-- A degraded result uses semantic fields `failure_class`, `fallback`
-  (`cached|none`), `stale`, `stale_age` when known, `action_needed`, and
-  `error_code`. Do not introduce a cross-domain result dataclass merely for
-  these fields.
-- Never retry authorization, configuration, or contract failures. Never add
-  retry loops, sleep-loop polling, or unbounded backoff.
-- Do not log or persist API keys, authorization headers, key-bearing URLs, raw
-  response bodies, or unredacted exception text. Apply canonical redaction at
-  the remote-call boundary before producing logs, timelines, results, or
-  dead-letter records.
-- When a remote call runs in an event-bus handler, §14 takes precedence:
-  handler exceptions never escape, the failure is redacted and dead-lettered,
-  and cached degradation/action-needed supplements rather than replaces that
-  record.
-
-## 9. Logging
-
-- Module logger only: `logger = logging.getLogger(__name__)`; never inline.
-- `print()` only CLI entry points; library code uses logger.
-- Levels: `debug` trace; `info` notable ops; `warning` non-fatal + `exc_info=True`; `error` failure + `exc_info=True`.
-- Entity messages include `extra={"component": ..., "provider": ..., "item_id": ...}`.
-- Never log MCP tool args.
-
-## 10. Migration Doctrine
-
-- No compatibility shims, deprecations, legacy paths, or deferred tests unless explicitly required. Remove old code with replacement.
-- Each migration step works; add/update tests with migration.
-- Moves/renames/deletes: grep whole repo, including `tests/`, for old dotted path as string (patches, `importlib`, decorators, config/YAML). Proof = green full suite: `python -m pytest tests/unit`; grep or partial suite insufficient.
-
-## 11. Lazy Initialization
-
-Lazy loading invisible to callers.
-
-- Prefer on-first-access loading for config registries, heavy dependencies, shared state.
-- Public API exposes no loaders, priming, or load-state checks; accessor returns ready value.
-- Guard stays inside accessor; loader idempotent, cached no-op after completion.
-- Prefer shared registry lazy-loader support over local `_loaded`/`_ensure_loaded()`.
-
-## 12. Anti-Pattern Quick Reference
-
-| Anti-pattern | Fix |
-|---|---|
-| Hardcoded entities / entity-name `if/elif` | Config or `(key, handler)` registry |
-| Foundation imports components/runtime outside `runtime/system` | Events/registry, invert dependency, or move fact to `runtime/system` |
-| `runtime/system` orchestration/upward imports | Read-only facts only |
-| Runtime imports optional component | Events/contribution registry |
-| Manual `FastMCP(...)` | `mcp_server(__name__)` |
-| Public `ValueError` | `AudiaGenticError(code=..., ...)` |
-| `except Exception: pass` | Log, wrap, or safe default |
-| Inline logger / library `print(...)` | Module `logger` |
-| Raw process output in errors/results/logs | `redact_text()` at boundary |
-| Pluggable `__all__` / editor CLI/path | Discovery / host adapter |
-| Caller loads/checks state; repeated loader work | Internal idempotent accessor loader |
-| Local lazy guard | Shared registry lazy-loader |
-| Callback lookup for direct import | Event or composition-root import |
-| Component vocabulary in foundation | Domain-neutral name or move to component |
-| Unregistered error code | Owning `error-resolutions.yaml` entry first |
-
-## 13. Contract Schema Ownership
-
-- Component schema `components/<component>/contracts/<name>.schema.json` is authoritative writable copy.
-- Same-name `foundation/contracts/schemas/<name>.schema.json` is read-only `schema_registry` mirror; update byte-identically after source change.
-- Component-only schemas stay under component; no foundation mirror, `schema_registry.py`, or `canonical_ids.py` registration.
-- Foundation-native schemas stay only in `foundation/contracts/schemas/`.
-- Unit test asserts byte equality for every matching component/foundation pair; foundation-only schemas exempt.
-
-**Decision:** 2026-07-10 — `event-trigger.schema.json` agent-jobs-only; no foundation mirror or registry entry.
-
-## 14. Async Event Handling
-
-Extends §8 at async/event boundaries.
-
-- Handlers never raise from bus. Boundary exceptions: log and durably dead-letter with `write_dead_letter`; pipeline continues.
-- v1: no automatic trigger retry. LLM launches may duplicate jobs/charges. Automatic retry requires documented component idempotency guard/key.
-- Failed firing, dispatch, or outcome apply: append-only ndjson via `write_dead_letter` (`audiagentic.components.agent_jobs.dead_letter`) and shared `append_operational_record` (EDJ20), at `.audiagentic/runtime/agent-jobs/dead-letter.ndjson`.
-- Record: `{event_type, payload_summary (redacted, max 500 chars), metadata, trigger_id/job_id, error_code, error_message, correlation_id, timestamp}`.
-- Manual replay: `read_dead_letters`, recover inputs, redispatch. Automatic replay out of scope v1.
-- No raw prompts, keys, tokens, or LLM output. `payload_summary` is redacted description; denylist enforced at write.
-
-**Decision:** 2026-07-10 — async error standard added after EDJ02/04/05 review; EDJ12 owns dead-letter format.
-
-## 15. Output Redaction at Subprocess Boundaries
-
-Captured subprocess stdout/stderr must be redacted before structured returns, persistence, or logs; it can contain credentials.
-
-- At disk boundary (logs, completion JSON, results, ndjson), apply `redact_text()` from `foundation/logging/redaction.py`.
-- At structured-return boundary (dict, `StepResult`, return), apply `redact_text()`.
-- Only pattern authority: `DEFAULT_REDACT_PATTERNS` in `foundation/logging/redaction.py`; extend it, never local regex lists.
-- `AudiaGenticError._redact_value()` is insufficient (1024-char truncation/subset patterns). Redact raw output at call site before adding error details.
-- Redaction changes output boundaries only; direct streaming/interactive terminal output exempt.
-
-**Exempt:** intentional credential provisioning to config; auth token returns; transport-only Authorization headers; captured-and-discarded output when only exit code is used.
-
-**Decision:** 2026-07-12 — standard added after OU01 audit; prior §8, observability, and §14 rules missed general structured/disk subprocess output.
-
-## 16. Managed Mutation Ownership
-
-Every durable mutation has one owner and one lifecycle path. Choose the primitive by
-artifact shape; do not create a component-local ownership or reconciliation system.
-
-| Artifact shape | Required primitive |
-|---|---|
-| Named entries in shared external config | `ManagedConfigSpec` + `sync_managed_config` + `ManagedFragmentRegistry` |
-| Nested keys in shared JSON/YAML/TOML | `ConfigPatcher` + `ArtifactRegistry` |
-| Whole file owned by one recipe | `WriteFileStep` + `ArtifactRegistry` |
-| Generated component/provider surface | descriptor virtual asset or registered renderer + managed block |
-| Owning-component durable record | component store + atomic helper from `foundation.io` |
-| Dynamically discovered, unowned third-party repair | bounded adapter-local exemption meeting every rule below |
-
-Generic orchestration owns path resolution, ownership/adoption, collisions, dry-run,
-apply/prune, reload, status, error normalization, redaction, and observability. Custom
-implementations own format parsing, rendering, and merge semantics only. Code outside
-the generic managed-config core must not call a `ManagedConfigSpec` writer/remover
-directly.
-
-Adapter-specific logic is justified by format, not entity name. Generic builders and
-services never branch on provider/component ids to select an implementation; config or
-a `(key, handler)` registry selects the adapter. Generic specs use domain-opaque payloads
-and never import a component-owned payload type.
-
-An exemption is valid only when all are true:
-
-- artifact belongs to an external tool and is not created/owned by AUDiaGentic;
-- location or shape is dynamically discovered and no existing primitive fits;
-- mutation is contained in one adapter-local function;
-- write is atomic and redacted, with preservation and failure tests;
-- code comment cites the audit/plan item and states why each generic primitive fails.
-
-Literal brace values, surgical nested-key edits, convenience, or one current consumer
-are not exemptions. `ConfigPatcher` accepts arbitrary values without template
-substitution and exists for surgical structured-config edits.
-
-Inventory and current remediation ownership live in
-`docs/reference/MANAGED_MUTATION_AUDIT.md`. Architecture tests keep its scanner and
-table in exact agreement.
-
-## 17. Event Topic Registry
-
-Every published bus event topic is registered before first publish, the same way
-error codes are registered. The registry is data + a loader + a conformance test;
-the bus does NOT gate publish on registration at runtime (no runtime coupling or
-performance cost). Enforcement is test-time.
-
-### 17.1 Naming
-
-Dotted lowercase `<domain>.<resource>.<action>` with past-tense actions for facts
-(created/completed/failed) and request nouns for commands (requested/cancel-requested).
-Domain = owning component's public domain (planning, agents.llm, lifecycle,
-interaction, ledger, agent-jobs, release). Do NOT add a parallel `EVT-XXX-001`
-numeric code — the dotted topic is the canonical identifier; topics have no freeform
-message part that would require a numeric code.
-
-### 17.2 Ownership
-
-Exactly one component owns each topic and is its sole publisher. Documented consumers
-may be many. Cross-component communication uses the owner's published topic, never
-a private literal. A topic declared by two different owners is a `CON-*` defect.
-
-### 17.3 Registration
-
-Every published topic MUST be declared in the owning component's
-`config/components/<component>/events.yaml` before first publish. An unregistered
-published topic is an architectural defect, caught by the conformance test — the same
-rule as error codes: register first, use later.
-
-### 17.4 Code Hygiene
-
-Publishers and subscribers reference a module-level constant in the owning component's
-events module, never inline string literals (test-only literals exempt). For indirect
-publisher helpers, callers must pass exported constants; dynamic topic expressions
-(f-strings, variable interpolation) are violations.
-
-### 17.5 Payload Contract
-
-Each registration declares `payload-required` keys and `payload-optional` keys;
-the full JSON schema per topic is OPTIONAL and added only when a consumer needs
-strict validation (anti-overengineering guard).
-
-### 17.6 Registry File Shape
-
-File: `src/audiagentic/config/components/<component>/events.yaml`
-
-```yaml
-agents.llm.completed:
-  description: "Gateway request completed successfully"
-  payload-required: ["request-id", "agent-profile-id", "state"]
-  payload-optional: ["provider-id", "model-id", "attempt_count"]
-  metadata-keys: []
-  delivery: async
-  since: v1.0.0
-```
-
-Schema validating the registry file itself:
-`foundation/contracts/schemas/event-topics.schema.json`.
-
-### 17.7 Loader Contract
-
-Use `get_component_config_dirs()` in the same precedence order as component/
-error-resolution loading. Registry identity is file location
-(`config/components/<owner>/events.yaml`). Reject the same topic declared by two
-different owners with a canonical `CON-*` error; same-owner later-overlay replacement
-follows shared last-wins precedence.
-
-### 17.8 Bus Topics vs Timeline Event Names
-
-State-machine timeline names (e.g. `JOB_TIMELINE_EVENTS`, or strings such as
-"job.state-propagated", "queue.cancelled-before-dispatch") are NOT bus topics and
-stay outside this registry — they are local observability artifacts, not
-inter-component communication.
-
-### 17.9 Conformance Detector
-
-The AST conformance test scans `src/**/*.py` for `get_bus().publish(...)` /
-`bus.publish(...)` first-argument string literals and module constants assigned
-dotted-topic-shaped strings that flow into publish; it asserts every publish-site
-topic is registered in some events.yaml and matches the naming grammar.
-Pattern-subscriptions (wildcards like `planning.**` from trigger config) are
-consumer-side data, not declarations — excluded from ownership check but validated
-against the naming grammar. Detector explicitly rejects f-strings and dynamic
-expressions in production code; indirect publisher helpers require callers to pass
-exported constants.
-
-## 18. Provider Platform Component Layer Rule
-
-`providers` is a **platform component**: domain-specific (external tool integration) but
-positioned **below** requester components in the dependency order, alongside foundation.
-Dependency arrows only point downward — from requester toward platform layers, never
-upward or sideways between requesters and providers internals.
-
-### 18.1 Sanctioned Import Edge
-
-Requester components (memory, coding-lsp, runtime bootstrap, release, …) may import **ONLY**
-one designated module: `audiagentic.components.providers.providers_api`.
-This is the single sanctioned edge. Never import adapters, services internals,
-serializers, capability config, matrices, or handlers.
-
-Violation = architectural defect. The allowed imports are enforced by machine-checked
-architecture guard tests (CC36+);
-a string key that conceals a `components.providers.adapters.*` or `services.mcp` call
-from a requester component is a §12 anti-pattern ("Callback lookup for direct import").
-
-### 18.2 Providers Imports Zero Requester Domains
-
-Providers must not import requester domains; handlers are requester-blind.
-Requests contain desired data and opaque ownership/correlation metadata only — never
-requester identity, domain vocabulary, or callback targets.
-Reverse imports (providers → memory, coding-lsp, planning) are forbidden regardless of
-registry indirection. A registry entry that causes providers to call into a requester
-domain is a coupling violation.
-
-### 18.3 Automation Authority Is Explicit Registration Only
-
-Runtime automation authority = explicit composition-root registration **ONLY**.
-Descriptive capability catalog and provider knowledge config are soft data — documentation,
-planning, MA19 views, status guidance. They can never enable a handler.
-Adding or changing descriptive capability data in YAML must not require runtime code change
-to dispatch an operation; it requires an explicit `registry.register(recipe)` call at
-composition time for the operation to execute.
-
-### 18.4 Foundation Placement Discriminator
-
-A type belongs in foundation **only if** both are true:
-(a) its definition contains no provider-domain concepts, and
-(b) a non-provider-managing component consumes it.
-
-Capability request/result fails this test — `capability_id` is a provider-domain concept,
-so capability types live in providers. The agent execution port passes the test —
-invocation-in, frozen-event-out, cancel-signal contains no provider vocabulary and is
-consumed by agents; its protocol lives in foundation/execution.
-
-**Decision:** 2026-07-14 — RV400–RV405 approved. Boundary was correct; location was wrong —
-visible narrow requester→providers dependency beats a laundered foundation edge.
-Foundation owns no capability concept; `foundation/capability_catalog/` is deleted.
+| `providers` | `audiagentic.components.providers.providers_api` | Product components, runtime orchestration, composition root | Provider-owned operations and reads only; no recipes, registries, adapters, serializers, or requester-domain imports. |
+
+Future platform APIs require the same narrow, documented approval. They are
+shared lower-layer seams, not general component-to-component exceptions.
+
+## 2. Extensions and Configuration
+
+- Entity declarations belong in configuration, not central Python lists or
+  entity-name conditionals.
+- Supported extensions use an owned, typed seam. Configuration declares an
+  entity; code provides its implementation and composition-root wiring.
+- Adding an entity must not require edits to a central dispatcher or unrelated
+  component. Explicit registration is allowed when it is the declared
+  execution-authority seam.
+- Component discovery uses descriptors or package discovery. A descriptor is
+  the canonical source of its component identifier.
+- Generated assets use owned renderers or virtual-asset contributions; runtime
+  does not branch on component-specific output paths.
+
+## 3. Ownership and Abstraction
+
+- Put a capability in foundation only when it is domain-neutral and has more
+  than one independent consumer. Shared component-domain logic stays with its
+  component.
+- Types are unified only when they share ownership, lifecycle, validation, and
+  semantics; field overlap alone is insufficient.
+- Split objects by cohesive responsibility. Size thresholds are review signals,
+  not automatic architectural boundaries.
+- Each durable artifact has one owner and one lifecycle path. Its mutation
+  behaviour must preserve user-owned content, be atomic where feasible, support
+  status/dry-run behaviour where applicable, and be testable.
+
+## 4. Public Contracts and Safety
+
+- Public domain failures use `AudiaGenticError` with a stable, owning-component
+  error code. Internal control flow may use native exceptions where they do not
+  cross a public boundary.
+- Errors, logs, results, timelines, and durable records must not expose secrets,
+  credentials, raw prompts, or unredacted process output.
+- External-service behaviour is explicit: classify failures, retry only bounded
+  idempotent transient operations, and report safe degraded state when a
+  best-effort operation can continue.
+- Library code uses module loggers. CLI entry points may write user-facing output.
+
+## 5. Events and Async Work
+
+- A bus topic has one owner and a stable declared contract. Dynamic production
+  topic construction is prohibited.
+- Event handlers isolate boundary failures: they do not break bus dispatch and
+  record a redacted durable failure suitable for operator action or manual
+  recovery.
+- Bus events communicate between components. Per-resource timelines and
+  operational records are observability artifacts, not bus-topic declarations.
+
+## 6. Platform and Provider Boundaries
+
+- Host/editor behaviour is implemented behind a configurable adapter; product
+  code does not embed host-specific commands or paths.
+- A platform component exposes only its approved narrow public API. Requesters
+  do not import adapters, serializers, handlers, or other implementation internals.
+- Platform components remain requester-blind: requests carry needed data and
+  opaque correlation/ownership context, not requester callbacks or domain policy.
+
+## 7. Enforcement
+
+- Architecture rules must have proportionate automated checks and focused tests.
+- Migrations remove obsolete paths and verify affected production and test
+  references. Validation scope matches the change; do not call a subset the
+  full suite.
+- Exceptions require an explicit, documented rationale and bounded scope.
+
+## Related guidance
+
+- [Architecture Implementation Guidelines](ARCHITECTURE_GUIDELINES.md)
+- [Observability Standards](OBSERVABILITY_STANDARDS.md)
+- [Creating Components](CREATING_A_COMPONENT.md)
