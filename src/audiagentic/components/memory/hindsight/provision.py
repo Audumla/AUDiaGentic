@@ -20,6 +20,10 @@ from audiagentic.components.memory.hindsight.lifecycle import (
     prune_hindsight,
     teardown_hindsight,
 )
+from audiagentic.components.memory.hindsight.mcp_recipe import (
+    build_hindsight_managed_entry,
+    hindsight_ownership_scope,
+)
 
 # Teardown locates/removes artifacts by server name, not by backend values, but
 # still needs real (non-guidance) recipes built. When no backend is configured
@@ -121,14 +125,38 @@ def build_hindsight_status_report(project_root: Path | str) -> dict[str, Any]:
         register_hindsight_recipes,
     )
     from audiagentic.components.memory.hindsight.status import build_hindsight_status
+    from audiagentic.components.memory.hindsight.strategies import resolve_hindsight_strategy
     from audiagentic.components.providers.descriptors.registry import all_descriptors
-    from audiagentic.components.providers.services.recipes import ProviderRecipeRegistry
+    from audiagentic.components.providers.providers_api import ManagedMcpRequest, manage_mcp_entries
+    from audiagentic.components.providers.services.recipes import (
+        ProviderRecipeKind,
+        ProviderRecipeRegistry,
+    )
 
     registry = ProviderRecipeRegistry()
     register_hindsight_recipes(registry, backend=backend, project_root=root)
 
     providers: dict[str, Any] = {}
     for provider_id in all_descriptors():
+        resolved = resolve_hindsight_strategy(provider_id, root)
+        if resolved and resolved.recipe_kind in {
+            ProviderRecipeKind.MCP_CONFIG,
+            ProviderRecipeKind.HYBRID,
+        }:
+            family = manage_mcp_entries(
+                root,
+                provider_id,
+                mode="status",
+                request=ManagedMcpRequest(
+                    ownership_scope=hindsight_ownership_scope(backend),
+                    entries=(build_hindsight_managed_entry(backend),),
+                ),
+            )
+            providers[provider_id] = {
+                "status": "active" if family.ok else "inactive",
+                "action_needed": family.action_needed,
+            }
+            continue
         status = build_hindsight_status(registry, provider_id, {"project_root": root})
         providers[provider_id] = status["hindsight"]
 

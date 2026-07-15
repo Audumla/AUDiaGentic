@@ -202,6 +202,30 @@ def sync_managed_provider_mcp_subset(
     )
 
 
+def sync_managed_provider_mcp_scope(
+    provider_id: str,
+    project_root: Path,
+    ownership_scope: str,
+    desired_entries: dict[str, tuple[str, McpServerEntry]],
+    *,
+    managed_ids: set[str] | None = None,
+) -> dict[str, Any]:
+    """Reconcile MCP entries owned by one opaque caller scope."""
+    descriptor = _descriptor(provider_id)
+    spec = descriptor.mcp_config
+    if spec is None:
+        return {"ok": False, "supported": False, "reason": "no mcp_config defined"}
+    result = sync_managed_config(
+        spec,
+        project_root,
+        ownership_scope,
+        desired_entries,
+        registry=mcp_ownership_registry(project_root),
+        managed_ids=managed_ids,
+    )
+    return result.to_dict()
+
+
 def add_mcp_entry(
     config_path: str | Path,
     server_name: str,

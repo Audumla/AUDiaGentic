@@ -30,7 +30,6 @@ from audiagentic.components.memory.hindsight.recipe_spec import (
 )
 from audiagentic.components.memory.hindsight.recipes import (
     _absolute_project_path,
-    _McpConfigAdapter,
 )
 from audiagentic.components.providers.descriptors.registry import get_descriptor
 from audiagentic.components.providers.services.recipes import ProviderRecipeKind
@@ -169,26 +168,11 @@ def _build_hooks_recipe(
         )
         return assemble_hindsight_recipe(blocked, None, _GUIDANCE_SPEC)
 
-    from audiagentic.components.memory.hindsight.recipe_spec import ParamBinding, RecipeSpec
-
-    is_verified = row.source_status == "verified"
-    spec = RecipeSpec(
-        pattern="declared_step",
-        params=[
-            ParamBinding(param_name="install_steps", row_field="install_steps"),
-            ParamBinding(param_name="uninstall_steps", row_field="uninstall_steps"),
-            ParamBinding(param_name="status_command", row_field="status_command"),
-            ParamBinding("verified", literal=is_verified),
-            ParamBinding("source_label", literal=row.source_status or ""),
-            ParamBinding(param_name="gate_action", row_field="notes"),
-        ],
-        status_overrides=[
-            StatusOverride(method="configure", state="configuring", status_text="hooks installed via CLI; no config write needed"),
-            StatusOverride(method="prune", state="absent", status_text="hooks managed by CLI; no config to prune"),
-            StatusOverride(method="dry_run", state="absent", status_text="would run install steps (dry-run)"),
-        ],
+    from audiagentic.components.memory.hindsight.declared_integration import (
+        build_declared_integration_recipe,
     )
-    return assemble_hindsight_recipe(row, backend, spec)
+
+    return build_declared_integration_recipe(row, backend)
 
 
 def _build_plugin_url_config_recipe(
@@ -218,8 +202,8 @@ def _build_plugin_config_recipe(
     harness_path = _resolve_harness_config_path(provider_id, project_root)
     if row.source_status != "verified" and row.install_steps:
         return assemble_hindsight_recipe(row, backend, _GUIDANCE_SPEC)
-    if row.plugin_array_package and harness_path:
-        return _PluginArrayRecipe(row, backend, harness_path)
+    if row.plugin_array_package and project_root:
+        return _PluginArrayRecipe(row, backend, project_root)
     if row.plugin_url_config_path:
         return _build_plugin_url_config_recipe(
             row, backend, row.plugin_url_config_path,
@@ -228,25 +212,6 @@ def _build_plugin_config_recipe(
     if harness_path:
         return PluginConfigRecipe(row, backend, Path(harness_path))
     return assemble_hindsight_recipe(row, backend, _GUIDANCE_SPEC)
-
-
-def _build_mcp_config_recipe(
-    row: HindsightRecipeRow,
-    backend: HindsightBackendConfig,
-    provider_id: str,
-    project_root: Path | None,
-) -> Any:
-    """Build MCP-config recipe.
-
-    Blocked source status returns guidance-only. After SL13 A8, HYBRID collapses
-    to _McpConfigAdapter (rules flow via surface contributions).
-    """
-    if row.source_status == "blocked":
-        return assemble_hindsight_recipe(row, backend, _GUIDANCE_SPEC)
-    harness_path = _resolve_harness_config_path(provider_id, project_root)
-    return _build_mcp_recipe(
-        row, backend, provider_id, project_root, harness_path, None,
-    )
 
 
 def _build_guidance_only_recipe(
@@ -275,8 +240,6 @@ _RECIPE_FACTORIES: dict[ProviderRecipeKind, _RecipeFactory] = {
     ProviderRecipeKind.HOOKS: lambda r, b, p, pr: _build_hooks_recipe(r, b),
     ProviderRecipeKind.WRAPPER_CLI: lambda r, b, p, pr: _build_hooks_recipe(r, b),
     ProviderRecipeKind.PLUGIN_CONFIG: _build_plugin_config_recipe,
-    ProviderRecipeKind.MCP_CONFIG: _build_mcp_config_recipe,
-    ProviderRecipeKind.HYBRID: _build_mcp_config_recipe,
     ProviderRecipeKind.GUIDANCE_ONLY: _build_guidance_only_recipe,
 }
 
@@ -295,37 +258,6 @@ def build_hindsight_recipe(
     factory = _RECIPE_FACTORIES.get(row.recipe_kind)
     if factory is not None:
         return factory(row, backend, provider_id, project_root)
-    return assemble_hindsight_recipe(row, backend, _GUIDANCE_SPEC)
-
-
-def _build_mcp_recipe(
-    row: HindsightRecipeRow,
-    backend: HindsightBackendConfig,
-    provider_id: str,
-    project_root: Path | None,
-    harness_path: str | None,
-    rule_path: Path | None,
-) -> Any:
-    """Build MCP-config recipe for MCP_CONFIG or HYBRID kind.
-
-    After SL13 A8: _CompositeRecipe collapsed into _McpConfigAdapter — rules
-    content flows via surface contributions (memory.yaml), so HYBRID is
-    equivalent to MCP_CONFIG. Falls back to guidance when paths are unavailable.
-    """
-    descriptor = get_descriptor(provider_id)
-    spec = descriptor.mcp_config if descriptor else None
-    # A remote (url-form) entry cannot be expressed in a stdio-only provider
-    # config — fall through to the guidance path instead of writing a broken
-    # entry (audit finding, HM21/RV155).
-    if (
-        spec is not None
-        and REMOTE_CAPABILITY not in spec.capabilities
-        and backend.transport != "stdio"
-    ):
-        harness_path = None
-    if harness_path:
-        config_path = Path(harness_path)
-        return _McpConfigAdapter(row, backend, config_path, project_root=project_root)
     return assemble_hindsight_recipe(row, backend, _GUIDANCE_SPEC)
 
 

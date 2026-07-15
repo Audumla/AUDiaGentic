@@ -9,6 +9,10 @@ from audiagentic.components.memory.hindsight.export import (
     build_hindsight_backend,
 )
 from audiagentic.components.memory.hindsight.matrix import HINDSIGHT_RECIPE_MATRIX
+from audiagentic.components.memory.hindsight.mcp_recipe import (
+    build_hindsight_managed_entry,
+    hindsight_ownership_scope,
+)
 from audiagentic.components.memory.hindsight.recipe_spec import (
     ParamBinding,
     RecipeSpec,
@@ -19,7 +23,9 @@ from audiagentic.components.memory.hindsight.strategies import (
     build_hindsight_recipe,
     resolve_hindsight_strategy,
 )
+from audiagentic.components.providers.providers_api import ManagedMcpRequest, manage_mcp_entries
 from audiagentic.components.providers.services.recipes import (
+    ProviderRecipeKind,
     ProviderRecipeRegistry,
     ProviderRecipeResult,
     RecipeState,
@@ -58,6 +64,12 @@ def register_hindsight_recipes(
     for row in HINDSIGHT_RECIPE_MATRIX:
         resolved = resolve_hindsight_strategy(row.provider_id, project_root)
         if resolved is None:
+            continue
+
+        if backend and resolved.recipe_kind in {
+            ProviderRecipeKind.MCP_CONFIG,
+            ProviderRecipeKind.HYBRID,
+        }:
             continue
 
         if not backend:
@@ -116,6 +128,38 @@ def _reconcile(
             results[recipe.provider_id] = result if result else ProviderRecipeResult.ok(
                 RecipeState.ABSENT, status="nothing to install",
             )
+
+    if backend is not None:
+        for row in HINDSIGHT_RECIPE_MATRIX:
+            resolved = resolve_hindsight_strategy(row.provider_id, project_root)
+            if resolved is None or resolved.recipe_kind not in {
+                ProviderRecipeKind.MCP_CONFIG,
+                ProviderRecipeKind.HYBRID,
+            }:
+                continue
+            if selected is not None and resolved.provider_id not in selected:
+                continue
+            mode = "apply" if operation == "install" else "prune"
+            family = manage_mcp_entries(
+                project_root,
+                resolved.provider_id,
+                mode=mode,
+                request=ManagedMcpRequest(
+                    ownership_scope=hindsight_ownership_scope(backend),
+                    entries=(build_hindsight_managed_entry(backend),) if mode == "apply" else (),
+                ),
+            )
+            if family.ok:
+                results[resolved.provider_id] = ProviderRecipeResult.ok(
+                    RecipeState.VERIFIED if mode == "apply" else RecipeState.ABSENT,
+                    status="managed MCP entry applied" if mode == "apply" else "managed MCP entry pruned",
+                    action_needed=family.action_needed or "",
+                )
+            else:
+                results[resolved.provider_id] = ProviderRecipeResult.fail(
+                    family.error_code or "managed MCP operation failed",
+                    action_needed=family.action_needed or "",
+                )
     return results
 
 

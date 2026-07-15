@@ -25,7 +25,6 @@ from audiagentic.components.memory.hindsight.recipe_spec import (
     StatusOverride,
     assemble_hindsight_recipe,
 )
-from audiagentic.components.memory.hindsight.recipes import _McpConfigAdapter
 from audiagentic.components.providers.services.recipes import ProviderRecipeKind
 
 
@@ -211,7 +210,11 @@ def test_plugin_url_repair_resolves_appdata_placeholder(tmp_path, monkeypatch):
         plugin_repair_server_script="scripts/mcp_server.py",
     )
 
-    ok, detail = _repair_windows_plugin_mcp(_backend(), row)
+    from audiagentic.components.memory.hindsight.plugin_definition import HindsightPluginDefinition
+
+    ok, detail = _repair_windows_plugin_mcp(
+        _backend(), HindsightPluginDefinition.from_row(row)
+    )
 
     assert ok, detail
     import json
@@ -221,38 +224,41 @@ def test_plugin_url_repair_resolves_appdata_placeholder(tmp_path, monkeypatch):
 
 
 def test_plugin_array_probe_golden(tmp_path):
+    package = "@vectorize-io/opencode-hindsight"
+    row = _row(recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG, plugin_array_package=package)
     r = _PluginArrayRecipe(
-        _row(recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG),
+        row,
         _backend(),
-        tmp_path / "arr.json",
+        tmp_path,
     )
     assert _snap(r.probe({})) == {
         "success": True,
         "state": "absent",
-        "status": "no reader configured for plugin array",
+        "status": "plugin entry absent or stale",
         "source_url": "https://src.example/doc",
         "source_date": "2026-01-01",
         "action_needed": "manage_config_writes",
     }
 
 
-def test_plugin_array_uninstall_removes_entry(tmp_path):
-    path = tmp_path / "arr.json"
+def test_plugin_array_uninstall_removes_entry(tmp_path, monkeypatch):
     package = "@vectorize-io/opencode-hindsight"
     row = _row(
         recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG,
         plugin_array_package=package,
-        plugin_array_reader="audiagentic.components.providers.adapters.opencode.plugin_array:read_opencode_plugin",
-        plugin_array_writer="audiagentic.components.providers.adapters.opencode.plugin_array:write_opencode_plugin",
-        plugin_array_remover="audiagentic.components.providers.adapters.opencode.plugin_array:remove_opencode_plugin",
     )
-    r = _PluginArrayRecipe(row, _backend(), path)
-    r.configure({})
+    r = _PluginArrayRecipe(row, _backend(), tmp_path)
+    calls = []
+    from audiagentic.components.providers.contracts.plugin_entry import PluginEntryResult
+    monkeypatch.setattr(
+        "audiagentic.components.providers.providers_api.manage_plugin_entry",
+        lambda *args, **kwargs: calls.append(kwargs["mode"]) or PluginEntryResult(True, True),
+    )
 
     result = r.uninstall({})
 
     assert result.success
-    assert package not in path.read_text(encoding="utf-8")
+    assert calls == ["prune"]
 
 
 def test_guidance_only_probe_provision_golden():
@@ -279,42 +285,11 @@ def test_guidance_only_probe_provision_golden():
     }
 
 
-def test_mcp_config_adapter_probe_golden(tmp_path):
-    r = _McpConfigAdapter(
-        _row(), _backend(), tmp_path / "mcp.json", project_root=tmp_path,
-    )
-    assert _snap(r.probe({})) == {
-        "success": True,
-        "state": "absent",
-        "status": "entry absent",
-        "source_url": "https://src.example/doc",
-        "source_date": "2026-01-01",
-        "action_needed": "manage_config_writes",
-    }
-    assert _snap(r.dry_run({})) == {
-        "success": True,
-        "state": "absent",
-        "status": "would install (dry-run)",
-        "source_url": "https://src.example/doc",
-        "source_date": "2026-01-01",
-        "action_needed": "manage_config_writes",
-    }
+def test_managed_mcp_payload_golden():
+    from audiagentic.components.memory.hindsight.mcp_recipe import build_hindsight_managed_entry
+
+    assert build_hindsight_managed_entry(_backend()).managed_id == "ag-hindsight"
 
 
-def test_hybrid_collapsed_to_mcp_adapter(tmp_path):
-    """After SL13 A8: HYBRID maps to _McpConfigAdapter (rules via surfaces).
-
-    _CompositeRecipe has been deleted; the HYBRID kind uses the same MCP adapter
-    and rules content flows through surface contributions (memory.yaml).
-    """
-    r = _McpConfigAdapter(
-        _row(recipe_kind=ProviderRecipeKind.HYBRID),
-        _backend(),
-        tmp_path / "mcp.json",
-        project_root=tmp_path,
-    )
-    snap = _snap(r.probe({}))
-    assert snap["success"] is True
-    assert snap["state"] == "absent"
-    assert snap["source_url"] == "https://src.example/doc"
-    assert snap["action_needed"] == "manage_config_writes"
+def test_hybrid_kind_remains_matrix_classification_only():
+    assert _row(recipe_kind=ProviderRecipeKind.HYBRID).recipe_kind is ProviderRecipeKind.HYBRID

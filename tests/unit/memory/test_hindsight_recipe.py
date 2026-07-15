@@ -148,58 +148,6 @@ def test_verified_matrix_step_definitions_build_provision_steps(tmp_path):
             assert steps, f"{row.provider_id} has step defs but recipe returned no ProvisionSteps"
 
 
-def test_mcp_config_adapter_provision_writes_config_via_step_path(tmp_path):
-    row = HindsightRecipeRow(
-        provider_id="gemini",
-        display_name="Gemini",
-        integration_type="mcp",
-        recipe_kind=ProviderRecipeKind.MCP_CONFIG,
-        source_status="verified",
-        audia_action="manage_config_writes",
-        source_url="https://example.invalid/gemini",
-        source_date="2026-07-01",
-    )
-    recipe = build_hindsight_recipe(row, _backend(api_key="k"), "gemini", tmp_path)
-
-    result = recipe.provision({})
-
-    assert result.success, result.error
-    settings = tmp_path / ".gemini" / "settings.json"
-    assert "hindsight" in settings.read_text(encoding="utf-8")
-
-
-def test_hybrid_recipe_provision_steps_include_installer_and_mcp(tmp_path):
-    """After SL13 A8: HYBRID maps to _McpConfigAdapter (rules via surfaces).
-
-    Provision steps include installer + MCP config steps; rule block steps are
-    handled by surface contributions, not the recipe.
-    """
-    row = HindsightRecipeRow(
-        provider_id="copilot",
-        display_name="GitHub Copilot",
-        integration_type="mcp+rules",
-        recipe_kind=ProviderRecipeKind.HYBRID,
-        source_status="verified",
-        audia_action="call_official_installer",
-        source_url="https://example.invalid/copilot",
-        source_date="2026-07-01",
-        install_steps=[
-            {
-                "type": "shell",
-                "id": "copilot-init",
-                "command": ["hindsight-copilot", "init", "--api-token={TOKEN}", "--bank-id={ID}"],
-            }
-        ],
-    )
-    recipe = build_hindsight_recipe(row, _backend(api_key="k", bank_id="bank"), "copilot", tmp_path)
-
-    steps = recipe.provision_steps()
-    ids = [step.id for step in steps]
-
-    assert "copilot-init" in ids
-    assert any("mcp" in step_id or "config" in step_id for step_id in ids)
-
-
 def test_apply_hindsight_mcp_provider_writes_inside_project_root(tmp_path, monkeypatch):
     """Regression: MCP-config provisioning must (a) succeed through the adapter
     path (inner RecipeResult re-stamped, not assumed ProviderRecipeResult) and
@@ -229,52 +177,6 @@ def test_apply_hindsight_mcp_provider_writes_inside_project_root(tmp_path, monke
 class TestBuildHindsightStatus:
     """HM15: status output includes source freshness, artifacts, and provenance."""
 
-    def test_status_includes_source_date_and_source_status(self, tmp_path):
-        from audiagentic.components.memory.hindsight.status import build_hindsight_status
-        from audiagentic.components.memory.hindsight.strategies import (
-            build_hindsight_recipe,
-        )
-        from audiagentic.components.providers.services.recipes import ProviderRecipeRegistry
-
-        registry = ProviderRecipeRegistry()
-        row = HindsightRecipeRow(
-            provider_id="gemini",
-            display_name="Gemini",
-            integration_type="mcp",
-            recipe_kind=ProviderRecipeKind.MCP_CONFIG,
-            source_status="verified",
-            audia_action="manage_config_writes",
-            source_url="https://example.invalid/gemini",
-            source_date="2026-07-01",
-        )
-        recipe = build_hindsight_recipe(row, _backend(api_key="k"), "gemini", tmp_path)
-        registry.register(recipe)
-
-        # Provision so probe returns VERIFIED
-        recipe.provision({})
-
-        status = build_hindsight_status(registry, "gemini")
-        assert status["provider_id"] == "gemini"
-        hs = status["hindsight"]
-        assert hs["status"] == "active"
-        recs = hs["recipes"]
-        assert len(recs) >= 1
-
-        entry = recs[0]
-        # All HM15 fields present
-        assert "kind" in entry
-        assert "state" in entry
-        assert "status" in entry
-        assert "action_needed" in entry
-        assert "source_url" in entry
-        assert "source_date" in entry
-        assert "source_status" in entry
-        assert "artifacts_owned" in entry
-        # Provenance fields populated from matrix row
-        assert entry["source_date"] == "2026-07-01"
-        assert entry["source_status"] == "verified"
-        assert entry["state"] == "verified"
-
     def test_status_for_unknown_provider(self, tmp_path):
         from audiagentic.components.memory.hindsight.status import build_hindsight_status
         from audiagentic.components.providers.services.recipes import ProviderRecipeRegistry
@@ -283,26 +185,6 @@ class TestBuildHindsightStatus:
         status = build_hindsight_status(registry, "no-such-provider")
         assert status["provider_id"] == "no-such-provider"
         assert status["hindsight"]["status"] == "not_registered"
-
-    def test_status_artifacts_owned_present_in_result(self, tmp_path):
-        """artifacts_owned field is populated by provision (not probe/status)."""
-        from audiagentic.components.memory.hindsight.strategies import build_hindsight_recipe
-
-        row = HindsightRecipeRow(
-            provider_id="gemini",
-            display_name="Gemini",
-            integration_type="mcp",
-            recipe_kind=ProviderRecipeKind.MCP_CONFIG,
-            source_status="verified",
-            audia_action="manage_config_writes",
-        )
-        recipe = build_hindsight_recipe(row, _backend(api_key="k"), "gemini", tmp_path)
-
-        result = recipe.provision({})
-        assert result.success
-        # Provision returns artifact IDs; status/probe reads state only.
-        assert len(result.artifacts_owned) >= 1
-
 
 class TestMemoryStatusProviderAgnostic:
     """memory_status must never leak per-provider Hindsight detail."""

@@ -16,6 +16,51 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.providers.contracts.managed_mcp import (
+    ManagedMcpEntry as ManagedMcpEntry,
+)
+from audiagentic.components.providers.contracts.managed_mcp import (
+    ManagedMcpMode,
+    ManagedMcpRequest,
+    ManagedMcpResult,
+)
+from audiagentic.components.providers.contracts.plugin_entry import (
+    PluginEntryMode,
+    PluginEntryRequest,
+    PluginEntryResult,
+)
+
+
+def manage_plugin_entry(
+    project_root: Path, provider_id: str, *, mode: PluginEntryMode, request: PluginEntryRequest,
+) -> PluginEntryResult:
+    """Manage one generic provider plugin-config entry."""
+    from audiagentic.components.providers.services.plugin_entries import (
+        manage_plugin_entry as _manage,
+    )
+
+    return _manage(project_root, provider_id, mode=mode, request=request)
+
+
+def manage_mcp_entries(
+    project_root: Path,
+    provider_id: str,
+    *,
+    mode: ManagedMcpMode,
+    request: ManagedMcpRequest,
+) -> ManagedMcpResult:
+    """Manage caller-owned MCP entries through provider automation."""
+    from audiagentic.components.providers.services.managed_mcp_family import (
+        manage_mcp_entries as _manage,
+    )
+
+    return _manage(
+        project_root,
+        provider_id,
+        mode=mode,
+        request=request,
+    )
+
 
 def list_providers(project_root: Path) -> dict[str, Any]:
     from audiagentic.components.providers.services.status import build_provider_status
@@ -82,17 +127,13 @@ def list_provider_descriptors() -> list[dict[str, Any]]:
     ]
 
 
-def list_provider_models(
-    project_root: Path, provider_id: str, *, refresh: bool = False
-) -> dict[str, Any]:
-    """Read one provider catalog, optionally refreshing it once first.
+def list_provider_models(project_root: Path, provider_id: str) -> dict[str, Any]:
+    """Read one provider catalog without fetching or writing durable state.
 
-    Catalog refresh is best effort: callers still receive a valid cached read
-    when one exists, with an explicit refresh outcome instead of raw exception
-    text.  This is the sole public model-catalog read surface.
+    Call :func:`refresh_provider_catalog` explicitly before this query when a
+    fresh remote catalog is required.
     """
     from audiagentic.components.providers.descriptors.registry import all_descriptors
-    from audiagentic.components.providers.services.catalog import fetch_provider_catalog
     from audiagentic.components.providers.services.provider_catalog import (
         catalog_is_stale,
         read_model_catalog,
@@ -119,17 +160,10 @@ def list_provider_models(
             "stale": False,
         }
 
-    refresh_error: AudiaGenticError | None = None
-    if refresh:
-        try:
-            fetch_provider_catalog(provider_id, project_root=project_root)
-        except AudiaGenticError as exc:
-            refresh_error = exc
-
     try:
         catalog = read_model_catalog(project_root, provider_id)
     except AudiaGenticError:
-        result: dict[str, Any] = {
+        return {
             "provider_id": provider_id,
             "models": [],
             "ok": False,
@@ -137,13 +171,6 @@ def list_provider_models(
             "catalog_present": False,
             "stale": False,
         }
-        if refresh_error is not None:
-            result.update({
-                "refresh_ok": False,
-                "error_code": refresh_error.code,
-                "action_needed": "check provider catalog access and retry refresh",
-            })
-        return result
 
     models = [
         {
@@ -155,7 +182,7 @@ def list_provider_models(
         }
         for model in catalog.get("models", [])
     ]
-    result = {
+    return {
         "provider_id": provider_id,
         "fetched_at": catalog.get("fetched-at", ""),
         "models": models,
@@ -164,14 +191,6 @@ def list_provider_models(
         "catalog_present": True,
         "stale": catalog_is_stale(catalog, max_age_hours=24),
     }
-    if refresh:
-        result["refresh_ok"] = refresh_error is None
-    if refresh_error is not None:
-        result.update({
-            "error_code": refresh_error.code,
-            "action_needed": "catalog refresh failed; using cached catalog",
-        })
-    return result
 
 
 async def refresh_provider_catalog(project_root: Path, provider_id: str) -> dict[str, Any]:
@@ -264,7 +283,7 @@ def describe_provider(project_root: Path, provider_id: str) -> dict[str, Any]:
         "descriptor": summary_rows[0] if summary_rows else {},
         "status": get_provider_status(project_root, provider_id),
         "execution": describe_execution_support(provider_id),
-        "models": list_provider_models(project_root, provider_id, refresh=False),
+        "models": list_provider_models(project_root, provider_id),
         "models_config": list_provider_models_config(project_root, provider_id),
         "config_surfaces": [
             _serialize_config_surface("mcp", descriptor.mcp_config, project_root),
