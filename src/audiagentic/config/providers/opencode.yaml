@@ -23,6 +23,36 @@ host_capabilities:
     capability_id: "sst-dev.opencode"
     display_name: "OpenCode"
 
+capability_facts:
+  - capability_id: model-catalog-refresh
+    subject: fetch_catalog_fn
+    mechanism: "opencode models --verbose"
+    constraints:
+      - "Provider command requires an installed OpenCode CLI."
+    limitations:
+      - "Catalog contents depend on provider authentication and upstream cache state."
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: execution
+      tool_version: "1.17.18"
+      fact_anchor: "docs/reference/model-source-evidence/opencode.md#opencode-evidence"
+      review_state: verified
+  - capability_id: model-config-projection
+    subject: "external:model-config-projection"
+    mechanism: "structured provider config"
+    constraints:
+      - "Config filename and winning container remain unresolved."
+    limitations:
+      - "No safe automatic projection contract is verified."
+    support_assessment: blocked
+    action_needed: "Resolve config.json versus opencode.json and provider key shape."
+    evidence:
+      evidence_tier: unverified
+      tool_version: "1.17.18"
+      fact_anchor: "docs/reference/model-source-evidence/opencode.md#opencode-evidence"
+      review_state: pending-review
+
 permissions:
   can_write_files: true
   can_execute_shell: true
@@ -46,6 +76,13 @@ mcp_config:
   remover: "audiagentic.components.providers.adapters.mcp_opencode:remove_opencode_mcp"
   format: "opencode-mcp"
   refresh_mode: "file-watch"
+
+plugin_config:
+  config_path: ".opencode/opencode.json"
+  reader: "audiagentic.components.providers.adapters.opencode.plugin_array:read_opencode_plugin"
+  writer: "audiagentic.components.providers.adapters.opencode.plugin_array:write_opencode_plugin"
+  remover: "audiagentic.components.providers.adapters.opencode.plugin_array:remove_opencode_plugin"
+  format: "opencode-plugin-array"
 
 language_servers_config:
   config_path: ".opencode/opencode.json"
