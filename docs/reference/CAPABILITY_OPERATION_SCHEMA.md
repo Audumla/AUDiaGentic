@@ -7,14 +7,92 @@
 
 Every public entry belongs to exactly one category.
 
-| Category | Purpose | Operation mode |
-|---|---|---|
-| Resource/query | Manage or read AUDiaGentic-owned provider resources, descriptors, catalogs, and evidence | No |
-| Automation family | Apply provider-specific automation to declared desired state | Supported subset of `plan`, `apply`, `prune`, `status` |
-| Agent execution | Run an explicitly composed provider execution adapter | No |
+| Category | Purpose | Durable mutation | Operation mode |
+|---|---|---|---|
+| Query | Observe state | None |
+| Resource command | Manage AUDiaGentic-owned desired state or cache | AUDiaGentic resource only | None |
+| Automation family | Change external provider state or owned contributions inside provider files | Provider/tool state | Supported subset of `plan`, `apply`, `prune`, `status` |
+| Agent execution | Run an explicitly composed provider execution adapter | Execution effects only | None |
 
-Resource CRUD is not forced into operation semantics. Agent execution is not an
-automation family. No universal gateway joins these categories.
+Provider-specific code does not make a call automation: mutation ownership does.
+Resource CRUD and catalog refresh do not use recipe modes. Agent execution is
+not an automation family. No universal gateway joins these categories.
+
+## Frozen current export classification
+
+`providers_mcp.py` is the sole current production caller of these public
+exports. Tests are validation callers.
+
+| Current export | Category and target | Owner |
+|---|---|---|
+| `list_providers` | Query; keep | MA31 |
+| `get_provider_status` | Query; keep | MA31 |
+| `list_provider_descriptors` | Query; keep | MA31 |
+| `describe_provider` | Query; keep | MA31 |
+| `model_source_list` | Query of desired-state resource; keep | MA31 |
+| `list_provider_models` | Catalog query; remove `refresh` flag | MA31 |
+| `refresh_provider_catalog` | Catalog resource command; cache write only | MA31 |
+| `refresh_all_catalogs` | Batch catalog resource command | MA31 |
+| `model_source_add` | Desired-state resource create only | MO02 |
+| `model_source_update` | Desired-state resource update only | MO02 |
+| `model_source_remove` | Desired-state resource delete, not `prune` | MO02 |
+| `model_source_set_enabled` | Desired-state resource update only | MO02 |
+| `sync_provider_models` | Replace with model-projection family modes | MO02 |
+| `list_provider_models_config` | Fold into model-projection `status` | MO02 |
+| `reload_provider_models` | Delete; private model-projection `apply` mechanic | MO02 |
+| `install_provider` | Replace with CLI `apply` | MA12 |
+| `repair_provider` | Replace with CLI `apply`; recipe selects repair | MA12 |
+| `uninstall_provider` | Replace with CLI `prune` | MA12 |
+| `apply_provider_surfaces` | Replace with surface `apply` | MA21 |
+| `prune_provider_surfaces` | Replace with surface `prune` | MA21 |
+| `reconcile_provider` | Delete; explicit family composition | MA22 |
+| `reconcile_all_providers` | Delete; explicit iteration/composition | MA22 |
+
+Model-source CRUD persists desired state only. It has no automation mode,
+`apply`, or `dry_run` flag. Callers explicitly invoke model projection when
+provider state must change. `list_provider_models` is query-only; refresh uses
+the explicit catalog resource commands.
+
+## Universal internal recipe schema
+
+Every automation implementation conforms to one provider-owned declarative
+`RecipeDefinition` schema. Its common envelope identifies the recipe, provider,
+open family id, supported modes, family payload/result contracts, recipe
+version, and whether opaque ownership scope is required.
+
+This is an internal schema, not a public request or result. Family payloads and
+results remain distinct. It contains no requester identity, provider path,
+command, serializer, handler dotpath, or closed family taxonomy. Queries,
+resource commands, and agent execution cannot register recipes.
+
+Schema validation describes an implementation; it does not enable one. Only an
+explicit provider+family code registration enables automation. Duplicate
+registration fails instead of replacing an existing binding.
+
+The frozen definition envelope is:
+
+| Field | Meaning |
+|---|---|
+| `recipe-id` | Diagnostic identity for the implementation definition. |
+| `provider-id` | Provider owning the implementation. |
+| `family-id` | Open automation-family identifier registered by composition. |
+| `supported-modes` | Supported subset of `plan`, `apply`, `prune`, `status`. |
+| `payload-contract` | Reference to the family-specific input contract. |
+| `result-contract` | Reference to the family-specific result contract. |
+| `recipe-version` | Definition version. |
+| `ownership-scope-required` | Whether calls require opaque ownership scope. |
+| `provenance-ref` | Optional non-authoritative evidence reference. |
+
+No command, path, serializer, handler reference, requester identity, recipe
+mechanic, or closed family enum belongs in this envelope. The provider-owned
+schema is `components/providers/contracts/provider-recipe.schema.json`.
+
+The internal automation registry receives an explicit open family-to-contract
+mapping and known-provider set from composition. It binds code by
+`(provider-id, family-id)`. Loading valid definition data alone leaves the
+recipe inert. Unknown providers/families, contract mismatches, duplicate
+bindings, unsupported modes, and missing required ownership scope fail with
+canonical provider errors.
 
 ## Automation modes
 

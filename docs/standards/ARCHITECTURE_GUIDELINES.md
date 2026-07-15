@@ -137,6 +137,17 @@ or handlers. Runtime automation becomes executable only through explicit
 composition-root registration; descriptive provider configuration is not
 execution authority.
 
+Provider automation recipes share one internal declarative recipe-definition
+schema and private lifecycle contract. Public functions, payloads, and results
+remain family-specific. Resource management and agent execution do not become
+recipes. Schema validation never substitutes for explicit code registration.
+
+Classify provider API entries by mutation ownership: queries do not mutate;
+resource commands mutate AUDiaGentic-owned desired state or cache; automation
+mutates external provider state or owned contributions in provider files;
+execution runs agent work. Invoking provider-specific code alone does not make
+a query or resource command automation.
+
 Provider-specific request/result types remain in providers when they contain
 provider concepts. Put a type in foundation only when it is domain-neutral and
 independently consumed outside provider management.
