@@ -14,6 +14,7 @@ from jsonschema import Draft202012Validator
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import read_schema
+from audiagentic.foundation.logging.redaction import redact_text
 from audiagentic.foundation.time import now_iso_z
 
 # Per-path locks for coordinated writes to the same file
@@ -148,9 +149,10 @@ class RawLogSink:
     def write(self, line: str) -> None:
         if not line:
             return
+        safe = redact_text(line)
         with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(line)
-            if not line.endswith("\n"):
+            handle.write(safe)
+            if not safe.endswith("\n"):
                 handle.write("\n")
 
     def flush(self) -> None:
@@ -191,7 +193,7 @@ class NormalizedEventSink:
             )
 
     def write(self, line: str) -> None:
-        text = line.rstrip("\r\n")
+        text = redact_text(line.rstrip("\r\n"))
         if not text:
             return
         self.write_event(

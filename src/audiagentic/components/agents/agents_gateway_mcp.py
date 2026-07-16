@@ -20,6 +20,20 @@ from audiagentic.foundation.mcp.component_server import (
 mcp = mcp_server(__name__)
 
 
+def _mcp_capped(timeout_seconds: float | None) -> float:
+    """Cap a blocking wait to what the MCP transport can hold.
+
+    The client transport has its own 30-60s timeout, so an MCP tool call must
+    never block indefinitely — it returns a 'running' status instead and the
+    caller polls. This constraint belongs to the TRANSPORT, which is why it is
+    applied here and not in the core gateway API: an in-process supervisor
+    running a long implementation task has no such limit (RV511).
+    """
+    cap = gateway.MCP_BLOCKING_TIMEOUT_SECONDS
+    return min(timeout_seconds, cap) if timeout_seconds else cap
+
+
+
 @mcp.tool()
 @log_tool_call
 def agent_llm_submit(
@@ -54,8 +68,10 @@ def agent_llm_status(request_id: str) -> dict[str, Any]:
 @mcp.tool()
 @log_tool_call
 def agent_llm_wait(request_id: str, timeout_seconds: float | None = None) -> dict[str, Any]:
-    """Block until a request reaches a terminal state or timeout (capped server-side)."""
-    return gateway.wait_llm_request(project_root_from_env(), request_id, timeout_seconds)
+    """Block until a request reaches a terminal state or timeout (capped for MCP transport)."""
+    return gateway.wait_llm_request(
+        project_root_from_env(), request_id, _mcp_capped(timeout_seconds)
+    )
 
 
 @mcp.tool()
@@ -81,7 +97,7 @@ def agent_llm_run(
         project_root_from_env(),
         agent_profile_id=agent_profile_id,
         prompt_body=prompt_body,
-        timeout_seconds=timeout_seconds,
+        timeout_seconds=_mcp_capped(timeout_seconds),
         fallback_profile_ids=fallback_profile_ids,
         source=source,
         metadata=metadata,

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "provider-language-server-projection-payload/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["entries"],
+  "properties": {
+    "entries": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["language", "command"],
+        "properties": {
+          "language": {"type": "string", "minLength": 1},
+          "command": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1
+          },
+          "file_extensions": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "settings": {"type": "object"}
+        }
+      }
+    }
+  }
+}

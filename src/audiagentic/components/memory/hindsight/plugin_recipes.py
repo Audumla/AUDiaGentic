@@ -3,12 +3,11 @@
 Recipes for providers whose Hindsight integration is a plugin: a plugin
 registered in the harness config (:class:`PluginConfigRecipe`), a per-provider
 settings JSON file with the Windows launcher repair
-(:class:`_PluginUrlConfigRecipe`), or a declarative plugin-array entry
-(:class:`_PluginArrayRecipe`).
+(:class:`PluginUrlConfigRecipe`), or a declarative plugin-array entry
+(:class:`PluginArrayRecipe`).
 
 All three consume only typed HindsightPluginDefinition and
-HindsightPluginDesired objects. The raw HindsightRecipeRow exists only in the
-matrix-to-definition parser.
+HindsightPluginDesired objects.
 """
 from __future__ import annotations
 
@@ -108,7 +107,7 @@ def _run_gated_steps(
     return None
 
 
-class _PluginRecipe(ProviderCapabilityRecipe):
+class PluginRecipe(ProviderCapabilityRecipe):
     """Base for Hindsight plugin recipes — consumes typed definition, not raw row."""
 
     capability_id = "hindsight"
@@ -163,7 +162,7 @@ class _PluginRecipe(ProviderCapabilityRecipe):
         return self._stamp(base)
 
 
-class PluginConfigRecipe(_PluginRecipe):
+class PluginConfigRecipe(PluginRecipe):
     """Plugin-config recipe: writes plugin registration to provider config.
 
     For providers like OpenCode, Claude that use plugin arrays or marketplace.
@@ -420,7 +419,7 @@ def _build_plugin_url_config(desired: HindsightPluginDesired) -> dict[str, Any]:
     return desired.options()
 
 
-class _PluginUrlConfigRecipe(_PluginRecipe):
+class PluginUrlConfigRecipe(PluginRecipe):
     """Writes hindsight connection config to a provider-specific JSON file.
 
     Used by providers whose Hindsight plugin reads a ~/.hindsight/<provider>.json
@@ -552,7 +551,7 @@ class _PluginUrlConfigRecipe(_PluginRecipe):
         ))
 
 
-class _PluginArrayRecipe(_PluginRecipe):
+class PluginArrayRecipe(PluginRecipe):
     """Upserts one named entry into a provider's declarative plugin-array config.
 
     For providers (e.g. OpenCode) that auto-install packages listed in a config
@@ -650,5 +649,8 @@ class _PluginArrayRecipe(_PluginRecipe):
 
 
 __all__ = [
+    "PluginRecipe",
     "PluginConfigRecipe",
+    "PluginUrlConfigRecipe",
+    "PluginArrayRecipe",
 ]

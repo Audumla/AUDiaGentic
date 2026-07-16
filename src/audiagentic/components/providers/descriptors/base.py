@@ -182,6 +182,13 @@ class ProviderDescriptor:
     # as self-providing LSP and is excluded from the generic ag-lsp MCP projection.
     # Receives project_root; returns a result dict.
     on_lsp_enabled: Callable[[Path | None], dict[str, Any]] | None = None
+    # Optional non-mutating companion to on_lsp_enabled. Reports whether the
+    # provider's self-provided LSP support is already present, without
+    # provisioning it. The self-provided-lsp family uses this for status mode so
+    # a query never triggers the install side effect of on_lsp_enabled. When a
+    # provider declares on_lsp_enabled but no probe, status reports evidence-only
+    # "unknown" rather than executing the hook.
+    lsp_support_probe: Callable[[Path | None], dict[str, Any]] | None = None
     # Controls whether this provider receives the ag-lsp MCP server from the
     # coding-lsp component. When True (default), the provider gets the MCP server
     # regardless of whether it has its own LSP implementation. Set to False to

@@ -14,7 +14,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.coding_lsp.language_servers import LanguageServerEntry
+from audiagentic.components.providers.contracts.language_server_projection import (
+    LanguageServerEntry,
+)
 from audiagentic.foundation.io import atomic_write_json, load_json_file
 
 # opencode keys its `lsp` object by opencode's own built-in server name, which is

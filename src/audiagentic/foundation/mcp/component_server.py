@@ -11,17 +11,21 @@ import asyncio
 import functools
 import logging
 import queue
-import re
 import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError, to_error_envelope
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.output import (
     ComponentOutputEvent,
     ComponentOutputSink,
     coerce_output_event,
+)
+from audiagentic.foundation.logging.redaction import (
+    DEFAULT_REDACT_PATTERNS,
+    redact_error_envelope,
+    redact_text,
 )
 
 try:
@@ -34,55 +38,9 @@ except ImportError:  # pragma: no cover
 T = TypeVar("T")
 logger = logging.getLogger(__name__)
 
-_SENSITIVE_DETAIL_KEYS = {
-    "stdout",
-    "stderr",
-    "output",
-    "prompt",
-    "input",
-    "token",
-    "secret",
-    "password",
-    "authorization",
-    "api-key",
-    "api_key",
-}
-_SECRET_PATTERNS = (
-    re.compile(r"(?i)(api[_-]?key|token|secret|password|authorization)(=|:)\s*([^\s,;]+)"),
-)
-
-
-def _redact_string(value: str, *, limit: int = 500) -> str:
-    redacted = value
-    for pattern in _SECRET_PATTERNS:
-        redacted = pattern.sub(r"\1\2 [redacted]", redacted)
-    if len(redacted) > limit:
-        return f"{redacted[:limit]}...[truncated]"
-    return redacted
-
-
-def _redact_error_value(key: str, value: Any) -> Any:
-    key_l = key.lower()
-    if any(token in key_l for token in _SENSITIVE_DETAIL_KEYS):
-        return "[redacted]"
-    if isinstance(value, str):
-        return _redact_string(value)
-    if isinstance(value, dict):
-        return {str(k): _redact_error_value(str(k), v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_redact_error_value(key, item) for item in value]
-    return value
-
-
-def _redact_error_envelope(error: AudiaGenticError) -> dict[str, Any]:
-    envelope = to_error_envelope(error)
-    details = envelope.get("details")
-    if isinstance(details, dict):
-        envelope["details"] = {
-            str(key): _redact_error_value(str(key), value)
-            for key, value in details.items()
-        }
-    return envelope
+# Redaction primitives moved to foundation/logging/redaction.py — single
+# source of truth for sensitive-key matching and pattern-based redaction.
+# Local variants are forbidden by §15 (Output Redaction).
 
 
 def server_instructions(decl: Any) -> str:
@@ -143,13 +101,33 @@ def tool_parameter_spec(decl: Any, name: str) -> dict[str, Any]:
 def report_error(
     label: str, tool_name: str, exc: Exception, logger: logging.Logger
 ) -> dict[str, Any]:
-    """Return a standardized MCP error envelope, logging the failure."""
+    """Return a standardized MCP error envelope, logging the failure.
+
+    Egress boundary: sanitises all string values in the envelope and then
+    verifies no secret-shaped content remains. If any value still contains
+    a redaction-match pattern, the envelope is collapsed to a generic error
+    rather than leaking partial secrets.
+    """
     logger.exception("%s tool failed: %s", label, tool_name)
     if isinstance(exc, AudiaGenticError):
-        envelope = _redact_error_envelope(exc)
+        envelope = redact_error_envelope(exc)
         envelope["tool"] = tool_name
-        return envelope
-    return {"ok": False, "error": _redact_string(str(exc)), "tool": tool_name}
+    else:
+        envelope = {"ok": False, "error": redact_text(str(exc)), "tool": tool_name}
+
+    # Fail-closed: if any string value survives with secret-shaped content,
+    # collapse to a generic error to prevent leakage. The key-value pattern
+    # (api_key/token/secret/password) is already handled by redact_text which
+    # replaces the value with [REDACTED], so we skip it here.
+    for pattern in DEFAULT_REDACT_PATTERNS:
+        if pattern.pattern.startswith(r"(https?://"):
+            continue  # URL-credential patterns have special replacement
+        if r"api[_-]?key|token|secret|password" in pattern.pattern:
+            continue  # key-value pattern already redacted by redact_text
+        for val in envelope.values():
+            if isinstance(val, str) and pattern.search(val):
+                return {"ok": False, "error": "tool failed", "tool": tool_name}
+    return envelope
 
 
 def log_tool_call(func: Callable) -> Callable:

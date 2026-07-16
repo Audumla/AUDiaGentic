@@ -1,0 +1,37 @@
+# Fixture: npm CLI lifecycle
+recipe-id: npm-cli-install
+recipe-version: "1.0.0"
+description: Install an npm package globally
+parameters:
+  - name: PACKAGE_NAME
+    required: true
+lifecycle:
+  probe:
+    type: command
+    command:
+      - npm
+      - list
+      - -g
+      - "{PACKAGE_NAME}"
+    expect-exit: 0
+  install-steps:
+    - type: shell
+      id: npm-install
+      command:
+        - npm
+        - install
+        - -g
+        - "{PACKAGE_NAME}"
+      timeout: 120
+  configure-steps: []
+  verify:
+    type: file-exists
+    path: /usr/local/bin/{PACKAGE_NAME}
+  uninstall-steps:
+    - type: shell
+      id: npm-uninstall
+      command:
+        - npm
+        - uninstall
+        - -g
+        - "{PACKAGE_NAME}"

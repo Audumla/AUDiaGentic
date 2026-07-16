@@ -6,12 +6,12 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 
 from audiagentic.components.memory.hindsight.matrix import HINDSIGHT_RECIPE_MATRIX
-from audiagentic.components.memory.hindsight.plugin_definition import HindsightPluginDefinition
+from audiagentic.components.memory.hindsight.strategies import _row_to_plugin_definition
 
 
 def test_claude_plugin_definition_validates_schema():
     row = next(item for item in HINDSIGHT_RECIPE_MATRIX if item.provider_id == "claude")
-    definition = HindsightPluginDefinition.from_row(row)
+    definition = _row_to_plugin_definition(row)
     schema_path = Path(__file__).resolve().parents[3] / (
         "src/audiagentic/config/components/memory/hindsight-plugin-definition.schema.json"
     )

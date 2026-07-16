@@ -3,7 +3,7 @@
 Runs inside a clean Docker container where only `audiagentic[acp]` is installed.
 Validates that:
 1. The [acp] extra installs cleanly from wheel
-2. foundation/execution/acp.py imports without component/provider leakage
+2. foundation/transports/acp.py imports without component/provider leakage
 3. A protocol-level fixture (echo agent) runs end-to-end through run_acp_prompt
 4. Host environment is untouched
 
@@ -30,7 +30,7 @@ async def test_acp_extra_imports_clean():
     from acp.interfaces import Client  # noqa: F401
 
     # Verify module source has no provider/component imports (AST scan)
-    from audiagentic.foundation.execution import acp as acp_mod
+    from audiagentic.foundation.transports import acp as acp_mod
 
     # The foundation module must not import any component/provider internals
     source = Path(acp_mod.__file__).read_text(encoding="utf-8")
@@ -40,7 +40,7 @@ async def test_acp_extra_imports_clean():
     assert "audiagentic.components.planning" not in source
 
     # Basic invariant: canonical kinds exist
-    from audiagentic.foundation.execution.acp import _KIND_VOCABULARY, _map_kind
+    from audiagentic.foundation.transports.acp import _KIND_VOCABULARY, _map_kind
     assert len(_KIND_VOCABULARY) >= 8
     assert _map_kind("agent_message_chunk") == "assistant-message"
     assert _map_kind("unknown_kind") == "unknown_kind"

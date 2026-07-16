@@ -8,9 +8,10 @@
 |---|---|
 | provider-id | `aider` |
 | upstream-id | paul-gauthier/aider (GitHub) |
-| tool-version | 0.86.2 |
-| verified-at | 2026-07-13 UTC |
-| evidence-kind | installed-tool CLI probe (`aider --help`, `aider --list-models`), env var inspection |
+| tool-version | 0.86.2; upstream docs revalidated 2026-07-16 |
+| verified-at | 2026-07-13 UTC, 2026-07-16 UTC (upstream doc revalidation) |
+| evidence-kind | installed-tool CLI probe (`aider --help`, `aider --list-models`), env var inspection, upstream docs verification (aider.chat) |
+| **correction-note** | **2026-07-16 revalidation**: Aider now supports GitHub Copilot as a connecting-to-LLMs provider. The `.aider.conf.yml` YAML config file is confirmed as the config surface with `api-key: [provider=<key>]` pattern for all providers. Reasoning models configuration is now a separate docs page, confirming that aider supports secondary reasoning models from providers.
 
 ---
 
@@ -62,13 +63,35 @@
 
 ---
 
+## New upstream capabilities (verified 2026-07-16 from aider.chat)
+
+### GitHub Copilot provider support
+
+Aider now lists "GitHub Copilot" as a connecting-to-LLMs provider. This means aider can route through GitHub's Copilot API for model access, alongside OpenAI, Anthropic, Gemini, and other providers.
+
+### Reasoning models configuration
+
+Aider now has a dedicated "Reasoning models" configuration page. Secondary providers for reasoning models are supported — the agent can use a primary model for coding tasks and a separate reasoning model for deeper analysis.
+
+### YAML config file confirmed
+
+The `.aider.conf.yml` file is confirmed as the structured config surface with:
+- `openai-api-key: <key>` / `anthropic-api-key: <key>` for dedicated providers
+- `api-key: [provider=<key>]` pattern for all other providers (e.g., `gemini=foo`, `openrouter=bar`, `deepseek=baz`)
+
+### Advanced model settings page
+
+Aider now has a dedicated "Advanced model settings" configuration page, confirming that model-level customization is supported beyond basic API key and model selection.
+
+---
+
 ## Config surface
 
 | Field | Value |
 |---|---|
-| **Config file** | No structured config file discovered. Aider uses CLI flags and environment variables for all configuration. Help references `--model-settings-file` and `--model-metadata-file` but shape unknown. `.aider.conf.yml` mentioned in matrix as a candidate surface (unverified). |
-| **Key mechanism** | **(a) Dedicated vendor keys:** `AIDER_OPENAI_API_KEY`, `AIDER_ANTHROPIC_API_KEY` env vars; CLI flags `--openai-api-key`, `--anthropic-api-key`. **(b) Generic provider keys:** `--api-key PROVIDER=KEY` pattern sets `<PROVIDER>_API_KEY`; applicable for Gemini, OpenRouter, and other vendors. **(c) Model selection:** `--model <id>` or env var `AIDER_MODEL`. Single active model at a time per session. |
-| **Model granularity** | All models available through LiteLLM catalog; selectable via `--model` flag or `AIDER_MODEL` env var. One active model per session. Model settings can be overridden via `--model-settings-file`. |
+| **Config file** | `.aider.conf.yml` (YAML) confirmed as the structured config surface. Contains: `openai-api-key`, `anthropic-api-key` for dedicated providers; `api-key: [provider=<key>]` pattern for all others (e.g., `gemini=foo`, `openrouter=bar`). Also supports `.env` file for env var keys. |
+| **Key mechanism** | **(a) Dedicated vendor keys:** `AIDER_OPENAI_API_KEY`, `AIDER_ANTHROPIC_API_KEY` env vars; CLI flags `--openai-api-key`, `--anthropic-api-key`; YAML `openai-api-key: <key>`. **(b) Generic provider keys:** `--api-key PROVIDER=KEY` pattern sets `<PROVIDER>_API_KEY`; YAML `api-key: [provider=<key>]`. **(c) Model selection:** `--model <id>` or env var `AIDER_MODEL`. Single active model at a time per session. **(d) Reasoning models:** Separate secondary provider configuration supported. |
+| **Model granularity** | All models available through LiteLLM catalog; selectable via `--model` flag or `AIDER_MODEL` env var. One active model per session. Model settings can be overridden via `--model-settings-file`. Advanced model settings page confirms model-level customization. |
 | **Reload behavior** | Aider reads config/env at startup. No live reload observed for model changes — restart required. |
 
 ---
@@ -78,3 +101,4 @@
 - **Native-key-injection (env)**: Primary viable path. Set dedicated vendor env vars (`AIDER_OPENAI_API_KEY`, `AIDER_ANTHROPIC_API_KEY`) or generic pattern (`GEMINI_API_KEY`, `OPENROUTER_API_KEY`). Model selection via `AIDER_MODEL` env var. No file mutation required — pure launch-env contribution.
 - **Custom-entries**: Not applicable — aider binds one model per session through LiteLLM routing. Model filter not needed since the catalog is authoritative and all vendors are addressable via prefix convention.
 - **Multi-vendor capability**: Unlike tools that switch auth mode, aider carries concurrent env vars for multiple vendors simultaneously — only the active model determines which vendor's key is used at runtime.
+- **Local endpoint note**: Openai-compatible local servers (Ollama, LM Studio, llama.cpp) are addressable via LiteLLM routing with `--openai-api-base <local-url>` and a LiteLLM model prefix such as `openai/<model-id>`. Same connector class as OpenAI — no separate vendor needed.

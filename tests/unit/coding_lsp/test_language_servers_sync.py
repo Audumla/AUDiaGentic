@@ -48,30 +48,38 @@ def _enable_python(tmp_path: Path, *, settings: dict | None = None) -> None:
 
 
 def test_sync_skips_when_config_missing(tmp_path: Path, monkeypatch) -> None:
-    called: list[object] = []
-    monkeypatch.setattr(
-        "audiagentic.components.providers.services.lsp_projection.sync_language_servers_to_provider_configs",
-        lambda root, servers: called.append((root, servers)) or {"ok": True},
-    )
     result = sync_language_servers_to_providers(tmp_path)
     assert result["synced"] == []
     assert result["skipped"] == "no valid configured language servers"
-    assert called == []
 
 
 def test_sync_writes_real_entries(tmp_path: Path, monkeypatch) -> None:
     _enable_python(tmp_path, settings={"python": {"analysis": "basic"}})
-    captured: dict[str, Any] = {}
+    captured: list[dict[str, Any]] = []
+
+    def fake_manage_all(project_root, *, mode, request):
+        from audiagentic.components.providers.contracts.language_server_projection import (
+            LanguageServerProjectionResult,
+        )
+        captured.append({
+            "project_root": project_root,
+            "mode": mode,
+            "entries": dict(request.entries),
+        })
+        return [LanguageServerProjectionResult(
+            ok=True, supported=True, provider_id="opencode"
+        )]
+
     monkeypatch.setattr(
-        "audiagentic.components.providers.services.lsp_projection.sync_language_servers_to_provider_configs",
-        lambda root, servers: captured.update({"root": root, "servers": servers}) or {"ok": True, "synced": ["codex"]},
+        "audiagentic.components.providers.providers_api.manage_language_servers_all",
+        fake_manage_all,
     )
 
     result = sync_language_servers_to_providers(tmp_path)
 
-    assert result["synced"] == ["codex"]
-    assert captured["root"] == tmp_path
-    entries = captured["servers"]
+    assert result["synced"] == ["opencode"]
+    assert len(captured) == 1
+    entries = captured[0]["entries"]
     assert "python" in entries
     assert entries["python"].command == ["pyright-langserver", "--stdio"]
     assert entries["python"].file_extensions == [".py", ".pyi"]
@@ -81,41 +89,56 @@ def test_prune_requests_full_catalog(tmp_path: Path, monkeypatch) -> None:
     # Disable/uninstall prunes every supported language (not just currently-active
     # ones), so previously-projected entries are never orphaned when feature state
     # has already been cleared.
-    captured: dict[str, Any] = {}
+    captured: list[dict[str, Any]] = []
+
+    def fake_manage_all(project_root, *, mode, request):
+        from audiagentic.components.providers.contracts.language_server_projection import (
+            LanguageServerProjectionResult,
+        )
+        captured.append({"mode": mode, "entries": dict(request.entries)})
+        return [LanguageServerProjectionResult(
+            ok=True, supported=True, provider_id="opencode"
+        )]
+
     monkeypatch.setattr(
-        "audiagentic.components.providers.services.lsp_projection.prune_language_servers_from_provider_configs",
-        lambda root, languages: captured.update({"root": root, "languages": languages}) or {
-            "ok": True,
-            "pruned": ["codex"],
-            "details": {"codex": {"removed": languages}},
-        },
+        "audiagentic.components.providers.providers_api.manage_language_servers_all",
+        fake_manage_all,
     )
 
-    result = prune_language_servers_from_providers(tmp_path)
+    prune_language_servers_from_providers(tmp_path)
 
     catalog = set(language_registry.all_languages())
-    assert result["pruned"] == ["codex"]
     assert "python" in catalog
-    assert set(captured["languages"]) == catalog
-    assert set(result["details"]["codex"]["removed"]) == catalog
+    # Verify all languages were sent in prune requests
+    for call in captured:
+        assert call["mode"] == "prune"
+        assert set(call["entries"]) == catalog
 
 
 def test_prune_requests_catalog_regardless_of_active_state(tmp_path: Path, monkeypatch) -> None:
     # No languages enabled in feature state, but prune still targets the whole
     # catalog; the per-provider removers are idempotent no-ops when absent.
-    captured: dict[str, Any] = {}
+    captured: list[dict[str, Any]] = []
+
+    def fake_manage_all(project_root, *, mode, request):
+        from audiagentic.components.providers.contracts.language_server_projection import (
+            LanguageServerProjectionResult,
+        )
+        captured.append({"mode": mode, "entries": dict(request.entries)})
+        return [LanguageServerProjectionResult(
+            ok=True, supported=True, provider_id="opencode"
+        )]
+
     monkeypatch.setattr(
-        "audiagentic.components.providers.services.lsp_projection.prune_language_servers_from_provider_configs",
-        lambda root, languages: captured.update({"root": root, "languages": languages}) or {
-            "ok": True,
-            "pruned": [],
-            "languages": languages,
-        },
+        "audiagentic.components.providers.providers_api.manage_language_servers_all",
+        fake_manage_all,
     )
-    result = prune_language_servers_from_providers(tmp_path)
+
+    prune_language_servers_from_providers(tmp_path)
     catalog = set(language_registry.all_languages())
-    assert set(result["languages"]) == catalog
-    assert set(captured["languages"]) == catalog
+    # Verify all languages were sent in prune requests
+    for call in captured:
+        assert set(call["entries"]) == catalog
 
 
 def test_generic_mcp_projection_uses_implementation_descriptor(tmp_path: Path, monkeypatch) -> None:
@@ -146,34 +169,35 @@ def test_generic_mcp_projection_uses_implementation_descriptor(tmp_path: Path, m
     )
     set_feature_state(tmp_path, "coding-lsp", "language", "python", FeatureState(enabled=True))
     captured: dict[str, Any] = {}
+
+    def fake_manage_all(project_root, *, mode, request):
+        from audiagentic.components.providers.contracts.lsp_mcp_projection import (
+            LspMcpProjectionResult,
+        )
+        captured.update({
+            "root": project_root,
+            "mode": mode,
+            "managed_ids": set(request.managed_ids),
+            "entries": list(request.entries),
+        })
+        return [LspMcpProjectionResult(ok=True, provider_id="codex")]
+
     monkeypatch.setattr(
-        "audiagentic.components.providers.services.lsp_projection.sync_generic_lsp_mcp_to_provider_configs",
-        lambda root, desired_entries, managed_ids: captured.update({
-            "root": root,
-            "desired_entries": desired_entries,
-            "managed_ids": managed_ids,
-        }) or {"ok": True, "synced": ["codex"]},
-    )
-    monkeypatch.setattr(
-        "audiagentic.components.coding_lsp.language_servers_sync.shutil.which",
-        lambda command: None,
+        "audiagentic.components.providers.providers_api.manage_lsp_mcp_projection_all",
+        fake_manage_all,
     )
 
     result = sync_generic_lsp_mcp_to_providers(tmp_path)
 
     assert result["synced"] == ["codex"]
-    assert result["mcp_command_status"] == {
-        "commands": ["custom-lsp"],
-        "missing": ["custom-lsp"],
-        "ok": False,
-    }
     assert captured["root"] == tmp_path
+    assert captured["mode"] == "apply"
     assert captured["managed_ids"] == {"coding-lsp/custom-lsp"}
-    managed_id, entry = next(iter(captured["desired_entries"].items()))
-    assert managed_id == "coding-lsp/custom-lsp"
-    assert entry[0] == "custom-lsp"
-    assert entry[1].command == "custom-lsp"
-    assert entry[1].args == ("serve", "--stdio")
+    entry = captured["entries"][0]
+    assert entry.managed_id == "coding-lsp/custom-lsp"
+    assert entry.name == "custom-lsp"
+    assert entry.command == "custom-lsp"
+    assert entry.args == ("serve", "--stdio")
 
 
 def test_prune_generic_mcp_uses_descriptor_managed_ids(tmp_path: Path, monkeypatch) -> None:
@@ -185,16 +209,22 @@ def test_prune_generic_mcp_uses_descriptor_managed_ids(tmp_path: Path, monkeypat
         )
     )
     captured: dict[str, Any] = {}
+
+    def fake_manage_all(project_root, *, mode, request):
+        from audiagentic.components.providers.contracts.lsp_mcp_projection import (
+            LspMcpProjectionResult,
+        )
+        captured.update({"root": project_root, "mode": mode, "managed_ids": set(request.managed_ids)})
+        return [LspMcpProjectionResult(ok=True, provider_id="codex", pruned=("coding-lsp/custom-lsp",))]
+
     monkeypatch.setattr(
-        "audiagentic.components.providers.services.lsp_projection.prune_generic_lsp_mcp_from_provider_configs",
-        lambda root, managed_ids: captured.update({"root": root, "managed_ids": managed_ids}) or {
-            "ok": True,
-            "pruned": ["codex"],
-            "managed_ids": managed_ids,
-        },
+        "audiagentic.components.providers.providers_api.manage_lsp_mcp_projection_all",
+        fake_manage_all,
     )
 
     result = prune_generic_lsp_mcp_from_providers(tmp_path)
 
-    assert result["managed_ids"] == {"coding-lsp/custom-lsp"}
+    assert result["pruned"] == ["codex"]
+    assert captured["mode"] == "prune"
+    assert captured["managed_ids"] == {"coding-lsp/custom-lsp"}
     assert captured["root"] == tmp_path

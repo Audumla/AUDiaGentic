@@ -16,27 +16,47 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.providers.contracts.cli_lifecycle import (
+    CliLifecycleMode,
+    CliLifecycleRequest,
+)
 from audiagentic.components.providers.contracts.generated_surface import (
     GeneratedSurfaceMode,
     GeneratedSurfaceRequest,
     GeneratedSurfaceResult,
 )
-from audiagentic.components.providers.contracts.cli_lifecycle import (
-    CliLifecycleMode,
-    CliLifecycleRequest,
+from audiagentic.components.providers.contracts.language_server_projection import (
+    LanguageServerEntry,
+    LanguageServerProjectionMode,
+    LanguageServerProjectionRequest,
+    LanguageServerProjectionResult,
+)
+from audiagentic.components.providers.contracts.lsp_mcp_projection import (
+    LspMcpProjectionEntry,
+    LspMcpProjectionMode,
+    LspMcpProjectionRequest,
+    LspMcpProjectionResult,
 )
 from audiagentic.components.providers.contracts.managed_mcp import (
-    ManagedMcpEntry as ManagedMcpEntry,
-)
-from audiagentic.components.providers.contracts.managed_mcp import (
+    ManagedMcpEntry,
     ManagedMcpMode,
     ManagedMcpRequest,
     ManagedMcpResult,
+)
+from audiagentic.components.providers.contracts.model_projection import (
+    ModelProjectionMode,
+    ModelProjectionRequest,
+    ModelProjectionResult,
 )
 from audiagentic.components.providers.contracts.plugin_entry import (
     PluginEntryMode,
     PluginEntryRequest,
     PluginEntryResult,
+)
+from audiagentic.components.providers.contracts.self_provided_lsp import (
+    SelfProvidedLspMode,
+    SelfProvidedLspRequest,
+    SelfProvidedLspResult,
 )
 
 
@@ -71,6 +91,186 @@ def manage_mcp_entries(
     )
 
 
+def manage_language_servers(
+    project_root: Path,
+    provider_id: str,
+    *,
+    mode: LanguageServerProjectionMode,
+    request: LanguageServerProjectionRequest,
+) -> LanguageServerProjectionResult:
+    """Manage caller-owned language server entries through provider automation."""
+    from audiagentic.components.providers.services.language_server_family import (
+        manage_language_servers as _manage,
+    )
+
+    return _manage(
+        project_root,
+        provider_id,
+        mode=mode,
+        request=request,
+    )
+
+
+def manage_language_servers_all(
+    project_root: Path,
+    *,
+    mode: LanguageServerProjectionMode,
+    request: LanguageServerProjectionRequest,
+) -> list[LanguageServerProjectionResult]:
+    """Manage language server entries for all providers that support the family.
+
+    Returns a list of per-provider results. Providers without language_servers_config
+    are not included in the results.
+    """
+    from audiagentic.components.providers.descriptors.registry import all_descriptors
+
+    results: list[LanguageServerProjectionResult] = []
+    for descriptor in all_descriptors().values():
+        if descriptor.language_servers_config is None:
+            continue
+        result = manage_language_servers(
+            project_root,
+            descriptor.provider_id,
+            mode=mode,
+            request=request,
+        )
+        results.append(result)
+    return results
+
+
+def manage_model_projection(
+    project_root: Path,
+    provider_id: str,
+    *,
+    mode: ModelProjectionMode,
+    request: ModelProjectionRequest,
+) -> ModelProjectionResult:
+    """Manage caller-owned model entries through provider automation."""
+    from audiagentic.components.providers.services.automation_registry import (
+        build_automation_registry,
+    )
+
+    registry = build_automation_registry(project_root)
+    result = registry.dispatch(
+        provider_id,
+        "model-projection",
+        mode,
+        request,
+    )
+    if isinstance(result, ModelProjectionResult):
+        return result
+    if isinstance(result, dict):
+        return ModelProjectionResult(**result)
+    return ModelProjectionResult(
+        ok=False, supported=False, provider_id=provider_id, error_code="RES-PREC-001"
+    )
+
+
+def manage_lsp_mcp_projection(
+    project_root: Path,
+    provider_id: str,
+    *,
+    mode: LspMcpProjectionMode,
+    request: LspMcpProjectionRequest,
+) -> LspMcpProjectionResult:
+    """Manage LSP-MCP entries through provider automation."""
+    from audiagentic.components.providers.services.lsp_mcp_projection import (
+        manage_lsp_mcp_projection as _manage,
+    )
+
+    return _manage(project_root, provider_id, mode=mode, request=request)
+
+
+def manage_lsp_mcp_projection_all(
+    project_root: Path,
+    *,
+    mode: LspMcpProjectionMode,
+    request: LspMcpProjectionRequest,
+) -> list[LspMcpProjectionResult]:
+    """Project LSP-MCP entries to all eligible providers."""
+    from audiagentic.components.providers.services.lsp_mcp_projection import (
+        manage_lsp_mcp_projection_all as _manage_all,
+    )
+
+    return _manage_all(project_root, mode=mode, request=request)
+
+
+def manage_self_provided_lsp(
+    project_root: Path,
+    provider_id: str,
+    *,
+    mode: SelfProvidedLspMode,
+    request: SelfProvidedLspRequest,
+) -> SelfProvidedLspResult:
+    """Manage self-provided LSP support through provider automation."""
+    from audiagentic.components.providers.services.automation_registry import (
+        build_automation_registry,
+    )
+
+    registry = build_automation_registry(project_root)
+    result = registry.dispatch(
+        provider_id,
+        "self-provided-lsp",
+        mode,
+        request,
+    )
+    if isinstance(result, SelfProvidedLspResult):
+        return result
+    if isinstance(result, dict):
+        return SelfProvidedLspResult(**result)
+    return SelfProvidedLspResult(
+        ok=False, supported=False, provider_id=provider_id, error_code="RES-PREC-001"
+    )
+
+
+def manage_self_provided_lsp_all(
+    project_root: Path,
+    *,
+    mode: SelfProvidedLspMode,
+    request: SelfProvidedLspRequest,
+) -> list[SelfProvidedLspResult]:
+    """Manage self-provided LSP support for every known provider.
+
+    Returns one result per provider so callers never need the descriptor
+    registry or enablement state to interpret the outcome: providers that do
+    not self-provide LSP come back ``supported=False``, and providers that are
+    not enabled come back ``ok=False`` with ``action_needed``.
+    """
+    from audiagentic.components.providers.descriptors.registry import all_descriptors
+    from audiagentic.components.providers.services.feature_resolution import (
+        enabled_provider_ids,
+    )
+
+    enabled = enabled_provider_ids(project_root)
+    results: list[SelfProvidedLspResult] = []
+    for descriptor in sorted(all_descriptors().values(), key=lambda d: d.provider_id):
+        pid = descriptor.provider_id
+        if descriptor.on_lsp_enabled is None:
+            results.append(
+                SelfProvidedLspResult(
+                    ok=False,
+                    supported=False,
+                    provider_id=pid,
+                    error_code="RES-PREC-001",
+                )
+            )
+            continue
+        if pid not in enabled:
+            results.append(
+                SelfProvidedLspResult(
+                    ok=False,
+                    supported=True,
+                    provider_id=pid,
+                    action_needed="provider is not enabled",
+                )
+            )
+            continue
+        results.append(
+            manage_self_provided_lsp(project_root, pid, mode=mode, request=request)
+        )
+    return results
+
+
 def operate_provider_surface(
     project_root: Path,
     provider_id: str,
@@ -79,14 +279,22 @@ def operate_provider_surface(
     request: GeneratedSurfaceRequest,
 ) -> GeneratedSurfaceResult:
     """Operate on generated provider surfaces through the recipe family."""
-    from audiagentic.components.providers.services.generated_surface_family import (
-        _make_handler,
+    from audiagentic.components.providers.services.automation_registry import (
+        build_automation_registry,
     )
 
-    handler = _make_handler(project_root)
-    result = handler(mode, request, provider_id)
+    registry = build_automation_registry(project_root)
+    result = registry.dispatch(
+        provider_id,
+        "generated-surfaces",
+        mode,
+        request,
+        ownership_scope=provider_id,
+    )
     if isinstance(result, GeneratedSurfaceResult):
         return result
+    if isinstance(result, dict):
+        return GeneratedSurfaceResult(**result)
     return GeneratedSurfaceResult(
         ok=False,
         supported=False,
@@ -717,4 +925,24 @@ __all__ = [
     # Surfaces
     "operate_provider_surface",
     "operate_provider_surfaces",
+    # Language servers
+    "LanguageServerEntry",
+    # Typed family contracts callers must construct to call the API below.
+    # Exported because a family function is unusable without its Request type;
+    # requesters must not reach into providers.contracts.* to get them.
+    "LanguageServerProjectionRequest",
+    "LspMcpProjectionEntry",
+    "LspMcpProjectionRequest",
+    "ManagedMcpEntry",
+    "SelfProvidedLspRequest",
+    "manage_language_servers",
+    "manage_language_servers_all",
+    # Model projection
+    "manage_model_projection",
+    # LSP-MCP projection
+    "manage_lsp_mcp_projection",
+    "manage_lsp_mcp_projection_all",
+    # Self-provided LSP
+    "manage_self_provided_lsp",
+    "manage_self_provided_lsp_all",
 ]

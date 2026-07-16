@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from audiagentic.components.providers.adapters.cli import require_executable
-from audiagentic.foundation.execution import AcpLaunch
+from audiagentic.foundation.transports import AcpLaunch
 
 
 def build_acp_launch(project_root: Path, *, model_id: str | None = None) -> AcpLaunch:

@@ -85,7 +85,7 @@ class ShellStep:
                 def _stream() -> None:
                     assert process and process.stdout
                     for line in process.stdout:
-                        safe = redact_text(line.rstrip("\n\r"))
+                        safe = line.rstrip("\n\r")
                         lines.append(safe)
                         self.progress_callback(safe)  # type: ignore[misc]
                 reader = threading.Thread(target=_stream, daemon=True)
@@ -94,14 +94,14 @@ class ShellStep:
                 reader.join(timeout=1)
             else:
                 output, _ = process.communicate(timeout=self.timeout)
-                lines = [redact_text(line) for line in output.splitlines()]
+                lines = list(output.splitlines())
         except subprocess.TimeoutExpired:
             if process:
                 process.kill()
                 process.wait(timeout=5)
             return StepResult(status="failed", outputs={"command": list(resolved)}, reason=f"timed out after {self.timeout}s")
         except Exception as exc:  # noqa: BLE001
-            return StepResult(status="failed", outputs={"command": list(resolved)}, reason=redact_text(str(exc)))
+            return StepResult(status="failed", outputs={"command": list(resolved)}, reason=str(exc))
         output = truncate_output("\n".join(lines))
         return StepResult(
             status="ok" if process.returncode == 0 else "failed",
@@ -128,17 +128,18 @@ class ShellStep:
                 timeout=self.timeout,
                 env=env,
             )
-            raw_stdout = redact_text(proc.stdout.rstrip("\n"))
-            safe_stdout = truncate_output(raw_stdout)
+            raw_stdout = proc.stdout.rstrip("\n")
+            redacted_stdout = redact_text(raw_stdout)
+            safe_stdout = truncate_output(redacted_stdout)
             return StepResult(
                 status="ok" if proc.returncode == 0 else "failed",
                 outputs={"command": cmd, "returncode": proc.returncode, "stdout": safe_stdout},
-                reason=None if proc.returncode == 0 else redact_text(proc.stdout.strip()) or None,
+                reason=None if proc.returncode == 0 else proc.stdout.strip() or None,
             )
         except subprocess.TimeoutExpired:
             return StepResult(status="failed", outputs={"command": cmd}, reason=f"timed out after {self.timeout}s")
         except Exception as exc:  # noqa: BLE001
-            return StepResult(status="failed", outputs={"command": cmd}, reason=redact_text(str(exc)))
+            return StepResult(status="failed", outputs={"command": cmd}, reason=str(exc))
 
     def _render_command(self, context: dict[str, Any]) -> tuple[str, ...]:
         base = self.platform.resolve() if self.platform else None

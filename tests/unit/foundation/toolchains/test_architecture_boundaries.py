@@ -391,10 +391,12 @@ class TestProviderRecipeTests:
         from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
         from audiagentic.components.memory.hindsight.matrix import HindsightRecipeRow
         from audiagentic.components.memory.hindsight.plugin_definition import (
-            HindsightPluginDefinition,
             HindsightPluginDesired,
         )
         from audiagentic.components.memory.hindsight.plugin_recipes import PluginConfigRecipe
+        from audiagentic.components.memory.hindsight.strategies import (
+            _row_to_plugin_definition,
+        )
         from audiagentic.components.providers.services.recipes import ProviderRecipeKind
 
         row = HindsightRecipeRow(
@@ -410,7 +412,7 @@ class TestProviderRecipeTests:
             audia_action="manage_config_writes",
         )
         recipe = PluginConfigRecipe(
-            HindsightPluginDefinition.from_row(row),
+            _row_to_plugin_definition(row),
             HindsightPluginDesired.from_backend(HindsightBackendConfig(base_url="https://hindsight.example.com")),
             tmp_path / "opencode.json",
         )
@@ -795,15 +797,13 @@ class TestRequesterProvidersImportAllowlist:
     ):
         """coding-lsp may import only from providers_api; never adapters/services internals.
 
-        Known pre-existing violations resolved by MA08 migration:
-        - language_servers_sync.py → providers.services.lsp_projection (should use public API)
+        No allowlisted violations remain: MA08's coding-lsp boundary is clean.
+        The contract types are exported through providers_api, and the
+        descriptor/enablement fan-out lives behind manage_self_provided_lsp_all.
+        Do not re-add entries here to make a new import pass — route it through
+        providers_api instead.
         """
-        # Allowlisted known violations — owned by MA08 resolution.
-        # Remove entries here when their owning item completes; assertion must pass clean.
-        known_violations = {
-            # MA08: coding-lsp still calls lsp_projection directly instead of public API
-            f"src\\audiagentic\\components\\coding_lsp\\language_servers_sync.py: imports audiagentic.components.providers.services.lsp_projection (allowed: {allowed_providers_prefix} only)",
-        }
+        known_violations: set[str] = set()
         violations = []
         for comp_dir in requester_component_dirs:
             if not comp_dir.exists():
@@ -827,6 +827,63 @@ class TestRequesterProvidersImportAllowlist:
             + "\n".join(violations)
         )
 
+    def test_names_imported_from_providers_api_are_exported(
+        self, requester_component_dirs
+    ):
+        """Every name a requester imports from providers_api must be in its __all__.
+
+        MA16 locks the provider public API as an exact export list. A name that
+        callers import but the module does not publish is a hole in that lock:
+        the export matrix cannot be audited against real usage. (RV500 —
+        manage_language_servers_all was imported by coding-lsp while absent
+        from __all__.)
+        """
+        import ast
+
+        api_path = (
+            WORKSPACE_ROOT
+            / "src"
+            / "audiagentic"
+            / "components"
+            / "providers"
+            / "providers_api.py"
+        )
+        tree = ast.parse(api_path.read_text(encoding="utf-8"))
+        exported: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == "__all__" for t in node.targets
+            ):
+                exported = {
+                    el.value
+                    for el in node.value.elts  # type: ignore[attr-defined]
+                    if isinstance(el, ast.Constant) and isinstance(el.value, str)
+                }
+        assert exported, "could not parse providers_api.__all__"
+
+        violations = []
+        for comp_dir in requester_component_dirs:
+            if not comp_dir.exists():
+                continue
+            for pyfile in _get_python_files(comp_dir):
+                node = ast.parse(pyfile.read_text(encoding="utf-8"))
+                for stmt in ast.walk(node):
+                    if not isinstance(stmt, ast.ImportFrom) or not stmt.module:
+                        continue
+                    if stmt.module != "audiagentic.components.providers.providers_api":
+                        continue
+                    for alias in stmt.names:
+                        if alias.name != "*" and alias.name not in exported:
+                            violations.append(
+                                f"{pyfile.relative_to(WORKSPACE_ROOT)}: imports "
+                                f"{alias.name!r} from providers_api, which is not in __all__"
+                            )
+
+        assert not violations, (
+            "Requester imports a providers_api name that is not publicly exported:\n"
+            + "\n".join(violations)
+        )
+
 
 class TestProvidersNoReverseImports:
     """RV405 — providers must not import requester domains; handlers are requester-blind."""
@@ -840,11 +897,13 @@ class TestProvidersNoReverseImports:
 
         Known pre-existing violations resolved by their owning items:
         - claude/hooks.py, gemini/adapter.py → agent_jobs.prompt_launch/parser (MA02/MO02)
-        - codex/opencode/qwen/language_servers.py → coding_lsp.language_servers (MA08)
-        - services/lsp_projection.py → coding_lsp.language_servers (MA08)
         - skill_surfaces.py → agent_jobs.prompt_syntax (MA17 provider-domain boundary)
+
+        The MA08 coding-lsp reverse imports are gone: LanguageServerEntry moved to
+        providers/contracts, and services/lsp_projection.py was deleted once
+        manage_lsp_mcp_projection superseded it. Providers import no coding-lsp type.
         """
-        # Allowlisted known violations — owned by MA02/MA08/MO02 resolution.
+        # Allowlisted known violations — owned by MA02/MO02/MA17 resolution.
         # Remove entries here when their owning item completes; assertion must pass clean.
         known_violations = {
             # MA02: provider hooks import agent_jobs for prompt rendering
@@ -853,12 +912,6 @@ class TestProvidersNoReverseImports:
             # MO02: gemini adapter imports agent_jobs for prompt rendering
             "src\\audiagentic\\components\\providers\\adapters\\gemini\\adapter.py: imports audiagentic.components.agent_jobs.prompt_launch",
             "src\\audiagentic\\components\\providers\\adapters\\gemini\\adapter.py: imports audiagentic.components.agent_jobs.prompt_parser",
-            # MA08: provider adapters import coding-lsp language_servers directly
-            "src\\audiagentic\\components\\providers\\adapters\\codex\\language_servers.py: imports audiagentic.components.coding_lsp.language_servers",
-            "src\\audiagentic\\components\\providers\\adapters\\opencode\\language_servers.py: imports audiagentic.components.coding_lsp.language_servers",
-            "src\\audiagentic\\components\\providers\\adapters\\qwen\\language_servers.py: imports audiagentic.components.coding_lsp.language_servers",
-            # MA08: lsp_projection service imports coding-lsp directly
-            "src\\audiagentic\\components\\providers\\services\\lsp_projection.py: imports audiagentic.components.coding_lsp.language_servers",
             # MA17: skill surfaces import agent_jobs prompt syntax
             "src\\audiagentic\\components\\providers\\skill_surfaces.py: imports audiagentic.components.agent_jobs.prompt_syntax",
         }

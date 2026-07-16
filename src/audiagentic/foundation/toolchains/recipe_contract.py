@@ -182,6 +182,16 @@ class ProvisioningRecipe(ABC):
     def prune(self, context: dict[str, Any]) -> RecipeResult:
         """Remove managed configuration/artifacts, leaving user content intact."""
 
+    def dry_run(self, context: dict[str, Any]) -> RecipeResult:
+        """Describe what :meth:`provision` would do, without doing any of it.
+
+        Concrete, non-abstract: a recipe that cannot describe its plan reports
+        that honestly rather than forcing every implementer to write a stub.
+        Overrides MUST NOT execute commands or write files — this backs the
+        public ``plan`` mode, and a query that mutates is a defect (RV497).
+        """
+        return RecipeResult.ok(RecipeState.ABSENT, status="no plan available")
+
     # --- result conversion ----------------------------------------------------
 
     def to_result(self, base: RecipeResult) -> RecipeResult:

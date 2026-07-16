@@ -25,10 +25,14 @@ def test_report_error_redacts_structured_error_details() -> None:
     assert result["error-code"] == "EXT-TEST-001"
     assert result["message"] == "tool failed"
     assert result["tool"] == "run"
-    assert result["details"]["stdout"] == "[redacted]"
-    assert result["details"]["stderr"] == "[redacted]"
+    # stdout is BULK_KEY — content-redacted, NOT blanked. "secret output" has no
+    # secret pattern so passes through intact (the regression this revision fixes).
+    assert result["details"]["stdout"] == "secret output"
+    # stderr is BULK_KEY — content-redacted. The token value is replaced but key preserved.
+    assert result["details"]["stderr"] == "token: [REDACTED]"
     assert result["details"]["safe"] == "ok"
-    assert result["details"]["nested"]["api_key"] == "[redacted]"
+    # api_key is SECRET_KEY — blanket-replaced.
+    assert result["details"]["nested"]["api_key"] == "[REDACTED]"
 
 
 def test_report_error_redacts_secret_patterns_in_generic_error() -> None:
@@ -41,6 +45,6 @@ def test_report_error_redacts_secret_patterns_in_generic_error() -> None:
 
     assert result == {
         "ok": False,
-        "error": "failed with token: [redacted]",
+        "error": "failed with token: [REDACTED]",
         "tool": "run",
     }

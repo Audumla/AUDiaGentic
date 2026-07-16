@@ -7,11 +7,13 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.coding_lsp import language_registry
-from audiagentic.components.coding_lsp.language_servers import LanguageServerEntry
 from audiagentic.components.coding_lsp.runtime_resolver import (
     active_language_bindings,
     active_lsp_implementation,
     resolve_active_runtime_servers,
+)
+from audiagentic.components.providers.providers_api import (
+    LanguageServerEntry,
 )
 from audiagentic.foundation.features.registry import (
     get_binding_writer,
@@ -216,36 +218,96 @@ def sync_language_servers_to_providers(project_root: Path) -> dict[str, Any]:
     if not configured:
         return {"ok": True, "synced": [], "skipped": "no valid configured language servers"}
 
-    from audiagentic.components.providers.services.lsp_projection import (
-        sync_language_servers_to_provider_configs,
+    from audiagentic.components.providers.providers_api import (
+        LanguageServerProjectionRequest,
+        manage_language_servers_all,
     )
 
-    return sync_language_servers_to_provider_configs(project_root, configured)
+    request = LanguageServerProjectionRequest(entries=configured)
+    results = manage_language_servers_all(
+        project_root,
+        mode="apply",
+        request=request,
+    )
+    synced: list[str] = []
+    skipped: list[str] = []
+    for result in results:
+        if result.ok and result.supported:
+            synced.append(result.provider_id)
+        else:
+            skipped.append(result.provider_id)
+
+    return {
+        "ok": True,
+        "synced": synced,
+        "skipped": skipped,
+        "servers": list(configured.keys()),
+    }
 
 
 def sync_generic_lsp_mcp_to_providers(project_root: Path) -> dict[str, Any]:
     """Sync selected generic LSP MCP projection to provider configs."""
     desired_entry = _generic_lsp_projection_for_active_implementation(project_root)
-    from audiagentic.components.providers.services.lsp_projection import (
-        sync_generic_lsp_mcp_to_provider_configs,
+    managed_ids = _generic_mcp_managed_ids()
+
+    from audiagentic.components.providers.providers_api import (
+        LspMcpProjectionEntry,
+        LspMcpProjectionRequest,
+        manage_lsp_mcp_projection_all,
     )
 
-    result = sync_generic_lsp_mcp_to_provider_configs(
-        project_root,
-        desired_entry,
-        _generic_mcp_managed_ids(),
+    entries = tuple(
+        LspMcpProjectionEntry(
+            managed_id=mid,
+            name=name,
+            command=entry.command,
+            args=entry.args,
+            env=tuple(sorted(entry.env.items())) if entry.env else (),
+            url=entry.url,
+            headers=tuple(sorted(entry.headers.items())) if entry.headers else (),
+            transport=("http" if entry.transport == "http" else ("sse" if entry.transport == "sse" else None)),
+        )
+        for mid, (name, entry) in desired_entry.items()
     )
-    result["mcp_command_status"] = _mcp_command_status(desired_entry)
-    return result
+    request = LspMcpProjectionRequest(managed_ids=tuple(sorted(managed_ids)), entries=entries)
+    results = manage_lsp_mcp_projection_all(
+        project_root,
+        mode="apply",
+        request=request,
+    )
+    synced: list[str] = []
+    skipped: list[str] = []
+    for result in results:
+        if result.ok and result.provider_id:
+            synced.append(result.provider_id)
+        else:
+            skipped.append(result.provider_id)
+
+    return {
+        "ok": True,
+        "synced": synced,
+        "skipped": skipped,
+        "mcp_command_status": _mcp_command_status(desired_entry),
+    }
 
 
 def provision_provider_lsp_support(project_root: Path) -> dict[str, Any]:
     """Configure provider-specific LSP support for providers that self-provide LSP."""
-    from audiagentic.components.providers.services.lsp_projection import (
-        provision_provider_lsp_support as _provision_provider_lsp_support,
+    from audiagentic.components.providers.providers_api import (
+        SelfProvidedLspRequest,
+        manage_self_provided_lsp_all,
     )
 
-    return _provision_provider_lsp_support(project_root)
+    results = manage_self_provided_lsp_all(
+        project_root,
+        mode="apply",
+        request=SelfProvidedLspRequest(project_root=str(project_root)),
+    )
+    return {
+        "ok": True,
+        "provisioned": [r.provider_id for r in results if r.ok],
+        "skipped": [r.provider_id for r in results if not r.ok],
+    }
 
 
 def prune_language_servers_from_providers(project_root: Path) -> dict[str, Any]:
@@ -258,20 +320,60 @@ def prune_language_servers_from_providers(project_root: Path) -> dict[str, Any]:
     The per-provider removers are idempotent (no-op when the language is absent).
     """
     languages = list(language_registry.all_languages().keys())
-    from audiagentic.components.providers.services.lsp_projection import (
-        prune_language_servers_from_provider_configs,
+    from audiagentic.components.providers.providers_api import (
+        LanguageServerProjectionRequest,
+        manage_language_servers_all,
     )
 
-    return prune_language_servers_from_provider_configs(project_root, languages)
+    request = LanguageServerProjectionRequest(
+        entries={lang: LanguageServerEntry(language=lang, command=[]) for lang in languages}
+    )
+    results = manage_language_servers_all(
+        project_root,
+        mode="prune",
+        request=request,
+    )
+    pruned: list[str] = []
+    skipped: list[str] = []
+    for result in results:
+        if result.ok and result.supported:
+            pruned.append(result.provider_id)
+        else:
+            skipped.append(result.provider_id)
+
+    return {
+        "ok": True,
+        "pruned": pruned,
+        "skipped": skipped,
+        "languages": languages,
+    }
 
 
 def prune_generic_lsp_mcp_from_providers(project_root: Path) -> dict[str, Any]:
     """Remove coding-lsp managed generic LSP MCP entries from provider configs."""
-    from audiagentic.components.providers.services.lsp_projection import (
-        prune_generic_lsp_mcp_from_provider_configs,
+    managed_ids = _generic_mcp_managed_ids()
+
+    from audiagentic.components.providers.providers_api import (
+        LspMcpProjectionRequest,
+        manage_lsp_mcp_projection_all,
     )
 
-    return prune_generic_lsp_mcp_from_provider_configs(
+    request = LspMcpProjectionRequest(managed_ids=tuple(sorted(managed_ids)), entries=())
+    results = manage_lsp_mcp_projection_all(
         project_root,
-        _generic_mcp_managed_ids(),
+        mode="prune",
+        request=request,
     )
+    pruned: list[str] = []
+    skipped: list[str] = []
+    for result in results:
+        if result.ok and result.provider_id:
+            pruned.append(result.provider_id)
+        else:
+            skipped.append(result.provider_id)
+
+    return {
+        "ok": True,
+        "pruned": pruned,
+        "skipped": skipped,
+    }

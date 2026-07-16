@@ -8,6 +8,7 @@ from typing import Any
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.output import ComponentOutputEvent, ComponentOutputSink
 from audiagentic.foundation.io import atomic_write_text
+from audiagentic.foundation.logging.redaction import DEFAULT_REDACT_PATTERNS
 
 from ..descriptors.feature_mapping import KIND_SKILLS, KIND_SURFACE
 from .base import SurfaceBlock, apply_managed_blocks
@@ -15,6 +16,23 @@ from .contributions import load_surface_contributions
 from .registry import load_contribution_renderer_registry
 
 logger = logging.getLogger(__name__)
+
+
+def _check_surface_content(content: str) -> None:
+    """Fail-closed check: reject surface content that contains secret-shaped values.
+
+    Surfaces are git-tracked files; this prevents a secret from being committed.
+    See OU01 step 5.
+    """
+    for pattern in DEFAULT_REDACT_PATTERNS:
+        if pattern.pattern.startswith(r"(https?://"):
+            continue
+        if pattern.search(content):
+            raise AudiaGenticError(
+                code="CON-SRF-001",
+                kind="providers-surfaces",
+                message="Surface content contains secret-shaped value; write rejected",
+            )
 
 
 def _emit(output: ComponentOutputSink | None, message: str, level: str = "info", **data: Any) -> None:
@@ -230,6 +248,7 @@ def apply_provider_surfaces(
         if current == desired:
             _emit(on_progress, f"No changes — {path.name}", level="debug")
             continue
+        _check_surface_content(desired)
         atomic_write_text(path, desired)
         written.append(str(path))
         _emit(on_progress, f"Updated {path.name} ({len(file_blocks)} block(s))")

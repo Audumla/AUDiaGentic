@@ -1,0 +1,44 @@
+# Fixture: LSP package provisioning
+recipe-id: lsp-pyright-install
+recipe-version: "1.0.0"
+description: Install and configure an LSP server via npm
+parameters:
+  - name: LSP_PACKAGE
+    required: true
+    default: pyright
+lifecycle:
+  probe:
+    type: composite
+    checks:
+      - type: command
+        command:
+          - node
+          - "{LSP_PACKAGE}"
+          - --version
+        expect-exit: 0
+      - type: file-exists
+        path: /usr/local/lib/node_modules/{LSP_PACKAGE}
+    mode: and
+  install-steps:
+    - type: shell
+      id: npm-install-lsp
+      command:
+        - npm
+        - install
+        - -g
+        - "{LSP_PACKAGE}"
+      timeout: 180
+  configure-steps:
+    - type: config-set
+      id: set-lsp-config
+      path: ~/.audiagentic/lsp.json
+      key-path: servers.pyright.command
+      value: "{LSP_PACKAGE}"
+  uninstall-steps:
+    - type: shell
+      id: npm-uninstall-lsp
+      command:
+        - npm
+        - uninstall
+        - -g
+        - "{LSP_PACKAGE}"

@@ -5,8 +5,10 @@ import json
 import re
 
 from audiagentic.foundation.logging.redaction import (
+    is_bulk_key,
     is_sensitive_key,
     redact_env_like,
+    redact_error_envelope,
     redact_text,
     safe_metadata,
     summarize_structure,
@@ -43,6 +45,15 @@ class TestDefaultPatterns:
     def test_false_positive_short_strings(self):
         short_token = "sk-short"
         assert redact_text(f"value: {short_token}") == f"value: {short_token}"
+
+    def test_url_credential_pattern(self):
+        url = "https://user:secrettoken@github.com/repo/commit"
+        result = redact_text(url)
+        assert "secrettoken" not in result
+        assert "[REDACTED]" in result
+        # The URL scheme and host should still be present
+        assert "https://" in result
+        assert "@github.com" in result
 
 
 class TestRedactText:
@@ -120,16 +131,22 @@ class TestTruncateOutput:
 
 
 class TestIsSensitiveKey:
-    def test_sensitive_keys_match(self):
+    def test_secret_keys_match(self):
         for key in (
-            "prompt-body", "prompt_body", "api_key", "token", "SECRET",
-            "password", "Authorization", "output", "raw_output", "auth-header",
+            "api_key", "token", "SECRET", "password", "Authorization",
+            "auth-header", "AUTH_TOKEN",
         ):
             assert is_sensitive_key(key), f"{key!r} should be sensitive"
+
+    def test_bulk_keys_not_secret(self):
+        for key in ("stdout", "stderr", "output", "input", "prompt-body", "raw_output"):
+            assert not is_sensitive_key(key), f"{key!r} should NOT be a secret key"
+            assert is_bulk_key(key), f"{key!r} should be a bulk key"
 
     def test_benign_keys_pass(self):
         for key in ("correlation_id", "job-id", "trigger-id", "status", "event_type", "subject"):
             assert not is_sensitive_key(key), f"{key!r} should be benign"
+            assert not is_bulk_key(key), f"{key!r} should not be a bulk key"
 
 
 class TestSummarizeStructure:
@@ -142,8 +159,11 @@ class TestSummarizeStructure:
             "nested": {"token": "tkn"},
         }
         summary = summarize_structure(payload)
-        assert "SECRET_PROMPT" not in summary
+        # prompt-body is BULK_KEY — content-redacted, NOT blanked. Clean diagnostic survives.
+        assert "SECRET_PROMPT" in summary
+        # api_key is SECRET_KEY — blanket-replaced.
         assert "sk-123" not in summary
+        # nested.token is SECRET_KEY — blanket-replaced.
         assert "tkn" not in summary
         assert "[REDACTED]" in summary
 
@@ -219,3 +239,57 @@ class TestSafeMetadata:
         assert safe_metadata(None) == {}
         assert safe_metadata("string") == {}
         assert safe_metadata([1, 2]) == {}
+
+
+class TestRedactErrorEnvelope:
+    """Shared redact_error_envelope replaces local variants (RV328)."""
+
+    def test_sensitive_keys_redacted(self):
+        from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+        err = AudiaGenticError(
+            code="INT-TST-001",
+            kind="test",
+            message="test error",
+            details={
+                "stdout": "some output with password=hunter2",
+                "api_key": "sk-secret",
+                "provider_id": "claude",
+            },
+        )
+        envelope = redact_error_envelope(err)
+        # stdout is BULK_KEY — content-redacted, NOT blanked. The password value is replaced.
+        assert envelope["details"]["stdout"] == "some output with password=[REDACTED]"
+        # api_key is SECRET_KEY — blanket-replaced.
+        assert envelope["details"]["api_key"] == "[REDACTED]"
+        assert envelope["details"]["provider_id"] == "claude"
+
+    def test_nested_details_redacted(self):
+        from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+        err = AudiaGenticError(
+            code="INT-TST-002",
+            kind="test",
+            message="test error",
+            details={
+                "nested": {
+                    "token": "secret_token",
+                    "safe": "value",
+                },
+            },
+        )
+        envelope = redact_error_envelope(err)
+        assert envelope["details"]["nested"]["token"] == "[REDACTED]"
+        assert envelope["details"]["nested"]["safe"] == "value"
+
+    def test_dict_input(self):
+        envelope = redact_error_envelope({
+            "error": "something",
+            "details": {
+                "stderr": "error output",
+                "count": 42,
+            },
+        })
+        # stderr is BULK_KEY — content-redacted, NOT blanked. Clean diagnostic survives intact.
+        assert envelope["details"]["stderr"] == "error output"
+        assert envelope["details"]["count"] == 42

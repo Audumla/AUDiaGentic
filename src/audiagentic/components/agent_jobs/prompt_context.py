@@ -13,19 +13,11 @@ from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.event.envelope import EventEnvelope
+from audiagentic.foundation.logging.redaction import is_sensitive_key, redact_text
 
 logger = logging.getLogger(__name__)
-
-# Keys that must never appear in prompt context at any depth.
-_REDACTION_DENYLIST: frozenset[str] = frozenset({
-    "token",
-    "secret",
-    "password",
-    "credential",
-    "api_key",
-    "prompt-body",
-    "output",
-})
+# Sensitive-key matching delegated to foundation/logging/redaction.py.
+# _REDACTION_DENYLIST removed — is_sensitive_key() is the single matcher (RV328).
 
 # Maximum bytes per context section before truncation.
 _MAX_SECTION_BYTES: int = 4 * 1024  # 4KB
@@ -58,17 +50,17 @@ class AgentJobPromptContext:
 # ---------------------------------------------------------------------------
 
 def _redact_dict(data: dict[str, Any]) -> dict[str, Any]:
-    """Remove denylisted keys at every depth."""
+    """Remove sensitive keys at every depth using shared is_sensitive_key()."""
     result: dict[str, Any] = {}
     for k, v in data.items():
-        if k.lower() in {d.lower() for d in _REDACTION_DENYLIST}:
+        if is_sensitive_key(k):
             continue
         if isinstance(v, dict):
             result[k] = _redact_dict(v)
         elif isinstance(v, list):
             result[k] = [_redact_dict(item) if isinstance(item, dict) else item for item in v]
         else:
-            result[k] = v
+            result[k] = redact_text(v) if isinstance(v, str) else v
     return result
 
 

@@ -334,6 +334,7 @@ PROVIDER_SPEC.add("model_entry_renderer", yaml_key="model_entry_renderer", kind=
 PROVIDER_SPEC.add("supported_connectors", yaml_key="supported_connectors", kind="data", default=tuple(), converter=_list_to_tuple)
 PROVIDER_SPEC.add("vendor_key_injection", yaml_key="vendor_key_injection", kind="data", default=dict())
 PROVIDER_SPEC.add("on_lsp_enabled", yaml_key="on_lsp_enabled", kind="ref", default=None)
+PROVIDER_SPEC.add("lsp_support_probe", yaml_key="lsp_support_probe", kind="ref", default=None)
 PROVIDER_SPEC.add("receive_lsp_mcp", yaml_key="receive_lsp_mcp", kind="data", default=True)
 PROVIDER_SPEC.add("surfaces", yaml_key="surfaces", kind="data", default=None)
 PROVIDER_SPEC.add("execution", yaml_key="execution", kind="data", default=None)

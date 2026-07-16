@@ -1,14 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
+# LanguageServerEntry moved to providers contracts (MA28). Re-export for
+# backwards compatibility during migration; remove this module after all
+# callers are migrated.
+from audiagentic.components.providers.providers_api import (
+    LanguageServerEntry,
+)
 
-
-@dataclass(frozen=True)
-class LanguageServerEntry:
-    """A single language server entry for config projection."""
-
-    language: str
-    command: list[str]
-    file_extensions: list[str] = field(default_factory=list)
-    settings: dict[str, Any] = field(default_factory=dict)
+__all__ = ["LanguageServerEntry"]

@@ -9,8 +9,9 @@
 | provider-id | `gemini` |
 | upstream-id | Google/gemini-cli (deprecated) → Google/antigravity (successor, v2.2.1) |
 | tool-version | gemini CLI 0.49.0 installed; antigravity 2.2.1 installed via winget; antigravity CLI (`agy`) binary not in PATH — requires terminal restart |
-| verified-at | 2026-07-13 UTC |
-| evidence-kind | installed-tool inspection (gemini `--help`, antigravity config surface at `~/.gemini/antigravity-cli/`), deprecation error from gemini runtime, antigravity bundled docs (`builtin/skills/antigravity_guide/references/cli.md`) |
+| verified-at | 2026-07-13 UTC, 2026-07-16 UTC (upstream doc revalidation) |
+| evidence-kind | installed-tool inspection (gemini `--help`, antigravity config surface at `~/.gemini/antigravity-cli/`), deprecation error from gemini runtime, antigravity bundled docs (`builtin/skills/antigravity_guide/references/cli.md`), upstream docs verification (docs.openhands.dev) |
+| **correction-note** | **2026-07-16 revalidation**: Gemini CLI is now an ACP agent in OpenHands Agent Canvas via `npx -y @google/gemini-cli --acp`. Subscription login path uses `~/.gemini/oauth_creds.json`; API key fallback is `GEMINI_API_KEY`.
 
 ---
 
@@ -61,6 +62,14 @@
 | **Config file** | `~/.gemini/settings.json` (shared gemini/antigravity settings with auth config); `~/.gemini/antigravity-cli/settings.json` (CLI-specific: colorScheme, permissions, trustedWorkspaces); `~/.gemini/antigravity/mcp_config.json` (IDE MCP servers) |
 | **Key mechanism** | Google account OAuth login only (`oauth-personal`). No external vendor key injection surface. |
 | **Model granularity** | Google model set determined by account tier entitlements. CLI `-m/--model` flag selects active model. No multi-vendor routing or custom endpoint configuration visible. |
+
+---
+
+## New upstream capabilities (verified 2026-07-16)
+
+### ACP agent in OpenHands Agent Canvas
+
+Gemini CLI is now an ACP agent in OpenHands Agent Canvas via `npx -y @google/gemini-cli --acp`. The free Google login path uses `~/.gemini/oauth_creds.json`; API key fallback is `GEMINI_API_KEY`. Subscription login takes priority over API key.
 
 ---
 

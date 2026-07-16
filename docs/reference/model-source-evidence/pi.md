@@ -7,11 +7,11 @@
 | Field | Value |
 |---|---|
 | provider-id | `pi` |
-| upstream-id | earendil-works/pi-coding-agent |
-| tool-version | 0.79.8 |
-| verified-at | 2026-07-13 UTC (RV353 correction) |
-| evidence-kind | installed-tool CLI probe (`pi --help` Environment Variables section, `pi --list-models`, home-scoped config inspection `~/.pi/agent/models.json`) |
-| **correction-note** | RV353 finding #1: prior classification "all vendors custom-entries only" is materially false. Installed help proves native env var key support for all P1 vendors plus dozens of additional vendors. Custom entries remain valid for local/custom endpoints but do not replace native vendor injection. |
+| upstream-id | earendil-works/pi-coding-agent (upstream repo/docs currently inaccessible — 404/removed) |
+| tool-version | 0.79.8; upstream docs not reachable as of 2026-07-16 |
+| verified-at | 2026-07-13 UTC (RV353 correction), 2026-07-16 UTC (upstream accessibility check) |
+| evidence-kind | installed-tool CLI probe (`pi --help` Environment Variables section, `pi --list-models`, home-scoped config inspection `~/.pi/agent/models.json`), upstream accessibility check (pi.vercel.app returns 404 for model-providers path; GitHub repo 404) |
+| **correction-note** | RV353 finding #1: prior classification "all vendors custom-entries only" is materially false. Installed help proves native env var key support for all P1 vendors plus dozens of additional vendors. Custom entries remain valid for local/custom endpoints but do not replace native vendor injection. **2026-07-16 revalidation**: Upstream docs (pi.vercel.app/guide/model-providers) return 404; GitHub repo earendil-works/pi-coding-agent returns 404. Community ACP adapter `vkozak/pi-acp` (513 stars, updated 28 days ago) confirms Pi is compatible with Agent Client Protocol. Extensions ecosystem active: pi-mcp-adapter, pi-web-access, pi-skills.
 
 ---
 
@@ -71,6 +71,26 @@
 | **Config shape** | `{ "providers": { "<source-id>": { "baseUrl", "api", "apiKey", "models[]", "compat" } } }`. One provider block per source. Models are explicit `models[]` entries — selectable granularity with `model-filter` applicable. This surface is for CUSTOM/LOCAL endpoints, not required for native vendors. |
 | **Key mechanism** | **(a) Native vendor key injection:** env var only — standard vendor API key names (OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY, etc.) recognized by installed tool at launch. CLI fallback: `--api-key <key>`. **(b) Custom endpoints:** structured JSON write to `~/.pi/agent/models.json` with `apiKey` field per provider block. |
 | **Reload behavior** | Not verified — Pi may require restart to pick up models.json changes. Env vars effective at launch time. |
+
+---
+
+## New upstream capabilities (verified 2026-07-16 from GitHub search)
+
+### ACP compatibility
+
+Community ACP adapter `vkozak/pi-acp` (513 stars, updated 28 days ago) confirms Pi is compatible with Agent Client Protocol. This means Pi could potentially be driven as an external agent in OpenHands Agent Canvas or similar platforms via ACP.
+
+### Active extensions ecosystem
+
+Multiple community extensions exist:
+- `pi-mcp-adapter` (Token-efficient MCP adapter for Pi coding agent)
+- `pi-web-access` (Web search and content extraction extension)
+- `pi-skills` (Skills compatible with Claude Code and Codex CLI)
+- `piclaw` (Pi coding agent in a technicolor web trenchcoat docker)
+
+### Upstream docs inaccessible
+
+The upstream documentation at pi.vercel.app/guide/model-providers returns 404. The GitHub repo earendil-works/pi-coding-agent returns 404. The project appears to have been moved or the docs site is down.
 
 ---
 

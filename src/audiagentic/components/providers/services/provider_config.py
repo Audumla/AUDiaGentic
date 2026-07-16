@@ -144,7 +144,9 @@ def load_provider_config_lenient(project_root: Path) -> dict[str, Any]:
         payload = load_yaml_file(path)
     except Exception:  # noqa: BLE001
         return {"contract-version": "v1", "providers": {}}
-    if not isinstance(payload, dict):
+    if not isinstance(payload, dict) or not payload:
+        # Empty/comment-only file (the install marker) means no providers
+        # configured — same as a missing file, and same as the strict loader.
         return {"contract-version": "v1", "providers": {}}
     return payload
 
@@ -162,6 +164,13 @@ def load_provider_config(project_root: Path) -> dict[str, Any]:
             message="failed to read provider config",
             details={"path": str(path), "error": str(exc)},
         ) from exc
+    if not isinstance(payload, dict) or not payload:
+        # An existing-but-empty file parses to an empty mapping — the install
+        # marker is a bare comment, so this is the normal freshly-installed
+        # state. It means the same as no file at all (no providers configured),
+        # so return the default rather than failing validation on a file the
+        # installer itself wrote. Matches load_provider_config_lenient.
+        return {"contract-version": "v1", "providers": {}}
     issues = validate_provider_config(payload)
     if issues:
         raise AudiaGenticError(

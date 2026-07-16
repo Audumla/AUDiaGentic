@@ -27,6 +27,24 @@ def _pi_uninstall(project_root=None):
     return subprocess.CompletedProcess(["audiagentic", "uninstall"], rc, "", "")
 
 
+def _pi_lens_present(project_root=None):
+    """Report whether the pi-lens extension is installed, without installing it.
+
+    Non-mutating status companion to :func:`_pi_ensure_lens`. ``pi install
+    npm:pi-lens`` resolves the package under the harness agent npm prefix, so
+    presence of that package directory is the installed signal.
+    """
+    from audiagentic.foundation.paths.home import global_harness_runtime
+    from audiagentic.runtime.harness.context import resolve_agent_bin
+    runtime = global_harness_runtime()
+    if not resolve_agent_bin(runtime).exists():
+        return {"ok": False, "skipped": "pi harness not installed"}
+    package_dir = runtime / "agent" / "npm" / "node_modules" / "pi-lens"
+    if not package_dir.exists():
+        return {"ok": False, "action_needed": "pi-lens extension is not installed"}
+    return {"ok": True}
+
+
 def _pi_ensure_lens(project_root=None):
     """Install the pi-lens LSP extension into the pi harness (best-effort)."""
     from audiagentic.foundation.paths.home import global_harness_runtime

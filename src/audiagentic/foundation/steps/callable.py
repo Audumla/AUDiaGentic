@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from audiagentic.foundation.logging.redaction import redact_text, truncate_output
+from audiagentic.foundation.logging.redaction import truncate_output
 
 from .results import StepResult
 
@@ -24,9 +24,9 @@ class CallableStep:
         try:
             completed = self.fn(project_root=context.get("project_root"))
         except Exception as exc:  # noqa: BLE001
-            return StepResult(status="failed", reason=redact_text(str(exc)))
-        stdout = truncate_output(redact_text((completed.stdout or "").strip()))
-        stderr = truncate_output(redact_text((completed.stderr or "").strip()))
+            return StepResult(status="failed", reason=str(exc))
+        stdout = truncate_output((completed.stdout or "").strip())
+        stderr = truncate_output((completed.stderr or "").strip())
         return StepResult(
             status="ok" if completed.returncode == 0 else "failed",
             outputs={"returncode": completed.returncode, "stdout": stdout, "stderr": stderr},

@@ -3,6 +3,11 @@
 
 provider_id: qwen
 automation_capabilities:
+  - family_id: lsp-mcp-projection
+    supported_modes: [apply, prune, status]
+    payload_contract: provider-lsp-mcp-projection-payload/v1
+    result_contract: provider-lsp-mcp-projection-result/v1
+    ownership_scope_required: false
   - family_id: cli-lifecycle
     supported_modes: [plan, apply, prune, status]
     payload_contract: provider-cli-lifecycle-payload/v1
@@ -12,6 +17,11 @@ automation_capabilities:
     supported_modes: [apply, prune, status]
     payload_contract: provider-managed-mcp-payload/v1
     result_contract: provider-managed-mcp-result/v1
+    ownership_scope_required: true
+  - family_id: language-server-projection
+    supported_modes: [apply, prune, status]
+    payload_contract: provider-language-server-projection-payload/v1
+    result_contract: provider-language-server-projection-result/v1
     ownership_scope_required: true
 display_name: "Qwen (Alibaba)"
 description: "Alibaba Cloud's Qwen Code CLI. Open-source coding agent built on the Qwen model family."

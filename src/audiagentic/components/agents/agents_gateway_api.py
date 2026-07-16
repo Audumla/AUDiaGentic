@@ -16,9 +16,26 @@ from audiagentic.components.agents import agents_gateway_store as store
 
 # A blocking MCP tool call must not hold the connection indefinitely — the
 # client-side transport typically has its own 30-60s timeout. Cap requested
-# blocking waits server-side and return a 'running'/'queued' status rather
-# than hang (RV17 finding on AG11).
-MAX_BLOCKING_TIMEOUT_SECONDS = 300.0
+# blocking waits and return a 'running'/'queued' status rather than hang
+# (RV17 finding on AG11).
+#
+# This cap belongs to the MCP TRANSPORT, not to execution. It is applied at the
+# MCP boundary (agents_gateway_mcp) — NOT here — because an in-process caller
+# (a supervisor owning a long implementation task) has no transport constraint
+# and must be able to wait for as long as the work actually takes.
+#
+# Applying it here previously made >300s work impossible through ANY caller:
+# the worker is a daemon thread in the caller's process, so when the capped
+# wait returned the caller exited and the thread was killed mid-attempt,
+# stranding the record at 'running' forever. See RV511.
+MCP_BLOCKING_TIMEOUT_SECONDS = 300.0
+
+# Backwards-compatible alias — some callers/tests reference the old name.
+MAX_BLOCKING_TIMEOUT_SECONDS = MCP_BLOCKING_TIMEOUT_SECONDS
+
+# A blocking wait with no requested timeout still needs a bound so it cannot
+# hang forever; callers that want longer pass an explicit timeout_seconds.
+DEFAULT_BLOCKING_TIMEOUT_SECONDS = 300.0
 
 _QUEUE_MANAGER = queue_mod.GatewayQueueManager()
 
@@ -82,7 +99,11 @@ def submit_llm_request(
     record = _QUEUE_MANAGER.enqueue(project_root, record, params, dispatch.dispatch_request)
 
     if mode == "blocking":
-        wait_timeout = min(timeout_seconds, MAX_BLOCKING_TIMEOUT_SECONDS) if timeout_seconds else MAX_BLOCKING_TIMEOUT_SECONDS
+        # Honour the caller's requested wait. The MCP boundary caps its own
+        # callers; an in-process supervisor running a long implementation task
+        # must be able to outlast the work, because the worker is a daemon
+        # thread in THIS process and dies when the caller returns (RV511).
+        wait_timeout = timeout_seconds or DEFAULT_BLOCKING_TIMEOUT_SECONDS
         return _QUEUE_MANAGER.wait(project_root, record["request-id"], wait_timeout)
     return record
 
@@ -93,9 +114,14 @@ def get_llm_request(project_root: Path, request_id: str) -> dict[str, Any]:
 
 
 def wait_llm_request(project_root: Path, request_id: str, timeout_seconds: float | None = None) -> dict[str, Any]:
-    """Block until a request reaches a terminal state or the (capped) timeout elapses."""
-    capped = min(timeout_seconds, MAX_BLOCKING_TIMEOUT_SECONDS) if timeout_seconds else MAX_BLOCKING_TIMEOUT_SECONDS
-    return _QUEUE_MANAGER.wait(project_root, request_id, capped)
+    """Block until a request reaches a terminal state or the timeout elapses.
+
+    The caller's timeout is honoured; the MCP boundary applies its own transport
+    cap. See MCP_BLOCKING_TIMEOUT_SECONDS.
+    """
+    return _QUEUE_MANAGER.wait(
+        project_root, request_id, timeout_seconds or DEFAULT_BLOCKING_TIMEOUT_SECONDS
+    )
 
 
 def cancel_llm_request(project_root: Path, request_id: str) -> dict[str, Any]:

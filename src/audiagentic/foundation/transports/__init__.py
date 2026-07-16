@@ -1,4 +1,4 @@
-"""Provider-neutral execution transports."""
+"""Provider-neutral agent transport protocols."""
 
 from .acp import AcpEvent, AcpLaunch, AcpResult, run_acp_prompt
 

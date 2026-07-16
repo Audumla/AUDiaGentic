@@ -11,7 +11,9 @@ from typing import Any
 
 import tomllib
 
-from audiagentic.components.coding_lsp.language_servers import LanguageServerEntry
+from audiagentic.components.providers.contracts.language_server_projection import (
+    LanguageServerEntry,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_text
 

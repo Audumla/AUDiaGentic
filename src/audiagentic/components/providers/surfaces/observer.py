@@ -19,10 +19,6 @@ from pathlib import Path
 from audiagentic.foundation.event import get_bus, subscribe_component_lifecycle
 
 from ..providers_api import operate_provider_surfaces
-from ..services.lsp_projection import (
-    CODING_LSP_PROVIDER_PROJECTION,
-    handle_lsp_provider_projection,
-)
 from ..services.mcp_projection import sync_component_mcp_to_providers
 
 
@@ -65,4 +61,3 @@ _on_component_mcp_lifecycle = subscribe_component_lifecycle(
     on_config_changed=partial(_sync_component_mcp, enabled=True),
 )
 get_bus().subscribe("lifecycle.component.mcp.sync", _on_component_mcp_sync)
-get_bus().subscribe(CODING_LSP_PROVIDER_PROJECTION, handle_lsp_provider_projection)

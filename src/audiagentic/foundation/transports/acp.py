@@ -4,7 +4,7 @@ Protocol framing and child lifecycle come from the official ACP SDK. This
 module owns no provider selection, profiles, retries, queues, or persistence.
 
 Implements the frozen neutral event and lifecycle contract per
-docs/reference/AGENT_EXECUTION_TRANSPORTS.md §'Neutral event and lifecycle
+docs/reference/AGENT_TRANSPORTS.md §'Neutral event and lifecycle
 contract — FROZEN'. Deviations require a plan review on MA18.
 """
 

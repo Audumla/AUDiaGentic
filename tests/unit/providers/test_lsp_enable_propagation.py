@@ -4,12 +4,13 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from audiagentic.components.coding_lsp.language_servers import LanguageServerEntry
-from audiagentic.components.providers.services.lsp_projection import (
-    sync_generic_lsp_mcp_to_provider_configs,
-    sync_language_servers_to_provider_configs,
+from audiagentic.components.providers.contracts.lsp_mcp_projection import (
+    LspMcpProjectionEntry,
+    LspMcpProjectionRequest,
 )
-from audiagentic.foundation.mcp import McpServerEntry
+from audiagentic.components.providers.services.lsp_mcp_projection import (
+    manage_lsp_mcp_projection_all,
+)
 
 
 class _Provider:
@@ -19,6 +20,13 @@ class _Provider:
         self.language_servers_config: object | None = object() if native else None
         self.on_lsp_enabled = None
         self.receive_lsp_mcp = receive_lsp_mcp
+
+    def automation_capability(self, family_id: str):
+        if family_id == "language-server-projection" and self.language_servers_config is not None:
+            return object()
+        if family_id == "lsp-mcp-projection" and self.mcp_config is not None and self.receive_lsp_mcp:
+            return object()
+        return None
 
 
 class TestEnableCodingLspAddsLspMcpToProviders:
@@ -46,18 +54,28 @@ class TestEnableCodingLspAddsLspMcpToProviders:
             }
             return {"ok": True}
 
-        with patch("audiagentic.components.providers.services.lsp_projection.all_descriptors", return_value=providers):
-            with patch("audiagentic.components.providers.services.lsp_projection.sync_managed_provider_mcp_subset", _fake_sync):
-                with patch("audiagentic.components.providers.services.lsp_projection.enabled_provider_ids", return_value=["claude"]):
+        with patch("audiagentic.components.providers.descriptors.registry.all_descriptors", return_value=providers):
+            with patch("audiagentic.components.providers.services.lsp_mcp_projection.sync_managed_provider_mcp_subset", _fake_sync):
+                with patch("audiagentic.components.providers.services.feature_resolution.enabled_provider_ids", return_value=["claude"]):
                     # Only ag-lsp should be projected — no ag-lsp-mgmt
-                    result = sync_generic_lsp_mcp_to_provider_configs(
+                    result = manage_lsp_mcp_projection_all(
                         tmp_path,
-                        {"coding-lsp/ag-lsp": ("ag-lsp", McpServerEntry(name="ag-lsp", command="python", args=("-m", "audiagentic.components.coding_lsp.lsp_mcp")))},
-                        {"coding-lsp/ag-lsp"},
+                        mode="apply",
+                        request=LspMcpProjectionRequest(
+                            managed_ids=("coding-lsp/ag-lsp",),
+                            entries=(LspMcpProjectionEntry(
+                                managed_id="coding-lsp/ag-lsp",
+                                name="ag-lsp",
+                                command="python",
+                                args=("-m", "audiagentic.components.coding_lsp.lsp_mcp"),
+                            ),),
+                        ),
                     )
 
-        assert result["ok"] is True
-        assert "claude" in result["synced"]
+        assert all(r.ok for r in result)
+        claude_result = next((r for r in result if r.provider_id == "claude"), None)
+        assert claude_result is not None
+        assert "coding-lsp/ag-lsp" in claude_result.synced
         entries = captured["claude"]["entries"]  # type: ignore[union-attr]
         assert "coding-lsp/ag-lsp" in entries
         # ag-lsp-mgmt must NOT be in the projected entries
@@ -74,17 +92,24 @@ class TestEnableCodingLspAddsLspMcpToProviders:
             captured[provider_id] = True
             return {"ok": True}
 
-        with patch("audiagentic.components.providers.services.lsp_projection.all_descriptors", return_value=providers):
-            with patch("audiagentic.components.providers.services.lsp_projection.sync_managed_provider_mcp_subset", _fake_sync):
-                with patch("audiagentic.components.providers.services.lsp_projection.enabled_provider_ids", return_value=["skip-lsp"]):
-                    result = sync_generic_lsp_mcp_to_provider_configs(
+        with patch("audiagentic.components.providers.descriptors.registry.all_descriptors", return_value=providers):
+            with patch("audiagentic.components.providers.services.lsp_mcp_projection.sync_managed_provider_mcp_subset", _fake_sync):
+                with patch("audiagentic.components.providers.services.feature_resolution.enabled_provider_ids", return_value=["skip-lsp"]):
+                    result = manage_lsp_mcp_projection_all(
                         tmp_path,
-                        {"coding-lsp/ag-lsp": ("ag-lsp", McpServerEntry(name="ag-lsp", command="python"))},
-                        {"coding-lsp/ag-lsp"},
+                        mode="apply",
+                        request=LspMcpProjectionRequest(
+                            managed_ids=("coding-lsp/ag-lsp",),
+                            entries=(LspMcpProjectionEntry(
+                                managed_id="coding-lsp/ag-lsp",
+                                name="ag-lsp",
+                                command="python",
+                            ),),
+                        ),
                     )
 
-        assert result["ok"] is True
-        assert "skip-lsp" in result["skipped"]
+        # Provider with receive_lsp_mcp=False is skipped by manage_lsp_mcp_projection_all
+        assert all(r.provider_id != "skip-lsp" for r in result)
         assert "skip-lsp" not in captured
 
     def test_sync_language_servers_to_native_provider(self, tmp_path: Path) -> None:
@@ -104,22 +129,33 @@ class TestEnableCodingLspAddsLspMcpToProviders:
         codex = providers["codex"]
         spec = type("_Spec", (), {
             "config_path": tmp_path / "config.json",
+            "capabilities": frozenset(),
         })()
         spec.writer = staticmethod(_fake_writer)
         spec.remover = staticmethod(_fake_remover)
         codex.language_servers_config = spec
 
-        with patch("audiagentic.components.providers.services.lsp_projection.all_descriptors", return_value=providers):
-            with patch("audiagentic.components.providers.services.lsp_projection.enabled_provider_ids", return_value=["codex"]):
-                result = sync_language_servers_to_provider_configs(
-                    tmp_path,
-                    {"python": LanguageServerEntry(language="python", command=["pyright-langserver", "--stdio"])},
-                )
+        from audiagentic.components.providers.contracts.language_server_projection import (
+            LanguageServerEntry,
+            LanguageServerProjectionRequest,
+        )
+        from audiagentic.components.providers.providers_api import manage_language_servers
 
-        assert result["ok"] is True
-        assert "codex" in result["synced"]
+        with patch("audiagentic.components.providers.descriptors.registry.get_descriptor") as mock_get:
+            def _get(pid: str):
+                return providers.get(pid)
+            mock_get.side_effect = _get
+            result = manage_language_servers(
+                tmp_path,
+                "codex",
+                mode="apply",
+                request=LanguageServerProjectionRequest(
+                    entries={"python": LanguageServerEntry(language="python", command=["pyright-langserver", "--stdio"])}
+                ),
+            )
+
+        assert result.ok is True
         assert captured["codex"] == ["python"]
-        assert "claude" in result["skipped"]
 
     def test_sync_generic_lsp_empty_when_no_desired_entries(self, tmp_path: Path) -> None:
         """When no desired entries, providers should receive empty dicts."""
@@ -132,15 +168,20 @@ class TestEnableCodingLspAddsLspMcpToProviders:
             captured[provider_id] = desired_entries
             return {"ok": True}
 
-        with patch("audiagentic.components.providers.services.lsp_projection.all_descriptors", return_value=providers):
-            with patch("audiagentic.components.providers.services.lsp_projection.sync_managed_provider_mcp_subset", _fake_sync):
-                result = sync_generic_lsp_mcp_to_provider_configs(
-                    tmp_path,
-                    {},
-                    set(),
-                )
+        with patch("audiagentic.components.providers.descriptors.registry.all_descriptors", return_value=providers):
+            with patch("audiagentic.components.providers.services.lsp_mcp_projection.get_descriptor", side_effect=lambda pid: providers.get(pid)):
+                with patch("audiagentic.components.providers.services.lsp_mcp_projection.sync_managed_provider_mcp_subset", _fake_sync):
+                    with patch("audiagentic.components.providers.services.feature_resolution.enabled_provider_ids", return_value=["disabled"]):
+                        result = manage_lsp_mcp_projection_all(
+                            tmp_path,
+                            mode="apply",
+                            request=LspMcpProjectionRequest(
+                                managed_ids=(),
+                                entries=(),
+                            ),
+                        )
 
-        assert result["ok"] is True
+        assert all(r.ok for r in result)
         assert captured["disabled"] == {}
 
     def test_sync_generic_lsp_to_provider_with_both_mcp_and_language_servers_config(self, tmp_path: Path) -> None:
@@ -156,16 +197,24 @@ class TestEnableCodingLspAddsLspMcpToProviders:
             captured[provider_id] = entries_map
             return {"ok": True}
 
-        with patch("audiagentic.components.providers.services.lsp_projection.all_descriptors", return_value=providers):
-            with patch("audiagentic.components.providers.services.lsp_projection.sync_managed_provider_mcp_subset", _fake_sync):
-                with patch("audiagentic.components.providers.services.lsp_projection.enabled_provider_ids", return_value=["opencode", "claude"]):
-                    result = sync_generic_lsp_mcp_to_provider_configs(
+        with patch("audiagentic.components.providers.descriptors.registry.all_descriptors", return_value=providers):
+            with patch("audiagentic.components.providers.services.lsp_mcp_projection.sync_managed_provider_mcp_subset", _fake_sync):
+                with patch("audiagentic.components.providers.services.feature_resolution.enabled_provider_ids", return_value=["opencode", "claude"]):
+                    result = manage_lsp_mcp_projection_all(
                         tmp_path,
-                        {"coding-lsp/ag-lsp": ("ag-lsp", McpServerEntry(name="ag-lsp", command="python", args=("-m", "audiagentic.components.coding_lsp.lsp_mcp")))},
-                        {"coding-lsp/ag-lsp"},
+                        mode="apply",
+                        request=LspMcpProjectionRequest(
+                            managed_ids=("coding-lsp/ag-lsp",),
+                            entries=(LspMcpProjectionEntry(
+                                managed_id="coding-lsp/ag-lsp",
+                                name="ag-lsp",
+                                command="python",
+                                args=("-m", "audiagentic.components.coding_lsp.lsp_mcp"),
+                            ),),
+                        ),
                     )
 
-        assert result["ok"] is True
+        assert all(r.ok for r in result)
         # opencode has both mcp_config and language_servers_config — should still receive MCP
         assert "opencode" in captured
         assert "coding-lsp/ag-lsp" in captured["opencode"]

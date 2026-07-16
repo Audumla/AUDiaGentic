@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import make_error_factory
-from audiagentic.foundation.logging.redaction import is_sensitive_key
+from audiagentic.foundation.logging.redaction import is_bulk_key, is_sensitive_key
 from audiagentic.foundation.time import now_iso_z
 
 _opr_error = make_error_factory("VAL", "OPR", "operational-record-validation")
@@ -30,7 +30,7 @@ def _find_denylisted_key(value: Any, depth: int = 0) -> str | None:
         return None
     if isinstance(value, Mapping):
         for key, nested in value.items():
-            if is_sensitive_key(key):
+            if is_sensitive_key(key) or is_bulk_key(key):
                 return str(key)
             found = _find_denylisted_key(nested, depth + 1)
             if found is not None:
