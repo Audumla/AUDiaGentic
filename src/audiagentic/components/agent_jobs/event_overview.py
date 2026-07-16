@@ -12,7 +12,6 @@ from typing import Any
 
 from audiagentic.components.agent_jobs import jobs_store as store
 from audiagentic.foundation.io import load_ndjson
-from audiagentic.foundation.logging.redaction import redact_text
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +84,7 @@ def event_jobs_overview(project_root: Path) -> dict[str, Any]:
             "event_type": str(entry.get("event_type") or ""),
             "correlation_id": entry.get("correlation_id"),
             "error_code": entry.get("error_code"),
-            "error_message": redact_text(str(entry.get("error_message") or "")),
+            "error_message": str(entry.get("error_message") or ""),
         }
         for entry in failures[:_MAX_RECENT_FAILURES]
     ]

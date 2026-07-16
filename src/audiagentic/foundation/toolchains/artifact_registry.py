@@ -17,6 +17,7 @@ from typing import Any
 
 from audiagentic.foundation.contracts.errors import make_error_factory
 from audiagentic.foundation.io import atomic_write_text
+from audiagentic.foundation.logging.redaction import DEFAULT_REDACT_PATTERNS
 
 from .config_patcher import ConfigPatcher, OwnedChange
 from .managed_block import BlockChange, remove_managed_block
@@ -68,9 +69,15 @@ class ArtifactRegistry:
         return data
 
     def _save(self, data: dict[str, Any]) -> None:
-        atomic_write_text(
-            self._path, json.dumps(data, indent=2, ensure_ascii=False) + "\n"
-        )
+        text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+        for pattern in DEFAULT_REDACT_PATTERNS:
+            if pattern.pattern.startswith(r"(https?://"):
+                continue
+            if pattern.search(text):
+                raise _artifact_error(
+                    2, "Artifact registry contains secret-shaped value; write rejected"
+                )
+        atomic_write_text(self._path, text)
 
     def _bucket(self, data: dict[str, Any], recipe: str) -> dict[str, Any]:
         bucket = data["recipes"].setdefault(

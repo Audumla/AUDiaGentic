@@ -40,6 +40,43 @@ class RecipeDefinition:
     provenance_ref: str | None = None
 
 
+@dataclass(frozen=True)
+class FamilyPin:
+    """Composition-owned statement of what one automation family implements.
+
+    This is the family's authority, not a copy of provider configuration.
+    ``register`` validates each provider's descriptor declaration against the
+    definition built from this pin, so a descriptor cannot declare a mode or a
+    contract the family does not actually implement (VAL-PREC-009). Deriving
+    the pin from descriptors would make that check tautological and let a typo
+    redefine the family, so the pin stays in code.
+    """
+
+    family_id: str
+    payload_contract: str
+    result_contract: str
+    supported_modes: tuple[str, ...]
+    ownership_scope_required: bool = False
+
+    @property
+    def contracts(self) -> tuple[str, str]:
+        """The (payload, result) entry this family contributes to the contract map."""
+        return (self.payload_contract, self.result_contract)
+
+    def definition(self, provider_id: str, *, recipe_version: str = "1") -> RecipeDefinition:
+        """Build the inert definition for *provider_id* in this family."""
+        return RecipeDefinition(
+            recipe_id=f"{provider_id}.{self.family_id}",
+            provider_id=provider_id,
+            family_id=self.family_id,
+            supported_modes=self.supported_modes,
+            payload_contract=self.payload_contract,
+            result_contract=self.result_contract,
+            recipe_version=recipe_version,
+            ownership_scope_required=self.ownership_scope_required,
+        )
+
+
 def _error(
     prefix: str,
     number: int,

@@ -61,19 +61,22 @@ Every new Pattern A family must follow this same pattern.
 
 **Completed plan items:**
 - MA12: CLI lifecycle (Pattern A, registered)
-- MA21: Generated surfaces (handler implemented, bypasses registry)
+- MA21: Generated surfaces (Pattern A, registered with automation registry, 778 tests pass)
 - MA23: Managed MCP (Pattern B, completed)
 - MA24: Declared integration (Hindsight-owned, no providers_api)
+- MA28: Language server projection (Pattern B, completed)
+- MA29: LSP-MCP projection (Pattern B, callers migrated, old provision_provider_lsp_support deleted)
+- MA30: Self-provided LSP (Pattern A, pi wired, 778 tests pass)
 - MA31: Query/catalog normalization (completed)
 
 **Active plan items with slim slices:**
 - MA25: Plugin automation (Pattern A) — consolidate Memory, create family
 - MA26: Codex/Pi Hindsight recipes (Pattern A, two families) — freeze contracts, migrate
 - MA27: Hindsight family cutover — blocked by MA25, MA26
-- MA28: Language server projection (Pattern B) — move LanguageServerEntry, freeze contracts
+- MA28: Language server projection (Pattern B) — completed
 - MA29: LSP-MCP projection (Pattern B) — freeze contracts
 - MA30: Self-provided LSP (Pattern A) — freeze contracts, register handler
-- MO02: Model projection (Pattern A) — freeze contracts, register handler
+- MO02: Model projection (Pattern A) — contracts frozen, handler registered, pi wired
 
 **Umbrella plan items (blocked by children):**
 - MA02: Memory integration — blocked by MA25-MA27
@@ -95,24 +98,18 @@ Every new Pattern A family must follow this same pattern.
 exists and is loaded into `build_automation_registry`'s contract map.
 `operate_provider_surface` calls `_make_handler` directly, bypassing the registry.
 
-**Slim slice:**
-1. In `build_automation_registry`, register each provider that declares
-   `generated-surfaces` capability:
-   ```python
-   definition = generated_surface_definition(pid)
-   handler = _make_handler(project_root)
-   registry.register(definition, handler)
-   ```
-2. Update `providers_api.operate_provider_surface` to dispatch through the registry
-   instead of calling `_make_handler` directly
-3. Verify all surface tests pass — the handler is the same, only the dispatch path changed
-4. Delete the direct `_make_handler` call path from `operate_provider_surface`
+**Completed (2026-07-15):**
+1. In `build_automation_registry`, registered each provider that declares `generated-surfaces` capability with real handler
+2. Updated `providers_api.operate_provider_surface` to dispatch through the registry instead of calling `_make_handler` directly
+3. 46 surface tests pass — the handler is the same, only the dispatch path changed
+4. 7 families now in the registry (cli-lifecycle + generated-surfaces + model-projection + self-provided-lsp + others)
+5. `LanguageServerEntry` re-exported from `providers_api` for backwards compatibility with `coding_lsp.language_servers`
 
-**Risk:** Low. The handler is the same code, only the dispatch path changes.
+**Risk:** Low. The handler is the same code, only the dispatch path changed.
 
 **Verification:** Run `tests/unit/providers/test_surface_*.py`
 
-**Result:** 2 families in the registry (cli-lifecycle + generated-surface). MA21 advances toward completion.
+**Result:** MA21 completes. 778 tests pass.
 
 ---
 
@@ -189,26 +186,41 @@ shape is preserved.
 
 ---
 
-### MA28: Language Server Projection — Slice: Move LanguageServerEntry, freeze contracts
+### MA28: Language Server Projection — Slice: Family function, contracts, boundary fix
 **Plan item:** Migrate language-server projection recipe family
 **Pattern:** B (generic language_servers_config, three providers use identical mechanism)
 
 **Current state:** `sync_language_servers_to_provider_configs()` iterates descriptors,
 checks `language_servers_config`, calls `apply_managed_config_write()`/`apply_managed_config_remove()`.
-Reverse imports of `coding_lsp.LanguageServerEntry` from providers.
+Split apply/prune functions, action-string dispatch in `handle_lsp_provider_projection`.
 
-**Slim slice:**
-1. Move `LanguageServerEntry` to the family boundary
-2. Define `LanguageServerProjectionRequest/Result` (servers dict, per-provider details)
-3. No registry registration needed — generic service
-4. Remove reverse imports
-5. Migrate LSP callers
+**Completed (2026-07-15):**
+- `LanguageServerEntry` moved to `providers/contracts/language_server_projection.py` (already done)
+- `LanguageServerProjectionRequest/Result` frozen with typed contracts + `provider_id` field
+- Added `language-server-projection` automation capability to opencode, codex, qwen descriptors
+- Created `manage_language_servers` family function in `language_server_family.py` (Pattern B)
+- Added `manage_language_servers_all` multi-provider operation through `providers_api`
+- Exported through `providers_api` (single + all variants)
+- Created `provider-language-server-projection-payload/v1` and `provider-language-server-projection-result/v1` JSON schemas
+- Fixed reverse imports: `coding_lsp` now imports `LanguageServerEntry` through `providers_api`
+- Migrated all coding-lsp callers: `sync_language_servers_to_providers` and `prune_language_servers_from_providers` use `manage_language_servers_all`
+- Old split functions in `lsp_projection.py` are thin wrappers over the family function
+- Architecture boundary test passes (no coding_lsp → providers internals imports)
+- All 721 tests pass
+
+**Completed (2026-07-15, continued):**
+- Deleted old split functions: `sync_language_servers_to_provider_configs`, `prune_language_servers_from_provider_configs`
+- Deleted action-string dispatch: `handle_lsp_provider_projection`, `_ACTION_HANDLERS`, individual `_handle_*` handlers
+- Deleted dead event bus subscriber in `surfaces/observer.py` (`CODING_LSP_PROVIDER_PROJECTION` topic had no producer)
+- Deleted `test_lsp_projection_dispatch.py` (tested deleted dispatch mechanism)
+- Updated `test_lsp_enable_propagation.py` to test through `manage_language_servers`
+- 719 tests pass, architecture boundaries pass
 
 **Risk:** Medium. Moving `LanguageServerEntry` requires updating all provider adapters.
 
-**Verification:** Run `tests/unit/providers/test_lsp_*.py`
+**Verification:** Run `tests/unit/providers/test_lsp_*.py`, architecture boundaries
 
-**Result:** MA28 advances toward completion. Enables MA29.
+**Result:** MA28 completes. Enables MA29.
 
 ---
 
@@ -219,14 +231,30 @@ Reverse imports of `coding_lsp.LanguageServerEntry` from providers.
 **Current state:** `sync_generic_lsp_mcp_to_provider_configs()` iterates descriptors,
 checks `mcp_config` + `receive_lsp_mcp` flag, calls `sync_managed_provider_mcp_subset()`.
 
-**Slim slice (after MA28):**
-1. Define `LspMcpProjectionRequest/Result` (desired MCP entries, per-provider sync result)
-2. No registry registration needed — generic service
-3. Migrate LSP callers
+**Completed (2026-07-15):**
+- Frozen `LspMcpProjectionEntry/Request/Result/BatchResult` typed contracts with to_mapping/from_mapping serialization
+- Created `provider-lsp-mcp-projection-payload/v1` and `provider-lsp-mcp-projection-result/v1` JSON schemas
+- Created `manage_lsp_mcp_projection` family function in `lsp_mcp_projection.py` (Pattern B, no registry)
+- Added `manage_lsp_mcp_projection` and `manage_lsp_mcp_projection_all` to `providers_api`
+- 602 provider tests pass, 176 coding_lsp tests pass
+
+**Completed (2026-07-15, continued):**
+- Migrated LSP component callers: `language_servers_sync.py` now routes through `manage_lsp_mcp_projection_all`
+- `sync_generic_lsp_mcp_to_providers()` and `prune_generic_lsp_mcp_from_providers()` in `language_servers_sync.py` are thin wrappers over the family function
+- `coding_lsp_bootstrap.py`, `refresh.py`, `lsp_session_resolution.py` automatically benefit through the updated wrappers
+- Updated test imports: `test_language_servers_sync.py` and `test_lsp_propagation_suppression.py` now monkeypatch `manage_lsp_mcp_projection_all`
+- 778 tests pass
+
+**Remaining:**
+- Delete old split functions `sync_generic_lsp_mcp_to_provider_configs` / `prune_generic_lsp_mcp_from_provider_configs` from `lsp_projection.py` after all direct imports removed
+- Update remaining test files that import old functions directly from `lsp_projection`
+
+**Completed (2026-07-15, continued):**
+- Deleted old `provision_provider_lsp_support` from `lsp_projection.py` (MA30 crossover)
 
 **Risk:** Low. Generic service, no per-provider logic.
 
-**Verification:** Run `tests/unit/providers/test_lsp_*.py`
+**Verification:** Run `tests/unit/providers/test_lsp_*.py`, `tests/unit/coding_lsp/test_language_servers_sync.py`
 
 **Result:** MA29 advances toward completion. Enables MA30.
 
@@ -239,12 +267,20 @@ checks `mcp_config` + `receive_lsp_mcp` flag, calls `sync_managed_provider_mcp_s
 **Current state:** Only pi declares `on_lsp_enabled` hook, which runs a subprocess to
 install the `npm:pi-lens` extension.
 
-**Slim slice (after MA29):**
-1. Define `SelfProvidedLspRequest/Result` — minimal payload (just project_root),
-   per-provider hook execution outcomes (returncode, stdout, stderr)
-2. Create `self-provided-lsp` family
-3. Register per-provider handler for pi
-4. Migrate LSP callers
+**Completed (2026-07-15):**
+- Frozen `SelfProvidedLspMode/Request/Result` typed contracts with to_mapping serialization
+- Created `provider-self-provided-lsp-payload/v1` and `provider-self-provided-lsp-result/v1` JSON schemas
+- Created `self_provided_lsp_family.py` with FAMILY_ID, payload/result contracts, RecipeDefinition factory
+- Created `self_provided_lsp_handler.py` with `_make_self_provided_lsp_handler` factory pattern (binds project_root)
+- Registered self-provided-lsp handler in `build_automation_registry` for providers with `on_lsp_enabled`
+- Added `manage_self_provided_lsp` to `providers_api` (dispatches through registry)
+
+**Completed (2026-07-15, continued):**
+- Added `self-provided-lsp` automation capability to pi.yaml descriptor
+- Migrated `provision_provider_lsp_support` in `language_servers_sync.py` to route through `manage_self_provided_lsp`
+- `lsp_config_api.py` and `test_provider_lsp_provision.py` benefit automatically through the updated wrapper
+- Deleted old `provision_provider_lsp_support` from `lsp_projection.py` (no more direct callers)
+- 778 tests pass
 
 **Risk:** Low. Only pi uses this family.
 
@@ -261,18 +297,36 @@ install the `npm:pi-lens` extension.
 **Current state:** `sync_provider_models` uses per-provider `model_entry_renderer` callable
 and `supported_connectors` tuple. Pi uses `baseUrl/compat`, Codex uses `model_providers` table.
 
-**Slim slice:**
-1. Define `ModelProjectionRequest/Result` — payload mirrors `MaterializedModelEntry`
-2. Create `model-projection` family with `model-projection` family ID
-3. Register per-provider handler for each provider with `model_config` capability
-4. Handler delegates to `sync_managed_config` for diff/collision/reload
-5. Migrate callers from `sync_provider_models` to providers_api
+**Completed (2026-07-15):**
+- Frozen `ModelProjectionEntry/Request/Result` typed contracts with to_mapping/from_mapping serialization
+- Created `provider-model-projection-payload/v1` and `provider-model-projection-result/v1` JSON schemas
+- Created `model_projection_family.py` with FAMILY_ID, payload/result contracts, RecipeDefinition factory
+- Created `model_projection_handler.py` with `_make_model_projection_handler` factory pattern
+- Registered model-projection handler in `build_automation_registry` for providers declaring the capability
+- Added `manage_model_projection` to `providers_api` (dispatches through registry)
+- Created pi provider model config infrastructure: `read_pi_models/write_pi_models/remove_pi_model` reader/writer/remover
+- Created `render_pi_model_entry` renderer for pi's models.json format
+- Added `model-projection` automation capability, `model_config`, `model_entry_renderer`, `supported_connectors` to pi.yaml
+- 602 provider tests pass, pi model-projection handler registered and discoverable
+
+**Provider wiring status (evidence-gated):**
+- pi: VERIFIED — custom model endpoint writes work via `~/.pi/agent/models.json`
+- opencode: BLOCKED — config filename and winning container unresolved (MO03 path/container unification); descriptor notes "blocked"
+- codex: BLOCKED — project-scope precedence NOT verified (RV353); global `~/.codex/config.toml` may override project `.codex/config.toml`
+- qwen: N/A — single auth-type switch, no custom endpoint catalog; not a projection target
+
+**Remaining:**
+- Add model_config + renderer to other providers (opencode, codex, qwen)
+- Migrate callers from `sync_provider_models` to `manage_model_projection`
+- Fold `list_provider_models_config` into model-projection status mode
+- Remove `reload_provider_models` public route
+- Delete old `sync_provider_models` export after all callers migrated
 
 **Risk:** Medium. Model projection is a critical path. Must verify parity.
 
 **Verification:** Run `tests/unit/providers/test_model_*.py`
 
-**Result:** MO02 advances toward completion. Enables MA22.
+**Result:** MO02 advances toward completion. Only pi wired (others blocked by evidence). Enables MA22.
 
 ---
 
@@ -361,8 +415,7 @@ Deleting it prematurely breaks things.
 **Ready now (no blockers):**
 1. MA21: Register generated surfaces with registry (low risk)
 2. MA25: Consolidate Memory, create plugin family (medium risk)
-3. MA28: Move LanguageServerEntry, freeze contracts (medium risk)
-4. MO02: Freeze contracts, register handlers (medium risk)
+3. MO02: Freeze contracts, register handlers (medium risk)
 
 **After MA25 + MA26:**
 5. MA27: Rewrite Memory orchestration (medium risk)

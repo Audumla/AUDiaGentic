@@ -1,0 +1,359 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://audiagentic.dev/schemas/recipes/declarative-recipe/v1",
+  "title": "Declarative Recipe Definition v1",
+  "description": "Config-managed recipe template: strict schema for shared lifecycle steps and probes. Public plan/apply/prune/status fields are forbidden.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["recipe-id", "recipe-version", "parameters", "lifecycle"],
+  "properties": {
+    "recipe-id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9]*(?:[-.][a-z0-9]+)*$"
+    },
+    "recipe-version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "provenance-ref": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "parameters": {
+      "$ref": "#/definitions/ParameterArray"
+    },
+    "lifecycle": {
+      "$ref": "#/definitions/LifecycleDefinition"
+    }
+  },
+  "definitions": {
+    "ParameterArray": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "default": {
+            "type": "string"
+          },
+          "sensitive": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "LifecycleDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["install-steps"],
+      "properties": {
+        "probe": {
+          "$ref": "#/definitions/ProbeDefinition"
+        },
+        "install-steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StepDefinition"
+          }
+        },
+        "configure-steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StepDefinition"
+          }
+        },
+        "verify": {
+          "$ref": "#/definitions/ProbeDefinition"
+        },
+        "uninstall-steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StepDefinition"
+          }
+        },
+        "dry-run-steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StepDefinition"
+          }
+        }
+      }
+    },
+    "ProbeDefinition": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "command"],
+          "properties": {
+            "type": { "const": "command" },
+            "command": {
+              "oneOf": [
+                { "type": "string", "minLength": 1 },
+                { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
+              ]
+            },
+            "expect-exit": { "type": "integer" },
+            "output-pattern": { "type": "string" },
+            "timeout": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 600
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "path"],
+          "properties": {
+            "type": { "const": "file-exists" },
+            "path": { "type": "string", "minLength": 1 },
+            "content-pattern": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "path", "key-path"],
+          "properties": {
+            "type": { "const": "config-key" },
+            "path": { "type": "string", "minLength": 1 },
+            "key-path": {
+              "oneOf": [
+                { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+                { "type": "string", "minLength": 1 }
+              ]
+            },
+            "expected-value": true
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "checks"],
+          "properties": {
+            "type": { "const": "composite" },
+            "checks": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ProbeDefinition"
+              },
+              "minItems": 1
+            },
+            "mode": {
+              "enum": ["and", "or", "atleast"]
+            },
+            "threshold": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "retries": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10
+            },
+            "delay-seconds": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 30
+            }
+          }
+        }
+      ]
+    },
+    "StepDefinition": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "id", "command"],
+          "properties": {
+            "type": { "const": "shell" },
+            "id": { "type": "string", "minLength": 1 },
+            "command": {
+              "oneOf": [
+                { "type": "string", "minLength": 1 },
+                { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
+              ]
+            },
+            "timeout": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 600
+            },
+            "dry-run": { "type": "boolean" },
+            "cwd": { "type": "string", "minLength": 1 },
+            "env": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            },
+            "platform": {
+              "$ref": "#/definitions/PlatformOverrides"
+            },
+            "compensate-command": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "minItems": 1
+            },
+            "shell": { "type": "boolean" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "id", "fn"],
+          "properties": {
+            "type": { "const": "callable" },
+            "id": { "type": "string", "minLength": 1 },
+            "fn": { "type": "string", "minLength": 1 },
+            "dry-run": { "type": "boolean" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "id", "steps"],
+          "properties": {
+            "type": { "const": "sequence" },
+            "id": { "type": "string", "minLength": 1 },
+            "steps": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/StepDefinition"
+              },
+              "minItems": 1
+            },
+            "fail-fast": { "type": "boolean" },
+            "compensate-on-failure": { "type": "boolean" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "id", "prompt"],
+          "properties": {
+            "type": { "const": "confirm" },
+            "id": { "type": "string", "minLength": 1 },
+            "prompt": { "type": "string", "minLength": 1 },
+            "default": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "id", "select", "variants"],
+          "properties": {
+            "type": { "const": "select" },
+            "id": { "type": "string", "minLength": 1 },
+            "select": { "type": "string", "minLength": 1 },
+            "variants": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/definitions/StepDefinition"
+              }
+            },
+            "fallback": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "id", "condition-key", "when-true"],
+          "properties": {
+            "type": { "const": "conditional" },
+            "id": { "type": "string", "minLength": 1 },
+            "condition-key": { "type": "string", "minLength": 1 },
+            "when-true": {
+              "$ref": "#/definitions/StepDefinition"
+            },
+            "when-false": {
+              "$ref": "#/definitions/StepDefinition"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "id", "path", "key-path", "value"],
+          "properties": {
+            "type": { "const": "config-set" },
+            "id": { "type": "string", "minLength": 1 },
+            "path": { "type": "string", "minLength": 1 },
+            "key-path": {
+              "oneOf": [
+                { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+                { "type": "string", "minLength": 1 }
+              ]
+            },
+            "value": true
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "id", "path"],
+          "properties": {
+            "type": { "const": "write-file" },
+            "id": { "type": "string", "minLength": 1 },
+            "path": { "type": "string", "minLength": 1 },
+            "content": { "type": "string" },
+            "create-parents": { "type": "boolean" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "id", "path", "block-id"],
+          "properties": {
+            "type": { "const": "managed-block" },
+            "id": { "type": "string", "minLength": 1 },
+            "path": { "type": "string", "minLength": 1 },
+            "block-id": { "type": "string", "minLength": 1 },
+            "content": { "type": "string" },
+            "comment-prefix": {
+              "type": "string",
+              "default": "#"
+            }
+          }
+        }
+      ]
+    },
+    "PlatformOverrides": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "win": {
+          "oneOf": [
+            { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+            { "type": "string", "minLength": 1 }
+          ]
+        },
+        "darwin": {
+          "oneOf": [
+            { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+            { "type": "string", "minLength": 1 }
+          ]
+        },
+        "linux": {
+          "oneOf": [
+            { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+            { "type": "string", "minLength": 1 }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -12,10 +12,12 @@ from audiagentic.components.memory.hindsight.matrix import (
 )
 from audiagentic.components.memory.hindsight.mcp_recipe import build_hindsight_entry
 from audiagentic.components.memory.hindsight.plugin_definition import (
-    HindsightPluginDefinition,
     HindsightPluginDesired,
 )
-from audiagentic.components.memory.hindsight.strategies import build_hindsight_recipe
+from audiagentic.components.memory.hindsight.strategies import (
+    _row_to_plugin_definition,
+    build_hindsight_recipe,
+)
 from audiagentic.components.providers.services.recipes import (
     ProviderRecipeKind,
     RecipeState,
@@ -289,7 +291,7 @@ class TestPluginConfigSourceGate:
         from audiagentic.components.memory.hindsight.plugin_recipes import PluginConfigRecipe
 
         row = self._make_unverified_plugin_config_row()
-        recipe = PluginConfigRecipe(HindsightPluginDefinition.from_row(row), HindsightPluginDesired.from_backend(_backend()))
+        recipe = PluginConfigRecipe(_row_to_plugin_definition(row), HindsightPluginDesired.from_backend(_backend()))
         result = recipe.install({})
         assert result.success is False
         assert result.action_needed == "manual installation required"
@@ -298,27 +300,27 @@ class TestPluginConfigSourceGate:
         from audiagentic.components.memory.hindsight.plugin_recipes import PluginConfigRecipe
 
         row = self._make_unverified_plugin_config_row()
-        recipe = PluginConfigRecipe(HindsightPluginDefinition.from_row(row), HindsightPluginDesired.from_backend(_backend()))
+        recipe = PluginConfigRecipe(_row_to_plugin_definition(row), HindsightPluginDesired.from_backend(_backend()))
         result = recipe.uninstall({})
         assert result.state is RecipeState.ABSENT
         assert result.action_needed == "manual installation required"
 
     def test_plugin_url_config_install_refuses_unverified_source(self, tmp_path):
-        from audiagentic.components.memory.hindsight.plugin_recipes import _PluginUrlConfigRecipe
+        from audiagentic.components.memory.hindsight.plugin_recipes import PluginUrlConfigRecipe
 
         row = self._make_unverified_plugin_config_row()
         config_path = tmp_path / "test-config.json"
-        recipe = _PluginUrlConfigRecipe(HindsightPluginDefinition.from_row(row), HindsightPluginDesired.from_backend(_backend()), config_path)
+        recipe = PluginUrlConfigRecipe(_row_to_plugin_definition(row), HindsightPluginDesired.from_backend(_backend()), config_path)
         result = recipe.install({})
         assert result.success is False
         assert result.action_needed == "manual installation required"
 
     def test_plugin_url_config_uninstall_refuses_unverified_source(self, tmp_path):
-        from audiagentic.components.memory.hindsight.plugin_recipes import _PluginUrlConfigRecipe
+        from audiagentic.components.memory.hindsight.plugin_recipes import PluginUrlConfigRecipe
 
         row = self._make_unverified_plugin_config_row()
         config_path = tmp_path / "test-config.json"
-        recipe = _PluginUrlConfigRecipe(HindsightPluginDefinition.from_row(row), HindsightPluginDesired.from_backend(_backend()), config_path)
+        recipe = PluginUrlConfigRecipe(_row_to_plugin_definition(row), HindsightPluginDesired.from_backend(_backend()), config_path)
         result = recipe.uninstall({})
         assert result.state is RecipeState.ABSENT
         assert result.action_needed == "manual installation required"
@@ -341,7 +343,7 @@ class TestShouldRunPluginCommand:
             source_status="verified",
             audia_action="call_official_installer",
         )
-        definition = HindsightPluginDefinition.from_row(row)
+        definition = _row_to_plugin_definition(row)
         recipe = PluginConfigRecipe(definition, HindsightPluginDesired.from_backend(_backend()))
         assert _should_run_plugin_command(recipe._definition) is True
 
@@ -359,13 +361,13 @@ class TestShouldRunPluginCommand:
             source_status="verified",
             audia_action="manage_config_writes",
         )
-        definition = HindsightPluginDefinition.from_row(row)
+        definition = _row_to_plugin_definition(row)
         recipe = PluginConfigRecipe(definition, HindsightPluginDesired.from_backend(_backend()))
         assert _should_run_plugin_command(recipe._definition) is False
 
     def test_plugin_url_config_should_run_true(self, tmp_path):
         from audiagentic.components.memory.hindsight.plugin_recipes import (
-            _PluginUrlConfigRecipe,
+            PluginUrlConfigRecipe,
             _should_run_plugin_command,
         )
 
@@ -377,13 +379,13 @@ class TestShouldRunPluginCommand:
             source_status="verified",
             audia_action="call_official_installer",
         )
-        definition = HindsightPluginDefinition.from_row(row)
-        recipe = _PluginUrlConfigRecipe(definition, HindsightPluginDesired.from_backend(_backend()), tmp_path / "cfg.json")
+        definition = _row_to_plugin_definition(row)
+        recipe = PluginUrlConfigRecipe(definition, HindsightPluginDesired.from_backend(_backend()), tmp_path / "cfg.json")
         assert _should_run_plugin_command(recipe._definition) is True
 
     def test_plugin_url_config_should_run_false(self, tmp_path):
         from audiagentic.components.memory.hindsight.plugin_recipes import (
-            _PluginUrlConfigRecipe,
+            PluginUrlConfigRecipe,
             _should_run_plugin_command,
         )
 
@@ -395,8 +397,8 @@ class TestShouldRunPluginCommand:
             source_status="verified",
             audia_action="manage_config_writes",
         )
-        definition = HindsightPluginDefinition.from_row(row)
-        recipe = _PluginUrlConfigRecipe(definition, HindsightPluginDesired.from_backend(_backend()), tmp_path / "cfg.json")
+        definition = _row_to_plugin_definition(row)
+        recipe = PluginUrlConfigRecipe(definition, HindsightPluginDesired.from_backend(_backend()), tmp_path / "cfg.json")
         assert _should_run_plugin_command(recipe._definition) is False
 
 
@@ -405,7 +407,7 @@ class TestPluginUrlConfigRoundTrip:
 
     def test_configure_writes_url_config_file(self, tmp_path):
         from audiagentic.components.memory.hindsight.plugin_recipes import (
-            _PluginUrlConfigRecipe,
+            PluginUrlConfigRecipe,
         )
 
         row = HindsightRecipeRow(
@@ -418,7 +420,7 @@ class TestPluginUrlConfigRoundTrip:
         )
         config_path = tmp_path / "hindsight" / "test-roundtrip.json"
         backend = _backend(api_key="sk-test", bank_id="mybank")
-        recipe = _PluginUrlConfigRecipe(HindsightPluginDefinition.from_row(row), HindsightPluginDesired.from_backend(backend), config_path)
+        recipe = PluginUrlConfigRecipe(_row_to_plugin_definition(row), HindsightPluginDesired.from_backend(backend), config_path)
 
         result = recipe.configure({})
         assert result.success
@@ -434,7 +436,7 @@ class TestPluginUrlConfigRoundTrip:
 
     def test_prune_removes_only_target_file(self, tmp_path):
         from audiagentic.components.memory.hindsight.plugin_recipes import (
-            _PluginUrlConfigRecipe,
+            PluginUrlConfigRecipe,
         )
 
         row = HindsightRecipeRow(
@@ -449,7 +451,7 @@ class TestPluginUrlConfigRoundTrip:
         sibling = tmp_path / "hindsight" / "other-file.txt"
 
         backend = _backend(api_key="sk-test")
-        recipe = _PluginUrlConfigRecipe(HindsightPluginDefinition.from_row(row), HindsightPluginDesired.from_backend(backend), config_path)
+        recipe = PluginUrlConfigRecipe(_row_to_plugin_definition(row), HindsightPluginDesired.from_backend(backend), config_path)
 
         recipe.configure({})
         sibling.write_text("unrelated data", encoding="utf-8")
@@ -464,7 +466,7 @@ class TestPluginUrlConfigRoundTrip:
 
     def test_prune_tolerates_missing_file(self, tmp_path):
         from audiagentic.components.memory.hindsight.plugin_recipes import (
-            _PluginUrlConfigRecipe,
+            PluginUrlConfigRecipe,
         )
 
         row = HindsightRecipeRow(
@@ -477,7 +479,7 @@ class TestPluginUrlConfigRoundTrip:
         )
         config_path = tmp_path / "hindsight" / "nonexistent.json"
         backend = _backend()
-        recipe = _PluginUrlConfigRecipe(HindsightPluginDefinition.from_row(row), HindsightPluginDesired.from_backend(backend), config_path)
+        recipe = PluginUrlConfigRecipe(_row_to_plugin_definition(row), HindsightPluginDesired.from_backend(backend), config_path)
 
         result = recipe.prune({})
         assert result.success

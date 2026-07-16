@@ -7,10 +7,11 @@
 | Field | Value |
 |---|---|
 | provider-id | `copilot` |
-| upstream-id | github/copilot (GitHub CLI extension) |
-| tool-version | CLI (version from session context, exact not captured in this run) |
-| verified-at | 2026-07-13 UTC |
-| evidence-kind | installed-tool CLI probe (`copilot --help`, model listing via error message), account inspection |
+| upstream-id | github/copilot (GitHub CLI extension) + MCP integration (2026-07-16) |
+| tool-version | CLI (version from session context, exact not captured in this run); upstream docs revalidated 2026-07-16 |
+| verified-at | 2026-07-13 UTC, 2026-07-16 UTC (upstream doc revalidation) |
+| evidence-kind | installed-tool CLI probe (`copilot --help`, model listing via error message), account inspection, upstream docs verification (docs.github.com) |
+| **correction-note** | **2026-07-16 revalidation**: Copilot now supports MCP (Model Context Protocol) for extending capabilities. GitHub MCP Server available with toolsets and enterprise configuration. MCP support is IDE-integrated: "Using Model Context Protocol in your IDE". This represents a significant new capability — Copilot can now integrate external tools via MCP servers, similar to other agents. However, the model catalog remains vendor-closed (curated from OpenAI, Anthropic, Google partners).
 
 ---
 
@@ -70,6 +71,25 @@
 | **Key mechanism** | Pure account-based. Authentication delegated to `gh` (GitHub CLI) OAuth token. No env-var injection for API keys, no per-vendor key configuration. Model selection via `--model <model>` flag only. |
 | **Model granularity** | Curated subset of vendor models available through Copilot subscription tiers. One active model per session via `--model`. The catalog is not extensible with custom endpoints. |
 | **Reload behavior** | Reads auth state and model list at startup. No live reload observed — restart required for model changes. |
+
+---
+
+## New upstream capabilities (verified 2026-07-16 from docs.github.com)
+
+### MCP (Model Context Protocol) support
+
+Copilot now supports MCP for extending capabilities. The GitHub MCP Server allows Copilot to interact with repositories, issues, pull requests, and other GitHub features directly from Copilot Chat in your IDE.
+
+Key MCP capabilities:
+- Extending Copilot Chat with external MCP servers
+- GitHub MCP Server (with toolsets and enterprise configuration)
+- Customizable MCP registry per IDE
+
+This represents a significant new integration surface — Copilot can now consume tools from external MCP servers, similar to other agents like OpenHands and Cline. However, the model catalog remains vendor-closed; MCP extends *capabilities*, not *model access*.
+
+### Agent Client Protocol (ACP) support
+
+Copilot Chat is listed as a supported ACP agent in OpenHands Agent Canvas, meaning it can be driven as an external agent via ACP's JSON-RPC over stdio protocol. This places Copilot alongside Claude Code and Gemini CLI as an ACP-compatible agent.
 
 ---
 

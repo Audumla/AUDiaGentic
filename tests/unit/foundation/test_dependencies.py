@@ -34,7 +34,7 @@ def test_detect_missing_all_satisfied() -> None:
 
 def test_all_binaries_probe_requires_every_binary(monkeypatch) -> None:
     monkeypatch.setattr(
-        "audiagentic.foundation.components.dependencies.tool_available",
+        "audiagentic.foundation.toolchains.detect.tool_available",
         lambda name: name == "present",
     )
     probes = build_dependency_probes(
@@ -47,9 +47,15 @@ def test_all_binaries_probe_requires_every_binary(monkeypatch) -> None:
 def test_command_probe_reports_success(monkeypatch) -> None:
     class _Result:
         returncode = 0
+        stdout = ""
+        stderr = ""
 
     monkeypatch.setattr(
-        "audiagentic.foundation.components.dependencies.subprocess.run",
+        "audiagentic.foundation.toolchains.probes.shutil.which",
+        lambda name: f"/usr/bin/{name}",
+    )
+    monkeypatch.setattr(
+        "audiagentic.foundation.toolchains.probes.subprocess.run",
         lambda *args, **kwargs: _Result(),
     )
     probes = build_dependency_probes({"thing": {"probe": "command:tool --version"}})
@@ -62,13 +68,19 @@ def test_command_probe_uses_utf8_replace(monkeypatch) -> None:
 
     class _Result:
         returncode = 0
+        stdout = ""
+        stderr = ""
 
     def _fake_run(*args, **kwargs):
         seen.update(kwargs)
         return _Result()
 
     monkeypatch.setattr(
-        "audiagentic.foundation.components.dependencies.subprocess.run",
+        "audiagentic.foundation.toolchains.probes.shutil.which",
+        lambda name: f"/usr/bin/{name}",
+    )
+    monkeypatch.setattr(
+        "audiagentic.foundation.toolchains.probes.subprocess.run",
         _fake_run,
     )
 

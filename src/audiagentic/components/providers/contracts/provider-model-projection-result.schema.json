@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Provider Model Projection Result",
+  "description": "Typed result for model-projection automation family.",
+  "type": "object",
+  "properties": {
+    "ok": {"type": "boolean"},
+    "supported": {"type": "boolean"},
+    "provider_id": {"type": "string"},
+    "added": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "removed": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "updated": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "collisions": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "skipped_connectors": {
+      "type": "array",
+      "items": {"type": "object"}
+    },
+    "error_code": {"type": ["string", "null"]},
+    "action_needed": {"type": ["string", "null"]},
+    "reload_required": {"type": "boolean"}
+  },
+  "required": ["ok", "supported"]
+}

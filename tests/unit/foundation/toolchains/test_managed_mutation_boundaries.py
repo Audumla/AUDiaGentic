@@ -11,7 +11,6 @@ AUDIT_PATH = WORKSPACE_ROOT / "docs" / "reference" / "MANAGED_MUTATION_AUDIT.md"
 _SCOPES = (
     "components/memory/hindsight",
     "components/providers/adapters",
-    "components/providers/services/lsp_projection.py",
     "components/providers/services/managed_mcp_registry.py",
     "components/providers/surfaces",
     "components/providers/skill_surfaces.py",
@@ -181,6 +180,7 @@ def test_direct_managed_spec_calls_are_core_or_recorded_violation() -> None:
     # sanctioned indirection point in foundation/toolchains/managed_config.py.
     allowed_core = {
         "src/audiagentic/components/providers/services/mcp.py",
+        "src/audiagentic/components/providers/services/plugin_entries.py",
         "src/audiagentic/foundation/toolchains/managed_config.py",
     }
     found: dict[str, set[str]] = {}

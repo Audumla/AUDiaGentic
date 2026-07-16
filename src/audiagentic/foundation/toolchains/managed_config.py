@@ -7,6 +7,12 @@ and ``reload_managed_config`` are the domain-neutral extraction of
 any :class:`ManagedConfigSpec` + :class:`ManagedFragmentRegistry` pair — MCP,
 LSP, and future managed-config kinds share one implementation instead of each
 cloning the reconcile loop.
+
+NON-GOAL (OU01 step 6): config-write path is NEVER redacted. Provider config
+legitimately CARRIES secrets: mcp_config env blocks hold API keys and writing
+them is the entire feature. Config is the SOURCE of the secret, not a leak of
+it. Redacting there breaks MCP auth. Protection for config is ownership/scoping
+and gitignore, not redaction.
 """
 from __future__ import annotations
 

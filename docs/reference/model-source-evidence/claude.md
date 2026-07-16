@@ -8,9 +8,10 @@
 |---|---|
 | provider-id | `claude` |
 | upstream-id | Anthropic/claude-code |
-| tool-version | 2.1.199 |
-| verified-at | 2026-07-13 UTC |
-| evidence-kind | installed-tool CLI probe (`claude --help`, `--version`), settings file inspection (`~/.claude/settings.json`) |
+| tool-version | 2.1.199; upstream docs revalidated 2026-07-16 |
+| verified-at | 2026-07-13 UTC, 2026-07-16 UTC (upstream doc revalidation) |
+| evidence-kind | installed-tool CLI probe (`claude --help`, `--version`), settings file inspection (`~/.claude/settings.json`), upstream docs verification (docs.cline.bot, docs.openhands.dev) |
+| **correction-note** | **2026-07-16 revalidation**: Claude Code is now available as an ACP agent in OpenHands Agent Canvas via `npx -y @agentclientprotocol/claude-agent-acp`. Cline now offers a "Claude Code" provider option that uses the Claude Max/Pro subscription directly (not just BYOK). The subscription login path (macOS Keychain or `~/.claude/.credentials.json`) takes priority over `ANTHROPIC_API_KEY`.
 
 ---
 
@@ -61,6 +62,18 @@
 | **Config file** | `~/.claude/settings.json` (user-global) with `"model"` field for active model selection. Project-level settings in `.claude/` directory (CLAUDE.md, skills, etc.). |
 | **Key mechanism** | Native Anthropic only: `ANTHROPIC_API_KEY` env var or OAuth/keychain login. No multi-vendor config surface. |
 | **Model granularity** | Single model at a time via `"model"` field in settings or `--model` CLI flag. Any Anthropic model name accepted by the account tier. |
+
+---
+
+## New upstream capabilities (verified 2026-07-16)
+
+### ACP agent in OpenHands Agent Canvas
+
+Claude Code is now available as an ACP agent in OpenHands Agent Canvas. The Agent Server spawns `npx -y @agentclientprotocol/claude-agent-acp` as a subprocess and relays turns via JSON-RPC on stdio. Authentication uses Claude Code's subscription login (macOS Keychain or `~/.claude/.credentials.json`) or `ANTHROPIC_API_KEY`.
+
+### Cline "Claude Code" provider option
+
+Cline now offers a "Claude Code" provider in the BYOK cloud provider table, using the Claude Max/Pro subscription directly. This means Cline can route through Claude Code's own CLI rather than just Anthropic's API key path.
 
 ---
 

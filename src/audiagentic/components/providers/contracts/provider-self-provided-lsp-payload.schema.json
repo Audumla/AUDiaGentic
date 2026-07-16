@@ -1,0 +1,1 @@
+{"$schema": "https://json-schema.org/draft/2020-12/schema", "title": "Provider Self-Provided LSP Payload", "description": "Typed payload for self-provided LSP support automation family.", "type": "object", "properties": {"project_root": {"type": "string"}}, "required": ["project_root"]}
