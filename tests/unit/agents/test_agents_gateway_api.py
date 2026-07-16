@@ -72,17 +72,36 @@ def test_wait_returns_timeout_status_for_still_running_request(tmp_path: Path, m
     gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=5)
 
 
-def test_wait_timeout_is_capped_server_side(tmp_path: Path, monkeypatch):
-    calls = {}
+class _RecordingManager:
+    def __init__(self):
+        self.calls = {}
 
-    class _RecordingManager:
-        def wait(self, project_root, request_id, timeout_seconds):
-            calls["timeout"] = timeout_seconds
-            return {"state": "running"}
+    def wait(self, project_root, request_id, timeout_seconds):
+        self.calls["timeout"] = timeout_seconds
+        return {"state": "running"}
 
-    monkeypatch.setattr(gateway, "_QUEUE_MANAGER", _RecordingManager())
+
+def test_core_wait_honours_the_callers_timeout(tmp_path: Path, monkeypatch):
+    """The 300s limit is an MCP TRANSPORT cap, applied at the MCP boundary.
+
+    The core API must not impose it: the worker is a daemon thread in the
+    caller's process, so capping here meant any task longer than the cap was
+    abandoned mid-attempt when the caller returned and exited — the record
+    stranded at 'running' forever. A supervisor owning a long implementation
+    task must be able to wait for as long as the work takes (RV511).
+    """
+    manager = _RecordingManager()
+    monkeypatch.setattr(gateway, "_QUEUE_MANAGER", manager)
     gateway.wait_llm_request(tmp_path, "req_x", timeout_seconds=10_000)
-    assert calls["timeout"] == gateway.MAX_BLOCKING_TIMEOUT_SECONDS
+    assert manager.calls["timeout"] == 10_000
+
+
+def test_core_wait_still_bounded_when_no_timeout_requested(tmp_path: Path, monkeypatch):
+    """No requested timeout must not mean 'block forever'."""
+    manager = _RecordingManager()
+    monkeypatch.setattr(gateway, "_QUEUE_MANAGER", manager)
+    gateway.wait_llm_request(tmp_path, "req_x")
+    assert manager.calls["timeout"] == gateway.DEFAULT_BLOCKING_TIMEOUT_SECONDS
 
 
 def test_cancel_queued_request_reaches_cancelled_state(tmp_path: Path, monkeypatch):

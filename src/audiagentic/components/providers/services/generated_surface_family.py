@@ -9,36 +9,22 @@ from audiagentic.components.providers.contracts.generated_surface import (
     GeneratedSurfaceResult,
 )
 from audiagentic.components.providers.services.recipe_definitions import (
-    RecipeDefinition,
+    FamilyPin,
     RecipeHandler,
 )
 
 FAMILY_ID = "generated-surfaces"
-PAYLOAD_CONTRACT = "provider-generated-surface-payload/v1"
-RESULT_CONTRACT = "provider-generated-surface-result/v1"
-SUPPORTED_MODES = ("plan", "apply", "prune", "status")
+
+PIN = FamilyPin(
+    family_id=FAMILY_ID,
+    payload_contract="provider-generated-surface-payload/v1",
+    result_contract="provider-generated-surface-result/v1",
+    supported_modes=("plan", "apply", "prune", "status"),
+    ownership_scope_required=True,
+)
 
 
-def generated_surface_definition(provider_id: str) -> RecipeDefinition:
-    """Build inert metadata for one explicitly declared provider surface family."""
-    return RecipeDefinition(
-        recipe_id=f"{provider_id}.generated-surfaces",
-        provider_id=provider_id,
-        family_id=FAMILY_ID,
-        supported_modes=SUPPORTED_MODES,
-        payload_contract=PAYLOAD_CONTRACT,
-        result_contract=RESULT_CONTRACT,
-        recipe_version="1",
-        ownership_scope_required=True,
-    )
-
-
-def generated_surface_family_contracts() -> dict[str, tuple[str, str]]:
-    """Return the MA20 open-family contract entry for composition."""
-    return {FAMILY_ID: (PAYLOAD_CONTRACT, RESULT_CONTRACT)}
-
-
-def _make_handler(project_root: Path) -> RecipeHandler:
+def make_generated_surface_handler(project_root: Path) -> RecipeHandler:
     """Create a recipe handler bound to *project_root*.
 
     The handler dispatches plan/status (read-only), apply (render desired
@@ -95,10 +81,6 @@ def _make_handler(project_root: Path) -> RecipeHandler:
 
 __all__ = [
     "FAMILY_ID",
-    "PAYLOAD_CONTRACT",
-    "RESULT_CONTRACT",
-    "SUPPORTED_MODES",
-    "generated_surface_definition",
-    "generated_surface_family_contracts",
-    "_make_handler",
+    "PIN",
+    "make_generated_surface_handler",
 ]

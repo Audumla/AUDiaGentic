@@ -12,6 +12,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.memory.hindsight.declared_integration import IntegrationCommand
 from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
 from audiagentic.components.memory.hindsight.matrix import (
     HINDSIGHT_RECIPE_MATRIX,
@@ -22,9 +23,9 @@ from audiagentic.components.memory.hindsight.plugin_definition import (
     HindsightPluginDesired,
 )
 from audiagentic.components.memory.hindsight.plugin_recipes import (
+    PluginArrayRecipe,
     PluginConfigRecipe,
-    _PluginArrayRecipe,
-    _PluginUrlConfigRecipe,
+    PluginUrlConfigRecipe,
 )
 from audiagentic.components.memory.hindsight.recipe_spec import (
     ParamBinding,
@@ -179,6 +180,39 @@ def _build_hooks_recipe(
     return build_declared_integration_recipe(row, backend)
 
 
+def _row_to_plugin_definition(row: HindsightRecipeRow) -> HindsightPluginDefinition:
+    """Convert a raw matrix row to a typed plugin definition at the Hindsight boundary."""
+    return HindsightPluginDefinition(
+        provider_id=row.provider_id,
+        plugin_id=row.plugin_array_package or None,
+        display_name=row.display_name,
+        source_url=row.source_url,
+        source_date=row.source_date,
+        audia_action=row.audia_action,
+        source_status=row.source_status,
+        notes=row.notes,
+        settings_path=Path(row.plugin_url_config_path).expanduser()
+        if row.plugin_url_config_path else None,
+        repair_cache_pattern=row.plugin_repair_cache_pattern,
+        repair_data_dir=row.plugin_repair_data_dir,
+        repair_venv_python=row.plugin_repair_venv_python,
+        repair_server_script=row.plugin_repair_server_script,
+        plugin_array_package=row.plugin_array_package or None,
+        install_steps=tuple(
+            IntegrationCommand.from_mapping(step, default_id=f"install-{index}")
+            for index, step in enumerate(row.install_steps)
+        ),
+        configure_steps=tuple(
+            IntegrationCommand.from_mapping(step, default_id=f"configure-{index}")
+            for index, step in enumerate(row.configure_steps)
+        ),
+        uninstall_steps=tuple(
+            IntegrationCommand.from_mapping(step, default_id=f"uninstall-{index}")
+            for index, step in enumerate(row.uninstall_steps)
+        ),
+    )
+
+
 def _build_plugin_url_config_recipe(
     row: HindsightRecipeRow,
     backend: HindsightBackendConfig,
@@ -186,8 +220,8 @@ def _build_plugin_url_config_recipe(
     harness_config_path: str | Path | None = None,
 ) -> Any:
     """Build Plugin URL config recipe with optional Windows repair."""
-    return _PluginUrlConfigRecipe(
-        HindsightPluginDefinition.from_row(row),
+    return PluginUrlConfigRecipe(
+        _row_to_plugin_definition(row),
         HindsightPluginDesired.from_backend(backend),
         url_config_path,
         harness_config_path=harness_config_path,
@@ -208,10 +242,10 @@ def _build_plugin_config_recipe(
     harness_path = _resolve_harness_config_path(provider_id, project_root)
     if row.source_status != "verified" and row.install_steps:
         return assemble_hindsight_recipe(row, backend, _GUIDANCE_SPEC)
-    definition = HindsightPluginDefinition.from_row(row)
+    definition = _row_to_plugin_definition(row)
     desired = HindsightPluginDesired.from_backend(backend)
     if row.plugin_array_package and project_root:
-        return _PluginArrayRecipe(definition, desired, project_root)
+        return PluginArrayRecipe(definition, desired, project_root)
     if row.plugin_url_config_path:
         return _build_plugin_url_config_recipe(
             row, backend, row.plugin_url_config_path,
@@ -307,4 +341,5 @@ def _resolve_rule_path(provider_id: str, project_root: Path | None = None) -> Pa
 __all__ = [
     "build_hindsight_recipe",
     "resolve_hindsight_strategy",
+    "_row_to_plugin_definition",
 ]

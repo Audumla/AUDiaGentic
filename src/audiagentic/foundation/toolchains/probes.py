@@ -11,13 +11,17 @@ import re
 import shutil
 import subprocess
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
-from audiagentic.foundation.contracts.errors import make_error
+from audiagentic.foundation.contracts.errors import make_error, make_error_factory
+from audiagentic.foundation.logging.redaction import redact_text
 
 from .config_reader import UNSET, read_config_value
+
+_probe_error: Any = make_error_factory("VAL", "DEP", "component-dependencies")
 
 
 @dataclass(frozen=True)
@@ -81,6 +85,8 @@ class CommandProbe:
                 list(self.command),
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=self.timeout,
                 stdin=subprocess.DEVNULL,
             )
@@ -190,6 +196,84 @@ class CompositeHealthCheck:
         )
 
 
+@dataclass(frozen=True)
+class _PredicateProbe:
+    """Adapt a zero-argument bool callable to the :class:`Probe` protocol."""
+
+    predicate: Callable[[], bool]
+    label: str
+
+    def check(self, context: dict[str, Any] | None = None) -> ProbeResult:
+        try:
+            passed = bool(self.predicate())
+        except Exception as exc:  # noqa: BLE001
+            return ProbeResult(False, redact_text(str(exc)))
+        return ProbeResult(passed, f"{self.label} {'ok' if passed else 'not available'}")
+
+
+def _spec_payload(spec: str, prefix: str) -> str:
+    payload = spec[len(prefix):].strip()
+    if not payload:
+        raise _probe_error(1, f"empty probe payload: {spec!r}", probe=spec)
+    return payload
+
+
+def probe_from_spec(spec: str) -> Probe:
+    """Build a :class:`Probe` from a declarative ``probe:`` spec string.
+
+    The single production parser for dependency probe syntax. Supported forms:
+    ``binary:<name>``, ``all-binaries:<a,b>``, ``path:<path>``,
+    ``command:<argv>``, ``custom:<module>:<dotpath>``, and exact ``toolchain:uv``.
+    Unknown or malformed syntax raises the canonical VAL-DEP-001 error.
+    """
+    from .detect import tool_available, uv_available
+
+    if spec == "toolchain:uv":
+        return _PredicateProbe(uv_available, "uv")
+
+    if spec.startswith("binary:"):
+        binary = _spec_payload(spec, "binary:")
+        return _PredicateProbe(lambda: tool_available(binary), binary)
+
+    if spec.startswith("all-binaries:"):
+        payload = _spec_payload(spec, "all-binaries:")
+        binaries = tuple(part.strip() for part in payload.split(",") if part.strip())
+        if not binaries:
+            raise _probe_error(1, f"empty probe payload: {spec!r}", probe=spec)
+        return _PredicateProbe(
+            lambda: all(tool_available(binary) for binary in binaries),
+            ",".join(binaries),
+        )
+
+    if spec.startswith("path:"):
+        return FileExistsCheck(_spec_payload(spec, "path:"))
+
+    if spec.startswith("command:"):
+        payload = _spec_payload(spec, "command:")
+        argv = tuple(safe_command_parts(payload))
+        if not argv:
+            raise _probe_error(1, f"empty probe payload: {spec!r}", probe=spec)
+        return CommandProbe(command=argv, timeout=10)
+
+    if spec.startswith("custom:"):
+        from audiagentic.foundation.refs import resolve_ref
+
+        ref = _spec_payload(spec, "custom:")
+        try:
+            predicate = resolve_ref(ref)
+        except Exception as exc:  # noqa: BLE001
+            raise _probe_error(
+                1, f"unresolvable custom probe ref: {ref!r}", probe=spec
+            ) from exc
+        if not callable(predicate):
+            raise _probe_error(
+                1, f"custom probe ref is not callable: {ref!r}", probe=spec
+            )
+        return _PredicateProbe(predicate, ref)
+
+    raise _probe_error(1, f"unknown probe syntax: {spec!r}", probe=spec)
+
+
 def check_with_retry(
     probe: Probe,
     *,
@@ -221,5 +305,6 @@ __all__ = [
     "Probe",
     "ProbeResult",
     "check_with_retry",
+    "probe_from_spec",
     "safe_command_parts",
 ]

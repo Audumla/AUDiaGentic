@@ -11,10 +11,7 @@ from audiagentic.components.providers.contracts.generated_surface import (
 )
 from audiagentic.components.providers.services.generated_surface_family import (
     FAMILY_ID,
-    PAYLOAD_CONTRACT,
-    RESULT_CONTRACT,
-    generated_surface_definition,
-    generated_surface_family_contracts,
+    PIN,
 )
 
 
@@ -34,12 +31,13 @@ def test_generated_surface_contracts_are_serializable_and_schema_valid() -> None
 
 
 def test_generated_surface_recipe_scaffold_matches_family_contract() -> None:
-    definition = generated_surface_definition("codex")
+    definition = PIN.definition("codex")
 
+    assert definition.recipe_id == "codex.generated-surfaces"
+    assert definition.provider_id == "codex"
     assert definition.family_id == FAMILY_ID
-    assert definition.payload_contract == PAYLOAD_CONTRACT
-    assert definition.result_contract == RESULT_CONTRACT
+    assert definition.payload_contract == PIN.payload_contract
+    assert definition.result_contract == PIN.result_contract
+    assert definition.supported_modes == PIN.supported_modes
     assert definition.ownership_scope_required is True
-    assert generated_surface_family_contracts() == {
-        FAMILY_ID: (PAYLOAD_CONTRACT, RESULT_CONTRACT)
-    }
+    assert PIN.contracts == (PIN.payload_contract, PIN.result_contract)

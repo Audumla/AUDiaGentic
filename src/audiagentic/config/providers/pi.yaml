@@ -3,6 +3,11 @@
 
 provider_id: pi
 automation_capabilities:
+  - family_id: lsp-mcp-projection
+    supported_modes: [apply, prune, status]
+    payload_contract: provider-lsp-mcp-projection-payload/v1
+    result_contract: provider-lsp-mcp-projection-result/v1
+    ownership_scope_required: false
   - family_id: cli-lifecycle
     supported_modes: [plan, apply, prune, status]
     payload_contract: provider-cli-lifecycle-payload/v1
@@ -13,6 +18,16 @@ automation_capabilities:
     payload_contract: provider-managed-mcp-payload/v1
     result_contract: provider-managed-mcp-result/v1
     ownership_scope_required: true
+  - family_id: model-projection
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-model-projection-payload/v1
+    result_contract: provider-model-projection-result/v1
+    ownership_scope_required: false
+  - family_id: self-provided-lsp
+    supported_modes: [apply, status]
+    payload_contract: provider-self-provided-lsp-payload/v1
+    result_contract: provider-self-provided-lsp-result/v1
+    ownership_scope_required: false
 display_name: "Pi Coding Agent"
 description: "Lightweight local coding agent TUI by Earendil Works. Supports MCP tool use via the pi-mcp-adapter extension."
 url: "https://www.earendilworks.com/pi"
@@ -136,3 +151,17 @@ mcp_config:
   refresh_mode: "restart-required"
 
 on_lsp_enabled: "audiagentic.components.providers.adapters.pi.hooks:_pi_ensure_lens"
+lsp_support_probe: "audiagentic.components.providers.adapters.pi.hooks:_pi_lens_present"
+
+model_config:
+  config_path: "~/.pi/agent/models.json"
+  reader: "audiagentic.components.providers.adapters.pi.model_config:read_pi_models"
+  writer: "audiagentic.components.providers.adapters.pi.model_config:write_pi_models"
+  remover: "audiagentic.components.providers.adapters.pi.model_config:remove_pi_model"
+  format: "pi-models-json"
+  refresh_mode: "none"
+
+model_entry_renderer: "audiagentic.components.providers.adapters.pi.model_entry:render_pi_model_entry"
+supported_connectors:
+  - openai
+  - anthropic

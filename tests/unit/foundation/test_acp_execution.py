@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.execution.acp import (
+from audiagentic.foundation.transports.acp import (
     ERR_EXECUTION_FAILED,
     ERR_SDK_MISSING,
     MAX_EVENTS,

@@ -16,6 +16,7 @@ from typing import Any
 
 from audiagentic.components.release.release_please.finalize import render_release_docs
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+from audiagentic.foundation.logging.redaction import redact_text
 
 logger = logging.getLogger(__name__)
 
@@ -183,7 +184,7 @@ def _run_build(project_root: Path) -> dict[str, Any]:
             raise make_error(
                 prefix="INT", component="release", number=14,
                 kind="release",
-                message=f"Build failed (exit {proc.returncode}): {proc.stderr}",
+                message=f"Build failed (exit {proc.returncode}): {redact_text(proc.stderr)}",
             )
     except FileNotFoundError:
         raise make_error(
@@ -237,11 +238,11 @@ def _create_git_tag(project_root: Path, tag_name: str, release_id: str) -> dict[
             "pushed": True,
         }
     except subprocess.CalledProcessError as exc:
-        logger.warning("Git tag failed: %s", exc.stderr)
+        logger.warning("Git tag failed: %s", redact_text(exc.stderr))
         return {
             "created": False,
             "tag": tag_name,
-            "error": exc.stderr,
+            "error": redact_text(exc.stderr),
         }
     except FileNotFoundError:
         return {
@@ -285,7 +286,7 @@ def _publish_pypi(project_root: Path, interactive: bool = True) -> dict[str, Any
         if proc.returncode != 0:
             return {
                 "published": False,
-                "error": proc.stderr,
+                "error": redact_text(proc.stderr),
             }
         return {
             "published": True,
@@ -348,7 +349,7 @@ def _create_github_release(
         if proc.returncode != 0:
             return {
                 "created": False,
-                "error": proc.stderr,
+                "error": redact_text(proc.stderr),
             }
         return {
             "created": True,

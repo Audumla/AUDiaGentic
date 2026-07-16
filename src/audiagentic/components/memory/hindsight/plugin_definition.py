@@ -7,7 +7,6 @@ from typing import Any
 
 from audiagentic.components.memory.hindsight.declared_integration import IntegrationCommand
 from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
-from audiagentic.components.memory.hindsight.matrix import HindsightRecipeRow
 
 
 @dataclass(frozen=True)
@@ -59,38 +58,6 @@ class HindsightPluginDefinition:
     install_steps: tuple[IntegrationCommand, ...] = ()
     configure_steps: tuple[IntegrationCommand, ...] = ()
     uninstall_steps: tuple[IntegrationCommand, ...] = ()
-
-    @classmethod
-    def from_row(cls, row: HindsightRecipeRow) -> HindsightPluginDefinition:
-        return cls(
-            provider_id=row.provider_id,
-            plugin_id=row.plugin_array_package or None,
-            display_name=row.display_name,
-            source_url=row.source_url,
-            source_date=row.source_date,
-            audia_action=row.audia_action,
-            source_status=row.source_status,
-            notes=row.notes,
-            settings_path=Path(row.plugin_url_config_path).expanduser()
-            if row.plugin_url_config_path else None,
-            repair_cache_pattern=row.plugin_repair_cache_pattern,
-            repair_data_dir=row.plugin_repair_data_dir,
-            repair_venv_python=row.plugin_repair_venv_python,
-            repair_server_script=row.plugin_repair_server_script,
-            plugin_array_package=row.plugin_array_package or None,
-            install_steps=tuple(
-                IntegrationCommand.from_mapping(step, default_id=f"install-{index}")
-                for index, step in enumerate(row.install_steps)
-            ),
-            configure_steps=tuple(
-                IntegrationCommand.from_mapping(step, default_id=f"configure-{index}")
-                for index, step in enumerate(row.configure_steps)
-            ),
-            uninstall_steps=tuple(
-                IntegrationCommand.from_mapping(step, default_id=f"uninstall-{index}")
-                for index, step in enumerate(row.uninstall_steps)
-            ),
-        )
 
     def to_mapping(self) -> dict[str, Any]:
         return {

@@ -1,6 +1,7 @@
 """Tests for error resolution loading and lookup."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -65,3 +66,36 @@ def test_registered_error_code_allowed_after_load() -> None:
         message="provider config failed validation",
     )
     assert err.code == "VAL-PCFG-001"
+
+
+def test_every_provider_error_code_literal_has_a_resolution() -> None:
+    """Codes returned as typed-result strings must still be catalogued.
+
+    AudiaGenticError rejects unregistered codes at construction, but the
+    provider automation families carry codes as plain ``error_code="..."``
+    strings on their typed results, so that guard never fires for them. This
+    scan is what keeps those codes in the config-owned catalogue.
+    """
+    repo_root = Path(__file__).resolve().parents[3]
+    config_dirs = [repo_root / "src" / "audiagentic" / "config" / "components"]
+    load_all_error_resolutions(config_dirs)
+
+    providers_src = repo_root / "src" / "audiagentic" / "components" / "providers"
+    pattern = re.compile(r"\"((?:VAL|CON|RES|IO|INT|EXT|TO)-[A-Z]{2,8}-\d{3})\"")
+
+    emitted: dict[str, str] = {}
+    for path in providers_src.rglob("*.py"):
+        for code in pattern.findall(path.read_text(encoding="utf-8")):
+            emitted.setdefault(code, str(path.relative_to(repo_root)))
+
+    assert emitted, "scan found no provider error codes — check the pattern"
+    missing = sorted(
+        f"{code} (emitted by {source})"
+        for code, source in emitted.items()
+        if get_error_resolution(code) is None
+    )
+    assert not missing, (
+        "provider error codes emitted in code but absent from "
+        "config/components/providers/error-resolutions.yaml:\n  "
+        + "\n  ".join(missing)
+    )

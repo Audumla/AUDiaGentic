@@ -3,6 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import audiagentic.components.providers  # noqa: F401
+from audiagentic.components.providers.contracts.generated_surface import (
+    GeneratedSurfaceRequest,
+)
+from audiagentic.components.providers.providers_api import (
+    operate_provider_surface,
+)
 from audiagentic.components.providers.skill_surfaces import build_skill_surfaces
 from audiagentic.components.providers.surfaces.base import (
     MANAGED_REGION_BEGIN,
@@ -13,12 +19,6 @@ from audiagentic.components.providers.surfaces.base import (
 )
 from audiagentic.components.providers.surfaces.contributions import (
     load_surface_contributions,
-)
-from audiagentic.components.providers.contracts.generated_surface import (
-    GeneratedSurfaceRequest,
-)
-from audiagentic.components.providers.providers_api import (
-    operate_provider_surface,
 )
 from audiagentic.components.providers.surfaces.manager import (
     build_provider_surface_blocks,

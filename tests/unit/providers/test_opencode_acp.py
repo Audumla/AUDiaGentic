@@ -10,7 +10,7 @@ from __future__ import annotations
 import ast
 from unittest.mock import patch
 
-from audiagentic.foundation.execution.acp import AcpLaunch
+from audiagentic.foundation.transports.acp import AcpLaunch
 
 # Forbidden imports: the acp.py binding must not import these modules.
 _FORBIDDEN_IMPORTS = frozenset((

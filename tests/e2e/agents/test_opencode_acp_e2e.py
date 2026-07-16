@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from audiagentic.components.providers.adapters.opencode.acp import build_acp_launch
-from audiagentic.foundation.execution import run_acp_prompt
+from audiagentic.foundation.transports import run_acp_prompt
 
 
 @pytest.mark.opt_in

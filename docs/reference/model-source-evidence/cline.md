@@ -7,10 +7,11 @@
 | Field | Value |
 |---|---|
 | provider-id | `cline` |
-| upstream-id | cline CLI (npm) |
-| tool-version | 3.0.3 |
-| verified-at | 2026-07-13 UTC |
-| evidence-kind | installed-tool CLI probe (`cline --help`, `cline auth --help`), config inspection (`~/.cline/`) |
+| upstream-id | cline CLI (npm) + Cline SDK (@cline/sdk) |
+| tool-version | 3.0.3; upstream docs revalidated 2026-07-16 |
+| verified-at | 2026-07-13 UTC, 2026-07-16 UTC (upstream doc revalidation) |
+| evidence-kind | installed-tool CLI probe (`cline --help`, `cline auth --help`), config inspection (`~/.cline/`), upstream docs verification (docs.cline.bot) |
+| **correction-note** | **2026-07-16 revalidation**: Cline has been significantly restructured. Three provider paths: (1) Cline usage-billing (OAuth via Google/GitHub/email, no API key needed), (2) ClinePass ($9.99/month subscription with 2-5x rate limits for open coding models), (3) BYOK (Bring Your Own Key) for cloud providers and local runtimes. The old `cline auth <provider>` subcommand still works for BYOK, but the new architecture adds IDE settings UI (API Provider dropdown + API Key field + Model dropdown). ClinePass is a new subscription provider with GLM, Kimi, DeepSeek, MiMo models. OpenRouter now has a named provider id in Cline. Custom base URL supported per provider.
 
 ---
 
@@ -44,9 +45,35 @@
 
 | Field | Value |
 |---|---|
-| **Sanitized source** | `cline auth gemini` returns error "provider 'gemini' requires API key setup (use subcommand: auth --provider gemini --apikey <key> --modelid <id>)". Confirms Gemini is a recognized provider id. |
-| **Sanitized summary** | Google/Gemini support via generic provider routing with `--provider gemini`. Requires `--apikey`, `--modelid`, optional `--baseurl`. Same auth surface as other vendors. |
-| **Support state** | **verified native via auth surface** (gemini provider id recognized) |
+| **Sanitized source** | Upstream docs confirm "Google Gemini" is a named provider in Cline's API Provider dropdown with its own "Gemini API Key" field. CLI: `cline auth --provider gemini --apikey <key> --modelid <id>` still works. |
+| **Sanitized summary** | Google/Gemini support via named provider id "Google Gemini". IDE: select from API Provider dropdown, paste key into "Gemini API Key" field, select model. CLI: `cline auth --provider gemini --apikey <key> --modelid <id>`. |
+| **Support state** | **verified native via named provider id** (google-gemini) |
+
+---
+
+## New upstream capabilities (verified 2026-07-16 from docs.cline.bot)
+
+### Three provider paths
+
+Cline now offers three distinct provider paths:
+
+| Path | Description |
+|---|---|
+| **Cline (usage-billing)** | Sign in with Google/GitHub/email; no API key needed; built-in billing and free model options; access to multiple providers from one account |
+| **ClinePass** | Flat $9.99/month subscription; 2-5x API rate limits; curated open coding models (GLM, Kimi, DeepSeek, MiMo) |
+| **BYOK (Bring Your Own Key)** | Use your own provider credentials for cloud providers (OpenRouter, Anthropic, OpenAI, Google Gemini, AWS Bedrock, DeepSeek) or local runtimes (Ollama, LM Studio) |
+
+### IDE settings UI
+
+The IDE settings page provides an API Provider dropdown with named providers, an API Key field per provider, and a Model dropdown. The CLI `cline auth` subcommand still works for BYOK.
+
+### OpenRouter now named provider
+
+OpenRouter has its own provider id in Cline's API Provider dropdown. Custom base URL is supported ("Use custom base URL" checkbox).
+
+### SDK architecture
+
+Cline now exposes an agent core SDK (`@cline/sdk`) that powers the CLI, Kanban, VS Code extension, and JetBrains plugin. The SDK can be used to build custom applications.
 
 ---
 
@@ -56,9 +83,9 @@
 
 | Field | Value |
 |---|---|
-| **Sanitized source** | No specific "openrouter" provider id tested. The generic `--provider`, `--apikey`, `--modelid`, `--baseurl` surface suggests any vendor with an API-compatible endpoint can be configured, including OpenRouter via custom base URL. |
-| **Sanitized summary** | OpenRouter support likely viable through generic provider configuration: `cline auth --provider <custom-id> --apikey <key> --modelid <id> --baseurl https://openrouter.ai/api/v1`. Not directly tested with a named "openrouter" provider id, but the surface supports arbitrary endpoints. |
-| **Support state** | **blocked: not a listed provider id; possible via custom endpoint configuration — not tested with live credentials** |
+| **Sanitized source** | Upstream docs confirm OpenRouter is now a named provider in Cline's API Provider dropdown. Custom base URL supported ("Use custom base URL" checkbox). The generic `--provider`, `--apikey`, `--modelid`, `--baseurl` surface also supports arbitrary endpoints. |
+| **Sanitized summary** | OpenRouter is now a named provider id in Cline v3+. IDE: select "OpenRouter" from API Provider dropdown, paste key into "OpenRouter API Key" field, select model. CLI: `cline auth --provider openrouter --apikey <key>`. Custom base URL supported. |
+| **Support state** | **verified native via named provider id** (openrouter; also custom endpoint configuration) |
 
 ---
 

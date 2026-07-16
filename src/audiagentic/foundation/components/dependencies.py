@@ -8,10 +8,8 @@ from __future__ import annotations
 
 import logging
 import re
-import shlex
 import subprocess
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any, cast
 
 from audiagentic.foundation.contracts.errors import make_error_factory
@@ -27,10 +25,9 @@ from audiagentic.foundation.steps import (
 from audiagentic.foundation.toolchains import (
     detect_pkg_manager,
     platform_key,
-    tool_available,
-    uv_available,
 )
 from audiagentic.foundation.toolchains.loader import build_step, has_action, raw_step
+from audiagentic.foundation.toolchains.probes import probe_from_spec
 
 from .loader import component_yaml_path
 
@@ -43,74 +40,10 @@ _dependency_error: Any = make_error_factory("VAL", "DEP", "component-dependencie
 # Probe resolution
 # ---------------------------------------------------------------------------
 
-def _resolve_probe_binary(spec: str) -> Callable[[], bool]:
-    binary = spec[7:]
-    return lambda: tool_available(binary)
-
-
-def _resolve_probe_all_binaries(spec: str) -> Callable[[], bool]:
-    binaries = tuple(part.strip() for part in spec[13:].split(",") if part.strip())
-    return lambda: all(tool_available(binary) for binary in binaries)
-
-
-def _resolve_probe_path(spec: str) -> Callable[[], bool]:
-    p = Path(spec[5:].replace("~", str(Path.home())))
-    return lambda: p.exists()
-
-
-def _resolve_probe_command(spec: str) -> Callable[[], bool]:
-    command = tuple(shlex.split(spec[8:]))
-
-    def _probe_command() -> bool:
-        if not command:
-            return False
-        try:
-            result = subprocess.run(
-                command,
-                check=False,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=10,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            return False
-        return result.returncode == 0
-
-    return _probe_command
-
-
-def _resolve_probe_custom(spec: str) -> Callable[[], bool]:
-    """Resolve custom: probe spec using colon-separated module:dotpath.
-
-    Delegates to foundation/refs.resolve_ref for consistent
-    colon-based resolution across all descriptor types.
-    """
-    from audiagentic.foundation.refs import resolve_ref
-
-    ref = spec[7:]
-    return resolve_ref(ref)
-
-
-_PROBE_RESOLVERS: dict[str, Callable[[str], Callable[[], bool]]] = {
-    "binary:": _resolve_probe_binary,
-    "all-binaries:": _resolve_probe_all_binaries,
-    "path:": _resolve_probe_path,
-    "command:": _resolve_probe_command,
-    "custom:": _resolve_probe_custom,
-}
-
-
 def _resolve_probe(spec: str) -> Callable[[], bool]:
-    if spec == "toolchain:uv":
-        return uv_available
-
-    for prefix, resolver in _PROBE_RESOLVERS.items():
-        if spec.startswith(prefix):
-            return resolver(spec)
-
-    raise _dependency_error(1, f"unknown probe syntax: {spec!r}", probe=spec)
+    """Adapt the structured probe for *spec* to the bool callable deps expect."""
+    probe = probe_from_spec(spec)
+    return lambda: probe.check().passed
 
 
 # ---------------------------------------------------------------------------

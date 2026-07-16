@@ -8,10 +8,10 @@
 |---|---|
 | provider-id | `opencode` |
 | upstream-id | opencode-ai/opencode (Vercel AI SDK based) |
-| tool-version | 1.17.18 |
-| verified-at | 2026-07-13 UTC (RV350/RV353 correction) |
-| evidence-kind | installed-tool CLI probe + `opencode models --verbose` catalog enumeration + `opencode providers list` credential surface |
-| **correction-note** | RV350/RV353 corrections: (a) env var key injection NOT supported for native vendors — Anthropic and Google probes confirmed rejection with env vars present; OpenAI env path untested (OAuth available masks rejection proof). (b) Model granularity "all models per vendor" is EXPECTED pattern based on OpenAI catalog behavior, not verified for Anthropic/Google without authenticated access. (c) OpenRouter absence from `providers list` is a probe observation — unsupported requires authoritative capability inventory or negative config test (not yet run). (d) Config filename/container: `providers` key accepted in `.opencode/config.json`; `provider` vs `providers` and winning filename between `.opencode/config.json` and `.opencode/opencode.json` remain unresolved. |
+| tool-version | 1.17.18 (installed); upstream docs revalidated 2026-07-16 |
+| verified-at | 2026-07-13 UTC (RV350/RV353 correction), 2026-07-16 UTC (upstream doc revalidation) |
+| evidence-kind | installed-tool CLI probe + `opencode models --verbose` catalog enumeration + `opencode providers list` credential surface + upstream doc verification (models.md, config.md, providers.md) |
+| **correction-note** | RV350/RV353 corrections: (a) env var key injection NOT supported for native vendors — Anthropic and Google probes confirmed rejection with env vars present; OpenAI env path untested (OAuth available masks rejection proof). (b) Model granularity "all models per vendor" is EXPECTED pattern based on OpenAI catalog behavior, not verified for Anthropic/Google without authenticated access. (c) OpenRouter absence from `providers list` is a probe observation — unsupported requires authoritative capability inventory or negative config test (not yet run). (d) Config filename/container: `providers` key accepted in `.opencode/config.json`; `provider` vs `providers` and winning filename between `.opencode/config.json` and `.opencode/opencode.json` remain unresolved. **2026-07-16 revalidation**: upstream docs confirm `opencode.json`/`opencode.jsonc` with top-level `provider` singular (not `providers` plural); model format is `provider_id/model_id`; variants system exists; recommended models include GPT 5.2, Claude Opus/Sonnet 4.5, Minimax M2.1, Gemini 3 Pro; custom providers support full provider/models/variants config.
 
 ---
 
@@ -75,6 +75,127 @@
 | **Config shape** | Provider entries: `{name, api, baseURL, apiKey, models:{...}}`. The harness materializer writes to `.opencode/config.json`. |
 | **Provider vs providers** | Config uses `providers` (plural) at top level; individual provider blocks keyed by source-id. UNRESOLVED CONTRACT QUESTION: whether installed OpenCode expects `provider` or `providers` for model config and which file wins (`.opencode/config.json` vs `.opencode/opencode.json`). Runtime evidence shows `providers` key is accepted, but the file precedence question remains open. |
 | **Catalog refresh** | `opencode models --verbose` reads from cached catalog on models.dev; supports `--refresh` flag to re-fetch. `_fetch_opencode_catalog` adapter wraps this correctly. |
+
+---
+
+## New upstream capabilities (verified 2026-07-16 from docs.opencode.ai)
+
+### Config file and key name
+
+Upstream documentation uses `opencode.json` or `opencode.jsonc` with top-level `provider` **singular** (not `providers`). The installed harness uses `.opencode/config.json` with `providers`. This discrepancy is the MO03 migration gate.
+
+### Model format
+
+Full model ID is `provider_id/model_id`, e.g. `opencode/gpt-5.1-codex` or `lmstudio/google/gemma-3n-e4b`. Set via top-level `model` key.
+
+### Recommended models (upstream list)
+
+- GPT 5.2
+- GPT 5.1 Codex
+- Claude Opus 4.5
+- Claude Sonnet 4.5
+- Minimax M2.1
+- Gemini 3 Pro
+
+### Variants system
+
+OpenCode supports built-in and custom variants for the same model:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "variants": {
+            "thinking": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low"
+            },
+            "fast": {
+              "disabled": true
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Built-in variant defaults per provider:
+- **Anthropic**: `high` (default), `max`
+- **OpenAI**: `none`, `minimal`, `low`, `medium`, `high`, `xhigh` (varies by model)
+- **Google**: `low`, `high`
+
+Cycle variants via keybind `variant_cycle`.
+
+### Global model configuration
+
+Models can be configured globally per provider:
+
+```jsonc
+{
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "options": {
+            "reasoningEffort": "high",
+            "textVerbosity": "low",
+            "reasoningSummary": "auto",
+            "include": ["reasoning.encrypted_content"]
+          }
+        }
+      }
+    },
+    "anthropic": {
+      "models": {
+        "claude-sonnet-4-5-20250929": {
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 16000
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### Custom providers via config
+
+Custom providers use the AI SDK provider npm package:
+
+```jsonc
+{
+  "provider": {
+    "audiagentic-local": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "AUDiaGentic Local",
+      "options": {
+        "baseURL": "http://127.0.0.1:1234/v1"
+      },
+      "models": {
+        "qwen3-coder": {
+          "name": "Qwen local"
+        }
+      }
+    }
+  },
+  "model": "audiagentic-local/qwen3-coder"
+}
+```
+
+### Model loading priority
+
+1. `--model` / `-m` CLI flag (format: `provider_id/model_id`)
+2. `model` key in config file
+3. Last used model
+4. First model using internal priority
 
 ---
 

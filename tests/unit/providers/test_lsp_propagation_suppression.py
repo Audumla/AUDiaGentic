@@ -6,7 +6,6 @@ from typing import Any
 from audiagentic.components.coding_lsp.language_servers_sync import (
     sync_generic_lsp_mcp_to_providers,
 )
-from audiagentic.components.providers.services import lsp_projection
 from audiagentic.components.providers.services.provider_config import set_provider_enabled
 from audiagentic.foundation.features import registry as feature_registry
 from audiagentic.foundation.features.base import (
@@ -16,7 +15,6 @@ from audiagentic.foundation.features.base import (
     ImplementationState,
 )
 from audiagentic.foundation.features.state import set_feature_state, set_implementation_state
-from audiagentic.foundation.mcp import McpServerEntry
 
 
 def _enable(tmp_path: Path, *provider_ids: str) -> None:
@@ -26,12 +24,25 @@ def _enable(tmp_path: Path, *provider_ids: str) -> None:
 
 
 class _Provider:
-    def __init__(self, provider_id: str, *, native: bool, has_mcp: bool = True, receive_lsp_mcp: bool = True) -> None:
+    def __init__(
+        self,
+        provider_id: str,
+        *,
+        native: bool,
+        has_mcp: bool = True,
+        receive_lsp_mcp: bool = True,
+        declared_families: tuple[str, ...] = ("lsp-mcp-projection",),
+    ) -> None:
         self.provider_id = provider_id
         self.mcp_config = object() if has_mcp else None
         self.language_servers_config = object() if native else None
         self.on_lsp_enabled = None
         self.receive_lsp_mcp = receive_lsp_mcp
+        self._declared_families = declared_families
+
+    def automation_capability(self, family_id: str) -> object | None:
+        """Mirror ProviderDescriptor: participation requires a declaration."""
+        return object() if family_id in self._declared_families else None
 
 
 def setup_function() -> None:
@@ -108,32 +119,54 @@ def test_sync_generic_lsp_routes_by_provider_capability(tmp_path: Path, monkeypa
         "aider": _Provider("aider", native=False, has_mcp=False),
     }
     _enable(tmp_path, "codex", "claude", "aider")
-    captured: dict[str, dict[str, tuple[str, McpServerEntry]]] = {}
+    captured: dict[str, dict] = {}
 
     def _fake_sync(*, provider_id, project_root, desired_entries, managed_ids):
         captured[provider_id] = desired_entries
         assert managed_ids == {"coding-lsp/ag-lsp", "coding-lsp/blackwell-agent-lsp"}
         return {"ok": True}
 
+    from audiagentic.components.providers.contracts.lsp_mcp_projection import (
+        LspMcpProjectionEntry,
+        LspMcpProjectionRequest,
+    )
+    from audiagentic.components.providers.services.lsp_mcp_projection import (
+        manage_lsp_mcp_projection_all,
+    )
+
     monkeypatch.setattr(
-        lsp_projection,
-        "all_descriptors",
+        "audiagentic.components.providers.descriptors.registry.all_descriptors",
         lambda: providers,
     )
     monkeypatch.setattr(
-        lsp_projection,
-        "sync_managed_provider_mcp_subset",
+        "audiagentic.components.providers.services.lsp_mcp_projection.get_descriptor",
+        lambda pid: providers.get(pid),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.providers.services.feature_resolution.enabled_provider_ids",
+        lambda root: set(providers.keys()),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.providers.services.lsp_mcp_projection.sync_managed_provider_mcp_subset",
         _fake_sync,
     )
 
-    result = lsp_projection.sync_generic_lsp_mcp_to_provider_configs(
+    results = manage_lsp_mcp_projection_all(
         tmp_path,
-        {"coding-lsp/ag-lsp": ("ag-lsp", McpServerEntry(name="ag-lsp", command="python"))},
-        {"coding-lsp/ag-lsp", "coding-lsp/blackwell-agent-lsp"},
+        mode="apply",
+        request=LspMcpProjectionRequest(
+            managed_ids=("coding-lsp/ag-lsp", "coding-lsp/blackwell-agent-lsp"),
+            entries=(LspMcpProjectionEntry(
+                managed_id="coding-lsp/ag-lsp",
+                name="ag-lsp",
+                command="python",
+            ),),
+        ),
     )
 
-    assert result["ok"] is True
-    assert "aider" in result["skipped"]
+    assert all(r.ok for r in results)
+    # aider has no mcp_config — skipped by manage_lsp_mcp_projection_all
+    assert all(r.provider_id != "aider" for r in results)
     # codex has both mcp_config and language_servers_config — should receive MCP
     assert "coding-lsp/ag-lsp" in captured["codex"]
     assert captured["codex"]["coding-lsp/ag-lsp"][0] == "ag-lsp"
@@ -151,18 +184,26 @@ def test_sync_generic_lsp_projects_blackwell_agent_lsp_when_active(tmp_path: Pat
     )
     _enable(tmp_path, "claude")
     published: dict[str, Any] = {}
+
+    def fake_manage_all(project_root, *, mode, request):
+        from audiagentic.components.providers.contracts.lsp_mcp_projection import (
+            LspMcpProjectionResult,
+        )
+        published.update({
+            "managed_ids": set(request.managed_ids),
+            "entries": list(request.entries),
+        })
+        return [LspMcpProjectionResult(ok=True, provider_id="claude")]
+
     monkeypatch.setattr(
-        "audiagentic.components.providers.services.lsp_projection.sync_generic_lsp_mcp_to_provider_configs",
-        lambda root, desired_entries, managed_ids: published.update({
-            "desired_entries": desired_entries,
-            "managed_ids": managed_ids,
-        }) or {"ok": True, "synced": ["claude"]},
+        "audiagentic.components.providers.providers_api.manage_lsp_mcp_projection_all",
+        fake_manage_all,
     )
 
     result = sync_generic_lsp_mcp_to_providers(tmp_path)
 
     assert result["ok"] is True
-    assert list(published["desired_entries"]) == ["coding-lsp/blackwell-agent-lsp"]
+    assert [e.managed_id for e in published["entries"]] == ["coding-lsp/blackwell-agent-lsp"]
 
 
 def test_sync_generic_lsp_projects_blackwell_agent_lsp_args(tmp_path: Path, monkeypatch) -> None:
@@ -176,19 +217,27 @@ def test_sync_generic_lsp_projects_blackwell_agent_lsp_args(tmp_path: Path, monk
     )
     _enable(tmp_path, "claude")
     published: dict[str, Any] = {}
+
+    def fake_manage_all(project_root, *, mode, request):
+        from audiagentic.components.providers.contracts.lsp_mcp_projection import (
+            LspMcpProjectionResult,
+        )
+        published.update({
+            "managed_ids": set(request.managed_ids),
+            "entries": list(request.entries),
+        })
+        return [LspMcpProjectionResult(ok=True, provider_id="claude")]
+
     monkeypatch.setattr(
-        "audiagentic.components.providers.services.lsp_projection.sync_generic_lsp_mcp_to_provider_configs",
-        lambda root, desired_entries, managed_ids: published.update({
-            "desired_entries": desired_entries,
-            "managed_ids": managed_ids,
-        }) or {"ok": True, "synced": ["claude"]},
+        "audiagentic.components.providers.providers_api.manage_lsp_mcp_projection_all",
+        fake_manage_all,
     )
 
     result = sync_generic_lsp_mcp_to_providers(tmp_path)
 
     assert result["ok"] is True
-    name, entry = published["desired_entries"]["coding-lsp/blackwell-agent-lsp"]
-    assert name == "blackwell-agent-lsp"
+    entry = published["entries"][0]
+    assert entry.name == "blackwell-agent-lsp"
     assert entry.command == "agent-lsp"
     assert entry.args == ("python:pyright-langserver,--stdio",)
 
@@ -205,23 +254,39 @@ def test_prune_generic_lsp_only_targets_component_owned_entry(tmp_path: Path, mo
         assert desired_entries == {}
         return {"ok": True}
 
+    from audiagentic.components.providers.contracts.lsp_mcp_projection import (
+        LspMcpProjectionRequest,
+    )
+    from audiagentic.components.providers.services.lsp_mcp_projection import (
+        manage_lsp_mcp_projection_all,
+    )
+
     monkeypatch.setattr(
-        lsp_projection,
-        "all_descriptors",
+        "audiagentic.components.providers.descriptors.registry.all_descriptors",
         lambda: providers,
     )
     monkeypatch.setattr(
-        lsp_projection,
-        "sync_managed_provider_mcp_subset",
+        "audiagentic.components.providers.services.lsp_mcp_projection.get_descriptor",
+        lambda pid: providers.get(pid),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.providers.services.feature_resolution.enabled_provider_ids",
+        lambda root: set(providers.keys()),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.providers.services.lsp_mcp_projection.sync_managed_provider_mcp_subset",
         _fake_sync,
     )
 
-    result = lsp_projection.prune_generic_lsp_mcp_from_provider_configs(
+    results = manage_lsp_mcp_projection_all(
         tmp_path,
-        {"coding-lsp/ag-lsp", "coding-lsp/blackwell-agent-lsp"},
+        mode="prune",
+        request=LspMcpProjectionRequest(
+            managed_ids=("coding-lsp/ag-lsp", "coding-lsp/blackwell-agent-lsp"),
+        ),
     )
 
-    assert result["ok"] is True
+    assert all(r.ok for r in results)
     assert captured == {
         "codex": {"coding-lsp/ag-lsp", "coding-lsp/blackwell-agent-lsp"},
         "claude": {"coding-lsp/ag-lsp", "coding-lsp/blackwell-agent-lsp"},

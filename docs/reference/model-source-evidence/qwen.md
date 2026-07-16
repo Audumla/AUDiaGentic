@@ -8,10 +8,10 @@
 |---|---|
 | provider-id | `qwen` |
 | upstream-id | qwen-code (npm @qwen-code/qwen-code) |
-| tool-version | 0.13.1 (installed as `qwen` CLI command in npm global) |
-| verified-at | 2026-07-13 UTC (RV353 correction) |
-| evidence-kind | installed-tool CLI probe (`qwen --help`, `qwen auth status`), settings file inspection (`~/.qwen/settings.json`) |
-| **correction-note** | RV353 finding #2: prior classification "Anthropic/Google unsupported, OpenAI-only connector" is materially false. Installed help proves `--auth-type` accepts openai/anthropic/qwen-oauth/gemini/vertex-ai. Settings surface carries auth type selection and model pointer. |
+| tool-version | 0.13.1 (installed); upstream docs revalidated 2026-07-16 |
+| verified-at | 2026-07-13 UTC (RV353 correction), 2026-07-16 UTC (upstream doc revalidation) |
+| evidence-kind | installed-tool CLI probe (`qwen --help`, `qwen auth status`), settings file inspection (`~/.qwen/settings.json`), upstream doc verification (model-providers.md, settings.md) |
+| **correction-note** | RV353 finding #2: prior classification "Anthropic/Google unsupported, OpenAI-only connector" is materially false. Installed help proves `--auth-type` accepts openai/anthropic/qwen-oauth/gemini/vertex-ai. Settings surface carries auth type selection and model pointer. **2026-07-16 revalidation**: upstream docs reveal `modelProviders` is a structured multi-provider config (not single-model-at-a-time); each auth type has its own SDK; model uniqueness by `id + baseUrl`; per-model `generationConfig` with timeout, maxRetries, contextWindowSize, customHeaders, extra_body, samplingParams; credentials read from `process.env[envKey]` — never persisted in settings; Qwen OAuth discontinued 2026-04-15.
 
 ---
 
@@ -74,8 +74,89 @@
 
 ---
 
+## New upstream capabilities (verified 2026-07-16 from qwenlm.github.io)
+
+### modelProviders multi-provider config
+
+Upstream docs reveal `modelProviders` is a structured config that allows multiple providers simultaneously — NOT just one auth-type at a time as previously assumed. Each provider key must be a valid auth type (`openai`, `anthropic`, `gemini`, `vertex-ai`). The `/model` command exposes non-default auth types.
+
+### Per-provider SDK mapping
+
+Qwen Code uses official SDKs per auth type:
+
+| Auth Type | SDK Package |
+|---|---|
+| `openai` | `openai` (Node.js) |
+| `anthropic` | `@anthropic-ai/sdk` |
+| `gemini` / `vertex-ai` | `@google/genai` |
+| `qwen-oauth` | `openai` (DashScope-compatible) |
+
+### Model uniqueness by `id + baseUrl`
+
+Models within the same auth type are uniquely identified by `id + baseUrl`. The same model ID can be defined multiple times under a single auth type as long as each has a different `baseUrl`.
+
+### Per-model generationConfig
+
+Each model entry supports a rich `generationConfig`:
+
+```json
+{
+  "modelProviders": {
+    "openai": {
+      "protocol": "openai",
+      "models": [
+        {
+          "id": "gpt-4o",
+          "name": "GPT-4o",
+          "envKey": "OPENAI_API_KEY",
+          "baseUrl": "https://api.openai.com/v1",
+          "generationConfig": {
+            "timeout": 60000,
+            "maxRetries": 3,
+            "enableCacheControl": true,
+            "contextWindowSize": 128000,
+            "modalities": { "image": true },
+            "customHeaders": { "X-Client-Request-ID": "req-123" },
+            "extra_body": {
+              "enable_thinking": true,
+              "service_tier": "priority"
+            },
+            "samplingParams": {
+              "temperature": 0.2,
+              "top_p": 0.8,
+              "max_tokens": 4096,
+              "presence_penalty": 0.1,
+              "frequency_penalty": 0.1
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+### Credentials never persisted in settings
+
+Credentials are read from `process.env[envKey]` — never stored in settings. When `envKey` is omitted, it falls back to the auth type's default env key.
+
+### Qwen OAuth discontinued
+
+Qwen OAuth free tier was discontinued on 2026-04-15. The `qwen-oauth` auth type is hard-coded and cannot be overridden in `modelProviders`.
+
+### Reasoning/thinking configuration
+
+Per-model reasoning effort support with `extra_body.enable_thinking`. Anthropic-style `budget_tokens` for thinking models.
+
+### Generation config layering: impermeable provider layer
+
+The provider layer is "impermeable" — generation config at the provider level cannot be overridden by lower layers. Per-field precedence rules apply.
+
+---
+
 ## Projection mode implications for AG
 
 - **Native-key-injection (env)**: Primary viable path for P1 vendors. Set `--auth-type <vendor>` plus the confirmed env vars: `OPENAI_API_KEY` (openai), `ANTHROPIC_API_KEY` (anthropic), `GEMINI_API_KEY` (gemini). Key mappings verified via runtime error messages.
 - **Custom-entries**: Not applicable — Qwen uses multi-auth-type model selection, not provider catalog entries. Only one active model at a time via settings/CLI.
 - **Limited scope note**: Unlike Pi which accepts all vendor keys simultaneously, Qwen switches auth mode per type — only ONE `--auth-type` is active at a time. This means AG cannot have multiple vendors enabled concurrently through the same tool instance.
+- **Local endpoint note**: Openai-compatible local servers (Ollama, LM Studio, llama.cpp) are addressable via `--auth-type openai --openai-base-url <local-url>` — same connector class as OpenAI, just with a base URL override. No separate vendor or connector type needed.
