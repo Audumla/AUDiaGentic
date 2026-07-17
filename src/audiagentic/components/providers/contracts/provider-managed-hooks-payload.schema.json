@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "provider-managed-hooks-payload/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ownership_scope", "entries"],
+  "properties": {
+    "ownership_scope": {"type": "string", "minLength": 1},
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["managed_id", "event", "command"],
+        "properties": {
+          "managed_id": {"type": "string", "minLength": 1},
+          "event": {"type": "string", "minLength": 1},
+          "command": {"type": "string", "minLength": 1},
+          "timeout": {"type": "integer"}
+        }
+      }
+    }
+  }
+}

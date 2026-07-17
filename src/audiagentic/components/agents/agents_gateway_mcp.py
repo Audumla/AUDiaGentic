@@ -43,9 +43,21 @@ def agent_llm_submit(
     fallback_profile_ids: list[str] | None = None,
     source: str | None = None,
     metadata: dict[str, Any] | None = None,
+    session_id: str | None = None,
+    session_keep_alive: bool = False,
+    session_idle_timeout_seconds: float | None = None,
+    session_max_lifetime_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Submit an async LLM gateway request. Returns immediately with request-id
-    and initial state — use agent_llm_status/agent_llm_wait to check progress."""
+    and initial state — use agent_llm_status/agent_llm_wait to check progress.
+
+    Sessions: session_keep_alive=true opens a live agent session that retains
+    conversation context after this request; continue it by passing the
+    response's session-id as session_id on later requests. Sessions self-clean
+    (idle timeout, default 15 min; max lifetime, default 4 h; pass 0 to
+    disable either bound). Turns queue FIFO per session; a processing session
+    is never reaped. Close explicitly with agent_llm_session_close when a
+    block of work is done."""
     return gateway.submit_llm_request(
         project_root_from_env(),
         agent_profile_id=agent_profile_id,
@@ -55,6 +67,10 @@ def agent_llm_submit(
         fallback_profile_ids=fallback_profile_ids,
         source=source,
         metadata=metadata,
+        session_id=session_id,
+        session_keep_alive=session_keep_alive,
+        session_idle_timeout_seconds=session_idle_timeout_seconds,
+        session_max_lifetime_seconds=session_max_lifetime_seconds,
     )
 
 
@@ -90,9 +106,17 @@ def agent_llm_run(
     fallback_profile_ids: list[str] | None = None,
     source: str | None = None,
     metadata: dict[str, Any] | None = None,
+    session_id: str | None = None,
+    session_keep_alive: bool = False,
+    session_idle_timeout_seconds: float | None = None,
+    session_max_lifetime_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Submit and block until a terminal result or timeout. For one-shot use
-    only — not for event-triggered paths (see AG12's async event surface)."""
+    only — not for event-triggered paths (see AG12's async event surface).
+
+    Sessions: session_keep_alive=true opens a live agent session (context is
+    retained for follow-up requests via session_id); the transport wait cap
+    still applies — long turns should use agent_llm_submit + agent_llm_wait."""
     return gateway.run_llm_request(
         project_root_from_env(),
         agent_profile_id=agent_profile_id,
@@ -101,6 +125,10 @@ def agent_llm_run(
         fallback_profile_ids=fallback_profile_ids,
         source=source,
         metadata=metadata,
+        session_id=session_id,
+        session_keep_alive=session_keep_alive,
+        session_idle_timeout_seconds=session_idle_timeout_seconds,
+        session_max_lifetime_seconds=session_max_lifetime_seconds,
     )
 
 
@@ -122,6 +150,23 @@ def agent_llm_gateway_overview() -> dict[str, Any]:
     """Operator-facing summary: persisted request counts by state, the 5 most
     recent failures (with redacted error), and in-process per-profile queue depths."""
     return gateway.gateway_overview(project_root_from_env())
+
+
+@mcp.tool()
+@log_tool_call
+def agent_llm_session_list(state: str | None = None) -> list[dict[str, Any]]:
+    """List persisted gateway sessions, newest first. Each entry carries a
+    'live' flag: true when the session's agent process is held by this gateway
+    process (only live sessions can accept new turns)."""
+    return gateway.list_llm_sessions(project_root_from_env(), state=state)
+
+
+@mcp.tool()
+@log_tool_call
+def agent_llm_session_close(session_id: str) -> dict[str, Any]:
+    """Close a live agent session (terminates its agent process). Idempotent —
+    an already-closed or orphaned session returns its final record."""
+    return gateway.close_llm_session(project_root_from_env(), session_id)
 
 
 def main() -> None:

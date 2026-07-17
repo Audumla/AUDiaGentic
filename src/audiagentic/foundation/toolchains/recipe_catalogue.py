@@ -171,7 +171,7 @@ class RecipeCatalogue:
 
         for templates, source in levels:
             for rid, template in templates.items():
-                replaces_version = template.provenance_ref
+                replaces_version = template.replaces_version
                 if rid in merged:
                     existing = merged[rid]
                     existing_version = existing.template.recipe_version
@@ -276,7 +276,7 @@ class RecipeCatalogue:
         return dict(self._templates)
 
     def has_recipe(self, recipe_id: str) -> bool:
-        """Check if a recipe exists in the catalogue without loading."""
+        """Check if a recipe exists in the catalogue."""
         if self._templates is None:
             self._templates = self._build()
         return recipe_id in self._templates

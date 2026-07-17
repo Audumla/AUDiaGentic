@@ -154,6 +154,28 @@ The provider layer is "impermeable" — generation config at the provider level 
 
 ---
 
+## ACP status
+
+| Field | Value |
+|---|---|
+| **ACP support** | Native |
+| **Registry ID** | `qwen-code` |
+| **Launch command** | `npx @qwen-code/qwen-code --acp --experimental-skills` |
+| **Distribution** | npx (npm) |
+
+Qwen Code natively implements ACP with `--experimental-skills` flag. Whether skills are required or optional for ACP operation is untested.
+
+## Config override at startup
+
+| Field | Value |
+|---|---|
+| **CLI flag** | `--settings <path>` — alternate settings file path |
+| **Env var** | No documented env var for config override |
+
+The `--settings` flag allows launching Qwen with a completely separate settings file, enabling project-level config isolation without mutating the user's default config.
+
+---
+
 ## Projection mode implications for AG
 
 - **Native-key-injection (env)**: Primary viable path for P1 vendors. Set `--auth-type <vendor>` plus the confirmed env vars: `OPENAI_API_KEY` (openai), `ANTHROPIC_API_KEY` (anthropic), `GEMINI_API_KEY` (gemini). Key mappings verified via runtime error messages.

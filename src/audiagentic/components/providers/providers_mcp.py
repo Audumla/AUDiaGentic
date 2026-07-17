@@ -1,10 +1,12 @@
 """AUDiaGentic providers component MCP server."""
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
 from audiagentic.components.providers import providers_api
-from audiagentic.components.providers.contracts.cli_lifecycle import CliLifecycleMode
+from audiagentic.components.providers.contracts.lifecycle_modes import (
+    normalize_provider_cli_mode,
+)
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
 from audiagentic.foundation.mcp.component_server import (
     FastMCP,
@@ -62,7 +64,7 @@ def build_server() -> FastMCP:
     @log_tool_call
     async def manage_cli_lifecycle(provider_id: str, mode: str) -> dict[str, Any]:
         return await providers_api.manage_cli_lifecycle(
-            project_root_from_env(), provider_id, mode=cast(CliLifecycleMode, mode)
+            project_root_from_env(), provider_id, mode=normalize_provider_cli_mode(mode)
         )
 
     @mcp.tool()

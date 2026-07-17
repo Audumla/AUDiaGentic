@@ -94,6 +94,26 @@ The upstream documentation at pi.vercel.app/guide/model-providers returns 404. T
 
 ---
 
+## ACP status
+
+| Field | Value |
+|---|---|
+| **ACP support** | None (not listed in registry) |
+| **Registry ID** | N/A — not in ACP registry v1.0.0 |
+
+Pi is not currently listed in the ACP registry v1.0.0. No ACP adapter package exists for this provider.
+
+## Config override at startup
+
+| Field | Value |
+|---|---|
+| **CLI flag** | No documented `--config` flag |
+| **Env var** | No documented env var for config override |
+
+Pi does not support startup config override.
+
+---
+
 ## Projection mode implications for AG
 
 - **Native-key-injection (env)**: Primary viable path for P1 vendors. AG sets `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, or `OPENROUTER_API_KEY` at launch time and Pi recognizes them immediately. Model selection via `--model <provider>/<id>` or `--provider <name>`. This requires NO file mutation — pure environment variable contribution through the launch-env seam.

@@ -178,9 +178,12 @@ def test_direct_managed_spec_calls_are_core_or_recorded_violation() -> None:
     # MO06 closed: lsp_projection.py no longer calls spec.writer/remover
     # directly — it routes through apply_managed_config_write/remove, the
     # sanctioned indirection point in foundation/toolchains/managed_config.py.
+    # RV509 closed the plugin_entries.py exemption: it now routes mutations
+    # through sync_managed_config and keeps only a status-mode spec.reader.
+    # Equality (not subset) so a stale allowlist entry fails loudly instead
+    # of silently weakening the guard.
     allowed_core = {
         "src/audiagentic/components/providers/services/mcp.py",
-        "src/audiagentic/components/providers/services/plugin_entries.py",
         "src/audiagentic/foundation/toolchains/managed_config.py",
     }
     found: dict[str, set[str]] = {}
@@ -188,7 +191,7 @@ def test_direct_managed_spec_calls_are_core_or_recorded_violation() -> None:
         calls = direct_spec_calls(path.read_text(encoding="utf-8"))
         if calls:
             found[path.relative_to(WORKSPACE_ROOT).as_posix()] = calls
-    assert set(found) <= allowed_core, found
+    assert set(found) == allowed_core, found
 
 
 def test_generic_hindsight_builder_provider_branches_are_pinned() -> None:

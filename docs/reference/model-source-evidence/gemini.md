@@ -73,6 +73,28 @@ Gemini CLI is now an ACP agent in OpenHands Agent Canvas via `npx -y @google/gem
 
 ---
 
+## ACP status
+
+| Field | Value |
+|---|---|
+| **ACP support** | Native |
+| **Registry ID** | `gemini` |
+| **Launch command** | `npx @google/gemini-cli --acp` |
+| **Distribution** | npx (npm) |
+
+Gemini CLI natively implements ACP. Also runs as an ACP agent in OpenHands Agent Canvas via the same command.
+
+## Config override at startup
+
+| Field | Value |
+|---|---|
+| **CLI flag** | No documented `--config` flag |
+| **Env var** | No documented env var for config override |
+
+Gemini CLI does not support startup config override. Config is fixed at user home path (`~/.gemini/`).
+
+---
+
 ## Projection mode implications for AG
 
 - Gemini / Antigravity is a **native vendor tool** — Google-only models, no external vendor routing surface.

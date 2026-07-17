@@ -97,7 +97,8 @@ def test_apply_returns_only_frozen_result_and_uses_scope(monkeypatch, tmp_path):
     )
     assert scopes == ["copilot/memory/hindsight/hindsight"]
     assert result == ManagedMcpResult(
-        ok=True, supported=True, changed=True, managed_ids=("ag-hindsight",),
+        ok=True, supported=True, provider_id="copilot", changed=True,
+        managed_ids=("ag-hindsight",),
     )
 
 

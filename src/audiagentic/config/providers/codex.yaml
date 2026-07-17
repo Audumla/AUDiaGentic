@@ -3,11 +3,7 @@
 
 provider_id: codex
 automation_capabilities:
-  - family_id: lsp-mcp-projection
-    supported_modes: [apply, prune, status]
-    payload_contract: provider-lsp-mcp-projection-payload/v1
-    result_contract: provider-lsp-mcp-projection-result/v1
-    ownership_scope_required: false
+
   - family_id: cli-lifecycle
     supported_modes: [plan, apply, prune, status]
     payload_contract: provider-cli-lifecycle-payload/v1
@@ -17,6 +13,11 @@ automation_capabilities:
     supported_modes: [apply, prune, status]
     payload_contract: provider-managed-mcp-payload/v1
     result_contract: provider-managed-mcp-result/v1
+    ownership_scope_required: true
+  - family_id: managed-hooks
+    supported_modes: [apply, prune, status]
+    payload_contract: provider-managed-hooks-payload/v1
+    result_contract: provider-managed-hooks-result/v1
     ownership_scope_required: true
   - family_id: language-server-projection
     supported_modes: [apply, prune, status]
@@ -135,6 +136,67 @@ capability_facts:
       tool_version: "0.87.0"
       fact_anchor: "docs/reference/model-source-evidence/codex.md#codex-evidence"
       review_state: pending-review
+  # --- ACP capability family (plan agent-sessions AS13/AS14) -------------
+  # Segregates ACP/live-session features so they can be requested per state
+  # while the capability is being built out. Evidence-only per boundary
+  # rules — the executable authority is the adapter's acp submodule hook
+  # (load_acp_launch_builder) consumed by gateway session dispatch.
+  - capability_id: acp-stdio-transport
+    subject: "external:acp-stdio-transport"
+    mechanism: "@agentclientprotocol/codex-acp bridge (npx or local binary) exposing an ACP stdio server over Codex App Server; launched via adapters/codex/acp.py build_acp_launch"
+    constraints:
+      - "bridge package is not yet a managed install (AS13 step 2 — aux_installs extension); npx fallback is ad-hoc"
+    limitations:
+      - "cannot attach to an already-open interactive Codex TUI — the ACP client owns the session"
+      - "model_id passthrough unverified; model selection rides on codex config.toml/CODEX_HOME"
+    support_assessment: partial
+    action_needed: "AS13: managed install, model passthrough verification, live validation against real codex-acp."
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "tests/unit/providers/test_codex_acp_launch.py"
+      review_state: pending-review
+  - capability_id: acp-live-session
+    subject: "external:acp-live-session"
+    mechanism: "gateway SessionRuntime keep-alive session over the codex-acp stdio bridge (session_keep_alive / session_id request fields)"
+    constraints:
+      - "default-deny permission policy may block codex approval requests until a policy_fn story exists"
+    limitations:
+      - "unvalidated live — launch builder and routing tested with fakes only"
+    support_assessment: partial
+    action_needed: "AS13: live two-turn context retention + clean close on real codex-acp."
+    evidence:
+      evidence_tier: installed-artifact
+      tool_version: repository
+      fact_anchor: "tests/unit/providers/test_codex_acp_launch.py"
+      review_state: pending-review
+  - capability_id: acp-session-resume
+    subject: "external:acp-session-resume"
+    mechanism: "planned: ACP session/load if codex-acp advertises it; natively thread/resume via Codex App Server"
+    constraints: []
+    limitations:
+      - "not implemented; ACP-created codex sessions are known not to appear in CLI /resume listing (upstream gap) — resume must be by persisted provider-session-ref, never by discovery"
+    support_assessment: blocked
+    action_needed: "AS10 (ACP session/load) / AS14 (App Server thread/resume)."
+    evidence:
+      evidence_tier: documentation
+      tool_version: "0.87.0"
+      fact_anchor: "docs/planning/active/agent-sessions/AS14.md"
+      review_state: pending-review
+  - capability_id: acp-shared-live-session
+    subject: "external:acp-shared-live-session"
+    mechanism: "planned: Codex App Server ws JSON-RPC (codex app-server --listen) with human TUI and gateway as peer clients; turn/start, turn/steer, turn/interrupt"
+    constraints:
+      - "upstream ws transport experimental — localhost/SSH tunnel only, no TLS/auth assumptions"
+    limitations:
+      - "no gateway integration yet; requires external-process-ownership mode in SessionRuntime"
+    support_assessment: blocked
+    action_needed: "AS14 design + implementation after AS11 trial evidence."
+    evidence:
+      evidence_tier: documentation
+      tool_version: "0.87.0"
+      fact_anchor: "docs/planning/active/agent-sessions/AS14.md"
+      review_state: pending-review
 
 permissions:
   can_write_files: true
@@ -166,3 +228,11 @@ language_servers_config:
   writer: "audiagentic.components.providers.adapters.codex.language_servers:write_language_servers_codex"
   remover: "audiagentic.components.providers.adapters.codex.language_servers:remove_language_servers_codex"
   format: "codex-toml"
+
+hooks_config:
+  config_path: "~/.codex/hooks.json"
+  reader: "audiagentic.components.providers.adapters.codex.hooks_format:read_codex_hooks"
+  writer: "audiagentic.components.providers.adapters.codex.hooks_format:write_codex_hooks"
+  remover: "audiagentic.components.providers.adapters.codex.hooks_format:remove_codex_hook"
+  format: "codex-hooks-json"
+  refresh_mode: "restart-required"

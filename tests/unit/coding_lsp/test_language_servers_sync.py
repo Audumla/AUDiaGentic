@@ -19,14 +19,6 @@ from audiagentic.foundation.features.base import (
 from audiagentic.foundation.features.state import set_feature_state
 
 
-def setup_function() -> None:
-    feature_registry.clear()
-
-
-def teardown_function() -> None:
-    feature_registry.clear()
-
-
 def _enable_python(tmp_path: Path, *, settings: dict | None = None) -> None:
     feature_registry.register(
         BindingDescriptor(
@@ -171,28 +163,28 @@ def test_generic_mcp_projection_uses_implementation_descriptor(tmp_path: Path, m
     captured: dict[str, Any] = {}
 
     def fake_manage_all(project_root, *, mode, request):
-        from audiagentic.components.providers.contracts.lsp_mcp_projection import (
-            LspMcpProjectionResult,
+        from audiagentic.components.providers.contracts.managed_mcp import (
+            ManagedMcpResult,
         )
         captured.update({
             "root": project_root,
             "mode": mode,
-            "managed_ids": set(request.managed_ids),
+            "ownership_scope": request.ownership_scope,
             "entries": list(request.entries),
         })
-        return [LspMcpProjectionResult(ok=True, provider_id="codex")]
+        return [ManagedMcpResult(ok=True, supported=True)]
 
     monkeypatch.setattr(
-        "audiagentic.components.providers.providers_api.manage_lsp_mcp_projection_all",
+        "audiagentic.components.coding_lsp.language_servers_sync.manage_mcp_entries_all",
         fake_manage_all,
     )
 
     result = sync_generic_lsp_mcp_to_providers(tmp_path)
 
-    assert result["synced"] == ["codex"]
+    assert result["synced"] == [""]
     assert captured["root"] == tmp_path
     assert captured["mode"] == "apply"
-    assert captured["managed_ids"] == {"coding-lsp/custom-lsp"}
+    assert captured["ownership_scope"] == "coding-lsp/ag-lsp"
     entry = captured["entries"][0]
     assert entry.managed_id == "coding-lsp/custom-lsp"
     assert entry.name == "custom-lsp"
@@ -200,7 +192,7 @@ def test_generic_mcp_projection_uses_implementation_descriptor(tmp_path: Path, m
     assert entry.args == ("serve", "--stdio")
 
 
-def test_prune_generic_mcp_uses_descriptor_managed_ids(tmp_path: Path, monkeypatch) -> None:
+def test_prune_generic_mcp_uses_scope(tmp_path: Path, monkeypatch) -> None:
     feature_registry.register(
         ImplementationDescriptor(
             parent="coding-lsp",
@@ -211,20 +203,26 @@ def test_prune_generic_mcp_uses_descriptor_managed_ids(tmp_path: Path, monkeypat
     captured: dict[str, Any] = {}
 
     def fake_manage_all(project_root, *, mode, request):
-        from audiagentic.components.providers.contracts.lsp_mcp_projection import (
-            LspMcpProjectionResult,
+        from audiagentic.components.providers.contracts.managed_mcp import (
+            ManagedMcpResult,
         )
-        captured.update({"root": project_root, "mode": mode, "managed_ids": set(request.managed_ids)})
-        return [LspMcpProjectionResult(ok=True, provider_id="codex", pruned=("coding-lsp/custom-lsp",))]
+        captured.update({
+            "root": project_root,
+            "mode": mode,
+            "ownership_scope": request.ownership_scope,
+            "entries": list(request.entries),
+        })
+        return [ManagedMcpResult(ok=True, supported=True)]
 
     monkeypatch.setattr(
-        "audiagentic.components.providers.providers_api.manage_lsp_mcp_projection_all",
+        "audiagentic.components.coding_lsp.language_servers_sync.manage_mcp_entries_all",
         fake_manage_all,
     )
 
     result = prune_generic_lsp_mcp_from_providers(tmp_path)
 
-    assert result["pruned"] == ["codex"]
+    assert result["pruned"] == [""]
     assert captured["mode"] == "prune"
-    assert captured["managed_ids"] == {"coding-lsp/custom-lsp"}
+    assert captured["ownership_scope"] == "coding-lsp/ag-lsp"
+    assert not captured["entries"]
     assert captured["root"] == tmp_path

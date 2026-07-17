@@ -25,14 +25,6 @@ from audiagentic.foundation.features.state import (
 )
 
 
-def setup_function() -> None:
-    feature_registry.clear()
-
-
-def teardown_function() -> None:
-    feature_registry.clear()
-
-
 def test_resolve_project_root_prefers_repo_root_for_nested_file(tmp_path: Path) -> None:
     (tmp_path / ".audiagentic").mkdir()
     nested = tmp_path / "src" / "pkg" / "mod.py"

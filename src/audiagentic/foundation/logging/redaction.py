@@ -130,10 +130,8 @@ def _summarize_value(value: Any, depth: int) -> Any:
         summarized: dict[str, Any] = {}
         for k, v in items[:_MAX_STRUCT_ENTRIES]:
             key_str = str(k)
-            if is_sensitive_key(key_str):
+            if is_sensitive_key(key_str) or is_bulk_key(key_str):
                 summarized[key_str] = _REDACTED
-            elif is_bulk_key(key_str):
-                summarized[key_str] = redact_text(v)[:_MAX_LEAF_STR_LEN]
             else:
                 summarized[key_str] = _summarize_value(v, depth + 1)
         if len(items) > _MAX_STRUCT_ENTRIES:

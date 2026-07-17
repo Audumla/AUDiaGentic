@@ -77,6 +77,28 @@ Cline now offers a "Claude Code" provider in the BYOK cloud provider table, usin
 
 ---
 
+## ACP status
+
+| Field | Value |
+|---|---|
+| **ACP support** | Adapter |
+| **Registry ID** | `anthropic/claude-code` |
+| **Launch command** | `npx anthropic/claude-code@latest` (adapter package) |
+| **Distribution** | npx (npm adapter) |
+
+Claude Code uses an ACP adapter. The `anthropic/claude-code` npm package provides the ACP interface for Claude Code instances.
+
+## Config override at startup
+
+| Field | Value |
+|---|---|
+| **CLI flag** | No documented `--config` flag |
+| **Env var** | No documented env var for config override |
+
+Claude Code does not support startup config override. Config is fixed at user home path (`~/.claude/`).
+
+---
+
 ## Projection mode implications for AG
 
 - Claude Code is a **native vendor tool** — it uses only Anthropic's own models and API. No external vendor routing, no key injection surface for other vendors, no custom endpoint configuration.

@@ -42,6 +42,18 @@
     "source": {
       "type": ["string", "null"]
     },
+    "session-id": {
+      "type": ["string", "null"]
+    },
+    "session-keep-alive": {
+      "type": "boolean"
+    },
+    "session-idle-timeout-seconds": {
+      "type": ["number", "null"]
+    },
+    "session-max-lifetime-seconds": {
+      "type": ["number", "null"]
+    },
     "metadata": {
       "type": "object"
     },

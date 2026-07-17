@@ -191,6 +191,26 @@ Anthropic-compatible default capabilities:
 
 ---
 
+## ACP status
+
+| Field | Value |
+|---|---|
+| **ACP support** | None (not listed in registry) |
+| **Registry ID** | N/A — not in ACP registry v1.0.0 |
+
+Zed is not currently listed in the ACP registry v1.0.0. No ACP adapter package exists for this provider.
+
+## Config override at startup
+
+| Field | Value |
+|---|---|
+| **CLI flag** | No documented `--config` flag |
+| **Env var** | No documented env var for config override |
+
+Zed does not support startup config override.
+
+---
+
 ## Projection mode implications for AG
 
 - **Custom-entries**: Primary path. Write `language_models.openai_compatible.<provider>` or `anthropic_compatible.<provider>` entries into user-global `settings.json`. BLOCKED on project-scope verification, settings merge behavior, reload behavior, and default model pointer.

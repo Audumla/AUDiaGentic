@@ -18,3 +18,20 @@ kinds:
           rejected: []
         state-sets:
           terminal: [completed, failed, cancelled, rejected]
+  # Live agent session lifecycle (plan agent-sessions AS03). Live handles are
+  # in-memory (SessionRuntime); these records are the durable audit/resume
+  # anchor. 'expired' = closed by the idle/max-lifetime reaper.
+  gateway-session:
+    default-workflow: standard
+    workflows:
+      standard:
+        initial: active
+        values: [active, closing, closed, expired, failed]
+        transitions:
+          active: [closing, closed, expired, failed]
+          closing: [closed, failed]
+          closed: []
+          expired: []
+          failed: []
+        state-sets:
+          terminal: [closed, expired, failed]

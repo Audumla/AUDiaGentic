@@ -19,14 +19,6 @@ from audiagentic.foundation.features.state import (
 )
 
 
-def setup_function() -> None:
-    feature_registry.clear()
-
-
-def teardown_function() -> None:
-    feature_registry.clear()
-
-
 def _register_language_bindings() -> None:
     feature_registry.register(
         BindingDescriptor(

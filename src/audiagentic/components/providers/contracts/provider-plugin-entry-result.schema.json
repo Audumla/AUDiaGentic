@@ -4,10 +4,11 @@
   "title": "Provider Plugin Entry Result",
   "type": "object",
   "additionalProperties": false,
-  "required": ["ok", "supported", "changed", "present", "action_needed", "error_code"],
+  "required": ["ok", "supported", "provider_id", "changed", "present", "action_needed", "error_code"],
   "properties": {
     "ok": {"type": "boolean"},
     "supported": {"type": "boolean"},
+    "provider_id": {"type": "string"},
     "changed": {"type": "boolean"},
     "present": {"type": "boolean"},
     "action_needed": {"type": ["string", "null"]},

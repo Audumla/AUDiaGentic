@@ -57,6 +57,29 @@ def _load_runner(provider_id: str) -> ProviderRunner | None:
     return runner
 
 
+def load_acp_launch_builder(provider_id: str) -> Callable[..., Any] | None:
+    """Return the provider's ACP launch builder if it supports live sessions.
+
+    Convention (plan agent-sessions AS04): an adapter package that supports
+    live ACP sessions exposes ``build_acp_launch(project_root, *, model_id)``
+    in its ``acp`` submodule (opencode already does). Returns None when the
+    provider has no live-session support — the caller decides how to fail.
+    This is the one allowed provider hook for the session dispatch path,
+    mirroring the ``run`` entrypoint convention for one-shot execution.
+    """
+    name = provider_id.replace("-", "_")
+    if keyword.iskeyword(name):
+        name = name + "_"
+    module_path = f"{_ADAPTER_BASE}.{name}.acp"
+    try:
+        if not importlib.util.find_spec(module_path):
+            return None
+    except (ModuleNotFoundError, AttributeError):
+        return None
+    module = import_module(module_path)
+    return getattr(module, "build_acp_launch", None)
+
+
 _EXECUTION_MODE_BY_DECLARATION: dict[str, str] = {
     "cli": "descriptor",
     "stub": "stub",

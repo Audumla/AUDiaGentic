@@ -95,6 +95,30 @@ Azure GPT-5 deployments reject `max_tokens` (sent by generic OpenAI-compatible p
 
 ---
 
+## ACP status
+
+| Field | Value |
+|---|---|
+| **ACP support** | Native |
+| **Registry ID** | `kilo` |
+| **Launch command** | `kilo acp` |
+| **Distribution** | Binary (5 platforms) + npx, SHA256 verified |
+
+Kilo Code natively implements ACP. As a fork of OpenCode, the same ACP transport applies.
+
+## Config override at startup
+
+| Field | Value |
+|---|---|
+| **CLI flag** | No dedicated `--config` flag |
+| **Env var: file path** | `KILO_CONFIG` — alternate config file path (inherited from OpenCode) |
+| **Env var: inline JSON** | `KILO_CONFIG_CONTENT` — inline JSON config content, no file I/O needed |
+| **Env var: provider override** | `KILO_PROVIDER` — override the active provider ID |
+
+Same config isolation as OpenCode. `KILO_CONFIG_CONTENT` is the strongest mechanism for isolated launch.
+
+---
+
 ## Projection mode implications for AG
 
 - **Custom-entries**: Primary path. Write `{provider: {<id>: {...}}}` into project `kilo.jsonc`. BLOCKED until installed schema, project/global precedence, and reload behavior are verified.

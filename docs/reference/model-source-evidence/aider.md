@@ -96,6 +96,27 @@ Aider now has a dedicated "Advanced model settings" configuration page, confirmi
 
 ---
 
+## ACP status
+
+| Field | Value |
+|---|---|
+| **ACP support** | None (not listed in registry) |
+| **Registry ID** | N/A — not in ACP registry v1.0.0 |
+
+Aider is not currently listed in the ACP registry v1.0.0. No ACP adapter package exists for this provider.
+
+## Config override at startup
+
+| Field | Value |
+|---|---|
+| **CLI flag** | No dedicated `--config` flag |
+| **Env var: file path** | `AIDER_CONFIG` — alternate config file path (inferred from vendor pattern) |
+| **Config file** | `.aider.conf.yml` — structured YAML config surface |
+
+Aider uses a per-repo or user-home `.aider.conf.yml` for structured configuration. No CLI flag for config override, but `AIDER_CONFIG` env var may allow alternate path (pattern inferred from dedicated vendor env naming convention).
+
+---
+
 ## Projection mode implications for AG
 
 - **Native-key-injection (env)**: Primary viable path. Set dedicated vendor env vars (`AIDER_OPENAI_API_KEY`, `AIDER_ANTHROPIC_API_KEY`) or generic pattern (`GEMINI_API_KEY`, `OPENROUTER_API_KEY`). Model selection via `AIDER_MODEL` env var. No file mutation required — pure launch-env contribution.

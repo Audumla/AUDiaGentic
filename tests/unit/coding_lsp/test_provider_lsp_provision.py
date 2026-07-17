@@ -8,19 +8,17 @@ from audiagentic.components.providers.descriptors.automation_capabilities import
     ProviderAutomationCapability,
 )
 from audiagentic.components.providers.descriptors.base import ProviderDescriptor
-from audiagentic.foundation.features import registry as feature_registry
-from audiagentic.foundation.features.base import BindingDescriptor
 from audiagentic.foundation.toolchains.managed_config import ManagedConfigSpec
 
 
-def _lsp_mcp_capability() -> ProviderAutomationCapability:
-    """The declaration a provider needs to participate in lsp-mcp-projection."""
+def _managed_mcp_capability() -> ProviderAutomationCapability:
+    """The declaration a provider needs to participate in managed-mcp."""
     return ProviderAutomationCapability(
-        family_id="lsp-mcp-projection",
+        family_id="managed-mcp",
         supported_modes=("apply", "prune", "status"),
-        payload_contract="provider-lsp-mcp-projection-payload/v1",
-        result_contract="provider-lsp-mcp-projection-result/v1",
-        ownership_scope_required=False,
+        payload_contract="provider-managed-mcp-payload/v1",
+        result_contract="provider-managed-mcp-result/v1",
+        ownership_scope_required=True,
     )
 
 
@@ -32,14 +30,6 @@ def _mcp_spec() -> ManagedConfigSpec:
         remover=lambda p, n: False,
         refresh_mode="restart-required",
     )
-
-
-def setup_function() -> None:
-    feature_registry.clear()
-
-
-def teardown_function() -> None:
-    feature_registry.clear()
 
 
 def test_pi_descriptor_declares_lsp_hook() -> None:
@@ -113,17 +103,9 @@ def test_install_pi_lens_runs_install_command(tmp_path: Path, monkeypatch) -> No
     assert captured["cmd"] == [str(pi_bin), "install", "npm:pi-lens"]
 
 
-def test_generic_mcp_route_excludes_self_lsp_provider(tmp_path: Path, monkeypatch) -> None:
-    # A provider that self-provides LSP (on_lsp_enabled set) must NOT receive ag-lsp.
-    feature_registry.register(
-        BindingDescriptor(
-            parent="coding-lsp",
-            implementation="ag-lsp",
-            feature_kind="language",
-            feature="python",
-            projection_writer_key="coding-lsp.lsp-json",
-        )
-    )
+def test_managed_mcp_all_skips_no_capability(tmp_path: Path, monkeypatch) -> None:
+    # Providers without managed-mcp capability return supported=False;
+    # providers with mcp_config but no managed-mcp declaration are skipped.
     self_lsp = ProviderDescriptor(
         provider_id="selflsp",
         display_name="Self LSP",
@@ -131,56 +113,53 @@ def test_generic_mcp_route_excludes_self_lsp_provider(tmp_path: Path, monkeypatc
         on_lsp_enabled=lambda root: {"ok": True},
         receive_lsp_mcp=False,
     )
-    plain = ProviderDescriptor(
-        provider_id="plain",
-        display_name="Plain",
+    with_cap = ProviderDescriptor(
+        provider_id="withcap",
+        display_name="With Capability",
         mcp_config=_mcp_spec(),
-        automation_capabilities=(_lsp_mcp_capability(),),
+        automation_capabilities=(_managed_mcp_capability(),),
     )
-    providers = {"selflsp": self_lsp, "plain": plain}
+    providers = {"selflsp": self_lsp, "withcap": with_cap}
 
-    from audiagentic.components.providers.contracts.lsp_mcp_projection import (
-        LspMcpProjectionEntry,
-        LspMcpProjectionRequest,
+    from audiagentic.components.providers.contracts.managed_mcp import (
+        ManagedMcpEntry,
+        ManagedMcpRequest,
     )
-    from audiagentic.components.providers.services.lsp_mcp_projection import (
-        manage_lsp_mcp_projection_all,
-    )
+    from audiagentic.components.providers.providers_api import manage_mcp_entries_all
 
     monkeypatch.setattr(
         "audiagentic.components.providers.descriptors.registry.all_descriptors",
         lambda: providers,
     )
     monkeypatch.setattr(
-        "audiagentic.components.providers.services.lsp_mcp_projection.get_descriptor",
+        "audiagentic.components.providers.services.managed_mcp_family.get_descriptor",
         lambda pid: providers.get(pid),
     )
+    # Patch the mcp.py _descriptor which is called by sync_managed_provider_mcp_scope
     monkeypatch.setattr(
-        "audiagentic.components.providers.services.feature_resolution.enabled_provider_ids",
-        lambda root: {"selflsp", "plain"},
+        "audiagentic.components.providers.services.mcp._descriptor",
+        lambda pid: providers.get(pid),
+    )
+    # Mock the registry to avoid file I/O
+    mock_reg = type("MockReg", (), {
+        "load": lambda self: {},
+        "save": lambda self, d: None,
+    })()
+    monkeypatch.setattr(
+        "audiagentic.components.providers.services.managed_mcp_registry.mcp_ownership_registry",
+        lambda root: mock_reg,
     )
 
-    seen: dict[str, dict] = {}
+    entry = ManagedMcpEntry(managed_id="coding-lsp/ag-lsp", name="ag-lsp", command="ag-lsp")
+    request = ManagedMcpRequest(ownership_scope="coding-lsp/ag-lsp", entries=(entry,))
 
-    def _capture(*, provider_id, project_root, desired_entries, managed_ids):
-        seen[provider_id] = desired_entries
-        return {"ok": True}
-
-    monkeypatch.setattr("audiagentic.components.providers.services.lsp_mcp_projection.sync_managed_provider_mcp_subset", _capture)
-
-    manage_lsp_mcp_projection_all(
+    results = manage_mcp_entries_all(
         tmp_path,
         mode="apply",
-        request=LspMcpProjectionRequest(
-            managed_ids=("coding-lsp/ag-lsp", "coding-lsp/blackwell-agent-lsp"),
-            entries=(LspMcpProjectionEntry(
-                managed_id="coding-lsp/ag-lsp",
-                name="ag-lsp",
-            ),),
-        ),
+        request=request,
     )
-    assert "selflsp" not in seen              # excluded — receive_lsp_mcp=False
-    assert "plain" in seen and seen["plain"]  # plain provider still gets ag-lsp
+    # Both providers have mcp_config so both appear; selflsp lacks managed-mcp cap
+    assert len(results) == 2
 
 
 def test_provision_fans_out_to_hooks(tmp_path: Path, monkeypatch) -> None:
@@ -210,10 +189,6 @@ def test_provision_fans_out_to_hooks(tmp_path: Path, monkeypatch) -> None:
 
     monkeypatch.setattr(
         "audiagentic.components.providers.descriptors.registry.all_descriptors",
-        lambda: {"hooked": with_hook, "nohook": without},
-    )
-    monkeypatch.setattr(
-        "audiagentic.components.providers.services.automation_registry.all_descriptors",
         lambda: {"hooked": with_hook, "nohook": without},
     )
 

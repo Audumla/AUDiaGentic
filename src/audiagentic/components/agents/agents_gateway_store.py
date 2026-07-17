@@ -131,6 +131,10 @@ def build_record(
     fallback_profile_ids: list[str] | None = None,
     source: str | None = None,
     metadata: dict[str, Any] | None = None,
+    session_id: str | None = None,
+    session_keep_alive: bool = False,
+    session_idle_timeout_seconds: float | None = None,
+    session_max_lifetime_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Build a new gateway request record in the initial 'queued' state.
 
@@ -169,6 +173,58 @@ def build_record(
             message="fallback_profile_ids must be a list of strings",
             details={"fallback_profile_ids": fallback_profile_ids},
         )
+    if session_id is not None and session_keep_alive:
+        raise AudiaGenticError(
+            code="VAL-AGW-057",
+            kind="agents",
+            message="session_id (continue an existing session) and session_keep_alive "
+                    "(open a new one) are mutually exclusive",
+            details={"session_id": session_id},
+        )
+    if (session_id is not None or session_keep_alive) and fallback_profile_ids:
+        # A sessionful request cannot fall back to a different profile —
+        # a conversation must never silently switch provider/model mid-flight.
+        raise AudiaGenticError(
+            code="VAL-AGW-058",
+            kind="agents",
+            message="sessionful requests cannot use fallback_profile_ids",
+            details={"session_id": session_id, "session_keep_alive": session_keep_alive},
+        )
+    # Session bounds are fixed when the session is opened, so they are only
+    # valid with keep-alive. 0 disables that bound (RV513 — remote-control
+    # sessions opt out of idle/lifetime caps); negatives are invalid.
+    if session_idle_timeout_seconds is not None:
+        if not session_keep_alive:
+            raise AudiaGenticError(
+                code="VAL-AGW-059",
+                kind="agents",
+                message="session_idle_timeout_seconds is only valid with session_keep_alive "
+                        "(the timeout is fixed when the session is opened)",
+                details={},
+            )
+        if session_idle_timeout_seconds < 0:
+            raise AudiaGenticError(
+                code="VAL-AGW-059",
+                kind="agents",
+                message="session_idle_timeout_seconds must be positive, or 0 to disable the idle timeout",
+                details={"session_idle_timeout_seconds": session_idle_timeout_seconds},
+            )
+    if session_max_lifetime_seconds is not None:
+        if not session_keep_alive:
+            raise AudiaGenticError(
+                code="VAL-AGW-061",
+                kind="agents",
+                message="session_max_lifetime_seconds is only valid with session_keep_alive "
+                        "(the cap is fixed when the session is opened)",
+                details={},
+            )
+        if session_max_lifetime_seconds < 0:
+            raise AudiaGenticError(
+                code="VAL-AGW-061",
+                kind="agents",
+                message="session_max_lifetime_seconds must be positive, or 0 to disable the lifetime cap",
+                details={"session_max_lifetime_seconds": session_max_lifetime_seconds},
+            )
     timestamp = now_iso_z()
     payload: dict[str, Any] = {
         "contract-version": "v1",
@@ -179,6 +235,10 @@ def build_record(
         "timeout-seconds": timeout_seconds,
         "fallback-profile-ids": list(fallback_profile_ids or []),
         "source": source,
+        "session-id": session_id,
+        "session-keep-alive": bool(session_keep_alive),
+        "session-idle-timeout-seconds": session_idle_timeout_seconds,
+        "session-max-lifetime-seconds": session_max_lifetime_seconds,
         "metadata": dict(metadata or {}),
         "state": "queued",
         "cancel-requested": False,

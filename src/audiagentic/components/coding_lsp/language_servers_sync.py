@@ -14,6 +14,10 @@ from audiagentic.components.coding_lsp.runtime_resolver import (
 )
 from audiagentic.components.providers.providers_api import (
     LanguageServerEntry,
+    ManagedMcpEntry,
+    ManagedMcpRequest,
+    adopt_legacy_mcp_ownership,
+    manage_mcp_entries_all,
 )
 from audiagentic.foundation.features.registry import (
     get_binding_writer,
@@ -27,6 +31,7 @@ from audiagentic.foundation.mcp import McpServerEntry
 from audiagentic.foundation.mcp.launch import component_mcp_launch
 
 _COMPONENT_ID = "coding-lsp"
+_MCP_OWNERSHIP_SCOPE = "coding-lsp/ag-lsp"
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +70,23 @@ def _generic_mcp_managed_ids() -> set[str]:
         if isinstance(managed_id, str) and managed_id:
             ids.add(managed_id)
     return ids
+
+
+def _to_managed_mcp_entry(
+    managed_id: str, name: str, entry: McpServerEntry,
+) -> ManagedMcpEntry:
+    """Convert an McpServerEntry projection to a ManagedMcpEntry."""
+    cmd = entry.command or None
+    return ManagedMcpEntry(
+        managed_id=managed_id,
+        name=name,
+        command=cmd,
+        args=entry.args,
+        env=tuple(sorted(entry.env.items())) if entry.env else (),
+        url=entry.url,
+        headers=tuple(sorted(entry.headers.items())) if entry.headers else (),
+        transport=("http" if entry.transport == "http" else ("sse" if entry.transport == "sse" else None)),
+    )
 
 
 def _generic_mcp_projection(project_root: Path, implementation: str) -> dict[str, tuple[str, McpServerEntry]]:
@@ -248,29 +270,19 @@ def sync_language_servers_to_providers(project_root: Path) -> dict[str, Any]:
 def sync_generic_lsp_mcp_to_providers(project_root: Path) -> dict[str, Any]:
     """Sync selected generic LSP MCP projection to provider configs."""
     desired_entry = _generic_lsp_projection_for_active_implementation(project_root)
-    managed_ids = _generic_mcp_managed_ids()
-
-    from audiagentic.components.providers.providers_api import (
-        LspMcpProjectionEntry,
-        LspMcpProjectionRequest,
-        manage_lsp_mcp_projection_all,
+    # Migrate registry scope from legacy provider_id to scoped key before apply
+    adopt_legacy_mcp_ownership(
+        project_root,
+        ownership_scope=_MCP_OWNERSHIP_SCOPE,
+        managed_ids=frozenset(_generic_mcp_managed_ids()),
     )
 
     entries = tuple(
-        LspMcpProjectionEntry(
-            managed_id=mid,
-            name=name,
-            command=entry.command,
-            args=entry.args,
-            env=tuple(sorted(entry.env.items())) if entry.env else (),
-            url=entry.url,
-            headers=tuple(sorted(entry.headers.items())) if entry.headers else (),
-            transport=("http" if entry.transport == "http" else ("sse" if entry.transport == "sse" else None)),
-        )
+        _to_managed_mcp_entry(mid, name, entry)
         for mid, (name, entry) in desired_entry.items()
     )
-    request = LspMcpProjectionRequest(managed_ids=tuple(sorted(managed_ids)), entries=entries)
-    results = manage_lsp_mcp_projection_all(
+    request = ManagedMcpRequest(ownership_scope=_MCP_OWNERSHIP_SCOPE, entries=entries)
+    results = manage_mcp_entries_all(
         project_root,
         mode="apply",
         request=request,
@@ -278,10 +290,10 @@ def sync_generic_lsp_mcp_to_providers(project_root: Path) -> dict[str, Any]:
     synced: list[str] = []
     skipped: list[str] = []
     for result in results:
-        if result.ok and result.provider_id:
-            synced.append(result.provider_id)
+        if result.ok and result.supported:
+            synced.append(result.provider_id or "")
         else:
-            skipped.append(result.provider_id)
+            skipped.append(result.provider_id or "")
 
     return {
         "ok": True,
@@ -350,16 +362,19 @@ def prune_language_servers_from_providers(project_root: Path) -> dict[str, Any]:
 
 
 def prune_generic_lsp_mcp_from_providers(project_root: Path) -> dict[str, Any]:
-    """Remove coding-lsp managed generic LSP MCP entries from provider configs."""
-    managed_ids = _generic_mcp_managed_ids()
+    """Remove coding-lsp managed generic LSP MCP entries from provider configs.
 
-    from audiagentic.components.providers.providers_api import (
-        LspMcpProjectionRequest,
-        manage_lsp_mcp_projection_all,
+    Uses mode="prune" with empty entries — the engine prunes all entries
+    owned by the scope key, so no caller-supplied managed_ids list is needed.
+    """
+    adopt_legacy_mcp_ownership(
+        project_root,
+        ownership_scope=_MCP_OWNERSHIP_SCOPE,
+        managed_ids=frozenset(_generic_mcp_managed_ids()),
     )
 
-    request = LspMcpProjectionRequest(managed_ids=tuple(sorted(managed_ids)), entries=())
-    results = manage_lsp_mcp_projection_all(
+    request = ManagedMcpRequest(ownership_scope=_MCP_OWNERSHIP_SCOPE, entries=())
+    results = manage_mcp_entries_all(
         project_root,
         mode="prune",
         request=request,
@@ -367,10 +382,10 @@ def prune_generic_lsp_mcp_from_providers(project_root: Path) -> dict[str, Any]:
     pruned: list[str] = []
     skipped: list[str] = []
     for result in results:
-        if result.ok and result.provider_id:
-            pruned.append(result.provider_id)
+        if result.ok and result.supported:
+            pruned.append(result.provider_id or "")
         else:
-            skipped.append(result.provider_id)
+            skipped.append(result.provider_id or "")
 
     return {
         "ok": True,

@@ -585,7 +585,7 @@ class PluginArrayRecipe(PluginRecipe):
 
         result = manage_plugin_entry(
             self._project_root, self.provider_id, mode="status",
-            request=PluginEntryRequest(self._package, tuple(self._expected_options().items())),
+            request=PluginEntryRequest(self._package, ownership_scope="hindsight", options=tuple(self._expected_options().items())),
         )
         if result.ok and result.present:
             return self._stamp(ProviderRecipeResult.ok(
@@ -608,7 +608,7 @@ class PluginArrayRecipe(PluginRecipe):
 
         result = manage_plugin_entry(
             self._project_root, self.provider_id, mode="apply",
-            request=PluginEntryRequest(self._package, tuple(self._expected_options().items())),
+            request=PluginEntryRequest(self._package, ownership_scope="hindsight", options=tuple(self._expected_options().items())),
         )
         if not result.ok:
             return self._stamp(ProviderRecipeResult.fail(result.error_code or "plugin entry write failed"))
@@ -633,7 +633,7 @@ class PluginArrayRecipe(PluginRecipe):
 
         manage_plugin_entry(
             self._project_root, self.provider_id, mode="prune",
-            request=PluginEntryRequest(self._package),
+            request=PluginEntryRequest(self._package, ownership_scope="hindsight"),
         )
         return self._stamp(ProviderRecipeResult.ok(
             RecipeState.ABSENT, status="plugin array entry removed",

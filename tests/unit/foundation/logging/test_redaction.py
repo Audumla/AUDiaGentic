@@ -159,8 +159,10 @@ class TestSummarizeStructure:
             "nested": {"token": "tkn"},
         }
         summary = summarize_structure(payload)
-        # prompt-body is BULK_KEY — content-redacted, NOT blanked. Clean diagnostic survives.
-        assert "SECRET_PROMPT" in summary
+        # prompt-body is BULK_KEY — fully redacted to prevent secret leakage.
+        assert "SECRET_PROMPT" not in summary
+        assert "prompt-body" in summary
+        assert summary.index("[REDACTED]") >= 0
         # api_key is SECRET_KEY — blanket-replaced.
         assert "sk-123" not in summary
         # nested.token is SECRET_KEY — blanket-replaced.

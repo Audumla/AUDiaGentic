@@ -255,6 +255,178 @@ def _try_profile_with_retries(
     raise last_exc
 
 
+def _is_session_request(record: dict[str, Any]) -> bool:
+    return bool(record.get("session-id") or record.get("session-keep-alive"))
+
+
+def _session_output_from_result(result: Any) -> str | None:
+    """Concatenate assistant-message texts from an AcpResult into the
+    gateway record's output field (same contract keys as one-shot dispatch).
+
+    ACP agents stream agent_message_chunk fragments — mid-word splits are
+    normal — so chunks are joined with NO separator (AS07 live-gate finding:
+    a newline join corrupted output into 'TOKEN\\n STORE\\nD\\n.')."""
+    texts = [
+        event.text
+        for event in result.events
+        if event.kind == "assistant-message" and event.text
+    ]
+    # Text carried by events the transport's budgets dropped (long turns) —
+    # appended so the worker's final report survives cap pressure intact.
+    overflow = getattr(result, "overflow_text", None)
+    if overflow:
+        texts.append(overflow)
+    return "".join(texts) if texts else None
+
+
+def _dispatch_session_request(project_root: Path, record: dict[str, Any]) -> dict[str, Any]:
+    """Dispatch a sessionful request through the live SessionRuntime (AS04).
+
+    No retry and no fallback on this path — retrying inside a stateful
+    conversation is not idempotent, and falling back to another profile
+    would silently switch provider/model mid-conversation (VAL-AGW-058
+    already rejects fallback ids at build time; this path never consults
+    them). Any turn failure is terminal for the request.
+    """
+    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+    from audiagentic.components.agents.agents_api import resolve_profile
+    from audiagentic.components.agents.agents_gateway_sessions import get_session_runtime
+    from audiagentic.components.providers.services.execution import load_acp_launch_builder
+    from audiagentic.components.providers.services.models import resolve_model_selection
+    from audiagentic.components.providers.services.provider_config import (
+        is_provider_enabled,
+        load_provider_config,
+    )
+
+    request_id = record["request-id"]
+    agent_profile_id = record["agent-profile-id"]
+    runtime = get_session_runtime()
+
+    profile = resolve_profile(project_root, agent_profile_id)
+    provider_id = profile["provider_id"]
+
+    session_id = record.get("session-id")
+    started_at = now_iso_z()
+    try:
+        if not is_provider_enabled(project_root, provider_id):
+            raise _resolve_provider_disabled_error(provider_id)
+        if session_id is None:
+            # keep-alive: open a new session bound to this profile
+            builder = load_acp_launch_builder(provider_id)
+            if builder is None:
+                raise AudiaGenticError(
+                    code="UNS-AGW-001",
+                    kind="agents",
+                    message="provider does not support live agent sessions",
+                    details={"provider-id": provider_id},
+                )
+            provider_cfg = load_provider_config(project_root).get("providers", {}).get(provider_id, {})
+            model = resolve_model_selection(
+                provider_id=provider_id,
+                provider_config=provider_cfg,
+                job_request={"model-id": profile.get("model_id"), "model-alias": profile.get("model_alias")},
+            )
+            model_id = model.get("model-id") or model.get("resolved")
+            params = profile.get("params", {})
+            session_record = runtime.open_session(
+                project_root,
+                agent_profile_id=agent_profile_id,
+                launch=builder(project_root, model_id=model_id),
+                provider_id=provider_id,
+                model_id=model_id,
+                # Request value wins over profile params; 0 disables the bound
+                # (RV513) — use explicit None checks so 0 survives resolution.
+                idle_timeout_seconds=(
+                    record.get("session-idle-timeout-seconds")
+                    if record.get("session-idle-timeout-seconds") is not None
+                    else _params_get(params, "session-idle-timeout-seconds", "session_idle_timeout_seconds")
+                ),
+                max_lifetime_seconds=(
+                    record.get("session-max-lifetime-seconds")
+                    if record.get("session-max-lifetime-seconds") is not None
+                    else _params_get(params, "session-max-lifetime-seconds", "session_max_lifetime_seconds")
+                ),
+            )
+            session_id = session_record["session-id"]
+        else:
+            # continue: the session must exist and be bound to the same profile
+            session_record = session_store.read_session_record(project_root, session_id)
+            if session_record["agent-profile-id"] != agent_profile_id:
+                raise AudiaGenticError(
+                    code="VAL-AGW-060",
+                    kind="agents",
+                    message="request agent profile does not match the session's profile",
+                    details={
+                        "session-id": session_id,
+                        "session-profile": session_record["agent-profile-id"],
+                        "request-profile": agent_profile_id,
+                    },
+                )
+
+        _raise_if_cancelled(project_root, request_id)
+        store.record_gateway_timeline(
+            project_root, request_id, "attempt.started",
+            state=store.read_record(project_root, request_id)["state"],
+            attributes={
+                "agent-profile-id": agent_profile_id,
+                "provider-id": provider_id,
+                "session-id": session_id,
+                "attempt-index": 0,
+                "max-attempts": 1,
+            },
+        )
+        result = runtime.prompt_in_session(
+            project_root, session_id, record.get("prompt-body") or "",
+            request_id=request_id,
+        )
+    except _CancelledDuringDispatch:
+        return store.transition_record(project_root, request_id, "cancelled")
+    except AudiaGenticError as exc:
+        store.append_attempt(
+            project_root, request_id,
+            agent_profile_id=agent_profile_id,
+            provider_id=provider_id,
+            model_id=profile.get("model_id"),
+            state="failed",
+            error=exc,
+            started_at=started_at,
+            finished_at=now_iso_z(),
+        )
+        return store.transition_record(
+            project_root, request_id, "failed",
+            updates={"error": exc, "session-id": session_id, "finished-at": now_iso_z()},
+        )
+
+    session_record = session_store.read_session_record(project_root, session_id)
+    model_id = session_record.get("model-id") or profile.get("model_id")
+    store.append_attempt(
+        project_root, request_id,
+        agent_profile_id=agent_profile_id,
+        provider_id=provider_id,
+        model_id=model_id,
+        state="completed",
+        started_at=started_at,
+        finished_at=now_iso_z(),
+    )
+    return store.transition_record(
+        project_root, request_id, "completed",
+        updates={
+            "provider-id": provider_id,
+            "model-id": model_id,
+            "output": _session_output_from_result(result),
+            "completion": {
+                "stop-reason": result.stop_reason,
+                "provider-session-ref": session_record.get("provider-session-ref"),
+                "total-events": result.total_events,
+                "dropped-events": result.dropped_events,
+            },
+            "usage": None,
+            "session-id": session_id,
+            "finished-at": now_iso_z(),
+        },
+    )
+
+
 def dispatch_request(project_root: Path, record: dict[str, Any]) -> dict[str, Any]:
     """Dispatch a queued/running gateway request record to completion.
 
@@ -263,12 +435,18 @@ def dispatch_request(project_root: Path, record: dict[str, Any]) -> dict[str, An
     transitions it before invoking the runner). Persists the terminal
     ('completed' or 'failed') state before returning.
 
+    Sessionful requests (session-id / session-keep-alive) route to the live
+    SessionRuntime via _dispatch_session_request — no retry, no fallback.
+
     Cancellation is cooperative and checked only BETWEEN attempts/fallback
     candidates (_raise_if_cancelled) — an in-flight execute_provider call
     (a subprocess or HTTP request already underway) is never interrupted
     mid-flight. A cancel recorded while an attempt is running takes effect
     only once that attempt returns (RV34 finding).
     """
+    if _is_session_request(record):
+        return _dispatch_session_request(project_root, record)
+
     candidates = [record["agent-profile-id"], *record.get("fallback-profile-ids", [])]
     last_error: AudiaGenticError | None = None
 

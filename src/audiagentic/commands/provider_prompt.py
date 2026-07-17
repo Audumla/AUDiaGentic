@@ -68,16 +68,11 @@ def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:
         print_error("providers component not available")
         return 1
 
-    from typing import cast
+    from audiagentic.components.providers.contracts.lifecycle_modes import (
+        provider_cli_mode_from_user_verb,
+    )
 
-    from audiagentic.components.providers.contracts.cli_lifecycle import CliLifecycleMode
-
-    mode_map = {
-        "install": "apply",
-        "uninstall": "prune",
-        "repair": "apply",
-    }
-    mode = cast(CliLifecycleMode, mode_map[action])
+    mode = provider_cli_mode_from_user_verb(action)
 
     import asyncio
 

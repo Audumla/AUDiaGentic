@@ -36,7 +36,6 @@ from .base import (
     ProviderPermissions,
 )
 from .capability_facts import validate_provider_capability_facts
-from .plugin_config import PluginConfigSpec
 from .spec import DescriptorSpec, iter_descriptor_files, load_descriptor
 
 
@@ -290,13 +289,27 @@ def _build_model_config(data: dict[str, Any]) -> ManagedConfigSpec:
     )
 
 
-def _build_plugin_config(data: dict[str, Any]) -> PluginConfigSpec:
-    return PluginConfigSpec(
+def _build_plugin_config(data: dict[str, Any]) -> ManagedConfigSpec:
+    """Build the plugin-entry ManagedConfigSpec from YAML dict (MA20)."""
+    return ManagedConfigSpec(
         config_path=data["config_path"],
         reader=resolve_ref(data["reader"]),
         writer=resolve_ref(data["writer"]),
         remover=resolve_ref(data["remover"]),
         format=data.get("format", ""),
+        refresh_mode=data.get("refresh_mode", "none"),
+    )
+
+
+def _build_hooks_config(data: dict[str, Any]) -> ManagedConfigSpec:
+    """Build the managed-hooks ManagedConfigSpec from YAML dict (MA26)."""
+    return ManagedConfigSpec(
+        config_path=data["config_path"],
+        reader=resolve_ref(data["reader"]),
+        writer=resolve_ref(data["writer"]),
+        remover=resolve_ref(data["remover"]),
+        format=data.get("format", ""),
+        refresh_mode=data.get("refresh_mode", "none"),
     )
 
 
@@ -329,6 +342,7 @@ PROVIDER_SPEC.add("fetch_catalog_fn", yaml_key="fetch_catalog_fn", kind="ref", d
 PROVIDER_SPEC.add("mcp_config", yaml_key="mcp_config", kind="nested", builder=_build_mcp_config, default=None)
 PROVIDER_SPEC.add("plugin_config", yaml_key="plugin_config", kind="nested", builder=_build_plugin_config, default=None)
 PROVIDER_SPEC.add("language_servers_config", yaml_key="language_servers_config", kind="nested", builder=_build_language_servers_config, default=None)
+PROVIDER_SPEC.add("hooks_config", yaml_key="hooks_config", kind="nested", builder=_build_hooks_config, default=None)
 PROVIDER_SPEC.add("model_config", yaml_key="model_config", kind="nested", builder=_build_model_config, default=None)
 PROVIDER_SPEC.add("model_entry_renderer", yaml_key="model_entry_renderer", kind="ref", default=None)
 PROVIDER_SPEC.add("supported_connectors", yaml_key="supported_connectors", kind="data", default=tuple(), converter=_list_to_tuple)

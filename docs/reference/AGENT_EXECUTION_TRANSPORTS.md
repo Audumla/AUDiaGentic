@@ -108,7 +108,23 @@ Canonical `kind` vocabulary (closed set; new kinds require MA18 review):
 
 Registered error codes: `CFG-ACP-001` (dependency missing, exists),
 `EXT-ACP-001` (execution failed, exists), `EXT-ACP-002` (malformed update,
-new), `EXT-ACP-003` (agent process exited unexpectedly, new).
+new), `EXT-ACP-003` (agent process exited unexpectedly, new),
+`CON-ACP-001` (session transport not open, sessions extension below).
+
+### Session lifecycle extension (RV512 on MA18; plan agent-sessions AS01)
+
+`AcpSessionTransport` keeps one child process and one protocol session alive
+across multiple `prompt()` turns: `open()` (spawn → initialize →
+new_session), `prompt()` × N, `close()` (idempotent; SDK unwind bounded by
+the 5s grace, then force terminate/kill — the child is never leaked, even
+when `open()` itself fails). The frozen per-turn event semantics above are
+UNCHANGED — every `prompt()` turn gets its own bounded-delivery pipeline and
+exactly one terminal `result` event. Process lifetime == session lifetime:
+no resume-after-death at this layer (AS10 build-out). Session updates
+arriving between turns are dropped and counted (`dropped_between_turns`).
+A child death mid-turn marks the transport dead; later `prompt()` calls
+raise `CON-ACP-001`. `run_acp_prompt` remains the behaviour-identical
+one-shot wrapper (open → prompt → close).
 
 ### Opens for dispatch
 

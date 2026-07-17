@@ -9,7 +9,6 @@ from audiagentic.foundation.steps import CallableStep, SequenceStep, ShellStep
 from audiagentic.foundation.toolchains.managed_config import ManagedConfigSpec
 
 from .automation_capabilities import ProviderAutomationCapability
-from .plugin_config import PluginConfigSpec
 
 
 @dataclass(frozen=True)
@@ -143,12 +142,18 @@ class ProviderDescriptor:
     # format can express url-form (remote) entries — consulted by capabilities
     # (e.g. hindsight) before projecting a remote entry.
     mcp_config: ManagedConfigSpec | None = None
-    # Generic named plugin-entry config capability. Requesters supply an entry
-    # identity/options; this descriptor owns native format/path mechanics.
-    plugin_config: PluginConfigSpec | None = None
+    # Generic named plugin-entry config capability (MA20). Requesters supply an
+    # entry identity/options; this descriptor owns native format/path mechanics.
+    # Uses ManagedConfigSpec so sync_managed_config can reconcile entries and
+    # preserve foreign plugins — same engine as mcp_config.
+    plugin_config: ManagedConfigSpec | None = None
     # Language server config spec — None means this provider doesn't accept LSP config sync.
     # kind="language-servers"; refresh_mode stays at the "none" default (no reload concept).
     language_servers_config: ManagedConfigSpec | None = None
+    # Native hooks config spec — None means this provider has no manageable hooks.
+    # Uses ManagedConfigSpec so sync_managed_config can reconcile hook entries and
+    # preserve foreign hooks — same engine as mcp_config (MA26).
+    hooks_config: ManagedConfigSpec | None = None
     # Model-endpoint config spec — None means AUDiaGentic cannot write managed
     # model entries into this provider's config (kind="model-endpoints"). The
     # reader/writer/remover trio is adapter-owned, same contract as mcp_config.

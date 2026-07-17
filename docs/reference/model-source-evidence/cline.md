@@ -100,6 +100,28 @@ Cline now exposes an agent core SDK (`@cline/sdk`) that powers the CLI, Kanban, 
 
 ---
 
+## ACP status
+
+| Field | Value |
+|---|---|
+| **ACP support** | Native |
+| **Registry ID** | `cline` |
+| **Launch command** | `npx @cline/cline-acp --mcp --acp` |
+| **Distribution** | npx (npm) |
+
+Cline natively implements ACP via the `@cline/cline-acp` npm package. The `--mcp` and `--acp` flags enable MCP integration alongside ACP protocol.
+
+## Config override at startup
+
+| Field | Value |
+|---|---|
+| **CLI flag** | No documented `--config` flag |
+| **Env var** | No documented env var for config override |
+
+Cline does not support startup config override. Config is fixed at user home path.
+
+---
+
 ## Projection mode implications for AG
 
 - **Native-key-injection (config)**: Viable through `cline auth --provider <id> --apikey <key>` for persistent configuration, or `-k --key` for per-run override. Supports OpenAI-compatible, Anthropic, Gemini provider ids natively. Requires user-home config writes.

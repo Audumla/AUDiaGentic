@@ -42,17 +42,62 @@ def _isolate_audiagentic_home(
 
 @pytest.fixture(autouse=True)
 def _reset_test_registries():
-    """Invalidate the loader's registration cache between every unit test.
+    """Restore canonical registry state between every unit test.
+
+    Clears the feature registry and resets the coding-lsp language_registry
+    (which loads from the feature registry), then invalidates the loader's
+    registration cache. This ensures that a test which clears the feature
+    registry (via setup_function/teardown_function or directly) does not
+    leave downstream tests with stale empty state — lazy loaders will
+    re-populate from component descriptors on next access.
+
+    Also forces key service modules to re-import their registry references,
+    clearing stale mock references left by patches at the definition site
+    (e.g., patching descriptors.registry.all_descriptors). This prevents a
+    test's patch from leaking into subsequent tests via already-imported
+    module-level name bindings.
 
     The CP02 cache guard in register_all_components() is keyed on resolved
-    config dirs; after a fixture clears underlying registries, a subsequent
-    lazy call would short-circuit and leave them empty (RV115: 67 failures).
-    This fixture clears the cache but preserves import-time registrations
-    that many test harnesses rely on.
+    config dirs; after clearing registries, a subsequent lazy call would
+    short-circuit and leave them empty (RV115: 67 failures). Clearing the
+    loader cache after registry resets prevents that.
+
+    Note: We do NOT call reset_all_registries() because provider tests may
+    register custom providers into other registries (e.g., renderer registry)
+    and expect them to persist within their test scope. Only the feature
+    registry and the language_registry (which depends on it) need explicit
+    reset for cross-file test isolation.
     """
     from audiagentic.foundation.components.loader import (
         _reset_registration_cache,
     )
+    from audiagentic.foundation.features.registry import clear
+
+    clear()
+
+    # Reset the coding-lsp language_registry so its lazy loader re-populates
+    # from (now-cleared) feature registry on next access.
+    try:
+        from audiagentic.components.coding_lsp.language_registry import _REGISTRY
+
+        _REGISTRY.reset()
+    except ImportError:
+        pass
+
+    # Force service modules to re-import their registry references, clearing
+    # stale mock bindings left by definition-site patches (e.g., patching
+    # descriptors.registry.all_descriptors). Without this, a test's patch can
+    # leak into subsequent tests via already-imported module-level names.
+    try:
+        import importlib
+
+        mod = __import__(
+            "audiagentic.components.providers.services.feature_resolution",
+            fromlist=["all_descriptors", "enabled_provider_ids"],
+        )
+        importlib.reload(mod)
+    except (ImportError, AttributeError):
+        pass
 
     _reset_registration_cache()
 

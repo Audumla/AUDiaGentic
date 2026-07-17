@@ -20,14 +20,15 @@ from audiagentic.foundation.time import now_iso_z
 
 @pytest.fixture(autouse=True)
 def _fresh_event_bus():
-    """Fresh bus per test; teardown restores the ORIGINAL bus so import-time
+    """Fresh bus per test; teardown restores an open bus so import-time
     observer subscriptions (memory, ledger, providers) survive this module."""
     from audiagentic.foundation.event import event_bus as event_bus_mod
 
-    saved_bus = event_bus_mod._bus_instance
+    saved_config = event_bus_mod._bus_instance.config if event_bus_mod._bus_instance else None
     reset_bus()
     yield
-    event_bus_mod._bus_instance = saved_bus
+    # Don't restore the old bus — reset_bus() closed it. Create a fresh open one.
+    reset_bus(config=saved_config)
 
 
 def _submit(manager: queue_mod.GatewayQueueManager, tmp_path: Path, profile_id: str, params: dict, runner) -> dict:
