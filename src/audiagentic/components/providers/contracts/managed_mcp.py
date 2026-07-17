@@ -82,6 +82,7 @@ class ManagedMcpRequest:
 class ManagedMcpResult:
     ok: bool
     supported: bool
+    provider_id: str = ""
     changed: bool = False
     managed_ids: tuple[str, ...] = ()
     removed_ids: tuple[str, ...] = ()
@@ -94,6 +95,7 @@ class ManagedMcpResult:
         return {
             "ok": self.ok,
             "supported": self.supported,
+            "provider_id": self.provider_id,
             "changed": self.changed,
             "managed_ids": list(self.managed_ids),
             "removed_ids": list(self.removed_ids),

@@ -7,6 +7,7 @@
   "properties": {
     "ok": {"type": "boolean"},
     "supported": {"type": "boolean"},
+    "provider_id": {"type": "string"},
     "changed": {"type": "boolean"},
     "managed_ids": {"type": "array", "items": {"type": "string"}},
     "removed_ids": {"type": "array", "items": {"type": "string"}},

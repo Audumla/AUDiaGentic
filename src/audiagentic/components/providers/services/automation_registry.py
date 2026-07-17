@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.providers.descriptors.registry import all_descriptors
 from audiagentic.components.providers.services import (
     cli_lifecycle_family,
     generated_surface_family,
@@ -42,9 +41,9 @@ class FamilyRegistrar:
 
 
 # Pattern A families only. Descriptor-backed generic families (managed-mcp,
-# plugin-entry, language-server-projection, lsp-mcp-projection) need no
-# registration per MA20 step 8 — they validate their declaration at call time
-# and are reached through providers_api.
+# plugin-entry, language-server-projection) need no registration per MA20 step 8
+# — they validate their declaration at call time and are reached through
+# providers_api.
 _REGISTRARS: tuple[FamilyRegistrar, ...] = (
     FamilyRegistrar(
         pin=cli_lifecycle_family.PIN,
@@ -79,6 +78,8 @@ def build_automation_registry(project_root: Path) -> ProviderAutomationRegistry:
     underlying descriptor mechanism. ``register`` rejects any declaration that
     disagrees with the family pin, so configuration cannot widen a family.
     """
+    from audiagentic.components.providers.descriptors.registry import all_descriptors
+
     descriptors = all_descriptors()
 
     registry = ProviderAutomationRegistry(

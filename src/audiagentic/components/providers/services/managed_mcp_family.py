@@ -58,9 +58,9 @@ def manage_mcp_entries(
         or descriptor.mcp_config is None
         or descriptor.automation_capability("managed-mcp") is None
     ):
-        return _result(ok=False, supported=False, error_code="RES-PREC-001")
+        return _result(ok=False, supported=False, provider_id=provider_id, error_code="RES-PREC-001")
     if mode not in _SUPPORTED_MODES:
-        return _result(ok=False, error_code="CON-PREC-002")
+        return _result(ok=False, provider_id=provider_id, error_code="CON-PREC-002")
 
     desired = _desired(request)
     if (
@@ -70,6 +70,7 @@ def manage_mcp_entries(
         return _result(
             ok=False,
             supported=False,
+            provider_id=provider_id,
             action_needed="provider MCP config does not support remote entries",
             error_code="CON-PMCP-001",
         )
@@ -82,7 +83,7 @@ def manage_mcp_entries(
             get_managed_entry_status(provider_id, project_root, name, entry).get("matches")
             for name, entry in desired.values()
         )
-        return _result(ok=matches, managed_ids=tuple(sorted(before)))
+        return _result(ok=matches, provider_id=provider_id, managed_ids=tuple(sorted(before)))
 
     sync = sync_managed_provider_mcp_scope(
         provider_id,
@@ -95,6 +96,7 @@ def manage_mcp_entries(
     collisions = sync.get("collisions") or []
     return _result(
         ok=bool(sync.get("ok")),
+        provider_id=provider_id,
         changed=bool(sync.get("updated") or sync.get("removed")),
         managed_ids=tuple(sorted(after)),
         removed_ids=tuple(sorted(set(before) - set(after))),
@@ -108,4 +110,51 @@ def manage_mcp_entries(
     )
 
 
-__all__ = ["manage_mcp_entries"]
+def adopt_legacy_mcp_ownership(
+    project_root: Path,
+    *,
+    ownership_scope: str,
+    managed_ids: frozenset[str],
+) -> None:
+    """Migrate registry entries from legacy bare provider_id scope to scoped key.
+
+    The old lsp-mcp-projection family used ``provider_id`` as the registry owner
+    scope (e.g. ``"claude"``). Managed-mcp uses
+    ``f"{provider_id}/{ownership_scope}"`` (e.g. ``"claude/coding-lsp/ag-lsp"``).
+    This moves only entries whose managed_id is in *managed_ids* from the legacy
+    scope to the new one, dropping emptied legacy scopes. Provider-owned function;
+    caller is requester-blind — it passes its scope and managed ids.
+    """
+    registry = mcp_ownership_registry(project_root)
+    data = registry.load()
+    if not managed_ids:
+        return
+
+    from audiagentic.components.providers.descriptors.registry import all_descriptors
+
+    for provider_id in all_descriptors():
+        old_scope_key = provider_id
+        new_scope_key = f"{provider_id}/{ownership_scope}"
+        old_entries = dict(data.get(old_scope_key, {}))
+        if not old_entries:
+            continue
+
+        to_migrate = {mid: name for mid, name in old_entries.items() if mid in managed_ids}
+        if not to_migrate:
+            continue
+
+        # Move entries to new scope
+        new_scope_data = data.get(new_scope_key, {})
+        new_scope_data.update(to_migrate)
+        data[new_scope_key] = new_scope_data
+        for mid in to_migrate:
+            old_entries.pop(mid, None)
+
+        # Clean up empty old scope if only migrated entries were there
+        if not old_entries:
+            data.pop(old_scope_key, None)
+
+    registry.save(data)
+
+
+__all__ = ["adopt_legacy_mcp_ownership", "manage_mcp_entries"]

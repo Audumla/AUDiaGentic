@@ -72,6 +72,26 @@ Crush supports model autodiscovery for local providers — the provider can fetc
 
 ---
 
+## ACP status
+
+| Field | Value |
+|---|---|
+| **ACP support** | None (not listed in registry) |
+| **Registry ID** | N/A — not in ACP registry v1.0.0 |
+
+Crush is not currently listed in the ACP registry v1.0.0. No ACP adapter package exists for this provider.
+
+## Config override at startup
+
+| Field | Value |
+|---|---|
+| **CLI flag** | No documented `--config` flag |
+| **Env var** | No documented env var for config override |
+
+Crush does not support startup config override.
+
+---
+
 ## Projection mode implications for AG
 
 - **Custom-entries**: Primary path. Write `{providers: {<id>: {...}}}` into project or user config. BLOCKED until exact path, precedence, key-reference syntax, and reload behavior are verified.

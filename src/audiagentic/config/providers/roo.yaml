@@ -3,11 +3,6 @@
 
 provider_id: roo
 automation_capabilities:
-  - family_id: lsp-mcp-projection
-    supported_modes: [apply, prune, status]
-    payload_contract: provider-lsp-mcp-projection-payload/v1
-    result_contract: provider-lsp-mcp-projection-result/v1
-    ownership_scope_required: false
   - family_id: cli-lifecycle
     supported_modes: [plan, apply, prune, status]
     payload_contract: provider-cli-lifecycle-payload/v1

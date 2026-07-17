@@ -14,14 +14,6 @@ def _config_dir() -> Path:
     return _coding_lsp_yaml_path().parent
 
 
-def setup_function() -> None:
-    feature_registry.clear()
-
-
-def teardown_function() -> None:
-    feature_registry.clear()
-
-
 def test_coding_lsp_yaml_loads() -> None:
     path = _coding_lsp_yaml_path()
     assert path.exists(), f"coding-lsp.yaml not found at {path}"

@@ -310,6 +310,29 @@ Project-local `.codex/config.toml` cannot override: `openai_base_url`, `chatgpt_
 
 ---
 
+## ACP status
+
+| Field | Value |
+|---|---|
+| **ACP support** | Adapter |
+| **Registry ID** | `github/copilot-codex` |
+| **Launch command** | `npx github/copilot-codex@latest` (adapter package) |
+| **Distribution** | npx (npm adapter) |
+
+Codex uses an ACP adapter. The `github/copilot-codex` npm package provides the ACP interface for Codex CLI instances.
+
+## Config override at startup
+
+| Field | Value |
+|---|---|
+| **CLI flag** | `-c <path>` — alternate config file path |
+| **CLI flag** | `--config-dir <path>` — alternate config directory |
+| **Env var** | No documented env var for config override |
+
+Codex supports the strongest startup config isolation among CLI-config providers. The `-c` flag allows specifying a separate config file, and `--config-dir` allows a separate config directory.
+
+---
+
 ## Projection mode implications for AG
 
 - **Custom-entries (config)**: Primary path for non-OpenAI vendors AND local openai-compatible endpoints, BLOCKED on project-scope verification. Write `[model_providers.<id>]` entries into project `.codex/config.toml`. Until project-scope precedence is verified, this remains `blocked`. If global config wins exclusively, AG would need user consent to write `~/.codex/config.toml` (requires consent gate). For local endpoints: built-in `oss_provider = "ollama"|"lmstudio"` shims require no `[model_providers]` block; custom openai-compatible servers use `[model_providers.<id>]` with `wire_api = "responses"`. Wire API constraint: Codex requires OpenAI Responses API — chat-completions-only endpoints will not work.

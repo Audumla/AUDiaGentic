@@ -31,11 +31,11 @@ from audiagentic.components.providers.contracts.language_server_projection impor
     LanguageServerProjectionRequest,
     LanguageServerProjectionResult,
 )
-from audiagentic.components.providers.contracts.lsp_mcp_projection import (
-    LspMcpProjectionEntry,
-    LspMcpProjectionMode,
-    LspMcpProjectionRequest,
-    LspMcpProjectionResult,
+from audiagentic.components.providers.contracts.managed_hooks import (
+    ManagedHooksEntry,
+    ManagedHooksMode,
+    ManagedHooksRequest,
+    ManagedHooksResult,
 )
 from audiagentic.components.providers.contracts.managed_mcp import (
     ManagedMcpEntry,
@@ -89,6 +89,76 @@ def manage_mcp_entries(
         mode=mode,
         request=request,
     )
+
+
+def adopt_legacy_mcp_ownership(
+    project_root: Path,
+    *,
+    ownership_scope: str,
+    managed_ids: frozenset[str],
+) -> None:
+    """Migrate MCP registry entries from legacy bare provider_id scope to scoped key.
+
+    Call before first managed-mcp apply/prune if the old lsp-mcp-projection family
+    may have written entries under the bare provider_id scope. The migration is
+    idempotent — it only moves entries whose managed_id is in the caller's set.
+    """
+    from audiagentic.components.providers.services.managed_mcp_family import (
+        adopt_legacy_mcp_ownership as _adopt,
+    )
+
+    _adopt(
+        project_root,
+        ownership_scope=ownership_scope,
+        managed_ids=managed_ids,
+    )
+
+
+def manage_hook_entries(
+    project_root: Path,
+    provider_id: str,
+    *,
+    mode: ManagedHooksMode,
+    request: ManagedHooksRequest,
+) -> ManagedHooksResult:
+    """Manage caller-owned hook entries through provider automation."""
+    from audiagentic.components.providers.services.managed_hooks_family import (
+        manage_hook_entries as _manage,
+    )
+
+    return _manage(
+        project_root,
+        provider_id,
+        mode=mode,
+        request=request,
+    )
+
+
+def manage_mcp_entries_all(
+    project_root: Path,
+    *,
+    mode: ManagedMcpMode,
+    request: ManagedMcpRequest,
+) -> list[ManagedMcpResult]:
+    """Manage MCP entries for all providers that support the managed-mcp family.
+
+    Returns a list of per-provider results. Providers without mcp_config or
+    the managed-mcp capability return ``supported=False``.
+    """
+    from audiagentic.components.providers.descriptors.registry import all_descriptors
+
+    results: list[ManagedMcpResult] = []
+    for descriptor in all_descriptors().values():
+        if descriptor.mcp_config is None:
+            continue
+        result = manage_mcp_entries(
+            project_root,
+            descriptor.provider_id,
+            mode=mode,
+            request=request,
+        )
+        results.append(result)
+    return results
 
 
 def manage_language_servers(
@@ -164,35 +234,6 @@ def manage_model_projection(
     return ModelProjectionResult(
         ok=False, supported=False, provider_id=provider_id, error_code="RES-PREC-001"
     )
-
-
-def manage_lsp_mcp_projection(
-    project_root: Path,
-    provider_id: str,
-    *,
-    mode: LspMcpProjectionMode,
-    request: LspMcpProjectionRequest,
-) -> LspMcpProjectionResult:
-    """Manage LSP-MCP entries through provider automation."""
-    from audiagentic.components.providers.services.lsp_mcp_projection import (
-        manage_lsp_mcp_projection as _manage,
-    )
-
-    return _manage(project_root, provider_id, mode=mode, request=request)
-
-
-def manage_lsp_mcp_projection_all(
-    project_root: Path,
-    *,
-    mode: LspMcpProjectionMode,
-    request: LspMcpProjectionRequest,
-) -> list[LspMcpProjectionResult]:
-    """Project LSP-MCP entries to all eligible providers."""
-    from audiagentic.components.providers.services.lsp_mcp_projection import (
-        manage_lsp_mcp_projection_all as _manage_all,
-    )
-
-    return _manage_all(project_root, mode=mode, request=request)
 
 
 def manage_self_provided_lsp(
@@ -931,17 +972,20 @@ __all__ = [
     # Exported because a family function is unusable without its Request type;
     # requesters must not reach into providers.contracts.* to get them.
     "LanguageServerProjectionRequest",
-    "LspMcpProjectionEntry",
-    "LspMcpProjectionRequest",
     "ManagedMcpEntry",
+    "ManagedMcpRequest",
     "SelfProvidedLspRequest",
     "manage_language_servers",
     "manage_language_servers_all",
+    "adopt_legacy_mcp_ownership",
+    "manage_mcp_entries",
+    "manage_mcp_entries_all",
+    # Managed hooks
+    "ManagedHooksEntry",
+    "ManagedHooksRequest",
+    "manage_hook_entries",
     # Model projection
     "manage_model_projection",
-    # LSP-MCP projection
-    "manage_lsp_mcp_projection",
-    "manage_lsp_mcp_projection_all",
     # Self-provided LSP
     "manage_self_provided_lsp",
     "manage_self_provided_lsp_all",

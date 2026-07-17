@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "session-id",
+    "agent-profile-id",
+    "state",
+    "request-ids",
+    "turn-count",
+    "created-at",
+    "updated-at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "contract-version": {
+      "const": "v1"
+    },
+    "session-id": {
+      "type": "string"
+    },
+    "agent-profile-id": {
+      "type": "string"
+    },
+    "provider-id": {
+      "type": ["string", "null"]
+    },
+    "model-id": {
+      "type": ["string", "null"]
+    },
+    "provider-session-ref": {
+      "type": ["string", "null"]
+    },
+    "state": {
+      "type": "string",
+      "enum": ["active", "closing", "closed", "expired", "failed"]
+    },
+    "close-reason": {
+      "type": ["string", "null"],
+      "enum": [
+        "client-request",
+        "idle-timeout",
+        "max-lifetime",
+        "shutdown",
+        "cancelled-turn",
+        "failed",
+        "orphaned",
+        null
+      ]
+    },
+    "idle-timeout-seconds": {
+      "type": ["number", "null"]
+    },
+    "max-lifetime-seconds": {
+      "type": ["number", "null"]
+    },
+    "request-ids": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "turn-count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "error": {
+      "type": ["object", "null"],
+      "properties": {
+        "code": {"type": "string"},
+        "message": {"type": "string"},
+        "kind": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "created-at": {
+      "type": "string"
+    },
+    "updated-at": {
+      "type": "string"
+    },
+    "last-activity-at": {
+      "type": ["string", "null"]
+    },
+    "closed-at": {
+      "type": ["string", "null"]
+    }
+  }
+}

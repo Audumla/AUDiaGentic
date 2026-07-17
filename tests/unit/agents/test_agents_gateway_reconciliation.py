@@ -27,10 +27,27 @@ def test_reconcile_gateway_state_terminalizes_orphaned_records(tmp_path):
             {"request-id": "req_queued", "state": "rejected"},
             {"request-id": "req_running", "state": "failed"},
         ],
+        "reconciled-sessions": [],
     }
     assert store.read_record(tmp_path, "req_queued")["state"] == "rejected"
     assert store.read_record(tmp_path, "req_running")["state"] == "failed"
 
     second = api.reconcile_gateway_state(tmp_path)
 
-    assert second == {"ok": True, "reconciled": []}
+    assert second == {"ok": True, "reconciled": [], "reconciled-sessions": []}
+
+
+def test_reconcile_marks_orphaned_sessions_failed(tmp_path):
+    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+
+    record = session_store.build_session_record(agent_profile_id="profile-a")
+    session_store.write_session_record(tmp_path, record)
+
+    result = api.reconcile_gateway_state(tmp_path)
+
+    assert result["reconciled-sessions"] == [
+        {"session-id": record["session-id"], "state": "failed"}
+    ]
+    stored = session_store.read_session_record(tmp_path, record["session-id"])
+    assert stored["state"] == "failed"
+    assert stored["close-reason"] == "orphaned"

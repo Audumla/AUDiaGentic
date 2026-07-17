@@ -126,6 +126,26 @@ The old `config.toml` / CLI approach is legacy V0. The `[llm]` section with `mod
 
 ---
 
+## ACP status
+
+| Field | Value |
+|---|---|
+| **ACP support** | None (not listed in registry) |
+| **Registry ID** | N/A — not in ACP registry v1.0.0 |
+
+OpenHands is not currently listed in the ACP registry v1.0.0. No ACP adapter package exists for this provider.
+
+## Config override at startup
+
+| Field | Value |
+|---|---|
+| **CLI flag** | No documented `--config` flag |
+| **Env var** | No documented env var for config override |
+
+OpenHands does not support startup config override.
+
+---
+
 ## Projection mode implications for AG
 
 - **Native-key-injection (env)**: Primary viable path. Set `LLM_API_KEY`, `LLM_BASE_URL` (if custom endpoint), and `LLM_MODEL` at launch time with `--override-with-envs`. This is the documented key-injection vehicle. Env var recognition is verified; actual vendor execution against non-OpenAI endpoints requires authenticated launch test to fully validate.

@@ -23,6 +23,10 @@
       "type": ["string", "null"],
       "minLength": 1
     },
+    "replaces-version": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
     "parameters": {
       "$ref": "#/definitions/ParameterArray"
     },

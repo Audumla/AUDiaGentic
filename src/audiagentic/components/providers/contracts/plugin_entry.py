@@ -11,11 +11,14 @@ PluginEntryMode = Literal["apply", "prune", "status"]
 @dataclass(frozen=True)
 class PluginEntryRequest:
     entry_id: str
+    ownership_scope: str
     options: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if not self.entry_id:
             raise ValueError("entry_id is required")
+        if not self.ownership_scope:
+            raise ValueError("ownership_scope is required")
         if len({key for key, _ in self.options}) != len(self.options):
             raise ValueError("plugin option names must be unique")
         if any(not key or not isinstance(value, str) for key, value in self.options):
@@ -28,6 +31,7 @@ class PluginEntryRequest:
             raise ValueError("plugin options must be a mapping")
         return cls(
             entry_id=str(value["entry_id"]),
+            ownership_scope=str(value["ownership_scope"]),
             options=tuple(sorted((str(key), str(item)) for key, item in raw_options.items())),
         )
 
@@ -35,13 +39,18 @@ class PluginEntryRequest:
         return dict(self.options)
 
     def to_mapping(self) -> dict[str, object]:
-        return {"entry_id": self.entry_id, "options": self.options_mapping()}
+        return {
+            "entry_id": self.entry_id,
+            "ownership_scope": self.ownership_scope,
+            "options": self.options_mapping(),
+        }
 
 
 @dataclass(frozen=True)
 class PluginEntryResult:
     ok: bool
     supported: bool
+    provider_id: str = ""
     changed: bool = False
     present: bool = False
     action_needed: str | None = None
@@ -51,6 +60,7 @@ class PluginEntryResult:
         return {
             "ok": self.ok,
             "supported": self.supported,
+            "provider_id": self.provider_id,
             "changed": self.changed,
             "present": self.present,
             "action_needed": self.action_needed,
