@@ -18,14 +18,6 @@ from audiagentic.foundation.features.base import BindingDescriptor, FeatureState
 from audiagentic.foundation.features.state import set_feature_state
 
 
-def setup_function() -> None:
-    feature_registry.clear()
-
-
-def teardown_function() -> None:
-    feature_registry.clear()
-
-
 def _enable_language(tmp_path: Path, language: str) -> None:
     feature_registry.register(
         BindingDescriptor(

@@ -71,6 +71,11 @@ def test_opencode_capability_facts_load_from_yaml() -> None:
         "surface-skill",
         "perm-declaration",
         "model-config-projection",
+        # ACP capability family (plan agent-sessions)
+        "acp-stdio-transport",
+        "acp-live-session",
+        "acp-session-resume",
+        "acp-shared-live-session",
     )
     catalog_fact = descriptor.capability_facts[5]
     assert catalog_fact.subject == "fetch_catalog_fn"

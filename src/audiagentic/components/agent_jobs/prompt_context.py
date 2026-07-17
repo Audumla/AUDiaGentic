@@ -13,7 +13,7 @@ from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.event.envelope import EventEnvelope
-from audiagentic.foundation.logging.redaction import is_sensitive_key, redact_text
+from audiagentic.foundation.logging.redaction import is_bulk_key, is_sensitive_key
 
 logger = logging.getLogger(__name__)
 # Sensitive-key matching delegated to foundation/logging/redaction.py.
@@ -60,7 +60,22 @@ def _redact_dict(data: dict[str, Any]) -> dict[str, Any]:
         elif isinstance(v, list):
             result[k] = [_redact_dict(item) if isinstance(item, dict) else item for item in v]
         else:
-            result[k] = redact_text(v) if isinstance(v, str) else v
+            result[k] = v
+    return result
+
+
+def _redact_event_dict(data: dict[str, Any]) -> dict[str, Any]:
+    """Remove sensitive and bulk keys from event payload at every depth."""
+    result: dict[str, Any] = {}
+    for k, v in data.items():
+        if is_sensitive_key(k) or is_bulk_key(k):
+            continue
+        if isinstance(v, dict):
+            result[k] = _redact_event_dict(v)
+        elif isinstance(v, list):
+            result[k] = [_redact_event_dict(item) if isinstance(item, dict) else item for item in v]
+        else:
+            result[k] = v
     return result
 
 
@@ -158,7 +173,7 @@ def build_prompt_context_from_event(
         }
 
     # -- event section: flatten envelope fields --
-    payload = _redact_dict(dict(envelope.payload)) if envelope.payload else {}
+    payload = _redact_event_dict(dict(envelope.payload)) if envelope.payload else {}
     event_section: dict[str, Any] = {
         "type": envelope.type,
         "source_component": envelope.source_component,

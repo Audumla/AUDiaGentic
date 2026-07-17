@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pi-hindsight-desired/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["base_url", "bank_id"],
+  "properties": {
+    "base_url": {"type": "string", "minLength": 1},
+    "bank_id": {"type": "string", "minLength": 1},
+    "bank_strategy": {"type": "string"},
+    "pi_host_block": {
+      "$ref": "#/$defs/pi_host_block"
+    }
+  },
+  "$defs": {
+    "pi_host_block": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "recall_mode": {"type": "string"},
+        "auto_recall_tags": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "auto_recall_tags_match": {"type": "string"},
+        "observation_scopes": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      }
+    }
+  }
+}

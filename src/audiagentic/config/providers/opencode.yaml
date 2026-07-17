@@ -3,11 +3,6 @@
 
 provider_id: opencode
 automation_capabilities:
-  - family_id: lsp-mcp-projection
-    supported_modes: [apply, prune, status]
-    payload_contract: provider-lsp-mcp-projection-payload/v1
-    result_contract: provider-lsp-mcp-projection-result/v1
-    ownership_scope_required: false
   - family_id: cli-lifecycle
     supported_modes: [plan, apply, prune, status]
     payload_contract: provider-cli-lifecycle-payload/v1
@@ -28,7 +23,7 @@ automation_capabilities:
     supported_modes: [apply, prune, status]
     payload_contract: provider-plugin-entry-payload/v1
     result_contract: provider-plugin-entry-result/v1
-    ownership_scope_required: false
+    ownership_scope_required: true
   - family_id: generated-surfaces
     supported_modes: [plan, apply, prune, status]
     payload_contract: provider-generated-surface-payload/v1
@@ -168,6 +163,63 @@ capability_facts:
       tool_version: "1.17.18"
       fact_anchor: "docs/reference/model-source-evidence/opencode.md#opencode-evidence"
       review_state: pending-review
+  # --- ACP capability family (plan agent-sessions AS01-AS07) -------------
+  # Segregates ACP/live-session features so they can be requested per state
+  # while the capability is being built out. Evidence-only per boundary
+  # rules — the executable authority is the adapter's acp submodule hook
+  # (load_acp_launch_builder) consumed by gateway session dispatch.
+  - capability_id: acp-stdio-transport
+    subject: "external:acp-stdio-transport"
+    mechanism: "native `opencode acp` stdio ACP server launched via adapters/opencode/acp.py build_acp_launch; model selected via OPENCODE_CONFIG_CONTENT inline config"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: execution
+      tool_version: repository
+      fact_anchor: "tests/e2e/agents/test_opencode_acp_e2e.py"
+      review_state: verified
+  - capability_id: acp-live-session
+    subject: "external:acp-live-session"
+    mechanism: "gateway SessionRuntime keep-alive session over `opencode acp` (session_keep_alive / session_id request fields; FIFO turn queue, idle/lifetime reaper)"
+    constraints:
+      - "long-running turns can hit transport event-volume caps before terminal completion (overseer R&D finding 2026-07-17) — checkpoint/compaction strategy pending"
+    limitations:
+      - "in-flight continuation ('bump' during a stalled prompt) is not safe — cancelling the await kills the transport; same-session continuation AFTER a terminal turn is verified"
+    support_assessment: partial
+    action_needed: "AS07 formal live gate + AS06 no-orphan proof; MA28 overseer delegation succeeded live 2026-07-17 (terminal end_turn, cleanup verified)."
+    evidence:
+      evidence_tier: execution
+      tool_version: repository
+      fact_anchor: "tests/unit/agents/test_agents_gateway_sessions.py"
+      review_state: pending-review
+  - capability_id: acp-session-resume
+    subject: "external:acp-session-resume"
+    mechanism: "planned: ACP session/load gated on advertised capability, anchored by persisted provider-session-ref; CLI fallback `opencode run --session <id>`"
+    constraints: []
+    limitations:
+      - "not implemented; sessions currently die with the gateway process"
+    support_assessment: blocked
+    action_needed: "AS10."
+    evidence:
+      evidence_tier: documentation
+      tool_version: "1.17.18"
+      fact_anchor: "docs/planning/active/agent-sessions/AS10.md"
+      review_state: pending-review
+  - capability_id: acp-shared-live-session
+    subject: "external:acp-shared-live-session"
+    mechanism: "no known opencode mechanism for multi-client attachment to one live session"
+    constraints: []
+    limitations:
+      - "gateway-side remote channeling (AS09) can expose OUR session to remote clients, but opencode offers no native peer-client surface comparable to Codex App Server"
+    support_assessment: blocked
+    action_needed: "Revisit if opencode ships a server/attach surface; otherwise AS09 covers the need gateway-side."
+    evidence:
+      evidence_tier: documentation
+      tool_version: "1.17.18"
+      fact_anchor: "docs/planning/active/agent-sessions/AS09.md"
+      review_state: pending-review
 
 permissions:
   can_write_files: true
@@ -195,10 +247,11 @@ mcp_config:
 
 plugin_config:
   config_path: ".opencode/opencode.json"
-  reader: "audiagentic.components.providers.adapters.opencode.plugin_array:read_opencode_plugin"
-  writer: "audiagentic.components.providers.adapters.opencode.plugin_array:write_opencode_plugin"
+  reader: "audiagentic.components.providers.adapters.opencode.plugin_array:read_opencode_plugins"
+  writer: "audiagentic.components.providers.adapters.opencode.plugin_array:write_opencode_plugins"
   remover: "audiagentic.components.providers.adapters.opencode.plugin_array:remove_opencode_plugin"
   format: "opencode-plugin-array"
+  refresh_mode: "none"
 
 language_servers_config:
   config_path: ".opencode/opencode.json"

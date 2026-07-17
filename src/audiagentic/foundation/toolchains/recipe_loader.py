@@ -108,6 +108,7 @@ class DeclarativeRecipeTemplate:
     recipe_version: str
     description: str = ""
     provenance_ref: str | None = None
+    replaces_version: str | None = None
     parameters: tuple[RecipeParameter, ...] = field(default_factory=tuple)
     lifecycle: RecipeLifecycleTemplate = field(default_factory=RecipeLifecycleTemplate)
     source_path: str = ""
@@ -135,6 +136,7 @@ class DeclarativeRecipeTemplate:
             "recipe-version": self.recipe_version,
             "description": self.description,
             "provenance-ref": self.provenance_ref,
+            "replaces-version": self.replaces_version,
             "parameters": [
                 {
                     "name": p.name,
@@ -240,6 +242,7 @@ def load_recipe_from_yaml(path: str | Path) -> DeclarativeRecipeTemplate:
         recipe_version=raw["recipe-version"],
         description=raw.get("description", ""),
         provenance_ref=raw.get("provenance-ref"),
+        replaces_version=raw.get("replaces-version"),
         parameters=params,
         lifecycle=lifecycle,
         source_path=str(p),

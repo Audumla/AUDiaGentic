@@ -93,6 +93,28 @@ Copilot Chat is listed as a supported ACP agent in OpenHands Agent Canvas, meani
 
 ---
 
+## ACP status
+
+| Field | Value |
+|---|---|
+| **ACP support** | Native |
+| **Registry ID** | `github/copilot-cli` |
+| **Launch command** | `npx @anthropic/claude-code@latest` (adapter for copilot) |
+| **Distribution** | npx (npm adapter) |
+
+GitHub Copilot CLI uses an ACP adapter via the `anthropic/claude-code` npm package. This is unusual — Copilot is served through Claude's adapter infrastructure.
+
+## Config override at startup
+
+| Field | Value |
+|---|---|
+| **CLI flag** | No documented `--config` flag |
+| **Env var** | No documented env var for config override |
+
+GitHub Copilot CLI does not support startup config override.
+
+---
+
 ## Projection mode implications for AG
 
 - **Native-key-injection**: Not viable — copilot has no API key injection surface. All models require GitHub Copilot account authentication with appropriate subscription tier.

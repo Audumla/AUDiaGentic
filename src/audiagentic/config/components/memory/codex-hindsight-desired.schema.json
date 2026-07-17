@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex-hindsight-desired/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["base_url", "bank_id"],
+  "properties": {
+    "base_url": {"type": "string", "minLength": 1},
+    "bank_id": {"type": "string", "minLength": 1},
+    "api_key": {"type": ["string", "null"]},
+    "interpreter_path": {"type": ["string", "null"]},
+    "script_dir": {"type": ["string", "null"]},
+    "hook_commands": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/hook_command"
+      }
+    }
+  },
+  "$defs": {
+    "hook_command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event", "command", "timeout"],
+      "properties": {
+        "event": {"type": "string", "minLength": 1},
+        "command": {"type": "string", "minLength": 1},
+        "timeout": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

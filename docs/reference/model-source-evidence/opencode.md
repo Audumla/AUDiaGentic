@@ -199,6 +199,32 @@ Custom providers use the AI SDK provider npm package:
 
 ---
 
+## ACP status
+
+| Field | Value |
+|---|---|
+| **ACP support** | Native |
+| **Registry ID** | `opencode` |
+| **Launch command** | `opencode acp` |
+| **Distribution** | Binary (6 platforms), SHA256 verified |
+| **Model override in ACP** | `OPENCODE_CONFIG_CONTENT` env var (inline JSON) |
+
+OpenCode natively implements ACP. No wrapper package needed. The `acp` subcommand starts a JSON-RPC-over-stdio server that can be driven by any ACP host (e.g., OpenHands Agent Canvas).
+
+## Config override at startup
+
+| Field | Value |
+|---|---|
+| **CLI flag** | No dedicated `--config` flag |
+| **Env var: file path** | `OPENCODE_CONFIG` — alternate config file path |
+| **Env var: inline JSON** | `OPENCODE_CONFIG_CONTENT` — inline JSON config content, no file I/O needed |
+| **Env var: config dir** | `OPENCODE_CONFIG_DIR` — alternate config directory |
+| **Env var: TUI config** | `OPENCODE_TUI_CONFIG` — alternate TUI-specific config |
+
+OpenCode provides the strongest config isolation in our provider set. `OPENCODE_CONFIG_CONTENT` allows launching with a completely independent config without any filesystem interaction — multiple concurrent providers with different configs can run simultaneously.
+
+---
+
 ## Projection mode implications for AG
 
 - **Native-key-injection (env)**: NOT viable for Anthropic/Google (confirmed blocked by probe). OpenAI env path untested — available via OAuth masks rejection proof. Overall pattern: OpenCode requires its own credential flow (`opencode providers login`). AG cannot inject API keys via ambient environment variables to enable a native provider.

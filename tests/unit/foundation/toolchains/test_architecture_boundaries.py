@@ -802,6 +802,16 @@ class TestRequesterProvidersImportAllowlist:
         descriptor/enablement fan-out lives behind manage_self_provided_lsp_all.
         Do not re-add entries here to make a new import pass — route it through
         providers_api instead.
+
+        Regression note (MA29): this test caught function-level imports in
+        _migrate_mcp_ownership_to_scope which bypassed the module-level guard
+        by importing providers.services.managed_mcp_registry and
+        providers.descriptors.registry directly inside a function. The fix was
+        to move that migration into providers (adopt_legacy_mcp_ownership) and
+        call it through providers_api. AST walk in _get_imports covers all
+        Import/ImportFrom nodes anywhere in the module, not just top-level —
+        so this test would catch any future attempt to dodge the boundary with
+        function-level imports.
         """
         known_violations: set[str] = set()
         violations = []
@@ -900,8 +910,8 @@ class TestProvidersNoReverseImports:
         - skill_surfaces.py → agent_jobs.prompt_syntax (MA17 provider-domain boundary)
 
         The MA08 coding-lsp reverse imports are gone: LanguageServerEntry moved to
-        providers/contracts, and services/lsp_projection.py was deleted once
-        manage_lsp_mcp_projection superseded it. Providers import no coding-lsp type.
+        providers/contracts, and the lsp-mcp-projection family was deleted once
+        managed-mcp superseded it (MA29). Providers import no coding-lsp type.
         """
         # Allowlisted known violations — owned by MA02/MO02/MA17 resolution.
         # Remove entries here when their owning item completes; assertion must pass clean.

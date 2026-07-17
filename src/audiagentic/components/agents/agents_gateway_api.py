@@ -58,18 +58,37 @@ def submit_llm_request(
     fallback_profile_ids: list[str] | None = None,
     source: str | None = None,
     metadata: dict[str, Any] | None = None,
+    session_id: str | None = None,
+    session_keep_alive: bool = False,
+    session_idle_timeout_seconds: float | None = None,
+    session_max_lifetime_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Submit a gateway request. Returns immediately with request-id and initial state
     unless mode='blocking', in which case it waits for a terminal result (see run_llm_request).
+
+    Sessions (plan agent-sessions): ``session_keep_alive=True`` opens a live
+    agent session that survives this request — the response's ``session-id``
+    continues the conversation via ``session_id=...`` on later requests.
+    Sessions are bound to one profile, never use fallbacks, and self-clean:
+    idle timeout (default 15 min) and max lifetime (default 4 h), both
+    settable at open time — 0 disables that bound (long-lived remote-control
+    sessions). Turns on one session queue FIFO; the reaper never closes a
+    session that is processing or has queued turns. Close explicitly with
+    close_llm_session when done.
     """
     profile = _resolve_profile_for_submit(project_root, agent_profile_id)
     resolved_profile_id = profile["profile_id"]
     params = profile.get("params", {})
 
+    sessionful = session_id is not None or session_keep_alive
     resolved_fallback_ids = (
-        fallback_profile_ids
-        if fallback_profile_ids is not None
-        else queue_mod.resolve_fallback_profile_ids(params)
+        []
+        if sessionful  # sessionful requests never fall back (VAL-AGW-058)
+        else (
+            fallback_profile_ids
+            if fallback_profile_ids is not None
+            else queue_mod.resolve_fallback_profile_ids(params)
+        )
     )
 
     record = store.build_record(
@@ -80,6 +99,10 @@ def submit_llm_request(
         fallback_profile_ids=resolved_fallback_ids,
         source=source,
         metadata=metadata,
+        session_id=session_id,
+        session_keep_alive=session_keep_alive,
+        session_idle_timeout_seconds=session_idle_timeout_seconds,
+        session_max_lifetime_seconds=session_max_lifetime_seconds,
     )
     store.write_record(project_root, record)
     store.record_gateway_timeline(
@@ -143,6 +166,10 @@ def run_llm_request(
     fallback_profile_ids: list[str] | None = None,
     source: str | None = None,
     metadata: dict[str, Any] | None = None,
+    session_id: str | None = None,
+    session_keep_alive: bool = False,
+    session_idle_timeout_seconds: float | None = None,
+    session_max_lifetime_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Submit and block until a terminal result or timeout. Not for event-triggered
     paths (AG12 handles those asynchronously through lifecycle events)."""
@@ -155,6 +182,10 @@ def run_llm_request(
         fallback_profile_ids=fallback_profile_ids,
         source=source,
         metadata=metadata,
+        session_id=session_id,
+        session_keep_alive=session_keep_alive,
+        session_idle_timeout_seconds=session_idle_timeout_seconds,
+        session_max_lifetime_seconds=session_max_lifetime_seconds,
     )
 
 
@@ -190,6 +221,43 @@ def list_llm_requests(
     if limit is not None:
         records = records[:limit]
     return records
+
+
+def list_llm_sessions(
+    project_root: Path,
+    *,
+    state: str | None = None,
+) -> list[dict[str, Any]]:
+    """List persisted gateway sessions, newest first, with a 'live' flag for
+    sessions whose transport is held by THIS process's SessionRuntime."""
+    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+    from audiagentic.components.agents.agents_gateway_sessions import get_session_runtime
+
+    live_ids = set(get_session_runtime().live_session_ids())
+    records = session_store.list_session_records(project_root)
+    if state is not None:
+        records = [r for r in records if r["state"] == state]
+    records.sort(key=lambda r: r["created-at"], reverse=True)
+    return [{**r, "live": r["session-id"] in live_ids} for r in records]
+
+
+def close_llm_session(project_root: Path, session_id: str) -> dict[str, Any]:
+    """Close a live session on client request. Idempotent — closing a session
+    that is already terminal (or whose process died) returns its final record."""
+    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+    from audiagentic.components.agents.agents_gateway_sessions import get_session_runtime
+
+    runtime = get_session_runtime()
+    if session_id in set(runtime.live_session_ids()):
+        return runtime.close_session(project_root, session_id, reason="client-request")
+    record = session_store.read_session_record(project_root, session_id)
+    if record["state"] not in session_store.SESSION_TERMINAL_STATES:
+        # Persisted active but not live here: orphaned by a restart.
+        record = session_store.transition_session_record(
+            project_root, session_id, "failed",
+            updates={"close-reason": "orphaned"},
+        )
+    return record
 
 
 def reconcile_gateway_state(project_root: Path) -> dict[str, Any]:
@@ -232,7 +300,25 @@ def reconcile_gateway_state(project_root: Path) -> dict[str, Any]:
                 },
             )
             reconciled.append({"request-id": request_id, "state": updated["state"]})
-    return {"ok": True, "reconciled": reconciled}
+
+    # Sessions persisted 'active'/'closing' with no live handle in this
+    # process were orphaned by a restart — mirror the request treatment.
+    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+    from audiagentic.components.agents.agents_gateway_sessions import get_session_runtime
+
+    live_ids = set(get_session_runtime().live_session_ids())
+    reconciled_sessions: list[dict[str, str]] = []
+    for session_record in session_store.list_session_records(project_root):
+        session_id = session_record["session-id"]
+        if session_id in live_ids:
+            continue
+        if session_record["state"] not in session_store.SESSION_TERMINAL_STATES:
+            updated = session_store.transition_session_record(
+                project_root, session_id, "failed",
+                updates={"close-reason": "orphaned"},
+            )
+            reconciled_sessions.append({"session-id": session_id, "state": updated["state"]})
+    return {"ok": True, "reconciled": reconciled, "reconciled-sessions": reconciled_sessions}
 
 
 def gateway_overview(project_root: Path) -> dict[str, Any]:
@@ -256,9 +342,25 @@ def gateway_overview(project_root: Path) -> dict[str, Any]:
             reverse=True,
         )[:5]
     ]
+    sessions = list_llm_sessions(project_root)
     return {
         "total_requests": len(records),
         "by_state": by_state,
         "recent_failures": recent_failures,
         "queues": _QUEUE_MANAGER.all_queue_depths(),
+        "sessions": {
+            "active-count": sum(1 for s in sessions if s["live"]),
+            "sessions": [
+                {
+                    "session-id": s["session-id"],
+                    "agent-profile-id": s["agent-profile-id"],
+                    "provider-id": s.get("provider-id"),
+                    "state": s["state"],
+                    "live": s["live"],
+                    "last-activity-at": s.get("last-activity-at"),
+                    "turn-count": s.get("turn-count", 0),
+                }
+                for s in sessions[:10]
+            ],
+        },
     }
