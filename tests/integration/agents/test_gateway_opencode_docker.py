@@ -10,7 +10,6 @@ from pathlib import Path
 import pytest
 import yaml
 
-
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.opt_in,
@@ -60,7 +59,7 @@ class _RigHandler(BaseHTTPRequestHandler):
                     "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
                 }
             )
-            data = f"data: {first}\n\ndata: {final}\n\ndata: [DONE]\n\n".encode("utf-8")
+            data = f"data: {first}\n\ndata: {final}\n\ndata: [DONE]\n\n".encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Content-Length", str(len(data)))
