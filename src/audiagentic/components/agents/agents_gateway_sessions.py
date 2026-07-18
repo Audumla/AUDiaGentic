@@ -34,6 +34,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.agents import agents_gateway_session_bindings as binding_store
 from audiagentic.components.agents import agents_gateway_sessions_store as session_store
 from audiagentic.components.agents.agents_event_topics import (
     SESSION_CLOSED_TOPIC,
@@ -479,6 +480,12 @@ class SessionRuntime:
             return []
         return self._call(self._snapshot_ids(), timeout=10)
 
+    def session_runtime_status(self, session_id: str) -> dict[str, Any]:
+        """Read-only, redacted live facts for one session in this process."""
+        if self._loop is None:
+            return {"available": False}
+        return self._call(self._session_runtime_status(session_id), timeout=10)
+
     def request_cancel(self, request_id: str) -> bool:
         """Signal protocol-level cancel to the turn owning *request_id*.
 
@@ -519,6 +526,18 @@ class SessionRuntime:
     async def _snapshot_ids(self) -> list[str]:
         return list(self._handles)
 
+    async def _session_runtime_status(self, session_id: str) -> dict[str, Any]:
+        handle = self._handles.get(session_id)
+        if handle is None:
+            return {"available": False}
+        return {
+            "available": True,
+            "pending-turns": handle.pending,
+            "turn-active": handle.turn_lock.locked(),
+            "current-request-id": handle.current_request_id,
+            "child-pid": handle.child_pid,
+        }
+
     async def _open_session(
         self,
         project_root: Path,
@@ -554,6 +573,7 @@ class SessionRuntime:
         session_id = record["session-id"]
         try:
             session_store.write_session_record(project_root, record)
+            binding_store.register_open_binding(project_root, record)
         except Exception:
             # Never leak a child because bookkeeping failed.
             await transport.close()
@@ -582,6 +602,7 @@ class SessionRuntime:
                     "max-lifetime-seconds": max_lifetime_seconds,
                     "turn-timeout-seconds": turn_timeout_seconds,
                     "child-pid": child_pid,
+                    "binding": binding_store.public_binding_projection(record.get("binding")),
                     "correlation-id": correlation_id,
                 },
             )
@@ -791,10 +812,11 @@ class SessionRuntime:
         try:
             record = session_store.read_session_record(handle.project_root, handle.session_id)
             if record["state"] not in session_store.SESSION_TERMINAL_STATES:
-                session_store.transition_session_record(
+                updated = session_store.transition_session_record(
                     handle.project_root, handle.session_id, "failed",
                     updates={"close-reason": reason, "closed-at": now_iso_z()},
                 )
+                binding_store.retire_binding(handle.project_root, updated, state="failed")
                 _publish_session_event(SESSION_FAILED_TOPIC, {
                     "session-id": handle.session_id,
                     "agent-profile-id": record["agent-profile-id"],
@@ -829,6 +851,7 @@ class SessionRuntime:
                 project_root, session_id, new_state,
                 updates={"close-reason": reason, "closed-at": now_iso_z()},
             )
+            binding_store.retire_binding(project_root, record, state=new_state)
             session_store.record_session_timeline(
                 project_root, session_id, "session.closed", state=record["state"],
                 attributes={
