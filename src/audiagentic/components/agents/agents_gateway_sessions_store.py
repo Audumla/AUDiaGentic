@@ -1,8 +1,8 @@
-"""Agent LLM Gateway session record store (plan agent-sessions AS03).
+"""Agent LLM Gateway session record store (plan agent-sessions AS03/AS30).
 
 Durable, observable state for live agent sessions. Live transport handles are
 in-memory only (agents_gateway_sessions.SessionRuntime); these records are the
-audit trail and the resume anchor (provider-session-ref) for later build-out
+audit trail and protected provider binding anchor for later build-out
 (AS10 resume, AS09 remote channeling). Follows agents_gateway_store conventions
 exactly: atomic JSON records, schema validation, workflow-driven transitions,
 NDJSON timeline, per-record locks.
@@ -19,6 +19,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.agents import agents_gateway_session_bindings as bindings
 from audiagentic.components.agents.agents_paths import (
     gateway_session_path,
     gateway_session_timeline_path,
@@ -126,13 +127,17 @@ def build_session_record(
             details={"max_lifetime_seconds": max_lifetime_seconds},
         )
     timestamp = now_iso_z()
+    binding = bindings.build_binding(
+        provider_id=provider_id,
+        provider_session_ref=provider_session_ref,
+    )
     payload: dict[str, Any] = {
-        "contract-version": "v1",
+        "contract-version": "v2",
         "session-id": session_id or generate_session_id(),
         "agent-profile-id": agent_profile_id,
         "provider-id": provider_id,
         "model-id": model_id,
-        "provider-session-ref": provider_session_ref,
+        "binding": binding,
         "state": "active",
         "close-reason": None,
         "idle-timeout-seconds": idle_timeout_seconds,
@@ -148,7 +153,21 @@ def build_session_record(
     return _validate(payload, code="VAL-AGW-052")
 
 
+def _migrate_v1_record(payload: dict[str, Any]) -> dict[str, Any]:
+    if payload.get("contract-version") != "v1":
+        return payload
+    migrated = dict(payload)
+    provider_session_ref = migrated.pop("provider-session-ref", None)
+    migrated["contract-version"] = "v2"
+    migrated["binding"] = bindings.build_binding(
+        provider_id=migrated.get("provider-id"),
+        provider_session_ref=provider_session_ref,
+    )
+    return migrated
+
+
 def _validate(payload: dict[str, Any], *, code: str) -> dict[str, Any]:
+    payload = _migrate_v1_record(payload)
     issues = validate_with_schema(_SCHEMA_STEM, payload)
     if issues:
         raise AudiaGenticError(
@@ -161,6 +180,7 @@ def _validate(payload: dict[str, Any], *, code: str) -> dict[str, Any]:
 
 
 def write_session_record(project_root: Path, payload: dict[str, Any]) -> Path:
+    payload = _migrate_v1_record(payload)
     session_id = payload.get("session-id")
     if not session_id:
         raise AudiaGenticError(
@@ -240,8 +260,8 @@ def transition_session_record(
 ) -> dict[str, Any]:
     """Transition a session record to a new state and persist it.
 
-    ``updates`` may set mutable fields (provider-id, model-id,
-    provider-session-ref, close-reason, closed-at, last-activity-at, error).
+    ``updates`` may set mutable fields (provider-id, model-id, binding,
+    close-reason, closed-at, last-activity-at, error).
     ``error`` is redacted before persisting.
     """
     with _session_lock(session_id):
