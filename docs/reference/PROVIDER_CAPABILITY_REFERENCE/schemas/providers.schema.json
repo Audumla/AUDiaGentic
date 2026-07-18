@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Provider Registry",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "providers"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "providers": {
+      "type": [
+        "object",
+        "array"
+      ]
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,162 @@
+schema_version: 1
+providers:
+  anthropic:
+    endpoint_families:
+    - id: anthropic-messages
+      protocol: anthropic-messages
+      base_url: https://api.anthropic.com
+      auth:
+      - api-key
+    telemetry:
+      request_usage: official-response
+      token_count: official-api
+      rate_limit: official-response-headers
+      subscription_allowance: unsupported-public-api
+      generic_balance: unsupported-public-api
+    evidence_ids:
+    - anthropic-api-rate-limits
+    - anthropic-token-count
+  openai:
+    endpoint_families:
+    - id: openai-responses
+      protocol: openai-responses
+      base_url: https://api.openai.com/v1
+      auth:
+      - api-key
+    - id: openai-chat-completions
+      protocol: openai-chat-completions
+      base_url: https://api.openai.com/v1
+      auth:
+      - api-key
+    telemetry:
+      request_usage: official-response
+      organization_usage: official-admin-api
+      organization_costs: official-admin-api
+      rate_limit: official-response-headers
+      generic_remaining_balance: unsupported-public-api
+    evidence_ids:
+    - openai-organization-usage
+  openrouter:
+    endpoint_families:
+    - id: openrouter-openai-compatible
+      protocol: openai-chat-completions
+      base_url: https://openrouter.ai/api/v1
+      auth:
+      - bearer-api-key
+    telemetry:
+      account_credits: official-management-api
+      key_limit: official-current-key-api
+      request_usage: official-response
+      generation_stats: official-api
+    evidence_ids:
+    - openrouter-credits
+    - openrouter-current-key
+    - openrouter-generation-usage
+  gemini:
+    endpoint_families:
+    - id: google-generative-language
+      protocol: google-generate-content
+      base_url: https://generativelanguage.googleapis.com
+      auth:
+      - api-key
+      - oauth
+    - id: vertex-ai-gemini
+      protocol: vertex-generate-content
+      base_url: regional-aiplatform
+      auth:
+      - google-oauth
+    telemetry:
+      request_usage: official-response-metadata
+      active_limits: official-console-or-cloud-monitoring
+      direct_remaining_quota: unsupported-single-endpoint
+    evidence_ids:
+    - gemini-rate-limits
+  azure-openai:
+    endpoint_families:
+    - id: azure-openai
+      protocol: openai-compatible
+      base_url: deployment-scoped
+      auth:
+      - api-key
+      - entra-id
+    telemetry:
+      cost: azure-cost-management
+      quota: azure-monitor-or-headers
+  amazon-bedrock:
+    endpoint_families:
+    - id: bedrock-runtime
+      protocol: aws-bedrock
+      base_url: regional-aws
+      auth:
+      - aws-sigv4
+    telemetry:
+      cost: aws-cost-explorer
+      quota: service-quotas-cloudwatch
+  vertex-ai:
+    endpoint_families:
+    - id: vertex-ai
+      protocol: vertex-model-api
+      base_url: regional-aiplatform
+      auth:
+      - google-oauth
+    telemetry:
+      cost: cloud-billing
+      quota: cloud-monitoring
+  ollama:
+    endpoint_families:
+    - id: ollama-native
+      protocol: ollama
+      base_url: http://127.0.0.1:11434
+      auth:
+      - none-local
+    - id: ollama-openai-compatible
+      protocol: openai-compatible
+      base_url: http://127.0.0.1:11434/v1
+      auth:
+      - none-local
+    telemetry:
+      loaded_models: official-local-api
+      runtime: system-and-engine-metrics
+      credits: not-applicable
+  vllm:
+    endpoint_families:
+    - id: vllm-openai-compatible
+      protocol: openai-compatible
+      base_url: deployment-defined
+      auth:
+      - deployment-defined
+    telemetry:
+      runtime: prometheus
+      request_usage: response-and-metrics
+      credits: not-applicable
+  llama-cpp:
+    endpoint_families:
+    - id: llama-cpp-openai-compatible
+      protocol: openai-compatible
+      base_url: deployment-defined
+      auth:
+      - deployment-defined
+    telemetry:
+      runtime: metrics-or-slots-build-dependent
+      credits: not-applicable
+  lm-studio:
+    endpoint_families:
+    - id: lm-studio-openai-compatible
+      protocol: openai-compatible
+      base_url: http://127.0.0.1:1234/v1
+      auth:
+      - local-config
+    telemetry:
+      runtime: local-api-dependent
+      credits: not-applicable
+  litellm-proxy:
+    endpoint_families:
+    - id: litellm-openai-compatible
+      protocol: openai-compatible
+      base_url: deployment-defined
+      auth:
+      - proxy-key
+    telemetry:
+      budget: official-if-configured
+      spend: official-proxy-logs
+      upstream: backend-dependent

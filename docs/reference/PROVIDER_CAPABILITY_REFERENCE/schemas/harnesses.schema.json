@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Harness Registry",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "harnesses"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "harnesses": {
+      "type": [
+        "object",
+        "array"
+      ]
+    }
+  },
+  "additionalProperties": true
+}

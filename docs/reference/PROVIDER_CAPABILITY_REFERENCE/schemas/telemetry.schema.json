@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Telemetry Registry",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "categories"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "categories": {
+      "type": [
+        "object",
+        "array"
+      ]
+    }
+  },
+  "additionalProperties": true
+}

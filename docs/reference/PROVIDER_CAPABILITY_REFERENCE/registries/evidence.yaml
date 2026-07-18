@@ -1,0 +1,69 @@
+schema_version: 1
+evidence:
+  openrouter-credits:
+    kind: official-doc
+    url: https://openrouter.ai/docs/api/api-reference/credits/get-credits
+    validated: '2026-07-17'
+    supports:
+    - account credits purchased and used
+    - management key requirement
+  openrouter-current-key:
+    kind: official-doc
+    url: https://openrouter.ai/docs/api/api-reference/api-keys/get-current-key
+    validated: '2026-07-17'
+    supports:
+    - key limit
+    - limit remaining
+    - period usage
+    - deprecated rate_limit warning
+  openrouter-generation-usage:
+    kind: official-doc
+    url: https://openrouter.ai/docs/api/reference/overview
+    validated: '2026-07-17'
+    supports:
+    - native token usage
+    - cost
+    - generation query
+  openai-organization-usage:
+    kind: official-doc
+    url: https://platform.openai.com/docs/api-reference/usage
+    validated: '2026-07-17'
+    supports:
+    - organization usage APIs
+    - admin credential scope
+  anthropic-api-rate-limits:
+    kind: official-doc
+    url: https://docs.anthropic.com/en/api/rate-limits
+    validated: '2026-07-17'
+    supports:
+    - API rate-limit headers and scopes
+  anthropic-token-count:
+    kind: official-doc
+    url: https://docs.anthropic.com/en/docs/build-with-claude/token-counting
+    validated: '2026-07-17'
+    supports:
+    - message token counting
+  gemini-rate-limits:
+    kind: official-doc
+    url: https://ai.google.dev/gemini-api/docs/rate-limits
+    validated: '2026-07-17'
+    supports:
+    - RPM TPM RPD project scope
+    - AI Studio active limits
+    - spend-based limits
+  copilot-acp:
+    kind: official-doc
+    url: https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server
+    validated: '2026-07-17'
+    supports:
+    - ACP preview
+    - stdio and TCP transports
+    - session setup constraints
+  copilot-cli-reference:
+    kind: official-doc
+    url: https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference
+    validated: '2026-07-17'
+    supports:
+    - ACP flag
+    - MCP configuration
+    - remote connect and context controls

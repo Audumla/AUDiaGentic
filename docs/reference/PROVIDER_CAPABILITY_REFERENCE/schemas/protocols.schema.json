@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Protocol Registry",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "protocols"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "protocols": {
+      "type": [
+        "object",
+        "array"
+      ]
+    }
+  },
+  "additionalProperties": true
+}

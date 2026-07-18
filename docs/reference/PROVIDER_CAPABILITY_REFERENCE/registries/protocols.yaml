@@ -1,0 +1,30 @@
+schema_version: 1
+protocols:
+  acp:
+    role: agent-client session/control protocol
+    stable_version: v1
+    draft_versions:
+    - v2
+    reference: protocols/acp-capabilities.md
+    non_guarantees:
+    - live-attach
+    - active-turn-steering
+    - concurrent-client-control
+    - provider-configuration
+  mcp:
+    role: tool/resource/prompt transport
+    transports:
+    - stdio
+    - streamable-http
+    - sse-legacy
+    relationship: Use MCP for client-provided tools and same-turn structured tool
+      results.
+  openai-responses:
+    role: model inference wire protocol
+    not_equivalent_to: openai-chat-completions
+  openai-chat-completions:
+    role: model inference wire protocol
+  anthropic-messages:
+    role: model inference wire protocol
+  google-generate-content:
+    role: model inference wire protocol
