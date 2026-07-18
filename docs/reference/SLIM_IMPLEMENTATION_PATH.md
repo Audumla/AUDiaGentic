@@ -294,8 +294,9 @@ install the `npm:pi-lens` extension.
 **Plan item:** Bind model projection through explicit provider handlers
 **Pattern:** A (per-provider handler — each provider has unique model_entry_renderer)
 
-**Current state:** `sync_provider_models` uses per-provider `model_entry_renderer` callable
-and `supported_connectors` tuple. Pi uses `baseUrl/compat`, Codex uses `model_providers` table.
+**Current state:** model-source CRUD commits desired state only. Provider reconciliation
+builds a typed request and calls `manage_model_projection`; the registered handler uses
+each descriptor's `model_entry_renderer` and `supported_connectors` declarations.
 
 **Completed (2026-07-15):**
 - Frozen `ModelProjectionEntry/Request/Result` typed contracts with to_mapping/from_mapping serialization
@@ -307,6 +308,9 @@ and `supported_connectors` tuple. Pi uses `baseUrl/compat`, Codex uses `model_pr
 - Created pi provider model config infrastructure: `read_pi_models/write_pi_models/remove_pi_model` reader/writer/remover
 - Created `render_pi_model_entry` renderer for pi's models.json format
 - Added `model-projection` automation capability, `model_config`, `model_entry_renderer`, `supported_connectors` to pi.yaml
+- Moved provider reconciliation onto the typed public family operation
+- Folded config inspection into model-projection status mode
+- Removed the public sync/list/reload routes and CRUD apply/dry-run flags
 - 602 provider tests pass, pi model-projection handler registered and discoverable
 
 **Provider wiring status (evidence-gated):**
@@ -315,18 +319,16 @@ and `supported_connectors` tuple. Pi uses `baseUrl/compat`, Codex uses `model_pr
 - codex: BLOCKED — project-scope precedence NOT verified (RV353); global `~/.codex/config.toml` may override project `.codex/config.toml`
 - qwen: N/A — single auth-type switch, no custom endpoint catalog; not a projection target
 
-**Remaining:**
-- Add model_config + renderer to other providers (opencode, codex, qwen)
-- Migrate callers from `sync_provider_models` to `manage_model_projection`
-- Fold `list_provider_models_config` into model-projection status mode
-- Remove `reload_provider_models` public route
-- Delete old `sync_provider_models` export after all callers migrated
+**Remaining:** None for the shared family boundary. Additional provider wiring remains
+evidence-gated and must only be added when a provider exposes a verified, useful model
+projection surface.
 
 **Risk:** Medium. Model projection is a critical path. Must verify parity.
 
 **Verification:** Run `tests/unit/providers/test_model_*.py`
 
-**Result:** MO02 advances toward completion. Only pi wired (others blocked by evidence). Enables MA22.
+**Result:** MO02 completes. Pi is wired; unsupported providers remain deliberately
+unregistered rather than accumulating speculative writers. Enables MA22.
 
 ---
 
@@ -488,7 +490,7 @@ For each slice:
 
 1. **MA26: Codex config schema freeze** — `CodexRecipeRequest/Result` must be defined before handler code. The config format is known from `codex_recipe.py`:
    - `~/.codex/hooks.json` — event-driven hook structure
-   - `~/.codex/config.toml` — `[features] codex_hooks = true`
+   - `~/.codex/config.toml` — `[features] hooks = true`
    - `~/.hindsight/codex.json` — Hindsight backend config
    - `~/.hindsight/codex/scripts/` — downloaded Python hook scripts
 
