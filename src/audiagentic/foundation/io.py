@@ -23,6 +23,18 @@ _REPLACE_RETRY_ATTEMPTS = 5
 _REPLACE_RETRY_DELAY_SECONDS = 0.05
 
 
+def read_text_with_retry(path: Path, *, encoding: str = "utf-8") -> str:
+    """Read through short Windows sharing violations from atomic replacement."""
+    for attempt in range(_REPLACE_RETRY_ATTEMPTS):
+        try:
+            return path.read_text(encoding=encoding)
+        except PermissionError:
+            if attempt == _REPLACE_RETRY_ATTEMPTS - 1:
+                raise
+            time.sleep(_REPLACE_RETRY_DELAY_SECONDS)
+    raise AssertionError("bounded read retry loop exhausted")
+
+
 def _ensure_dict(data: Any) -> dict[str, Any]:
     """Return data if it's a dict, otherwise return an empty dict."""
     return data if isinstance(data, dict) else {}

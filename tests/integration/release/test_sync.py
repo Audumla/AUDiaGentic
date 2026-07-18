@@ -37,7 +37,9 @@ def test_sync_merges_fragments_idempotent(tmp_path: Path) -> None:
 
         # idempotent
         result2 = sync_current_release_ledger(sandbox.repo)
-        assert result2.fragment_count == 2
+        # The first sync purges merged fragments; a second sync therefore has
+        # no pending fragments and must leave the durable ledger unchanged.
+        assert result2.fragment_count == 0
         lines2 = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines() if line.strip()]
         assert lines2 == lines
     finally:

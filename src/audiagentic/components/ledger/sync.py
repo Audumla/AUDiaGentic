@@ -3,10 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import socket
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -19,12 +16,10 @@ from audiagentic.components.ledger.paths import (
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_ndjson, atomic_write_text
+from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
-
-STALE_AFTER_SECONDS = 300
-
 
 @dataclass(frozen=True)
 class SyncResult:
@@ -76,50 +71,26 @@ def _manifest_path(project_root: Path) -> Path:
     return ledger_manifest_path(project_root)
 
 
-def _acquire_lock(project_root: Path) -> tuple[Path, str | None]:
+def _acquire_lock(project_root: Path) -> tuple[StartupLock, str | None]:
     lock_path = _lock_path(project_root)
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    warning = None
-
-    if lock_path.exists():
-        payload = json.loads(lock_path.read_text(encoding="utf-8"))
-        acquired_at = payload.get("acquired-at")
-        pid = int(payload.get("pid", 0))
-        try:
-            acquired_dt = datetime.fromisoformat(acquired_at.replace("Z", "+00:00")) if acquired_at else datetime.now(timezone.utc)
-        except ValueError:
-            acquired_dt = datetime.now(timezone.utc)
-        age = (datetime.now(timezone.utc) - acquired_dt).total_seconds()
-
-        pid_alive = False
-        if pid:
-            try:
-                os.kill(pid, 0)
-                pid_alive = True
-            except OSError:
-                pid_alive = False
-
-        if age <= STALE_AFTER_SECONDS and pid_alive:
+    warning = "stale-lock-replaced" if lock_path.exists() else None
+    lock = StartupLock(lock_path, timeout=0.1)
+    try:
+        lock.__enter__()
+    except AudiaGenticError as exc:
+        if exc.code == "TO-PROC-002":
             raise AudiaGenticError(
                 code="CON-SYNCL-001",
                 kind="release",
                 message="sync lock already held",
-                details={"pid": pid},
-            )
-        warning = "stale-lock-replaced"
-
-    lock_path.write_text(json.dumps({
-        "pid": os.getpid(),
-        "hostname": socket.gethostname(),
-        "acquired-at": now_iso_z(),
-        "command": "sync-current-release-ledger",
-    }, indent=2), encoding="utf-8")
-    return lock_path, warning
+                details={"path": str(lock_path)},
+            ) from exc
+        raise
+    return lock, warning
 
 
-def _release_lock(lock_path: Path) -> None:
-    if lock_path.exists():
-        lock_path.unlink()
+def _release_lock(lock: StartupLock) -> None:
+    lock.__exit__()
 
 
 def _fragment_dir(project_root: Path) -> Path:
@@ -148,7 +119,7 @@ def _load_manifest(project_root: Path) -> dict[str, Any]:
 
 
 def sync_current_release_ledger(project_root: Path) -> SyncResult:
-    lock_path, warning = _acquire_lock(project_root)
+    lock, warning = _acquire_lock(project_root)
     try:
         fragments = _load_fragments(project_root)
         current_ids = {f["event-id"] for f in fragments}
@@ -179,7 +150,7 @@ def sync_current_release_ledger(project_root: Path) -> SyncResult:
 
         purged = _purge_synced_fragments(project_root, current_ids)
     finally:
-        _release_lock(lock_path)
+        _release_lock(lock)
 
     return SyncResult(
         ledger_path=current_ledger_path(project_root),

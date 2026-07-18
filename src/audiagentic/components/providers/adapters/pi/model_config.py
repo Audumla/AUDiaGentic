@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.io import atomic_write_json
+
 
 def read_pi_models(config_path: Path) -> dict[str, tuple[str, Any]]:
     """Read pi's models.json and return managed_id -> (name, payload)."""
@@ -45,8 +47,7 @@ def write_pi_models(
             models_list.append(entry)
             seen_ids.add(mid)
     current_data["models"] = models_list
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(json.dumps(current_data, indent=2), encoding="utf-8")
+    atomic_write_json(config_path, current_data, sort_keys=False)
 
 
 def remove_pi_model(config_path: Path, managed_id: str) -> bool:
@@ -61,5 +62,5 @@ def remove_pi_model(config_path: Path, managed_id: str) -> bool:
     ]
     removed = len(data["models"]) < original_len
     if removed:
-        config_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        atomic_write_json(config_path, data, sort_keys=False)
     return removed

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.components.dependencies import build_dependency_probes
+from audiagentic.foundation.io import atomic_write_json
 
 from . import language_registry
 from .lsp_lifecycle import ServerConfig
@@ -67,9 +68,8 @@ def read_lsp_config(path: Path | str) -> dict[str, dict[str, Any]]:
 def write_lsp_config(path: Path | str, servers: dict[str, dict[str, Any]]) -> None:
     """Write server configuration to lsp.json."""
     path = _as_path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
     data = {"version": 1, "servers": servers}
-    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    atomic_write_json(path, data, sort_keys=False)
 
 
 def detect_project_languages(project_root: Path | str) -> dict[str, str]:

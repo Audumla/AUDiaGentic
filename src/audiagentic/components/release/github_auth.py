@@ -26,6 +26,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.io import atomic_write_json
 
 # GitHub OAuth device flow endpoints
 _DEVICE_AUTH_URL = "https://github.com/login/device/code"
@@ -115,7 +116,7 @@ def save_token(token: str) -> None:
         "token": token,
         "saved-at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
-    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    atomic_write_json(path, data, sort_keys=False)
     try:
         os.chmod(path, 0o600)
     except OSError:
