@@ -211,7 +211,10 @@ ERROR_ENVELOPE_SCHEMA = {
     "properties": {
         "contract-version": {"const": "v1"},
         "ok": {"const": False},
-        "error-code": {"type": "string", "pattern": "^[A-Z]{2,}-[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-\d{3}$"},
+        "error-code": {
+            "type": "string",
+            "pattern": r"^[A-Z]{2,}-[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-\d{3}$",
+        },
         "error-kind": {"type": "string", "pattern": "^[a-z][a-z0-9]{0,38}([a-z0-9]+-[a-z0-9]+)*$"},
         "message": {"type": "string"},
         "details": {"type": "object"},

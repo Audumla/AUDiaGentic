@@ -3,12 +3,11 @@ from __future__ import annotations
 
 import json
 import threading
-from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import make_error_factory
-from audiagentic.foundation.logging.redaction import is_bulk_key, is_sensitive_key
+from audiagentic.foundation.logging.redaction import find_denylisted_key
 from audiagentic.foundation.time import now_iso_z
 
 _opr_error = make_error_factory("VAL", "OPR", "operational-record-validation")
@@ -16,31 +15,6 @@ _con_opr_error = make_error_factory("CON", "OPR", "operational-record-constraint
 
 _OPR_LOCKS: dict[Path, threading.Lock] = {}
 _OPR_LOCKS_GUARD = threading.Lock()
-
-
-def _find_denylisted_key(value: Any, depth: int = 0) -> str | None:
-    """Return the first sensitive-shaped mapping key found anywhere in *value*.
-
-    Reuses the single shared matcher from ``foundation.logging.redaction``
-    (EDJ24) — no parallel pattern set here. Recurses through mappings and
-    sequences (bounded depth); string contents are not inspected — callers
-    summarize/redact values before writing.
-    """
-    if depth > 16:
-        return None
-    if isinstance(value, Mapping):
-        for key, nested in value.items():
-            if is_sensitive_key(key) or is_bulk_key(key):
-                return str(key)
-            found = _find_denylisted_key(nested, depth + 1)
-            if found is not None:
-                return found
-    elif isinstance(value, (list, tuple, set, frozenset)):
-        for nested in value:
-            found = _find_denylisted_key(nested, depth + 1)
-            if found is not None:
-                return found
-    return None
 
 
 def _lock_for(path: Path) -> threading.Lock:
@@ -75,7 +49,7 @@ def append_operational_record(path: Path, record: dict[str, Any]) -> None:
             keys=list(record.keys()),
         )
 
-    denied = _find_denylisted_key(record)
+    denied = find_denylisted_key(record)
     if denied is not None:
         raise _con_opr_error(
             2,

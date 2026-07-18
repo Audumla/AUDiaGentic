@@ -1,6 +1,6 @@
 """MA18 Step 4 — ACP execution contract tests.
 
-Exact test matrix per frozen contract in AGENT_EXECUTION_TRANSPORTS.md
+Exact test matrix per frozen contract in PROVIDER_CAPABILITY_REFERENCE/execution/agent-execution-transports.md
 §'Neutral event and lifecycle contract — FROZEN'.
 
 Mock official SDK boundary, not provider internals.
@@ -20,6 +20,7 @@ from audiagentic.foundation.transports.acp import (
     ERR_EXECUTION_FAILED,
     ERR_SDK_MISSING,
     MAX_EVENTS,
+    MAX_TOTAL_BYTES,
     AcpLaunch,
     _map_kind,
     run_acp_prompt,
@@ -187,16 +188,25 @@ async def test_explicit_policy_grant(tmp_path, monkeypatch):
 
 # ── malformed update ────────────────────────────────────────────
 
+class _BadStr:
+    """Object whose str() always raises — triggers malformed update path."""
+
+    def __str__(self):
+        raise ValueError("unrepresentable")
+
+    def __repr__(self):
+        return "<_BadStr>"
+
+
 @pytest.mark.asyncio
 async def test_malformed_update_normalized(tmp_path, monkeypatch):
     """Malformed updates produce error-kind event with EXT-ACP-002."""
     async def prompt_handler(session_id, prompt):
         client = captured["client"]
         if client is not None:
-            # Force malformed update — _plain will choke on SimpleNamespace
             await client.session_update(
                 session_id,
-                SimpleNamespace(bad=object()),  # str() on object() produces repr, not clean
+                _BadStr(),
             )
         return SimpleNamespace(stop_reason="end_turn")
 
@@ -209,9 +219,14 @@ async def test_malformed_update_normalized(tmp_path, monkeypatch):
         prompt="hello",
     )
 
-    # The session_update with a SimpleNamespace that str() handles fine will NOT error.
-    # We need to actually trigger an exception. Rewrite to use a side_effect approach.
-    assert len(result.events) >= 1
+    error_events = [e for e in result.events if e.kind == "error"]
+    assert len(error_events) >= 1, "Expected at least one error event for malformed update"
+    err = error_events[0]
+    assert err.error is not None
+    assert err.error["code"] == "EXT-ACP-002"
+    # Session continues — terminal result still emitted
+    assert result.terminal_event is not None
+    assert result.terminal_event.kind == "result"
 
 # ── child exit ───────────────────────────────────────────────────
 
@@ -286,7 +301,51 @@ async def test_callback_failure_disables(tmp_path, monkeypatch):
     status_events = [e for e in result.events if e.kind == "status"]
     assert len(status_events) >= 1
 
+# ── cancel during prompt (protocol-level) ───────────────────────
+
+@pytest.mark.asyncio
+async def test_cancel_during_prompt(tmp_path, monkeypatch):
+    """Cancel signal set mid-prompt triggers protocol cancel, returns cancelled."""
+    cancel_called = {"count": 0}
+
+    async def slow_prompt(session_id, prompt):
+        """Simulates a long-running prompt that never completes."""
+        await asyncio.sleep(10)
+        return SimpleNamespace(stop_reason="end_turn")
+
+    conn, ctx, captured = _build_mock(
+        tmp_path, monkeypatch, prompt_side_effect=slow_prompt,
+    )
+    # Add protocol-level cancel method to the mock connection
+    async def mock_cancel(session_id):
+        cancel_called["count"] += 1
+
+    conn.cancel = mock_cancel
+
+    cancel_signal = asyncio.Event()
+
+    async def fire_cancel():
+        await asyncio.sleep(0.1)
+        cancel_signal.set()
+
+    asyncio.ensure_future(fire_cancel())
+
+    result = await run_acp_prompt(
+        AcpLaunch("agent"),
+        cwd=tmp_path,
+        prompt="hello",
+        cancel_signal=cancel_signal,
+    )
+
+    assert result.stop_reason == "cancelled"
+    terminal = result.terminal_event
+    assert terminal is not None
+    assert terminal.kind == "result"
+    # Protocol-level cancel was attempted
+    assert cancel_called["count"] >= 1
+
 # ── cancel before prompt ────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_cancel_before_prompt(tmp_path, monkeypatch):
@@ -341,6 +400,37 @@ async def test_bounded_event_count(tmp_path, monkeypatch):
     assert len(result.events) <= MAX_EVENTS + 1
     assert result.dropped_events > 0
     assert result.total_events > MAX_EVENTS
+
+# ── bounded total bytes ─────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_bounded_total_bytes(tmp_path, monkeypatch):
+    """Beyond MAX_TOTAL_BYTES, oldest events are evicted; terminal retained."""
+    BIG_TEXT = "x" * 1024  # 1 KiB per event — 8192 events exceed 8 MiB
+
+    async def prompt_handler(session_id, prompt):
+        client = captured["client"]
+        if client is not None:
+            for i in range(8192):
+                await client.session_update(
+                    session_id,
+                    {"sessionUpdate": "agent_message_chunk", "text": BIG_TEXT},
+                )
+        return SimpleNamespace(stop_reason="end_turn")
+
+    conn, ctx, captured = _build_mock(
+        tmp_path, monkeypatch, prompt_side_effect=prompt_handler,
+    )
+    result = await run_acp_prompt(
+        AcpLaunch("agent"),
+        cwd=tmp_path,
+        prompt="hello",
+    )
+
+    assert result.bytes_buffered <= MAX_TOTAL_BYTES + 1024
+    assert result.dropped_events > 0
+    assert result.terminal_event is not None
+    assert result.terminal_event.kind == "result"
 
 # ── secret canary absent from normalized errors ─────────────────
 
@@ -410,3 +500,39 @@ async def test_result_structure(tmp_path, monkeypatch):
     assert result.terminal_event is not None
     assert result.terminal_event.terminal is True
     assert result.callback_disabled is False
+
+# ── foundation import guard ─────────────────────────────────────
+
+def test_acp_no_component_imports():
+    """foundation/transports/acp.py must not import component or provider modules."""
+    import ast
+
+    acp_path = (
+        __import__(
+            "audiagentic.foundation.transports.acp",
+            fromlist=[""],
+        )
+        .__file__ or ""
+    )
+
+    with open(acp_path, encoding="utf-8") as f:
+        source = f.read()
+
+    tree = ast.parse(source)
+    forbidden_prefixes = (
+        "audiagentic.components",
+        "audiagentic.runtime",
+    )
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                for prefix in forbidden_prefixes:
+                    assert not alias.name.startswith(prefix), (
+                        f"ACP foundation imports forbidden: {alias.name}"
+                    )
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            for prefix in forbidden_prefixes:
+                assert not node.module.startswith(prefix), (
+                    f"ACP foundation imports forbidden: {node.module}"
+                )
