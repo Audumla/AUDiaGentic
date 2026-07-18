@@ -12,5 +12,5 @@ This folder currently defines Pi-specific descriptor metadata. Pi runtime-heavy 
 
 ## Capability matrix
 
-Full provider × vendor support matrix: see [PROVIDER_MODEL_ENDPOINT_CAPABILITIES.md](../../../../../../docs/reference/PROVIDER_MODEL_ENDPOINT_CAPABILITIES.md#agent-provider--vendor-support-matrix)
-Pi-specific evidence: [model-source-evidence/pi.md](../../../../../../docs/reference/model-source-evidence/pi.md)
+Full provider × vendor support matrix: see [endpoints/provider-model-endpoints.md](../../../../../../docs/reference/PROVIDER_CAPABILITY_REFERENCE/endpoints/provider-model-endpoints.md#agent-provider--vendor-support-matrix)
+Pi-specific evidence: [harnesses/profiles/pi.md](../../../../../../docs/reference/PROVIDER_CAPABILITY_REFERENCE/harnesses/profiles/pi.md)

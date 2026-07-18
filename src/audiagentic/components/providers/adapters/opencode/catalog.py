@@ -50,6 +50,7 @@ def _fetch_opencode_catalog(provider_cfg: dict[str, Any]) -> list[dict[str, Any]
             status = "active" if raw_status == "active" else "deprecated"
             models.append({
                 "model-id": model_key,
+                "vendor-id": model_key.partition("/")[0],
                 "display-name": data.get("name", model_key),
                 "status": status,
                 "supports-structured-output": toolcall,

@@ -2,7 +2,7 @@
 agents.llm.gateway.requested:
   description: "Agent job dispatched to gateway via event trigger"
   payload-required: ["project-root", "prompt-body"]
-  payload-optional: ["agent-profile-id", "fallback-profile-ids", "source"]
+  payload-optional: ["agent-profile-id", "source"]
   metadata-keys: []
   delivery: sync
   since: v1.0.0
@@ -61,5 +61,79 @@ agents.llm.rejected:
   payload-required: ["request-id", "agent-profile-id", "state"]
   payload-optional: []
   metadata-keys: []
+  delivery: async
+  since: v1.0.0
+
+# Agent session lifecycle events — published by agents_gateway_sessions
+agents.session.opened:
+  description: "Session opened and registered with SessionRuntime"
+  payload-required: ["session-id", "agent-profile-id", "state"]
+  payload-optional: ["provider-id", "model-id"]
+  metadata-keys: ["correlation_id"]
+  delivery: async
+  since: v1.0.0
+
+agents.session.turn-finished:
+  description: "A turn completed on a live session"
+  payload-required: ["session-id", "agent-profile-id", "state"]
+  payload-optional: ["provider-id", "model-id", "request-id", "turn-count", "stop-reason"]
+  metadata-keys: ["correlation_id"]
+  delivery: async
+  since: v1.0.0
+
+agents.session.closed:
+  description: "Session closed (client-request or shutdown)"
+  payload-required: ["session-id", "agent-profile-id", "state"]
+  payload-optional: ["provider-id", "model-id", "close-reason", "turn-count"]
+  metadata-keys: ["correlation_id"]
+  delivery: async
+  since: v1.0.0
+
+agents.session.expired:
+  description: "Session expired (idle-timeout or max-lifetime)"
+  payload-required: ["session-id", "agent-profile-id", "state"]
+  payload-optional: ["provider-id", "model-id", "close-reason", "turn-count"]
+  metadata-keys: ["correlation_id"]
+  delivery: async
+  since: v1.0.0
+
+agents.session.failed:
+  description: "Session failed (child process died or transport error)"
+  payload-required: ["session-id", "agent-profile-id", "state"]
+  payload-optional: ["provider-id", "model-id", "close-reason", "turn-count"]
+  metadata-keys: ["correlation_id"]
+  delivery: async
+  since: v1.0.0
+
+# Agent turn intra-turn events — published by agents_gateway_sessions (AS18)
+agents.turn.model.started:
+  description: "Model inference starting (intra-turn observation)"
+  payload-required: ["session-id", "agent-profile-id", "request-id", "kind"]
+  payload-optional: ["provider-id", "model-id", "sequence", "native_kind", "semantic-strength", "verification-tier"]
+  metadata-keys: ["correlation_id"]
+  delivery: async
+  since: v1.0.0
+
+agents.turn.model.completed:
+  description: "Model inference completed (intra-turn observation)"
+  payload-required: ["session-id", "agent-profile-id", "request-id", "kind"]
+  payload-optional: ["provider-id", "model-id", "sequence", "native_kind", "semantic-strength", "verification-tier"]
+  metadata-keys: ["correlation_id"]
+  delivery: async
+  since: v1.0.0
+
+agents.turn.tool.started:
+  description: "Tool execution starting (intra-turn observation)"
+  payload-required: ["session-id", "agent-profile-id", "request-id", "kind"]
+  payload-optional: ["provider-id", "model-id", "sequence", "native_kind", "semantic-strength", "verification-tier", "tool-call-id"]
+  metadata-keys: ["correlation_id"]
+  delivery: async
+  since: v1.0.0
+
+agents.turn.tool.completed:
+  description: "Tool execution completed (intra-turn observation; status distinguishes completed from failed)"
+  payload-required: ["session-id", "agent-profile-id", "request-id", "kind"]
+  payload-optional: ["provider-id", "model-id", "sequence", "native_kind", "semantic-strength", "verification-tier", "tool-call-id", "status"]
+  metadata-keys: ["correlation_id"]
   delivery: async
   since: v1.0.0

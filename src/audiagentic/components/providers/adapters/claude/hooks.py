@@ -5,12 +5,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from pathlib import Path
 from typing import Any
 
 from audiagentic.components.providers.adapters.claude.restrictions import (
     enforce_stage_restrictions,
 )
+from audiagentic.components.providers.prompt_tags import parse_tagged_prompt
 from audiagentic.foundation.cli_io import print_json
 from audiagentic.foundation.io import _ensure_dict
 
@@ -43,71 +43,21 @@ def detect_and_launch_prompt_tag(
     if not raw_prompt:
         return {}
 
-    # Extract first non-empty line
-    first_line = None
-    for line in raw_prompt.split('\n'):
-        if line.strip():
-            first_line = line.strip()
-            break
-
-    if not first_line:
+    tagged_prompt = parse_tagged_prompt(raw_prompt)
+    if tagged_prompt is None:
         return {}
-
-    # Detect tag starting with @ (canonical or aliased)
-    if not first_line.startswith('@'):
-        return {}  # No tag, pass through to normal planning
-
-    # Extract tag token (everything up to space or end of line)
-    tag_token = first_line[1:].split()[0] if first_line[1:] else ''
-    if not tag_token:
-        return {}
-
-    # The shared bridge will handle tag/provider alias resolution
-    # We just need to detect that a tag-like token is present
-    tag_found = '@' + tag_token
-
-    return _invoke_prompt_launch(
-        raw_prompt=raw_prompt,
-        first_line=first_line,
-        tag=tag_found,
-        session_metadata=session_metadata,
-    )
-
-
-def _invoke_prompt_launch(
-    raw_prompt: str,
-    first_line: str,
-    tag: str,
-    session_metadata: dict[str, Any],
-) -> dict[str, Any]:
-    try:
-        from audiagentic.components.agent_jobs.prompt_launch import launch_prompt_request
-        from audiagentic.components.agent_jobs.prompt_parser import (
-            parse_prompt_launch_request,
-        )
-
-        workspace_root = session_metadata.get('workspace_root', '.')
-        surface = session_metadata.get('surface', 'cli')
-        session_id = session_metadata.get('session_id', '')
-        params = _parse_first_line_params(first_line)
-        provider_id = params.get('provider', 'claude')
-
-        request = parse_prompt_launch_request(
-            raw_prompt,
-            surface=surface,
-            provider_id=provider_id,
-            session_id=session_id or None,
-            allow_adhoc_target=False,
-            project_root=Path(workspace_root),
-        )
-        return launch_prompt_request(Path(workspace_root), request)
-
-    except Exception as exc:
-        return {
-            'status': 'error',
-            'kind': 'exception',
-            'message': f'Hook handler error: {type(exc).__name__}: {exc}',
-        }
+    # A provider hook reports primitive provenance for its requester to launch.
+    # It must not parse a requester request or create a requester-owned job.
+    return {
+        "status": "tag-detected",
+        "tag": tagged_prompt.tag,
+        "directives": dict(tagged_prompt.directives),
+        "prompt-body": tagged_prompt.body,
+        "raw-prompt": raw_prompt,
+        "provider-id": tagged_prompt.directives.get("provider", "claude"),
+        "surface": session_metadata.get("surface", "claude"),
+        "session-id": session_metadata.get("session_id") or None,
+    }
 
 
 def _parse_first_line_params(first_line: str) -> dict[str, str]:

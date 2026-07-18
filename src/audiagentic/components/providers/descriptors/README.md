@@ -45,4 +45,4 @@ The single canonical resolver is `foundation/descriptors/resolver.py:resolve_ref
   from the former `DescriptorRegistry` in 2026-07). Step specs are built by
   `foundation.workflow.invocation.from_spec.build_step_from_spec` — workflow owns its
   own YAML deserializer.
-- Hindsight-specific provider matrices remain in `config/components/memory/hindsight_matrix.yaml`.
+- Requester-specific provider matrices remain in their owning component configs.

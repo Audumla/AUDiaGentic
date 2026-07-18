@@ -10,5 +10,5 @@ Owns OpenHands-specific descriptor, execution bridge, and managed surface conten
 
 ## Capability matrix
 
-Full provider × vendor support matrix: see [PROVIDER_MODEL_ENDPOINT_CAPABILITIES.md](../../../../../../docs/reference/PROVIDER_MODEL_ENDPOINT_CAPABILITIES.md#agent-provider--vendor-support-matrix)
-OpenHands-specific evidence: [model-source-evidence/openhands.md](../../../../../../docs/reference/model-source-evidence/openhands.md)
+Full provider × vendor support matrix: see [endpoints/provider-model-endpoints.md](../../../../../../docs/reference/PROVIDER_CAPABILITY_REFERENCE/endpoints/provider-model-endpoints.md#agent-provider--vendor-support-matrix)
+OpenHands-specific evidence: [harnesses/profiles/openhands.md](../../../../../../docs/reference/PROVIDER_CAPABILITY_REFERENCE/harnesses/profiles/openhands.md)

@@ -10,5 +10,5 @@ Owns Codex-specific descriptor, execution bridge, MCP-format translation, langua
 
 ## Capability matrix
 
-Full provider × vendor support matrix: see [PROVIDER_MODEL_ENDPOINT_CAPABILITIES.md](../../../../../../docs/reference/PROVIDER_MODEL_ENDPOINT_CAPABILITIES.md#agent-provider--vendor-support-matrix)
-Codex-specific evidence: [model-source-evidence/codex.md](../../../../../../docs/reference/model-source-evidence/codex.md)
+Full provider × vendor support matrix: see [endpoints/provider-model-endpoints.md](../../../../../../docs/reference/PROVIDER_CAPABILITY_REFERENCE/endpoints/provider-model-endpoints.md#agent-provider--vendor-support-matrix)
+Codex-specific evidence: [harnesses/profiles/codex.md](../../../../../../docs/reference/PROVIDER_CAPABILITY_REFERENCE/harnesses/profiles/codex.md)

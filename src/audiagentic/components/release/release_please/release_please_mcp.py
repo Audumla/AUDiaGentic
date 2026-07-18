@@ -75,6 +75,7 @@ def build_release_artifacts(
     interactive: bool = True,
 ) -> dict:
     return release_api.build_release_artifacts(
+        project_root_from_env(),
         release_id=release_id,
         tag=tag,
         pypi=pypi,

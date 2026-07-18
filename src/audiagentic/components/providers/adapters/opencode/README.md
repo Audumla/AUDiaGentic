@@ -17,5 +17,5 @@ Env var probes (`ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`) confirmed rejected by v1.
 
 ## Capability matrix
 
-Full provider × vendor support matrix and evidence: see [PROVIDER_MODEL_ENDPOINT_CAPABILITIES.md](../../../../../../docs/reference/PROVIDER_MODEL_ENDPOINT_CAPABILITIES.md#agent-provider--vendor-support-matrix)
-OpenCode-specific evidence: [model-source-evidence/opencode.md](../../../../../../docs/reference/model-source-evidence/opencode.md)
+Full provider × vendor support matrix and evidence: see [endpoints/provider-model-endpoints.md](../../../../../../docs/reference/PROVIDER_CAPABILITY_REFERENCE/endpoints/provider-model-endpoints.md#agent-provider--vendor-support-matrix)
+OpenCode-specific evidence: [harnesses/profiles/opencode.md](../../../../../../docs/reference/PROVIDER_CAPABILITY_REFERENCE/harnesses/profiles/opencode.md)
