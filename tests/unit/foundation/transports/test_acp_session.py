@@ -234,9 +234,16 @@ async def test_overflow_preserves_assistant_text_past_event_cap(tmp_path, monkey
 
     assert result.dropped_events > 0  # cap semantics unchanged
     assert len(result.events) <= MAX_EVENTS + 1
+    # Rolling FIFO: the TAIL (final report) is retained as events; the
+    # evicted OLDEST chunks survive as overflow text.
+    retained_texts = [e.text for e in result.events if e.kind == "assistant-message"]
+    assert f"[{MAX_EVENTS + 49}]" in retained_texts[-1]
     assert result.overflow_text is not None
-    # The last chunk — beyond the cap — is preserved as text
-    assert f"[{MAX_EVENTS + 49}]" in result.overflow_text
+    assert "[0]" in result.overflow_text
+    # Sequences stay strictly increasing across evictions
+    seqs = [e.sequence for e in result.events]
+    assert seqs == sorted(seqs)
+    assert seqs[0] > 0  # oldest were evicted
 
 
 @pytest.mark.asyncio
@@ -285,3 +292,62 @@ async def test_close_force_terminates_stubborn_child(tmp_path, monkeypatch):
     proc.terminate = sticky_terminate
     await transport.close()
     assert proc.terminated or proc.returncode is not None
+
+
+# ── RV679: terminal callback delivery, real wire vocabulary, compact ids ──
+
+
+@pytest.mark.asyncio
+async def test_terminal_result_is_delivered_to_on_event(tmp_path, monkeypatch):
+    """The terminal 'result' event reaches the on_event callback — turn
+    completion must be observable without waiting on the sync return."""
+    conn, proc, captured, exited = _install_sdk(monkeypatch)
+    transport = AcpSessionTransport(AcpLaunch("agent"), cwd=tmp_path)
+    await transport.open()
+
+    seen: list = []
+
+    async def on_event(event):
+        seen.append(event)
+
+    result = await transport.prompt("go", on_event=on_event)
+    await transport.close()
+
+    terminals = [e for e in seen if e.kind == "result" and e.terminal]
+    assert len(terminals) == 1
+    assert terminals[0].ext["acp"]["stop_reason"] == "end_turn"
+    assert result.terminal_event is not None
+
+
+@pytest.mark.asyncio
+async def test_real_wire_kinds_map_to_canonical(tmp_path, monkeypatch):
+    """agent_thought_chunk / tool_call_update — the kinds real agents send —
+    normalize to canonical 'thought' / 'tool-call' instead of leaking raw."""
+    async def prompt_one(session_id, prompt):
+        client = captured["client"]
+        await client.session_update(
+            session_id,
+            {"sessionUpdate": "agent_thought_chunk", "content": {"type": "text", "text": "thinking"}},
+        )
+        await client.session_update(
+            session_id,
+            {"sessionUpdate": "tool_call_update", "toolCallId": "tc9", "status": "completed"},
+        )
+        return SimpleNamespace(stop_reason="end_turn")
+
+    conn, proc, captured, exited = _install_sdk(monkeypatch, prompt_side_effect=prompt_one)
+    transport = AcpSessionTransport(AcpLaunch("agent"), cwd=tmp_path, compact_events=True)
+    await transport.open()
+    result = await transport.prompt("go")
+    await transport.close()
+
+    kinds = [e.kind for e in result.events]
+    assert "thought" in kinds and "tool-call" in kinds
+    thought = next(e for e in result.events if e.kind == "thought")
+    assert thought.text == "thinking"
+    assert thought.ext["acp"]["raw_kind"] == "agent_thought_chunk"
+    # Compact mode preserves the tool lifecycle identity without the payload.
+    tool = next(e for e in result.events if e.kind == "tool-call")
+    assert tool.ext["acp"]["status"] == "completed"
+    assert tool.ext["acp"]["tool_call_id"] == "tc9"
+    assert "payload" not in tool.ext["acp"]

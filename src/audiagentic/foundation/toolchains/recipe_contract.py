@@ -135,7 +135,7 @@ class ProvisioningRecipe(ABC):
     unchanged; override them only when the default ordering does not fit.
 
     The return type of lifecycle methods is covariant: subclasses may narrow
-    ``RecipeResult`` to a richer result (e.g. ``ProviderRecipeResult``).
+    ``RecipeResult`` to a richer typed result for their family contract.
     """
 
     #: Provider-specific teardown callables run during :meth:`teardown`, after

@@ -16,6 +16,11 @@ def global_harness_runtime() -> Path:
     return audiagentic_home() / "harness"
 
 
+def global_service_runtime() -> Path:
+    """Return the machine-scoped managed-service state directory."""
+    return audiagentic_home() / "services"
+
+
 def global_log_dir(component: str) -> Path:
     """Return the global log directory for a named component."""
     return audiagentic_home() / "logs" / component

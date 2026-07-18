@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+import pytest
+
 from audiagentic.foundation.event import DeliveryMode, EventBus
 
 
@@ -194,3 +196,50 @@ def test_reset_bus_closes_old_instance_and_carries_config() -> None:
     assert old._closed is True
     assert new._max_depth == 5  # config carried over
     reset_bus()
+
+
+def test_correlation_cycle_tracking_has_bounded_lru_retention() -> None:
+    from audiagentic.foundation.event import EventCycleDetectionSettings, EventLayerConfig
+    from audiagentic.foundation.event.envelope import EventEnvelope
+    from audiagentic.foundation.event.event_bus import EventBus
+
+    bus = EventBus(config=EventLayerConfig(
+        cycle_detection=EventCycleDetectionSettings(max_correlation_chains=3)
+    ))
+    for index in range(5):
+        bus.publish_envelope(EventEnvelope(
+            type="test.event", payload={}, correlation_id=f"correlation-{index}"
+        ))
+
+    assert list(bus._correlation_chains) == ["correlation-2", "correlation-3", "correlation-4"]
+    bus.close()
+
+
+def test_one_correlation_chain_has_bounded_event_retention() -> None:
+    from audiagentic.foundation.event import EventCycleDetectionSettings, EventLayerConfig
+    from audiagentic.foundation.event.envelope import EventEnvelope
+    from audiagentic.foundation.event.event_bus import EventBus
+
+    bus = EventBus(config=EventLayerConfig(
+        cycle_detection=EventCycleDetectionSettings(max_events_per_correlation=3)
+    ))
+    for index in range(5):
+        bus.publish_envelope(EventEnvelope(
+            id=f"event-{index}", type="test.event", payload={}, correlation_id="shared"
+        ))
+
+    assert list(bus._correlation_chains["shared"]) == ["event-2", "event-3", "event-4"]
+    bus.close()
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [("max_depth", 0), ("max_correlation_chains", True), ("max_events_per_correlation", "3")],
+)
+def test_cycle_detection_retention_settings_require_positive_integers(
+    field: str, value: object
+) -> None:
+    from audiagentic.foundation.event import EventCycleDetectionSettings
+
+    with pytest.raises(ValueError, match=field):
+        EventCycleDetectionSettings(**{field: value})

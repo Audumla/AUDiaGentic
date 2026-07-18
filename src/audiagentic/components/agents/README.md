@@ -17,6 +17,11 @@ execution parameters. Profiles are stored per-project in
 - `agents_gateway_api.py` — Public submit/status/wait/cancel/run API (AG11)
 - `agents_gateway_mcp.py` — Gateway MCP server (AG11)
 - `agents_gateway_events.py` — Event-triggered submission via `agents.llm.gateway.requested` (AG12)
+- `agents_gateway_application.py` — Framework-neutral gateway application contract
+- `agents_gateway_service_application.py` — Closed standalone v1 operation/lease router
+- `agents_gateway_http_transport.py` — Authenticated IPv4-loopback HTTP adapter
+- `agents_gateway_remote_client.py` — Explicit standalone client with bounded attach semantics
+- `agents_gateway_service_host.py` — Foundation managed-service host composition
 
 ## Two-server pattern (profiles)
 
@@ -61,11 +66,11 @@ validated against `agent-llm-record.schema.json`.
 - **Async** (default) — `agent_llm_submit` returns `{request-id, state: "queued"}` immediately.
   Poll `agent_llm_status(request_id)` or block later with `agent_llm_wait(request_id, timeout_seconds)`.
 - **Blocking** — `agent_llm_run` submits and waits for a terminal result or timeout in one call.
-  Server-side timeout cap: `agents_gateway_api.MAX_BLOCKING_TIMEOUT_SECONDS` (300s) — a longer
+  MCP adapter timeout cap: `agents_gateway_mcp.MCP_BLOCKING_TIMEOUT_SECONDS` (300s) — a longer
   requested timeout is silently clamped, since a blocking MCP tool call must not hold the
   connection past the client's own transport timeout.
 - **Event-triggered** — publish `agents.llm.gateway.requested` on the foundation event bus
-  (`{project-root, prompt-body, agent-profile-id?, fallback-profile-ids?, blocking?, source?}`).
+  (`{project-root, prompt-body, agent-profile-id?, blocking?, source?}`).
   Always async unless `payload.blocking` is explicitly set. Not for one-shot MCP-tool use —
   use `agent_llm_run` for that.
 
@@ -75,7 +80,7 @@ validated against `agent-llm-record.schema.json`.
 per-profile queue is full). See `workflows.yaml`'s `gateway-request` kind for the full
 transition table. `cancel-requested` is a separate persisted flag, not a state — cancelling
 a queued request transitions it straight to `cancelled`; cancelling a running request only
-records intent (the dispatch retry/fallback loop checks it between attempts and stops, but a
+records intent (the dispatch retry loop checks it between attempts and stops, but a
 request that finishes normally before the next check completes as `completed`, not `cancelled`
 — cancellation of an in-flight provider call is best-effort, not interruptive).
 
@@ -87,12 +92,19 @@ defaulting) — resolved via `agents_gateway_queue.resolve_*` / `agents_gateway_
 - `max-concurrency` (int, default 1) — concurrent in-flight requests per profile.
 - `queue-max-size` (int, default `max(8, max_concurrency*2)`) — requests rejected once exceeded.
 - `retry-count` (int, default 1) — additional attempts after a transient failure, per profile.
-- `fallback-profile-ids` (list[str], default `[]`) — tried in order after retries on the
-  current profile are exhausted, but only for *transient* failures (network/timeout/external/
-  internal/IO errors). A validation/config failure (unknown profile, disabled provider,
-  invalid request, missing model) is terminal on the first occurrence — never retried, never
-  falls back. Classification is driven by the error's canonical code prefix
-  (`foundation.contracts.errors.ERROR_CODE_PREFIXES`), not per-provider special-casing.
+- `session-turn-timeout-seconds` (number, default 3600, 0 disables) — hard
+  deadline for one session turn (RV680). On expiry the session is failed with
+  close-reason `turn-timeout` and the request fails with `TO-AGW-090` — a
+  wedged harness can no longer hold a profile compute slot forever.
+- `session-turn-silence-timeout-seconds` (number, default 0 = disabled) —
+  opt-in in-turn liveness watchdog: if a running turn produces no transport
+  events for this long, the reaper fails the session with close-reason
+  `turn-stalled`. Only enable for harnesses with a known event cadence.
+
+Cancelling a running SESSION request now also signals protocol-level
+`session/cancel` to the in-flight turn (best-effort); an interrupted turn
+terminalizes the request as `cancelled` while the session stays usable.
+Non-session requests keep the between-attempts cooperative check only.
 
 ### Lifecycle events
 
@@ -114,11 +126,86 @@ performs one-shot cleanup for persisted non-terminal records: `running` requests
 `failed` with an orphaned-after-restart error, and `queued` requests become `rejected`.
 The reconciliation is idempotent and leaves already-terminal records untouched.
 
+### Explicit standalone mode (SH04)
+
+Start a local service explicitly:
+
+```text
+audiagentic gateway serve --host 127.0.0.1 --port 8765 --token-file <private-path>
+```
+
+Clients opt in with all three settings; there is no discovery or in-process
+fallback in this phase:
+
+```text
+AUDIAGENTIC_GATEWAY_MODE=standalone
+AUDIAGENTIC_GATEWAY_ENDPOINT=http://127.0.0.1:8765
+AUDIAGENTIC_GATEWAY_TOKEN_FILE=<private-path>
+```
+
+The service rejects non-loopback origins, missing/incorrect tokens, protocol
+version mismatches, stale owner epochs, inactive leases, and non-canonical
+project roots before domain work. Health may retry one transient network
+failure. Domain mutations are never network-retried; the client can reattach
+once only after the service proves the previous lease was stale before
+invocation. Select `AUDIAGENTIC_GATEWAY_MODE=in-process` to roll back during
+the migration.
+
+### Self-managed automatic mode (SH05)
+
+Set `AUDIAGENTIC_GATEWAY_MODE=automatic` to request the compatible machine-wide
+gateway. The public gateway client delegates the single-winner start-or-attach
+race, detached process ownership, stale-record recovery, readiness, and initial
+client lease to the foundation managed-service lifecycle. The optional
+`AUDIAGENTIC_GATEWAY_PORT` selects the loopback port (default `8765`).
+
+Health reports `lifetime-scope`, and the automatic client exposes the same
+foundation evidence as `service_lifetime_scope`. `shared-service-host` means
+the service detached from its starter. On a Windows supervisor whose Job
+Object denies breakaway, foundation reports `session-child`: the gateway is
+shared while that supervisor remains alive but may exit when its Job Object
+closes. That degradation is logged and observable; it is never presented as a
+fully detached owner.
+
+Automatic mode does not fall back to the in-process gateway. An incompatible
+live protocol, unprovable process owner, or unhealthy startup is reported as a
+managed-service error; an unrelated live process is never terminated. This
+mode remains opt-in until the SH11 consumer cutover.
+
+### Durable trigger ingress (SH09)
+
+Cross-process gateway triggers use a durable file spool beside the service
+record (`<service-root>/ingress/`), not the in-process event bus and not a
+broker. Publish from any process with
+`agents_gateway_ingress.publish_gateway_trigger(topic, payload)` — safe while
+the service is down; the running host drains the spool at startup and every
+second thereafter. Spool `event-id` becomes the request idempotency key, so
+redelivery replays the original request instead of double-dispatching.
+Malformed or validation-rejected events move to `ingress/dead-letter/`
+(replayable via `replay_dead_letter`); transient failures retry in order with
+a bounded attempt budget.
+
+### Self-managed lifecycle (SH10)
+
+`AUDIAGENTIC_GATEWAY_IDLE_GRACE_SECONDS` (unset/0 = keep-warm forever)
+enables idle self-shutdown: a running service with no active client leases,
+no queued/running work, no live sessions, and an empty ingress spool for one
+full grace window drains and exits through the PR06 guarded transitions
+(running → draining → re-check → stopped). A lease acquired during the grace
+window resets it. Operators get `service_status` / `service_drain` /
+`service_resume` / `service_stop {force}` as closed service operations
+(force reports the work it abandons). A dead-or-unprovable recorded owner is
+recovered record-only via `agents_gateway_lifecycle.recover_unprovable_owner`
+(explicit confirm required; preserves diagnostics; never signals the PID).
+
 ### Known limitations
 
 - **Not project-scoped**: the queue manager singleton is process-wide, not keyed by
   project-root. Fine in practice (one project per process), but worth knowing.
-- **Same-process only**: blocking wait/cancel and reconciliation assume one gateway
-  process owns the store. The shared-service readiness analysis and v1 decision
-  (events are the sole cross-instance contract; multi-instance work deferred) are
-  recorded in [docs/design/gateway-shared-service.md](../../../../docs/design/gateway-shared-service.md).
+- **Recovery boundary**: SH04 proves explicit service ownership, client-exit
+  survival, and deterministic idle process restart. Durable recovery of queued
+  or running work after service-process failure is owned by SH07; the existing
+  one-shot reconciliation remains the current orphan classifier until then.
+- **Automatic mode is not yet the default**: SH11 owns consumer cutover and
+  removal of in-process ownership. SH04 standalone and SH05 automatic modes
+  remain explicit migration choices.

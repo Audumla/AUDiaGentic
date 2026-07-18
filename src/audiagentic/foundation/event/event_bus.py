@@ -13,6 +13,7 @@ import logging
 import threading
 import uuid
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
@@ -168,8 +169,12 @@ class EventBus(EventBusProtocol):
         if config is not None:
             max_depth = config.cycle_detection.max_depth
             self._correlation_tracking = config.cycle_detection.correlation_tracking
+            self._max_correlation_chains = max(1, config.cycle_detection.max_correlation_chains)
+            self._max_events_per_correlation = config.cycle_detection.max_events_per_correlation
         else:
             self._correlation_tracking = True
+            self._max_correlation_chains = 4096
+            self._max_events_per_correlation = 1024
         self._source_component = source_component
         self._max_depth = max_depth
         self._async_executor = async_executor or ThreadPoolExecutor(max_workers=4)
@@ -180,7 +185,7 @@ class EventBus(EventBusProtocol):
         self._subscriptions: dict[str, list[SubscriptionHandle]] = {}
         self._subscription_lock = threading.Lock()
 
-        self._correlation_chains: dict[str, set[str]] = {}
+        self._correlation_chains: OrderedDict[str, OrderedDict[str, None]] = OrderedDict()
         self._chain_lock = threading.Lock()
 
     @property
@@ -347,7 +352,11 @@ class EventBus(EventBusProtocol):
         if envelope.correlation_id and self._correlation_tracking:
             with self._chain_lock:
                 if envelope.correlation_id not in self._correlation_chains:
-                    self._correlation_chains[envelope.correlation_id] = set()
+                    if len(self._correlation_chains) >= self._max_correlation_chains:
+                        self._correlation_chains.popitem(last=False)
+                    self._correlation_chains[envelope.correlation_id] = OrderedDict()
+                else:
+                    self._correlation_chains.move_to_end(envelope.correlation_id)
 
                 if envelope.id in self._correlation_chains[envelope.correlation_id]:
                     raise CycleDetectedError(
@@ -356,7 +365,10 @@ class EventBus(EventBusProtocol):
                         correlation_id=envelope.correlation_id,
                     )
 
-                self._correlation_chains[envelope.correlation_id].add(envelope.id)
+                events = self._correlation_chains[envelope.correlation_id]
+                if len(events) >= self._max_events_per_correlation:
+                    events.popitem(last=False)
+                events[envelope.id] = None
 
     def close(self) -> None:
         """Close the event bus and cleanup resources. Idempotent."""

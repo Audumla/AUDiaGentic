@@ -26,6 +26,16 @@ class EventCycleDetectionSettings:
 
     max_depth: int = 10
     correlation_tracking: bool = True
+    max_correlation_chains: int = 4096
+    max_events_per_correlation: int = 1024
+
+    def __post_init__(self) -> None:
+        for field_name in ("max_depth", "max_correlation_chains", "max_events_per_correlation"):
+            value = getattr(self, field_name)
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ValueError(f"{field_name} must be a positive integer")
+        if not isinstance(self.correlation_tracking, bool):
+            raise ValueError("correlation_tracking must be a boolean")
 
 
 @dataclass
@@ -67,6 +77,8 @@ def load_event_config(root: Path | None = None) -> EventLayerConfig:
                 cycle_detection=EventCycleDetectionSettings(
                     max_depth=data.get("runtime", {}).get("cycle_detection", {}).get("max_depth", 10),
                     correlation_tracking=data.get("runtime", {}).get("cycle_detection", {}).get("correlation_tracking", True),
+                    max_correlation_chains=data.get("runtime", {}).get("cycle_detection", {}).get("max_correlation_chains", 4096),
+                    max_events_per_correlation=data.get("runtime", {}).get("cycle_detection", {}).get("max_events_per_correlation", 1024),
                 ),
                 replay=EventReplaySettings(
                     dispatch_on_replay=data.get("runtime", {}).get("replay", {}).get("dispatch_on_replay", False),

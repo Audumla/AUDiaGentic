@@ -116,6 +116,25 @@ def is_bulk_key(key: Any) -> bool:
     return bool(BULK_KEYS.search(str(key)))
 
 
+def find_denylisted_key(value: Any, depth: int = 0) -> str | None:
+    """Return the first secret- or bulk-shaped mapping key in a structure."""
+    if depth > 16:
+        return None
+    if isinstance(value, Mapping):
+        for key, nested in value.items():
+            if is_sensitive_key(key) or is_bulk_key(key):
+                return str(key)
+            found = find_denylisted_key(nested, depth + 1)
+            if found is not None:
+                return found
+    elif isinstance(value, (list, tuple, set, frozenset)):
+        for nested in value:
+            found = find_denylisted_key(nested, depth + 1)
+            if found is not None:
+                return found
+    return None
+
+
 def _summarize_value(value: Any, depth: int) -> Any:
     if depth > _MAX_STRUCT_DEPTH:
         return _TRUNCATED

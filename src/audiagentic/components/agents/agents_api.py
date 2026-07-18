@@ -15,6 +15,7 @@ from audiagentic.components.agents.models import (
     profile_from_dict,
     profile_to_dict,
 )
+from audiagentic.foundation.components.hooks import ComponentStatusPayload
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_text, load_yaml_file, save_yaml_file
 
@@ -247,7 +248,6 @@ def agent_status(project_root: Path) -> ComponentStatusPayload:
     """
     from audiagentic.components.agents import agents_gateway_api
     from audiagentic.foundation.components import is_enabled
-    from audiagentic.foundation.components.hooks import ComponentStatusPayload
 
     store = load_profiles(project_root)
     profiles = store.to_dicts()

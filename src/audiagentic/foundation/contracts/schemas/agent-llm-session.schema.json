@@ -45,6 +45,8 @@
         "cancelled-turn",
         "failed",
         "orphaned",
+        "turn-timeout",
+        "turn-stalled",
         null
       ]
     },

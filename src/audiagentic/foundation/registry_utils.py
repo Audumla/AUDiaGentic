@@ -19,6 +19,7 @@ Collision policy:
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Callable
 from typing import Generic, TypeVar
 
@@ -45,19 +46,21 @@ class Registry(Generic[T]):
         self._loader = loader
         self._loaded = loader is None
         self._loading = False
+        self._load_lock = threading.RLock()
         self._items: dict[str, T] = {}
         self._aliases: dict[str, str] = {}  # alias -> key
         _REGISTRIES.append(self)
 
     def _ensure_loaded(self) -> None:
-        if self._loaded or self._loading or self._loader is None:
-            return
-        self._loading = True
-        try:
-            self._loader()
-            self._loaded = True
-        finally:
-            self._loading = False
+        with self._load_lock:
+            if self._loaded or self._loading or self._loader is None:
+                return
+            self._loading = True
+            try:
+                self._loader()
+                self._loaded = True
+            finally:
+                self._loading = False
 
     def is_registered(self, key: str) -> bool:
         """Check if key exists in registry without triggering lazy load."""

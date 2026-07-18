@@ -132,3 +132,61 @@ async def test_is_alive_reflects_lifecycle(tmp_path):
         assert not transport.is_alive(), "alive after close"
     finally:
         await transport.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(_SUBPROCESS_TIMEOUT)
+async def test_intra_turn_event_ordering_model_tool_model(tmp_path):
+    """Intra-turn events follow the correct model → tool → result sequence.
+
+    The fake ACP agent emits normalized events using ACP SDK types:
+    AgentThoughtChunk (model starting) -> AgentMessageChunk (response)
+    -> ToolCallProgress pending (tool started) -> ToolCallProgress completed (tool done)
+    -> result (terminal)
+
+    This proves AS18/AS20 can rely on event ordering for concurrency decisions.
+    The ACP SDK produces sessionUpdate values: agent_thought_chunk,
+    agent_message_chunk, tool_call_update — the transport normalizes these to
+    the CANONICAL vocabulary (thought, assistant-message, tool-call) with the
+    raw wire kind preserved in ext (RV679: raw kinds must not leak as event
+    kinds — turn-state consumers key on canonical kinds only).
+    """
+    launch = AcpLaunch(executable=sys.executable, args=(_FAKE_AGENT,))
+    transport = AcpSessionTransport(launch, cwd=tmp_path)
+
+    try:
+        await transport.open()
+        result = await transport.prompt("hello")
+
+        kinds = [e.kind for e in result.events]
+
+        # Verify the canonical sequence exists in order
+        expected_sequence = ["thought", "assistant-message", "tool-call", "tool-call", "result"]
+        assert expected_sequence == kinds, f"event ordering incorrect: got {kinds}"
+
+        # Verify thought (model starting) is not terminal and keeps raw kind
+        started_event = result.events[0]
+        assert started_event.kind == "thought"
+        assert started_event.ext["acp"]["raw_kind"] == "agent_thought_chunk"
+        assert not started_event.terminal, "thought should not be terminal"
+
+        # Verify tool-call events carry status in ext (compact-safe location)
+        tool_started = result.events[2]
+        assert tool_started.kind == "tool-call"
+        assert tool_started.ext["acp"]["raw_kind"] == "tool_call_update"
+        assert not tool_started.terminal
+        assert tool_started.ext["acp"].get("status") in ("pending", "in_progress"), (
+            f"tool-call missing status: {tool_started.ext}"
+        )
+
+        tool_completed = result.events[3]
+        assert tool_completed.kind == "tool-call"
+        assert tool_completed.ext["acp"].get("status") == "completed"
+        assert not tool_completed.terminal
+
+        # Verify terminal result event exists
+        result_events = [e for e in result.events if e.terminal]
+        assert len(result_events) > 0, "no terminal result event"
+        assert result_events[0].kind == "result", f"terminal event should be 'result', got {result_events[0].kind}"
+    finally:
+        await transport.close()
