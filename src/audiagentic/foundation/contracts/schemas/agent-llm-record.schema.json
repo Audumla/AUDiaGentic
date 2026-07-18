@@ -12,11 +12,14 @@
     "attempts",
     "metadata",
     "cancel-requested"
+    ,"cancel-acknowledged-at"
+    ,"cancel-acknowledged-by"
     ,"revision"
     ,"worker-id"
     ,"attempt-epoch"
     ,"dispatch-owner-epoch"
     ,"dispatch-claimed-at"
+    ,"dispatch-service-root"
     ,"recovery"
   ],
   "additionalProperties": false,
@@ -80,11 +83,18 @@
     "cancel-requested": {
       "type": "boolean"
     },
+    "cancel-acknowledged-at": {
+      "type": ["string", "null"]
+    },
+    "cancel-acknowledged-by": {
+      "type": ["string", "null"]
+    },
     "revision": {"type": "integer", "minimum": 0},
     "worker-id": {"type": ["string", "null"]},
     "attempt-epoch": {"type": "integer", "minimum": 0},
     "dispatch-owner-epoch": {"type": ["string", "null"]},
     "dispatch-claimed-at": {"type": ["string", "null"]},
+    "dispatch-service-root": {"type": ["string", "null"]},
     "recovery": {
       "type": ["object", "null"],
       "required": ["reason", "outcome"],

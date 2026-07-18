@@ -53,6 +53,7 @@ _REDACTED_ERROR_KEYS = {"code", "message", "kind"}
 
 _COMPONENT_ID = "agents"
 _RESOURCE_KIND = "agent-llm-gateway-request"
+ACTIVE_WORK_DIR = "active-work"
 
 
 def record_gateway_timeline(
@@ -83,6 +84,30 @@ def _request_lock(project_root: Path, request_id: str) -> StartupLock:
 def _admission_lock(project_root: Path) -> StartupLock:
     """Serialize project-local idempotency reservation and record creation."""
     return StartupLock(gateway_admission_lock_path(project_root))
+
+
+def active_work_path(service_root: Path, request_id: str) -> Path:
+    digest = hashlib.sha256(request_id.encode("utf-8")).hexdigest()
+    return service_root / ACTIVE_WORK_DIR / f"{digest}.json"
+
+
+def record_active_work(service_root: Path | None, project_root: Path, request_id: str, *, owner_epoch: str) -> None:
+    if service_root is None:
+        return
+    payload = {
+        "contract-version": "v1",
+        "request-id": request_id,
+        "project-root": str(project_root),
+        "owner-epoch": owner_epoch,
+        "recorded-at": now_iso_z(),
+    }
+    atomic_write_json(active_work_path(service_root, request_id), payload)
+
+
+def clear_active_work(service_root: Path | None, request_id: str) -> None:
+    if service_root is None:
+        return
+    active_work_path(service_root, request_id).unlink(missing_ok=True)
 
 
 def hash_idempotency_key(idempotency_key: str) -> str:
@@ -383,11 +408,14 @@ def build_record(
         "metadata": dict(metadata or {}),
         "state": "queued",
         "cancel-requested": False,
+        "cancel-acknowledged-at": None,
+        "cancel-acknowledged-by": None,
         "revision": 0,
         "worker-id": None,
         "attempt-epoch": 0,
         "dispatch-owner-epoch": None,
         "dispatch-claimed-at": None,
+        "dispatch-service-root": None,
         "recovery": None,
         "provider-id": None,
         "model-id": None,
@@ -477,9 +505,12 @@ def _read_record_payload(project_root: Path, request_id: str) -> dict[str, Any]:
 
 def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Make the only supported legacy record shape explicit and forward-only."""
-    if payload.get("contract-version") != "v1":
-        return payload
     migrated = dict(payload)
+    migrated.setdefault("cancel-acknowledged-at", None)
+    migrated.setdefault("cancel-acknowledged-by", None)
+    migrated.setdefault("dispatch-service-root", None)
+    if payload.get("contract-version") != "v1":
+        return _validate(migrated, code="VAL-AGW-005")
     migrated.update({
         "contract-version": _CONTRACT_VERSION,
         "dispatch-owner-epoch": None,
@@ -492,24 +523,31 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
 def _read_record_locked(project_root: Path, request_id: str) -> dict[str, Any]:
     """Read and, while the request lock is held, migrate a v1 record safely."""
     payload = _read_record_payload(project_root, request_id)
-    if payload.get("contract-version") == "v1":
-        migrated = _migrate_v1_payload(payload)
+    migrated = _migrate_v1_payload(payload)
+    if migrated != payload:
         atomic_write_json(gateway_request_path(project_root, request_id), _redact_for_persistence(migrated))
         record_gateway_timeline(
             project_root,
             request_id,
             "record.migrated",
             state=migrated["state"],
-            attributes={"from-contract-version": "v1", "to-contract-version": _CONTRACT_VERSION},
+            attributes={
+                "from-contract-version": payload.get("contract-version"),
+                "to-contract-version": _CONTRACT_VERSION,
+            },
         )
         return migrated
-    return _validate(payload, code="VAL-AGW-005")
+    return migrated
 
 
 def read_record(project_root: Path, request_id: str) -> dict[str, Any]:
     """Read a durable request, upgrading a v1 payload under its mutation lock."""
     payload = _read_record_payload(project_root, request_id)
-    if payload.get("contract-version") != "v1":
+    if (
+        payload.get("contract-version") != "v1"
+        and "cancel-acknowledged-at" in payload
+        and "cancel-acknowledged-by" in payload
+    ):
         return _validate(payload, code="VAL-AGW-005")
     with _request_lock(project_root, request_id):
         return _read_record_locked(project_root, request_id)
@@ -546,8 +584,9 @@ def project_public_status(
     visible = (
         "contract-version", "request-id", "agent-profile-id", "mode", "state",
         "cancel-requested", "revision", "dispatch-owner-epoch", "dispatch-claimed-at",
+        "cancel-acknowledged-at", "cancel-acknowledged-by",
         "recovery", "worker-id", "attempt-epoch", "provider-id", "model-id",
-        "output", "completion", "usage", "error", "attempts", "created-at",
+        "session-id", "session-keep-alive", "output", "completion", "usage", "error", "attempts", "created-at",
         "updated-at", "started-at", "finished-at",
     )
     status = {field: record.get(field) for field in visible}
@@ -671,6 +710,39 @@ def mark_cancel_requested(project_root: Path, request_id: str) -> dict[str, Any]
         return updated
 
 
+def acknowledge_cancel(project_root: Path, request_id: str, *, by: str) -> dict[str, Any]:
+    """Record the first component that observed a cancel request.
+
+    First writer wins so a later session/runtime acknowledgement cannot erase
+    the recovery or queue evidence that actually won the race.
+    """
+    if not by:
+        raise AudiaGenticError(
+            code="VAL-AGW-086",
+            kind="agents",
+            message="cancel acknowledgement actor is required",
+            details={},
+        )
+    with _request_lock(project_root, request_id):
+        record = _read_record_locked(project_root, request_id)
+        if record.get("cancel-acknowledged-by"):
+            return record
+        updated = dict(record)
+        updated["cancel-acknowledged-at"] = now_iso_z()
+        updated["cancel-acknowledged-by"] = by
+        updated["updated-at"] = now_iso_z()
+        updated["revision"] = record["revision"] + 1
+        write_record(project_root, updated)
+        record_gateway_timeline(
+            project_root,
+            request_id,
+            "cancel.acknowledged",
+            state=updated["state"],
+            attributes={"by": by},
+        )
+        return updated
+
+
 def append_attempt(
     project_root: Path,
     request_id: str,
@@ -760,6 +832,9 @@ def cancel_queued_or_mark_requested(project_root: Path, request_id: str) -> dict
         updated = dict(record)
         updated.update({
             "state": "cancelled",
+            "cancel-requested": True,
+            "cancel-acknowledged-at": now_iso_z(),
+            "cancel-acknowledged-by": "queue-worker",
             "updated-at": now_iso_z(),
             "finished-at": now_iso_z(),
             "revision": record["revision"] + 1,
@@ -771,6 +846,88 @@ def cancel_queued_or_mark_requested(project_root: Path, request_id: str) -> dict
             "state.changed",
             state="cancelled",
             attributes={"from": "queued", "to": "cancelled", "updated-keys": []},
+        )
+        return updated
+
+
+def release_stale_claim(project_root: Path, request_id: str, *, stale_epoch: str) -> dict[str, Any]:
+    with _request_lock(project_root, request_id):
+        record = _read_record_locked(project_root, request_id)
+        if record.get("dispatch-owner-epoch") != stale_epoch:
+            raise AudiaGenticError(
+                code="CON-AGW-083",
+                kind="agents",
+                message="gateway request dispatch ownership changed",
+                details={},
+            )
+        if record["state"] != "queued":
+            raise AudiaGenticError(
+                code="CON-AGW-083",
+                kind="agents",
+                message="gateway request is not a stale queued claim",
+                details={"state": record["state"]},
+            )
+        updated = dict(record)
+        updated.update({
+            "dispatch-owner-epoch": None,
+            "dispatch-claimed-at": None,
+            "dispatch-service-root": None,
+            "updated-at": now_iso_z(),
+            "revision": record["revision"] + 1,
+            "recovery": {"reason": "service-restart", "outcome": "resubmit-required"},
+        })
+        write_record(project_root, updated)
+        record_gateway_timeline(
+            project_root,
+            request_id,
+            "dispatch.claim.released",
+            state="queued",
+            attributes={"stale-owner-epoch": stale_epoch},
+        )
+        return updated
+
+
+def transition_recovered_terminal(
+    project_root: Path,
+    request_id: str,
+    new_state: str,
+    *,
+    error: BaseException | dict[str, Any] | None,
+    stale_epoch: str,
+) -> dict[str, Any]:
+    if new_state not in TERMINAL_STATES:
+        raise AudiaGenticError("VAL-AGW-084", "agents", "recovered transition must be terminal", {})
+    with _request_lock(project_root, request_id):
+        record = _read_record_locked(project_root, request_id)
+        if record.get("dispatch-owner-epoch") != stale_epoch:
+            raise AudiaGenticError(
+                code="CON-AGW-083",
+                kind="agents",
+                message="gateway request dispatch ownership changed",
+                details={},
+            )
+        ensure_transition(record["state"], new_state)
+        timestamp = now_iso_z()
+        updated = dict(record)
+        updated.update({
+            "state": new_state,
+            "error": _redact_error(error),
+            "finished-at": timestamp,
+            "dispatch-service-root": None,
+            "updated-at": timestamp,
+            "revision": record["revision"] + 1,
+            "recovery": {"reason": "service-restart", "outcome": "resubmit-required"},
+        })
+        if updated.get("cancel-requested") and not updated.get("cancel-acknowledged-by"):
+            updated["cancel-acknowledged-at"] = timestamp
+            updated["cancel-acknowledged-by"] = "recovery"
+        write_record(project_root, updated)
+        record_gateway_timeline(
+            project_root,
+            request_id,
+            "recovery.terminalized",
+            state=new_state,
+            attributes={"stale-owner-epoch": stale_epoch},
         )
         return updated
 
@@ -817,6 +974,7 @@ def claim_dispatch(
     *,
     owner_epoch: str,
     expected_revision: int,
+    service_root: Path | None = None,
 ) -> dict[str, Any]:
     """Fence a queued request to one service owner before it starts work.
 
@@ -839,15 +997,18 @@ def claim_dispatch(
         if current_owner not in (None, owner_epoch):
             raise AudiaGenticError("CON-AGW-083", "agents", "gateway request dispatch ownership changed", {})
         if current_owner == owner_epoch:
+            record_active_work(service_root, project_root, request_id, owner_epoch=owner_epoch)
             return record
         updated = dict(record)
         updated.update({
             "dispatch-owner-epoch": owner_epoch,
             "dispatch-claimed-at": now_iso_z(),
+            "dispatch-service-root": str(service_root) if service_root is not None else None,
             "updated-at": now_iso_z(),
             "revision": record["revision"] + 1,
         })
         write_record(project_root, updated)
+        record_active_work(service_root, project_root, request_id, owner_epoch=owner_epoch)
         record_gateway_timeline(
             project_root, request_id, "dispatch.claimed", state="queued",
             attributes={"dispatch-owner-epoch": owner_epoch},
@@ -926,17 +1087,24 @@ def transition_owned_terminal(
     worker_id: str,
     attempt_epoch: int,
     updates: dict[str, Any] | None = None,
+    service_root: Path | None = None,
 ) -> dict[str, Any]:
     """Write a terminal result only with the complete dispatch fence."""
     if new_state not in TERMINAL_STATES:
         raise AudiaGenticError("VAL-AGW-084", "agents", "owned transition must be terminal", {})
     _require_owned_identity(owner_epoch, worker_id, attempt_epoch)
-    return transition_record(
+    updated = transition_record(
         project_root, request_id, new_state, updates=updates,
         expected_dispatch_owner_epoch=owner_epoch,
         expected_worker_id=worker_id,
         expected_attempt_epoch=attempt_epoch,
     )
+    service_root_for_cleanup = service_root
+    if service_root_for_cleanup is None:
+        stored_root = updated.get("dispatch-service-root")
+        service_root_for_cleanup = Path(stored_root) if isinstance(stored_root, str) and stored_root else None
+    clear_active_work(service_root_for_cleanup, request_id)
+    return updated
 
 
 def _require_owned_identity(owner_epoch: str | None, worker_id: str | None, attempt_epoch: int) -> None:

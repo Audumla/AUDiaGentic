@@ -6,6 +6,7 @@
     "session-id",
     "agent-profile-id",
     "state",
+    "binding",
     "request-ids",
     "turn-count",
     "created-at",
@@ -14,7 +15,7 @@
   "additionalProperties": false,
   "properties": {
     "contract-version": {
-      "const": "v1"
+      "enum": ["v1", "v2"]
     },
     "session-id": {
       "type": "string"
@@ -28,8 +29,44 @@
     "model-id": {
       "type": ["string", "null"]
     },
-    "provider-session-ref": {
-      "type": ["string", "null"]
+    "binding": {
+      "type": ["object", "null"],
+      "required": [
+        "binding-id",
+        "generation",
+        "provider-id",
+        "surface-id",
+        "provider-session-ref",
+        "provider-ref-key",
+        "relation",
+        "ownership",
+        "identity-context-fingerprint",
+        "execution-context-fingerprint",
+        "created-at"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "binding-id": {"type": "string"},
+        "generation": {"type": "integer", "minimum": 1},
+        "provider-id": {"type": ["string", "null"]},
+        "surface-id": {"type": "string"},
+        "surface-version": {"type": ["string", "null"]},
+        "ref-namespace": {"type": "string"},
+        "provider-session-ref": {"type": "string"},
+        "provider-ref-key": {"type": "string"},
+        "relation": {
+          "type": "string",
+          "enum": ["opened", "attached", "resumed-from", "replaced"]
+        },
+        "ownership": {
+          "type": "string",
+          "enum": ["owned", "external", "adopted"]
+        },
+        "predecessor-binding-id": {"type": ["string", "null"]},
+        "identity-context-fingerprint": {"type": "string"},
+        "execution-context-fingerprint": {"type": "string"},
+        "created-at": {"type": "string"}
+      }
     },
     "state": {
       "type": "string",

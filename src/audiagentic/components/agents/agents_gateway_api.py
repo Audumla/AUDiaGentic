@@ -241,6 +241,48 @@ def get_llm_request(project_root: Path, request_id: str) -> dict[str, Any]:
     return store.read_public_status(project_root, request_id)
 
 
+def request_runtime_status(project_root: Path, request_id: str) -> dict[str, Any]:
+    """Return redacted runtime facts for one request without starting runtimes."""
+    record = store.read_public_status(project_root, request_id)
+    state = record["state"]
+    slot = _QUEUE_MANAGER.request_slot_status(record["agent-profile-id"], request_id)
+    if state in store.TERMINAL_STATES:
+        queue_state = "terminal"
+        profile_slot = None
+    elif slot is not None:
+        queue_state = "running" if slot in {"active", "idle"} else "queued"
+        profile_slot = slot
+    elif state == "running":
+        queue_state = "running"
+        profile_slot = "active"
+    elif state == "queued" and record.get("dispatch-owner-epoch"):
+        queue_state = "queued"
+        profile_slot = "pending"
+    else:
+        queue_state = state
+        profile_slot = None
+
+    session_status: dict[str, Any] = {"available": False}
+    session_id = record.get("session-id")
+    if session_id:
+        from audiagentic.components.agents.agents_gateway_sessions import peek_session_runtime
+
+        runtime = peek_session_runtime()
+        if runtime is not None:
+            session_status = runtime.session_runtime_status(session_id)
+
+    return {
+        "request-id": request_id,
+        "queue-state": queue_state,
+        "profile-slot": profile_slot,
+        "state": state,
+        "cancel-requested": record.get("cancel-requested"),
+        "cancel-acknowledged-by": record.get("cancel-acknowledged-by"),
+        "session-id": session_id,
+        "session": session_status,
+    }
+
+
 def wait_llm_request(project_root: Path, request_id: str, timeout_seconds: float | None = None) -> dict[str, Any]:
     """Block until a request reaches a terminal state or the timeout elapses.
 
@@ -343,6 +385,7 @@ def list_llm_sessions(
 ) -> list[dict[str, Any]]:
     """List persisted gateway sessions, newest first, with a 'live' flag for
     sessions whose transport is held by THIS process's SessionRuntime."""
+    from audiagentic.components.agents import agents_gateway_session_bindings as binding_store
     from audiagentic.components.agents import agents_gateway_sessions_store as session_store
     from audiagentic.components.agents.agents_gateway_sessions import get_session_runtime
 
@@ -351,12 +394,19 @@ def list_llm_sessions(
     if state is not None:
         records = [r for r in records if r["state"] == state]
     records.sort(key=lambda r: r["created-at"], reverse=True)
-    return [{**r, "live": r["session-id"] in live_ids} for r in records]
+    public_records: list[dict[str, Any]] = []
+    for record in records:
+        projected = dict(record)
+        projected["binding"] = binding_store.public_binding_projection(record.get("binding"))
+        projected.pop("provider-session-ref", None)
+        public_records.append({**projected, "live": record["session-id"] in live_ids})
+    return public_records
 
 
 def close_llm_session(project_root: Path, session_id: str) -> dict[str, Any]:
     """Close a live session on client request. Idempotent — closing a session
     that is already terminal (or whose process died) returns its final record."""
+    from audiagentic.components.agents import agents_gateway_session_bindings as binding_store
     from audiagentic.components.agents import agents_gateway_sessions_store as session_store
     from audiagentic.components.agents.agents_gateway_sessions import get_session_runtime
 
@@ -370,6 +420,7 @@ def close_llm_session(project_root: Path, session_id: str) -> dict[str, Any]:
             project_root, session_id, "failed",
             updates={"close-reason": "orphaned"},
         )
+        binding_store.retire_binding(project_root, record, state="failed")
     return record
 
 
@@ -416,6 +467,7 @@ def reconcile_gateway_state(project_root: Path) -> dict[str, Any]:
 
     # Sessions persisted 'active'/'closing' with no live handle in this
     # process were orphaned by a restart — mirror the request treatment.
+    from audiagentic.components.agents import agents_gateway_session_bindings as binding_store
     from audiagentic.components.agents import agents_gateway_sessions_store as session_store
     from audiagentic.components.agents.agents_gateway_sessions import get_session_runtime
 
@@ -430,6 +482,7 @@ def reconcile_gateway_state(project_root: Path) -> dict[str, Any]:
                 project_root, session_id, "failed",
                 updates={"close-reason": "orphaned"},
             )
+            binding_store.retire_binding(project_root, updated, state="failed")
             reconciled_sessions.append({"session-id": session_id, "state": updated["state"]})
     return {"ok": True, "reconciled": reconciled, "reconciled-sessions": reconciled_sessions}
 
