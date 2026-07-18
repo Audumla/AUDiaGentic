@@ -80,6 +80,20 @@ def load_acp_launch_builder(provider_id: str) -> Callable[..., Any] | None:
     return getattr(module, "build_acp_launch", None)
 
 
+def load_execution_environment_builder(provider_id: str) -> Callable[..., Any] | None:
+    """Load an optional provider-owned isolated-worker environment builder."""
+    name = provider_id.replace("-", "_")
+    if keyword.iskeyword(name):
+        name = name + "_"
+    module_path = f"{_ADAPTER_BASE}.{name}.execution_environment"
+    try:
+        if not importlib.util.find_spec(module_path):
+            return None
+    except (ModuleNotFoundError, AttributeError):
+        return None
+    return getattr(import_module(module_path), "build_execution_environment", None)
+
+
 _EXECUTION_MODE_BY_DECLARATION: dict[str, str] = {
     "cli": "descriptor",
     "stub": "stub",
