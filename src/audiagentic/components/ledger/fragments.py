@@ -12,6 +12,7 @@ from audiagentic.components.ledger.events import publish_ledger_event_recorded
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import validate_with_schema
 from audiagentic.foundation.io import atomic_write_text
+from audiagentic.foundation.time import now_iso_z
 
 
 def _validate_change_event(payload: dict[str, Any]) -> None:
@@ -50,7 +51,7 @@ def _sanitize_filename(desc: str) -> str:
 
 def record_change_event(project_root: Path, event: dict[str, Any]) -> dict[str, Any]:
     if "timestamp-utc" not in event:
-        event["timestamp-utc"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        event["timestamp-utc"] = now_iso_z()
     if "event-id" not in event:
         desc = event.get("user-summary-candidate", "")
         event["event-id"] = _generate_event_id(_sanitize_filename(desc) if desc else None)
