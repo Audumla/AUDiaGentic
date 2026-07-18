@@ -10,8 +10,8 @@ from tests.unit.agents.test_agents_gateway_sessions import FakeTransport, _Clock
 from audiagentic.components.agents import agents_gateway_api as gateway
 from audiagentic.components.agents import agents_gateway_queue
 from audiagentic.components.agents import agents_gateway_sessions as sessions_module
-from audiagentic.components.agents.agents_gateway_sessions import SessionRuntime
 from audiagentic.components.agents.agents_api import create_profile
+from audiagentic.components.agents.agents_gateway_sessions import SessionRuntime
 from audiagentic.components.providers.providers_api import (
     ProviderAcpLaunchResult,
     ProviderExecutionResult,
