@@ -4,34 +4,21 @@ Thin orchestration over agents_gateway_store (persistence), agents_gateway_queue
 (per-profile concurrency), and agents_gateway_dispatch (provider dispatch/retry/
 fallback). One GatewayQueueManager instance per process (module-level) — see
 its docstring for the process-lifetime caveat.
+
+SH02: submit_llm_request now validates through SubmissionEnvelope and persists a
+redacted ExecutionManifest alongside each request record. The raw prompt body is
+never persisted (only its digest); it is threaded to dispatch via functools.partial.
 """
 from __future__ import annotations
 
+import functools
+import uuid
 from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agents import agents_gateway_dispatch as dispatch
 from audiagentic.components.agents import agents_gateway_queue as queue_mod
 from audiagentic.components.agents import agents_gateway_store as store
-
-# A blocking MCP tool call must not hold the connection indefinitely — the
-# client-side transport typically has its own 30-60s timeout. Cap requested
-# blocking waits and return a 'running'/'queued' status rather than hang
-# (RV17 finding on AG11).
-#
-# This cap belongs to the MCP TRANSPORT, not to execution. It is applied at the
-# MCP boundary (agents_gateway_mcp) — NOT here — because an in-process caller
-# (a supervisor owning a long implementation task) has no transport constraint
-# and must be able to wait for as long as the work actually takes.
-#
-# Applying it here previously made >300s work impossible through ANY caller:
-# the worker is a daemon thread in the caller's process, so when the capped
-# wait returned the caller exited and the thread was killed mid-attempt,
-# stranding the record at 'running' forever. See RV511.
-MCP_BLOCKING_TIMEOUT_SECONDS = 300.0
-
-# Backwards-compatible alias — some callers/tests reference the old name.
-MAX_BLOCKING_TIMEOUT_SECONDS = MCP_BLOCKING_TIMEOUT_SECONDS
 
 # A blocking wait with no requested timeout still needs a bound so it cannot
 # hang forever; callers that want longer pass an explicit timeout_seconds.
@@ -48,6 +35,15 @@ def _resolve_profile_for_submit(project_root: Path, agent_profile_id: str | None
     return resolve_default_profile(project_root)
 
 
+def _resolve_provider_isolation_tier(provider_id: str) -> str:
+    """Resolve the required MA20 provider-level execution isolation fact."""
+    from audiagentic.components.providers.providers_api import (
+        get_provider_execution_isolation_tier,
+    )
+
+    return get_provider_execution_isolation_tier(provider_id)
+
+
 def submit_llm_request(
     project_root: Path,
     *,
@@ -55,13 +51,14 @@ def submit_llm_request(
     prompt_body: str | None = None,
     mode: str = "async",
     timeout_seconds: float | None = None,
-    fallback_profile_ids: list[str] | None = None,
     source: str | None = None,
     metadata: dict[str, Any] | None = None,
     session_id: str | None = None,
     session_keep_alive: bool = False,
     session_idle_timeout_seconds: float | None = None,
     session_max_lifetime_seconds: float | None = None,
+    component_profile: str | None = None,
+    _dispatch_owner_epoch: str | None = None,
 ) -> dict[str, Any]:
     """Submit a gateway request. Returns immediately with request-id and initial state
     unless mode='blocking', in which case it waits for a terminal result (see run_llm_request).
@@ -69,63 +66,171 @@ def submit_llm_request(
     Sessions (plan agent-sessions): ``session_keep_alive=True`` opens a live
     agent session that survives this request — the response's ``session-id``
     continues the conversation via ``session_id=...`` on later requests.
-    Sessions are bound to one profile, never use fallbacks, and self-clean:
+    Sessions are bound to one profile and self-clean:
     idle timeout (default 15 min) and max lifetime (default 4 h), both
     settable at open time — 0 disables that bound (long-lived remote-control
     sessions). Turns on one session queue FIFO; the reaper never closes a
     session that is processing or has queued turns. Close explicitly with
     close_llm_session when done.
+
+    SH02: validates through SubmissionEnvelope, resolves an ExecutionManifest,
+    and persists only a redacted record (prompt_digest, not raw prompt_body).
+    The raw prompt is threaded to dispatch via functools.partial.
     """
+    from audiagentic.components.agents.contracts.execution_context import (
+        SubmissionEnvelope,
+        build_manifest,
+        compute_agent_runtime_digest,
+        derive_idempotency_key,
+        sanitize_submission_metadata,
+    )
+    from audiagentic.foundation.paths.names import get_active_profile
+    from audiagentic.foundation.time import now_iso_z
+
+    # --- 1. Construct and validate the submission envelope -----------------
+    if component_profile is None:
+        component_profile = get_active_profile()
+    # Validate the caller-owned mapping before reading its control fields.
+    # The sanitized form is the only metadata allowed into durable records,
+    # lifecycle events, and provider packets.
+    persisted_metadata = sanitize_submission_metadata(metadata)
+    raw_metadata = dict(metadata or {})
+    envelope_mapping = {
+        "project_root": str(project_root),
+        "schema_version": raw_metadata.get("schema_version", 1),
+        "idempotency_key": raw_metadata.get("idempotency_key"),
+        "correlation_id": raw_metadata.get("correlation_id"),
+        "source": source,
+        "agent_profile_id": agent_profile_id,
+        "provider_id": raw_metadata.get("provider_id"),
+        "model_id": raw_metadata.get("model_id"),
+        "component_profile": component_profile,
+        "mode": mode,
+        "timeout_seconds": timeout_seconds,
+        "session": {
+            "session_id": session_id,
+            "keep_alive": session_keep_alive,
+            "idle_timeout_seconds": session_idle_timeout_seconds,
+            "max_lifetime_seconds": session_max_lifetime_seconds,
+        },
+        "prompt_body": prompt_body,
+        "metadata": raw_metadata,
+    }
+    envelope = SubmissionEnvelope.from_mapping(envelope_mapping)
+    canonical_root = envelope.validate()
+
+    # --- 2. Resolve profile ------------------------------------------------
     profile = _resolve_profile_for_submit(project_root, agent_profile_id)
     resolved_profile_id = profile["profile_id"]
+    resolved_provider_id = profile["provider_id"]
+    resolved_model_id = profile["model_id"]
     params = profile.get("params", {})
 
-    sessionful = session_id is not None or session_keep_alive
-    resolved_fallback_ids = (
-        []
-        if sessionful  # sessionful requests never fall back (VAL-AGW-058)
-        else (
-            fallback_profile_ids
-            if fallback_profile_ids is not None
-            else queue_mod.resolve_fallback_profile_ids(params)
-        )
+    # --- 3. Resolve provider isolation tier and runtime digest --------------
+    isolation_tier = _resolve_provider_isolation_tier(resolved_provider_id)
+
+    # Agent runtime digest: hash of resolved profile + provider config + component overlay
+    from audiagentic.components.providers.providers_api import (
+        get_provider_runtime_config_state,
     )
 
-    record = store.build_record(
+    provider_cfg = get_provider_runtime_config_state(
+        project_root,
+        resolved_provider_id,
+    )
+    agent_runtime_digest = compute_agent_runtime_digest(
+        resolved_profile=profile,
+        provider_config_state=provider_cfg,
+        component_overlay={"component-profile": component_profile or ""},
+    )
+
+    # --- 4. Build the execution manifest -----------------------------------
+    request_id = store.generate_request_id()
+    manifest_id = f"mf_{uuid.uuid4().hex[:16]}"
+    resolved_at = now_iso_z()
+    manifest = build_manifest(
+        envelope,
+        manifest_id=manifest_id,
+        request_id=request_id,
+        resolved_at=resolved_at,
+        canonical_root=canonical_root,
         agent_profile_id=resolved_profile_id,
-        prompt_body=prompt_body,
+        provider_id=resolved_provider_id,
+        model_id=resolved_model_id,
+        provider_isolation_tier=isolation_tier,
+        agent_runtime_digest=agent_runtime_digest,
+    )
+
+    # Derive idempotency key (client-supplied wins, else deterministic)
+    idempotency_key = derive_idempotency_key(
+        envelope.idempotency_key,
+        context_fingerprint=manifest.context_fingerprint,
+        prompt_digest=manifest.prompt_digest,
+        session_id=session_id,
+    )
+
+    # --- 5. Build and atomically admit the record ---------------------------
+    # The client key currently arrives through transport metadata. It remains
+    # available for envelope validation but must never reach records, queues,
+    # events, or provider packets in raw form.
+    record = store.build_record(
+        request_id=request_id,
+        agent_profile_id=resolved_profile_id,
+        prompt_body=prompt_body,  # carried in-memory; redacted before persistence
         mode=mode,
         timeout_seconds=timeout_seconds,
-        fallback_profile_ids=resolved_fallback_ids,
         source=source,
-        metadata=metadata,
+        metadata=persisted_metadata,
         session_id=session_id,
         session_keep_alive=session_keep_alive,
         session_idle_timeout_seconds=session_idle_timeout_seconds,
         session_max_lifetime_seconds=session_max_lifetime_seconds,
+        # Manifest fields (persisted)
+        manifest_id=manifest_id,
+        context_fingerprint=manifest.context_fingerprint,
+        prompt_digest=manifest.prompt_digest,
+        idempotency_key=None,
+        correlation_id=envelope.correlation_id,
     )
-    store.write_record(project_root, record)
-    store.record_gateway_timeline(
+    record, created = store.admit_record(
         project_root,
-        record["request-id"],
-        "request.created",
-        state=record["state"],
-        attributes={
-            "agent-profile-id": resolved_profile_id,
-            "mode": mode,
-            "source": source,
-            "fallback-profile-ids": resolved_fallback_ids,
-            "correlation_id": (metadata or {}).get("correlation_id"),
-            "subject": (metadata or {}).get("subject"),
-        },
+        record,
+        idempotency_key=idempotency_key,
     )
-    record = _QUEUE_MANAGER.enqueue(project_root, record, params, dispatch.dispatch_request)
+
+    if created:
+        store.record_gateway_timeline(
+            project_root,
+            request_id,
+            "request.created",
+            state=record["state"],
+            attributes={
+                "agent-profile-id": resolved_profile_id,
+                "mode": mode,
+                "source": source,
+                "correlation_id": envelope.correlation_id,
+                "subject": persisted_metadata.get("subject"),
+                "manifest-id": manifest_id,
+                "context-fingerprint": manifest.context_fingerprint,
+            },
+        )
+
+        # --- 6. Enqueue with dispatch_prompt threaded via functools.partial -
+        runner = functools.partial(
+            dispatch.dispatch_request,
+            dispatch_prompt=prompt_body,
+            manifest_id=manifest.manifest_id,
+            context_fingerprint=manifest.context_fingerprint,
+            component_profile=manifest.identity.component_profile,
+            provider_isolation_tier=manifest.identity.provider_isolation_tier,
+            worker_timeout_seconds=manifest.timeout_seconds or DEFAULT_BLOCKING_TIMEOUT_SECONDS,
+        )
+        record = _QUEUE_MANAGER.enqueue(
+            project_root, record, params, runner,
+            dispatch_owner_epoch=_dispatch_owner_epoch,
+        )
 
     if mode == "blocking":
-        # Honour the caller's requested wait. The MCP boundary caps its own
-        # callers; an in-process supervisor running a long implementation task
-        # must be able to outlast the work, because the worker is a daemon
-        # thread in THIS process and dies when the caller returns (RV511).
         wait_timeout = timeout_seconds or DEFAULT_BLOCKING_TIMEOUT_SECONDS
         return _QUEUE_MANAGER.wait(project_root, record["request-id"], wait_timeout)
     return record
@@ -133,14 +238,14 @@ def submit_llm_request(
 
 def get_llm_request(project_root: Path, request_id: str) -> dict[str, Any]:
     """Return the current persisted state of a gateway request."""
-    return store.read_record(project_root, request_id)
+    return store.read_public_status(project_root, request_id)
 
 
 def wait_llm_request(project_root: Path, request_id: str, timeout_seconds: float | None = None) -> dict[str, Any]:
     """Block until a request reaches a terminal state or the timeout elapses.
 
     The caller's timeout is honoured; the MCP boundary applies its own transport
-    cap. See MCP_BLOCKING_TIMEOUT_SECONDS.
+    cap. The MCP adapter applies its own transport-specific bound.
     """
     return _QUEUE_MANAGER.wait(
         project_root, request_id, timeout_seconds or DEFAULT_BLOCKING_TIMEOUT_SECONDS
@@ -163,13 +268,14 @@ def run_llm_request(
     agent_profile_id: str | None = None,
     prompt_body: str | None = None,
     timeout_seconds: float | None = None,
-    fallback_profile_ids: list[str] | None = None,
     source: str | None = None,
     metadata: dict[str, Any] | None = None,
     session_id: str | None = None,
     session_keep_alive: bool = False,
     session_idle_timeout_seconds: float | None = None,
     session_max_lifetime_seconds: float | None = None,
+    component_profile: str | None = None,
+    _dispatch_owner_epoch: str | None = None,
 ) -> dict[str, Any]:
     """Submit and block until a terminal result or timeout. Not for event-triggered
     paths (AG12 handles those asynchronously through lifecycle events)."""
@@ -179,13 +285,14 @@ def run_llm_request(
         prompt_body=prompt_body,
         mode="blocking",
         timeout_seconds=timeout_seconds,
-        fallback_profile_ids=fallback_profile_ids,
         source=source,
         metadata=metadata,
         session_id=session_id,
         session_keep_alive=session_keep_alive,
         session_idle_timeout_seconds=session_idle_timeout_seconds,
         session_max_lifetime_seconds=session_max_lifetime_seconds,
+        component_profile=component_profile,
+        _dispatch_owner_epoch=_dispatch_owner_epoch,
     )
 
 
@@ -220,7 +327,13 @@ def list_llm_requests(
     records.sort(key=lambda r: r["created-at"], reverse=True)
     if limit is not None:
         records = records[:limit]
-    return records
+    return [
+        store.project_public_status(
+            record,
+            latest_transition=store.latest_transition_projection(project_root, record["request-id"]),
+        )
+        for record in records
+    ]
 
 
 def list_llm_sessions(

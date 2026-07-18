@@ -10,39 +10,119 @@ item makes for durability).
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading
 import time
+import uuid
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agents import agents_gateway_store as store
+from audiagentic.components.agents.agents_event_topics import (
+    LLM_CANCELLED_TOPIC,
+    LLM_COMPLETED_TOPIC,
+    LLM_FAILED_TOPIC,
+    LLM_QUEUED_TOPIC,
+    LLM_REJECTED_TOPIC,
+    LLM_STARTED_TOPIC,
+)
+from audiagentic.components.agents.agents_paths import gateway_request_path
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
 
 
+_WAIT_INITIAL_BACKOFF_SECONDS = 0.05
+_WAIT_MAX_BACKOFF_SECONDS = 0.5
+
+
+def _record_signature(path: Path) -> tuple[int, int, int] | None:
+    """Return a cheap change marker for a durable gateway record.
+
+    Records are atomically replaced by the store.  Size plus the platform's
+    modification/change timestamps gives waiters a low-cost hint that a full
+    JSON read is useful, without making correctness depend on any one
+    filesystem timestamp's precision.  A bounded full-read fallback remains
+    below for filesystems that cannot expose a distinguishable marker.
+    """
+    try:
+        status = path.stat()
+    except OSError:
+        return None
+    return (status.st_size, status.st_mtime_ns, status.st_ctime_ns)
+
+
+class TurnConcurrencyCallbacks:
+    """Two-phase concurrency hooks called by SessionRuntime when a session turn
+    actually starts and finishes on the transport. Per-request callbacks are
+    stored in a thread-safe dict to support max_concurrency > 1 (AS15).
+
+    SessionRuntime invokes the callbacks on its asyncio loop. Blocking slot
+    acquisition is therefore delegated to a worker thread.
+    """
+
+    def __init__(self) -> None:
+        self._callbacks: dict[
+            str,
+            tuple[Callable[[str], Awaitable[None]], Callable[[str], Awaitable[None]]],
+        ] = {}
+        self._lock = threading.Lock()
+
+    def set_callbacks(
+        self,
+        request_id: str,
+        on_turn_starting: Callable[[str], Awaitable[None]],
+        on_turn_done: Callable[[str], Awaitable[None]],
+    ) -> None:
+        """Wire up the two-phase callbacks for a request. Called at _run_one dispatch time."""
+        with self._lock:
+            self._callbacks[request_id] = (on_turn_starting, on_turn_done)
+
+    def clear(self, request_id: str) -> None:
+        """Remove callbacks after the request completes."""
+        with self._lock:
+            self._callbacks.pop(request_id, None)
+
+    async def turn_starting(self, request_id: str) -> None:
+        with self._lock:
+            cb = self._callbacks.get(request_id)
+        if cb is not None:
+            await cb[0](request_id)
+
+    async def turn_done(self, request_id: str) -> None:
+        with self._lock:
+            cb = self._callbacks.get(request_id)
+        if cb is not None:
+            await cb[1](request_id)
+
+
+_TURNCB = TurnConcurrencyCallbacks()
+
+
+async def notify_turn_starting(request_id: str) -> None:
+    """Wait until this session turn owns one profile compute slot."""
+    await _TURNCB.turn_starting(request_id)
+
+
+async def notify_turn_done(request_id: str) -> None:
+    """Release the profile compute slot owned by this session turn."""
+    await _TURNCB.turn_done(request_id)
+
 _TERMINAL_EVENT_SUFFIXES = {"completed", "failed", "cancelled", "rejected"}
 
 # BU02: explicit suffix→topic-constant map replaces the f-string publish.
 # Each value matches a registered agents-owned topic in events.yaml.
-_TOPIC_QUEUED = "agents.llm.queued"
-_TOPIC_STARTED = "agents.llm.started"
-_TOPIC_COMPLETED = "agents.llm.completed"
-_TOPIC_FAILED = "agents.llm.failed"
-_TOPIC_CANCELLED = "agents.llm.cancelled"
-_TOPIC_REJECTED = "agents.llm.rejected"
-
 _LIFECYCLE_SUFFIX_TOPIC_MAP: dict[str, str] = {
-    "queued": _TOPIC_QUEUED,
-    "started": _TOPIC_STARTED,
-    "completed": _TOPIC_COMPLETED,
-    "failed": _TOPIC_FAILED,
-    "cancelled": _TOPIC_CANCELLED,
-    "rejected": _TOPIC_REJECTED,
+    "queued": LLM_QUEUED_TOPIC,
+    "started": LLM_STARTED_TOPIC,
+    "completed": LLM_COMPLETED_TOPIC,
+    "failed": LLM_FAILED_TOPIC,
+    "cancelled": LLM_CANCELLED_TOPIC,
+    "rejected": LLM_REJECTED_TOPIC,
 }
 
 
@@ -92,6 +172,11 @@ RequestRunner = Callable[[Path, dict[str, Any]], dict[str, Any]]
 record (or an updated copy) transitioned to a terminal state. Injected so the
 queue can be tested with a deterministic fake, independent of AG10's real
 provider dispatch."""
+
+RequestRunnerWithContext = Callable[[Path, dict[str, Any], str | None], dict[str, Any]]
+"""SH02: runner that also receives the dispatch_prompt (raw prompt body)
+separately from the persisted record. The persisted record only carries
+prompt_digest; dispatch needs the raw prompt for provider execution."""
 
 
 def _params_get(params: dict[str, Any], *keys: str) -> Any:
@@ -150,31 +235,29 @@ def resolve_queue_max_size(params: dict[str, Any], max_concurrency: int) -> int:
     return value
 
 
-def resolve_fallback_profile_ids(params: dict[str, Any]) -> list[str]:
-    """Resolve params.fallback-profile-ids (or fallback_profile_ids); default []."""
-    value = _params_get(params, "fallback-profile-ids", "fallback_profile_ids")
-    if value is None:
-        return []
-    if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
-        raise AudiaGenticError(
-            code="VAL-AGW-024",
-            kind="agents",
-            message="agent profile params.fallback-profile-ids must be a list of strings",
-            details={"value": value},
-        )
-    return list(value)
-
-
 class _ProfileQueue:
-    """Bookkeeping for one agent-profile's FIFO queue and concurrency gate."""
+    """Bookkeeping for one agent-profile's FIFO queue and concurrency gate.
+
+    Session-aware concurrency (AS15): pq.running tracks all dispatched requests,
+    but pq.idle tracks those that are waiting on a session turn_lock (not doing
+    real compute). The concurrency gate uses active_running = running - idle so
+    idle sessions don't block other profiles from making progress.
+    """
 
     def __init__(self, max_concurrency: int, queue_max_size: int) -> None:
         self.max_concurrency = max_concurrency
         self.queue_max_size = queue_max_size
         self.lock = threading.Lock()
         self.pending: deque[str] = deque()
+        self.dispatch_owners: dict[str, str] = {}
         self.running: set[str] = set()
+        self.idle: set[str] = set()
         self.cancel_requested: set[str] = set()
+        self.compute_slots = threading.BoundedSemaphore(max_concurrency)
+
+    def active_running(self) -> int:
+        """Count of requests actually consuming compute (not waiting on session locks)."""
+        return len(self.running) - len(self.idle)
 
 
 class GatewayQueueManager:
@@ -205,6 +288,8 @@ class GatewayQueueManager:
         record: dict[str, Any],
         params: dict[str, Any],
         runner: RequestRunner,
+        *,
+        dispatch_owner_epoch: str | None = None,
     ) -> dict[str, Any]:
         """Accept a queued record, enqueueing it if capacity exists.
 
@@ -213,6 +298,7 @@ class GatewayQueueManager:
         """
         request_id = record["request-id"]
         agent_profile_id = record["agent-profile-id"]
+        owner_epoch = dispatch_owner_epoch or f"local-{uuid.uuid4().hex}"
         pq = self._profile_queue(agent_profile_id, params)
 
         # Lifecycle event publish is SYNC dispatch — a subscriber that calls
@@ -224,6 +310,7 @@ class GatewayQueueManager:
             queue_full = len(pq.pending) >= pq.queue_max_size
             if not queue_full:
                 pq.pending.append(request_id)
+                pq.dispatch_owners[request_id] = owner_epoch
                 pending_count = len(pq.pending)
 
         if queue_full:
@@ -281,16 +368,25 @@ class GatewayQueueManager:
         params: dict[str, Any],
         runner: RequestRunner,
     ) -> None:
-        """Start worker threads for as many pending requests as capacity allows."""
+        """Start worker threads for as many pending requests as capacity allows.
+
+        AS15: uses active_running() (running - idle) so that session requests
+        waiting on turn_lock don't block other sessions from making progress.
+        """
         while True:
             with pq.lock:
-                if len(pq.running) >= pq.max_concurrency or not pq.pending:
+                if pq.active_running() >= pq.max_concurrency or not pq.pending:
                     return
                 request_id = pq.pending.popleft()
                 pq.running.add(request_id)
+                owner_epoch = pq.dispatch_owners.get(request_id)
+                if owner_epoch is None:
+                    logger.error("gateway queue lost dispatch owner", extra={"request-id": request_id})
+                    pq.running.discard(request_id)
+                    continue
             thread = threading.Thread(
                 target=self._run_one,
-                args=(project_root, agent_profile_id, pq, request_id, params, runner),
+                args=(project_root, agent_profile_id, pq, request_id, owner_epoch, params, runner),
                 daemon=True,
                 name=f"gateway-{agent_profile_id}-{request_id}",
             )
@@ -302,19 +398,53 @@ class GatewayQueueManager:
         agent_profile_id: str,
         pq: _ProfileQueue,
         request_id: str,
+        owner_epoch: str,
         params: dict[str, Any],
         runner: RequestRunner,
     ) -> None:
+        is_session = False
+        non_session_slot_held = False
+
         try:
             if request_id in pq.cancel_requested:
                 logger.info("gateway request cancelled before dispatch", extra={"request-id": request_id})
-                cancelled = store.transition_record(project_root, request_id, "cancelled")
-                store.record_gateway_timeline(project_root, request_id, "queue.cancelled-before-dispatch", state="cancelled")
-                _publish_lifecycle_event("cancelled", cancelled)
+                cancelled = store.cancel_queued_or_mark_requested(project_root, request_id)
+                if cancelled["state"] == "cancelled":
+                    store.record_gateway_timeline(project_root, request_id, "queue.cancelled-before-dispatch", state="cancelled")
+                    _publish_lifecycle_event("cancelled", cancelled)
                 return
-            record = store.transition_record(
-                project_root, request_id, "running",
-                updates={"started-at": now_iso_z()},
+            current = store.read_record(project_root, request_id)
+            try:
+                claimed = store.claim_dispatch(
+                    project_root, request_id, owner_epoch=owner_epoch,
+                    expected_revision=current["revision"],
+                )
+            except AudiaGenticError as exc:
+                # Cancellation may linearize after this worker has dequeued the
+                # request but before its durable claim is written.  That makes
+                # this claim deliberately stale: the cancellation is already
+                # the authoritative terminal outcome, so this worker only has
+                # cleanup left to do.  Keep every other claim conflict loud --
+                # it is evidence of an ownership/revision bug, not a retry
+                # opportunity.
+                latest = store.read_record(project_root, request_id)
+                if (
+                    exc.code in {"CON-AGW-071", "CON-AGW-083"}
+                    and latest["state"] == "cancelled"
+                ):
+                    logger.info(
+                        "gateway dispatch claim superseded by durable cancellation",
+                        extra={"request-id": request_id},
+                    )
+                    _publish_lifecycle_event("cancelled", latest)
+                    return
+                raise
+            if claimed["state"] != "queued":
+                return
+            record = store.start_owned_attempt(
+                project_root, request_id, owner_epoch=owner_epoch,
+                worker_id=f"worker_{uuid.uuid4().hex[:16]}",
+                expected_revision=claimed["revision"],
             )
             logger.info("gateway request running", extra={"request-id": request_id, "agent-profile-id": agent_profile_id})
             store.record_gateway_timeline(
@@ -328,6 +458,41 @@ class GatewayQueueManager:
                 },
             )
             _publish_lifecycle_event("started", record)
+
+            # AS15: two-phase concurrency for session requests.
+            # Detect session request early to set up callbacks.
+            is_session = bool(record.get("session-id") or record.get("session-keep-alive"))
+            if is_session:
+                with pq.lock:
+                    pq.idle.add(request_id)
+
+                session_slot_held = False
+
+                async def _on_turn_starting(rid: str) -> None:
+                    nonlocal session_slot_held
+                    await asyncio.to_thread(pq.compute_slots.acquire)
+                    with pq.lock:
+                        session_slot_held = True
+                        pq.idle.discard(rid)
+
+                async def _on_turn_done(rid: str) -> None:
+                    nonlocal session_slot_held
+                    with pq.lock:
+                        release_slot = session_slot_held
+                        session_slot_held = False
+                        pq.idle.add(rid)
+                    if release_slot:
+                        pq.compute_slots.release()
+                    self._drain(project_root, agent_profile_id, pq, params, runner)
+
+                _TURNCB.set_callbacks(request_id, _on_turn_starting, _on_turn_done)
+                # This worker is waiting at the session/turn boundary, so let
+                # another request reach the same bounded compute gate.
+                self._drain(project_root, agent_profile_id, pq, params, runner)
+            else:
+                pq.compute_slots.acquire()
+                non_session_slot_held = True
+
             try:
                 result = runner(project_root, record)
                 logger.info(
@@ -351,24 +516,35 @@ class GatewayQueueManager:
                 logger.error("gateway request runner raised", extra={"request-id": request_id}, exc_info=True)
                 current = store.read_record(project_root, request_id)
                 if current["state"] == "running":
-                    failed = store.transition_record(
+                    failed = store.transition_owned_terminal(
                         project_root, request_id, "failed",
                         updates={"error": exc, "finished-at": now_iso_z()},
+                        owner_epoch=record["dispatch-owner-epoch"],
+                        worker_id=record["worker-id"],
+                        attempt_epoch=record["attempt-epoch"],
                     )
                     _publish_lifecycle_event("failed", failed)
             except Exception as exc:  # noqa: BLE001
                 logger.error("gateway request runner raised unexpectedly", extra={"request-id": request_id}, exc_info=True)
                 current = store.read_record(project_root, request_id)
                 if current["state"] == "running":
-                    failed = store.transition_record(
+                    failed = store.transition_owned_terminal(
                         project_root, request_id, "failed",
                         updates={"error": exc, "finished-at": now_iso_z()},
+                        owner_epoch=record["dispatch-owner-epoch"],
+                        worker_id=record["worker-id"],
+                        attempt_epoch=record["attempt-epoch"],
                     )
                     _publish_lifecycle_event("failed", failed)
         finally:
+            if non_session_slot_held:
+                pq.compute_slots.release()
             with pq.lock:
                 pq.running.discard(request_id)
+                pq.idle.discard(request_id)
                 pq.cancel_requested.discard(request_id)
+                pq.dispatch_owners.pop(request_id, None)
+            _TURNCB.clear(request_id)
             self._drain(project_root, agent_profile_id, pq, params, runner)
 
     def cancel(self, project_root: Path, agent_profile_id: str, request_id: str) -> dict[str, Any]:
@@ -381,7 +557,10 @@ class GatewayQueueManager:
         """
         pq = self._profiles.get(agent_profile_id)
         if pq is None:
-            return store.read_record(project_root, request_id)
+            # A remote service/process can own the in-memory queue.  Durable
+            # cancellation still has to reach the record even when this local
+            # manager has no profile queue.
+            return store.cancel_queued_or_mark_requested(project_root, request_id)
 
         with pq.lock:
             if request_id in pq.pending:
@@ -393,44 +572,92 @@ class GatewayQueueManager:
             if is_running:
                 pq.cancel_requested.add(request_id)
 
-        if removed_from_queue:
-            logger.info("gateway request cancelled (was queued)", extra={"request-id": request_id})
-            return store.transition_record(project_root, request_id, "cancelled")
-        if is_running:
-            # Persisted so the intent is observable (get/wait) and so the
-            # dispatch retry/fallback loop can see it across process/module
-            # boundaries — the in-memory cancel_requested set alone is not
-            # enough once the record is inspected from outside this manager.
-            logger.info("gateway request cancel-requested (running)", extra={"request-id": request_id})
-            return store.mark_cancel_requested(project_root, request_id)
+        if removed_from_queue or is_running:
+            # The durable record is the linearization point.  A request may
+            # already have left ``pending`` but not yet claimed dispatch; the
+            # store then cancels its still-queued record atomically instead of
+            # leaving queued+cancel-requested without a queue entry.
+            updated = store.cancel_queued_or_mark_requested(project_root, request_id)
+            if updated["state"] == "cancelled":
+                logger.info("gateway request cancelled before running", extra={"request-id": request_id})
+            elif is_running:
+                # Persisted so the intent is observable (get/wait) and so the
+                # dispatch retry/fallback loop can see it across process/module
+                # boundaries — the in-memory cancel_requested set alone is not
+                # enough once the record is inspected from outside this manager.
+                logger.info("gateway request cancel-requested (running)", extra={"request-id": request_id})
+                # RV680: a running SESSION turn is interruptible via the ACP
+                # protocol-level cancel — signal it best-effort. Non-session
+                # requests keep the between-attempts cooperative check only.
+                try:
+                    from audiagentic.components.agents.agents_gateway_sessions import (
+                        peek_session_runtime,
+                    )
+
+                    runtime = peek_session_runtime()
+                    if runtime is not None:
+                        runtime.request_cancel(request_id)
+                except Exception:  # noqa: BLE001 — cancel stays best-effort
+                    logger.debug(
+                        "failed to signal session turn cancel",
+                        extra={"request-id": request_id},
+                        exc_info=True,
+                    )
+            return updated
         return store.read_record(project_root, request_id)
 
     def wait(self, project_root: Path, request_id: str, timeout_seconds: float | None) -> dict[str, Any]:
         """Block until the request reaches a terminal state or timeout elapses.
 
-        Polls the persisted record rather than an in-memory signal so it works
-        regardless of which GatewayQueueManager instance (if any) is driving
-        the request — including calls made after an async submit from a
-        separate process invocation.
+        The durable record remains the authority, so this also works when a
+        different manager or process owns dispatch.  To avoid JSON parsing and
+        schema validation every 50ms for unchanged long-running requests, use
+        the record file's change marker as a hint and retain a bounded full
+        read fallback for coarse or unreliable filesystem timestamps.
         """
         deadline = None if timeout_seconds is None else time.monotonic() + timeout_seconds
-        poll_interval = 0.05
+        record_path = gateway_request_path(project_root, request_id)
+        backoff_seconds = _WAIT_INITIAL_BACKOFF_SECONDS
+        record = store.read_record(project_root, request_id)
+        signature = _record_signature(record_path)
+        next_full_read_at = time.monotonic() + _WAIT_MAX_BACKOFF_SECONDS
+
         while True:
-            record = store.read_record(project_root, request_id)
             if record["state"] in store.TERMINAL_STATES:
                 return record
-            if deadline is not None and time.monotonic() >= deadline:
+            now = time.monotonic()
+            if deadline is not None and now >= deadline:
                 return record
-            time.sleep(poll_interval)
+
+            sleep_seconds = backoff_seconds
+            if deadline is not None:
+                sleep_seconds = min(sleep_seconds, max(0.0, deadline - now))
+            time.sleep(sleep_seconds)
+
+            now = time.monotonic()
+            observed_signature = _record_signature(record_path)
+            marker_changed = observed_signature != signature
+            fallback_due = now >= next_full_read_at
+            if marker_changed or fallback_due:
+                record = store.read_record(project_root, request_id)
+                signature = _record_signature(record_path)
+                next_full_read_at = now + _WAIT_MAX_BACKOFF_SECONDS
+                # A durable transition deserves prompt observation; reset the
+                # bounded wait cadence rather than carrying a long idle delay.
+                backoff_seconds = _WAIT_INITIAL_BACKOFF_SECONDS
+            else:
+                backoff_seconds = min(backoff_seconds * 2, _WAIT_MAX_BACKOFF_SECONDS)
 
     def queue_depth(self, agent_profile_id: str) -> dict[str, int]:
         pq = self._profiles.get(agent_profile_id)
         if pq is None:
-            return {"pending": 0, "running": 0, "max_concurrency": 0}
+            return {"pending": 0, "running": 0, "active_running": 0, "idle": 0, "max_concurrency": 0}
         with pq.lock:
             return {
                 "pending": len(pq.pending),
                 "running": len(pq.running),
+                "active_running": pq.active_running(),
+                "idle": len(pq.idle),
                 "max_concurrency": pq.max_concurrency,
             }
 

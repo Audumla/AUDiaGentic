@@ -21,6 +21,11 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.agents.agents_event_topics import (
+    GATEWAY_CANCEL_REQUESTED_TOPIC,
+    GATEWAY_REQUESTED_TOPIC,
+    LLM_REJECTED_TOPIC,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.event import get_bus
 
@@ -31,13 +36,6 @@ _REGISTERED = False
 # name is broad enough that an unrelated future publisher could accidentally
 # trigger real provider dispatch by publishing to what looked like a neutral
 # "an LLM request happened" marker (RV32 finding).
-REQUESTED_TOPIC = "agents.llm.gateway.requested"
-CANCEL_REQUESTED_TOPIC = "agents.llm.gateway.cancel-requested"
-EVENT_REJECTED = "agents.llm.rejected"
-
-# Deprecated aliases — kept for import compatibility, will be removed.
-_REQUESTED_TOPIC = REQUESTED_TOPIC
-_CANCEL_REQUESTED_TOPIC = CANCEL_REQUESTED_TOPIC
 
 
 def _payload_get(payload: dict[str, Any], *keys: str) -> Any:
@@ -52,7 +50,7 @@ def _publish_rejected(reason: str, metadata: dict[str, Any]) -> None:
     there is no request-id yet, so this carries only the reason and whatever
     correlation/subject metadata the publisher supplied (RV18 finding)."""
     get_bus().publish(
-        EVENT_REJECTED,
+        LLM_REJECTED_TOPIC,
         {"request-id": None, "error": {"code": "VAL-AGW-040", "message": reason, "kind": "agents"}},
         metadata=metadata,
     )
@@ -79,21 +77,19 @@ def _on_llm_requested(event_type: str, payload: dict[str, Any], metadata: dict[s
         _publish_rejected("payload missing required 'prompt-body'", metadata)
         return
 
-    from audiagentic.components.agents import agents_gateway_api as gateway
+    from audiagentic.components.agents.agents_gateway_client import get_gateway_client
 
     project_root = Path(project_root_raw)
     agent_profile_id = _payload_get(payload, "agent-profile-id", "agent_profile_id")
-    fallback_profile_ids = _payload_get(payload, "fallback-profile-ids", "fallback_profile_ids")
     blocking = bool(payload.get("blocking"))
-    source = _payload_get(payload, "source") or f"event:{_REQUESTED_TOPIC}"
+    source = _payload_get(payload, "source") or f"event:{GATEWAY_REQUESTED_TOPIC}"
 
     try:
-        gateway.submit_llm_request(
+        get_gateway_client().submit_llm_request(
             project_root,
             agent_profile_id=agent_profile_id,
             prompt_body=prompt_body,
             mode="blocking" if blocking else "async",
-            fallback_profile_ids=fallback_profile_ids,
             source=source,
             # metadata flows straight into the persisted record, so
             # correlation_id/subject survive into every lifecycle event
@@ -137,10 +133,10 @@ def _on_cancel_requested(event_type: str, payload: dict[str, Any], metadata: dic
         )
         return
 
-    from audiagentic.components.agents import agents_gateway_api as gateway
+    from audiagentic.components.agents.agents_gateway_client import get_gateway_client
 
     try:
-        gateway.cancel_llm_request(Path(project_root_raw), request_id)
+        get_gateway_client().cancel_llm_request(Path(project_root_raw), request_id)
     except AudiaGenticError:
         logger.warning(
             "gateway cancel event failed",
@@ -160,8 +156,8 @@ def register() -> None:
     global _REGISTERED
     if _REGISTERED:
         return
-    get_bus().subscribe(_REQUESTED_TOPIC, _on_llm_requested)
-    get_bus().subscribe(_CANCEL_REQUESTED_TOPIC, _on_cancel_requested)
+    get_bus().subscribe(GATEWAY_REQUESTED_TOPIC, _on_llm_requested)
+    get_bus().subscribe(GATEWAY_CANCEL_REQUESTED_TOPIC, _on_cancel_requested)
     _REGISTERED = True
 
 

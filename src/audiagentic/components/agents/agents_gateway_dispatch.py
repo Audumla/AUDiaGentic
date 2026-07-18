@@ -1,17 +1,18 @@
-"""Agent LLM Gateway provider dispatch, retry, and fallback (AG10).
+"""Agent LLM Gateway provider dispatch and retry (AG10).
 
 The RequestRunner passed to GatewayQueueManager.enqueue. Resolves the request's
 agent profile to a provider/model, dispatches through providers.services.execution
 (the one allowed seam into providers — no provider-specific branches live here),
 retries transient failures against the same profile, and falls back to
-fallback-profile-ids only after retries on the current profile are exhausted.
 Validation/config failures (unknown profile, disabled provider, invalid
 request, missing model, safety/config rejection) are terminal on first
-occurrence — never retried, never trigger fallback (AG10 spec + RV13).
+occurrence — never retried.
 """
 from __future__ import annotations
 
+import json
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,32 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
+
+_ENV_STREAM_OUTPUT = "AUDIAGENTIC_GATEWAY_STREAM_OUTPUT"
+
+
+def _write_output_chunk(project_root: Path, request_id: str, text: str | None, attempt_index: int) -> None:
+    """Append an output chunk to <request-dir>/output.ndjson if streaming is enabled.
+
+    Fire-and-forget — never raises. Controlled by AUDIAGENTIC_GATEWAY_STREAM_OUTPUT env var.
+    Set to any truthy value (e.g. '1') to enable; unset or empty to disable."""
+    if not os.environ.get(_ENV_STREAM_OUTPUT):
+        return
+    if not text:
+        return
+    try:
+        from audiagentic.components.agents.agents_paths import gateway_root
+
+        out_path = gateway_root(project_root) / request_id / "output.ndjson"
+        with open(out_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps({"attempt": attempt_index, "text": text}) + "\n")
+    except Exception:  # noqa: BLE001
+        logger.debug(
+            "failed to write output chunk (non-fatal)",
+            extra={"request-id": request_id},
+            exc_info=True,
+        )
+
 
 # Classification is code-prefix-driven (the canonical PREFIX-COMPONENT-NNN
 # convention every AudiaGenticError already follows — foundation.contracts.errors
@@ -33,6 +60,7 @@ logger = logging.getLogger(__name__)
 # no-fallback case; a future rate-limit-flavored RES code would currently be
 # misclassified as terminal too — no adapter emits one today (rate limits
 # surface as NET-*/TO-*/EXT-* in the existing adapters).
+
 _TERMINAL_PREFIXES = ("VAL-", "RES-", "CON-", "CFG-", "VER-", "UNS-")
 _TRANSIENT_PREFIXES = ("NET-", "TO-", "EXT-", "INT-", "IO-")
 
@@ -85,19 +113,10 @@ def resolve_retry_count(params: dict[str, Any]) -> int:
     return value
 
 
-def _resolve_provider_disabled_error(provider_id: str) -> AudiaGenticError:
-    return AudiaGenticError(
-        code="VAL-AGW-031",
-        kind="agents",
-        message="provider is not enabled",
-        details={"provider-id": provider_id},
-    )
-
-
 def _raise_if_cancelled(project_root: Path, request_id: str) -> None:
     """Cooperative cancellation check: subprocess/HTTP calls can't be interrupted
-    mid-flight, but the retry/fallback loop can stop advancing to the next
-    attempt or fallback profile once a cancel has been recorded (RV23)."""
+    mid-flight, but the retry loop can stop advancing to the next attempt
+    once a cancel has been recorded (RV23)."""
     if store.read_record(project_root, request_id)["cancel-requested"]:
         raise _CancelledDuringDispatch()
 
@@ -114,11 +133,16 @@ def _build_packet_ctx(
     record: dict[str, Any],
     profile: dict[str, Any],
     model: dict[str, Any],
+    *,
+    dispatch_prompt: str,
 ) -> dict[str, Any]:
     """Build provider-neutral execution context from gateway-owned state.
 
     The gateway's project root is authoritative. Request metadata is correlation
     data only and cannot redirect provider execution into another directory.
+
+    SH02: dispatch_prompt is the raw prompt body passed separately — it never
+    lives in the persisted record (only prompt_digest does).
     """
     return {
         "request-id": record["request-id"],
@@ -126,7 +150,7 @@ def _build_packet_ctx(
         "provider-id": profile["provider_id"],
         "model-id": model.get("model-id") or model.get("resolved"),
         "model-alias": profile.get("model_alias"),
-        "prompt-body": record.get("prompt-body"),
+        "prompt-body": dispatch_prompt,
         "params": profile.get("params", {}),
         "working-root": str(project_root.resolve()),
         "stream-controls": dict(profile.get("params", {}).get("stream-controls") or {}),
@@ -139,49 +163,97 @@ def _dispatch_one_attempt(
     project_root: Path,
     record: dict[str, Any],
     agent_profile_id: str,
+    *,
+    dispatch_prompt: str,
+    manifest_id: str,
+    context_fingerprint: str,
+    component_profile: str,
+    provider_isolation_tier: str,
+    worker_timeout_seconds: float,
 ) -> dict[str, Any]:
     """Resolve profile/provider/model and call execute_provider once.
 
     Raises AudiaGenticError on any failure (validation or transient — caller
-    classifies and decides retry/fallback). Returns the normalized provider
+    classifies and decides retry). Returns the normalized provider
     result dict on success.
+
+    SH02: dispatch_prompt is the raw prompt body, passed separately from the
+    persisted record (which only carries prompt_digest).
     """
     from audiagentic.components.agents.agents_api import resolve_profile
-    from audiagentic.components.providers.services.execution import execute_provider
-    from audiagentic.components.providers.services.models import resolve_model_selection
-    from audiagentic.components.providers.services.provider_config import (
-        is_provider_enabled,
-        load_provider_config,
+    from audiagentic.components.agents.agents_gateway_worker import (
+        execute_isolated_provider_turn,
     )
+    from audiagentic.components.agents.contracts.worker_protocol import (
+        WorkerExecutionIdentity,
+    )
+    from audiagentic.components.providers import providers_api
 
     profile = resolve_profile(project_root, agent_profile_id)
     provider_id = profile["provider_id"]
+    if not providers_api.get_provider_runtime_config_state(
+        project_root, provider_id
+    )["enabled"]:
+        raise AudiaGenticError(
+            code="VAL-AGW-031",
+            kind="agents",
+            message="agent profile references a disabled provider",
+            details={"provider-id": provider_id},
+        )
 
-    if not is_provider_enabled(project_root, provider_id):
-        raise _resolve_provider_disabled_error(provider_id)
-
-    provider_cfg = load_provider_config(project_root).get("providers", {}).get(provider_id, {})
-
-    model = resolve_model_selection(
-        provider_id=provider_id,
-        provider_config=provider_cfg,
-        job_request={"model-id": profile.get("model_id"), "model-alias": profile.get("model_alias")},
+    packet_ctx = _build_packet_ctx(
+        project_root,
+        record,
+        profile,
+        {"model-id": profile.get("model_id")},
+        dispatch_prompt=dispatch_prompt,
     )
-
-    packet_ctx = _build_packet_ctx(project_root, record, profile, model)
-    return execute_provider(provider_id=provider_id, packet_ctx=packet_ctx, provider_cfg=provider_cfg)
+    provider_request = providers_api.ProviderExecutionRequest(
+        project_root=project_root.resolve(),
+        provider_id=provider_id,
+        model_id=profile.get("model_id"),
+        model_alias=profile.get("model_alias"),
+        packet_data=packet_ctx,
+        worker_id=str(record.get("worker-id") or ""),
+        attempt_epoch=int(record.get("attempt-epoch") or 0),
+        provider_isolation_tier=provider_isolation_tier,
+    )
+    identity = WorkerExecutionIdentity(
+        worker_id=provider_request.worker_id,
+        attempt_epoch=provider_request.attempt_epoch,
+        manifest_id=manifest_id,
+        context_fingerprint=context_fingerprint,
+        project_root=str(project_root.resolve()),
+        component_profile=component_profile,
+        provider_isolation_tier=provider_isolation_tier,
+    )
+    result = execute_isolated_provider_turn(
+        identity=identity,
+        execution_request=provider_request.to_mapping(),
+        timeout_seconds=worker_timeout_seconds,
+    )
+    return dict(result.result_data)
 
 
 def _try_profile_with_retries(
     project_root: Path,
     record: dict[str, Any],
     agent_profile_id: str,
+    *,
+    dispatch_prompt: str,
+    manifest_id: str,
+    context_fingerprint: str,
+    component_profile: str,
+    provider_isolation_tier: str,
+    worker_timeout_seconds: float,
 ) -> dict[str, Any]:
     """Try one profile, retrying transient failures up to its retry-count.
 
     Raises _TerminalFailure immediately on a validation/config error (no
     retry). Raises the last AudiaGenticError if all attempts are transient
-    failures (caller decides whether to fall back to another profile).
+    failures.
+
+    SH02: dispatch_prompt is passed through to each attempt for provider dispatch.
     """
     from audiagentic.components.agents.agents_api import resolve_profile
 
@@ -208,10 +280,23 @@ def _try_profile_with_retries(
             },
         )
         try:
-            result = _dispatch_one_attempt(project_root, record, agent_profile_id)
+            result = _dispatch_one_attempt(
+                project_root,
+                record,
+                agent_profile_id,
+                dispatch_prompt=dispatch_prompt,
+                manifest_id=manifest_id,
+                context_fingerprint=context_fingerprint,
+                component_profile=component_profile,
+                provider_isolation_tier=provider_isolation_tier,
+                worker_timeout_seconds=worker_timeout_seconds,
+            )
         except AudiaGenticError as exc:
-            store.append_attempt(
+            store.append_owned_attempt(
                 project_root, record["request-id"],
+                owner_epoch=record["dispatch-owner-epoch"],
+                worker_id=record["worker-id"],
+                attempt_epoch=record["attempt-epoch"],
                 agent_profile_id=agent_profile_id,
                 provider_id=profile.get("provider_id"),
                 model_id=profile.get("model_id"),
@@ -226,8 +311,11 @@ def _try_profile_with_retries(
             continue
         else:
             model_id = _extract_model_id(result, profile)
-            store.append_attempt(
+            store.append_owned_attempt(
                 project_root, record["request-id"],
+                owner_epoch=record["dispatch-owner-epoch"],
+                worker_id=record["worker-id"],
+                attempt_epoch=record["attempt-epoch"],
                 agent_profile_id=agent_profile_id,
                 provider_id=profile.get("provider_id"),
                 model_id=model_id,
@@ -235,10 +323,12 @@ def _try_profile_with_retries(
                 started_at=started_at,
                 finished_at=now_iso_z(),
             )
+            output_text = result.get("output")
+            _write_output_chunk(project_root, record["request-id"], output_text, attempt_num)
             return {
                 "provider-id": result.get("provider-id", profile.get("provider_id")),
                 "model-id": model_id,
-                "output": result.get("output"),
+                "output": output_text,
                 "completion": result.get("completion"),
                 "usage": result.get("usage"),
             }
@@ -271,32 +361,32 @@ def _session_output_from_result(result: Any) -> str | None:
         for event in result.events
         if event.kind == "assistant-message" and event.text
     ]
-    # Text carried by events the transport's budgets dropped (long turns) —
-    # appended so the worker's final report survives cap pressure intact.
+    # Text carried by events the transport's rolling budgets EVICTED — with
+    # FIFO eviction those are always the OLDEST chunks, so they lead.
     overflow = getattr(result, "overflow_text", None)
     if overflow:
-        texts.append(overflow)
+        texts.insert(0, overflow)
     return "".join(texts) if texts else None
 
 
-def _dispatch_session_request(project_root: Path, record: dict[str, Any]) -> dict[str, Any]:
+def _dispatch_session_request(
+    project_root: Path,
+    record: dict[str, Any],
+    *,
+    dispatch_prompt: str,
+) -> dict[str, Any]:
     """Dispatch a sessionful request through the live SessionRuntime (AS04).
 
-    No retry and no fallback on this path — retrying inside a stateful
-    conversation is not idempotent, and falling back to another profile
-    would silently switch provider/model mid-conversation (VAL-AGW-058
-    already rejects fallback ids at build time; this path never consults
-    them). Any turn failure is terminal for the request.
+    No retry on this path — retrying inside a stateful conversation is not
+    idempotent. Any turn failure is terminal for the request.
+
+    SH02: dispatch_prompt is the raw prompt body, passed separately from the
+    persisted record (which only carries prompt_digest).
     """
     from audiagentic.components.agents import agents_gateway_sessions_store as session_store
     from audiagentic.components.agents.agents_api import resolve_profile
     from audiagentic.components.agents.agents_gateway_sessions import get_session_runtime
-    from audiagentic.components.providers.services.execution import load_acp_launch_builder
-    from audiagentic.components.providers.services.models import resolve_model_selection
-    from audiagentic.components.providers.services.provider_config import (
-        is_provider_enabled,
-        load_provider_config,
-    )
+    from audiagentic.components.providers import providers_api
 
     request_id = record["request-id"]
     agent_profile_id = record["agent-profile-id"]
@@ -308,32 +398,23 @@ def _dispatch_session_request(project_root: Path, record: dict[str, Any]) -> dic
     session_id = record.get("session-id")
     started_at = now_iso_z()
     try:
-        if not is_provider_enabled(project_root, provider_id):
-            raise _resolve_provider_disabled_error(provider_id)
         if session_id is None:
             # keep-alive: open a new session bound to this profile
-            builder = load_acp_launch_builder(provider_id)
-            if builder is None:
-                raise AudiaGenticError(
-                    code="UNS-AGW-001",
-                    kind="agents",
-                    message="provider does not support live agent sessions",
-                    details={"provider-id": provider_id},
-                )
-            provider_cfg = load_provider_config(project_root).get("providers", {}).get(provider_id, {})
-            model = resolve_model_selection(
+            prepared_launch = providers_api.prepare_provider_acp_launch(
+                project_root,
                 provider_id=provider_id,
-                provider_config=provider_cfg,
-                job_request={"model-id": profile.get("model_id"), "model-alias": profile.get("model_alias")},
+                model_id=profile.get("model_id"),
+                model_alias=profile.get("model_alias"),
             )
-            model_id = model.get("model-id") or model.get("resolved")
+            model_id = prepared_launch.model_id
             params = profile.get("params", {})
             session_record = runtime.open_session(
                 project_root,
                 agent_profile_id=agent_profile_id,
-                launch=builder(project_root, model_id=model_id),
+                launch=prepared_launch.launch,
                 provider_id=provider_id,
                 model_id=model_id,
+                correlation_id=record.get("correlation-id"),
                 # Request value wins over profile params; 0 disables the bound
                 # (RV513) — use explicit None checks so 0 survives resolution.
                 idle_timeout_seconds=(
@@ -345,6 +426,16 @@ def _dispatch_session_request(project_root: Path, record: dict[str, Any]) -> dic
                     record.get("session-max-lifetime-seconds")
                     if record.get("session-max-lifetime-seconds") is not None
                     else _params_get(params, "session-max-lifetime-seconds", "session_max_lifetime_seconds")
+                ),
+                # RV680: per-turn deadline and opt-in event-silence watchdog,
+                # profile-param driven; None → runtime defaults, 0 disables.
+                turn_timeout_seconds=_params_get(
+                    params, "session-turn-timeout-seconds", "session_turn_timeout_seconds"
+                ),
+                turn_silence_timeout_seconds=_params_get(
+                    params,
+                    "session-turn-silence-timeout-seconds",
+                    "session_turn_silence_timeout_seconds",
                 ),
             )
             session_id = session_record["session-id"]
@@ -376,14 +467,18 @@ def _dispatch_session_request(project_root: Path, record: dict[str, Any]) -> dic
             },
         )
         result = runtime.prompt_in_session(
-            project_root, session_id, record.get("prompt-body") or "",
+            project_root, session_id, dispatch_prompt,
             request_id=request_id,
+            correlation_id=record.get("correlation-id"),
         )
     except _CancelledDuringDispatch:
-        return store.transition_record(project_root, request_id, "cancelled")
+        return _transition_owned_attempt(project_root, record, "cancelled")
     except AudiaGenticError as exc:
-        store.append_attempt(
+        store.append_owned_attempt(
             project_root, request_id,
+            owner_epoch=record["dispatch-owner-epoch"],
+            worker_id=record["worker-id"],
+            attempt_epoch=record["attempt-epoch"],
             agent_profile_id=agent_profile_id,
             provider_id=provider_id,
             model_id=profile.get("model_id"),
@@ -392,15 +487,28 @@ def _dispatch_session_request(project_root: Path, record: dict[str, Any]) -> dic
             started_at=started_at,
             finished_at=now_iso_z(),
         )
-        return store.transition_record(
-            project_root, request_id, "failed",
+        return _transition_owned_attempt(
+            project_root, record, "failed",
             updates={"error": exc, "session-id": session_id, "finished-at": now_iso_z()},
+        )
+
+    if result.stop_reason == "cancelled":
+        # RV680: a turn interrupted by protocol-level cancel is a cancelled
+        # request, not a completed one — the session itself stays usable.
+        return _transition_owned_attempt(
+            project_root, record, "cancelled",
+            updates={"session-id": session_id, "finished-at": now_iso_z()},
         )
 
     session_record = session_store.read_session_record(project_root, session_id)
     model_id = session_record.get("model-id") or profile.get("model_id")
-    store.append_attempt(
+    output_text = _session_output_from_result(result)
+    _write_output_chunk(project_root, request_id, output_text, 0)
+    store.append_owned_attempt(
         project_root, request_id,
+        owner_epoch=record["dispatch-owner-epoch"],
+        worker_id=record["worker-id"],
+        attempt_epoch=record["attempt-epoch"],
         agent_profile_id=agent_profile_id,
         provider_id=provider_id,
         model_id=model_id,
@@ -408,8 +516,8 @@ def _dispatch_session_request(project_root: Path, record: dict[str, Any]) -> dic
         started_at=started_at,
         finished_at=now_iso_z(),
     )
-    return store.transition_record(
-        project_root, request_id, "completed",
+    return _transition_owned_attempt(
+        project_root, record, "completed",
         updates={
             "provider-id": provider_id,
             "model-id": model_id,
@@ -427,7 +535,17 @@ def _dispatch_session_request(project_root: Path, record: dict[str, Any]) -> dic
     )
 
 
-def dispatch_request(project_root: Path, record: dict[str, Any]) -> dict[str, Any]:
+def dispatch_request(
+    project_root: Path,
+    record: dict[str, Any],
+    *,
+    dispatch_prompt: str,
+    manifest_id: str,
+    context_fingerprint: str,
+    component_profile: str,
+    provider_isolation_tier: str,
+    worker_timeout_seconds: float,
+) -> dict[str, Any]:
     """Dispatch a queued/running gateway request record to completion.
 
     RequestRunner signature — passed to GatewayQueueManager.enqueue. The
@@ -436,48 +554,64 @@ def dispatch_request(project_root: Path, record: dict[str, Any]) -> dict[str, An
     ('completed' or 'failed') state before returning.
 
     Sessionful requests (session-id / session-keep-alive) route to the live
-    SessionRuntime via _dispatch_session_request — no retry, no fallback.
+    SessionRuntime via _dispatch_session_request — no retry.
 
-    Cancellation is cooperative and checked only BETWEEN attempts/fallback
-    candidates (_raise_if_cancelled) — an in-flight execute_provider call
+    Cancellation is cooperative and checked only BETWEEN attempts
+    (_raise_if_cancelled) — an in-flight execute_provider call
     (a subprocess or HTTP request already underway) is never interrupted
     mid-flight. A cancel recorded while an attempt is running takes effect
     only once that attempt returns (RV34 finding).
+
+    SH02: dispatch_prompt is the raw prompt body, passed separately from the
+    persisted record (which only carries prompt_digest).
     """
     if _is_session_request(record):
-        return _dispatch_session_request(project_root, record)
+        return _dispatch_session_request(project_root, record, dispatch_prompt=dispatch_prompt)
 
-    candidates = [record["agent-profile-id"], *record.get("fallback-profile-ids", [])]
-    last_error: AudiaGenticError | None = None
-
-    for agent_profile_id in candidates:
-        try:
-            _raise_if_cancelled(project_root, record["request-id"])
-            outcome = _try_profile_with_retries(project_root, record, agent_profile_id)
-        except _CancelledDuringDispatch:
-            return store.transition_record(project_root, record["request-id"], "cancelled")
-        except _TerminalFailure as exc:
-            return store.transition_record(
-                project_root, record["request-id"], "failed",
-                updates={"error": exc.original, "finished-at": now_iso_z()},
-            )
-        except AudiaGenticError as exc:
-            last_error = exc
-            continue
-        else:
-            return store.transition_record(
-                project_root, record["request-id"], "completed",
-                updates={**outcome, "finished-at": now_iso_z()},
-            )
-
-    if last_error is None:
-        raise AudiaGenticError(
-            code="INT-AGW-002",
-            kind="agents",
-            message="dispatch candidate loop exited without a result or error",
-            details={"request-id": record["request-id"]},
+    try:
+        _raise_if_cancelled(project_root, record["request-id"])
+        outcome = _try_profile_with_retries(
+            project_root,
+            record,
+            record["agent-profile-id"],
+            dispatch_prompt=dispatch_prompt,
+            manifest_id=manifest_id,
+            context_fingerprint=context_fingerprint,
+            component_profile=component_profile,
+            provider_isolation_tier=provider_isolation_tier,
+            worker_timeout_seconds=worker_timeout_seconds,
         )
-    return store.transition_record(
-        project_root, record["request-id"], "failed",
-        updates={"error": last_error, "finished-at": now_iso_z()},
+    except _CancelledDuringDispatch:
+        return _transition_owned_attempt(project_root, record, "cancelled")
+    except _TerminalFailure as exc:
+        error = exc.original
+    except AudiaGenticError as exc:
+        error = exc
+    else:
+        return _transition_owned_attempt(
+            project_root, record, "completed",
+            updates={**outcome, "finished-at": now_iso_z()},
+        )
+    return _transition_owned_attempt(
+        project_root, record, "failed",
+        updates={"error": error, "finished-at": now_iso_z()},
+    )
+
+
+def _transition_owned_attempt(
+    project_root: Path,
+    record: dict[str, Any],
+    new_state: str,
+    *,
+    updates: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Persist a terminal state only while this worker attempt still owns it."""
+    return store.transition_owned_terminal(
+        project_root,
+        record["request-id"],
+        new_state,
+        updates=updates,
+        owner_epoch=record["dispatch-owner-epoch"],
+        worker_id=record["worker-id"],
+        attempt_epoch=record["attempt-epoch"],
     )

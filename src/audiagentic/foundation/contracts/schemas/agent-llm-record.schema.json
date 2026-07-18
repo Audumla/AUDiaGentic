@@ -10,14 +10,19 @@
     "created-at",
     "updated-at",
     "attempts",
-    "fallback-profile-ids",
     "metadata",
     "cancel-requested"
+    ,"revision"
+    ,"worker-id"
+    ,"attempt-epoch"
+    ,"dispatch-owner-epoch"
+    ,"dispatch-claimed-at"
+    ,"recovery"
   ],
   "additionalProperties": false,
   "properties": {
     "contract-version": {
-      "const": "v1"
+      "const": "v2"
     },
     "request-id": {
       "type": "string"
@@ -28,16 +33,27 @@
     "prompt-body": {
       "type": ["string", "null"]
     },
+    "prompt-digest": {
+      "type": ["string", "null"]
+    },
+    "manifest-id": {
+      "type": ["string", "null"]
+    },
+    "context-fingerprint": {
+      "type": ["string", "null"]
+    },
+    "idempotency-key": {
+      "type": ["string", "null"]
+    },
+    "correlation-id": {
+      "type": ["string", "null"]
+    },
     "mode": {
       "type": "string",
       "enum": ["async", "blocking"]
     },
     "timeout-seconds": {
       "type": ["number", "null"]
-    },
-    "fallback-profile-ids": {
-      "type": "array",
-      "items": {"type": "string"}
     },
     "source": {
       "type": ["string", "null"]
@@ -59,10 +75,30 @@
     },
     "state": {
       "type": "string",
-      "enum": ["queued", "running", "completed", "failed", "cancelled", "rejected"]
+      "enum": ["queued", "running", "completed", "failed", "cancelled", "rejected", "interrupted"]
     },
     "cancel-requested": {
       "type": "boolean"
+    },
+    "revision": {"type": "integer", "minimum": 0},
+    "worker-id": {"type": ["string", "null"]},
+    "attempt-epoch": {"type": "integer", "minimum": 0},
+    "dispatch-owner-epoch": {"type": ["string", "null"]},
+    "dispatch-claimed-at": {"type": ["string", "null"]},
+    "recovery": {
+      "type": ["object", "null"],
+      "required": ["reason", "outcome"],
+      "properties": {
+        "reason": {
+          "type": "string",
+          "enum": ["service-restart", "unproven-dispatch", "unproven-execution"]
+        },
+        "outcome": {
+          "type": "string",
+          "enum": ["resubmit-required", "manual-review-required"]
+        }
+      },
+      "additionalProperties": false
     },
     "provider-id": {
       "type": ["string", "null"]
@@ -106,6 +142,8 @@
           },
           "started-at": {"type": "string"},
           "finished-at": {"type": ["string", "null"]}
+          ,"worker-id": {"type": ["string", "null"]}
+          ,"attempt-epoch": {"type": "integer", "minimum": 0}
         },
         "additionalProperties": false
       }

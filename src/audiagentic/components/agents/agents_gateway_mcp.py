@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from audiagentic.components.agents import agents_gateway_api as gateway
+from audiagentic.components.agents.agents_gateway_client import get_gateway_client
 from audiagentic.foundation.mcp.component_server import (
     log_tool_call,
     mcp_server,
@@ -18,6 +18,10 @@ from audiagentic.foundation.mcp.component_server import (
 )
 
 mcp = mcp_server(__name__)
+
+# A blocking MCP tool call must not outlive the transport that carries it.
+# This is deliberately transport-owned; the in-process client has no cap.
+MCP_BLOCKING_TIMEOUT_SECONDS = 300.0
 
 
 def _mcp_capped(timeout_seconds: float | None) -> float:
@@ -29,7 +33,7 @@ def _mcp_capped(timeout_seconds: float | None) -> float:
     applied here and not in the core gateway API: an in-process supervisor
     running a long implementation task has no such limit (RV511).
     """
-    cap = gateway.MCP_BLOCKING_TIMEOUT_SECONDS
+    cap = MCP_BLOCKING_TIMEOUT_SECONDS
     return min(timeout_seconds, cap) if timeout_seconds else cap
 
 
@@ -40,7 +44,6 @@ def agent_llm_submit(
     agent_profile_id: str | None = None,
     prompt_body: str | None = None,
     timeout_seconds: float | None = None,
-    fallback_profile_ids: list[str] | None = None,
     source: str | None = None,
     metadata: dict[str, Any] | None = None,
     session_id: str | None = None,
@@ -58,13 +61,12 @@ def agent_llm_submit(
     disable either bound). Turns queue FIFO per session; a processing session
     is never reaped. Close explicitly with agent_llm_session_close when a
     block of work is done."""
-    return gateway.submit_llm_request(
+    return get_gateway_client().submit_llm_request(
         project_root_from_env(),
         agent_profile_id=agent_profile_id,
         prompt_body=prompt_body,
         mode="async",
         timeout_seconds=timeout_seconds,
-        fallback_profile_ids=fallback_profile_ids,
         source=source,
         metadata=metadata,
         session_id=session_id,
@@ -78,14 +80,14 @@ def agent_llm_submit(
 @log_tool_call
 def agent_llm_status(request_id: str) -> dict[str, Any]:
     """Return the current persisted state of a gateway request."""
-    return gateway.get_llm_request(project_root_from_env(), request_id)
+    return get_gateway_client().get_llm_request(project_root_from_env(), request_id)
 
 
 @mcp.tool()
 @log_tool_call
 def agent_llm_wait(request_id: str, timeout_seconds: float | None = None) -> dict[str, Any]:
     """Block until a request reaches a terminal state or timeout (capped for MCP transport)."""
-    return gateway.wait_llm_request(
+    return get_gateway_client().wait_llm_request(
         project_root_from_env(), request_id, _mcp_capped(timeout_seconds)
     )
 
@@ -94,7 +96,7 @@ def agent_llm_wait(request_id: str, timeout_seconds: float | None = None) -> dic
 @log_tool_call
 def agent_llm_cancel(request_id: str) -> dict[str, Any]:
     """Cancel a queued request, or best-effort mark a running one cancel-requested."""
-    return gateway.cancel_llm_request(project_root_from_env(), request_id)
+    return get_gateway_client().cancel_llm_request(project_root_from_env(), request_id)
 
 
 @mcp.tool()
@@ -103,7 +105,6 @@ def agent_llm_run(
     agent_profile_id: str | None = None,
     prompt_body: str | None = None,
     timeout_seconds: float | None = None,
-    fallback_profile_ids: list[str] | None = None,
     source: str | None = None,
     metadata: dict[str, Any] | None = None,
     session_id: str | None = None,
@@ -117,12 +118,11 @@ def agent_llm_run(
     Sessions: session_keep_alive=true opens a live agent session (context is
     retained for follow-up requests via session_id); the transport wait cap
     still applies — long turns should use agent_llm_submit + agent_llm_wait."""
-    return gateway.run_llm_request(
+    return get_gateway_client().run_llm_request(
         project_root_from_env(),
         agent_profile_id=agent_profile_id,
         prompt_body=prompt_body,
         timeout_seconds=_mcp_capped(timeout_seconds),
-        fallback_profile_ids=fallback_profile_ids,
         source=source,
         metadata=metadata,
         session_id=session_id,
@@ -141,7 +141,7 @@ def agent_llm_list_requests(state: str | None = None, limit: int | None = None) 
     rejected). Reads from disk, so this works even for requests from an
     earlier process — unlike queue depths, which are in-memory only.
     """
-    return gateway.list_llm_requests(project_root_from_env(), state=state, limit=limit)
+    return get_gateway_client().list_llm_requests(project_root_from_env(), state=state, limit=limit)
 
 
 @mcp.tool()
@@ -149,7 +149,7 @@ def agent_llm_list_requests(state: str | None = None, limit: int | None = None) 
 def agent_llm_gateway_overview() -> dict[str, Any]:
     """Operator-facing summary: persisted request counts by state, the 5 most
     recent failures (with redacted error), and in-process per-profile queue depths."""
-    return gateway.gateway_overview(project_root_from_env())
+    return get_gateway_client().gateway_overview(project_root_from_env())
 
 
 @mcp.tool()
@@ -158,7 +158,7 @@ def agent_llm_session_list(state: str | None = None) -> list[dict[str, Any]]:
     """List persisted gateway sessions, newest first. Each entry carries a
     'live' flag: true when the session's agent process is held by this gateway
     process (only live sessions can accept new turns)."""
-    return gateway.list_llm_sessions(project_root_from_env(), state=state)
+    return get_gateway_client().list_llm_sessions(project_root_from_env(), state=state)
 
 
 @mcp.tool()
@@ -166,7 +166,7 @@ def agent_llm_session_list(state: str | None = None) -> list[dict[str, Any]]:
 def agent_llm_session_close(session_id: str) -> dict[str, Any]:
     """Close a live agent session (terminates its agent process). Idempotent —
     an already-closed or orphaned session returns its final record."""
-    return gateway.close_llm_session(project_root_from_env(), session_id)
+    return get_gateway_client().close_llm_session(project_root_from_env(), session_id)
 
 
 def main() -> None:
