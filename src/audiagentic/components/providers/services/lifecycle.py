@@ -10,7 +10,7 @@ from audiagentic.foundation.contracts.output import ComponentOutputEvent, Compon
 from audiagentic.foundation.workflow.invocation import WorkflowInvocationResult
 
 from ..descriptors.base import CliInstallRecipe, ProviderDescriptor
-from ..descriptors.registry import _probe_cli, all_descriptors, get_descriptor
+from ..descriptors.registry import _probe_cli, get_descriptor
 from ..workflow import (
     workflow_provider_cli_plan,
     workflow_provider_cli_run,
@@ -60,7 +60,8 @@ def _descriptor(provider_id: str) -> ProviderDescriptor:
     return descriptor
 
 
-def _probe_provider_cli(descriptor: ProviderDescriptor) -> dict[str, Any] | None:
+def probe_provider_cli(descriptor: ProviderDescriptor) -> dict[str, Any] | None:
+    """Return the descriptor-owned CLI availability probe result."""
     recipe = descriptor.cli_install
     if recipe and recipe.probe_fn:
         return recipe.probe_fn(descriptor)
@@ -69,12 +70,12 @@ def _probe_provider_cli(descriptor: ProviderDescriptor) -> dict[str, Any] | None
 
 def _probe_provider_cli_after_install(descriptor: ProviderDescriptor) -> dict[str, Any] | None:
     """Probe a newly installed CLI, allowing Windows shims/PATH to settle."""
-    probe = _probe_provider_cli(descriptor)
+    probe = probe_provider_cli(descriptor)
     if probe is None or probe.get("available"):
         return probe
     for _ in range(3):
         time.sleep(1)
-        probe = _probe_provider_cli(descriptor)
+        probe = probe_provider_cli(descriptor)
         if probe is None or probe.get("available"):
             break
     return probe
@@ -179,17 +180,6 @@ def install_provider_cli(
     result["workflow-events"] = workflow_events
     if status == "installed" and project_root is not None:
         _seed_provider_config(project_root, provider_id, descriptor, enabled=True)
-        _emit(on_progress, "Applying provider surfaces...", provider_id=provider_id, action="install")
-        from ..providers_api import operate_provider_surface
-
-        surface_result = operate_provider_surface(
-            project_root, provider_id, mode="apply",
-            request=_build_surface_request(project_root, provider_id),
-        )
-        result["surfaces"] = surface_result.to_mapping()
-        # Populate managed MCP config now that the provider is enabled; under
-        # enabled-aware propagation it would otherwise wait for the next sync.
-        _sync_provider_mcp(project_root, on_progress)
     _emit(on_progress, f"{provider_id}: {status}", provider_id=provider_id, action="install", status=status)
     return result
 
@@ -221,7 +211,7 @@ def uninstall_provider_cli(
         timeout=timeout,
         project_root=project_root,
         on_progress=on_progress,
-        probe_fn=_probe_provider_cli,
+        probe_fn=probe_provider_cli,
     )
     inv = _invocation_result_from_workflow(workflow_result, step_id="uninstall")
     result = _result(
@@ -239,39 +229,7 @@ def uninstall_provider_cli(
         )
 
         set_provider_enabled(project_root, provider_id, enabled=False)
-        _emit(on_progress, "Pruning provider surfaces...", provider_id=provider_id, action="uninstall")
-        from ..providers_api import operate_provider_surface
-
-        surface_result = operate_provider_surface(
-            project_root, provider_id, mode="prune",
-            request=_build_surface_request(project_root, provider_id),
-        )
-        result["surfaces"] = surface_result.to_mapping()
     _emit(on_progress, f"{provider_id}: {status}", provider_id=provider_id, action="uninstall", status=status)
-    return result
-
-
-def repair_provider_cli(
-    provider_id: str,
-    *,
-    dry_run: bool = False,
-    timeout: int = 300,
-    project_root: Path | None = None,
-    on_progress: ComponentOutputSink | None = None,
-) -> dict[str, Any]:
-    descriptor = _descriptor(provider_id)
-    probe = _probe_provider_cli(descriptor)
-    if probe and probe["available"]:
-        return _result(
-            provider_id=provider_id,
-            action="repair",
-            status="ok",
-            recipe=descriptor.cli_install,
-            probe=probe,
-            reason="CLI already available",
-        )
-    result = install_provider_cli(provider_id, dry_run=dry_run, timeout=timeout, project_root=project_root, on_progress=on_progress)
-    result["action"] = "repair"
     return result
 
 
@@ -301,32 +259,3 @@ def _seed_provider_config(
     set_provider_enabled(project_root, provider_id, enabled=enabled)
 
 
-def provision_all_provider_clis(
-    action: str,
-    *,
-    dry_run: bool = False,
-    timeout: int = 300,
-    project_root: Path | None = None,
-    on_progress: ComponentOutputSink | None = None,
-) -> dict[str, Any]:
-    actions = {
-        "install": install_provider_cli,
-        "uninstall": uninstall_provider_cli,
-        "repair": repair_provider_cli,
-    }
-    if action not in actions:
-        raise AudiaGenticError(
-            code="VAL-PLFC-002",
-            kind="providers",
-            message="unsupported provider CLI provisioning action",
-            details={"action": action},
-        )
-    results = [
-        actions[action](provider_id, dry_run=dry_run, timeout=timeout, project_root=project_root, on_progress=on_progress)
-        for provider_id in sorted(all_descriptors())
-    ]
-    return {
-        "action": action,
-        "ok": all(entry["status"] in {"installed", "uninstalled", "ok", "planned", "skipped"} for entry in results),
-        "providers": results,
-    }

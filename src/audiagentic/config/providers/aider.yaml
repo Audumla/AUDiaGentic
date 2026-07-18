@@ -2,6 +2,7 @@
 # Toolchain-based install (uv), no MCP config
 
 provider_id: aider
+execution_isolation_tier: partial-isolation
 automation_capabilities:
   - family_id: cli-lifecycle
     supported_modes: [plan, apply, prune, status]

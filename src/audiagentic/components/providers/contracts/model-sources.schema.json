@@ -27,6 +27,10 @@
         "display-name": {
           "type": "string"
         },
+        "vendor-id": {
+          "type": "string",
+          "description": "Optional upstream vendor/account group id such as anthropic, google, openai, or openrouter. Distinct from the harness provider id."
+        },
         "connector": {
           "type": "string",
           "enum": [
@@ -41,7 +45,7 @@
         },
         "connector-options": {
           "type": "object",
-          "description": "Free-form per-connector parameters (RV323). No per-connector sub-schema at v1 — known/required keys per verified connector are documented in docs/reference/PROVIDER_MODEL_ENDPOINT_CAPABILITIES.md, not enforced here."
+          "description": "Free-form per-connector parameters (RV323). No per-connector sub-schema at v1 — known/required keys per verified connector are documented in PROVIDER_CAPABILITY_REFERENCE/endpoints/provider-model-endpoints.md, not enforced here."
         },
         "base-url": {
           "type": "string"

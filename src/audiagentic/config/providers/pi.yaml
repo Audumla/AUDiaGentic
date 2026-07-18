@@ -2,6 +2,7 @@
 # Custom case: callable install/uninstall, custom probe, on_lsp_enabled hook
 
 provider_id: pi
+execution_isolation_tier: no-isolation
 automation_capabilities:
   - family_id: cli-lifecycle
     supported_modes: [plan, apply, prune, status]
@@ -158,5 +159,12 @@ model_config:
 
 model_entry_renderer: "audiagentic.components.providers.adapters.pi.model_entry:render_pi_model_entry"
 supported_connectors:
+  - openai-compatible
   - openai
   - anthropic
+
+vendor_key_injection:
+  openai: {mechanism: env, key: OPENAI_API_KEY}
+  anthropic: {mechanism: env, key: ANTHROPIC_API_KEY}
+  google: {mechanism: env, key: GEMINI_API_KEY}
+  openrouter: {mechanism: env, key: OPENROUTER_API_KEY}

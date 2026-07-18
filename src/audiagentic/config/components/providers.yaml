@@ -24,21 +24,20 @@ mcp-servers:
       - list_provider_models
       - refresh_provider_catalog
       - refresh_all_catalogs
-      - install_provider
-      - uninstall_provider
-      - repair_provider
-      - apply_provider_surfaces
-      - prune_provider_surfaces
+      - manage_cli_lifecycle
+      - operate_provider_surface
+      - operate_provider_surfaces
       - reconcile_provider
       - reconcile_all_providers
       - model_source_list
+      - list_model_inventory
+      - refresh_model_source_catalog
+      - model_vendor_set_enabled
+      - apply_model_sources
       - model_source_add
       - model_source_update
       - model_source_remove
       - model_source_set_enabled
-      - list_provider_models_config
-      - sync_provider_models
-      - reload_provider_models
       - describe_provider
     description: Providers MCP server for provider management and introspection
     propagate: audiagentic
@@ -53,20 +52,19 @@ mcp-servers:
       list_provider_models: List model IDs from a provider runtime catalog.
       refresh_provider_catalog: Fetch and persist live model catalog for a provider.
       refresh_all_catalogs: Fetch and persist model catalogs for all providers that support it.
-      install_provider: Install a provider CLI. For explicit install requests, call with dry_run=false unless the user specifically asks for a dry run.
-      uninstall_provider: Uninstall a provider CLI after user confirmation; do not dry-run unless requested.
-      repair_provider: Repair a provider CLI by installing it if missing. For explicit repair requests, call with dry_run=false unless the user specifically asks for a dry run.
-      apply_provider_surfaces: Apply managed provider surface blocks to agent files.
-      prune_provider_surfaces: Remove stale managed provider surface blocks from agent files.
+      manage_cli_lifecycle: Apply, prune, plan, or inspect one provider CLI lifecycle through the typed provider family contract.
+      operate_provider_surface: Apply, prune, plan, or inspect generated surface contributions for one provider and ownership scope.
+      operate_provider_surfaces: Apply, prune, plan, or inspect generated surface contributions for one or all active providers.
       reconcile_provider: Reconcile a single provider against host state and sync config or surfaces.
       reconcile_all_providers: Reconcile all registered providers against host state.
       model_source_list: List declared model sources (local endpoints and remote accounts) from model-sources.yaml.
-      model_source_add: Add a model source declaration. Validates against the schema; use dry_run=true to preview, apply=true to reconcile provider configs after writing.
-      model_source_update: Update fields of an existing model source declaration. Same dry_run/apply semantics as model_source_add.
-      model_source_remove: Remove a model source declaration; reconcile prunes only AUDiaGentic-owned projections.
+      list_model_inventory: Show AUDiaGentic model sources, vendor groups, their models, and compatible harness paths without network access.
+      refresh_model_source_catalog: Explicitly refresh one configured vendor or endpoint source catalog.
+      model_vendor_set_enabled: Enable or disable all configured sources for one vendor group as desired state; call apply_model_sources separately to project it.
+      apply_model_sources: Apply enabled AUDiaGentic model sources across every enabled harness with a verified model projection handler.
+      model_source_add: Add a validated model source desired-state declaration without mutating provider files.
+      model_source_update: Update a validated model source desired-state declaration without mutating provider files.
+      model_source_remove: Remove a model source desired-state declaration; use model projection separately to prune owned provider entries.
       model_source_set_enabled: Enable or disable a model source without deleting its configuration.
-      list_provider_models_config: Read the MANAGED model-config view for a provider (what AUDiaGentic materialized), distinct from list_provider_models (runtime catalog).
-      sync_provider_models: Sync AUDiaGentic-owned model entries into one provider's config from declared model sources.
-      reload_provider_models: Signal or report reload requirements after model config changes for a provider.
       describe_provider: Deep read-only interrogation of one provider - descriptor, status, execution support, model catalog and managed config, config surfaces, and ownership registries. For agent profiles use agent_list_profiles.
 

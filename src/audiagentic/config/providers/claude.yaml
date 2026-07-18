@@ -2,6 +2,7 @@
 # Common case: npm install, MCP JSON config, VS Code extension, callable hooks
 
 provider_id: claude
+execution_isolation_tier: no-isolation
 automation_capabilities:
   - family_id: cli-lifecycle
     supported_modes: [plan, apply, prune, status]

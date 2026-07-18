@@ -42,13 +42,23 @@ def manage_hook_entries(
 ) -> ManagedHooksResult:
     """Reconcile typed caller-owned hook entries using descriptor capabilities."""
     descriptor = get_descriptor(provider_id)
-    if (
-        descriptor is None
-        or descriptor.hooks_config is None
-        or descriptor.automation_capability("managed-hooks") is None
-    ):
+    if descriptor is None or descriptor.hooks_config is None:
         return ManagedHooksResult(
             ok=False, supported=False, provider_id=provider_id, error_code="RES-PHKS-001"
+        )
+    capability = descriptor.automation_capability("managed-hooks")
+    if capability is None:
+        return ManagedHooksResult(
+            ok=False, supported=False, provider_id=provider_id, error_code="RES-PHKS-001"
+        )
+    if (
+        capability.payload_contract != PIN.payload_contract
+        or capability.result_contract != PIN.result_contract
+        or tuple(capability.supported_modes) != PIN.supported_modes
+        or capability.ownership_scope_required != PIN.ownership_scope_required
+    ):
+        return ManagedHooksResult(
+            ok=False, supported=True, provider_id=provider_id, error_code="VAL-PHKS-001"
         )
     if mode not in PIN.supported_modes:
         return ManagedHooksResult(
@@ -84,6 +94,7 @@ def manage_hook_entries(
             for entry in request.entries
         }
 
+    before = registry.load().get(scope_key, {})
     result = sync_managed_config(
         spec,
         project_root,
@@ -91,8 +102,6 @@ def manage_hook_entries(
         desired_entries,
         registry=registry,
     )
-
-    before = registry.load().get(scope_key, {})
     after = registry.load().get(scope_key, {})
     changed = bool(result.updated) or bool(result.removed)
     return ManagedHooksResult(

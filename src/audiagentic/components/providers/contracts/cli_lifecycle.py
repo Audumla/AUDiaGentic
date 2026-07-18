@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+
 CliLifecycleMode = Literal["plan", "apply", "prune", "status"]
 
 
@@ -40,7 +42,23 @@ class CliLifecycleResult:
 
     def __post_init__(self) -> None:
         if self.state not in {"installed", "uninstalled", "skipped", "failed"}:
-            raise ValueError(f"invalid CLI lifecycle state: {self.state!r}")
+            raise AudiaGenticError(
+                code="VAL-PCLI-001",
+                kind="providers",
+                message="invalid CLI lifecycle state",
+                details={"state": self.state},
+            )
+
+    @classmethod
+    def from_mapping(cls, value: Mapping[str, Any]) -> CliLifecycleResult:
+        return cls(
+            ok=bool(value.get("ok", False)),
+            supported=bool(value.get("supported", False)),
+            changed=bool(value.get("changed", False)),
+            state=str(value.get("state", "skipped")),
+            action_needed=value.get("action_needed"),
+            error_code=value.get("error_code"),
+        )
 
     def to_mapping(self) -> dict[str, Any]:
         return {

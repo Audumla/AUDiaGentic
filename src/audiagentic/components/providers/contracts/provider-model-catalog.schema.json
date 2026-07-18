@@ -41,6 +41,9 @@
           "model-id": {
             "type": "string"
           },
+          "vendor-id": {
+            "type": "string"
+          },
           "display-name": {
             "type": "string"
           },
