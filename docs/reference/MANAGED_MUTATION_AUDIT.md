@@ -1,6 +1,6 @@
 # Managed Mutation Audit
 
-Status: MA01 baseline, 2026-07-12.
+Status: MA06/MA27 revalidated, 2026-07-18.
 
 Scope is shared external configuration, generated surfaces, adapter serializers, and
 runtime materializers under `src/audiagentic`. Owning-component domain records
@@ -16,14 +16,11 @@ Categories: `shared-config`, `adapter-serializer`, `generated-surface`,
 
 | path:symbol | mutations | category | primitive | action | rationale |
 |---|---|---|---|---|---|
-| src/audiagentic/components/memory/hindsight/codex_recipe.py:_download | write_bytes | component-managed | WriteFileStep + ArtifactRegistry | MA02 | Downloaded integration files need owned-file lifecycle. |
-| src/audiagentic/components/memory/hindsight/codex_recipe.py:_enable_codex_hooks | write_text | shared-config | ConfigPatcher + ArtifactRegistry | MA02 | Nested `features.codex_hooks`; surgical edit is not exemption. |
-| src/audiagentic/components/memory/hindsight/codex_recipe.py:uninstall | rmtree,unlink | component-managed | ArtifactRegistry.prune | MA02 | Remove registered integration artifacts only. |
-| src/audiagentic/components/memory/hindsight/pi_recipe.py:configure | write_text | shared-config | ConfigPatcher + ArtifactRegistry | MA02 | Nested Hindsight/Pi keys; brace strings are ordinary values. |
-| src/audiagentic/components/memory/hindsight/pi_recipe.py:prune | write_text | shared-config | ArtifactRegistry.prune | MA02 | Prune owned keys, preserve user values. |
-| src/audiagentic/components/memory/hindsight/plugin_recipes.py:_repair_windows_plugin_mcp | write_text | third-party-repair | adapter exemption candidate | MA02 | Dynamic plugin-owned file; must gain atomic/preservation tests. |
-| src/audiagentic/components/memory/hindsight/plugin_recipes.py:prune | unlink | component-managed | ArtifactRegistry.prune | MA02 | URL config is recipe-owned, not exempt. |
+| src/audiagentic/components/memory/hindsight/provision.py:_download_codex_scripts | atomic_write_text | component-managed | atomic foundation writer | keep | Hindsight-owned UTF-8 hook assets preserve their upstream relative paths and settings remains user-preserving when already present. |
 | src/audiagentic/components/providers/adapters/codex/adapter.py:run | unlink | runtime-asset | bounded adapter cleanup | keep | Temporary result file created and removed in same call. |
+| src/audiagentic/components/providers/adapters/codex/hooks_format.py:_enable_codex_hooks | atomic_write_text | adapter-serializer | surgical shared-config upsert | keep | Current Codex `features.hooks` is a single-key shared-config mutation; the adapter migrates the deprecated `features.codex_hooks` key and prune never disables hooks. |
+| src/audiagentic/components/providers/adapters/codex/hooks_format.py:_save_hooks | atomic_write_text | adapter-serializer | atomic foundation writer | keep | Codex hooks JSON serializer preserves foreign hooks through managed-config reconciliation. |
+| src/audiagentic/components/providers/adapters/codex/hooks_format.py:remove_codex_hook | unlink | adapter-serializer | atomic adapter contract | keep | Removes owned hook entries only; unlinks only after the hooks section becomes empty. |
 | src/audiagentic/components/providers/adapters/codex/language_servers.py:_save_toml | atomic_write_text | adapter-serializer | atomic foundation writer | keep | Compliant custom TOML serializer with atomic write (verified MA04, 2026-07-14). |
 | src/audiagentic/components/providers/adapters/codex/mcp_format.py:_save_toml | atomic_write_text | adapter-serializer | atomic foundation writer | keep | Compliant custom TOML serializer. |
 | src/audiagentic/components/providers/adapters/continue_/mcp_format.py:remove_continue_json | atomic_write_json | adapter-serializer | atomic foundation writer | keep | Compliant remove serializer. |
@@ -70,16 +67,16 @@ Categories: `shared-config`, `adapter-serializer`, `generated-surface`,
 | src/audiagentic/runtime/harness/pi/install/patches_mcp_register.py:_patch_mcp_direct_tools_live_register | write_text | third-party-repair | adapter exemption candidate | MA03 | Patches installed third-party package. |
 | src/audiagentic/runtime/harness/pi/mcp_format.py:remove_pi_mcp_json | atomic_write_json | adapter-serializer | registered provider serializer | MA03 | Duplicate runtime serializer/lifecycle wrapper. |
 | src/audiagentic/runtime/harness/pi/mcp_format.py:write_pi_mcp_json | atomic_write_json | adapter-serializer | registered provider serializer | MA03 | Duplicate runtime serializer/lifecycle wrapper. |
-| src/audiagentic/components/providers/adapters/pi/model_config.py:write_pi_models | write_text | adapter-serializer | atomic foundation writer | keep | Compliant pi model config serializer using write_text. |
-| src/audiagentic/components/providers/adapters/pi/model_config.py:remove_pi_model | write_text | adapter-serializer | atomic foundation writer | keep | Compliant pi model removal via conditional write_text.
+| src/audiagentic/components/providers/adapters/pi/model_config.py:write_pi_models | atomic_write_json | adapter-serializer | atomic foundation writer | keep | Compliant Pi model config serializer using atomic_write_json. |
+| src/audiagentic/components/providers/adapters/pi/model_config.py:remove_pi_model | atomic_write_json | adapter-serializer | atomic foundation writer | keep | Compliant Pi model removal via conditional atomic_write_json. |
 
 ## Non-mutation architecture findings
 
 | finding | owner | remedy |
 |---|---|---|
-| `memory/hindsight/strategies.py::_build_hooks_recipe` branches on `codex`, `pi`, `aider` | MA02 | Descriptor/matrix implementation refs and registry dispatch. |
-| Architecture test checks only `build_hindsight_recipe`, missing helper branches | MA01/MA02 | Scan all generic strategy comparisons. |
-| Artifact registry loading treats corrupt registries as empty | MA02 | Canonical corruption error; never erase ownership silently. |
+No open non-mutation findings remain from the MA02/MA27 Hindsight migration. The
+former matrix/strategy implementation is deleted, and managed-fragment registry
+corruption raises the canonical ownership error rather than erasing state.
 
 Closed (MO06): `lsp_projection.py` no longer calls `spec.writer`/`spec.remover`
 directly — routed through `apply_managed_config_write`/`apply_managed_config_remove`
