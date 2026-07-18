@@ -383,6 +383,7 @@ def _dispatch_session_request(
     SH02: dispatch_prompt is the raw prompt body, passed separately from the
     persisted record (which only carries prompt_digest).
     """
+    from audiagentic.components.agents import agents_gateway_session_bindings as binding_store
     from audiagentic.components.agents import agents_gateway_sessions_store as session_store
     from audiagentic.components.agents.agents_api import resolve_profile
     from audiagentic.components.agents.agents_gateway_sessions import get_session_runtime
@@ -524,7 +525,7 @@ def _dispatch_session_request(
             "output": _session_output_from_result(result),
             "completion": {
                 "stop-reason": result.stop_reason,
-                "provider-session-ref": session_record.get("provider-session-ref"),
+                "binding": binding_store.public_binding_projection(session_record.get("binding")),
                 "total-events": result.total_events,
                 "dropped-events": result.dropped_events,
             },

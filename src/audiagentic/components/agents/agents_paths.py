@@ -65,3 +65,13 @@ def gateway_session_path(project_root: Path, session_id: str) -> Path:
 def gateway_session_timeline_path(project_root: Path, session_id: str) -> Path:
     """Return the timeline.ndjson path for a gateway session."""
     return gateway_session_dir(project_root, session_id) / "timeline.ndjson"
+
+
+def gateway_session_binding_index_path(project_root: Path) -> Path:
+    """Return the durable redacted provider-session binding index path."""
+    return gateway_sessions_root(project_root) / "session-binding-index.json"
+
+
+def gateway_session_binding_lock_path(project_root: Path) -> Path:
+    """Return the project-local lock protecting the binding index."""
+    return gateway_sessions_root(project_root) / "session-binding-index.lock"
