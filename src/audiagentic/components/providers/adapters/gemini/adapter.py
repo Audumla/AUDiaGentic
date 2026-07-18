@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +11,7 @@ from audiagentic.components.providers.adapters.base_runner import (
     resolve_execution_model,
 )
 from audiagentic.components.providers.adapters.cli import require_executable
+from audiagentic.components.providers.prompt_tags import parse_tagged_prompt
 from audiagentic.components.providers.protocols.streaming.base_extractor import (
     BaseEventExtractor,
 )
@@ -24,15 +24,6 @@ from audiagentic.components.providers.protocols.streaming.provider_streaming imp
     run_streaming_command,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-
-try:
-    from audiagentic.components.agent_jobs.prompt_launch import launch_prompt_request
-    from audiagentic.components.agent_jobs.prompt_parser import parse_prompt_launch_request
-except ImportError:
-    launch_prompt_request = None  # type: ignore[assignment]
-    parse_prompt_launch_request = None  # type: ignore[assignment]
-
-logger = logging.getLogger(__name__)
 
 
 class GeminiEventExtractor(BaseEventExtractor):
@@ -56,43 +47,12 @@ class GeminiEventExtractor(BaseEventExtractor):
 
 def _handle_prompt_tags(
     packet_ctx: dict[str, Any],
-    provider_cfg: dict[str, Any],
-    working_root: Path,
-) -> tuple[str | None, str | None]:
-    if parse_prompt_launch_request is None or launch_prompt_request is None:
-        return None, None
+) -> str | None:
     prompt_text = packet_ctx.get("prompt-body")
-    if not prompt_text:
-        return None, None
-
-    lines = prompt_text.splitlines()
-    first_non_empty = None
-    for line in lines:
-        if line.strip():
-            first_non_empty = line.strip()
-            break
-
-    if not first_non_empty or not first_non_empty.startswith("@"):
-        return None, None
-
-    try:
-        request = parse_prompt_launch_request(
-            prompt_text,
-            surface=packet_ctx.get("surface", "cli"),
-            provider_id=packet_ctx.get("provider-id", "gemini"),
-            session_id=packet_ctx.get("session-id"),
-            model_id=packet_ctx.get("model-id"),
-            model_alias=packet_ctx.get("model-alias"),
-            workflow_profile=packet_ctx.get("workflow-profile", "standard"),
-            allow_adhoc_target=True,
-        )
-        result = launch_prompt_request(working_root, request)
-        if result.get("status") in {"created", "resumed", "complete"}:
-            return request.get("prompt-body", "").strip(), result.get("job-id")
-    except AudiaGenticError:
-        logger.warning("Prompt tag parsing failed, proceeding with original prompt", exc_info=True)
-
-    return None, None
+    if not isinstance(prompt_text, str):
+        return None
+    tagged_prompt = parse_tagged_prompt(prompt_text)
+    return tagged_prompt.body.strip() if tagged_prompt is not None else None
 
 
 def _build_prompt(
@@ -139,16 +99,13 @@ def _parse_gemini_completion(
 
 def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, Any]:
     executable = require_executable("gemini", "gemini")
-    working_root_str = packet_ctx.get("working-root")
-    working_root = Path(working_root_str) if working_root_str else Path.cwd()
+    working_root = packet_ctx.get("working-root")
+    cwd = Path(working_root) if working_root else None
 
-    modified_prompt, job_id = _handle_prompt_tags(packet_ctx, provider_cfg, working_root)
-    if job_id:
-        packet_ctx["job-id"] = job_id
+    modified_prompt = _handle_prompt_tags(packet_ctx)
 
     prompt = _build_prompt(packet_ctx, provider_cfg, modified_prompt=modified_prompt)
     default_model = resolve_execution_model(packet_ctx, provider_cfg)
-    cwd = working_root
 
     execution_policy = provider_cfg.get("execution-policy", {})
     output_format = execution_policy.get("output-format", "text")

@@ -30,7 +30,6 @@ Component-lifecycle capability: install, baseline sync, uninstall, and installed
 | `detector.py` | Detect and report current installed state |
 | `fresh_install.py` | Bootstrap a fresh project installation |
 | `uninstall.py` | Remove runtime and component-owned files |
-| `external_mcp_probe.py` | External MCP server probing |
 | `observers.py` | Lifecycle event observers |
 
 ## Related Domains

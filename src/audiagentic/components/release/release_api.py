@@ -210,6 +210,7 @@ def clear_github_auth() -> dict[str, Any]:
 
 
 def build_release_artifacts(
+    project_root: Path,
     release_id: str = "rel_0003",
     tag: bool = True,
     pypi: bool = False,
@@ -224,10 +225,8 @@ def build_release_artifacts(
     This is an alternative to dispatch_release_workflow for environments
     where GitHub CI/CD is not available or desired.
     """
-    from audiagentic.foundation.mcp.component_server import project_root_from_env
-
     return _build_release_artifacts(
-        project_root=project_root_from_env(),
+        project_root=project_root,
         release_id=release_id,
         tag=tag,
         pypi=pypi,

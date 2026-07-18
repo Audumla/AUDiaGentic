@@ -107,7 +107,6 @@ mcp-servers:
     tool-descriptions:
       agent_llm_submit: >
         Submit an async request. agent-profile-id defaults to the default profile.
-        fallback-profile-ids defaults from the profile's params.fallback-profile-ids
         if not given explicitly. Returns {request-id, state: "queued", ...}.
       agent_llm_status: >
         Return the current persisted record for request-id (state, output, completion,
