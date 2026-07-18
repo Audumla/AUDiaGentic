@@ -12,8 +12,10 @@ from typing import Any
 
 import pytest
 
+from audiagentic.components.agents import agents_gateway_session_bindings as binding_store
 from audiagentic.components.agents import agents_gateway_sessions_store as session_store
 from audiagentic.components.agents.agents_gateway_sessions import SessionRuntime
+from audiagentic.components.agents.agents_paths import gateway_session_binding_index_path
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports import AcpLaunch, AcpResult
 
@@ -31,11 +33,12 @@ class FakeTransport:
         self.block_event: threading.Event | None = None
         # AS18: optional on_event emitter for intra-turn events
         self.on_event_emitter: Any = None  # callable((on_event, session_id) -> None)
+        self.provider_session_ref = "prov-ses-1"
 
     async def open(self) -> str:
         self.opened = True
         self.alive = True
-        return "prov-ses-1"
+        return self.provider_session_ref
 
     def is_alive(self) -> bool:
         return self.alive and not self.closed
@@ -91,9 +94,13 @@ def rig(tmp_path):
     """(runtime, clock, transports) with a fast reaper; shut down after test."""
     clock = _Clock()
     transports: list[FakeTransport] = []
+    counter = 0
 
     def factory(launch, cwd):
+        nonlocal counter
+        counter += 1
         transport = FakeTransport(launch, cwd)
+        transport.provider_session_ref = f"prov-ses-{counter}"
         transports.append(transport)
         return transport
 
@@ -127,7 +134,9 @@ def test_open_prompt_close_lifecycle(rig):
     record = _open(runtime, tmp_path)
     session_id = record["session-id"]
     assert record["state"] == "active"
-    assert record["provider-session-ref"] == "prov-ses-1"
+    assert record["contract-version"] == "v2"
+    assert record["binding"]["provider-session-ref"] == "prov-ses-1"
+    assert "provider-session-ref" not in binding_store.public_binding_projection(record["binding"])
     assert runtime.live_session_ids() == [session_id]
 
     result = runtime.prompt_in_session(tmp_path, session_id, "hello", request_id="req_1")
@@ -335,6 +344,8 @@ def test_api_list_and_close_sessions(rig, monkeypatch):
     listed = api.list_llm_sessions(tmp_path)
     assert [s["session-id"] for s in listed] == [record["session-id"]]
     assert listed[0]["live"] is True
+    assert "provider-session-ref" not in repr(listed)
+    assert listed[0]["binding"]["provider-ref-key-prefix"]
 
     closed = api.close_llm_session(tmp_path, record["session-id"])
     assert closed["state"] == "closed"
@@ -371,6 +382,89 @@ def test_session_record_validation():
     )
     assert record["idle-timeout-seconds"] == 0
     assert record["max-lifetime-seconds"] == 0
+
+
+def test_v1_session_record_migrates_to_v2_binding(tmp_path):
+    import json
+
+    legacy = {
+        "contract-version": "v1",
+        "session-id": "ses_legacy",
+        "agent-profile-id": "p",
+        "provider-id": "opencode",
+        "model-id": "m",
+        "provider-session-ref": "secret-ref",
+        "state": "active",
+        "close-reason": None,
+        "idle-timeout-seconds": None,
+        "max-lifetime-seconds": None,
+        "request-ids": [],
+        "turn-count": 0,
+        "error": None,
+        "created-at": "2026-01-01T00:00:00Z",
+        "updated-at": "2026-01-01T00:00:00Z",
+        "last-activity-at": "2026-01-01T00:00:00Z",
+        "closed-at": None,
+    }
+    path = tmp_path / "runtime" / "agent-llm-gateway" / "sessions" / "ses_legacy" / "record.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(legacy), encoding="utf-8")
+
+    migrated = session_store.read_session_record(tmp_path, "ses_legacy")
+    assert migrated["contract-version"] == "v2"
+    assert "provider-session-ref" not in migrated
+    assert migrated["binding"]["provider-session-ref"] == "secret-ref"
+    assert migrated["binding"]["relation"] == "opened"
+    assert migrated["binding"]["ownership"] == "owned"
+
+
+def test_binding_index_uses_hash_not_raw_ref(rig):
+    runtime, clock, transports, tmp_path = rig
+    record = _open(runtime, tmp_path)
+    text = gateway_session_binding_index_path(tmp_path).read_text(encoding="utf-8")
+    assert "prov-ses-1" not in text
+    assert record["binding"]["provider-ref-key"] in text
+
+
+def test_duplicate_owned_binding_rolls_back_transport(tmp_path):
+    clock = _Clock()
+    transports: list[FakeTransport] = []
+
+    def factory(launch, cwd):
+        transport = FakeTransport(launch, cwd)
+        transport.provider_session_ref = "same-ref"
+        transports.append(transport)
+        return transport
+
+    runtime = SessionRuntime(clock=clock, reap_interval_seconds=60, transport_factory=factory)
+    try:
+        _open(runtime, tmp_path)
+        with pytest.raises(AudiaGenticError, match="CON-AGW-096"):
+            _open(runtime, tmp_path)
+        assert transports[1].closed
+    finally:
+        runtime.shutdown()
+
+
+def test_closed_owned_binding_allows_later_same_ref(tmp_path):
+    clock = _Clock()
+    transports: list[FakeTransport] = []
+
+    def factory(launch, cwd):
+        transport = FakeTransport(launch, cwd)
+        transport.provider_session_ref = "same-ref"
+        transports.append(transport)
+        return transport
+
+    runtime = SessionRuntime(clock=clock, reap_interval_seconds=60, transport_factory=factory)
+    try:
+        first = _open(runtime, tmp_path)
+        runtime.close_session(tmp_path, first["session-id"])
+        second = _open(runtime, tmp_path)
+        assert second["binding"]["provider-session-ref"] == "same-ref"
+        assert second["session-id"] != first["session-id"]
+    finally:
+        runtime.shutdown()
 
 
 def test_request_record_session_field_validation():

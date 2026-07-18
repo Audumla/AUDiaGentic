@@ -661,6 +661,17 @@ class GatewayQueueManager:
                 "max_concurrency": pq.max_concurrency,
             }
 
+    def request_slot_status(self, agent_profile_id: str, request_id: str) -> str | None:
+        pq = self._profiles.get(agent_profile_id)
+        if pq is None:
+            return None
+        with pq.lock:
+            if request_id in pq.running:
+                return "idle" if request_id in pq.idle else "active"
+            if request_id in pq.pending:
+                return "pending"
+        return None
+
     def all_queue_depths(self) -> dict[str, dict[str, int]]:
         """Return queue_depth() for every profile that has ever had a request
         submitted in this process (used by the component status hook)."""
