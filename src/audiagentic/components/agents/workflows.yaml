@@ -8,16 +8,17 @@ kinds:
     workflows:
       standard:
         initial: queued
-        values: [queued, running, completed, failed, cancelled, rejected]
+        values: [queued, running, completed, failed, cancelled, rejected, interrupted]
         transitions:
-          queued: [running, cancelled, rejected]
-          running: [completed, failed, cancelled]
+          queued: [running, cancelled, rejected, interrupted]
+          running: [completed, failed, cancelled, interrupted]
           completed: []
           failed: []
           cancelled: []
           rejected: []
+          interrupted: []
         state-sets:
-          terminal: [completed, failed, cancelled, rejected]
+          terminal: [completed, failed, cancelled, rejected, interrupted]
   # Live agent session lifecycle (plan agent-sessions AS03). Live handles are
   # in-memory (SessionRuntime); these records are the durable audit/resume
   # anchor. 'expired' = closed by the idle/max-lifetime reaper.

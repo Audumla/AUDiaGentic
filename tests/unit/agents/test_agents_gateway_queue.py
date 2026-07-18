@@ -3,6 +3,10 @@ concurrency, cancel, wait, and queue-full rejection (AG09), using a
 deterministic fake runner (no real provider dispatch)."""
 from __future__ import annotations
 
+import asyncio
+import os
+import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -85,12 +89,6 @@ def test_resolve_queue_max_size_default():
     assert queue_mod.resolve_queue_max_size({}, 5) == 10
 
 
-def test_resolve_fallback_profile_ids_rejects_wrong_type():
-    with pytest.raises(AudiaGenticError) as exc_info:
-        queue_mod.resolve_fallback_profile_ids({"fallback-profile-ids": "not-a-list"})
-    assert exc_info.value.code == "VAL-AGW-024"
-
-
 # ---------------------------------------------------------------------------
 # concurrency
 # ---------------------------------------------------------------------------
@@ -160,6 +158,58 @@ def test_max_concurrency_two_runs_two_third_waits(tmp_path: Path):
     for r in records:
         result = manager.wait(tmp_path, r["request-id"], timeout_seconds=5)
         assert result["state"] == "completed"
+
+
+def test_session_workers_share_one_profile_compute_slot(tmp_path: Path):
+    """AS15: waiting session turns progress without exceeding profile capacity."""
+    manager = queue_mod.GatewayQueueManager()
+    workers_entered = threading.Semaphore(0)
+    allow_turn_start = threading.Event()
+    release_compute = threading.Event()
+    active = 0
+    max_active = 0
+    active_lock = threading.Lock()
+
+    def runner(project_root: Path, record: dict) -> dict:
+        nonlocal active, max_active
+        workers_entered.release()
+        allow_turn_start.wait(timeout=5)
+        asyncio.run(queue_mod.notify_turn_starting(record["request-id"]))
+        try:
+            with active_lock:
+                active += 1
+                max_active = max(max_active, active)
+            release_compute.wait(timeout=5)
+        finally:
+            with active_lock:
+                active -= 1
+            asyncio.run(queue_mod.notify_turn_done(record["request-id"]))
+        return store.transition_record(
+            project_root, record["request-id"], "completed",
+            updates={"output": "done", "finished-at": now_iso_z()},
+        )
+
+    records = [
+        store.build_record(
+            agent_profile_id="session-profile",
+            prompt_body=str(index),
+            session_id=f"session-{index}",
+        )
+        for index in range(2)
+    ]
+    for record in records:
+        store.write_record(tmp_path, record)
+        manager.enqueue(tmp_path, record, {"max-concurrency": 1}, runner)
+
+    assert workers_entered.acquire(timeout=2)
+    assert workers_entered.acquire(timeout=2)
+    assert manager.queue_depth("session-profile")["running"] == 2
+
+    allow_turn_start.set()
+    release_compute.set()
+    for record in records:
+        assert manager.wait(tmp_path, record["request-id"], timeout_seconds=5)["state"] == "completed"
+    assert max_active == 1
 
 
 def test_fifo_ordering(tmp_path: Path):
@@ -319,6 +369,131 @@ def test_wait_times_out_for_long_running(tmp_path: Path):
 
     hold.set()
     t.join(timeout=5)
+
+
+def test_cancel_after_dequeue_before_claim_is_terminal_not_stranded(tmp_path: Path, monkeypatch):
+    """RV677: durable cancellation wins the queue-to-claim hand-off race."""
+    manager = queue_mod.GatewayQueueManager()
+    record = store.build_record(agent_profile_id="p5-race", prompt_body="queued")
+    store.write_record(tmp_path, record)
+    claim_entered = threading.Event()
+    release_claim = threading.Event()
+    original_claim = store.claim_dispatch
+
+    def paused_claim(*args, **kwargs):
+        claim_entered.set()
+        assert release_claim.wait(timeout=5)
+        return original_claim(*args, **kwargs)
+
+    monkeypatch.setattr(queue_mod.store, "claim_dispatch", paused_claim)
+    manager.enqueue(tmp_path, record, {"max-concurrency": 1}, _immediate_runner)
+    assert claim_entered.wait(timeout=2)
+
+    cancelled = manager.cancel(tmp_path, "p5-race", record["request-id"])
+    assert cancelled["state"] == "cancelled"
+    release_claim.set()
+    result = manager.wait(tmp_path, record["request-id"], timeout_seconds=5)
+
+    assert result["state"] == "cancelled"
+    assert manager.queue_depth("p5-race")["pending"] == 0
+    # Terminal state is durable before the worker thread's ``finally`` block
+    # removes its in-memory slot.  Wait for that cleanup explicitly rather
+    # than asserting an incidental scheduling order.
+    deadline = time.monotonic() + 2
+    while manager.queue_depth("p5-race")["running"] and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert manager.queue_depth("p5-race")["running"] == 0
+
+
+def test_wait_uses_bounded_full_read_fallback_for_unchanged_record(tmp_path: Path, monkeypatch):
+    """RV639: an unchanged durable record must not be parsed every 50ms."""
+    manager = queue_mod.GatewayQueueManager()
+    record = store.build_record(agent_profile_id="p6", prompt_body="x")
+    store.write_record(tmp_path, record)
+
+    original_read = store.read_record
+    read_count = 0
+
+    def _counting_read(project_root: Path, request_id: str) -> dict:
+        nonlocal read_count
+        read_count += 1
+        return original_read(project_root, request_id)
+
+    clock = [0.0]
+
+    def _monotonic() -> float:
+        return clock[0]
+
+    def _sleep(seconds: float) -> None:
+        clock[0] += seconds
+
+    monkeypatch.setattr(queue_mod.store, "read_record", _counting_read)
+    monkeypatch.setattr(queue_mod.time, "monotonic", _monotonic)
+    monkeypatch.setattr(queue_mod.time, "sleep", _sleep)
+
+    result = manager.wait(tmp_path, record["request-id"], timeout_seconds=0.9)
+
+    assert result["state"] == "queued"
+    # Initial validation plus one 500ms safety refresh; the former 50ms loop
+    # would have required nineteen full record reads for this timeout.
+    assert read_count == 2
+
+
+def test_wait_observes_terminal_write_from_independent_process(tmp_path: Path, monkeypatch):
+    """The mtime/size hint keeps a local waiter correct for an external writer."""
+    manager = queue_mod.GatewayQueueManager()
+    record = store.build_record(agent_profile_id="p6", prompt_body="x")
+    store.write_record(tmp_path, record)
+    store.transition_record(tmp_path, record["request-id"], "running")
+
+    initial_observation = threading.Event()
+    original_signature = queue_mod._record_signature
+
+    def _observed_signature(path: Path):
+        signature = original_signature(path)
+        initial_observation.set()
+        return signature
+
+    monkeypatch.setattr(queue_mod, "_record_signature", _observed_signature)
+    result: dict[str, dict] = {}
+    waiter = threading.Thread(
+        target=lambda: result.setdefault(
+            "record", manager.wait(tmp_path, record["request-id"], timeout_seconds=5)
+        ),
+    )
+    waiter.start()
+    assert initial_observation.wait(timeout=2)
+
+    writer_code = "\n".join((
+        "import sys",
+        "from pathlib import Path",
+        "from audiagentic.components.agents import agents_gateway_store as store",
+        "from audiagentic.foundation.time import now_iso_z",
+        "store.transition_record(Path(sys.argv[1]), sys.argv[2], 'completed', updates={'output': 'external', 'finished-at': now_iso_z()})",
+    ))
+    repo_root = Path(__file__).resolve().parents[3]
+    source_root = repo_root / "src"
+    subprocess_env = dict(os.environ)
+    existing_pythonpath = subprocess_env.get("PYTHONPATH")
+    subprocess_env["PYTHONPATH"] = (
+        f"{source_root}{os.pathsep}{existing_pythonpath}"
+        if existing_pythonpath else str(source_root)
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", writer_code, str(tmp_path), record["request-id"]],
+        capture_output=True,
+        text=True,
+        timeout=5,
+        check=False,
+        cwd=repo_root,
+        env=subprocess_env,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+    waiter.join(timeout=5)
+    assert not waiter.is_alive()
+    assert result["record"]["state"] == "completed"
+    assert result["record"]["output"] == "external"
 
 
 def test_wait_returns_completed_result(tmp_path: Path):

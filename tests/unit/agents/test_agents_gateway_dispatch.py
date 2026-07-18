@@ -1,9 +1,8 @@
-"""Unit tests for agents_gateway_dispatch — packet_ctx shape, retry on
-transient failure, fallback profile order, and no-fallback for
-validation/config errors (AG10), using an injected fake execute_provider."""
+"""Unit tests for agents_gateway_dispatch — packet_ctx shape and retries."""
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -29,22 +28,44 @@ def _make_profile(project_root: Path, profile_id: str, provider_id: str, model_i
     _enable_provider(project_root, provider_id)
 
 
-def _record(project_root: Path, agent_profile_id: str, fallback_profile_ids=None) -> dict:
+def _record(project_root: Path, agent_profile_id: str) -> dict:
     record = store.build_record(
         agent_profile_id=agent_profile_id,
         prompt_body="do the thing",
-        fallback_profile_ids=fallback_profile_ids or [],
     )
     store.write_record(project_root, record)
-    return store.transition_record(project_root, record["request-id"], "running")
+    claimed = store.claim_dispatch(
+        project_root, record["request-id"], owner_epoch="service-test", expected_revision=0
+    )
+    return store.start_owned_attempt(
+        project_root, record["request-id"], owner_epoch="service-test", worker_id="worker_test",
+        expected_revision=claimed["revision"],
+    )
+
+
+def _dispatch(project_root: Path, record: dict, prompt: str = "do the thing") -> dict:
+    return dispatch.dispatch_request(
+        project_root,
+        record,
+        dispatch_prompt=prompt,
+        manifest_id="mf_test",
+        context_fingerprint="0" * 64,
+        component_profile="",
+        provider_isolation_tier="full-isolation",
+        worker_timeout_seconds=10,
+    )
+
+
+def _worker_result(data: dict) -> SimpleNamespace:
+    return SimpleNamespace(result_data=data)
 
 
 def test_classify_failure_prefixes():
-    # Terminal (validation/config) — never retried, never triggers fallback.
+    # Terminal (validation/config) — never retried.
     for prefix in ("VAL", "RES", "CON", "CFG", "VER", "UNS"):
         exc = AudiaGenticError(code=f"{prefix}-X-001", kind="agents", message="m")
         assert dispatch.classify_failure(exc) == "validation_config", prefix
-    # Transient — retried, then falls back to the next profile.
+    # Transient — retried.
     for prefix in ("NET", "TO", "EXT", "INT", "IO"):
         exc = AudiaGenticError(code=f"{prefix}-X-001", kind="agents", message="m")
         assert dispatch.classify_failure(exc) == "transient", prefix
@@ -56,15 +77,18 @@ def test_dispatch_success_builds_expected_packet_ctx(tmp_path: Path, monkeypatch
 
     captured = {}
 
-    def fake_execute_provider(*, provider_id, packet_ctx, provider_cfg):
+    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+        packet_ctx = execution_request["packet-data"]
+        provider_id = execution_request["provider-id"]
         if packet_ctx.get("request-id") != record["request-id"]:
             raise AudiaGenticError(code="NET-STRAY-001", kind="providers", message="not this test's request")
         captured.update(packet_ctx)
-        return {"provider-id": provider_id, "status": "ok", "model": "gpt-4o", "output": "hi", "completion": {"kind": "completion"}}
+        return _worker_result({"provider-id": provider_id, "status": "ok", "model": "gpt-4o", "output": "hi", "completion": {"kind": "completion"}})
 
-    monkeypatch.setattr("audiagentic.components.providers.services.execution.execute_provider", fake_execute_provider)
+    monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider)
 
-    result = dispatch.dispatch_request(tmp_path, record)
+    # SH02: pass dispatch_prompt separately; the persisted record has prompt-body=None
+    result = _dispatch(tmp_path, record)
 
     assert result["state"] == "completed"
     assert result["output"] == "hi"
@@ -92,16 +116,18 @@ def test_dispatch_uses_profile_stream_controls_and_ignores_metadata_working_root
     store.write_record(tmp_path, record)
     captured = {}
 
-    def fake_execute_provider(*, provider_id, packet_ctx, provider_cfg):
+    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+        packet_ctx = execution_request["packet-data"]
+        provider_id = execution_request["provider-id"]
         captured.update(packet_ctx)
-        return {"provider-id": provider_id, "model": "gpt-4o", "output": "ok"}
+        return _worker_result({"provider-id": provider_id, "model": "gpt-4o", "output": "ok"})
 
     monkeypatch.setattr(
-        "audiagentic.components.providers.services.execution.execute_provider",
+        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
         fake_execute_provider,
     )
 
-    result = dispatch.dispatch_request(tmp_path, record)
+    result = _dispatch(tmp_path, record)
 
     assert result["state"] == "completed"
     assert captured["working-root"] == str(tmp_path.resolve())
@@ -114,7 +140,9 @@ def test_dispatch_retries_transient_then_succeeds(tmp_path: Path, monkeypatch):
 
     calls = {"count": 0}
 
-    def flaky_execute_provider(*, provider_id, packet_ctx, provider_cfg):
+    def flaky_execute_provider(*, identity, execution_request, timeout_seconds):
+        packet_ctx = execution_request["packet-data"]
+        provider_id = execution_request["provider-id"]
         # execute_provider is monkeypatched process-wide — a straggler
         # background thread from an earlier (unrelated) test's queue-manager
         # worker can still be mid-flight and call through this same patched
@@ -125,11 +153,11 @@ def test_dispatch_retries_transient_then_succeeds(tmp_path: Path, monkeypatch):
         calls["count"] += 1
         if calls["count"] < 3:
             raise AudiaGenticError(code="NET-FAKE-001", kind="providers", message="connection reset")
-        return {"provider-id": provider_id, "status": "ok", "model": "gpt-4o", "output": "recovered"}
+        return _worker_result({"provider-id": provider_id, "status": "ok", "model": "gpt-4o", "output": "recovered"})
 
-    monkeypatch.setattr("audiagentic.components.providers.services.execution.execute_provider", flaky_execute_provider)
+    monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", flaky_execute_provider)
 
-    result = dispatch.dispatch_request(tmp_path, record)
+    result = _dispatch(tmp_path, record)
 
     assert result["state"] == "completed"
     assert result["output"] == "recovered"
@@ -138,64 +166,38 @@ def test_dispatch_retries_transient_then_succeeds(tmp_path: Path, monkeypatch):
     assert [a["state"] for a in result["attempts"]] == ["failed", "failed", "completed"]
 
 
-def test_dispatch_falls_back_to_second_profile_after_retries_exhausted(tmp_path: Path, monkeypatch):
-    _make_profile(tmp_path, "primary", "local-openai", **{"retry-count": 0})
-    _make_profile(tmp_path, "backup", "codex", **{"retry-count": 0})
-    record = _record(tmp_path, "primary", fallback_profile_ids=["backup"])
-
-    def fake_execute_provider(*, provider_id, packet_ctx, provider_cfg):
-        if provider_id == "local-openai":
-            raise AudiaGenticError(code="EXT-FAKE-001", kind="providers", message="primary down")
-        return {"provider-id": provider_id, "status": "ok", "model": "gpt-4o", "output": "from backup"}
-
-    monkeypatch.setattr("audiagentic.components.providers.services.execution.execute_provider", fake_execute_provider)
-
-    result = dispatch.dispatch_request(tmp_path, record)
-
-    assert result["state"] == "completed"
-    assert result["provider-id"] == "codex"
-    assert result["output"] == "from backup"
-    profiles_tried = [a["agent-profile-id"] for a in result["attempts"]]
-    assert profiles_tried == ["primary", "backup"]
-
-
-def test_dispatch_no_fallback_on_validation_error(tmp_path: Path, monkeypatch):
+def test_dispatch_validation_error_is_terminal(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "primary", "local-openai")
-    _make_profile(tmp_path, "backup", "codex")
-    record = _record(tmp_path, "primary", fallback_profile_ids=["backup"])
+    record = _record(tmp_path, "primary")
 
-    def fake_execute_provider(*, provider_id, packet_ctx, provider_cfg):
+    def fake_execute_provider(**_kwargs):
         raise AudiaGenticError(code="VAL-FAKE-001", kind="providers", message="bad request")
 
-    monkeypatch.setattr("audiagentic.components.providers.services.execution.execute_provider", fake_execute_provider)
+    monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider)
 
-    result = dispatch.dispatch_request(tmp_path, record)
+    result = _dispatch(tmp_path, record)
 
     assert result["state"] == "failed"
     assert result["error"]["code"] == "VAL-FAKE-001"
-    # exactly one attempt — fallback was never tried
+    # exactly one attempt — validation errors do not retry
     assert len(result["attempts"]) == 1
     assert result["attempts"][0]["agent-profile-id"] == "primary"
 
 
-def test_dispatch_disabled_provider_is_terminal_no_fallback(tmp_path: Path, monkeypatch):
+def test_dispatch_disabled_provider_is_terminal(tmp_path: Path, monkeypatch):
     create_profile(tmp_path, {"profile_id": "primary", "provider_id": "local-openai", "model_id": "gpt-4o"})
     # provider left disabled (never enabled)
-    create_profile(tmp_path, {"profile_id": "backup", "provider_id": "codex", "model_id": "gpt-4o"})
-    _enable_provider(tmp_path, "codex")
-    record = _record(tmp_path, "primary", fallback_profile_ids=["backup"])
+    record = _record(tmp_path, "primary")
 
     calls = {"count": 0}
 
-    def fake_execute_provider(*, provider_id, packet_ctx, provider_cfg):
-        if packet_ctx.get("request-id") != record["request-id"]:
-            raise AudiaGenticError(code="NET-STRAY-001", kind="providers", message="not this test's request")
+    def fake_execute_provider(**_kwargs):
         calls["count"] += 1
-        return {"provider-id": provider_id, "status": "ok", "model": "gpt-4o", "output": "should not be called"}
+        raise AudiaGenticError(code="CFG-PEXE-001", kind="providers", message="provider disabled")
 
-    monkeypatch.setattr("audiagentic.components.providers.services.execution.execute_provider", fake_execute_provider)
+    monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider)
 
-    result = dispatch.dispatch_request(tmp_path, record)
+    result = _dispatch(tmp_path, record)
 
     assert result["state"] == "failed"
     assert result["error"]["code"] == "VAL-AGW-031"
@@ -211,7 +213,8 @@ def test_dispatch_stops_retrying_once_cancel_requested(tmp_path: Path, monkeypat
 
     calls = {"count": 0}
 
-    def fake_execute_provider(*, provider_id, packet_ctx, provider_cfg):
+    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+        packet_ctx = execution_request["packet-data"]
         if packet_ctx.get("request-id") != record["request-id"]:
             raise AudiaGenticError(code="NET-STRAY-001", kind="providers", message="not this test's request")
         calls["count"] += 1
@@ -219,39 +222,15 @@ def test_dispatch_stops_retrying_once_cancel_requested(tmp_path: Path, monkeypat
             store.mark_cancel_requested(tmp_path, record["request-id"])
         raise AudiaGenticError(code="NET-FAKE-001", kind="providers", message="down")
 
-    monkeypatch.setattr("audiagentic.components.providers.services.execution.execute_provider", fake_execute_provider)
+    monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider)
 
-    result = dispatch.dispatch_request(tmp_path, record)
+    result = _dispatch(tmp_path, record)
 
     assert result["state"] == "cancelled"
     # attempt 1 ran and failed, then the cancel flag stopped attempt 2 —
     # nowhere near the configured retry-count of 5 additional attempts.
     assert calls["count"] == 1
     assert len(result["attempts"]) == 1
-
-
-def test_dispatch_stops_before_fallback_once_cancel_requested(tmp_path: Path, monkeypatch):
-    """RV23: cancel observed between exhausting the primary profile and
-    trying a fallback profile must stop the fallback from ever starting."""
-    _make_profile(tmp_path, "primary", "local-openai", **{"retry-count": 0})
-    _make_profile(tmp_path, "backup", "codex", **{"retry-count": 0})
-    record = _record(tmp_path, "primary", fallback_profile_ids=["backup"])
-
-    def fake_execute_provider(*, provider_id, packet_ctx, provider_cfg):
-        if packet_ctx.get("request-id") != record["request-id"]:
-            raise AudiaGenticError(code="NET-STRAY-001", kind="providers", message="not this test's request")
-        if provider_id == "local-openai":
-            store.mark_cancel_requested(tmp_path, record["request-id"])
-            raise AudiaGenticError(code="EXT-FAKE-001", kind="providers", message="primary down")
-        raise AssertionError("fallback profile should never be dispatched once cancelled")
-
-    monkeypatch.setattr("audiagentic.components.providers.services.execution.execute_provider", fake_execute_provider)
-
-    result = dispatch.dispatch_request(tmp_path, record)
-
-    assert result["state"] == "cancelled"
-    profiles_tried = [a["agent-profile-id"] for a in result["attempts"]]
-    assert profiles_tried == ["primary"]
 
 
 def test_resolve_retry_count_default_and_validation():
