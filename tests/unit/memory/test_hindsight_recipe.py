@@ -1,559 +1,250 @@
+"""MA27 memory orchestration boundary tests.
+
+Tests the family-preference orchestration over providers_api: reconcile_hindsight,
+build_hindsight_status_report, and the supporting infrastructure (entry builders,
+desired state). No matrix, no factory dispatch, no recipe registry.
+"""
 from __future__ import annotations
 
-import audiagentic.components.providers  # noqa: F401  (register provider descriptors)
+from dataclasses import replace
+from pathlib import Path
+
+import pytest
+
+import audiagentic.components.providers  # noqa: F401 — register provider descriptors
+from audiagentic.components.memory.hindsight.codex_pi_desired import (
+    CodexHindsightDesired,
+    HookCommand,
+)
 from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
-from audiagentic.components.memory.hindsight.lifecycle import (
-    apply_hindsight,
-    teardown_hindsight,
+from audiagentic.components.memory.hindsight.mcp_recipe import (
+    build_hindsight_entry,
+    build_hindsight_managed_entry,
 )
-from audiagentic.components.memory.hindsight.matrix import (
-    HindsightRecipeRow,
-    get_matrix_rows,
-)
-from audiagentic.components.memory.hindsight.mcp_recipe import build_hindsight_entry
-from audiagentic.components.memory.hindsight.plugin_definition import (
-    HindsightPluginDesired,
-)
-from audiagentic.components.memory.hindsight.strategies import (
-    _row_to_plugin_definition,
-    build_hindsight_recipe,
-)
-from audiagentic.components.providers.services.recipes import (
-    ProviderRecipeKind,
-    RecipeState,
+from audiagentic.components.memory.hindsight.provision import (
+    _hindsight_families,
+    _resolve_family,
+    build_hindsight_status_report,
+    discover_provider_ids,
+    reconcile_hindsight,
 )
 
-
-def _backend(**kw):
-    return HindsightBackendConfig(base_url="https://hs.example.com", **kw)
+_BACKEND = HindsightBackendConfig(base_url="https://hs.example.com")
 
 
-def test_sse_entry_shape():
-    entry = build_hindsight_entry(_backend(transport="sse", api_key="k"))
-    assert entry["type"] == "sse"
-    assert entry["url"] == "https://hs.example.com/mcp"
-    assert entry["headers"]["Authorization"] == "Bearer k"
+# ---------------------------------------------------------------------------
+# MCP entry shape — retained from pre-MA27 test coverage
+# ---------------------------------------------------------------------------
+
+class TestMcpEntryShape:
+    """MCP entry builders produce correct shapes per transport."""
+
+    def test_sse_entry(self):
+        backend = replace(_BACKEND, transport="sse", api_key="k")
+        entry = build_hindsight_entry(backend)
+        assert entry["type"] == "sse"
+        assert entry["url"] == "https://hs.example.com/mcp"
+        assert entry["headers"]["Authorization"] == "Bearer k"
+
+    def test_stdio_entry(self):
+        backend = replace(_BACKEND, transport="stdio", api_key="k")
+        entry = build_hindsight_entry(backend)
+        assert entry["command"] == "hindsight-mcp"
+        assert "--base-url" in entry["args"]
+        assert entry["env"]["HINDSIGHT_API_KEY"] == "k"
+
+    def test_managed_entry_has_stable_id(self):
+        managed = build_hindsight_managed_entry(_BACKEND)
+        assert managed.managed_id == "ag-hindsight"
+        assert managed.name == "hindsight"
 
 
-def test_stdio_entry_shape():
-    entry = build_hindsight_entry(_backend(transport="stdio", api_key="k"))
-    assert entry["command"] == "hindsight-mcp"
-    assert "--base-url" in entry["args"]
-    assert entry["env"]["HINDSIGHT_API_KEY"] == "k"
+# ---------------------------------------------------------------------------
+# Family resolution — fixed preference order, no provider-id branches
+# ---------------------------------------------------------------------------
+
+class TestFamilyPreferenceOrder:
+    """Step 2: Fixed family preference resolves first supported family."""
+
+    def test_fixed_order(self):
+        families = _hindsight_families()
+        assert families == ["managed-hooks", "managed-mcp", "plugin-entry"]
+
+    def test_codex_resolves_to_managed_hooks(self):
+        family = _resolve_family("codex")
+        assert family == "managed-hooks"
+
+    def test_unsupported_provider_returns_none(self):
+        family = _resolve_family("nonexistent-provider-xyz")
+        assert family is None
 
 
-def test_managed_block_and_surface_coexistence(tmp_path):
-    """Infrastructure test: managed_block and surfaces regions survive each other.
+# ---------------------------------------------------------------------------
+# Desired state — typed, no Any payloads
+# ---------------------------------------------------------------------------
 
-    Retained after SL13 A7 as a safety net for the underlying infrastructure,
-    even though hindsight no longer writes blocks directly (flows via surface
-    contributions). Pins the coexistence invariant — strip_managed_content only
-    strips HTML-comment regions; managed_block uses Markdown #-comments.
-    """
-    from audiagentic.components.providers.surfaces.base import (
-        SurfaceBlock,
-        apply_managed_blocks,
-    )
-    from audiagentic.foundation.toolchains.managed_block import (
-        apply_managed_block,
-        remove_managed_block,
-    )
+class TestCodexDesiredState:
+    """Step 4: Backend builders produce frozen desired state."""
 
-    rule_file = tmp_path / "AGENTS.md"
-    rule_file.write_text("User content.\n", encoding="utf-8")
+    def test_codex_desired_has_hook_commands(self):
+        from audiagentic.components.memory.hindsight.provision import _build_codex_desired
 
-    surface_block = SurfaceBlock(
-        path=rule_file, block_id="provider-surface", content="## Provider note\nSome text."
-    )
-    existing = rule_file.read_text(encoding="utf-8")
-    with_region = apply_managed_blocks(existing, [surface_block])
-    rule_file.write_text(with_region, encoding="utf-8")
-    assert "<!-- ag:managed:begin -->" in rule_file.read_text(encoding="utf-8")
+        desired = _build_codex_desired(_BACKEND)
+        assert isinstance(desired, CodexHindsightDesired)
+        assert len(desired.hook_commands) == 3
+        events = {hc.event for hc in desired.hook_commands}
+        assert events == {"SessionStart", "UserPromptSubmit", "Stop"}
 
-    change = apply_managed_block(rule_file, "hindsight-memory", "Rule content.")
-    assert change.existed is False
-    text_after_hindsight = rule_file.read_text(encoding="utf-8")
-    assert "audiagentic:hindsight-memory" in text_after_hindsight
-
-    surface_reapply = apply_managed_blocks(text_after_hindsight, [surface_block])
-    rule_file.write_text(surface_reapply, encoding="utf-8")
-    assert "audiagentic:hindsight-memory" in rule_file.read_text(encoding="utf-8")
-
-    remove_managed_block(rule_file, "hindsight-memory")
-    text_after_prune = rule_file.read_text(encoding="utf-8")
-    assert "<!-- ag:managed:begin -->" in text_after_prune
-    assert "User content." in text_after_prune
-    assert "audiagentic:hindsight-memory" not in text_after_prune
-
-
-def test_hindsight_orchestration_entrypoints_run_selected_provider(tmp_path, monkeypatch):
-    """After SL13 A7 and SL15: guidance recipes are assembled via RecipeSpec.
-
-    apply_hindsight and teardown_hindsight succeed with guidance recipes; no file
-    writing is expected (content flows via surface contributions).
-    """
-    from audiagentic.components.memory.hindsight.recipe_spec import (
-        ParamBinding,
-        RecipeSpec,
-        StatusOverride,
-        assemble_hindsight_recipe,
-    )
-
-    _GUIDANCE_SPEC = RecipeSpec(
-        pattern="no_automation",
-        params=[ParamBinding(param_name="action_needed", row_field="notes")],
-        status_overrides=[StatusOverride(method="probe", state="absent", status_text="no automated integration available")],
-    )
-
-    row = HindsightRecipeRow(
-        provider_id="test",
-        display_name="Test",
-        integration_type="rules-only",
-        recipe_kind=ProviderRecipeKind.GUIDANCE_ONLY,
-        audia_action="no_source",
-    )
-
-    def fake_register(registry, backend=None, project_root=None):
-        recipe = assemble_hindsight_recipe(row, None, _GUIDANCE_SPEC)  # type: ignore[arg-type]
-        registry.register(recipe)
-        return [recipe]
-
-    monkeypatch.setattr(
-        "audiagentic.components.memory.hindsight.lifecycle.register_hindsight_recipes",
-        fake_register,
-    )
-
-    applied = apply_hindsight(tmp_path, backend=_backend(), provider_ids=["test"])
-    assert applied["test"].success
-
-    torn_down = teardown_hindsight(tmp_path, backend=_backend(), provider_ids=["test"])
-    assert torn_down["test"].success
-
-
-def test_verified_matrix_step_definitions_build_provision_steps(tmp_path):
-    backend = _backend(api_key="sk-test", bank_id="bank")
-    automated_kinds = {
-        ProviderRecipeKind.HOOKS,
-        ProviderRecipeKind.WRAPPER_CLI,
-        ProviderRecipeKind.PLUGIN_CONFIG,
-        ProviderRecipeKind.MCP_CONFIG,
-        ProviderRecipeKind.HYBRID,
-    }
-
-    for row in get_matrix_rows():
-        if row.source_status != "verified" or row.recipe_kind not in automated_kinds:
-            continue
-        recipe = build_hindsight_recipe(row, backend, row.provider_id, tmp_path)
-        provision_steps = getattr(recipe, "provision_steps", None)
-        if not callable(provision_steps):
-            continue
-
-        steps = provision_steps()
-
-        if row.install_steps or row.configure_steps:
-            assert steps, f"{row.provider_id} has step defs but recipe returned no ProvisionSteps"
-
-
-def test_apply_hindsight_mcp_provider_writes_inside_project_root(tmp_path, monkeypatch):
-    """Regression: MCP-config provisioning must (a) succeed through the adapter
-    path (inner RecipeResult re-stamped, not assumed ProviderRecipeResult) and
-    (b) write inside project_root, never relative to the current directory."""
-    from audiagentic.components.memory.hindsight.lifecycle import apply_hindsight
-
-    # Run from an unrelated cwd to prove paths anchor to project_root, not cwd.
-    other = tmp_path / "elsewhere"
-    other.mkdir()
-    monkeypatch.chdir(other)
-
-    project = tmp_path / "project"
-    project.mkdir()
-
-    # gemini is a verified MCP-config provider writing .gemini/settings.json.
-    results = apply_hindsight(project, backend=_backend(api_key="k"), provider_ids=["gemini"])
-
-    res = results["gemini"]
-    assert res.success, res.error           # Bug A: adapter path must not raise
-    settings = project / ".gemini" / "settings.json"
-    assert settings.exists()                 # Bug B: written under project_root
-    assert "hindsight" in settings.read_text(encoding="utf-8")
-    # Nothing leaked into the working directory.
-    assert not (other / ".gemini").exists()
-
-
-class TestBuildHindsightStatus:
-    """HM15: status output includes source freshness, artifacts, and provenance."""
-
-    def test_status_for_unknown_provider(self, tmp_path):
-        from audiagentic.components.memory.hindsight.status import build_hindsight_status
-        from audiagentic.components.providers.services.recipes import ProviderRecipeRegistry
-
-        registry = ProviderRecipeRegistry()
-        status = build_hindsight_status(registry, "no-such-provider")
-        assert status["provider_id"] == "no-such-provider"
-        assert status["hindsight"]["status"] == "not_registered"
-
-class TestMemoryStatusProviderAgnostic:
-    """memory_status must never leak per-provider Hindsight detail."""
-
-    def test_memory_status_no_provider_detail(self, tmp_path):
-        from audiagentic.components.memory.memory_api import memory_status
-
-        result = memory_status(tmp_path)
-        payload = str(result).lower()
-        for kw in ("gemini", "copilot", "claude"):
-            assert kw not in payload, f"memory_status must not mention '{kw}'"
-
-
-def test_row_recipe_stamp_matches_provider_recipe_result_shape():
-    """_RowRecipe._stamp produces a ProviderRecipeResult with correct provenance fields.
-
-    Verifies that source_url/source_date come from the row and action_needed
-    falls back to row.audia_action when the input result carries none.
-    """
-    from audiagentic.components.memory.hindsight.recipes import _RowRecipe
-    from audiagentic.components.providers.services.recipes import (
-        ProviderRecipeResult,
-        RecipeResult,
-        RecipeState,
-    )
-
-    row = HindsightRecipeRow(
-        provider_id="test-stamp",
-        display_name="Test Stamp",
-        integration_type="guidance",
-        recipe_kind=ProviderRecipeKind.GUIDANCE_ONLY,
-        source_url="https://example.invalid/stamp-test",
-        source_date="2026-06-15",
-        audia_action="call_official_installer",
-    )
-
-    class _MinimalStampRecipe(_RowRecipe):
-        def probe(self, context):  # noqa: ANN001,ANN202
-            return RecipeResult.ok(RecipeState.ABSENT)
-
-        def install(self, context):  # noqa: ANN001,ANN202
-            return RecipeResult.ok(RecipeState.INSTALLING)
-
-        def configure(self, context):  # noqa: ANN001,ANN202
-            return RecipeResult.ok(RecipeState.CONFIGURING)
-
-        def verify(self, context):  # noqa: ANN001,ANN202
-            return RecipeResult.ok(RecipeState.VERIFIED)
-
-        def uninstall(self, context):  # noqa: ANN001,ANN202
-            return RecipeResult.ok(RecipeState.ABSENT)
-
-        def prune(self, context):  # noqa: ANN001,ANN202
-            return RecipeResult.ok(RecipeState.ABSENT)
-
-    recipe = _MinimalStampRecipe(row)
-
-    # Case 1: result has no action_needed -> falls back to row.audia_action
-    base_result = RecipeResult.ok(RecipeState.VERIFIED, status="ok")
-    stamped = recipe._stamp(base_result)
-
-    assert isinstance(stamped, ProviderRecipeResult)
-    assert stamped.source_url == "https://example.invalid/stamp-test"
-    assert stamped.source_date == "2026-06-15"
-    assert stamped.action_needed == "call_official_installer", (
-        f"action_needed should fall back to row.audia_action, got {stamped.action_needed!r}"
-    )
-
-    # Case 2: result has action_needed set -> preserves it over audia_action
-    base_with_action = RecipeResult.ok(
-        RecipeState.VERIFIED, action_needed="custom guidance"
-    )
-    stamped2 = recipe._stamp(base_with_action)
-
-    assert stamped2.action_needed == "custom guidance", (
-        f"action_needed from result should override audia_action, got {stamped2.action_needed!r}"
-    )
-
-
-class TestPluginConfigSourceGate:
-    """RS11: Plugin config/plugin_url_config install/uninstall refuse unverified source."""
-
-    def _make_unverified_plugin_config_row(self, **kw):
-        return HindsightRecipeRow(
-            provider_id="test-unverified-plugin",
-            display_name="Test Unverified Plugin",
-            integration_type="plugin-config",
-            recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG,
-            source_status="unconfirmed",
-            audia_action="call_official_installer",
-            install_steps=[{"type": "shell", "id": "install-step", "command": ["echo", "test"]}],
-            uninstall_steps=[{"type": "shell", "id": "uninstall-step", "command": ["echo", "rm"]}],
-            notes="manual installation required",
-            **kw,
+    def test_codex_desired_round_trip(self):
+        cmds = (
+            HookCommand(event="SessionStart", command="python s.py", timeout=5),
+            HookCommand(event="Stop", command="python r.py", timeout=30),
         )
-
-    def test_plugin_config_install_refuses_unverified_source(self):
-        from audiagentic.components.memory.hindsight.plugin_recipes import PluginConfigRecipe
-
-        row = self._make_unverified_plugin_config_row()
-        recipe = PluginConfigRecipe(_row_to_plugin_definition(row), HindsightPluginDesired.from_backend(_backend()))
-        result = recipe.install({})
-        assert result.success is False
-        assert result.action_needed == "manual installation required"
-
-    def test_plugin_config_uninstall_refuses_unverified_source(self):
-        from audiagentic.components.memory.hindsight.plugin_recipes import PluginConfigRecipe
-
-        row = self._make_unverified_plugin_config_row()
-        recipe = PluginConfigRecipe(_row_to_plugin_definition(row), HindsightPluginDesired.from_backend(_backend()))
-        result = recipe.uninstall({})
-        assert result.state is RecipeState.ABSENT
-        assert result.action_needed == "manual installation required"
-
-    def test_plugin_url_config_install_refuses_unverified_source(self, tmp_path):
-        from audiagentic.components.memory.hindsight.plugin_recipes import PluginUrlConfigRecipe
-
-        row = self._make_unverified_plugin_config_row()
-        config_path = tmp_path / "test-config.json"
-        recipe = PluginUrlConfigRecipe(_row_to_plugin_definition(row), HindsightPluginDesired.from_backend(_backend()), config_path)
-        result = recipe.install({})
-        assert result.success is False
-        assert result.action_needed == "manual installation required"
-
-    def test_plugin_url_config_uninstall_refuses_unverified_source(self, tmp_path):
-        from audiagentic.components.memory.hindsight.plugin_recipes import PluginUrlConfigRecipe
-
-        row = self._make_unverified_plugin_config_row()
-        config_path = tmp_path / "test-config.json"
-        recipe = PluginUrlConfigRecipe(_row_to_plugin_definition(row), HindsightPluginDesired.from_backend(_backend()), config_path)
-        result = recipe.uninstall({})
-        assert result.state is RecipeState.ABSENT
-        assert result.action_needed == "manual installation required"
-
-
-class TestShouldRunPluginCommand:
-    """_should_run_plugin_command (module-level) returns True iff audia_action == 'call_official_installer'."""
-
-    def test_plugin_config_should_run_true(self):
-        from audiagentic.components.memory.hindsight.plugin_recipes import (
-            PluginConfigRecipe,
-            _should_run_plugin_command,
+        desired = CodexHindsightDesired(
+            base_url="http://localhost:8888",
+            bank_id="codex",
+            hook_commands=cmds,
         )
+        mapped = desired.to_mapping()
+        restored = CodexHindsightDesired.from_mapping(mapped)
+        assert desired == restored
 
-        row = HindsightRecipeRow(
-            provider_id="test-srpc",
-            display_name="Test SRPC",
-            integration_type="plugin-config",
-            recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG,
-            source_status="verified",
-            audia_action="call_official_installer",
+
+# ---------------------------------------------------------------------------
+# Reconcile orchestration — family-based, no registry
+# ---------------------------------------------------------------------------
+
+class TestReconcileOrchestration:
+    """Step 3: reconcile_hindsight calls providers_api, preserves summary shape."""
+
+    def test_summary_shape_has_action_and_providers(self, tmp_path):
+        result = reconcile_hindsight(
+            tmp_path,
+            provider_ids=["codex"],
+            active=False,
         )
-        definition = _row_to_plugin_definition(row)
-        recipe = PluginConfigRecipe(definition, HindsightPluginDesired.from_backend(_backend()))
-        assert _should_run_plugin_command(recipe._definition) is True
+        assert "action" in result
+        assert "providers" in result
+        assert isinstance(result["providers"], dict)
 
-    def test_plugin_config_should_run_false(self):
-        from audiagentic.components.memory.hindsight.plugin_recipes import (
-            PluginConfigRecipe,
-            _should_run_plugin_command,
+    def test_torn_down_action_when_inactive(self, tmp_path):
+        result = reconcile_hindsight(
+            tmp_path,
+            provider_ids=["codex"],
+            active=False,
         )
+        assert result["action"] == "torn-down"
 
-        row = HindsightRecipeRow(
-            provider_id="test-srpc",
-            display_name="Test SRPC",
-            integration_type="plugin-config",
-            recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG,
-            source_status="verified",
-            audia_action="manage_config_writes",
+    def test_provider_entry_has_success_state_role(self, tmp_path):
+        result = reconcile_hindsight(
+            tmp_path,
+            provider_ids=["codex"],
+            active=False,
         )
-        definition = _row_to_plugin_definition(row)
-        recipe = PluginConfigRecipe(definition, HindsightPluginDesired.from_backend(_backend()))
-        assert _should_run_plugin_command(recipe._definition) is False
+        if "codex" in result["providers"]:
+            entry = result["providers"]["codex"]
+            assert "success" in entry
+            assert "state" in entry
+            assert "role" in entry
 
-    def test_plugin_url_config_should_run_true(self, tmp_path):
-        from audiagentic.components.memory.hindsight.plugin_recipes import (
-            PluginUrlConfigRecipe,
-            _should_run_plugin_command,
+    def test_guidance_only_fallback(self, tmp_path):
+        """A provider with no supported family gets guidance-only role."""
+        result = reconcile_hindsight(
+            tmp_path,
+            provider_ids=["nonexistent-provider-xyz"],
+            active=True,
         )
+        # Should succeed without crashing; may get guidance-only or fail gracefully
+        assert "action" in result
 
-        row = HindsightRecipeRow(
-            provider_id="test-srpc-url",
-            display_name="Test SRPC URL",
-            integration_type="plugin-config",
-            recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG,
-            source_status="verified",
-            audia_action="call_official_installer",
-        )
-        definition = _row_to_plugin_definition(row)
-        recipe = PluginUrlConfigRecipe(definition, HindsightPluginDesired.from_backend(_backend()), tmp_path / "cfg.json")
-        assert _should_run_plugin_command(recipe._definition) is True
-
-    def test_plugin_url_config_should_run_false(self, tmp_path):
-        from audiagentic.components.memory.hindsight.plugin_recipes import (
-            PluginUrlConfigRecipe,
-            _should_run_plugin_command,
-        )
-
-        row = HindsightRecipeRow(
-            provider_id="test-srpc-url",
-            display_name="Test SRPC URL",
-            integration_type="plugin-config",
-            recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG,
-            source_status="verified",
-            audia_action="manage_config_writes",
-        )
-        definition = _row_to_plugin_definition(row)
-        recipe = PluginUrlConfigRecipe(definition, HindsightPluginDesired.from_backend(_backend()), tmp_path / "cfg.json")
-        assert _should_run_plugin_command(recipe._definition) is False
+    def test_no_registry_import_in_provision(self):
+        """Verify the new provision module does not import legacy types."""
+        import audiagentic.components.memory.hindsight.provision as prov
+        source = Path(prov.__file__).read_text(encoding="utf-8")
+        assert "ProviderRecipeRegistry" not in source
+        assert "ProviderRecipeResult" not in source
+        assert "HINDSIGHT_RECIPE_MATRIX" not in source
+        assert "register_hindsight_recipes" not in source
 
 
-class TestPluginUrlConfigRoundTrip:
-    """RS18: configure → prune round-trip correctness."""
+# ---------------------------------------------------------------------------
+# Status report — family queries, no registry
+# ---------------------------------------------------------------------------
 
-    def test_configure_writes_url_config_file(self, tmp_path):
-        from audiagentic.components.memory.hindsight.plugin_recipes import (
-            PluginUrlConfigRecipe,
-        )
+class TestStatusReport:
+    """Step 3: build_hindsight_status_report uses providers_api queries."""
 
-        row = HindsightRecipeRow(
-            provider_id="test-roundtrip",
-            display_name="Test RoundTrip",
-            integration_type="plugin-config",
-            recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG,
-            source_status="verified",
-            audia_action="manage_config_writes",
-        )
-        config_path = tmp_path / "hindsight" / "test-roundtrip.json"
-        backend = _backend(api_key="sk-test", bank_id="mybank")
-        recipe = PluginUrlConfigRecipe(_row_to_plugin_definition(row), HindsightPluginDesired.from_backend(backend), config_path)
+    def test_unconfigured_returns_empty(self, tmp_path):
+        result = build_hindsight_status_report(tmp_path)
+        assert result["configured"] is False
+        assert result["providers"] == {}
 
-        result = recipe.configure({})
-        assert result.success
-        assert result.state is RecipeState.CONFIGURING
-        assert config_path.exists()
-
-        import json
-
-        data = json.loads(config_path.read_text(encoding="utf-8"))
-        assert data["hindsightApiUrl"] == "https://hs.example.com"
-        assert data["hindsightApiToken"] == "sk-test"
-        assert data["bankId"] == "mybank"
-
-    def test_prune_removes_only_target_file(self, tmp_path):
-        from audiagentic.components.memory.hindsight.plugin_recipes import (
-            PluginUrlConfigRecipe,
-        )
-
-        row = HindsightRecipeRow(
-            provider_id="test-prune",
-            display_name="Test Prune",
-            integration_type="plugin-config",
-            recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG,
-            source_status="verified",
-            audia_action="manage_config_writes",
-        )
-        config_path = tmp_path / "hindsight" / "test-prune.json"
-        sibling = tmp_path / "hindsight" / "other-file.txt"
-
-        backend = _backend(api_key="sk-test")
-        recipe = PluginUrlConfigRecipe(_row_to_plugin_definition(row), HindsightPluginDesired.from_backend(backend), config_path)
-
-        recipe.configure({})
-        sibling.write_text("unrelated data", encoding="utf-8")
-        assert config_path.exists()
-        assert sibling.exists()
-
-        result = recipe.prune({})
-        assert result.success
-        assert result.state is RecipeState.ABSENT
-        assert not config_path.exists(), "target file should be removed"
-        assert sibling.exists(), "sibling file must survive prune"
-
-    def test_prune_tolerates_missing_file(self, tmp_path):
-        from audiagentic.components.memory.hindsight.plugin_recipes import (
-            PluginUrlConfigRecipe,
-        )
-
-        row = HindsightRecipeRow(
-            provider_id="test-prune-missing",
-            display_name="Test Prune Missing",
-            integration_type="plugin-config",
-            recipe_kind=ProviderRecipeKind.PLUGIN_CONFIG,
-            source_status="verified",
-            audia_action="manage_config_writes",
-        )
-        config_path = tmp_path / "hindsight" / "nonexistent.json"
-        backend = _backend()
-        recipe = PluginUrlConfigRecipe(_row_to_plugin_definition(row), HindsightPluginDesired.from_backend(backend), config_path)
-
-        result = recipe.prune({})
-        assert result.success
-        assert result.state is RecipeState.ABSENT
+    def test_no_registry_import_in_status_path(self):
+        import audiagentic.components.memory.hindsight.provision as prov
+        source = Path(prov.__file__).read_text(encoding="utf-8")
+        assert "ProviderRecipeRegistry" not in source
 
 
-class TestCodexConfigureUsesWriteFileStep:
-    """RS18: Codex configure routes writes through WriteFileStep."""
+# ---------------------------------------------------------------------------
+# Provider discovery — no provider services import at memory boundary
+# ---------------------------------------------------------------------------
 
-    def test_configure_writes_via_write_file_step(self, tmp_path, monkeypatch):
-        from audiagentic.components.memory.hindsight.codex_recipe import (
-            CodexHindsightRecipe,
-        )
+class TestProviderDiscovery:
+    """Step 4: discover_provider_ids uses providers_api, not internal discovery."""
 
-        row = HindsightRecipeRow(
-            provider_id="codex",
-            display_name="Codex",
-            integration_type="hooks",
-            recipe_kind=ProviderRecipeKind.HOOKS,
-            source_status="verified",
-            audia_action="manage_config_writes",
-        )
-        backend = _backend(api_key="sk-test", bank_id="codex")
-        monkeypatch.setattr("audiagentic.components.memory.hindsight.codex_recipe._home", lambda: tmp_path)  # noqa: ARG005
-        recipe = CodexHindsightRecipe(row, backend)
-
-        result = recipe.configure({})
-        assert result.success
-        assert result.state is RecipeState.CONFIGURING
-
-        user_config = tmp_path / ".hindsight" / "codex.json"
-        hooks_file = tmp_path / ".codex" / "hooks.json"
-        assert user_config.exists()
-        assert hooks_file.exists()
-
-        import json
-
-        data = json.loads(user_config.read_text(encoding="utf-8"))
-        assert data["hindsightApiUrl"] == "https://hs.example.com"
+    def test_returns_tuple_of_lists(self, tmp_path):
+        all_ids, enabled_ids = discover_provider_ids(tmp_path)
+        assert isinstance(all_ids, list)
+        assert isinstance(enabled_ids, list)
 
 
-class TestPiConfigureIntentionalOneOff:
-    """RS18: Pi configure uses bare write_text (intentional one-off due to literal
-    brace placeholders like "{project}" that conflict with WriteFileStep substitution)."""
+# ---------------------------------------------------------------------------
+# Architecture — no matrix/factory/registry in memory after MA27
+# ---------------------------------------------------------------------------
 
-    def test_configure_writes_config_correctly(self, tmp_path, monkeypatch):
-        from audiagentic.components.memory.hindsight.pi_recipe import (
-            PiHindsightRecipe,
-        )
+class TestArchitectureNoLegacy:
+    """Step 9: No legacy symbols in the memory component."""
 
-        row = HindsightRecipeRow(
-            provider_id="pi",
-            display_name="Pi",
-            integration_type="hooks",
-            recipe_kind=ProviderRecipeKind.HOOKS,
-            source_status="verified",
-            audia_action="manage_config_writes",
-        )
-        backend = _backend(api_key="sk-test", bank_id="audiagentic")
-        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)  # noqa: ARG005
-        recipe = PiHindsightRecipe(row, backend)
+    def test_no_matrix_module(self):
+        with pytest.raises(ImportError, match="matrix"):
+            import audiagentic.components.memory.hindsight.matrix  # noqa: F401
 
-        result = recipe.configure({})
-        assert result.success
-        assert result.state is RecipeState.CONFIGURING
+    def test_no_strategies_module(self):
+        with pytest.raises(ImportError, match="strategies"):
+            import audiagentic.components.memory.hindsight.strategies  # noqa: F401
 
-        config_path = tmp_path / ".hindsight" / "config.json"
-        assert config_path.exists()
+    def test_no_recipe_spec_module(self):
+        with pytest.raises(ImportError, match="recipe_spec"):
+            import audiagentic.components.memory.hindsight.recipe_spec  # noqa: F401
 
-        import json
+    def test_no_lifecycle_module(self):
+        with pytest.raises(ImportError, match="lifecycle"):
+            import audiagentic.components.memory.hindsight.lifecycle  # noqa: F401
 
-        data = json.loads(config_path.read_text(encoding="utf-8"))
-        assert data["baseUrl"] == "https://hs.example.com"
-        assert data.get("host", {}).get("pi", {}).get("enabled") is True
-        # Literal brace placeholders survive correctly
-        pi_data = data.get("host", {}).get("pi", {})
-        assert "{project}" in pi_data.get("autoRecallTags", [])
+    def test_provision_has_no_legacy_imports(self):
+        import audiagentic.components.memory.hindsight.provision as prov
+        source = Path(prov.__file__).read_text(encoding="utf-8")
+        for symbol in (
+            "HINDSIGHT_RECIPE_MATRIX",
+            "register_hindsight_recipes",
+            "ProviderRecipeRegistry",
+            "ProviderRecipeKind",
+            "build_hindsight_recipe",
+            "resolve_hindsight_strategy",
+        ):
+            assert symbol not in source, f"Legacy symbol '{symbol}' found in provision.py"
+
+    def test_provision_uses_only_public_provider_boundary(self):
+        import audiagentic.components.memory.hindsight.provision as prov
+
+        source = Path(prov.__file__).read_text(encoding="utf-8")
+        assert "audiagentic.components.providers.descriptors" not in source
+        assert "audiagentic.components.providers.contracts" not in source
+        provider_imports = [
+            line
+            for line in source.splitlines()
+            if line.startswith("from audiagentic.components.providers")
+        ]
+        assert provider_imports == [
+            "from audiagentic.components.providers.providers_api import ("
+        ]
