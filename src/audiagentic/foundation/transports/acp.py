@@ -20,6 +20,7 @@ resume-after-death here (deferred to AS10).
 from __future__ import annotations
 
 import asyncio
+import os
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AsyncExitStack, suppress
 from dataclasses import dataclass, field
@@ -67,16 +68,25 @@ _KIND_VOCABULARY = frozenset({
     "permission-request", "error", "result",
 })
 
-# Mapping: raw ACP sessionUpdate values → canonical kind
+# Mapping: raw ACP sessionUpdate values → canonical kind.
+# The left column must cover the REAL wire vocabulary (agent_thought_chunk,
+# tool_call_update, plan, …), not just idealized names — RV679 on AS19 found
+# turn-state detection silently depending on unmapped kinds leaking through
+# raw. Legacy/raw-dict test spellings are retained as additional aliases.
 _RAW_TO_CANONICAL = {
     "agent_message_chunk": "assistant-message",
+    "agent_thought_chunk": "thought",
     "thought": "thought",
     "status": "status",
     "usage": "usage",
     "tool_call": "tool-call",
+    "tool_call_update": "tool-call",
     "file_change": "file-change",
     "terminal_output": "terminal-output",
+    "plan": "plan-update",
     "plan_update": "plan-update",
+    "available_commands_update": "status",
+    "current_mode_update": "status",
 }
 
 
@@ -245,7 +255,7 @@ class _TurnPipeline:
                 self.callback_disabled = True
                 # Emit status event to record callback disable (self-referential)
                 disable_event = AcpEvent(
-                    sequence=len(self.events),
+                    sequence=self._sequence,
                     kind="status",
                     timestamp=_now(),
                     session_id=event.session_id,
@@ -254,7 +264,8 @@ class _TurnPipeline:
                     error=None,
                     ext={},
                 )
-                self.events.append(disable_event)
+                self._sequence += 1
+                self._retain(disable_event, 0)
 
     async def emit(self, session_id: str, raw_kind: str, payload: dict[str, Any]) -> None:
         """Emit an event with rolling bounded delivery and normalization.
@@ -267,11 +278,20 @@ class _TurnPipeline:
         canonical = _map_kind(raw_kind)
         text = _extract_text(canonical, payload)
 
-        # Serialize ext for byte accounting
-        if self._compact:
-            ext = {"acp": {"raw_kind": raw_kind}}
-        else:
-            ext = {"acp": {"raw_kind": raw_kind, "payload": payload}}
+        # Tool lifecycle identity survives even in compact mode: status and
+        # toolCallId are what turn-state consumers key on, and dropping them
+        # with the payload made tool events unobservable on the gateway path
+        # (RV679 on AS19).
+        acp_ext: dict[str, Any] = {"raw_kind": raw_kind}
+        status = payload.get("status")
+        if status is not None:
+            acp_ext["status"] = str(status)
+        tool_call_id = payload.get("toolCallId") or payload.get("tool_call_id")
+        if tool_call_id is not None:
+            acp_ext["tool_call_id"] = str(tool_call_id)
+        if not self._compact:
+            acp_ext["payload"] = payload
+        ext: dict[str, Any] = {"acp": acp_ext}
         ext_bytes = len(str(ext).encode("utf-8"))
 
         _, ext_was_cut = _truncate_bytes(
@@ -308,38 +328,52 @@ class _TurnPipeline:
         self, session_id: str, code: str, message: str, payload_excerpt: dict[str, Any] | None = None
     ) -> None:
         """Emit a non-terminal error-kind event (malformed update)."""
+        while len(self.events) >= MAX_EVENTS:
+            self._evict_oldest()
+        ext = {"acp": {"raw_excerpt": payload_excerpt or {}}}
         event = AcpEvent(
-            sequence=len(self.events),
+            sequence=self._sequence,
             kind="error",
             timestamp=_now(),
             session_id=str(session_id),
             text=message,
             terminal=False,
             error={"code": code, "message": message},
-            ext={"acp": {"raw_excerpt": payload_excerpt or {}}},
+            ext=ext,
         )
-        self.events.append(event)
+        self._sequence += 1
+        self._retain(event, len(str(ext).encode("utf-8")))
         await self._emit_callback(event)
 
-    def emit_terminal(
+    async def emit_terminal(
         self,
         session_id: str,
         stop_reason: str | None,
         error: dict[str, str] | None = None,
     ) -> AcpEvent:
-        """Emit the terminal result event. Always retained."""
+        """Emit the terminal result event. Always retained.
+
+        Also delivered to the on_event callback — the terminal event is the
+        one signal an observer needs to know the turn is over, and it was
+        previously never emitted through the callback at all (RV679 on AS19).
+        """
         self.total_received += 1
+        while len(self.events) >= MAX_EVENTS:
+            self._evict_oldest()
+        ext = {"acp": {"stop_reason": stop_reason}}
         event = AcpEvent(
-            sequence=len(self.events),
+            sequence=self._sequence,
             kind="result",
             timestamp=_now(),
             session_id=str(session_id),
             text=None,
             terminal=True,
             error=error,
-            ext={"acp": {"stop_reason": stop_reason}},
+            ext=ext,
         )
-        self.events.append(event)
+        self._sequence += 1
+        self._retain(event, len(str(ext).encode("utf-8")))
+        await self._emit_callback(event)
         return event
 
     def build_result(
@@ -394,11 +428,17 @@ class AcpSessionTransport:
         self._current_turn: _TurnPipeline | None = None
         self._closed = False
         self._dead = False
+        self._kill_job: object | None = None
         self.dropped_between_turns = 0
 
     @property
     def session_id(self) -> str | None:
         return self._session_id
+
+    @property
+    def child_pid(self) -> int | None:
+        """OS pid of the spawned agent child, once open() has succeeded."""
+        return getattr(self._proc, "pid", None)
 
     def is_alive(self) -> bool:
         """True while the transport is open and the child has not exited."""
@@ -467,12 +507,14 @@ class AcpSessionTransport:
                     payload = _plain(update)
                     await turn.emit(session_id, str(payload.get("sessionUpdate", "update")), payload)
                 except Exception as exc:
-                    # Malformed update: normalize to error event, continue
+                    # Malformed update: normalize to error event, continue.
+                    # Do not re-serialize the update — it may be the same object
+                    # that failed serialization above.
                     await turn.emit_error(
                         session_id,
                         ERR_MALFORMED_UPDATE,
                         f"Malformed ACP update: {type(exc).__name__}",
-                        _plain(update),
+                        None,
                     )
 
         stack = AsyncExitStack()
@@ -507,6 +549,17 @@ class AcpSessionTransport:
         self._connection = connection
         self._proc = proc
         self._session_id = str(session.session_id)
+        # Windows: adopt the SDK-spawned child into a kill-on-close Job Object
+        # so a hard-killed host cannot orphan the agent tree (AS17/RV681 —
+        # atexit/close never run on hard kill). Best-effort: refusal (nested
+        # non-nestable job, old OS) leaves the existing close() teardown as
+        # the only guarantee, which is the pre-existing behavior.
+        if os.name == "nt" and self.child_pid is not None:
+            from audiagentic.foundation.system.supervised_process import (
+                adopt_pid_into_kill_job,
+            )
+
+            self._kill_job = adopt_pid_into_kill_job(self.child_pid)
         return self._session_id
 
     async def prompt(
@@ -535,49 +588,85 @@ class AcpSessionTransport:
             )
         turn = _TurnPipeline(on_event, compact=self._compact_events)
         self._current_turn = turn
+        cancelled_by_signal = False
         try:
             if cancel_signal is not None and cancel_signal.is_set():
-                terminal = turn.emit_terminal(str(self._session_id), "cancelled")
+                terminal = await turn.emit_terminal(str(self._session_id), "cancelled")
                 return turn.build_result(str(self._session_id), "cancelled", terminal)
 
-            try:
-                response = await self._connection.prompt(
-                    session_id=self._session_id,
-                    prompt=[self._text_block(prompt)],  # type: ignore[misc]
+            response = None
+            if cancel_signal is not None:
+                # Race prompt against cancel signal — protocol-level cancel first.
+                prompt_task = asyncio.ensure_future(
+                    self._connection.prompt(
+                        session_id=self._session_id,
+                        prompt=[self._text_block(prompt)],  # type: ignore[misc]
+                    )
                 )
-            except asyncio.CancelledError as exc:
-                self._dead = True
-                turn.emit_terminal(
-                    str(self._session_id),
-                    "cancelled",
-                    error={"code": ERR_CHILD_EXIT, "message": "Agent process cancelled unexpectedly"},
+                cancel_task = asyncio.ensure_future(cancel_signal.wait())
+                wait_done, wait_pending = await asyncio.wait(
+                    {prompt_task, cancel_task},
+                    return_when=asyncio.FIRST_COMPLETED,
                 )
-                raise AudiaGenticError(
-                    code=ERR_EXECUTION_FAILED,
-                    kind="execution",
-                    message="ACP agent execution failed",
-                    details={
-                        "executable": self._launch.executable,
-                        "error-type": type(exc).__name__,
-                    },
-                ) from exc
-            except Exception as exc:
-                # Unexpected child exit: normalize to canonical error
-                self._dead = True
-                turn.emit_terminal(
-                    str(self._session_id),
-                    None,
-                    error={"code": ERR_CHILD_EXIT, "message": type(exc).__name__},
-                )
-                raise AudiaGenticError(
-                    code=ERR_EXECUTION_FAILED,
-                    kind="execution",
-                    message="ACP agent execution failed",
-                    details={
-                        "executable": self._launch.executable,
-                        "error-type": type(exc).__name__,
-                    },
-                ) from exc
+                if prompt_task in wait_done and not prompt_task.cancelled():
+                    response = prompt_task.result()
+                    cancel_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await cancel_task
+                elif cancel_task in wait_done:
+                    # Signal was set during prompt — protocol cancel, then abort.
+                    with suppress(Exception):
+                        cancel_fn = getattr(self._connection, "cancel", None)
+                        if cancel_fn is not None:
+                            await cancel_fn(self._session_id)
+                    for t in wait_pending:
+                        t.cancel()
+                    cancelled_by_signal = True
+                    with suppress(asyncio.CancelledError):
+                        await prompt_task
+            else:
+                try:
+                    response = await self._connection.prompt(
+                        session_id=self._session_id,
+                        prompt=[self._text_block(prompt)],  # type: ignore[misc]
+                    )
+                except asyncio.CancelledError as exc:
+                    self._dead = True
+                    await turn.emit_terminal(
+                        str(self._session_id),
+                        "cancelled",
+                        error={"code": ERR_CHILD_EXIT, "message": "Agent process cancelled unexpectedly"},
+                    )
+                    raise AudiaGenticError(
+                        code=ERR_EXECUTION_FAILED,
+                        kind="execution",
+                        message="ACP agent execution failed",
+                        details={
+                            "executable": self._launch.executable,
+                            "error-type": type(exc).__name__,
+                        },
+                    ) from exc
+                except Exception as exc:
+                    # Unexpected child exit: normalize to canonical error
+                    self._dead = True
+                    await turn.emit_terminal(
+                        str(self._session_id),
+                        None,
+                        error={"code": ERR_CHILD_EXIT, "message": type(exc).__name__},
+                    )
+                    raise AudiaGenticError(
+                        code=ERR_EXECUTION_FAILED,
+                        kind="execution",
+                        message="ACP agent execution failed",
+                        details={
+                            "executable": self._launch.executable,
+                            "error-type": type(exc).__name__,
+                        },
+                    ) from exc
+
+            if cancelled_by_signal:
+                terminal = await turn.emit_terminal(str(self._session_id), "cancelled")
+                return turn.build_result(str(self._session_id), "cancelled", terminal)
             # Drain pending update dispatch before detaching the turn pipeline
             # (see _TURN_DRAIN_YIELDS). Failure paths skip this — the turn is
             # already lost and the transport is dead.
@@ -587,10 +676,18 @@ class AcpSessionTransport:
         finally:
             self._current_turn = None
 
+        if response is None:
+            raise AudiaGenticError(
+                code=ERR_EXECUTION_FAILED,
+                kind="execution",
+                message="ACP agent execution failed — no prompt response",
+                details={"executable": self._launch.executable},
+            )
+
         stop_reason = (
             str(response.stop_reason) if response.stop_reason is not None else None
         )
-        terminal = turn.emit_terminal(str(self._session_id), stop_reason)
+        terminal = await turn.emit_terminal(str(self._session_id), stop_reason)
         return turn.build_result(str(self._session_id), stop_reason, terminal)
 
     async def close(self) -> None:
@@ -631,6 +728,16 @@ class AcpSessionTransport:
                 except (Exception, asyncio.CancelledError, asyncio.TimeoutError):
                     with suppress(Exception):
                         proc.kill()
+
+        # Closing the kill-on-close Job Object last: if anything above failed
+        # to reap the child tree, the kernel finishes the job here.
+        if self._kill_job is not None:
+            from audiagentic.foundation.system.supervised_process import (
+                _close_job_handle,
+            )
+
+            _close_job_handle(self._kill_job)
+            self._kill_job = None
 
 
 async def run_acp_prompt(

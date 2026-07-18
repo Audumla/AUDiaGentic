@@ -28,7 +28,9 @@ import os
 import signal
 import subprocess
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
+from typing import IO, Any
 
 from audiagentic.foundation.system.process import kill_process_tree
 
@@ -48,6 +50,39 @@ def _assign_to_kill_job(proc: subprocess.Popen) -> object | None:
     every process in the job. Returns None if the OS refuses (older Windows /
     already in a non-nestable job); the ``finally`` tree-kill remains as backup.
     """
+    return _assign_handle_to_kill_job(int(proc._handle))  # type: ignore[attr-defined]
+
+
+def adopt_pid_into_kill_job(pid: int) -> object | None:
+    """Adopt an already-spawned child (by pid) into a kill-on-close Job Object.
+
+    For children spawned by third-party code (e.g. the ACP SDK) where no
+    ``Popen`` handle is available. Same contract as ``_assign_to_kill_job``:
+    keep the returned handle referenced for the child's lifetime; closing it —
+    including implicitly when this process dies — kills the child's tree.
+    Returns None off-Windows or when the OS refuses.
+    """
+    if os.name != "nt":
+        return None
+    import ctypes
+    from ctypes import wintypes
+
+    process_set_quota = 0x0100
+    process_terminate = 0x0001
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    handle = kernel32.OpenProcess(process_set_quota | process_terminate, False, pid)
+    if not handle:
+        logger.debug("OpenProcess for job adoption failed (err=%s)", ctypes.get_last_error())
+        return None
+    try:
+        return _assign_handle_to_kill_job(int(handle))
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def _assign_handle_to_kill_job(process_handle: int) -> object | None:
     import ctypes
     from ctypes import wintypes
 
@@ -104,16 +139,133 @@ def _assign_to_kill_job(proc: subprocess.Popen) -> object | None:
         logger.debug("SetInformationJobObject failed (err=%s)", ctypes.get_last_error())
         return None
 
-    if not kernel32.AssignProcessToJobObject(job, int(proc._handle)):  # type: ignore[attr-defined]
+    if not kernel32.AssignProcessToJobObject(job, process_handle):
         # ERROR_ACCESS_DENIED here means the host is already in a job that
         # disallows nesting. Rare on Windows 8+; fall back to finally tree-kill.
         logger.debug("AssignProcessToJobObject failed (err=%s)", ctypes.get_last_error())
+        kernel32.CloseHandle(job)
         return None
 
     return job
 
 
 # --- Public API -----------------------------------------------------------
+
+
+def _close_job_handle(job: object | None) -> None:
+    if job is None or os.name != "nt":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.kernel32.CloseHandle(job)
+    except Exception:  # noqa: BLE001 - teardown must remain best effort
+        logger.warning("Failed to close process Job Object", exc_info=True)
+
+
+@dataclass
+class SupervisedProcess:
+    """Owned child process whose descendant tree is reaped on close.
+
+    The handle is deliberately small: callers retain normal ``Popen`` pipe
+    access while lifecycle ownership remains explicit and reusable by both
+    blocking harness launches and short-lived isolated workers.
+    """
+
+    process: subprocess.Popen[str]
+    _job: object | None = None
+    _process_group_id: int | None = None
+    _closed: bool = False
+
+    @property
+    def pid(self) -> int:
+        return self.process.pid
+
+    @property
+    def stdin(self) -> IO[str] | None:
+        return self.process.stdin
+
+    @property
+    def stdout(self) -> IO[str] | None:
+        return self.process.stdout
+
+    @property
+    def stderr(self) -> IO[str] | None:
+        return self.process.stderr
+
+    def poll(self) -> int | None:
+        return self.process.poll()
+
+    def wait(self, timeout: float | None = None) -> int:
+        return self.process.wait(timeout=timeout)
+
+    def communicate(
+        self,
+        input: str | None = None,
+        timeout: float | None = None,
+    ) -> tuple[str, str]:
+        stdout, stderr = self.process.communicate(input=input, timeout=timeout)
+        return stdout or "", stderr or ""
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            if self._process_group_id is not None and os.name != "nt":
+                try:
+                    os.killpg(self._process_group_id, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            kill_process_tree(self.process.pid)
+            try:
+                self.process.wait(timeout=5.0)
+            except subprocess.TimeoutExpired:
+                logger.warning("Supervised process did not exit after tree teardown")
+        finally:
+            _close_job_handle(self._job)
+            self._job = None
+
+    def __enter__(self) -> SupervisedProcess:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self.close()
+
+
+def spawn_supervised(
+    command: Sequence[str],
+    *,
+    cwd: str | Path | None = None,
+    env: Mapping[str, str] | None = None,
+    stdin: Any = None,
+    stdout: Any = None,
+    stderr: Any = None,
+    isolated_process_group: bool = False,
+) -> SupervisedProcess:
+    """Start an owned child with optional replacement environment and pipes."""
+    proc = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=dict(env) if env is not None else None,
+        stdin=stdin,
+        stdout=stdout,
+        stderr=stderr,
+        text=True,
+        encoding="utf-8",
+        start_new_session=isolated_process_group and os.name != "nt",
+    )
+    job: object | None = None
+    if os.name == "nt":
+        try:
+            job = _assign_to_kill_job(proc)
+        except Exception:  # noqa: BLE001 — never leave an unsupervised child
+            logger.warning("Job Object assignment failed; relying on explicit teardown", exc_info=True)
+    return SupervisedProcess(
+        process=proc,
+        _job=job,
+        _process_group_id=(proc.pid if isolated_process_group and os.name != "nt" else None),
+    )
 
 
 def supervised_run(
@@ -129,14 +281,8 @@ def supervised_run(
     exception, or launcher signal — and, on Windows, even if the launcher is
     hard-killed (via the Job Object).
     """
-    proc = subprocess.Popen(command, cwd=cwd, env=dict(env) if env is not None else None)
-
-    job: object | None = None
-    if os.name == "nt":
-        try:
-            job = _assign_to_kill_job(proc)
-        except Exception:  # noqa: BLE001 — never let supervision break the run
-            logger.warning("Job Object assignment failed; relying on finally teardown", exc_info=True)
+    owned = spawn_supervised(command, cwd=cwd, env=env)
+    proc = owned.process
 
     previous: dict[int, object] = {}
 
@@ -155,17 +301,9 @@ def supervised_run(
     try:
         return proc.wait()
     finally:
-        if proc.poll() is None:
-            kill_process_tree(proc.pid)
-        else:
-            # Host already exited; sweep any grandchildren it left behind.
-            kill_process_tree(proc.pid)
+        owned.close()
         for sig, handler in previous.items():
             try:
                 signal.signal(sig, handler)  # type: ignore[arg-type]
             except (OSError, ValueError):
                 pass
-        # Closing the job handle kills any survivors on Windows; dropping the
-        # reference lets the GC close it. Done last so it never pre-empts the
-        # explicit tree-kill above.
-        del job

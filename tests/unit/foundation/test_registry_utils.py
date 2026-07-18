@@ -1,9 +1,31 @@
 from __future__ import annotations
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.registry_utils import Registry, reset_all_registries
+
+
+def test_concurrent_first_reads_wait_for_lazy_loader() -> None:
+    entered = threading.Event()
+    release = threading.Event()
+    value = object()
+    registry: Registry[object]
+
+    def _load() -> None:
+        entered.set()
+        assert release.wait(timeout=2)
+        registry.register("ready", value)
+
+    registry = Registry(loader=_load)
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futures = [pool.submit(registry.get, "ready") for _ in range(3)]
+        assert entered.wait(timeout=2)
+        release.set()
+        assert [future.result(timeout=2) for future in futures] == [value] * 3
 
 
 def test_registry_loader_runs_once_and_again_after_reset() -> None:
