@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -46,6 +47,17 @@ def _make_profile(project_root: Path, profile_id: str, provider_id: str, **param
         "params": params,
     })
     set_implementation_state(project_root, "providers", provider_id, ImplementationState(enabled=True))
+
+
+def _worker_result(execution_request: dict, output: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        result_data={
+            "provider-id": execution_request["provider-id"],
+            "status": "ok",
+            "model": "gpt-4o",
+            "output": output,
+        }
+    )
 
 
 def _collect(topic: str):
@@ -93,20 +105,20 @@ def test_register_is_idempotent():
     # must be a no-op from here on (never touch the _REGISTERED flag directly
     # in a test — that would leave a real duplicate subscription on the
     # process-global event bus for the rest of the test session).
-    subs_before = get_bus().subscription_count(events._REQUESTED_TOPIC)
+    subs_before = get_bus().subscription_count(events.GATEWAY_REQUESTED_TOPIC)
     events.register()
     events.register()
-    subs_after = get_bus().subscription_count(events._REQUESTED_TOPIC)
+    subs_after = get_bus().subscription_count(events.GATEWAY_REQUESTED_TOPIC)
     assert subs_after == subs_before
 
 
 def test_requested_event_creates_and_queues_request(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
 
-    def fake_execute_provider(*, provider_id, packet_ctx, provider_cfg):
-        return {"provider-id": provider_id, "status": "ok", "model": "gpt-4o", "output": "done"}
+    def fake_execute_provider(*, execution_request, **_kwargs):
+        return _worker_result(execution_request, "done")
 
-    monkeypatch.setattr("audiagentic.components.providers.services.execution.execute_provider", fake_execute_provider)
+    monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider)
 
     received, done = _collect("agents.llm.completed")
 
@@ -127,11 +139,11 @@ def test_requested_event_defaults_to_async_not_blocking(tmp_path: Path, monkeypa
     _make_profile(tmp_path, "default", "local-openai")
     hold = threading.Event()
 
-    def slow_execute_provider(*, provider_id, packet_ctx, provider_cfg):
+    def slow_execute_provider(*, execution_request, **_kwargs):
         hold.wait(timeout=5)
-        return {"provider-id": provider_id, "status": "ok", "model": "gpt-4o", "output": "done"}
+        return _worker_result(execution_request, "done")
 
-    monkeypatch.setattr("audiagentic.components.providers.services.execution.execute_provider", slow_execute_provider)
+    monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", slow_execute_provider)
 
     received, done = _collect("agents.llm.completed")
 
@@ -183,10 +195,10 @@ def test_requested_event_unexpected_exception_publishes_rejected_not_swallowed(t
 def test_requested_event_preserves_correlation_id_and_subject(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
 
-    def fake_execute_provider(*, provider_id, packet_ctx, provider_cfg):
-        return {"provider-id": provider_id, "status": "ok", "model": "gpt-4o", "output": "done"}
+    def fake_execute_provider(*, execution_request, **_kwargs):
+        return _worker_result(execution_request, "done")
 
-    monkeypatch.setattr("audiagentic.components.providers.services.execution.execute_provider", fake_execute_provider)
+    monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider)
 
     received, done = _collect("agents.llm.completed")
 
