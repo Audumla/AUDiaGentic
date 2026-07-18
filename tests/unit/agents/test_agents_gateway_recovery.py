@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 from audiagentic.components.agents import agents_gateway_recovery as recovery
@@ -104,3 +105,79 @@ def test_cancel_acknowledgement_is_first_writer_wins(tmp_path: Path) -> None:
 
     assert first["cancel-acknowledged-by"] == "queue-worker"
     assert second["cancel-acknowledged-by"] == "queue-worker"
+
+
+def test_recovery_discards_malformed_active_work_without_touching_requests(tmp_path: Path) -> None:
+    service_root = tmp_path / "service"
+    project_root = tmp_path / "project"
+    record = _record(project_root)
+    active_root = service_root / store.ACTIVE_WORK_DIR
+    active_root.mkdir(parents=True)
+    (active_root / "not-json.json").write_text("{ definitely not json", encoding="utf-8")
+    (active_root / "wrong-shape.json").write_text("[]", encoding="utf-8")
+    before = store.read_record(project_root, record["request-id"])
+
+    report = recovery.recover_gateway_requests(service_root, live_owner_epoch="epoch-live")
+    after = store.read_record(project_root, record["request-id"])
+
+    assert report.cleared == 2
+    assert report.examined == 0
+    assert after["revision"] == before["revision"]
+    assert not list(active_root.glob("*.json"))
+
+
+def test_recovery_ignores_missing_request_but_keeps_evidence(tmp_path: Path) -> None:
+    service_root = tmp_path / "service"
+    active_root = service_root / store.ACTIVE_WORK_DIR
+    active_root.mkdir(parents=True)
+    missing_id = "req_missing"
+    store.record_active_work(service_root, tmp_path / "missing-project", missing_id, owner_epoch="old")
+
+    report = recovery.recover_gateway_requests(service_root, live_owner_epoch="new")
+
+    assert report.examined == 1
+    assert report.cleared == 0
+    assert store.active_work_path(service_root, missing_id).exists()
+
+
+def test_recovery_is_idempotent_after_releasing_stale_claim(tmp_path: Path) -> None:
+    service_root = tmp_path / "service"
+    project_root = tmp_path / "project"
+    record = _record(project_root)
+    store.claim_dispatch(
+        project_root,
+        record["request-id"],
+        owner_epoch="old-epoch",
+        expected_revision=record["revision"],
+        service_root=service_root,
+    )
+
+    first = recovery.recover_gateway_requests(service_root, live_owner_epoch="new-epoch")
+    second = recovery.recover_gateway_requests(service_root, live_owner_epoch="new-epoch")
+    recovered = store.read_record(project_root, record["request-id"])
+
+    assert first.requeued == 1
+    assert second == recovery.RecoveryReport()
+    assert recovered["state"] == "queued"
+    assert recovered["dispatch-owner-epoch"] is None
+
+
+def test_cancel_acknowledgement_race_has_one_winner(tmp_path: Path) -> None:
+    record = _record(tmp_path)
+    store.mark_cancel_requested(tmp_path, record["request-id"])
+    winners: list[str] = []
+
+    def acknowledge(name: str) -> None:
+        winners.append(
+            store.acknowledge_cancel(tmp_path, record["request-id"], by=name)["cancel-acknowledged-by"]
+        )
+
+    threads = [threading.Thread(target=acknowledge, args=(f"actor-{i}",)) for i in range(12)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=2)
+
+    final = store.read_record(tmp_path, record["request-id"])
+    assert len(set(winners)) == 1
+    assert final["cancel-acknowledged-by"] == winners[0]
