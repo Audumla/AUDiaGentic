@@ -1,7 +1,6 @@
 """Normalization for tagged interactive prompts."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -23,9 +22,10 @@ from audiagentic.components.agent_jobs.prompt_targets import (
     _parse_target,
 )
 from audiagentic.components.agent_jobs.prompt_templates import load_prompt_template
-from audiagentic.components.providers.services.provider_config import load_provider_config
+from audiagentic.components.providers.providers_api import get_provider_prompt_settings_profile
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import validate_with_schema
+from audiagentic.foundation.time import now_iso_z
 
 # Fallback used before a project root is available; overridden per-call from config.
 ALLOWED_TAGS = load_canonical_tags({})
@@ -54,7 +54,7 @@ ALLOWED_DIRECTIVES = {
 
 
 def _now_timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return now_iso_z()
 
 
 def generate_prompt_id(*, now_fn=None) -> str:
@@ -221,13 +221,10 @@ def parse_prompt_launch_request(
     syntax_profile_name = None
     if project_root is not None:
         try:
-            provider_config = load_provider_config(project_root).get("providers", {})
-            provider_cfg = provider_config.get(resolved_provider, {})
-            prompt_surface = provider_cfg.get("prompt-surface")
-            if isinstance(prompt_surface, dict):
-                selected_profile = prompt_surface.get("settings-profile")
-                if isinstance(selected_profile, str) and selected_profile.strip():
-                    syntax_profile_name = selected_profile.strip()
+            syntax_profile_name = get_provider_prompt_settings_profile(
+                project_root,
+                resolved_provider,
+            )
         except AudiaGenticError:
             syntax_profile_name = None
 

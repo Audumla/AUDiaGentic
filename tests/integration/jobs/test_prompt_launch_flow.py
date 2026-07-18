@@ -153,13 +153,13 @@ def test_prompt_launch_defaults_model_and_job_subject_from_provider_shorthand(tm
 
 def test_prompt_review_creates_review_artifacts(tmp_path: Path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "prompt-review")
-    original_execute_provider = review_launch.execute_provider
+    original_execute_provider = review_launch.execute_provider_review_turn
     try:
         _write_project_and_provider_config(sandbox)
         captured: dict[str, object] = {}
 
-        def fake_execute_provider(*, provider_id, packet_ctx, provider_cfg):  # type: ignore[no-untyped-def]
-            captured["packet_ctx"] = packet_ctx
+        def fake_execute_provider(project_root, *, provider_id, packet_data):  # type: ignore[no-untyped-def]
+            captured["packet_ctx"] = packet_data
             return {
                 "provider-id": provider_id,
                 "status": "ok",
@@ -180,7 +180,7 @@ def test_prompt_review_creates_review_artifacts(tmp_path: Path) -> None:
                 ),
             }
 
-        review_launch.execute_provider = fake_execute_provider  # type: ignore[assignment]
+        review_launch.execute_provider_review_turn = fake_execute_provider  # type: ignore[assignment]
         request = parse_prompt_launch_request(
             "@r-cline id=job_001 ctx=documentation t=review-default\n",
             surface="cli",
@@ -205,5 +205,5 @@ def test_prompt_review_creates_review_artifacts(tmp_path: Path) -> None:
         assert packet_ctx["stream-controls"]["enabled"] is True
         assert packet_ctx["input-controls"]["capture-stdin"] is True
     finally:
-        review_launch.execute_provider = original_execute_provider  # type: ignore[assignment]
+        review_launch.execute_provider_review_turn = original_execute_provider  # type: ignore[assignment]
         sandbox.cleanup()

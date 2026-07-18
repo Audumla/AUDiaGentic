@@ -9,17 +9,17 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agent_jobs import control as job_control
+from audiagentic.components.agent_jobs import jobs_store as store
 from audiagentic.components.agent_jobs.profiles import load_profile
 from audiagentic.components.agent_jobs.records import build_job_record
 from audiagentic.components.agent_jobs.stages import execute_stage
 from audiagentic.components.agent_jobs.state_machine import transition_and_persist
-from audiagentic.components.providers.descriptors.registry import canonical_provider_ids
+from audiagentic.components.providers.providers_api import list_canonical_provider_ids
 from audiagentic.foundation.contracts.canonical_ids import validate_ids
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
-from audiagentic.components.agent_jobs import jobs_store as store
 
 StageExecutor = Callable[
     [dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any] | None],
@@ -81,7 +81,7 @@ def _apply_pending_control(project_root: Path, job_id: str) -> dict[str, Any] | 
 
 
 def _validate_provider_id(provider_id: str) -> None:
-    issues = validate_ids([provider_id], canonical_provider_ids())
+    issues = validate_ids([provider_id], list_canonical_provider_ids())
     if issues:
         raise AudiaGenticError(
             code="VAL-RUN-001",

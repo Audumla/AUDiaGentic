@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.providers.providers_api import load_packaged_prompt_template
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.path_safety import ensure_contained
 from audiagentic.foundation.templates import render_template as _render_dotted
@@ -48,31 +49,7 @@ def load_prompt_template(project_root: Path, *, tag: str, provider_id: str, temp
 
 
 def _load_packaged_prompt_template(*, tag: str, template_name: str | None) -> tuple[str, Path | None] | None:
-    from audiagentic.components.providers.tags.registry import (
-        all_tags,  # noqa: PLC0415
-    )
-
-    descriptor = all_tags().get(tag)
-    if descriptor is None and tag.startswith("ag-"):
-        descriptor = all_tags().get(tag.removeprefix("ag-"))
-    if descriptor is None:
-        return None
-
-    requested = template_name or "default"
-    for prompt in descriptor.prompts:
-        if prompt.name != requested:
-            continue
-        source = descriptor.config_dir / prompt.content_file
-        if source.exists():
-            return source.read_text(encoding="utf-8"), source
-        bodies = [
-            instruction.body.strip()
-            for instruction in descriptor.instructions
-            if instruction.body.strip()
-        ]
-        content = "\n\n".join(bodies) or descriptor.description or f"{descriptor.display_name} prompt"
-        return content.rstrip() + "\n", None
-    return None
+    return load_packaged_prompt_template(tag, template_name=template_name)
 
 
 def load_prompt_from_file(

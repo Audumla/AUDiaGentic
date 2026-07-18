@@ -400,6 +400,12 @@ def load_session_data(
                         record = _loads_json(line)
                         if isinstance(record, dict):
                             records.append(record)
+            except PermissionError:
+                # Permission is an operator-actionable store failure, unlike a
+                # malformed individual record. Let the outer contract map it
+                # to IO-CTX-002 rather than silently presenting an empty
+                # session as valid.
+                raise
             except Exception:  # noqa: BLE001
                 continue
     except PermissionError as exc:
@@ -432,10 +438,10 @@ def load_session_data(
 # ---------------------------------------------------------------------------
 
 def _now_iso() -> str:
-    from datetime import datetime, timezone
-    return datetime.now(timezone.utc).isoformat()
+    return now_iso_z()
 
 
 def _loads_json(text: str) -> Any:
     import json as _json
     return _json.loads(text)
+from audiagentic.foundation.time import now_iso_z
