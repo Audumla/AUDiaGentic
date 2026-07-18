@@ -7,6 +7,8 @@ terminal VAL-AGW-060, and the one-shot path is untouched for plain records.
 """
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from tests.unit.agents.test_agents_gateway_sessions import FakeTransport, _Clock
 
@@ -39,20 +41,22 @@ def rig(tmp_path, monkeypatch):
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
 
     import audiagentic.components.agents.agents_api as agents_api
-    import audiagentic.components.providers.services.execution as execution
-    import audiagentic.components.providers.services.models as models
-    import audiagentic.components.providers.services.provider_config as provider_config
+    from audiagentic.components.providers.providers_api import ProviderAcpLaunchResult
 
     monkeypatch.setattr(agents_api, "resolve_profile", lambda root, pid: dict(PROFILE))
-    monkeypatch.setattr(provider_config, "is_provider_enabled", lambda root, pid: True)
-    monkeypatch.setattr(provider_config, "load_provider_config", lambda root: {"providers": {"opencode": {}}})
     monkeypatch.setattr(
-        models, "resolve_model_selection",
-        lambda **kwargs: {"model-id": "m1"},
+        "audiagentic.components.providers.providers_api.prepare_provider_acp_launch",
+        lambda root, **kwargs: ProviderAcpLaunchResult(
+            provider_id=kwargs["provider_id"], model_id="m1", launch=AcpLaunch("agent")
+        ),
     )
     monkeypatch.setattr(
-        execution, "load_acp_launch_builder",
-        lambda provider_id: (lambda root, model_id=None: AcpLaunch("agent")),
+        "audiagentic.components.providers.providers_api.get_provider_runtime_config_state",
+        lambda root, provider_id: {
+            "provider-id": provider_id,
+            "enabled": True,
+            "config": {},
+        },
     )
     yield runtime, transports, tmp_path
     runtime.shutdown()
@@ -61,31 +65,52 @@ def rig(tmp_path, monkeypatch):
 def _running_record(tmp_path, **kwargs):
     record = store.build_record(agent_profile_id="profile-1", prompt_body="hello", **kwargs)
     store.write_record(tmp_path, record)
-    return store.transition_record(tmp_path, record["request-id"], "running")
+    claimed = store.claim_dispatch(
+        tmp_path, record["request-id"], owner_epoch="service-test", expected_revision=0
+    )
+    return store.start_owned_attempt(
+        tmp_path, record["request-id"], owner_epoch="service-test", worker_id="worker_test",
+        expected_revision=claimed["revision"],
+    )
+
+
+def _dispatch(tmp_path, record, *, dispatch_prompt):
+    return dispatch.dispatch_request(
+        tmp_path,
+        record,
+        dispatch_prompt=dispatch_prompt,
+        manifest_id="mf_test",
+        context_fingerprint="0" * 64,
+        component_profile="",
+        provider_isolation_tier="full-isolation",
+        worker_timeout_seconds=10,
+    )
 
 
 def test_keep_alive_opens_session_and_completes(rig):
     runtime, transports, tmp_path = rig
     record = _running_record(tmp_path, session_keep_alive=True)
-    result = dispatch.dispatch_request(tmp_path, record)
+    result = _dispatch(tmp_path, record, dispatch_prompt="do the thing")
     assert result["state"] == "completed"
     assert result["session-id"] is not None
     assert result["provider-id"] == "opencode"
     assert result["completion"]["provider-session-ref"] == "prov-ses-1"
     assert len(transports) == 1
-    assert transports[0].turns == ["hello"]
+    # SH02 keeps prompt bodies out of persisted records; dispatch receives the
+    # raw prompt through its in-memory argument instead.
+    assert transports[0].turns == ["do the thing"]
     assert not transports[0].closed  # keep-alive: session survives the request
 
 
 def test_session_id_continues_same_live_transport(rig):
     runtime, transports, tmp_path = rig
-    first = dispatch.dispatch_request(
-        tmp_path, _running_record(tmp_path, session_keep_alive=True)
+    first = _dispatch(
+        tmp_path, _running_record(tmp_path, session_keep_alive=True), dispatch_prompt="hello"
     )
     session_id = first["session-id"]
 
-    second = dispatch.dispatch_request(
-        tmp_path, _running_record(tmp_path, session_id=session_id)
+    second = _dispatch(
+        tmp_path, _running_record(tmp_path, session_id=session_id), dispatch_prompt="hello"
     )
     assert second["state"] == "completed"
     assert second["session-id"] == session_id
@@ -95,21 +120,38 @@ def test_session_id_continues_same_live_transport(rig):
 
 def test_unsupported_provider_terminal(rig, monkeypatch):
     runtime, transports, tmp_path = rig
-    import audiagentic.components.providers.services.execution as execution
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
 
-    monkeypatch.setattr(execution, "load_acp_launch_builder", lambda provider_id: None)
-    result = dispatch.dispatch_request(
-        tmp_path, _running_record(tmp_path, session_keep_alive=True)
+    monkeypatch.setattr(
+        "audiagentic.components.providers.providers_api.prepare_provider_acp_launch",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AudiaGenticError(
+                code="UNS-PEXE-002",
+                kind="providers",
+                message="provider does not support ACP live sessions",
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.providers.providers_api.get_provider_runtime_config_state",
+        lambda _root, provider_id: {"provider-id": provider_id, "enabled": True, "config": {}},
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.providers.providers_api.get_provider_runtime_config_state",
+        lambda root, provider_id: {"provider-id": provider_id, "enabled": True, "config": {}},
+    )
+    result = _dispatch(
+        tmp_path, _running_record(tmp_path, session_keep_alive=True), dispatch_prompt="hello"
     )
     assert result["state"] == "failed"
-    assert result["error"]["code"] == "UNS-AGW-001"
+    assert result["error"]["code"] == "UNS-PEXE-002"
     assert transports == []
 
 
 def test_profile_mismatch_terminal(rig, monkeypatch):
     runtime, transports, tmp_path = rig
-    first = dispatch.dispatch_request(
-        tmp_path, _running_record(tmp_path, session_keep_alive=True)
+    first = _dispatch(
+        tmp_path, _running_record(tmp_path, session_keep_alive=True), dispatch_prompt="hello"
     )
     session_id = first["session-id"]
 
@@ -121,8 +163,14 @@ def test_profile_mismatch_terminal(rig, monkeypatch):
         agent_profile_id="profile-2", prompt_body="hi", session_id=session_id
     )
     store.write_record(tmp_path, record)
-    running = store.transition_record(tmp_path, record["request-id"], "running")
-    result = dispatch.dispatch_request(tmp_path, running)
+    claimed = store.claim_dispatch(
+        tmp_path, record["request-id"], owner_epoch="service-test", expected_revision=0
+    )
+    running = store.start_owned_attempt(
+        tmp_path, record["request-id"], owner_epoch="service-test", worker_id="worker_test_mismatch",
+        expected_revision=claimed["revision"],
+    )
+    result = _dispatch(tmp_path, running, dispatch_prompt="hi")
     assert result["state"] == "failed"
     assert result["error"]["code"] == "VAL-AGW-060"
     assert transports[0].turns == ["hello"]  # mismatch never reached the agent
@@ -130,8 +178,8 @@ def test_profile_mismatch_terminal(rig, monkeypatch):
 
 def test_unknown_session_terminal(rig):
     runtime, transports, tmp_path = rig
-    result = dispatch.dispatch_request(
-        tmp_path, _running_record(tmp_path, session_id="ses_nope")
+    result = _dispatch(
+        tmp_path, _running_record(tmp_path, session_id="ses_nope"), dispatch_prompt="hi"
     )
     assert result["state"] == "failed"
     assert result["error"]["code"] == "RES-AGW-002"
@@ -160,12 +208,14 @@ def test_plain_record_does_not_touch_session_path(rig, monkeypatch):
 
     monkeypatch.setattr(sessions_module, "get_session_runtime", boom)
 
-    import audiagentic.components.providers.services.execution as execution
-
     monkeypatch.setattr(
-        execution, "execute_provider",
-        lambda **kwargs: {"provider-id": "opencode", "model": "m1", "output": "ok"},
+        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+        lambda **kwargs: SimpleNamespace(
+            result_data={"provider-id": "opencode", "model": "m1", "output": "ok"}
+        ),
     )
-    result = dispatch.dispatch_request(tmp_path, _running_record(tmp_path))
-    assert result["state"] == "completed"
+    result = _dispatch(
+        tmp_path, _running_record(tmp_path), dispatch_prompt="do the thing"
+    )
+    assert result["state"] == "completed", result
     assert transports == []

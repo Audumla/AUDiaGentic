@@ -25,7 +25,7 @@ def test_agent_llm_submit_delegates():
     assert result["state"] == "queued"
     mock.assert_called_once_with(
         _ROOT, agent_profile_id="p", prompt_body="hi", mode="async",
-        timeout_seconds=None, fallback_profile_ids=None, source=None, metadata=None,
+        timeout_seconds=None, source=None, metadata=None,
         session_id=None, session_keep_alive=False, session_idle_timeout_seconds=None,
         session_max_lifetime_seconds=None,
     )
@@ -73,8 +73,8 @@ def test_agent_llm_run_delegates():
     # supervisor can wait out a long task (RV511).
     mock.assert_called_once_with(
         _ROOT, agent_profile_id="p", prompt_body="hi",
-        timeout_seconds=agents_gateway_mcp.gateway.MCP_BLOCKING_TIMEOUT_SECONDS,
-        fallback_profile_ids=None, source=None, metadata=None,
+        timeout_seconds=agents_gateway_mcp.MCP_BLOCKING_TIMEOUT_SECONDS,
+        source=None, metadata=None,
         session_id=None, session_keep_alive=False, session_idle_timeout_seconds=None,
         session_max_lifetime_seconds=None,
     )
@@ -82,11 +82,9 @@ def test_agent_llm_run_delegates():
 
 def test_mcp_caps_a_long_requested_wait_but_core_api_does_not():
     """The 300s limit is an MCP transport constraint, not an execution limit."""
-    from audiagentic.components.agents import agents_gateway_api as gateway
-
     # MCP boundary: a caller asking for an hour is capped to the transport limit.
-    assert agents_gateway_mcp._mcp_capped(3600.0) == gateway.MCP_BLOCKING_TIMEOUT_SECONDS
-    assert agents_gateway_mcp._mcp_capped(None) == gateway.MCP_BLOCKING_TIMEOUT_SECONDS
+    assert agents_gateway_mcp._mcp_capped(3600.0) == agents_gateway_mcp.MCP_BLOCKING_TIMEOUT_SECONDS
+    assert agents_gateway_mcp._mcp_capped(None) == agents_gateway_mcp.MCP_BLOCKING_TIMEOUT_SECONDS
     # ...but a short request is honoured as-is.
     assert agents_gateway_mcp._mcp_capped(30.0) == 30.0
 
