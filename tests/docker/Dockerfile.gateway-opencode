@@ -1,0 +1,15 @@
+FROM audia-test-base:latest
+
+WORKDIR /app
+ENV AUDIAGENTIC_DOCKER_TESTS=1
+ENV AUDIAGENTIC_GATEWAY_OPENCODE_DOCKER=1
+ENV PYTHONPATH="/app/src"
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+
+# Build:
+#   docker build -f tests/docker/Dockerfile.gateway-opencode -t audiagentic-gateway-opencode:local .
+# Run:
+#   docker run --rm audiagentic-gateway-opencode:local
+COPY . /app
+
+CMD ["bash", "-c", "uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp,test]' && /venv/bin/pytest tests/integration/agents/test_gateway_opencode_docker.py -q --tb=short --timeout=180"]
