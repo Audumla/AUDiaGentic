@@ -417,7 +417,6 @@ class EventObserver:
                 "project-root": str(root),
                 "prompt-body": prompt_body,
                 "agent-profile-id": trigger_config.agent_profile_id,
-                "fallback-profile-ids": None,
                 "source": f"event-trigger:{trigger_config.trigger_id}",
             },
             metadata=gateway_metadata,

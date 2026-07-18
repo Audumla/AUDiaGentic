@@ -2,9 +2,6 @@
 from __future__ import annotations
 
 import json
-import os  # noqa: F401
-import stat  # noqa: F401
-import sys  # noqa: F401
 from pathlib import Path
 
 import pytest
@@ -439,7 +436,7 @@ class TestLoadSessionData:
         assert "job_001" in result["jobs"]
         assert "job_002" in result["jobs"]
 
-    def test_permission_error_raises_IO_CTX_002(self, tmp_path: Path) -> None:
+    def test_permission_error_raises_IO_CTX_002(self, tmp_path: Path, monkeypatch) -> None:
         jobs_root = tmp_path / ".audiagentic" / "runtime" / "jobs"
         jobs_root.mkdir(parents=True)
         input_file = jobs_root / "job_001"
@@ -447,15 +444,19 @@ class TestLoadSessionData:
         ndjson = input_file / "input.ndjson"
         ndjson.write_text('{"test": 1}', encoding="utf-8")
 
-        # Revoke read permission on Linux; skip on Windows.
-        if sys.platform != "win32":
-            os.chmod(str(ndjson), 0)
-            try:
-                with pytest.raises(AudiaGenticError) as exc_info:
-                    load_session_data(str(tmp_path), "sess-x")
-                assert exc_info.value.code == "IO-CTX-002"
-            finally:
-                os.chmod(str(ndjson), stat.S_IRUSR | stat.S_IWUSR)
+        original_read_text = Path.read_text
+
+        def denied_read_text(path: Path, *args, **kwargs):
+            if path == ndjson:
+                raise PermissionError("test permission denial")
+            return original_read_text(path, *args, **kwargs)
+
+        # A deterministic boundary simulation works under Docker's root user
+        # as well as normal host users; chmod cannot guarantee denial for root.
+        monkeypatch.setattr(Path, "read_text", denied_read_text)
+        with pytest.raises(AudiaGenticError) as exc_info:
+            load_session_data(str(tmp_path), "sess-x")
+        assert exc_info.value.code == "IO-CTX-002"
 
 
 class TestTemplateDictDottedPathAccess:
