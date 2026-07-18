@@ -126,6 +126,7 @@ VAL-PCAP-010: "Provider capability automation validation error. Check the automa
 IO-DESC-001: "Failed to read provider descriptor file. Check the path and file format."
 VAL-DESC-003: "Required field missing from provider descriptor YAML. Check the descriptor schema."
 CON-SRF-001: "Surface content contains secret-shaped value; write rejected"
+CON-PROV-096: "The resolved provider session surface does not support the requested binding operation. Use a surface with validated support or open a new session explicitly."
 # Test-only error codes for dispatch/queue unit tests
 EXT-FAKE-001: "Test external failure used in agent dispatch and queue tests"
 NET-FAKE-001: "Test network failure used in agent dispatch retry tests"
