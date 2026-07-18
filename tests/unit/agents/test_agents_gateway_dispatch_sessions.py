@@ -94,7 +94,8 @@ def test_keep_alive_opens_session_and_completes(rig):
     assert result["state"] == "completed"
     assert result["session-id"] is not None
     assert result["provider-id"] == "opencode"
-    assert result["completion"]["provider-session-ref"] == "prov-ses-1"
+    assert result["completion"]["binding"]["provider-ref-key-prefix"]
+    assert "provider-session-ref" not in repr(result["completion"])
     assert len(transports) == 1
     # SH02 keeps prompt bodies out of persisted records; dispatch receives the
     # raw prompt through its in-memory argument instead.

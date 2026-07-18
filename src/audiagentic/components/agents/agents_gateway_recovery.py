@@ -73,6 +73,7 @@ def recover_gateway_requests(service_root: Path, *, live_owner_epoch: str) -> Re
 
         if record["state"] == "queued":
             store.release_stale_claim(project_root, request_id, stale_epoch=record_epoch)
+            store.clear_active_work(service_root, request_id)
             requeued += 1
         elif record["state"] == "running":
             store.transition_recovered_terminal(
@@ -86,6 +87,7 @@ def recover_gateway_requests(service_root: Path, *, live_owner_epoch: str) -> Re
                 },
                 stale_epoch=record_epoch,
             )
+            store.clear_active_work(service_root, request_id)
             interrupted += 1
 
     return RecoveryReport(
