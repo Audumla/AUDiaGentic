@@ -55,3 +55,4 @@ opencode.json
 /docker-build-test*.log
 /.opencode/node_modules/
 /.pi/npm/node_modules/
+%SystemDrive%/
