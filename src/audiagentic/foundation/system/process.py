@@ -12,10 +12,34 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+
+_thread_lock_guard = threading.Lock()
+_thread_locks: dict[str, tuple[threading.Lock, int]] = {}
+
+
+def _claim_thread_lock(path: Path) -> threading.Lock:
+    """Return a ref-counted in-process lock for one filesystem lock path."""
+    key = os.path.normcase(os.path.abspath(path))
+    with _thread_lock_guard:
+        lock, users = _thread_locks.get(key, (threading.Lock(), 0))
+        _thread_locks[key] = (lock, users + 1)
+    return lock
+
+
+def _release_thread_lock(path: Path, lock: threading.Lock) -> None:
+    key = os.path.normcase(os.path.abspath(path))
+    lock.release()
+    with _thread_lock_guard:
+        current, users = _thread_locks[key]
+        if users == 1:
+            del _thread_locks[key]
+        else:
+            _thread_locks[key] = (current, users - 1)
 
 
 def _process_error(prefix: str, code_number: int, message: str, **details: object) -> AudiaGenticError:
@@ -82,11 +106,49 @@ def executable_command(binary: Path) -> list[str]:
 
 def pid_alive(pid: int) -> bool:
     """Return True if *pid* names a live process, False if dead or unknown."""
+    if os.name == "nt":
+        return _windows_pid_alive(pid)
     try:
         os.kill(pid, 0)
-        return True
     except OSError:
         return False
+    if os.name != "nt":
+        try:
+            state = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8").split()[2]
+        except (OSError, IndexError):
+            return True
+        if state in {"Z", "X"}:
+            return False
+    return True
+
+
+def _windows_pid_alive(pid: int) -> bool:
+    """Query process exit state instead of treating a retained handle as live."""
+    import ctypes
+    from ctypes import wintypes
+
+    process_query_limited_information = 0x1000
+    still_active = 259
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+    if not handle:
+        # ERROR_ACCESS_DENIED means the process exists but is not openable
+        # (other user / elevated). Treating it as dead lets stale-lock
+        # breakers steal locks from live holders (RV681) — stay conservative.
+        error_access_denied = 5
+        return ctypes.get_last_error() == error_access_denied
+    exit_code = wintypes.DWORD()
+    try:
+        return bool(kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code))) and (
+            exit_code.value == still_active
+        )
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 class StartupLock:
@@ -107,31 +169,59 @@ class StartupLock:
         self._path = lock_path
         self._timeout = timeout
         self._fd: int | None = None
+        self._thread_lock: threading.Lock | None = None
 
     def __enter__(self) -> StartupLock:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         deadline = time.monotonic() + self._timeout
-        while time.monotonic() < deadline:
-            try:
-                self._fd = os.open(str(self._path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                os.write(self._fd, str(os.getpid()).encode())
-                return self
-            except FileExistsError:
+        self._thread_lock = _claim_thread_lock(self._path)
+        if not self._thread_lock.acquire(timeout=max(0.0, deadline - time.monotonic())):
+            _release_thread_lock(self._path, self._thread_lock)
+            self._thread_lock = None
+            raise self._timeout_error()
+        try:
+            while time.monotonic() < deadline:
                 try:
-                    holder = int(self._path.read_text(encoding="utf-8"))
-                    if pid_alive(holder):
-                        time.sleep(0.1)
-                        continue
-                    self._path.unlink(missing_ok=True)
-                except (ValueError, OSError):
-                    self._path.unlink(missing_ok=True)
-        raise _process_error(
+                    self._fd = os.open(str(self._path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                    os.write(self._fd, str(os.getpid()).encode())
+                    return self
+                except FileExistsError:
+                    try:
+                        holder = int(self._path.read_text(encoding="utf-8"))
+                        if pid_alive(holder):
+                            time.sleep(0.1)
+                            continue
+                        self._unlink()
+                    except (ValueError, OSError):
+                        self._unlink()
+        except BaseException:
+            _release_thread_lock(self._path, self._thread_lock)
+            self._thread_lock = None
+            raise
+        _release_thread_lock(self._path, self._thread_lock)
+        self._thread_lock = None
+        raise self._timeout_error()
+
+    def _timeout_error(self) -> AudiaGenticError:
+        return _process_error(
             "TO",
             2,
             f"Timed out waiting for startup lock: {self._path}",
             path=str(self._path),
             timeout=self._timeout,
         )
+
+    def _unlink(self) -> None:
+        """Remove the lock, tolerating short-lived Windows reader handles."""
+        deadline = time.monotonic() + min(1.0, self._timeout)
+        while True:
+            try:
+                self._path.unlink(missing_ok=True)
+                return
+            except PermissionError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.01)
 
     def __exit__(self, *_: object) -> None:
         if self._fd is not None:
@@ -140,7 +230,10 @@ class StartupLock:
             except OSError:
                 pass
             self._fd = None
-        self._path.unlink(missing_ok=True)
+        self._unlink()
+        if self._thread_lock is not None:
+            _release_thread_lock(self._path, self._thread_lock)
+            self._thread_lock = None
 
 
 def find_pid_on_port(port: int) -> int | None:
