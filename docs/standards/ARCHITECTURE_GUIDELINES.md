@@ -30,6 +30,11 @@ wiring instead.
 - Component configuration defines `instructions` and `tool-descriptions`.
   A tool description can be a string or an object with `description` and
   `parameters`; component-owned extension keys may pass through unchanged.
+- Keep tools as protocol translation only. Resolve project/caller context and
+  apply transport-only timeout, progress, and logging behavior here, then call
+  the owning framework-neutral public API. Validation, persistence,
+  orchestration, retries, and lifecycle belong behind that API so CLI, events,
+  services, and tests reuse the same behavior.
 
 ## 3. Error, Logging, and Redaction Practice
 

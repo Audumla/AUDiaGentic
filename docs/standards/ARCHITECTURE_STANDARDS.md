@@ -68,6 +68,23 @@ shared lower-layer seams, not general component-to-component exceptions.
   behaviour must preserve user-owned content, be atomic where feasible, support
   status/dry-run behaviour where applicable, and be testable.
 
+### Evidence-led scope
+
+- Build only the capability, contract, schema fields, and policy required by a
+  current, evidenced use case or an approved owning plan item. Do not add
+  speculative fields, modes, abstractions, compatibility paths, or generic
+  machinery for requirements that do not yet exist.
+- Design seams so a later owning item can extend them deliberately, normally by
+  an additive versioned contract change. A possible future extension is not by
+  itself a reason to implement it now.
+- A proposed shared abstraction needs the same owner, lifecycle, validation,
+  and semantics across at least two independent consumers. Similar field names
+  or anticipated reuse are insufficient.
+- Plan items must state the present trigger and keep deferred variants outside
+  their delivery scope. When an implementation reveals a new requirement,
+  create or revise its owning future item rather than silently broadening the
+  current one.
+
 ## 4. Public Contracts and Safety
 
 - Backward compatibility is not maintained by default. A migration updates all
@@ -110,6 +127,20 @@ shared lower-layer seams, not general component-to-component exceptions.
   references in the same change. Validation scope matches the change; do not
   call a subset the full suite.
 - Exceptions require an explicit, documented rationale and bounded scope.
+
+## 8. Protocol Adapter Boundaries
+
+- MCP, CLI, event, and service-transport modules are inbound protocol adapters.
+  They may translate parameters and authenticated caller context, apply
+  transport-only timeouts/progress/logging, call an owning public client or
+  application API, and serialize results and errors.
+- Protocol adapters do not own domain validation, persistence, state
+  transitions, dispatch, retries, provider selection, discovery, process or
+  worker lifecycle, or resource arbitration.
+- Dependencies point from adapters to framework-neutral public APIs. Core and
+  API modules must not import MCP/FastMCP or own MCP-specific constants.
+- An adapter must not import its component's store, queue, dispatch, service,
+  provider adapter, or other implementation-internal module.
 
 ## Related guidance
 

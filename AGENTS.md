@@ -1,3 +1,17 @@
+<!-- MANAGED_BY_AUDIAGENTIC: do not edit directly. -->
+
+# Project instructions
+
+This repository uses AUDiaGentic workflow jobs.
+
+## Prompt tag doctrine
+
+- Parse only the first non-empty line for the workflow tag.
+- Keep tag semantics identical to the shared AUDiaGentic launch contract.
+- Do not invent provider-specific alternate tags.
+- Preserve raw prompt text in provenance metadata.
+- Keep provenance visible: provider id, surface, and session id should survive normalization.
+
 <!-- ag:managed:begin -->
 _Managed by AUDiaGentic — generated from component configs. Edit the owning component and re-run surface apply; edits here are overwritten._
 
@@ -10,6 +24,10 @@ status ('unreleased'). Other fields are auto-generated.
 - Check release ledger state before changing release notes, changelog fragments, or release workflow files.
 - Keep release artifacts and job records synchronized with implementation and review outcomes.
 - Do not bypass ledger updates by editing generated release outputs only.
+
+When recording a change event for work associated with one or more plan items,
+include "plan-item-ids" in the event dict (e.g. {"plan-item-ids": ["CC07", "CC08"]}).
+The planning component will automatically link the ledger event ID to those items.
 
 ## Planning process
 
@@ -74,13 +92,6 @@ Use Hindsight memory when prior project context may help.
 - Retain durable decisions, user preferences, architecture constraints, and outcomes.
 - Do not retain secrets, credentials, or transient noise.
 
-## Release doctrine
-
-Use the configured release manager for versioning and publication.
-Do not edit generated release artifacts (CHANGELOG.md, RELEASE_NOTES.md) directly.
-Run finalize_release only after ledger audit review is complete.
-The ledger is archived as part of finalization — this cannot be undone.
-
 ## Component profile doctrine
 
 Component profiles select an alternative set of component configurations for a
@@ -135,8 +146,4 @@ requesting a different profile later in the same process raises
 VAL-COMP-010. To switch profiles, stop the current session and restart
 with a different `--component-profile` value or updated environment
 variable.
-
-## Source control doctrine
-
-Do not invoke git or GitHub APIs directly — use the MCP tools.
 <!-- ag:managed:end -->

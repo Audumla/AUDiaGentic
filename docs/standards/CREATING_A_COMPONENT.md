@@ -36,6 +36,10 @@ src/audiagentic/
     README.md                 # intent + capabilities
 ```
 
+The MCP module may translate transport parameters/context and serialize the
+public result. It must not import component stores, queues, dispatchers,
+adapters, or service internals; those remain behind the framework-neutral API.
+
 Descriptor under `config/components/` is **data**; package under `components/` is **code**. YAML names dotted module paths; the runtime imports them lazily.
 
 ### Error text ownership
