@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from audiagentic.components.agent_jobs.event_overview import event_jobs_overview
+from audiagentic.components.agent_jobs import jobs_api
 from audiagentic.foundation.mcp.component_server import (
     log_tool_call,
     mcp_server,
@@ -25,7 +25,7 @@ def event_jobs_overview_tool() -> dict[str, Any]:
     """Operator-facing summary of event-driven jobs: per-trigger fired/
     suppressed/failed counts, event-origin job counts by state, and the 5
     most recent trigger failures (redacted). Read-only."""
-    return event_jobs_overview(project_root_from_env())
+    return jobs_api.event_jobs_overview(project_root_from_env())
 
 
 def main() -> None:

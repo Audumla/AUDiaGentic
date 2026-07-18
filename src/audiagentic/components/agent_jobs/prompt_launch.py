@@ -23,10 +23,11 @@ from audiagentic.components.agent_jobs.prompt_templates import (
 )
 from audiagentic.components.agent_jobs.records import build_job_record
 from audiagentic.components.agent_jobs.state_machine import TERMINAL_STATES
-from audiagentic.components.providers.services.models import resolve_model_selection
-from audiagentic.components.providers.services.provider_config import (
-    is_provider_enabled,
-    load_provider_config,
+from audiagentic.components.providers.providers_api import (
+    is_provider_enabled_for_launch as is_provider_enabled,
+)
+from audiagentic.components.providers.providers_api import (
+    resolve_launch_model,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_json, load_yaml_file
@@ -230,16 +231,12 @@ def _build_job_from_request(
     job_id = _resolve_job_id(project_root, request, now_fn=now_fn)
     timestamp = (now_fn or now_iso_z)()
     target = request["target"]
-    provider_config = load_provider_config(project_root).get("providers", {})
     provider_id, resolved_model, resolved_alias = _resolve_agent_provider_model(project_root, request)
-    selection = resolve_model_selection(
+    selection = resolve_launch_model(
+        project_root,
         provider_id=provider_id,
-        provider_config=provider_config.get(provider_id, {}),
-        job_request={
-            "model-id": resolved_model or request["source"].get("model-id"),
-            "model-alias": resolved_alias or request["source"].get("model-alias"),
-        },
-        catalog=None,
+        model_id=resolved_model or request["source"].get("model-id"),
+        model_alias=resolved_alias or request["source"].get("model-alias"),
     )
     packet_id = (
         target.get("packet-id")
@@ -302,18 +299,14 @@ def _resume_job_from_request(project_root: Path, request: dict[str, Any], *, now
             message="cannot resume a terminal job",
             details={"job-id": job_id, "state": job["state"]},
         )
-    provider_config = load_provider_config(project_root).get("providers", {})
     provider_id, resolved_model, resolved_alias = _resolve_agent_provider_model(project_root, request)
     if not provider_id:
         provider_id = job["provider-id"]
-    selection = resolve_model_selection(
+    selection = resolve_launch_model(
+        project_root,
         provider_id=provider_id,
-        provider_config=provider_config.get(provider_id, {}),
-        job_request={
-            "model-id": resolved_model or request["source"].get("model-id") or job.get("model-id"),
-            "model-alias": resolved_alias or request["source"].get("model-alias") or job.get("model-alias"),
-        },
-        catalog=None,
+        model_id=resolved_model or request["source"].get("model-id") or job.get("model-id"),
+        model_alias=resolved_alias or request["source"].get("model-alias") or job.get("model-alias"),
     )
     job["updated-at"] = (now_fn or now_iso_z)()
     request = _render_launch_prompt(
@@ -443,7 +436,6 @@ def build_job_from_event(
     }
 
     # Resolve provider/model selection
-    provider_config = load_provider_config(project_root).get("providers", {})
     project_cfg = load_project_config(project_root)
     provider_id, resolved_model, resolved_alias = _resolve_agent_provider_model(
         project_root,
@@ -452,14 +444,11 @@ def build_job_from_event(
             "source": {},
         },
     )
-    selection = resolve_model_selection(
+    selection = resolve_launch_model(
+        project_root,
         provider_id=provider_id,
-        provider_config=provider_config.get(provider_id, {}),
-        job_request={
-            "model-id": resolved_model,
-            "model-alias": resolved_alias,
-        },
-        catalog=None,
+        model_id=resolved_model,
+        model_alias=resolved_alias,
     )
 
     # Resolve workflow profile

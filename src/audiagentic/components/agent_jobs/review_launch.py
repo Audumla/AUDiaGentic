@@ -24,8 +24,7 @@ from audiagentic.components.agent_jobs.reviews import (
     reviewer_key_from_source,
     subject_from_target,
 )
-from audiagentic.components.providers.services.execution import execute_provider
-from audiagentic.components.providers.services.provider_config import load_provider_config
+from audiagentic.components.providers.providers_api import execute_provider_review_turn
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_json
 from audiagentic.foundation.time import now_iso_z
@@ -78,7 +77,6 @@ def _execute_and_parse_review(
     request: dict[str, Any],
     *,
     provider_id: str | None,
-    provider_cfg: dict[str, Any],
     job_id: str,
     subject: dict[str, Any],
     review_id: str,
@@ -92,12 +90,13 @@ def _execute_and_parse_review(
     Returns ``None`` if the provider is not eligible/available or its output
     cannot be parsed into a well-formed report.
     """
-    if not (provider_id and provider_cfg.get("access-mode") in {"cli", "external-configured", "none"}):
+    if not provider_id:
         return None
     try:
-        provider_result = execute_provider(
+        provider_result = execute_provider_review_turn(
+            project_root,
             provider_id=provider_id,
-            packet_ctx={
+            packet_data={
                 "provider-id": provider_id,
                 "job-id": job_id,
                 "packet-id": subject.get("job-id")
@@ -112,8 +111,9 @@ def _execute_and_parse_review(
                 "stream-controls": request.get("stream-controls", {}),
                 "input-controls": request.get("input-controls", {}),
             },
-            provider_cfg=provider_cfg,
         )
+        if provider_result is None:
+            return None
         output_text = str(provider_result.get("output") or "").strip()
         if not output_text:
             return None
@@ -220,8 +220,6 @@ def launch_review_request(project_root: Path, request: dict[str, Any], *, now_fn
         "reviewer-key": reviewer_key_from_source(request["source"]),
     }
     provider_id = request["source"].get("provider-id")
-    provider_config = load_provider_config(project_root).get("providers", {})
-    provider_cfg = provider_config.get(provider_id or "", {})
 
     rendered_prompt = _render_review_prompt(
         project_root, request, provider_id=provider_id, subject=subject
@@ -235,7 +233,6 @@ def launch_review_request(project_root: Path, request: dict[str, Any], *, now_fn
         project_root,
         request,
         provider_id=provider_id,
-        provider_cfg=provider_cfg,
         job_id=job_id,
         subject=subject,
         review_id=review_id,
