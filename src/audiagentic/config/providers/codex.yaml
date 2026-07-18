@@ -2,6 +2,7 @@
 # Toolchain-based install (npm), TOML MCP/LSP config, VS Code extension
 
 provider_id: codex
+execution_isolation_tier: full-isolation
 automation_capabilities:
 
   - family_id: cli-lifecycle

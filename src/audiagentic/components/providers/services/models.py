@@ -15,6 +15,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.providers.contracts.model_projection import (
+    ModelProjectionEntry,
+    ModelProjectionRequest,
+)
 from audiagentic.components.providers.services.provider_catalog import (
     catalog_is_stale,
     catalog_model_ids,
@@ -22,7 +26,6 @@ from audiagentic.components.providers.services.provider_catalog import (
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error_factory
 from audiagentic.foundation.toolchains.managed_config import (
     ManagedFragmentRegistry,
-    reload_managed_config,
     resolve_managed_config_path,
     sync_managed_config,
 )
@@ -46,6 +49,7 @@ class MaterializedModelEntry:
     visible_name: str
     connector: str
     managed_id: str
+    vendor_id: str | None = None
     endpoint: dict[str, Any] = field(default_factory=dict)  # base-url, connector-options
     capabilities: dict[str, Any] = field(default_factory=dict)
     limits: dict[str, Any] = field(default_factory=dict)  # context-window, max-output-tokens
@@ -91,6 +95,111 @@ def materialize_local_endpoint_sources(document: dict[str, Any]) -> list[Materia
             )
         )
     return entries
+
+
+def materialize_catalog_sources(
+    project_root: Path,
+    document: dict[str, Any],
+) -> list[MaterializedModelEntry]:
+    """Materialize cached/static catalog models without network access.
+
+    Discovery refresh is an explicit resource operation. Reconciliation only
+    consumes the last validated catalog and applies the source's model filter.
+    """
+    from audiagentic.components.providers.services.source_catalog import (
+        apply_model_filter,
+        get_source_catalog,
+    )
+
+    entries: list[MaterializedModelEntry] = []
+    for source_id, source in (document.get("sources") or {}).items():
+        if source.get("source-class") != "remote-account":
+            continue
+        if source.get("enabled", True) is False:
+            continue
+        catalog = get_source_catalog(project_root, source_id, source, refresh=False)
+        models = apply_model_filter(catalog.models, source.get("model-filter"))
+        for model in models:
+            model_id = str(model["model-id"])
+            limits: dict[str, Any] = {}
+            for key in ("context-window", "max-output-tokens"):
+                value = model.get(key, source.get(key))
+                if value:
+                    limits[key] = value
+            endpoint: dict[str, Any] = {}
+            for key in ("base-url", "connector-options", "provider-overrides"):
+                if source.get(key):
+                    value = source[key]
+                    endpoint[key] = dict(value) if isinstance(value, dict) else value
+            entries.append(
+                MaterializedModelEntry(
+                    source_id=source_id,
+                    model_id=model_id,
+                    visible_name=str(model.get("display-name") or model_id),
+                    connector=str(source["connector"]),
+                    managed_id=f"model-endpoints/{source_id}/{model_id}",
+                    vendor_id=source.get("vendor-id"),
+                    endpoint=endpoint,
+                    capabilities=dict(model.get("capabilities") or source.get("capabilities") or {}),
+                    limits=limits,
+                    auth_ref=source.get("api-key-ref"),
+                )
+            )
+    return entries
+
+
+def build_model_projection_request(
+    project_root: Path,
+    provider_id: str,
+    *,
+    enabled: bool,
+) -> ModelProjectionRequest:
+    """Build one full-reconcile request from desired state and owned ids.
+
+    The managed-id set is the union of current desired entries and previously
+    owned entries. That lets apply remove stale sources and lets prune remove
+    every owned entry without exposing the ownership registry to callers.
+    """
+    from audiagentic.components.providers.services.model_source_config import (
+        load_model_sources,
+    )
+
+    document = load_model_sources(project_root)
+    materialized = (
+        materialize_local_endpoint_sources(document)
+        + materialize_catalog_sources(project_root, document)
+        if enabled
+        else []
+    )
+    from audiagentic.components.providers.descriptors.registry import get_descriptor
+
+    descriptor = get_descriptor(provider_id)
+    materialized = [
+        entry for entry in materialized
+        if not (
+            entry.vendor_id
+            and descriptor is not None
+            and entry.vendor_id in descriptor.vendor_key_injection
+        )
+    ]
+    entries = tuple(
+        ModelProjectionEntry(
+            source_id=entry.source_id,
+            model_id=entry.model_id,
+            visible_name=entry.visible_name,
+            connector=entry.connector,
+            managed_id=entry.managed_id,
+            vendor_id=entry.vendor_id,
+            endpoint=dict(entry.endpoint),
+            capabilities=dict(entry.capabilities),
+            limits=dict(entry.limits),
+            auth_ref=entry.auth_ref,
+        )
+        for entry in materialized
+    )
+    owned = model_ownership_registry(project_root).load().get(provider_id, {})
+    managed_ids = tuple(sorted(set(owned) | {entry.managed_id for entry in entries}))
+    return ModelProjectionRequest(managed_ids=managed_ids, entries=entries)
 
 
 def _model_config_timeline_path(project_root: Path) -> Path:
@@ -246,40 +355,6 @@ def sync_managed_provider_models_subset(
     )
 
 
-def sync_all_provider_models(project_root: Path) -> dict[str, Any]:
-    """Sync managed model entries for every model-config-capable provider.
-
-    MO02 step 12 branch semantics: enabled providers receive the desired set
-    materialized from model-sources; disabled providers receive an empty set
-    so owned entries are pruned. Providers without model_config are skipped
-    inside the wrapper. Per-provider failures are reported, not raised — one
-    broken provider config must not abort the rest.
-    """
-    from audiagentic.components.providers.descriptors.registry import all_descriptors
-    from audiagentic.components.providers.services.feature_resolution import (
-        enabled_provider_ids,
-    )
-    from audiagentic.components.providers.services.model_source_config import (
-        load_model_sources,
-    )
-
-    entries = materialize_local_endpoint_sources(load_model_sources(project_root))
-    enabled = enabled_provider_ids(project_root)
-    results: dict[str, dict[str, Any]] = {}
-    ok = True
-    for provider_id, descriptor in sorted(all_descriptors().items()):
-        if descriptor.model_config is None:
-            continue
-        desired = entries if provider_id in enabled else []
-        try:
-            result = sync_managed_provider_models(provider_id, project_root, desired)
-        except AudiaGenticError as exc:
-            result = {"provider_id": provider_id, "ok": False, "error_code": exc.code}
-        results[provider_id] = result
-        ok = ok and bool(result.get("ok", True))
-    return {"ok": ok, "providers": results}
-
-
 def list_provider_models_config(provider_id: str, project_root: Path) -> dict[str, Any]:
     """Read the MANAGED model-config view for one provider.
 
@@ -318,16 +393,6 @@ def list_provider_models_config(provider_id: str, project_root: Path) -> dict[st
         "entries": sorted(current),
         "managed": dict(owned),
     }
-
-
-def reload_provider_models(provider_id: str, project_root: Path) -> dict[str, Any]:
-    """Refresh-mode-aware reload (or action-needed text) for model config."""
-    descriptor, spec = _model_spec(provider_id)
-    if spec is None:
-        return {"provider_id": provider_id, "ok": False, "error": "no model_config defined"}
-    result = reload_managed_config(spec, project_root, display_name=descriptor.display_name)
-    result["provider_id"] = provider_id
-    return result
 
 
 def resolve_model_selection(

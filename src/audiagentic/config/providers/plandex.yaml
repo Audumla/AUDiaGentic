@@ -2,12 +2,18 @@
 # Toolchain-based install (brew), no MCP config
 
 provider_id: plandex
+execution_isolation_tier: no-isolation
 automation_capabilities:
   - family_id: cli-lifecycle
     supported_modes: [plan, apply, prune, status]
     payload_contract: provider-cli-lifecycle-payload/v1
     result_contract: provider-cli-lifecycle-result/v1
     ownership_scope_required: false
+  - family_id: generated-surfaces
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-generated-surface-payload/v1
+    result_contract: provider-generated-surface-result/v1
+    ownership_scope_required: true
 display_name: "Plandex"
 description: "Open-source AI coding agent for large, complex tasks. Manages long-running plans across many files with version control and sandboxed changes."
 url: "https://plandex.ai"

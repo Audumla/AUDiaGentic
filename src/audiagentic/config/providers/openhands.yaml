@@ -2,6 +2,7 @@
 # Toolchain-based install (uv), custom probe, no MCP config
 
 provider_id: openhands
+execution_isolation_tier: no-isolation
 automation_capabilities:
   - family_id: cli-lifecycle
     supported_modes: [plan, apply, prune, status]
@@ -12,6 +13,11 @@ automation_capabilities:
     supported_modes: [apply, prune, status]
     payload_contract: provider-managed-mcp-payload/v1
     result_contract: provider-managed-mcp-result/v1
+    ownership_scope_required: true
+  - family_id: generated-surfaces
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-generated-surface-payload/v1
+    result_contract: provider-generated-surface-result/v1
     ownership_scope_required: true
 display_name: "OpenHands"
 description: "Open-source autonomous AI agent (formerly OpenDevin). Runs tasks in sandboxed Docker containers with full shell, browser, and file access."

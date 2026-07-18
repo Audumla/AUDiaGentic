@@ -19,6 +19,7 @@ from typing import Any
 from audiagentic.components.providers.contracts.cli_lifecycle import (
     CliLifecycleMode,
     CliLifecycleRequest,
+    CliLifecycleResult,
 )
 from audiagentic.components.providers.contracts.generated_surface import (
     GeneratedSurfaceMode,
@@ -44,6 +45,7 @@ from audiagentic.components.providers.contracts.managed_mcp import (
     ManagedMcpResult,
 )
 from audiagentic.components.providers.contracts.model_projection import (
+    ModelProjectionEntry,
     ModelProjectionMode,
     ModelProjectionRequest,
     ModelProjectionResult,
@@ -53,11 +55,176 @@ from audiagentic.components.providers.contracts.plugin_entry import (
     PluginEntryRequest,
     PluginEntryResult,
 )
+from audiagentic.components.providers.contracts.provider_execution import (
+    ProviderAcpLaunchResult,
+    ProviderExecutionRequest,
+    ProviderExecutionResult,
+    ProviderIsolationTier,
+)
 from audiagentic.components.providers.contracts.self_provided_lsp import (
     SelfProvidedLspMode,
     SelfProvidedLspRequest,
     SelfProvidedLspResult,
 )
+
+
+def get_provider_execution_isolation_tier(provider_id: str) -> ProviderIsolationTier:
+    """Return the provider-wide execution isolation fact."""
+    from audiagentic.components.providers.services.public_execution import (
+        get_provider_execution_isolation_tier as _get_tier,
+    )
+
+    return _get_tier(provider_id)
+
+
+def get_provider_runtime_config_state(
+    project_root: Path,
+    provider_id: str,
+) -> dict[str, Any]:
+    """Return provider-scoped runtime configuration state for fingerprinting."""
+    from audiagentic.components.providers.services.public_execution import (
+        get_provider_runtime_config_state as _get_state,
+    )
+
+    return _get_state(project_root, provider_id)
+
+
+def execute_provider_turn(request: ProviderExecutionRequest) -> ProviderExecutionResult:
+    """Execute one provider turn through the sanctioned public boundary."""
+    from audiagentic.components.providers.services.public_execution import (
+        execute_provider_turn as _execute,
+    )
+
+    return _execute(request)
+
+
+def prepare_provider_execution_environment(
+    request: ProviderExecutionRequest,
+) -> dict[str, str]:
+    """Return transient provider-owned variables for an isolated worker."""
+    from audiagentic.components.providers.services.public_execution import (
+        prepare_provider_execution_environment as _prepare,
+    )
+
+    return _prepare(request)
+
+
+def list_canonical_provider_ids() -> tuple[str, ...]:
+    """Return provider ids accepted by provider-backed prompt launches."""
+    from audiagentic.components.providers.services.public_prompt_operations import (
+        list_canonical_provider_ids as _list,
+    )
+
+    return _list()
+
+
+def get_prompt_syntax_defaults() -> dict[str, Any]:
+    """Return provider-owned defaults for shared prompt syntax parsing."""
+    from audiagentic.components.providers.services.public_prompt_operations import (
+        get_prompt_syntax_defaults as _get,
+    )
+
+    return _get()
+
+
+def load_prompt_syntax(
+    project_root: Path | None,
+    profile_name: str | None = None,
+) -> dict[str, Any]:
+    """Load the provider-owned prompt syntax document and project overlay."""
+    from audiagentic.components.providers.services.prompt_syntax import (
+        load_prompt_syntax as _load,
+    )
+
+    return _load(project_root, profile_name)
+
+
+def get_provider_prompt_settings_profile(
+    project_root: Path,
+    provider_id: str,
+) -> str | None:
+    """Return one provider's optional prompt-syntax settings profile."""
+    from audiagentic.components.providers.services.public_prompt_operations import (
+        get_provider_prompt_settings_profile as _get,
+    )
+
+    return _get(project_root, provider_id)
+
+
+def is_provider_enabled_for_launch(project_root: Path, provider_id: str) -> bool:
+    """Return whether a provider is enabled for prompt launch resolution."""
+    from audiagentic.components.providers.services.public_prompt_operations import (
+        is_provider_enabled_for_launch as _is_enabled,
+    )
+
+    return _is_enabled(project_root, provider_id)
+
+
+def resolve_launch_model(
+    project_root: Path,
+    *,
+    provider_id: str,
+    model_id: str | None,
+    model_alias: str | None,
+) -> dict[str, Any]:
+    """Resolve one launch model through provider-owned runtime configuration."""
+    from audiagentic.components.providers.services.public_prompt_operations import (
+        resolve_launch_model as _resolve,
+    )
+
+    return _resolve(
+        project_root,
+        provider_id=provider_id,
+        model_id=model_id,
+        model_alias=model_alias,
+    )
+
+
+def load_packaged_prompt_template(
+    tag: str,
+    *,
+    template_name: str | None,
+) -> tuple[str, Path | None] | None:
+    """Resolve a packaged provider-owned prompt template."""
+    from audiagentic.components.providers.services.public_prompt_operations import (
+        load_packaged_prompt_template as _load,
+    )
+
+    return _load(tag, template_name=template_name)
+
+
+def execute_provider_review_turn(
+    project_root: Path,
+    *,
+    provider_id: str,
+    packet_data: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Run a review-specific provider turn through the public boundary."""
+    from audiagentic.components.providers.services.public_prompt_operations import (
+        execute_provider_review_turn as _execute,
+    )
+
+    return _execute(project_root, provider_id=provider_id, packet_data=packet_data)
+
+
+def prepare_provider_acp_launch(
+    project_root: Path,
+    *,
+    provider_id: str,
+    model_id: str | None,
+    model_alias: str | None,
+) -> ProviderAcpLaunchResult:
+    """Prepare a provider-owned ACP launch for an agents-owned live session."""
+    from audiagentic.components.providers.services.public_execution import (
+        prepare_provider_acp_launch as _prepare,
+    )
+
+    return _prepare(
+        project_root,
+        provider_id=provider_id,
+        model_id=model_id,
+        model_alias=model_alias,
+    )
 
 
 def manage_plugin_entry(
@@ -512,6 +679,7 @@ def list_provider_models(project_root: Path, provider_id: str) -> dict[str, Any]
     models = [
         {
             "model_id": model.get("model-id", ""),
+            "vendor_id": model.get("vendor-id", ""),
             "display_name": model.get("display-name", ""),
             "status": model.get("status", ""),
             "supports_structured_output": model.get("supports-structured-output", False),
@@ -621,7 +789,20 @@ def describe_provider(project_root: Path, provider_id: str) -> dict[str, Any]:
         "status": get_provider_status(project_root, provider_id),
         "execution": describe_execution_support(provider_id),
         "models": list_provider_models(project_root, provider_id),
-        "models_config": list_provider_models_config(project_root, provider_id),
+        "models_config": (
+            manage_model_projection(
+                project_root,
+                provider_id,
+                mode="status",
+                request=ModelProjectionRequest(managed_ids=()),
+            ).to_mapping()
+            if descriptor.automation_capability("model-projection") is not None
+            else {
+                "ok": True,
+                "supported": False,
+                "provider_id": provider_id,
+            }
+        ),
         "config_surfaces": [
             _serialize_config_surface("mcp", descriptor.mcp_config, project_root),
             _serialize_config_surface(
@@ -646,15 +827,11 @@ def describe_provider(project_root: Path, provider_id: str) -> dict[str, Any]:
     }
 
 
-# --- model-source management (MO02 step 9/11) --------------------------------
+# --- model-source desired-state resources (MO02) -----------------------------
 #
-# Mutation semantics (step 11): dry_run=True validates + computes the diff but
-# writes NOTHING (neither model-sources.yaml, ownership registry, nor provider
-# config); apply=False atomically writes desired state only; apply=True writes
-# desired state then reconciles provider configs. If reconcile fails, desired
-# state remains committed and the result reports applied=False + action_needed
-# — never a false rollback claim. Tools mutate DESIRED STATE only; provider
-# config files are written exclusively by the reconcile/sync path.
+# CRUD owns only ``model-sources.yaml``. Provider-file mutation is an explicit
+# call to the typed model-projection family above; resource operations never
+# smuggle automation through ``apply`` or ``dry_run`` flags.
 
 
 def _model_source_diff(old: dict[str, Any], new: dict[str, Any]) -> dict[str, list[str]]:
@@ -674,20 +851,14 @@ def _model_source_diff(old: dict[str, Any], new: dict[str, Any]) -> dict[str, li
 def _mutate_model_sources(
     project_root: Path,
     mutate,
-    *,
-    apply: bool,
-    dry_run: bool,
 ) -> dict[str, Any]:
     from audiagentic.components.providers.services.model_source_config import (
         load_model_sources,
         validate_model_sources,
         write_model_sources,
     )
-    from audiagentic.components.providers.services.models import (
-        record_model_config_timeline,
-        sync_all_provider_models,
-    )
-    from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+    from audiagentic.components.providers.services.models import record_model_config_timeline
+    from audiagentic.foundation.contracts.errors import make_error
 
     current = load_model_sources(project_root)
     proposed = mutate(json_roundtrip(current))
@@ -700,37 +871,13 @@ def _mutate_model_sources(
         )
 
     diff = _model_source_diff(current, proposed)
-    result: dict[str, Any] = {"ok": True, "diff": diff, "dry_run": dry_run, "applied": False}
-    if dry_run:
-        return result
-
     write_model_sources(project_root, proposed)
-    result["written"] = True
     for source_id in diff["added"] + diff["changed"] + diff["removed"]:
         record_model_config_timeline(
             project_root, "model-sources", "model-config.planned",
             attributes={"source-id": source_id},
         )
-    if not apply:
-        return result
-
-    try:
-        sync_result = sync_all_provider_models(project_root)
-    except AudiaGenticError as exc:
-        result["applied"] = False
-        result["action_needed"] = (
-            f"desired state written but reconcile failed ({exc.code}); "
-            "run sync_provider_models per provider to apply"
-        )
-        return result
-    result["sync"] = sync_result
-    result["applied"] = bool(sync_result.get("ok"))
-    if not result["applied"]:
-        result["action_needed"] = (
-            "desired state written but one or more provider syncs failed; "
-            "see sync.providers for details"
-        )
-    return result
+    return {"ok": True, "diff": diff, "written": True}
 
 
 def json_roundtrip(value: dict[str, Any]) -> dict[str, Any]:
@@ -749,6 +896,7 @@ def model_source_list(project_root: Path) -> dict[str, Any]:
         source_id: {
             "source-class": source.get("source-class"),
             "display-name": source.get("display-name"),
+            "vendor-id": source.get("vendor-id"),
             "connector": source.get("connector"),
             "model-discovery": source.get("model-discovery"),
             "model-id": source.get("model-id"),
@@ -760,13 +908,197 @@ def model_source_list(project_root: Path) -> dict[str, Any]:
     return {"ok": True, "contract-version": document.get("contract-version"), "sources": sources}
 
 
+def list_model_inventory(project_root: Path) -> dict[str, Any]:
+    """Show configured sources, vendor groups, models, and harness paths."""
+    from audiagentic.components.providers.descriptors.registry import all_descriptors
+    from audiagentic.components.providers.services.model_source_config import load_model_sources
+    from audiagentic.components.providers.services.source_catalog import (
+        apply_model_filter,
+        get_source_catalog,
+    )
+
+    descriptors = all_descriptors()
+    provider_catalogs = {
+        provider_id: list_provider_models(project_root, provider_id)
+        for provider_id in sorted(descriptors)
+    }
+    vendor_harnesses: dict[str, set[str]] = {}
+    vendor_models: dict[str, dict[str, dict[str, Any]]] = {}
+    vendor_sources: dict[str, list[dict[str, Any]]] = {}
+    for provider_id, catalog in provider_catalogs.items():
+        if not catalog.get("ok"):
+            continue
+        for model in catalog.get("models", []):
+            vendor_id = str(model.get("vendor_id") or "")
+            if not vendor_id:
+                continue
+            vendor_harnesses.setdefault(vendor_id, set()).add(provider_id)
+            vendor_models.setdefault(vendor_id, {})[str(model["model_id"])] = model
+
+    sources: list[dict[str, Any]] = []
+    document = load_model_sources(project_root)
+    for source_id, source in sorted((document.get("sources") or {}).items()):
+        if source.get("source-class") == "local-endpoint":
+            models = [{
+                "model_id": source.get("model-id"),
+                "display_name": source.get("display-name") or source.get("model-id"),
+            }]
+            freshness = "declared"
+            action_needed = None
+        else:
+            try:
+                catalog = get_source_catalog(project_root, source_id, source, refresh=False)
+                selected = apply_model_filter(catalog.models, source.get("model-filter"))
+                models = [{
+                    "model_id": model.get("model-id"),
+                    "display_name": model.get("display-name") or model.get("model-id"),
+                    "context_window": model.get("context-window"),
+                } for model in selected]
+                freshness = catalog.freshness
+                action_needed = catalog.action_needed
+            except Exception as exc:  # noqa: BLE001 - inventory reports source failure
+                models = []
+                freshness = "invalid"
+                action_needed = str(exc)
+
+        vendor_id = str(source.get("vendor-id") or "")
+        if vendor_id:
+            vendor_sources.setdefault(vendor_id, []).append({
+                "source_id": source_id,
+                "enabled": source.get("enabled", True),
+            })
+            for model in models:
+                model_id = str(model.get("model_id") or "")
+                if model_id:
+                    vendor_models.setdefault(vendor_id, {})[model_id] = model
+        harnesses: dict[tuple[str, str], dict[str, Any]] = {}
+        for provider_id, descriptor in sorted(descriptors.items()):
+            if vendor_id and vendor_id in descriptor.vendor_key_injection:
+                from audiagentic.foundation.secrets import has_ambient_value
+
+                spec = descriptor.vendor_key_injection[vendor_id]
+                key_name = spec.get("key", "")
+                expected_ref = f"env:{key_name}" if key_name else ""
+                available = bool(expected_ref and has_ambient_value(expected_ref))
+                harnesses[(provider_id, "native-vendor")] = {
+                    "provider_id": provider_id,
+                    "mode": "native-vendor",
+                    "available": available,
+                    "enabled": bool(source.get("enabled", True) and available),
+                    "action_needed": None if available else f"set {key_name}",
+                }
+            if (
+                descriptor.automation_capability("model-projection") is not None
+                and source.get("connector") in descriptor.supported_connectors
+                and not (vendor_id and vendor_id in descriptor.vendor_key_injection)
+            ):
+                harnesses[(provider_id, "custom-entries")] = {
+                    "provider_id": provider_id,
+                    "mode": "custom-entries",
+                    "available": True,
+                    "enabled": bool(source.get("enabled", True)),
+                    "action_needed": None,
+                }
+            if vendor_id and provider_id in vendor_harnesses.get(vendor_id, set()):
+                harnesses[(provider_id, "native-catalog")] = {
+                    "provider_id": provider_id,
+                    "mode": "native-catalog",
+                    "available": True,
+                    "enabled": bool(source.get("enabled", True)),
+                    "action_needed": None,
+                }
+        sources.append({
+            "source_id": source_id,
+            "display_name": source.get("display-name") or source_id,
+            "vendor_id": vendor_id or None,
+            "source_class": source.get("source-class"),
+            "connector": source.get("connector"),
+            "enabled": source.get("enabled", True),
+            "catalog_freshness": freshness,
+            "action_needed": action_needed,
+            "models": models,
+            "harnesses": list(harnesses.values()),
+        })
+
+    vendors = [{
+        "vendor_id": vendor_id,
+        "harnesses": sorted(vendor_harnesses.get(vendor_id, set())),
+        "sources": vendor_sources.get(vendor_id, []),
+        "enabled": any(item["enabled"] for item in vendor_sources.get(vendor_id, [])),
+        "models": sorted(
+            vendor_models.get(vendor_id, {}).values(),
+            key=lambda item: item["model_id"],
+        ),
+    } for vendor_id in sorted(set(vendor_models) | set(vendor_sources))]
+    return {"ok": True, "sources": sources, "vendors": vendors}
+
+
+def refresh_model_source_catalog(project_root: Path, source_id: str) -> dict[str, Any]:
+    """Explicitly refresh one configured source catalog."""
+    from audiagentic.components.providers.services.model_source_config import load_model_sources
+    from audiagentic.components.providers.services.source_catalog import get_source_catalog
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    source = (load_model_sources(project_root).get("sources") or {}).get(source_id)
+    if source is None:
+        raise AudiaGenticError(
+            code="VAL-MEP-005", kind="providers", message="unknown model source",
+            details={"source-id": source_id},
+        )
+    return get_source_catalog(project_root, source_id, source, refresh=True).to_dict()
+
+
+def model_vendor_set_enabled(
+    project_root: Path, vendor_id: str, enabled: bool
+) -> dict[str, Any]:
+    """Enable or disable every configured source for one vendor group."""
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    matched: list[str] = []
+
+    def mutate(document: dict[str, Any]) -> dict[str, Any]:
+        for source_id, source in (document.get("sources") or {}).items():
+            if source.get("vendor-id") == vendor_id:
+                source["enabled"] = enabled
+                matched.append(source_id)
+        if not matched:
+            raise AudiaGenticError(
+                code="VAL-MEP-006", kind="providers",
+                message="vendor has no configured model source",
+                details={"vendor-id": vendor_id},
+            )
+        return document
+
+    result = _mutate_model_sources(project_root, mutate)
+    result.update({"vendor_id": vendor_id, "enabled": enabled, "source_ids": matched})
+    return result
+
+
+def apply_model_sources(project_root: Path) -> dict[str, Any]:
+    """Apply desired sources to every enabled registered model harness."""
+    from audiagentic.components.providers.descriptors.registry import all_descriptors
+    from audiagentic.components.providers.services.models import build_model_projection_request
+    from audiagentic.components.providers.services.provider_config import is_provider_enabled
+
+    results: list[dict[str, Any]] = []
+    for provider_id, descriptor in sorted(all_descriptors().items()):
+        if descriptor.automation_capability("model-projection") is None:
+            continue
+        if not is_provider_enabled(project_root, provider_id):
+            results.append({"provider_id": provider_id, "ok": True, "supported": True,
+                            "skipped": "provider-disabled"})
+            continue
+        request = build_model_projection_request(project_root, provider_id, enabled=True)
+        results.append(manage_model_projection(
+            project_root, provider_id, mode="apply", request=request
+        ).to_mapping())
+    return {"ok": all(result.get("ok", False) for result in results), "results": results}
+
+
 def model_source_add(
     project_root: Path,
     source_id: str,
     config: dict[str, Any],
-    *,
-    apply: bool = True,
-    dry_run: bool = False,
 ) -> dict[str, Any]:
     from audiagentic.foundation.contracts.errors import make_error
 
@@ -781,7 +1113,7 @@ def model_source_add(
         sources[source_id] = config
         return document
 
-    return _mutate_model_sources(project_root, mutate, apply=apply, dry_run=dry_run)
+    return _mutate_model_sources(project_root, mutate)
 
 
 def _require_source(document: dict[str, Any], source_id: str) -> dict[str, Any]:
@@ -801,94 +1133,38 @@ def model_source_update(
     project_root: Path,
     source_id: str,
     updates: dict[str, Any],
-    *,
-    apply: bool = True,
-    dry_run: bool = False,
 ) -> dict[str, Any]:
     def mutate(document: dict[str, Any]) -> dict[str, Any]:
         sources = _require_source(document, source_id)
         sources[source_id].update(updates)
         return document
 
-    return _mutate_model_sources(project_root, mutate, apply=apply, dry_run=dry_run)
+    return _mutate_model_sources(project_root, mutate)
 
 
 def model_source_remove(
     project_root: Path,
     source_id: str,
-    *,
-    apply: bool = True,
-    dry_run: bool = False,
 ) -> dict[str, Any]:
     def mutate(document: dict[str, Any]) -> dict[str, Any]:
         sources = _require_source(document, source_id)
         del sources[source_id]
         return document
 
-    return _mutate_model_sources(project_root, mutate, apply=apply, dry_run=dry_run)
+    return _mutate_model_sources(project_root, mutate)
 
 
 def model_source_set_enabled(
     project_root: Path,
     source_id: str,
     enabled: bool,
-    *,
-    apply: bool = True,
-    dry_run: bool = False,
 ) -> dict[str, Any]:
     def mutate(document: dict[str, Any]) -> dict[str, Any]:
         sources = _require_source(document, source_id)
         sources[source_id]["enabled"] = enabled
         return document
 
-    return _mutate_model_sources(project_root, mutate, apply=apply, dry_run=dry_run)
-
-
-def sync_provider_models(
-    project_root: Path, provider_id: str, *, dry_run: bool = False
-) -> dict[str, Any]:
-    from audiagentic.components.providers.services.feature_resolution import (
-        enabled_provider_ids,
-    )
-    from audiagentic.components.providers.services.model_source_config import (
-        load_model_sources,
-    )
-    from audiagentic.components.providers.services.models import (
-        materialize_local_endpoint_sources,
-        sync_managed_provider_models,
-    )
-
-    enabled = provider_id in enabled_provider_ids(project_root)
-    entries = (
-        materialize_local_endpoint_sources(load_model_sources(project_root))
-        if enabled
-        else []
-    )
-    if dry_run:
-        return {
-            "provider_id": provider_id,
-            "ok": True,
-            "dry_run": True,
-            "provider_enabled": enabled,
-            "desired_managed_ids": sorted(entry.managed_id for entry in entries),
-        }
-    return sync_managed_provider_models(provider_id, project_root, entries)
-
-
-def list_provider_models_config(project_root: Path, provider_id: str) -> dict[str, Any]:
-    from audiagentic.components.providers.services.models import (
-        list_provider_models_config as _list,
-    )
-
-    return _list(provider_id, project_root)
-
-
-def reload_provider_models(project_root: Path, provider_id: str) -> dict[str, Any]:
-    from audiagentic.components.providers.services.models import (
-        reload_provider_models as _reload,
-    )
-
-    return _reload(provider_id, project_root)
+    return _mutate_model_sources(project_root, mutate)
 
 
 async def refresh_all_catalogs(project_root: Path) -> dict[str, Any]:
@@ -901,7 +1177,7 @@ async def refresh_all_catalogs(project_root: Path) -> dict[str, Any]:
 
 async def manage_cli_lifecycle(
     project_root: Path, provider_id: str, *, mode: CliLifecycleMode
-) -> dict[str, Any]:
+) -> CliLifecycleResult:
     from audiagentic.components.providers.services.automation_registry import (
         build_automation_registry,
     )
@@ -913,13 +1189,11 @@ async def manage_cli_lifecycle(
         mode,
         CliLifecycleRequest(),
     )
-    from audiagentic.components.providers.contracts.cli_lifecycle import CliLifecycleResult
-
     if isinstance(result, CliLifecycleResult):
-        return result.to_mapping()
-    if isinstance(result, dict):
         return result
-    return {"ok": False, "supported": False, "state": "failed"}
+    if isinstance(result, dict):
+        return CliLifecycleResult.from_mapping(result)
+    return CliLifecycleResult(ok=False, supported=False, state="failed")
 
 
 async def reconcile_provider(project_root: Path, provider_id: str, *, fetch_catalog: bool) -> dict[str, Any]:
@@ -943,6 +1217,25 @@ async def reconcile_all_providers(project_root: Path, *, fetch_catalogs: bool) -
 
 
 __all__ = [
+    # One-shot provider execution
+    "ProviderExecutionRequest",
+    "ProviderExecutionResult",
+    "ProviderAcpLaunchResult",
+    "ProviderIsolationTier",
+    "get_provider_execution_isolation_tier",
+    "get_provider_runtime_config_state",
+    "execute_provider_turn",
+    "prepare_provider_acp_launch",
+    "prepare_provider_execution_environment",
+    # Prompt launch/query operations
+    "list_canonical_provider_ids",
+    "get_prompt_syntax_defaults",
+    "load_prompt_syntax",
+    "get_provider_prompt_settings_profile",
+    "is_provider_enabled_for_launch",
+    "resolve_launch_model",
+    "load_packaged_prompt_template",
+    "execute_provider_review_turn",
     "list_providers",
     "get_provider_status",
     "list_provider_descriptors",
@@ -951,15 +1244,18 @@ __all__ = [
     "describe_provider",
     # Model source management (MO02)
     "model_source_list",
+    "list_model_inventory",
+    "refresh_model_source_catalog",
+    "model_vendor_set_enabled",
+    "apply_model_sources",
     "model_source_add",
     "model_source_update",
     "model_source_remove",
     "model_source_set_enabled",
-    "sync_provider_models",
-    "list_provider_models_config",
-    "reload_provider_models",
     "refresh_all_catalogs",
     # Provider lifecycle
+    "CliLifecycleRequest",
+    "CliLifecycleResult",
     "manage_cli_lifecycle",
     "reconcile_provider",
     "reconcile_all_providers",
@@ -974,6 +1270,7 @@ __all__ = [
     "LanguageServerProjectionRequest",
     "ManagedMcpEntry",
     "ManagedMcpRequest",
+    "ManagedMcpResult",
     "SelfProvidedLspRequest",
     "manage_language_servers",
     "manage_language_servers_all",
@@ -983,8 +1280,16 @@ __all__ = [
     # Managed hooks
     "ManagedHooksEntry",
     "ManagedHooksRequest",
+    "ManagedHooksResult",
     "manage_hook_entries",
+    # Provider plugins
+    "PluginEntryRequest",
+    "PluginEntryResult",
+    "manage_plugin_entry",
     # Model projection
+    "ModelProjectionEntry",
+    "ModelProjectionRequest",
+    "ModelProjectionResult",
     "manage_model_projection",
     # Self-provided LSP
     "manage_self_provided_lsp",

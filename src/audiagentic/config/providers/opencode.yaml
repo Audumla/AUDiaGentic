@@ -2,6 +2,7 @@
 # Toolchain-based install (npm), custom probe, MCP + LSP JSON config, VS Code extension
 
 provider_id: opencode
+execution_isolation_tier: full-isolation
 automation_capabilities:
   - family_id: cli-lifecycle
     supported_modes: [plan, apply, prune, status]

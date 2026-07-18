@@ -15,7 +15,7 @@ import difflib
 import sys
 from pathlib import Path
 
-from audiagentic.components.agent_jobs.prompt_syntax import load_prompt_syntax
+from audiagentic.components.providers.services.prompt_syntax import load_prompt_syntax
 from audiagentic.components.providers.surfaces.base import (
     SkillDefinition,
     apply_managed_blocks,

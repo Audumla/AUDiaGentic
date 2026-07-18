@@ -13,7 +13,6 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 AUTOMATION_MODES = frozenset({"plan", "apply", "prune", "status"})
 _CONTRACT_DIR = Path(__file__).resolve().parents[1] / "contracts"
 
-
 @dataclass(frozen=True)
 class ProviderAutomationCapability:
     """One explicitly supported provider automation family.

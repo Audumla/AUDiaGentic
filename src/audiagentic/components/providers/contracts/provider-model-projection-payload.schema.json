@@ -19,6 +19,7 @@
           "visible_name": {"type": "string"},
           "connector": {"type": "string"},
           "managed_id": {"type": "string"},
+          "vendor_id": {"type": ["string", "null"]},
           "endpoint": {"type": "object"},
           "capabilities": {"type": "object"},
           "limits": {"type": "object"},

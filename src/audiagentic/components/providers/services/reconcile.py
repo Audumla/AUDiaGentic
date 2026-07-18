@@ -31,7 +31,7 @@ def _sync_provider_mcp(project_root: Path, on_progress: ComponentOutputSink | No
         _emit(on_progress, "MCP server config sync failed (non-fatal)", level="warning")
 
 
-def _sync_provider_models(
+def _reconcile_model_projection(
     provider_id: str,
     project_root: Path,
     *,
@@ -40,30 +40,35 @@ def _sync_provider_models(
 ) -> None:
     """Sync managed model entries for one provider (MO02 step 6, non-fatal).
 
-    Enabled providers receive the desired entries materialized from
-    model-sources; disabled providers receive an empty desired set so owned
-    entries are pruned (MO02 step 12). Providers without a model_config spec
-    are a clean skip inside the sync wrapper.
+    Enabled providers receive the desired entries through the typed public
+    model-projection family; disabled providers prune their owned ids through
+    the same seam. Providers without a declared implementation are a clean
+    skip.
     """
     from audiagentic.components.providers.services.lifecycle import _emit
     try:
-        from audiagentic.components.providers.services.model_source_config import (
-            load_model_sources,
-        )
+        from audiagentic.components.providers.descriptors.registry import get_descriptor
+        from audiagentic.components.providers.providers_api import manage_model_projection
         from audiagentic.components.providers.services.models import (
-            materialize_local_endpoint_sources,
-            sync_managed_provider_models,
+            build_model_projection_request,
         )
 
-        entries = (
-            materialize_local_endpoint_sources(load_model_sources(project_root))
-            if enabled
-            else []
-        )
-        result = sync_managed_provider_models(provider_id, project_root, entries)
-        if result.get("skipped"):
+        descriptor = get_descriptor(provider_id)
+        if (
+            descriptor is None
+            or descriptor.automation_capability("model-projection") is None
+        ):
             return
-        if result.get("updated") or result.get("removed"):
+        request = build_model_projection_request(
+            project_root, provider_id, enabled=enabled
+        )
+        result = manage_model_projection(
+            project_root,
+            provider_id,
+            mode="apply" if enabled else "prune",
+            request=request,
+        )
+        if result.updated or result.removed:
             _emit(on_progress, f"Model config synced for {provider_id}")
     except Exception:  # noqa: BLE001
         logger.warning("Model config sync failed for %s", provider_id, exc_info=True, extra={"provider": provider_id})
@@ -118,8 +123,8 @@ def reconcile_provider(
     )
     from audiagentic.components.providers.services.lifecycle import (
         _emit,
-        _probe_provider_cli,
         _seed_provider_config,
+        probe_provider_cli,
     )
     from audiagentic.components.providers.services.provider_config import (
         resolve_provider_enabled,
@@ -128,7 +133,7 @@ def reconcile_provider(
 
     _emit(on_progress, f"Probing {provider_id}...")
     descriptor = _get_descriptor(provider_id)
-    probe = _probe_provider_cli(descriptor)
+    probe = probe_provider_cli(descriptor)
     cli_available = bool(probe and probe["available"])
     _emit(on_progress, f"CLI {'available' if cli_available else 'not found'}")
 
@@ -150,7 +155,7 @@ def reconcile_provider(
         )
         surfaces_result = surface_result.to_mapping()
         _sync_provider_mcp(project_root, on_progress)
-        _sync_provider_models(provider_id, project_root, enabled=True, on_progress=on_progress)
+        _reconcile_model_projection(provider_id, project_root, enabled=True, on_progress=on_progress)
         _sync_host_extensions(project_root, on_progress)
         action_taken = "enabled"
         if fetch_catalog and descriptor.fetch_catalog_fn is not None:
@@ -175,12 +180,12 @@ def reconcile_provider(
             request=_build_surface_request(project_root, provider_id),
         )
         surfaces_result = surface_result.to_mapping()
-        _sync_provider_models(provider_id, project_root, enabled=False, on_progress=on_progress)
+        _reconcile_model_projection(provider_id, project_root, enabled=False, on_progress=on_progress)
         action_taken = "disabled"
     else:
         _emit(on_progress, f"{provider_id} already in sync ({('enabled' if currently_enabled else 'disabled')})")
         _sync_provider_mcp(project_root, on_progress)
-        _sync_provider_models(provider_id, project_root, enabled=currently_enabled, on_progress=on_progress)
+        _reconcile_model_projection(provider_id, project_root, enabled=currently_enabled, on_progress=on_progress)
         _sync_host_extensions(project_root, on_progress)
         action_taken = "ok"
 

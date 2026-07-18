@@ -2,6 +2,7 @@
 # Explicit shell steps for install/uninstall, custom YAML MCP format
 
 provider_id: goose
+execution_isolation_tier: partial-isolation
 automation_capabilities:
   - family_id: cli-lifecycle
     supported_modes: [plan, apply, prune, status]
@@ -12,6 +13,11 @@ automation_capabilities:
     supported_modes: [apply, prune, status]
     payload_contract: provider-managed-mcp-payload/v1
     result_contract: provider-managed-mcp-result/v1
+    ownership_scope_required: true
+  - family_id: generated-surfaces
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-generated-surface-payload/v1
+    result_contract: provider-generated-surface-result/v1
     ownership_scope_required: true
 display_name: "Goose (Block)"
 description: "Open-source AI agent by Block. Extensible toolkit of MCP extensions for dev workflows."

@@ -17,6 +17,7 @@ class ModelProjectionEntry:
     visible_name: str
     connector: str
     managed_id: str
+    vendor_id: str | None = None
     endpoint: dict[str, Any] = field(default_factory=dict)
     capabilities: dict[str, Any] = field(default_factory=dict)
     limits: dict[str, Any] = field(default_factory=dict)
@@ -33,6 +34,7 @@ class ModelProjectionEntry:
             "visible_name": self.visible_name,
             "connector": self.connector,
             "managed_id": self.managed_id,
+            "vendor_id": self.vendor_id,
             "endpoint": dict(self.endpoint),
             "capabilities": dict(self.capabilities),
             "limits": dict(self.limits),
@@ -47,6 +49,7 @@ class ModelProjectionEntry:
             visible_name=str(value.get("visible_name", "")),
             connector=str(value["connector"]),
             managed_id=str(value["managed_id"]),
+            vendor_id=str(value["vendor_id"]) if value.get("vendor_id") else None,
             endpoint=dict(value.get("endpoint") or {}),
             capabilities=dict(value.get("capabilities") or {}),
             limits=dict(value.get("limits") or {}),

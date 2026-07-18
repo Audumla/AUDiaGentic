@@ -56,7 +56,7 @@ _on_component_mcp_lifecycle = subscribe_component_lifecycle(
     None,
     on_installed=partial(_sync_component_mcp, enabled=True),
     on_enabled=partial(_sync_component_mcp, enabled=True),
-    on_disabled=partial(_sync_component_mcp, enabled=True),
+    on_disabled=partial(_sync_component_mcp, enabled=False),
     on_uninstalled=partial(_sync_component_mcp, enabled=False),
     on_config_changed=partial(_sync_component_mcp, enabled=True),
 )

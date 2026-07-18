@@ -2,6 +2,7 @@
 # Toolchain-based install (npm), custom probe, MCP JSON + LSP config, VS Code extension
 
 provider_id: qwen
+execution_isolation_tier: full-isolation
 automation_capabilities:
   - family_id: cli-lifecycle
     supported_modes: [plan, apply, prune, status]
@@ -17,6 +18,11 @@ automation_capabilities:
     supported_modes: [apply, prune, status]
     payload_contract: provider-language-server-projection-payload/v1
     result_contract: provider-language-server-projection-result/v1
+    ownership_scope_required: true
+  - family_id: generated-surfaces
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-generated-surface-payload/v1
+    result_contract: provider-generated-surface-result/v1
     ownership_scope_required: true
 display_name: "Qwen (Alibaba)"
 description: "Alibaba Cloud's Qwen Code CLI. Open-source coding agent built on the Qwen model family."
@@ -159,6 +165,11 @@ permissions:
   can_browse_web: false
   can_read_env: true
   notes: "CLI agent; Alibaba Cloud account auth required"
+
+vendor_key_injection:
+  openai: {mechanism: env, key: OPENAI_API_KEY}
+  anthropic: {mechanism: env, key: ANTHROPIC_API_KEY}
+  google: {mechanism: env, key: GEMINI_API_KEY}
 
 instruction_file: "QWEN.md"
 
