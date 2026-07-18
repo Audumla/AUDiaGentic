@@ -2,9 +2,10 @@
 # container.
 #
 # Deliberately a clean toolchain: NO language servers or provider CLIs are baked
-# in. The non-mutating tests (unit, most integration, e2e/cli, release,
-# lifecycle, shell-stdout) do not care that they run inside a container, so we
-# run them all here in one parallel pass instead of a hand-picked subset.
+# in. It runs the non-mutating, hermetic unit, integration, and CLI tests in
+# one controlled pass. Tests that need the *host* Docker daemon do not become
+# hermetic merely by being invoked from a container, so the runner excludes
+# their marker explicitly.
 #
 # What does NOT run here, and why:
 #   - mutates_host tests (test_install_deps, provider lifecycle/CLI, provider-lsp)
@@ -28,7 +29,6 @@ COPY src ./src
 COPY tests ./tests
 COPY docs/examples ./docs/examples
 COPY .audiagentic/config ./.audiagentic/config
-COPY .audiagentic/runtime ./.audiagentic/runtime
 COPY .audiagentic/skills ./.audiagentic/skills
 COPY .claude/skills ./.claude/skills
 COPY .gemini ./.gemini
@@ -37,6 +37,11 @@ COPY .github/workflows ./.github/workflows
 COPY .github/prompts ./.github/prompts
 COPY .opencode ./.opencode
 COPY AGENTS.md CLAUDE.md GEMINI.md ./
+
+# Runtime records are mutable user/process state and are excluded from the
+# build context. Tests that need the conventional location receive a clean
+# empty root instead.
+RUN mkdir -p .audiagentic/runtime
 
 RUN printf '#!/bin/sh\nexport DONT_PROMPT_WSL_INSTALL=1\nunset WSL_DISTRO_NAME WSL_INTEROP WSLENV\nexec /usr/bin/code --no-sandbox --user-data-dir /tmp/vscode-data "$@"\n' > /usr/local/bin/code \
     && chmod +x /usr/local/bin/code
@@ -47,7 +52,7 @@ RUN printf '#!/bin/sh\nexport DONT_PROMPT_WSL_INSTALL=1\nunset WSL_DISTRO_NAME W
 ENV PATH="/venv/bin:$PATH"
 RUN uv venv /venv && \
     uv pip install --python /venv/bin/python -q --no-compile \
-        -e '.[mcp]' pytest pytest-asyncio pytest-timeout pytest-xdist
+        -e '.[mcp,acp]' pytest pytest-asyncio pytest-timeout pytest-xdist psutil
 
 # Whole non-mutating suite, parallel.
 CMD ["bash", "tests/docker/run_suite.sh"]

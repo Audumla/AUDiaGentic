@@ -230,8 +230,8 @@ def test_uninstall_removes_ag_planning_from_provider_configs(tmp_path: Path) -> 
             )
 
 
-def test_disable_preserves_ag_planning_in_provider_configs(tmp_path: Path) -> None:
-    """Disable must not remove MCP entries from provider configs (only uninstall does)."""
+def test_disable_removes_ag_planning_from_provider_configs(tmp_path: Path) -> None:
+    """Disabling removes managed provider MCP entries just like uninstall."""
     with component_sandbox(tmp_path, "plan-mcp-disable") as sb:
         install_with_deps("project", sb.repo)
         install_with_deps("providers", sb.repo)
@@ -243,9 +243,9 @@ def test_disable_preserves_ag_planning_in_provider_configs(tmp_path: Path) -> No
 
         for config_rel in mcp_config_paths(sb.repo):
             present = mcp_servers_in(sb.repo, config_rel)
-            assert _PLANNING_SERVER in present, (
-                f"{_PLANNING_SERVER} removed from {config_rel} after disable "
-                f"(should stay until uninstall). Present: {present}"
+            assert _PLANNING_SERVER not in present, (
+                f"{_PLANNING_SERVER} still in {config_rel} after disable. "
+                f"Present: {present}"
             )
 
 

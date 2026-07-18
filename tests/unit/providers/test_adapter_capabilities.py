@@ -16,9 +16,9 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.components.coding_lsp.language_servers import LanguageServerEntry
 from audiagentic.components.providers.descriptors.base import ProviderDescriptor
 from audiagentic.components.providers.descriptors.registry import all_descriptors
+from audiagentic.components.providers.providers_api import LanguageServerEntry
 from audiagentic.foundation.mcp import McpServerEntry
 
 _DESCRIPTORS = all_descriptors()

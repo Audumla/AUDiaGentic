@@ -12,6 +12,7 @@ from audiagentic.components.providers.descriptors import registry as descriptor_
 from audiagentic.components.providers.descriptors.base import ProviderDescriptor
 from audiagentic.components.providers.services.models import (
     MaterializedModelEntry,
+    build_model_projection_request,
     materialize_local_endpoint_sources,
     model_ownership_registry,
     sync_managed_provider_models,
@@ -232,65 +233,220 @@ def _sources_file(tmp_path: Path) -> Path:
     return tmp_path / ".audiagentic" / "config" / "model-sources.yaml"
 
 
-def test_dry_run_writes_nothing(tmp_path: Path) -> None:
-    result = providers_api.model_source_add(
-        tmp_path, "local-a", dict(_SOURCE), apply=True, dry_run=True
-    )
-    assert result["dry_run"] is True
-    assert result["applied"] is False
+def test_resource_crud_commits_desired_only(tmp_path: Path) -> None:
+    result = providers_api.model_source_add(tmp_path, "local-a", dict(_SOURCE))
+    assert result["written"] is True
     assert result["diff"]["added"] == ["local-a"]
-    assert not _sources_file(tmp_path).exists()
+    assert _sources_file(tmp_path).exists()
     assert not model_ownership_registry(tmp_path).path.exists()
 
 
-def test_write_without_apply_commits_desired_only(tmp_path: Path) -> None:
-    result = providers_api.model_source_add(
-        tmp_path, "local-a", dict(_SOURCE), apply=False, dry_run=False
-    )
-    assert result["written"] is True
-    assert result["applied"] is False
-    assert _sources_file(tmp_path).exists()
+def test_resource_crud_has_no_automation_flags() -> None:
+    import inspect
+
+    for operation in (
+        providers_api.model_source_add,
+        providers_api.model_source_update,
+        providers_api.model_source_remove,
+        providers_api.model_source_set_enabled,
+    ):
+        parameters = inspect.signature(operation).parameters
+        assert "apply" not in parameters
+        assert "dry_run" not in parameters
 
 
-def test_apply_writes_then_reconciles(tmp_path: Path) -> None:
-    result = providers_api.model_source_add(
-        tmp_path, "local-a", dict(_SOURCE), apply=True, dry_run=False
+def test_public_model_projection_plan_uses_registered_family(tmp_path: Path) -> None:
+    request = providers_api.ModelProjectionRequest(
+        managed_ids=("model-endpoints/local-a",),
+        entries=(
+            providers_api.ModelProjectionEntry(
+                source_id="local-a",
+                model_id="model-a",
+                visible_name="Local A",
+                connector="openai",
+                managed_id="model-endpoints/local-a",
+                endpoint={"base-url": "http://127.0.0.1:1234/v1"},
+            ),
+        ),
     )
-    assert result["written"] is True
-    # no shipped provider declares model_config yet, so the sync trivially succeeds
-    assert result["applied"] is True
-    assert result["sync"]["ok"] is True
+
+    result = providers_api.manage_model_projection(
+        tmp_path, "pi", mode="plan", request=request
+    )
+
+    assert isinstance(result, providers_api.ModelProjectionResult)
+    assert result.ok is True
+    assert result.supported is True
+    assert result.provider_id == "pi"
+    assert result.added == ("model-endpoints/local-a",)
+    assert not (tmp_path / ".pi" / "agent" / "models.json").exists()
+
+
+def test_projection_request_includes_stale_owned_ids(fake_provider, tmp_path: Path) -> None:
+    model_ownership_registry(tmp_path).save(
+        {"fakemodels": {"model-endpoints/removed": "Removed"}}
+    )
+    providers_api.model_source_add(tmp_path, "local-a", dict(_SOURCE))
+
+    request = build_model_projection_request(
+        tmp_path, "fakemodels", enabled=True
+    )
+
+    assert request.managed_ids == (
+        "model-endpoints/local-a",
+        "model-endpoints/removed",
+    )
+    assert tuple(entry.managed_id for entry in request.entries) == (
+        "model-endpoints/local-a",
+    )
+
+
+def test_cached_vendor_catalog_materializes_filtered_models(tmp_path: Path) -> None:
+    providers_api.model_source_add(tmp_path, "anthropic-endpoint", {
+        "source-class": "remote-account",
+        "connector": "anthropic",
+        "model-discovery": "list-api",
+        "model-filter": {"include": ["claude-*"]},
+        "api-key-ref": "env:ANTHROPIC_API_KEY",
+    })
+    cache = (
+        tmp_path / ".audiagentic" / "runtime" / "providers"
+        / "source-catalogs" / "anthropic-endpoint.json"
+    )
+    cache.parent.mkdir(parents=True)
+    cache.write_text(json.dumps({
+        "contract-version": "v1",
+        "source-id": "anthropic-endpoint",
+        "discovery-mode": "list-api",
+        "fetched-at": "2026-07-18T00:00:00Z",
+        "models": [
+            {"model-id": "claude-sonnet", "context-window": 200000},
+            {"model-id": "other-model"},
+        ],
+    }), encoding="utf-8")
+
+    request = build_model_projection_request(tmp_path, "pi", enabled=True)
+
+    assert request.managed_ids == (
+        "model-endpoints/anthropic-endpoint/claude-sonnet",
+    )
+    assert request.entries[0].connector == "anthropic"
+    assert request.entries[0].auth_ref == "env:ANTHROPIC_API_KEY"
+
+
+def test_native_vendor_group_is_not_duplicated_as_custom_entries(tmp_path: Path) -> None:
+    providers_api.model_source_add(tmp_path, "anthropic-main", {
+        "source-class": "remote-account",
+        "vendor-id": "anthropic",
+        "connector": "anthropic",
+        "model-discovery": "none",
+    })
+
+    request = build_model_projection_request(tmp_path, "pi", enabled=True)
+
+    assert request.entries == ()
+
+
+def test_model_inventory_groups_vendor_and_harness_modes(monkeypatch, tmp_path: Path) -> None:
+    providers_api.model_source_add(tmp_path, "anthropic-main", {
+        "source-class": "remote-account",
+        "vendor-id": "anthropic",
+        "connector": "anthropic",
+        "model-discovery": "none",
+    })
+    monkeypatch.setattr(providers_api, "list_provider_models", lambda _root, provider_id: {
+        "ok": True,
+        "models": ([{"model_id": "anthropic/claude-sonnet", "vendor_id": "anthropic"}]
+                   if provider_id == "opencode" else []),
+    })
+
+    inventory = providers_api.list_model_inventory(tmp_path)
+
+    assert inventory["vendors"] == [{
+        "vendor_id": "anthropic",
+        "harnesses": ["opencode"],
+        "sources": [{"source_id": "anthropic-main", "enabled": True}],
+        "enabled": True,
+        "models": [{"model_id": "anthropic/claude-sonnet", "vendor_id": "anthropic"}],
+    }]
+    modes = {(row["provider_id"], row["mode"])
+             for row in inventory["sources"][0]["harnesses"]}
+    assert ("opencode", "native-catalog") in modes
+    assert ("pi", "native-vendor") in modes
+    assert ("pi", "custom-entries") not in modes
+
+
+def test_vendor_enablement_updates_all_group_sources(tmp_path: Path) -> None:
+    for source_id, connector in (("anthropic-a", "anthropic"), ("anthropic-b", "anthropic")):
+        providers_api.model_source_add(tmp_path, source_id, {
+            "source-class": "remote-account",
+            "vendor-id": "anthropic",
+            "connector": connector,
+            "model-discovery": "none",
+            "enabled": False,
+        })
+
+    result = providers_api.model_vendor_set_enabled(tmp_path, "anthropic", True)
+
+    assert result["source_ids"] == ["anthropic-a", "anthropic-b"]
+    sources = providers_api.model_source_list(tmp_path)["sources"]
+    assert all(source["enabled"] for source in sources.values())
+
+
+def test_holistic_apply_fans_out_only_registered_model_family(monkeypatch, tmp_path: Path) -> None:
+    from audiagentic.components.providers.services import models, provider_config
+
+    calls: list[str] = []
+    monkeypatch.setattr(provider_config, "is_provider_enabled", lambda _root, _pid: True)
+    monkeypatch.setattr(
+        models,
+        "build_model_projection_request",
+        lambda _root, _pid, enabled: providers_api.ModelProjectionRequest(managed_ids=()),
+    )
+
+    def _apply(_root, provider_id, *, mode, request):
+        calls.append(provider_id)
+        return providers_api.ModelProjectionResult(
+            ok=True, supported=True, provider_id=provider_id
+        )
+
+    monkeypatch.setattr(providers_api, "manage_model_projection", _apply)
+
+    result = providers_api.apply_model_sources(tmp_path)
+
+    assert result["ok"] is True
+    assert calls == ["pi"]
 
 
 def test_add_duplicate_rejected(tmp_path: Path) -> None:
-    providers_api.model_source_add(tmp_path, "local-a", dict(_SOURCE), apply=False)
+    providers_api.model_source_add(tmp_path, "local-a", dict(_SOURCE))
     with pytest.raises(AudiaGenticError):
-        providers_api.model_source_add(tmp_path, "local-a", dict(_SOURCE), apply=False)
+        providers_api.model_source_add(tmp_path, "local-a", dict(_SOURCE))
 
 
 def test_update_remove_set_enabled_roundtrip(tmp_path: Path) -> None:
-    providers_api.model_source_add(tmp_path, "local-a", dict(_SOURCE), apply=False)
+    providers_api.model_source_add(tmp_path, "local-a", dict(_SOURCE))
 
-    providers_api.model_source_set_enabled(tmp_path, "local-a", False, apply=False)
+    providers_api.model_source_set_enabled(tmp_path, "local-a", False)
     listing = providers_api.model_source_list(tmp_path)
     assert listing["sources"]["local-a"]["enabled"] is False
 
     providers_api.model_source_update(
-        tmp_path, "local-a", {"display-name": "Renamed"}, apply=False
+        tmp_path, "local-a", {"display-name": "Renamed"}
     )
-    providers_api.model_source_remove(tmp_path, "local-a", apply=False)
+    providers_api.model_source_remove(tmp_path, "local-a")
     assert providers_api.model_source_list(tmp_path)["sources"] == {}
 
 
 def test_update_unknown_source_rejected(tmp_path: Path) -> None:
     with pytest.raises(AudiaGenticError):
-        providers_api.model_source_update(tmp_path, "nope", {"enabled": False}, apply=False)
+        providers_api.model_source_update(tmp_path, "nope", {"enabled": False})
 
 
 def test_invalid_config_rejected_without_partial_write(tmp_path: Path) -> None:
     with pytest.raises(AudiaGenticError) as exc:
         providers_api.model_source_add(
-            tmp_path, "bad", {"source-class": "nope", "connector": "openai-compatible"}, apply=False
+            tmp_path, "bad", {"source-class": "nope", "connector": "openai-compatible"}
         )
     assert exc.value.code == "VAL-MEP-001"
     assert not _sources_file(tmp_path).exists()

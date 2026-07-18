@@ -120,7 +120,7 @@ def recorded_mcp(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, Path, bool]
     [
         ("lifecycle.component.installed", True),
         ("lifecycle.component.enabled", True),
-        ("lifecycle.component.disabled", True),
+        ("lifecycle.component.disabled", False),
         ("lifecycle.component.uninstalled", False),
     ],
 )

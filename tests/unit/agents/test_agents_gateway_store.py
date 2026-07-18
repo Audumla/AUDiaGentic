@@ -2,22 +2,32 @@
 state transitions, and error redaction (AG08)."""
 from __future__ import annotations
 
+import functools
+import json
+import multiprocessing
+import os
+import subprocess
+import sys
 import threading
 from pathlib import Path
 
 import pytest
 
 from audiagentic.components.agents import agents_gateway_store as store
-from audiagentic.components.agents.agents_paths import gateway_timeline_path
+from audiagentic.components.agents.agents_paths import (
+    gateway_idempotency_index_path,
+    gateway_request_path,
+    gateway_timeline_path,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import load_ndjson
+from audiagentic.foundation.io import atomic_write_json, load_ndjson
 
 
 def test_build_record_defaults(tmp_path: Path) -> None:
     record = store.build_record(agent_profile_id="default", prompt_body="do the thing")
     assert record["state"] == "queued"
     assert record["mode"] == "async"
-    assert record["fallback-profile-ids"] == []
+    assert "fallback-profile-ids" not in record
     assert record["attempts"] == []
     assert record["cancel-requested"] is False
     assert record["request-id"].startswith("req_")
@@ -51,19 +61,290 @@ def test_build_record_rejects_non_positive_timeout(tmp_path: Path) -> None:
     assert exc_info.value.code == "VAL-AGW-008"
 
 
-def test_build_record_rejects_string_fallback_profile_ids() -> None:
-    """A bare string is iterable, so 'backup' would silently explode into
-    ['b','a','c','k','u','p'] without this check (RV30)."""
-    with pytest.raises(AudiaGenticError) as exc_info:
-        store.build_record(agent_profile_id="default", prompt_body="x", fallback_profile_ids="backup")
-    assert exc_info.value.code == "VAL-AGW-009"
-
-
 def test_write_and_read_round_trip(tmp_path: Path) -> None:
-    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    """SH02: prompt-body is redacted before persistence; only digest survives."""
+    record = store.build_record(
+        agent_profile_id="default",
+        prompt_body="hello",
+        manifest_id="mf_test123",
+        context_fingerprint="fp" * 32,
+        prompt_digest="digest123",
+    )
     store.write_record(tmp_path, record)
     fetched = store.read_record(tmp_path, record["request-id"])
-    assert fetched == record
+
+    # SH02: prompt-body is redacted before persistence
+    assert fetched["prompt-body"] is None
+    # But manifest fields survive
+    assert fetched["manifest-id"] == "mf_test123"
+    assert fetched["context-fingerprint"] == "fp" * 32
+    assert fetched["prompt-digest"] == "digest123"
+    # Other fields round-trip correctly
+    for key in ("request-id", "agent-profile-id", "mode", "state", "contract-version"):
+        assert fetched[key] == record[key], f"{key} mismatch"
+
+
+def test_admit_record_replays_same_key_and_intent_without_raw_key(tmp_path: Path) -> None:
+    raw_key = "customer-request-opaque-key"
+    first, created = store.admit_record(
+        tmp_path,
+        store.build_record(
+            agent_profile_id="default",
+            prompt_body="private prompt",
+            context_fingerprint="a" * 64,
+            prompt_digest="b" * 64,
+        ),
+        idempotency_key=raw_key,
+    )
+    replay, replay_created = store.admit_record(
+        tmp_path,
+        store.build_record(
+            agent_profile_id="default",
+            prompt_body="private prompt",
+            context_fingerprint="a" * 64,
+            prompt_digest="b" * 64,
+        ),
+        idempotency_key=raw_key,
+    )
+
+    assert created is True
+    assert replay_created is False
+    assert replay["request-id"] == first["request-id"]
+    assert replay["prompt-body"] is None
+    key_digest = store.hash_idempotency_key(raw_key)
+    assert store.read_record(tmp_path, first["request-id"])["idempotency-key"] == key_digest
+    index_path = gateway_idempotency_index_path(tmp_path, key_digest)
+    assert raw_key not in index_path.read_text(encoding="utf-8")
+    assert raw_key not in gateway_request_path(tmp_path, first["request-id"]).read_text(encoding="utf-8")
+
+
+def test_admit_record_rejects_same_key_with_different_intent(tmp_path: Path) -> None:
+    store.admit_record(
+        tmp_path,
+        store.build_record(
+            agent_profile_id="default", prompt_body="first", prompt_digest="a" * 64,
+            context_fingerprint="b" * 64,
+        ),
+        idempotency_key="same-key",
+    )
+
+    with pytest.raises(AudiaGenticError, match="CON-AGW-081"):
+        store.admit_record(
+            tmp_path,
+            store.build_record(
+                agent_profile_id="default", prompt_body="second", prompt_digest="c" * 64,
+                context_fingerprint="b" * 64,
+            ),
+            idempotency_key="same-key",
+        )
+
+
+def test_admit_record_repairs_stale_index_then_uses_persisted_intent_as_authority(
+    tmp_path: Path,
+) -> None:
+    """A well-formed stale index cannot override the durable request record."""
+    raw_key = "stale-index-key"
+    original, _ = store.admit_record(
+        tmp_path,
+        store.build_record(
+            agent_profile_id="default", prompt_body="original", prompt_digest="a" * 64,
+            context_fingerprint="b" * 64,
+        ),
+        idempotency_key=raw_key,
+    )
+    changed = store.build_record(
+        agent_profile_id="default", prompt_body="changed", prompt_digest="c" * 64,
+        context_fingerprint="b" * 64,
+    )
+    key_digest = store.hash_idempotency_key(raw_key)
+    index_path = gateway_idempotency_index_path(tmp_path, key_digest)
+    # The stale entry is structurally valid and points to a real record, but
+    # advertises the contender's different intent.
+    atomic_write_json(index_path, {
+        "key-digest": key_digest,
+        "intent-digest": store._intent_digest(changed),
+        "request-id": original["request-id"],
+    })
+
+    with pytest.raises(AudiaGenticError, match="CON-AGW-081"):
+        store.admit_record(tmp_path, changed, idempotency_key=raw_key)
+
+    repaired = json.loads(index_path.read_text(encoding="utf-8"))
+    assert repaired == {
+        "key-digest": key_digest,
+        "intent-digest": store._intent_digest(original),
+        "request-id": original["request-id"],
+    }
+    replay, created = store.admit_record(
+        tmp_path,
+        store.build_record(
+            agent_profile_id="default", prompt_body="original", prompt_digest="a" * 64,
+            context_fingerprint="b" * 64,
+        ),
+        idempotency_key=raw_key,
+    )
+    assert created is False
+    assert replay["request-id"] == original["request-id"]
+
+
+def test_concurrent_admission_creates_one_record_for_one_key(tmp_path: Path) -> None:
+    barrier = threading.Barrier(8)
+    results: list[tuple[str, bool]] = []
+    errors: list[BaseException] = []
+
+    def submit() -> None:
+        try:
+            candidate = store.build_record(
+                agent_profile_id="default", prompt_body="private", prompt_digest="a" * 64,
+                context_fingerprint="b" * 64,
+            )
+            barrier.wait(timeout=5)
+            record, created = store.admit_record(tmp_path, candidate, idempotency_key="one-key")
+            results.append((record["request-id"], created))
+        except BaseException as exc:  # pragma: no cover - asserted below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=submit) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert not errors, errors
+    assert {request_id for request_id, _ in results}
+    assert len({request_id for request_id, _ in results}) == 1
+    assert sum(created for _, created in results) == 1
+    assert len(store.list_records(tmp_path)) == 1
+
+
+def test_cross_process_admission_creates_one_record_for_one_key(tmp_path: Path) -> None:
+    context = multiprocessing.get_context("spawn")
+    processes = [
+        context.Process(
+            target=functools.partial(
+                store.admit_record,
+                tmp_path,
+                store.build_record(
+                    agent_profile_id="default", prompt_body="private", prompt_digest="a" * 64,
+                    context_fingerprint="b" * 64,
+                ),
+                idempotency_key="cross-process-key",
+            ),
+        )
+        for _ in range(8)
+    ]
+    for process in processes:
+        process.start()
+    for process in processes:
+        process.join(timeout=20)
+
+    assert [process.exitcode for process in processes] == [0] * len(processes)
+    records = store.list_records(tmp_path)
+    assert len(records) == 1
+    assert records[0]["idempotency-key"] == store.hash_idempotency_key("cross-process-key")
+
+
+def test_cross_process_divergent_intents_have_one_winner_and_conflicts(tmp_path: Path) -> None:
+    """The admission lock serializes unlike intents without duplicate records."""
+    contender_count = 4
+    worker = """
+import json
+import sys
+from pathlib import Path
+
+from audiagentic.components.agents import agents_gateway_store as store
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+try:
+    record, created = store.admit_record(
+        Path(sys.argv[1]),
+        store.build_record(
+            agent_profile_id=\"default\",
+            prompt_body=\"private\",
+            prompt_digest=sys.argv[2],
+            context_fingerprint=\"b\" * 64,
+        ),
+        idempotency_key=\"cross-process-divergent-key\",
+    )
+except AudiaGenticError as exc:
+    print(json.dumps({\"outcome\": \"rejected\", \"code\": exc.code}))
+else:
+    print(json.dumps({\"outcome\": \"admitted\", \"created\": created, \"request-id\": record[\"request-id\"]}))
+"""
+    environment = dict(os.environ)
+    source_root = str(Path(__file__).resolve().parents[3] / "src")
+    environment["PYTHONPATH"] = source_root + os.pathsep + environment.get("PYTHONPATH", "")
+    processes = [
+        subprocess.Popen(
+            [sys.executable, "-c", worker, str(tmp_path), f"{index:x}" * 64],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=environment,
+        )
+        for index in range(contender_count)
+    ]
+    completed = [process.communicate(timeout=30) for process in processes]
+    assert [process.returncode for process in processes] == [0] * contender_count, completed
+    observed = [json.loads(stdout) for stdout, _stderr in completed]
+    winners = [outcome for outcome in observed if outcome["outcome"] == "admitted"]
+    conflicts = [outcome for outcome in observed if outcome["outcome"] == "rejected"]
+    assert len(winners) == 1
+    assert winners[0]["created"] is True
+    assert [outcome["code"] for outcome in conflicts] == ["CON-AGW-081"] * (contender_count - 1)
+    assert len(store.list_records(tmp_path)) == 1
+
+
+def test_admit_record_recovers_missing_index_from_persisted_record(tmp_path: Path) -> None:
+    raw_key = "recover-index"
+    first, _ = store.admit_record(
+        tmp_path,
+        store.build_record(
+            agent_profile_id="default", prompt_body="private", prompt_digest="a" * 64,
+            context_fingerprint="b" * 64,
+        ),
+        idempotency_key=raw_key,
+    )
+    index_path = gateway_idempotency_index_path(tmp_path, store.hash_idempotency_key(raw_key))
+    index_path.unlink()
+
+    replay, created = store.admit_record(
+        tmp_path,
+        store.build_record(
+            agent_profile_id="default", prompt_body="private", prompt_digest="a" * 64,
+            context_fingerprint="b" * 64,
+        ),
+        idempotency_key=raw_key,
+    )
+
+    assert created is False
+    assert replay["request-id"] == first["request-id"]
+    assert index_path.exists()
+
+
+def test_admit_record_recovers_orphaned_index_without_reviving_lost_prompt(tmp_path: Path) -> None:
+    raw_key = "recover-orphan"
+    first, _ = store.admit_record(
+        tmp_path,
+        store.build_record(
+            agent_profile_id="default", prompt_body="lost prompt", prompt_digest="a" * 64,
+            context_fingerprint="b" * 64,
+        ),
+        idempotency_key=raw_key,
+    )
+    gateway_request_path(tmp_path, first["request-id"]).unlink()
+
+    admitted, created = store.admit_record(
+        tmp_path,
+        store.build_record(
+            agent_profile_id="default", prompt_body="replacement prompt", prompt_digest="c" * 64,
+            context_fingerprint="b" * 64,
+        ),
+        idempotency_key=raw_key,
+    )
+
+    assert created is True
+    assert admitted["request-id"] != first["request-id"]
 
 
 def test_read_missing_record_raises(tmp_path: Path) -> None:
@@ -177,7 +458,7 @@ def test_mark_cancel_requested_is_idempotent(tmp_path: Path) -> None:
 
 
 def test_concurrent_mark_cancel_requested_and_append_attempt_do_not_clobber(tmp_path: Path) -> None:
-    """RV31: without per-request locking, a cancel racing a dispatch worker's
+    """A cancel racing a dispatch worker's
     attempt append is a lost-update — whichever read-modify-write lands last
     silently discards the other's change. Hammer both concurrently and assert
     neither is ever lost."""
@@ -219,6 +500,58 @@ def test_concurrent_mark_cancel_requested_and_append_attempt_do_not_clobber(tmp_
     assert len(final["attempts"]) == iterations
 
 
+def test_cross_process_attempt_appends_do_not_lose_updates(tmp_path: Path) -> None:
+    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    request_id = record["request-id"]
+    context = multiprocessing.get_context("spawn")
+    count = 12
+    processes = [
+        context.Process(
+            target=functools.partial(
+                store.append_attempt,
+                tmp_path,
+                request_id,
+                agent_profile_id="default",
+                provider_id="local-openai",
+                model_id=f"model-{index}",
+                state="failed",
+            ),
+        )
+        for index in range(count)
+    ]
+
+    for process in processes:
+        process.start()
+    for process in processes:
+        process.join(timeout=20)
+
+    assert [process.exitcode for process in processes] == [0] * count
+    final = store.read_record(tmp_path, request_id)
+    assert len(final["attempts"]) == count
+    assert final["revision"] == count
+
+
+def test_attempt_identity_rejects_stale_worker_terminal_write(tmp_path: Path) -> None:
+    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    running = store.start_attempt(tmp_path, record["request-id"], "worker-current")
+
+    with pytest.raises(AudiaGenticError, match="CON-AGW-072"):
+        store.transition_record(
+            tmp_path,
+            record["request-id"],
+            "completed",
+            expected_worker_id="worker-stale",
+            expected_attempt_epoch=running["attempt-epoch"],
+        )
+
+    current = store.read_record(tmp_path, record["request-id"])
+    assert current["state"] == "running"
+    assert current["worker-id"] == "worker-current"
+    assert current["attempt-epoch"] == 1
+
+
 def test_append_attempt_does_not_change_state(tmp_path: Path) -> None:
     record = store.build_record(agent_profile_id="default", prompt_body="hello")
     store.write_record(tmp_path, record)
@@ -237,4 +570,144 @@ def test_append_attempt_does_not_change_state(tmp_path: Path) -> None:
 
 
 def test_terminal_states() -> None:
-    assert store.TERMINAL_STATES == {"completed", "failed", "cancelled", "rejected"}
+    assert store.TERMINAL_STATES == {"completed", "failed", "cancelled", "rejected", "interrupted"}
+
+
+def test_read_migrates_v1_record_under_request_lock(tmp_path: Path) -> None:
+    legacy = store.build_record(agent_profile_id="default", prompt_body="secret")
+    legacy["contract-version"] = "v1"
+    legacy.pop("dispatch-owner-epoch")
+    legacy.pop("dispatch-claimed-at")
+    legacy.pop("recovery")
+    store.write_record(tmp_path, {**legacy, "contract-version": "v2", "dispatch-owner-epoch": None,
+                                  "dispatch-claimed-at": None, "recovery": None})
+    path = gateway_request_path(tmp_path, legacy["request-id"])
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["contract-version"] = "v1"
+    raw.pop("dispatch-owner-epoch")
+    raw.pop("dispatch-claimed-at")
+    raw.pop("recovery")
+    atomic_write_json(path, raw)
+
+    migrated = store.read_record(tmp_path, legacy["request-id"])
+
+    assert migrated["contract-version"] == "v2"
+    assert migrated["dispatch-owner-epoch"] is None
+    assert migrated["recovery"] is None
+    assert json.loads(path.read_text(encoding="utf-8"))["contract-version"] == "v2"
+    assert load_ndjson(gateway_timeline_path(tmp_path, legacy["request-id"]))[-1]["event"] == "record.migrated"
+
+
+def test_owned_dispatch_fences_reject_stale_owner_worker_and_attempt(tmp_path: Path) -> None:
+    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(
+        tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0
+    )
+    running = store.start_owned_attempt(
+        tmp_path, record["request-id"], owner_epoch="service-a", worker_id="worker-a",
+        expected_revision=claimed["revision"],
+    )
+
+    with pytest.raises(AudiaGenticError, match="CON-AGW-083"):
+        store.transition_owned_terminal(
+            tmp_path, record["request-id"], "completed", owner_epoch="service-b",
+            worker_id="worker-a", attempt_epoch=running["attempt-epoch"],
+        )
+    with pytest.raises(AudiaGenticError, match="CON-AGW-072"):
+        store.transition_owned_terminal(
+            tmp_path, record["request-id"], "completed", owner_epoch="service-a",
+            worker_id="worker-b", attempt_epoch=running["attempt-epoch"],
+        )
+    with pytest.raises(AudiaGenticError, match="CON-AGW-073"):
+        store.transition_owned_terminal(
+            tmp_path, record["request-id"], "completed", owner_epoch="service-a",
+            worker_id="worker-a", attempt_epoch=running["attempt-epoch"] + 1,
+        )
+
+    terminal = store.transition_owned_terminal(
+        tmp_path, record["request-id"], "interrupted", owner_epoch="service-a",
+        worker_id="worker-a", attempt_epoch=running["attempt-epoch"],
+        updates={"recovery": {"reason": "service-restart", "outcome": "resubmit-required"}},
+    )
+    assert terminal["state"] == "interrupted"
+
+
+def test_owned_mutations_require_a_complete_owner_identity(tmp_path: Path) -> None:
+    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    running = store.start_attempt(tmp_path, record["request-id"], "worker-current")
+
+    with pytest.raises(AudiaGenticError, match="VAL-AGW-085"):
+        store.append_owned_attempt(
+            tmp_path, record["request-id"],
+            owner_epoch="", worker_id="worker-current", attempt_epoch=running["attempt-epoch"],
+            agent_profile_id="default", provider_id="local-openai", model_id="gpt-4o", state="failed",
+        )
+    with pytest.raises(AudiaGenticError, match="VAL-AGW-085"):
+        store.transition_owned_terminal(
+            tmp_path, record["request-id"], "failed",
+            owner_epoch=None, worker_id="worker-current", attempt_epoch=running["attempt-epoch"],
+        )
+
+
+def test_recovery_record_is_a_strict_safe_projection(tmp_path: Path) -> None:
+    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(
+        tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0
+    )
+    running = store.start_owned_attempt(
+        tmp_path, record["request-id"], owner_epoch="service-a", worker_id="worker-a",
+        expected_revision=claimed["revision"],
+    )
+
+    with pytest.raises(AudiaGenticError, match="VAL-AGW-004"):
+        store.transition_owned_terminal(
+            tmp_path, record["request-id"], "interrupted",
+            owner_epoch="service-a", worker_id="worker-a", attempt_epoch=running["attempt-epoch"],
+            updates={"recovery": {"reason": "service-restart", "outcome": "resubmit-required", "secret": "nope"}},
+        )
+
+    terminal = store.transition_owned_terminal(
+        tmp_path, record["request-id"], "interrupted",
+        owner_epoch="service-a", worker_id="worker-a", attempt_epoch=running["attempt-epoch"],
+        updates={"recovery": {"reason": "service-restart", "outcome": "resubmit-required"}},
+    )
+    status = store.read_public_status(tmp_path, record["request-id"])
+    assert terminal["recovery"] == {"reason": "service-restart", "outcome": "resubmit-required"}
+    assert status["recovery"] == terminal["recovery"]
+
+
+def test_public_status_latest_transition_excludes_timeline_attributes(tmp_path: Path) -> None:
+    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    store.record_gateway_timeline(
+        tmp_path,
+        record["request-id"],
+        "operator.checked",
+        state="queued",
+        attributes={"raw-secret": "must-not-be-projected", "context-fingerprint": "also-private"},
+    )
+
+    status = store.read_public_status(tmp_path, record["request-id"])
+
+    assert status["latest-transition"] is not None
+    assert status["latest-transition"]["event"] == "operator.checked"
+    assert status["latest-transition"]["state"] == "queued"
+    assert set(status["latest-transition"]) == {"event", "state", "timestamp"}
+    assert "raw-secret" not in status["latest-transition"]
+    assert "context-fingerprint" not in status["latest-transition"]
+
+
+def test_public_status_projection_excludes_submission_secrets() -> None:
+    record = store.build_record(
+        agent_profile_id="default", prompt_body="secret", prompt_digest="digest",
+        context_fingerprint="fingerprint", idempotency_key="key", metadata={"subject": "private"},
+    )
+    status = store.project_public_status(record)
+    assert "prompt-body" not in status
+    assert "prompt-digest" not in status
+    assert "context-fingerprint" not in status
+    assert "idempotency-key" not in status
+    assert "metadata" not in status

@@ -27,7 +27,6 @@ from typing import Any
 
 import pytest
 
-from audiagentic.components.coding_lsp.language_servers import LanguageServerEntry
 from audiagentic.components.providers.adapters.codex.language_servers import (
     read_language_servers_codex,
     remove_language_servers_codex,
@@ -53,6 +52,7 @@ from audiagentic.components.providers.adapters.qwen.language_servers import (
     remove_language_servers_qwen,
     write_language_servers_qwen,
 )
+from audiagentic.components.providers.providers_api import LanguageServerEntry
 from audiagentic.foundation.mcp import McpServerEntry
 
 

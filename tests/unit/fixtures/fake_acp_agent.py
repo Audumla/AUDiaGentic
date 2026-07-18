@@ -8,6 +8,8 @@ from acp import (
     run_agent,
     text_block,
     update_agent_message,
+    update_agent_thought_text,
+    update_tool_call,
 )
 from acp.schema import ListSessionsResponse
 
@@ -20,6 +22,10 @@ class FakeAcpAgent:
 
     State is kept in-process across turns — turn 2's response contains the
     cumulative count from turn 1 + turn 2, proving context retention.
+
+    Emits normalized intra-turn events for AS18/AS20 testing using ACP SDK types:
+    AgentThoughtChunk (model started), AgentMessageChunk (response),
+    ToolCallProgress (tool start/complete).
     """
 
     def __init__(self) -> None:
@@ -66,12 +72,34 @@ class FakeAcpAgent:
             elif hasattr(block, "type") and getattr(block, "type", None) == "text":
                 prompt_text = getattr(block, "text", "")
 
-        # Send session update with turn number + echoed text
+        # Emit normalized intra-turn events for AS18/AS20 testing.
+        # Sequence: thought (model started) → agent_message_chunk (response)
+        #   → tool_call pending (tool started) → tool_call completed
+
+        # 1. Model started — AgentThoughtChunk
+        await self._conn.session_update(
+            session_id,
+            update_agent_thought_text(f"[model] turn-{turn} starting"),
+        )
+
+        # 2. Assistant message chunk (the actual response) — AgentMessageChunk
         await self._conn.session_update(
             session_id,
             update_agent_message(
                 text_block(f"[turn={turn}] echo: {prompt_text}")
             ),
+        )
+
+        # 3. Tool started — ToolCallProgress with status "pending"
+        await self._conn.session_update(
+            session_id,
+            update_tool_call(f"tc-{turn}", title="echo", status="pending"),
+        )
+
+        # 4. Tool completed — ToolCallProgress with status "completed"
+        await self._conn.session_update(
+            session_id,
+            update_tool_call(f"tc-{turn}", title="echo", status="completed"),
         )
 
         return PromptResponse(stop_reason="end_turn")
