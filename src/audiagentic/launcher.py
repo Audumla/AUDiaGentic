@@ -3,6 +3,7 @@
 Usage
 -----
   audiagentic install [--target PATH]              Install harness (once per machine / shared folder)
+  audiagentic uninstall [--target PATH]            Remove harness-owned runtime files
   audiagentic component list [--project PATH]      List all registered components and their status
   audiagentic component install ID [--project PATH]
   audiagentic component uninstall ID [--project PATH] [--remove-configs]
@@ -22,6 +23,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from audiagentic.commands.component import _cmd_component
+from audiagentic.commands.gateway import cmd_gateway
 from audiagentic.commands.install import cmd_install
 from audiagentic.commands.job_control import cmd_job_control
 from audiagentic.commands.launch import _cmd_launch
@@ -30,6 +32,7 @@ from audiagentic.commands.provider_prompt import _try_provider_prompt
 from audiagentic.commands.refresh import cmd_refresh
 from audiagentic.commands.release_bootstrap import cmd_release_bootstrap
 from audiagentic.commands.session_input import cmd_session_input
+from audiagentic.commands.uninstall import cmd_uninstall
 from audiagentic.commands.update import cmd_update
 from audiagentic.foundation.cli_io import print_error
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -48,7 +51,9 @@ def _cmd_update_binaries(args: argparse.Namespace, project_root: Path) -> int:
 
 _COMMAND_HANDLERS: dict[str, Callable] = {
     "install": cmd_install,
+    "uninstall": cmd_uninstall,
     "component": _cmd_component,
+    "gateway": cmd_gateway,
     "update": cmd_update,
     "mcp": cmd_mcp,
     "job-control": cmd_job_control,
@@ -106,6 +111,14 @@ def _main(argv: list[str] | None = None) -> int:
         help="Install location (default: ~/.audiagentic/harness, override with AUDIAGENTIC_HOME)",
     )
 
+    uninstall_parser = subparsers.add_parser("uninstall", help="Remove installed harness files")
+    uninstall_parser.add_argument(
+        "--target",
+        metavar="PATH",
+        default=None,
+        help="Install location (default: ~/.audiagentic/harness, override with AUDIAGENTIC_HOME)",
+    )
+
     component_parser = subparsers.add_parser("component", help="Manage installed components")
     component_sub = component_parser.add_subparsers(dest="component_cmd", required=True)
 
@@ -120,6 +133,13 @@ def _main(argv: list[str] | None = None) -> int:
                 action="store_true",
                 help="Also delete create-if-missing config files",
             )
+
+    gateway_parser = subparsers.add_parser("gateway", help="Manage the local agent gateway")
+    gateway_sub = gateway_parser.add_subparsers(dest="gateway_cmd", required=True)
+    gateway_serve = gateway_sub.add_parser("serve", help="Run the standalone local gateway")
+    gateway_serve.add_argument("--host", default="127.0.0.1", choices=["127.0.0.1"])
+    gateway_serve.add_argument("--port", type=int, default=0)
+    gateway_serve.add_argument("--token-file", metavar="PATH")
 
     subparsers.add_parser("update", help="Check for a new audiagentic version and update")
 
