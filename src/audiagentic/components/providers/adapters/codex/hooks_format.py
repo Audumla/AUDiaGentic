@@ -5,7 +5,7 @@ value = {event, timeout}. The adapter is the ONLY place that knows Codex's
 nested per-event list shape (entries are {type:"command", command, timeout}
 under event keys; 'type' stays adapter-internal).
 
-Also carries the surgical [features] codex_hooks upsert — enables the flag
+Also carries the surgical [features] hooks upsert — enables the flag
 when writing entries.
 """
 from __future__ import annotations
@@ -78,8 +78,19 @@ def _enable_codex_hooks(config_path: Path) -> None:
     text = _read_text(config_path)
     lines = text.splitlines()
     if not lines:
-        config_path.write_text("[features]\ncodex_hooks = true\n", encoding="utf-8")
+        atomic_write_text(config_path, "[features]\nhooks = true\n")
         return
+
+    in_features = False
+    has_current_flag = False
+    for raw in lines:
+        stripped = raw.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            in_features = stripped == "[features]"
+            continue
+        key = stripped.partition("=")[0].strip()
+        if in_features and key == "hooks":
+            has_current_flag = True
 
     out: list[str] = []
     in_features = False
@@ -89,26 +100,32 @@ def _enable_codex_hooks(config_path: Path) -> None:
         stripped = raw.strip()
         if stripped.startswith("[") and stripped.endswith("]"):
             if in_features and not wrote:
-                out.append("codex_hooks = true")
+                out.append("hooks = true")
                 wrote = True
             in_features = stripped == "[features]"
             saw_features = saw_features or in_features
             out.append(raw)
             continue
-        if in_features and stripped.startswith("codex_hooks"):
-            out.append("codex_hooks = true")
+        key = stripped.partition("=")[0].strip()
+        if in_features and key == "codex_hooks":
+            if not has_current_flag and not wrote:
+                out.append("hooks = true")
+                wrote = True
+            continue
+        if in_features and key == "hooks":
+            out.append("hooks = true")
             wrote = True
             continue
         out.append(raw)
 
     if saw_features and in_features and not wrote:
-        out.append("codex_hooks = true")
+        out.append("hooks = true")
         wrote = True
     if not saw_features:
         if out and out[-1].strip():
             out.append("")
-        out.extend(["[features]", "codex_hooks = true"])
-    config_path.write_text("\n".join(out).rstrip() + "\n", encoding="utf-8")
+        out.extend(["[features]", "hooks = true"])
+    atomic_write_text(config_path, "\n".join(out).rstrip() + "\n")
 
 
 def read_codex_hooks(path: Path) -> dict[str, dict[str, Any]]:
@@ -146,7 +163,7 @@ def write_codex_hooks(path: Path, entries: dict[str, dict[str, Any]]) -> None:
     """Write one or more hook entries into hooks.json.
 
     Merges with existing content — foreign entries are preserved. Enables the
-    [features] codex_hooks = true flag in ~/.codex/config.toml so Codex will
+    [features] hooks = true flag in ~/.codex/config.toml so Codex will
     actually run hooks (decision (a) of MA26 step 3).
     """
     data = _load_hooks(path)

@@ -73,7 +73,9 @@ Optional file-based event persistence with atomic writes (temp file + rename). B
 Dataclass-based configuration loaded from `.audiagentic/event/config.yaml`.
 
 - `EventStoreSettings` — enabled, path, retention_days
-- `EventCycleDetectionSettings` — max_depth, correlation_tracking
+- `EventCycleDetectionSettings` — `max_depth`, `correlation_tracking`,
+  `max_correlation_chains`, and `max_events_per_correlation`; both correlation
+  dimensions use bounded least-recently-used retention
 - `EventReplaySettings` — dispatch_on_replay
 - `EventLayerConfig` — top-level event-layer settings object
 - `load_event_config(root)` — loads from file or returns defaults

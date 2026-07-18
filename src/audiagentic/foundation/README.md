@@ -15,7 +15,7 @@ Foundation is where AUDiaGentic keeps reusable building blocks that should stay 
 - `mcp/` shared MCP server scaffolding and output bridging
 - `system/` process and host-level helpers
 - `toolchains/` external dependency detection and recipe loading
-- `workflow/` state-machine and propagation primitives
+- `workflow/` state-machine, transition, and propagation primitives
 
 ## Must Not Own
 

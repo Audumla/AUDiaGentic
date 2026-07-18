@@ -17,7 +17,7 @@ Centralize behavior shared across all provider adapters so component APIs do not
 
 ## Key Files
 
-- `provider_registry.py` and `provider_config.py` load configured providers and descriptors.
+- `provider_config.py` loads configured providers and descriptors.
 - `catalog.py` and `provider_catalog.py` own model catalog refresh/persistence.
 - `execution.py` routes runtime execution.
 - `health.py`, `status.py`, and `lifecycle.py` compute install/runtime state and reconciliation plans.
