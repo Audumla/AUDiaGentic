@@ -22,7 +22,7 @@ from ..descriptors.registry import (
     get_descriptor,
 )
 from .health import health_check
-from .lifecycle import _probe_provider_cli
+from .lifecycle import probe_provider_cli
 from .models import model_ownership_registry, resolve_model_selection
 
 
@@ -120,7 +120,7 @@ def _provider_entry(
     descriptor = get_descriptor(provider_id)
     entry["model-config"] = _model_config_status(provider_id, descriptor, project_root)
     cli_probe = descriptor.cli_probe if descriptor and descriptor.cli_probe else None
-    entry["cli-check"] = _probe_provider_cli(descriptor) if descriptor and include_probes else None
+    entry["cli-check"] = probe_provider_cli(descriptor) if descriptor and include_probes else None
 
     from .host_adapter import all_host_adapters
 

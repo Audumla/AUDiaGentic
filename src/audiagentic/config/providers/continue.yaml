@@ -2,6 +2,7 @@
 # Toolchain-based install (npm), custom probe, JSON MCP config, VS Code extension
 
 provider_id: continue
+execution_isolation_tier: partial-isolation
 automation_capabilities:
 
   - family_id: cli-lifecycle

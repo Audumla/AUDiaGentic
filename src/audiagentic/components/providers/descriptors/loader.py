@@ -5,8 +5,8 @@ Builds ``ProviderDescriptor`` instances from YAML files under
     load YAML → resolve dotpath hooks → build step tree → construct typed descriptor
 
 The PROVIDER_SPEC declares the field map for ProviderDescriptor.
-Hindsight-specific fields are NOT part of this spec — they belong to
-``config/components/memory/hindsight_matrix.yaml``.
+Requester-specific fields are NOT part of this spec; they belong to their
+own owning components.
 """
 from __future__ import annotations
 
@@ -22,10 +22,7 @@ from audiagentic.foundation.toolchains.managed_config import (
 )
 from audiagentic.foundation.workflow.invocation.from_spec import build_step_from_spec
 
-from .automation_capabilities import (
-    ProviderAutomationCapability,
-    validate_automation_capabilities,
-)
+from .automation_capabilities import ProviderAutomationCapability, validate_automation_capabilities
 from .base import (
     AgentFile,
     CapabilityEvidence,
@@ -315,6 +312,23 @@ def _build_hooks_config(data: dict[str, Any]) -> ManagedConfigSpec:
 
 def _construct_provider_descriptor(**values: Any) -> ProviderDescriptor:
     descriptor = ProviderDescriptor(**values)
+    if descriptor.execution_isolation_tier not in {
+        "full-isolation",
+        "partial-isolation",
+        "no-isolation",
+    }:
+        raise AudiaGenticError(
+            code="VAL-PCAP-010",
+            kind="providers",
+            message=(
+                "execution_isolation_tier must be full-isolation, "
+                "partial-isolation, or no-isolation"
+            ),
+            details={
+                "provider_id": descriptor.provider_id,
+                "execution_isolation_tier": descriptor.execution_isolation_tier,
+            },
+        )
     validate_provider_capability_facts(descriptor)
     validate_automation_capabilities(descriptor.automation_capabilities)
     return descriptor
@@ -332,6 +346,7 @@ PROVIDER_SPEC.add("cli_probe", yaml_key="cli_probe", kind="data", default=None)
 PROVIDER_SPEC.add("cli_install", yaml_key="cli_install", kind="nested", builder=_build_cli_install, default=None)
 PROVIDER_SPEC.add("host_capabilities", yaml_key="host_capabilities", kind="nested", builder=_build_host_capabilities, default=tuple())
 PROVIDER_SPEC.add("capability_facts", yaml_key="capability_facts", kind="nested", builder=_build_capability_facts, default=tuple())
+PROVIDER_SPEC.add("execution_isolation_tier", yaml_key="execution_isolation_tier", kind="data", required=True)
 PROVIDER_SPEC.add("automation_capabilities", yaml_key="automation_capabilities", kind="nested", builder=_build_automation_capabilities, default=tuple())
 PROVIDER_SPEC.add("permissions", yaml_key="permissions", kind="nested", builder=_build_permissions, default=ProviderPermissions())
 PROVIDER_SPEC.add("agent_files", yaml_key="agent_files", kind="nested", builder=_build_agent_files, default=tuple())

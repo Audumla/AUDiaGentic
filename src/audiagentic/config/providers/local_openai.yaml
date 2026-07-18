@@ -2,6 +2,7 @@
 # No CLI, no MCP, no LSP — REST endpoint only
 
 provider_id: local-openai
+execution_isolation_tier: no-isolation
 automation_capabilities:
   - family_id: generated-surfaces
     supported_modes: [plan, apply, prune, status]

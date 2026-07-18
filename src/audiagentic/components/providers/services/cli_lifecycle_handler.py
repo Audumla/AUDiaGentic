@@ -56,10 +56,10 @@ def _do_plan(
 ) -> CliLifecycleResult:
     """Plan: probe CLI state without mutation."""
     from audiagentic.components.providers.services.lifecycle import (
-        _probe_provider_cli,
+        probe_provider_cli,
     )
 
-    probe = _probe_provider_cli(descriptor)
+    probe = probe_provider_cli(descriptor)
     if probe and probe.get("available"):
         return CliLifecycleResult(
             ok=True,
@@ -70,8 +70,9 @@ def _do_plan(
     return CliLifecycleResult(
         ok=True,
         supported=True,
-        changed=False,
-        state="skipped",
+        changed=True,
+        state="uninstalled",
+        action_needed="install",
     )
 
 
@@ -80,13 +81,13 @@ def _do_apply(
     descriptor: Any,
     project_root: Path,
 ) -> CliLifecycleResult:
-    """Apply: probe first; install if absent; no-op if present; repair if broken."""
+    """Apply: probe first; install if absent; no-op if present."""
     from audiagentic.components.providers.services.lifecycle import (
-        _probe_provider_cli,
         install_provider_cli,
+        probe_provider_cli,
     )
 
-    probe = _probe_provider_cli(descriptor)
+    probe = probe_provider_cli(descriptor)
     if probe and probe.get("available"):
         return CliLifecycleResult(
             ok=True,
@@ -120,11 +121,11 @@ def _do_prune(
 ) -> CliLifecycleResult:
     """Prune: uninstall CLI and prune owned state."""
     from audiagentic.components.providers.services.lifecycle import (
-        _probe_provider_cli,
+        probe_provider_cli,
         uninstall_provider_cli,
     )
 
-    probe = _probe_provider_cli(descriptor)
+    probe = probe_provider_cli(descriptor)
     if not probe or not probe.get("available"):
         return CliLifecycleResult(
             ok=True,
@@ -157,10 +158,10 @@ def _do_status(
 ) -> CliLifecycleResult:
     """Status: probe current CLI state without mutation."""
     from audiagentic.components.providers.services.lifecycle import (
-        _probe_provider_cli,
+        probe_provider_cli,
     )
 
-    probe = _probe_provider_cli(descriptor)
+    probe = probe_provider_cli(descriptor)
     if probe and probe.get("available"):
         return CliLifecycleResult(
             ok=True,

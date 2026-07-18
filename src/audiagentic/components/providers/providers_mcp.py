@@ -63,9 +63,10 @@ def build_server() -> FastMCP:
     @mcp.tool()
     @log_tool_call
     async def manage_cli_lifecycle(provider_id: str, mode: str) -> dict[str, Any]:
-        return await providers_api.manage_cli_lifecycle(
+        result = await providers_api.manage_cli_lifecycle(
             project_root_from_env(), provider_id, mode=normalize_provider_cli_mode(mode)
         )
+        return result.to_mapping()
 
     @mcp.tool()
     @log_tool_call
@@ -79,14 +80,12 @@ def build_server() -> FastMCP:
         )
 
         if contribution_ids is None or len(contribution_ids) == 0:
-            from audiagentic.components.providers.surfaces.contributions import (
-                load_surface_contributions,
+            result = providers_api.operate_provider_surfaces(
+                project_root_from_env(),
+                provider_id=provider_id,
+                mode=mode,
             )
-
-            contributions = load_surface_contributions(
-                project_root=project_root_from_env()
-            )
-            contribution_ids = [c.contribution_id for c in contributions]
+            return result.to_mapping()
 
         request = GeneratedSurfaceRequest(
             ownership_scope=provider_id,
@@ -143,56 +142,49 @@ def build_server() -> FastMCP:
 
     @mcp.tool()
     @log_tool_call
-    def model_source_add(
-        source_id: str, config: dict[str, Any], apply: bool = True, dry_run: bool = False
-    ) -> dict[str, Any]:
-        return providers_api.model_source_add(
-            project_root_from_env(), source_id, config, apply=apply, dry_run=dry_run
+    def list_model_inventory() -> dict[str, Any]:
+        return providers_api.list_model_inventory(project_root_from_env())
+
+    @mcp.tool()
+    @log_tool_call
+    def refresh_model_source_catalog(source_id: str) -> dict[str, Any]:
+        return providers_api.refresh_model_source_catalog(
+            project_root_from_env(), source_id
         )
 
     @mcp.tool()
     @log_tool_call
-    def model_source_update(
-        source_id: str, updates: dict[str, Any], apply: bool = True, dry_run: bool = False
-    ) -> dict[str, Any]:
-        return providers_api.model_source_update(
-            project_root_from_env(), source_id, updates, apply=apply, dry_run=dry_run
+    def model_vendor_set_enabled(vendor_id: str, enabled: bool) -> dict[str, Any]:
+        return providers_api.model_vendor_set_enabled(
+            project_root_from_env(), vendor_id, enabled
         )
 
     @mcp.tool()
     @log_tool_call
-    def model_source_remove(
-        source_id: str, apply: bool = True, dry_run: bool = False
-    ) -> dict[str, Any]:
-        return providers_api.model_source_remove(
-            project_root_from_env(), source_id, apply=apply, dry_run=dry_run
-        )
+    def apply_model_sources() -> dict[str, Any]:
+        return providers_api.apply_model_sources(project_root_from_env())
 
     @mcp.tool()
     @log_tool_call
-    def model_source_set_enabled(
-        source_id: str, enabled: bool, apply: bool = True, dry_run: bool = False
-    ) -> dict[str, Any]:
+    def model_source_add(source_id: str, config: dict[str, Any]) -> dict[str, Any]:
+        return providers_api.model_source_add(project_root_from_env(), source_id, config)
+
+    @mcp.tool()
+    @log_tool_call
+    def model_source_update(source_id: str, updates: dict[str, Any]) -> dict[str, Any]:
+        return providers_api.model_source_update(project_root_from_env(), source_id, updates)
+
+    @mcp.tool()
+    @log_tool_call
+    def model_source_remove(source_id: str) -> dict[str, Any]:
+        return providers_api.model_source_remove(project_root_from_env(), source_id)
+
+    @mcp.tool()
+    @log_tool_call
+    def model_source_set_enabled(source_id: str, enabled: bool) -> dict[str, Any]:
         return providers_api.model_source_set_enabled(
-            project_root_from_env(), source_id, enabled, apply=apply, dry_run=dry_run
+            project_root_from_env(), source_id, enabled
         )
-
-    @mcp.tool()
-    @log_tool_call
-    def list_provider_models_config(provider_id: str) -> dict[str, Any]:
-        return providers_api.list_provider_models_config(project_root_from_env(), provider_id)
-
-    @mcp.tool()
-    @log_tool_call
-    def sync_provider_models(provider_id: str, dry_run: bool = False) -> dict[str, Any]:
-        return providers_api.sync_provider_models(
-            project_root_from_env(), provider_id, dry_run=dry_run
-        )
-
-    @mcp.tool()
-    @log_tool_call
-    def reload_provider_models(provider_id: str) -> dict[str, Any]:
-        return providers_api.reload_provider_models(project_root_from_env(), provider_id)
 
     @mcp.tool()
     @log_tool_call

@@ -2,6 +2,7 @@
 # Toolchain-based install (npm), custom probe, MCP JSON config, VS Code extensions
 
 provider_id: copilot
+execution_isolation_tier: no-isolation
 automation_capabilities:
 
   - family_id: cli-lifecycle
@@ -13,6 +14,11 @@ automation_capabilities:
     supported_modes: [apply, prune, status]
     payload_contract: provider-managed-mcp-payload/v1
     result_contract: provider-managed-mcp-result/v1
+    ownership_scope_required: true
+  - family_id: generated-surfaces
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-generated-surface-payload/v1
+    result_contract: provider-generated-surface-result/v1
     ownership_scope_required: true
 display_name: "GitHub Copilot"
 description: "GitHub's AI coding assistant. Inline completions, chat, and multi-file edits across VS Code and JetBrains."

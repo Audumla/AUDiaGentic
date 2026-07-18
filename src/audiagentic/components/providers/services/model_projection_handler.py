@@ -31,6 +31,7 @@ def _entry_to_materialized(entry) -> MaterializedModelEntry:
         visible_name=entry.visible_name,
         connector=entry.connector,
         managed_id=entry.managed_id,
+        vendor_id=entry.vendor_id,
         endpoint=dict(entry.endpoint),
         capabilities=dict(entry.capabilities),
         limits=dict(entry.limits),

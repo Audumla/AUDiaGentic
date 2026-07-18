@@ -3,12 +3,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from audiagentic.foundation.steps import CallableStep, SequenceStep, ShellStep
 from audiagentic.foundation.toolchains.managed_config import ManagedConfigSpec
 
 from .automation_capabilities import ProviderAutomationCapability
+
+IsolationTier = Literal["full-isolation", "partial-isolation", "no-isolation"]
 
 
 @dataclass(frozen=True)
@@ -114,6 +116,10 @@ class ProviderDescriptor:
     # Provider-owned knowledge/evidence. These records describe declared or
     # externally documented capabilities; they never register or execute them.
     capability_facts: tuple[ProviderCapabilityFact, ...] = field(default_factory=tuple)
+    # The provider-level execution configuration isolation fact.  It is not an
+    # automation-family property: gateway admission and worker materialization
+    # need one provider-wide declaration, independently of supported families.
+    execution_isolation_tier: IsolationTier = "no-isolation"
     # Explicitly declared automation families. These declarations are only
     # capability metadata; explicit provider+family code registration is still
     # required before an operation can execute.
@@ -139,8 +145,8 @@ class ProviderDescriptor:
     fetch_catalog_fn: Callable[[dict[str, Any]], list[dict[str, Any]]] | None = None
     # MCP server config spec — None means this provider has no manageable MCP config.
     # kind="mcp"; capabilities may include managed_config.REMOTE_CAPABILITY when the
-    # format can express url-form (remote) entries — consulted by capabilities
-    # (e.g. hindsight) before projecting a remote entry.
+    # format can express url-form (remote) entries — consulted by requesters
+    # before projecting a remote entry.
     mcp_config: ManagedConfigSpec | None = None
     # Generic named plugin-entry config capability (MA20). Requesters supply an
     # entry identity/options; this descriptor owns native format/path mechanics.
