@@ -1,14 +1,13 @@
 """Foundation workflow engine.
 
-Generic, host-agnostic workflow infrastructure: state machine, propagation
-engine, lifecycle actions, frontmatter assembly, relationships, ID generation.
+Generic, host-agnostic workflow infrastructure: state machines, lifecycle
+actions, frontmatter assembly, relationships, and ID generation.
 """
 
 from .actions import WorkflowActionExecutor, render
 from .frontmatter import FrontmatterBuilder
 from .id_gen import next_id
 from .interfaces import ItemView, WorkflowConfig, WorkflowContext
-from .propagation import StatePropagationEngine, WorkflowItemAPI
 from .state_machine import StateMachine
 from .transition_engine import TransitionConfig, TransitionEngine
 from .transitions import (
@@ -27,11 +26,9 @@ __all__ = [
     "StateMachine",
     "TransitionConfig",
     "TransitionEngine",
-    "StatePropagationEngine",
     "WorkflowActionExecutor",
     "WorkflowConfig",
     "WorkflowContext",
-    "WorkflowItemAPI",
     "body_has_section",
     "extract_ref_ids",
     "in_state_set",
