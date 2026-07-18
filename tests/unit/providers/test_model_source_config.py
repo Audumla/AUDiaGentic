@@ -50,7 +50,7 @@ def test_valid_local_endpoint_source_passes() -> None:
 
 
 def test_valid_remote_account_source_passes() -> None:
-    payload = {"contract-version": "v1", "sources": {"openrouter-main": _remote_account()}}
+    payload = {"contract-version": "v1", "sources": {"openrouter-main": _remote_account(**{"vendor-id": "openrouter"})}}
     assert validate_model_sources(payload) == []
 
 

@@ -13,6 +13,7 @@ from audiagentic.components.providers.services.generated_surface_family import (
     FAMILY_ID,
     PIN,
 )
+from audiagentic.components.providers.surfaces.registry import load_renderer_registry
 
 
 def test_generated_surface_contracts_are_serializable_and_schema_valid() -> None:
@@ -41,3 +42,17 @@ def test_generated_surface_recipe_scaffold_matches_family_contract() -> None:
     assert definition.supported_modes == PIN.supported_modes
     assert definition.ownership_scope_required is True
     assert PIN.contracts == (PIN.payload_contract, PIN.result_contract)
+
+
+def test_every_surface_renderer_declares_generated_surface_capability() -> None:
+    """A renderer is executable only through its descriptor-backed family."""
+    from audiagentic.components.providers.descriptors.registry import all_descriptors
+
+    descriptors = all_descriptors()
+    for provider_id in load_renderer_registry():
+        capability = descriptors[provider_id].automation_capability(FAMILY_ID)
+        assert capability is not None, provider_id
+        assert capability.supported_modes == PIN.supported_modes, provider_id
+        assert capability.payload_contract == PIN.payload_contract, provider_id
+        assert capability.result_contract == PIN.result_contract, provider_id
+        assert capability.ownership_scope_required is PIN.ownership_scope_required, provider_id

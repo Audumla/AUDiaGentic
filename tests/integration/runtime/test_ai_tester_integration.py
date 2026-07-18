@@ -11,6 +11,8 @@ import pathlib
 
 import pytest
 
+pytestmark = [pytest.mark.opt_in, pytest.mark.slow, pytest.mark.no_parallel]
+
 if os.environ.get("AUDIAGENTIC_LIVE_RIG_TESTS") != "1":
     pytest.skip(
         "live embedded rig tests are opt-in; set AUDIAGENTIC_LIVE_RIG_TESTS=1",

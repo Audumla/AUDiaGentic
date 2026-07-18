@@ -295,14 +295,16 @@ def test_uninstall_removes_mcp_servers_from_providers(
 
 
 @pytest.mark.parametrize("component_id", _PROPAGATION_COMPONENTS)
-def test_disable_does_not_remove_provider_mcp_servers(
+def test_disable_removes_provider_mcp_servers(
     component_id: str, tmp_path: Path
 ) -> None:
-    """Disable must not remove MCP server entries from provider configs.
+    """Disable must remove MCP server entries from provider configs.
 
-    MCP server removal only happens on uninstall.  A disabled component's
-    servers should still be present so that the provider can load them if the
-    user re-enables without a full reinstall.
+    Enabled means the component's functionality (including its MCP tools) is
+    live; disabling it must stop those tools from being callable, not just
+    mark them inert in AUDiaGentic's own bookkeeping. Uninstall additionally
+    removes the component's install-time management state — disable and
+    uninstall diverge on that, not on MCP propagation.
     """
     expected_servers = _provider_mcp_server_names(component_id)
     if not expected_servers:
@@ -316,14 +318,46 @@ def test_disable_does_not_remove_provider_mcp_servers(
         apply_surfaces(sb.repo)
 
         disable_component(component_id, sb.repo)
-        # Do NOT call apply_surfaces — disable should not trigger MCP removal
+        # disable fires lifecycle.component.mcp.sync synchronously; no explicit
+        # apply_surfaces call needed for the MCP config to reflect the change.
 
+        for config_rel in _provider_mcp_config_paths(sb.repo):
+            still_present = mcp_servers_in(sb.repo, config_rel) & expected_servers
+            assert not still_present, (
+                f"{component_id}: servers {still_present} still in {config_rel} after disable"
+            )
+
+
+@pytest.mark.parametrize("component_id", _PROPAGATION_COMPONENTS)
+def test_enable_reinjects_provider_mcp_servers_after_disable(
+    component_id: str, tmp_path: Path
+) -> None:
+    """MCP servers pruned on disable reappear after enable, without reinstall."""
+    expected_servers = _provider_mcp_server_names(component_id)
+    if not expected_servers:
+        pytest.skip(f"{component_id} has no provider-propagated MCP servers")
+
+    with component_sandbox(tmp_path, f"mcp-reenable-{component_id}") as sb:
+        install_with_deps("project", sb.repo)
+        install_with_deps("providers", sb.repo)
+        setup_provider_surfaces(sb.repo)
+        install_with_deps(component_id, sb.repo)
+        apply_surfaces(sb.repo)
+
+        disable_component(component_id, sb.repo)
+        for config_rel in _provider_mcp_config_paths(sb.repo):
+            still_present = mcp_servers_in(sb.repo, config_rel) & expected_servers
+            assert not still_present, (
+                f"{component_id}: servers {still_present} not pruned after disable"
+            )
+
+        enable_component(component_id, sb.repo)
         for config_rel in _provider_mcp_config_paths(sb.repo):
             present = mcp_servers_in(sb.repo, config_rel)
             missing = expected_servers - present
             assert not missing, (
-                f"{component_id}: servers {missing} removed from {config_rel} after disable "
-                f"(should remain). Present: {present}"
+                f"{component_id}: servers {missing} not reinjected after re-enable. "
+                f"Present: {present}"
             )
 
 

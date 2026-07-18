@@ -15,7 +15,7 @@ import shutil
 import pytest
 
 from audiagentic.components.providers.descriptors.registry import all_descriptors
-from audiagentic.components.providers.services.lifecycle import _probe_provider_cli
+from audiagentic.components.providers.services.lifecycle import probe_provider_cli
 
 # pi probes the harness runtime on disk, not PATH — not a shutil.which contract.
 _NON_PATH_PROBES = {"pi"}
@@ -39,7 +39,7 @@ def test_probe_reports_unavailable_when_cli_absent(provider_id: str, monkeypatch
     monkeypatch.setattr(shutil, "which", lambda name: None)
     descriptor = all_descriptors()[provider_id]
 
-    result = _probe_provider_cli(descriptor)
+    result = probe_provider_cli(descriptor)
 
     assert result is not None, f"{provider_id} has a probe path but returned None"
     assert result["available"] is False, f"{provider_id} reported available with no CLI"

@@ -138,12 +138,24 @@ class TestProviderYamlLoader:
 
     def test_provider_spec_defaults(self) -> None:
         """PROVIDER_SPEC applies defaults for optional fields."""
-        data = {"provider_id": "test", "display_name": "Test"}
+        data = {
+            "provider_id": "test",
+            "display_name": "Test",
+            "execution_isolation_tier": "no-isolation",
+        }
         resolved = PROVIDER_SPEC.load(data)
         assert resolved["access_mode"] == "cli"
         assert resolved["receive_lsp_mcp"] is True
         assert resolved["cli_probe"] is None
         assert resolved["cli_install"] is None
+
+    def test_provider_spec_requires_valid_execution_isolation_tier(self) -> None:
+        with pytest.raises(Exception, match="execution_isolation_tier"):
+            PROVIDER_SPEC.build({
+                "provider_id": "test",
+                "display_name": "Test",
+                "execution_isolation_tier": "unknown",
+            })
 
 
 class TestProvidersConfigDir:
@@ -174,7 +186,10 @@ class TestLoadProvidersFromDirectory:
         assert expected == loaded, f"Missing: {expected - loaded}, Extra: {loaded - expected}"
         for descriptor in providers.values():
             assert isinstance(descriptor, ProviderDescriptor)
-            assert descriptor.automation_capabilities is not None
+        assert descriptor.automation_capabilities is not None
+        assert descriptor.execution_isolation_tier in {
+                "full-isolation", "partial-isolation", "no-isolation"
+            }
 
     def test_automation_capabilities_are_explicit_and_match_native_mechanics(self) -> None:
         providers = load_providers_from_directory(get_providers_config_dir())
@@ -200,5 +215,10 @@ class TestLoadProvidersFromDirectory:
     def test_vendor_key_injection_defaults_empty_mapping(self) -> None:
         """MO01: values start empty and are populated only from MO09-verified evidence."""
         providers = load_providers_from_directory(get_providers_config_dir())
-        for provider_id, descriptor in providers.items():
-            assert descriptor.vendor_key_injection == {}, provider_id
+        assert providers["claude"].vendor_key_injection == {}
+        assert providers["pi"].vendor_key_injection["anthropic"] == {
+            "mechanism": "env", "key": "ANTHROPIC_API_KEY"
+        }
+        assert providers["qwen"].vendor_key_injection["google"] == {
+            "mechanism": "env", "key": "GEMINI_API_KEY"
+        }

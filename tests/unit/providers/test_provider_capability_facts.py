@@ -86,7 +86,13 @@ def test_opencode_capability_facts_load_from_yaml() -> None:
 
 
 def test_capability_facts_default_empty() -> None:
-    descriptor = PROVIDER_SPEC.build({"provider_id": "fixture", "display_name": "Fixture"})
+    descriptor = PROVIDER_SPEC.build(
+        {
+            "provider_id": "fixture",
+            "display_name": "Fixture",
+            "execution_isolation_tier": "no-isolation",
+        }
+    )
 
     assert descriptor.capability_facts == ()
 
@@ -105,6 +111,7 @@ def test_loader_rejects_invalid_evidence(evidence, code) -> None:
             {
                 "provider_id": "fixture",
                 "display_name": "Fixture",
+                "execution_isolation_tier": "no-isolation",
                 "capability_facts": [
                     {
                         "capability_id": "catalog-read",

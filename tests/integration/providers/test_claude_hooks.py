@@ -15,15 +15,22 @@ class TestDetectAndLaunchPromptTag:
     """Test UserPromptSubmit hook logic."""
 
     def test_detects_plan_tag(self):
-        """Verify @plan tag is detected and recognized."""
+        """A provider hook reports primitive tag provenance; it creates no job."""
         raw_prompt = "@plan\nReview the implementation status."
         result = detect_and_launch_prompt_tag(
             raw_prompt,
             {'workspace_root': '.', 'surface': 'cli'},
         )
-        # Should attempt bridge invocation (or return empty if no bridge available)
-        # For now, just verify no exception
-        assert isinstance(result, dict)
+        assert result == {
+            "status": "tag-detected",
+            "tag": "@plan",
+            "directives": {},
+            "prompt-body": "Review the implementation status.",
+            "raw-prompt": raw_prompt,
+            "provider-id": "claude",
+            "surface": "cli",
+            "session-id": None,
+        }
 
     def test_passes_through_non_tagged_prompt(self):
         """Verify non-tagged prompts pass through unchanged."""
@@ -36,7 +43,6 @@ class TestDetectAndLaunchPromptTag:
 
     def test_parses_provider_override(self):
         """Verify provider override in tag is extracted."""
-        raw_prompt = "@plan provider=cline\nContinue work."
         params = _parse_first_line_params("@plan provider=cline")
         assert params['provider'] == 'cline'
 
