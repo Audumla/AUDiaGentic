@@ -68,6 +68,7 @@ def test_gemini_adapter_recognizes_tag(monkeypatch, tmp_path: Path) -> None:
             "AUDiaGentic Gemini provider execution request." in captured["command"][2]
         )
         assert "Do the work." in captured["command"][2]
+        assert "@plan" not in captured["command"][2]
     finally:
         sandbox.cleanup()
 

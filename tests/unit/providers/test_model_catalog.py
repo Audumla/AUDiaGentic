@@ -10,6 +10,7 @@ from audiagentic.components.providers.services.provider_catalog import (
     build_model_catalog,
     validate_model_catalog,
 )
+from audiagentic.foundation.components.registry import get_mcp_server_declaration
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
@@ -67,6 +68,26 @@ def test_mcp_list_provider_models_has_no_refresh_argument() -> None:
         "provider_id": {"title": "Provider Id", "type": "string"}
     }
     assert tool.parameters["required"] == ["provider_id"]
+
+
+def test_providers_mcp_descriptor_names_only_real_tools() -> None:
+    declaration = get_mcp_server_declaration("providers", "ag-providers-mgmt")
+    server = build_server()
+
+    assert set(declaration.direct_tools) == set(server._tool_manager._tools)
+    assert set(declaration.tool_descriptions) == set(declaration.direct_tools)
+
+
+def test_model_mcp_surface_is_audiagentic_centric() -> None:
+    tools = set(build_server()._tool_manager._tools)
+
+    assert {
+        "list_model_inventory",
+        "refresh_model_source_catalog",
+        "model_vendor_set_enabled",
+        "apply_model_sources",
+    } <= tools
+    assert "manage_model_projection" not in tools
 
 
 def test_build_model_catalog_validates_shape() -> None:

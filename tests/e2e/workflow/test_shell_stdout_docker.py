@@ -31,6 +31,8 @@ SHELL_TEST = (
 
 
 def _image_exists() -> bool:
+    if DOCKER_EXE is None:
+        return False
     try:
         result = subprocess.run(
             [DOCKER_EXE, "image", "inspect", SUITE_IMAGE],

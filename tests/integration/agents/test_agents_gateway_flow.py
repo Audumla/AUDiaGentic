@@ -13,8 +13,9 @@ import pytest
 from audiagentic.components.agents import agents_gateway_api as gateway
 from audiagentic.components.agents import agents_gateway_queue
 from audiagentic.components.agents.agents_api import create_profile
+from audiagentic.components.providers.providers_api import ProviderExecutionResult
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.event import get_bus, reset_bus
+from audiagentic.foundation.event import get_bus
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state
 
@@ -43,10 +44,14 @@ def test_async_submit_wait_completed_flow(tmp_path: Path, monkeypatch) -> None:
     """submit (async, default) -> wait -> completed, using a fake provider adapter."""
     _make_profile(tmp_path, "default", "local-openai")
 
-    def fake_execute_provider(*, provider_id, packet_ctx, provider_cfg):
-        return {"provider-id": provider_id, "status": "ok", "model": "gpt-4o", "output": "the answer"}
+    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+        return ProviderExecutionResult(
+            provider_id="local-openai", model_id="gpt-4o",
+            worker_id=identity.worker_id, attempt_epoch=identity.attempt_epoch,
+            result_data={"provider-id": "local-openai", "model": "gpt-4o", "output": "the answer"},
+        )
 
-    monkeypatch.setattr("audiagentic.components.providers.services.execution.execute_provider", fake_execute_provider)
+    monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider)
 
     submitted = gateway.submit_llm_request(tmp_path, prompt_body="what is 2+2?")
     assert submitted["state"] in ("queued", "running", "completed")
@@ -60,10 +65,14 @@ def test_async_submit_wait_completed_flow(tmp_path: Path, monkeypatch) -> None:
 def test_blocking_run_returns_terminal_result(tmp_path: Path, monkeypatch) -> None:
     _make_profile(tmp_path, "default", "local-openai")
 
-    def fake_execute_provider(*, provider_id, packet_ctx, provider_cfg):
-        return {"provider-id": provider_id, "status": "ok", "model": "gpt-4o", "output": "blocking answer"}
+    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+        return ProviderExecutionResult(
+            provider_id="local-openai", model_id="gpt-4o",
+            worker_id=identity.worker_id, attempt_epoch=identity.attempt_epoch,
+            result_data={"provider-id": "local-openai", "model": "gpt-4o", "output": "blocking answer"},
+        )
 
-    monkeypatch.setattr("audiagentic.components.providers.services.execution.execute_provider", fake_execute_provider)
+    monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider)
 
     result = gateway.run_llm_request(tmp_path, prompt_body="what is 2+2?")
     assert result["state"] == "completed"
@@ -74,20 +83,28 @@ def test_event_triggered_request_reaches_completed_event(tmp_path: Path, monkeyp
     from audiagentic.components.agents import agents_gateway_events as events
     from audiagentic.foundation.event import event_bus as event_bus_mod
 
-    # Restore the ORIGINAL bus afterwards — import-time observer subscriptions
-    # (memory, ledger, providers) must survive this test module.
+    # Swap in an isolated bus WITHOUT closing the original — import-time
+    # observer subscriptions (memory, ledger, providers) must survive this
+    # test module. reset_bus() would close the saved instance, and restoring
+    # a closed bus poisons every later test in the process with VAL-EVT-002.
     saved_bus = event_bus_mod._bus_instance
-    reset_bus()
+    event_bus_mod._bus_instance = event_bus_mod.EventBus(
+        config=saved_bus.config if saved_bus is not None else None
+    )
     events._REGISTERED = False
     events.register()
     try:
         _make_profile(tmp_path, "default", "local-openai")
 
-        def fake_execute_provider(*, provider_id, packet_ctx, provider_cfg):
-            return {"provider-id": provider_id, "status": "ok", "model": "gpt-4o", "output": "event answer"}
+        def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+            return ProviderExecutionResult(
+                provider_id="local-openai", model_id="gpt-4o",
+                worker_id=identity.worker_id, attempt_epoch=identity.attempt_epoch,
+                result_data={"provider-id": "local-openai", "model": "gpt-4o", "output": "event answer"},
+            )
 
         monkeypatch.setattr(
-            "audiagentic.components.providers.services.execution.execute_provider", fake_execute_provider
+            "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider
         )
 
         received = []
@@ -108,7 +125,10 @@ def test_event_triggered_request_reaches_completed_event(tmp_path: Path, monkeyp
         assert received[0]["state"] == "completed"
     finally:
         events._REGISTERED = False
+        test_bus = event_bus_mod._bus_instance
         event_bus_mod._bus_instance = saved_bus
+        if test_bus is not None and test_bus is not saved_bus:
+            test_bus.close()
 
 
 def test_disabled_provider_produces_user_facing_error(tmp_path: Path, monkeypatch) -> None:
@@ -122,11 +142,11 @@ def test_disabled_provider_produces_user_facing_error(tmp_path: Path, monkeypatc
 
     calls = {"count": 0}
 
-    def fake_execute_provider(*, provider_id, packet_ctx, provider_cfg):
+    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
         calls["count"] += 1
-        return {"provider-id": provider_id, "status": "ok", "model": "gpt-4o", "output": "should not run"}
+        raise AssertionError("disabled provider reached worker execution")
 
-    monkeypatch.setattr("audiagentic.components.providers.services.execution.execute_provider", fake_execute_provider)
+    monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider)
 
     result = gateway.run_llm_request(tmp_path, prompt_body="hi")
     assert result["state"] == "failed"

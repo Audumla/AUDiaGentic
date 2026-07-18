@@ -38,6 +38,9 @@ tests/unit/runtime/Qwen3.5-0.8B-UD-Q5_K_XL.gguf
 !.audiagentic/planning/
 !.audiagentic/planning/config/
 !.audiagentic/planning/config/**
+# Runtime records are mutable user/process state, never Docker build inputs.
+.audiagentic/runtime
+.audiagentic/runtime/**
 
 !.agents/
 !.agents/skills/
