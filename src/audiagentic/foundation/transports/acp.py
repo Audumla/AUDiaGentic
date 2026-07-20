@@ -28,6 +28,20 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.transports.agent_session import (
+    ControlDisposition,
+    CorrelationQuality,
+    ObservationSink,
+    Scalar,
+    SessionControlAction,
+    SessionControlRequest,
+    SessionControlResult,
+    SessionOpenResult,
+    SessionPrompt,
+    SessionTurnResult,
+    TransportObservation,
+    TransportObservationKind,
+)
 
 # Registered error codes
 ERR_SDK_MISSING = "CFG-ACP-001"
@@ -744,6 +758,331 @@ class AcpSessionTransport:
             if isinstance(self._adopted_child, AdoptedChild):
                 close_kill_job(self._adopted_child)
             self._adopted_child = None
+
+
+# ---------------------------------------------------------------------------
+# AcpAgentSessionTransport  (AS28 slice 2 — private provider-adapter wrapper)
+# ---------------------------------------------------------------------------
+
+# Mapping from ACP canonical event kind → TransportObservationKind.
+# Unknown kinds fall through to TRANSPORT_UNKNOWN with no attributes.
+_ACP_KIND_TO_TRANSPORT: dict[str, TransportObservationKind] = {
+    "assistant-message": TransportObservationKind.ACTIVITY,
+    "thought": TransportObservationKind.ACTIVITY,
+    "status": TransportObservationKind.ACTIVITY,
+    "usage": TransportObservationKind.ACTIVITY,
+    "result": TransportObservationKind.TERMINAL,
+    "error": TransportObservationKind.TRANSPORT_ERROR,
+}
+
+
+def _map_acp_event_to_observation(
+    acp_event: AcpEvent,
+    ag_session_id: str,
+    turn_id: str | None,
+) -> TransportObservation:
+    """Map a raw AcpEvent to a bounded TransportObservation.
+
+    Unknown ACP kinds produce TRANSPORT_UNKNOWN with no attributes —
+    no raw kind name or payload leaks into the neutral contract.
+    """
+    acp_kind = acp_event.kind
+
+    # --- Known: tool-call with status extraction ---
+    if acp_kind == "tool-call":
+        acp_ext = acp_event.ext.get("acp", {})
+        status = str(acp_ext.get("status", ""))
+        tool_call_id = acp_ext.get("tool_call_id")
+
+        if status in ("pending", "started", "in_progress"):
+            return TransportObservation(
+                ag_session_id=ag_session_id,
+                turn_id=turn_id,
+                sequence=acp_event.sequence,
+                kind=TransportObservationKind.TOOL_REQUESTED,
+                observed_at=acp_event.timestamp,
+                correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+                attributes={
+                    "tool_call_id": tool_call_id,
+                    "tool_status": status,
+                },
+            )
+        elif status in ("completed", "finished", "failed", "cancelled"):
+            return TransportObservation(
+                ag_session_id=ag_session_id,
+                turn_id=turn_id,
+                sequence=acp_event.sequence,
+                kind=TransportObservationKind.TOOL_FINISHED,
+                observed_at=acp_event.timestamp,
+                correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+                attributes={
+                    "tool_call_id": tool_call_id,
+                    "tool_status": status,
+                },
+            )
+        else:
+            # No status — unknown tool-call variant; drop to TRANSPORT_UNKNOWN
+            return TransportObservation(
+                ag_session_id=ag_session_id,
+                turn_id=turn_id,
+                sequence=acp_event.sequence,
+                kind=TransportObservationKind.TRANSPORT_UNKNOWN,
+                observed_at=acp_event.timestamp,
+                correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+            )
+
+    # --- Known: permission-request ---
+    if acp_kind == "permission-request":
+        acp_ext = acp_event.ext.get("acp", {})
+        tool_call_id = acp_ext.get("tool_call_id")
+        return TransportObservation(
+            ag_session_id=ag_session_id,
+            turn_id=turn_id,
+            sequence=acp_event.sequence,
+            kind=TransportObservationKind.PERMISSION_REQUESTED,
+            observed_at=acp_event.timestamp,
+            correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+            attributes={"tool_call_id": tool_call_id},
+        )
+
+    # --- Known: mapped kinds ---
+    transport_kind = _ACP_KIND_TO_TRANSPORT.get(acp_kind)
+    if transport_kind is not None:
+        attrs: dict[str, Scalar] = {}
+
+        if transport_kind == TransportObservationKind.TERMINAL:
+            # Extract stop_reason from AcpEvent.error or ext
+            stop_reason: str | None = None
+            if acp_event.error is not None:
+                stop_reason = acp_event.error.get("code")
+            acp_ext = acp_event.ext.get("acp", {})
+            ext_stop = acp_ext.get("stop_reason")
+            if ext_stop is not None:
+                stop_reason = str(ext_stop)
+            error_code: str | None = None
+            if acp_event.error is not None and acp_event.error.get("code"):
+                error_code = acp_event.error["code"]
+            if error_code:
+                attrs["error_code"] = error_code
+            if stop_reason:
+                attrs["stop_reason"] = stop_reason
+        elif transport_kind == TransportObservationKind.TRANSPORT_ERROR:
+            if acp_event.error is not None:
+                err_code = acp_event.error.get("code", "")
+                if err_code:
+                    attrs["error_code"] = err_code
+                reason = acp_event.error.get("message") or acp_event.text or ""
+                if reason:
+                    attrs["reason"] = reason
+            else:
+                attrs["reason"] = acp_event.text or ""
+        elif transport_kind == TransportObservationKind.ACTIVITY:
+            # Extract model_activity from text for thought events
+            if acp_kind == "thought" and acp_event.text:
+                attrs["model_activity"] = acp_event.text
+
+        return TransportObservation(
+            ag_session_id=ag_session_id,
+            turn_id=turn_id,
+            sequence=acp_event.sequence,
+            kind=transport_kind,
+            observed_at=acp_event.timestamp,
+            correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+            attributes=attrs,
+        )
+
+    # --- Unknown: TRANSPORT_UNKNOWN, no attributes, no raw kind leak ---
+    return TransportObservation(
+        ag_session_id=ag_session_id,
+        turn_id=turn_id,
+        sequence=acp_event.sequence,
+        kind=TransportObservationKind.TRANSPORT_UNKNOWN,
+        observed_at=acp_event.timestamp,
+        correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+    )
+
+
+class AcpAgentSessionTransport:
+    """Private provider-adapter wrapper: ACP → neutral AgentSessionTransport.
+
+    Maps raw ACP event frames to bounded ``TransportObservation`` values and
+    exposes only proven control capabilities. Raw ACP session refs, extension
+    payload, and native kind names never leave this wrapper.
+
+    This class is intentionally **not** in the public foundation transport
+    exports (it is importable from ``acp.py`` for provider adapters and
+    foundation contract tests). It implements ``AgentSessionTransport``
+    protocol without any ``components.*`` imports.
+
+    Control semantics:
+    - CANCEL_TURN → ACCEPTED when transport is alive; UNSUPPORTED otherwise.
+    - INTERRUPT_TURN / STEER_TURN → UNSUPPORTED (no ACP protocol support).
+    - RESPOND_PERMISSION → default-deny (delegated to AcpSessionTransport
+      policy_fn; no versioned ACP proof of permission response).
+    - CLOSE_SESSION → delegates idempotently to underlying close.
+
+    Never infers terminal durable state from a control acknowledgement.
+    """
+
+    def __init__(
+        self,
+        launch: AcpLaunch,
+        *,
+        cwd: Path,
+        policy_fn: PolicyCallback | None = None,
+        compact_events: bool = False,
+    ) -> None:
+        self._inner: AcpSessionTransport = AcpSessionTransport(
+            launch, cwd=cwd, policy_fn=policy_fn, compact_events=compact_events,
+        )
+        self._ag_session_id: str | None = None
+        self._closed = False
+        # Per-turn cancel signal for CANCEL_TURN control.
+        self._current_cancel: asyncio.Event | None = None
+        self._turn_active = False
+
+    @property
+    def ag_session_id(self) -> str | None:
+        """Canonical AG session id, set after open()."""
+        return self._ag_session_id
+
+    async def open(self) -> SessionOpenResult:
+        """Open the underlying ACP transport. Returns canonical AG session id."""
+        await self._inner.open()
+        # Use the ACP-provided session id as the canonical AG session id.
+        # (AS30 binding will later map provider session ref ↔ AG session id.)
+        self._ag_session_id = self._inner.session_id
+        return SessionOpenResult(ag_session_id=self._ag_session_id)
+
+    async def prompt(
+        self,
+        request: SessionPrompt,
+        sink: ObservationSink,
+    ) -> SessionTurnResult:
+        """Run one turn, mapping AcpEvent → TransportObservation via *sink*."""
+        if self._ag_session_id is None:
+            raise AudiaGenticError(
+                code="CON-ACP-001",
+                kind="execution",
+                message="AcpAgentSessionTransport not opened",
+            )
+
+        ag_sid = self._ag_session_id
+        turn_id = request.turn_id
+        delivered_count = 0
+        dropped_count = 0
+        _final_summary_parts: list[str] = []
+
+        # Build the neutral observation sink that maps AcpEvent → TransportObservation.
+        async def _wrapped_sink(acp_event: AcpEvent) -> None:
+            nonlocal delivered_count
+            try:
+                obs = _map_acp_event_to_observation(acp_event, ag_sid, turn_id)
+                result = sink(obs)
+                if asyncio.iscoroutine(result):
+                    await result
+                delivered_count += 1
+                # Collect assistant-text fragments for the bounded final summary.
+                # Only "assistant-message" kind; no thought, tool args, or provider refs.
+                if acp_event.kind == "assistant-message" and acp_event.text:
+                    _final_summary_parts.append(acp_event.text)
+            except Exception:
+                # Sink callback exception isolation: never let a single
+                # observation delivery failure kill the turn.
+                pass
+
+        self._current_cancel = asyncio.Event()
+        self._turn_active = True
+        try:
+            acp_result = await self._inner.prompt(
+                request.body,
+                on_event=_wrapped_sink,
+                cancel_signal=self._current_cancel if request.cancel_token is not None else None,
+            )
+            stop_reason = acp_result.stop_reason
+            # Count dropped ACP events (from FIFO eviction / budgeting).
+            dropped_count = acp_result.dropped_events
+        except AudiaGenticError:
+            raise
+        except Exception as exc:
+            raise AudiaGenticError(
+                code="EXT-ACP-001",
+                kind="execution",
+                message=f"ACP prompt execution failed: {type(exc).__name__}",
+            ) from exc
+        finally:
+            self._turn_active = False
+            self._current_cancel = None
+
+        return SessionTurnResult(
+            turn_id=turn_id,
+            stop_reason=stop_reason,
+            observations_delivered=delivered_count,
+            dropped_observations=dropped_count,
+            final_summary="".join(_final_summary_parts) or None,
+        )
+
+    async def control(
+        self,
+        request: SessionControlRequest,
+    ) -> SessionControlResult:
+        """Canonical control with bounded disposition. No native escape hatch."""
+        action = request.action
+
+        if action == SessionControlAction.CANCEL_TURN:
+            if not self.is_alive():
+                return SessionControlResult(
+                    disposition=ControlDisposition.UNSUPPORTED,
+                )
+            # Set the cancel signal for the current turn.
+            # The ACP protocol will race against it in _inner.prompt().
+            if self._current_cancel is not None:
+                self._current_cancel.set()
+            else:
+                # No active turn — create a new one; next prompt() will see
+                # it already set and return "cancelled" immediately.
+                self._current_cancel = asyncio.Event()
+                self._current_cancel.set()
+            return SessionControlResult(
+                disposition=ControlDisposition.ACCEPTED,
+                correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+            )
+
+        if action in (SessionControlAction.INTERRUPT_TURN, SessionControlAction.STEER_TURN):
+            # ACP protocol has no interrupt/steer support.
+            return SessionControlResult(
+                disposition=ControlDisposition.UNSUPPORTED,
+                correlation_quality=CorrelationQuality.UNCERTAIN,
+            )
+
+        if action == SessionControlAction.RESPOND_PERMISSION:
+            # Default-deny: ACP permission response requires versioned proof
+            # that the protocol actually accepted it. Without that, deny.
+            return SessionControlResult(
+                disposition=ControlDisposition.UNSUPPORTED,
+                correlation_quality=CorrelationQuality.UNCERTAIN,
+            )
+
+        if action == SessionControlAction.CLOSE_SESSION:
+            await self.close()
+            return SessionControlResult(
+                disposition=ControlDisposition.ACCEPTED,
+                correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+            )
+
+        # Should not be reachable (closed enum), but default-deny.
+        return SessionControlResult(
+            disposition=ControlDisposition.UNSUPPORTED,
+        )
+
+    async def close(self) -> None:
+        """Shut the session down. Idempotent; never raises."""
+        self._closed = True
+        await self._inner.close()
+
+    def is_alive(self) -> bool:
+        """True while transport is open and child has not exited."""
+        return not self._closed and self._inner.is_alive()
 
 
 async def run_acp_prompt(

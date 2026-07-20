@@ -21,29 +21,31 @@ from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
 
+# ── AS28 slice 4a helpers ────────────────────────────────────────
+def _build_default_surface_hint(provider_id: str) -> Any:
+    """Build a default SurfaceHint for ACP-based provider surfaces.
+
+    Uses ``<provider-id>-acp`` as the surface id, matching the naming
+    convention in provider descriptors (e.g. opencode-acp).
+    """
+    from audiagentic.components.providers.contracts.session_surface import (
+        SurfaceHint,
+    )
+
+    return SurfaceHint(surface_id=f"{provider_id}-acp")
+
 
 def _is_session_request(record: dict[str, Any]) -> bool:
     return bool(record.get("session-id") or record.get("session-keep-alive"))
 
 
 def _session_output_from_result(result: Any) -> str | None:
-    """Concatenate assistant-message texts from an AcpResult into the
-    gateway record's output field (same contract keys as one-shot dispatch).
+    """Read the bounded final summary from a SessionTurnResult.
 
-    ACP agents stream agent_message_chunk fragments — mid-word splits are
-    normal — so chunks are joined with NO separator (AS07 live-gate finding:
-    a newline join corrupted output into 'TOKEN\\n STORE\\nD\\n.')."""
-    texts = [
-        event.text
-        for event in result.events
-        if event.kind == "assistant-message" and event.text
-    ]
-    # Text carried by events the transport's rolling budgets EVICTED — with
-    # FIFO eviction those are always the OLDEST chunks, so they lead.
-    overflow = getattr(result, "overflow_text", None)
-    if overflow:
-        texts.insert(0, overflow)
-    return "".join(texts) if texts else None
+    Output is produced inside the ACP adapter; agents never reconstructs
+    output from protocol events. The adapter carries assistant-text
+    fragments only (no thought, tool args, provider refs)."""
+    return result.final_summary if hasattr(result, "final_summary") else None
 
 
 def _post_turn_close_continued_session_if_quiescent(
@@ -80,6 +82,7 @@ def _dispatch_session_request(
     record: dict[str, Any],
     *,
     dispatch_prompt: str,
+    context_fingerprint: str | None = None,
 ) -> dict[str, Any]:
     """Dispatch a sessionful request through the live SessionRuntime (AS04).
 
@@ -94,7 +97,6 @@ def _dispatch_session_request(
     from audiagentic.components.agents.agents_api import resolve_profile
     from audiagentic.components.agents.agents_gateway_sessions import get_session_runtime
     from audiagentic.components.agents.agents_paths import gateway_request_dir
-    from audiagentic.components.providers import providers_api
 
     request_id = record["request-id"]
     agent_profile_id = record["agent-profile-id"]
@@ -120,22 +122,19 @@ def _dispatch_session_request(
                 load_harness_config(project_root=project_root),
                 runtime_root=request_runtime_root / "pi",
             )
-            prepared_launch = providers_api.prepare_provider_acp_launch(
-                project_root,
-                provider_id=provider_id,
-                model_id=profile.get("model_id"),
-                model_alias=profile.get("model_alias"),
-                request_runtime_root=gateway_request_dir(project_root, request_id) / "runtime",
-            )
-            model_id = prepared_launch.model_id
+            # AS28 slice 4a: pass provider context — the session runtime
+            # resolves the transport via providers_api.prepare_provider_session_transport.
+            # AS08: persist execution-context fingerprint on session create.
+            profile_model_id = profile.get("model_id")
             params = profile.get("params", {})
             session_record = runtime.open_session(
                 project_root,
                 agent_profile_id=agent_profile_id,
-                launch=prepared_launch.launch,
                 provider_id=provider_id,
-                model_id=model_id,
+                model_id=profile_model_id,
+                surface_hint=_build_default_surface_hint(provider_id),
                 correlation_id=record.get("correlation-id"),
+                context_fingerprint=context_fingerprint,
                 # Request value wins over profile params; 0 disables the bound
                 # (RV513) — use explicit None checks so 0 survives resolution.
                 idle_timeout_seconds=(
@@ -182,6 +181,20 @@ def _dispatch_session_request(
                         "request-profile": agent_profile_id,
                     },
                 )
+            # AS08: validate execution-context fingerprint exact match on continuation.
+            if context_fingerprint is not None:
+                stored_fingerprint = _get_stored_context_fingerprint(session_record)
+                if stored_fingerprint and context_fingerprint != stored_fingerprint:
+                    raise AudiaGenticError(
+                        code="CON-AGW-101",
+                        kind="agents",
+                        message="execution context fingerprint does not match the session's context",
+                        details={
+                            "session-id": session_id,
+                            "stored-fingerprint": stored_fingerprint,
+                            "request-fingerprint": context_fingerprint,
+                        },
+                    )
             # Update lifetime bounds when continuing with keep-alive and new
             # policy values. Bounds apply to the in-memory handle so the
             # updated policy is effective for this and future turns.
@@ -294,8 +307,8 @@ def _dispatch_session_request(
                 "completion": {
                     "stop-reason": result.stop_reason,
                     "binding": binding_store.public_binding_projection(session_record.get("binding")),
-                    "total-events": result.total_events,
-                    "dropped-events": result.dropped_events,
+                    "total-events": result.observations_delivered + result.dropped_observations,
+                    "dropped-events": result.dropped_observations,
                 },
                 "usage": None,
                 "session-id": session_id,
@@ -340,8 +353,8 @@ def _dispatch_session_request(
             "completion": {
                 "stop-reason": result.stop_reason,
                 "binding": binding_store.public_binding_projection(session_record.get("binding")),
-                "total-events": result.total_events,
-                "dropped-events": result.dropped_events,
+                "total-events": result.observations_delivered + result.dropped_observations,
+                "dropped-events": result.dropped_observations,
             },
             "usage": None,
             "session-id": session_id,
