@@ -1,8 +1,8 @@
 """Agent LLM Gateway live session runtime (plan agent-sessions AS02).
 
 Owns live agent sessions inside the gateway process: one background daemon
-thread running an asyncio event loop hosts every AcpSessionTransport; sync
-gateway code talks to it via run_coroutine_threadsafe. Mirrors the
+thread running an asyncio event loop hosts every provider-neutral transport;
+sync gateway code talks to it via run_coroutine_threadsafe. Mirrors the
 GatewayQueueManager lifetime pattern (module-level singleton in
 agents_gateway_api; sessions die with the host process — the detached
 supervisor is AS08).
@@ -20,8 +20,15 @@ All registry mutations happen on the session loop thread (coroutines), so
 the registry needs no locking. Store I/O from loop coroutines is small
 atomic local-file writes; acceptable on the loop (documented tradeoff).
 
-This module is generic: it knows launches and transports, never providers,
-coding, or planning. Provider resolution lives in dispatch (AS04).
+AS28 slice 4a: the OPEN path resolves a provider-neutral transport via the
+``providers_api.prepare_provider_session_transport`` seam. No AcpLaunch or
+AcpSessionTransport construction in this module's open path.
+
+AS28 slice 4b-A: the prompt, cancel, and close paths now use the neutral
+AgentSessionTransport seam (SessionPrompt / ObservationSink / SessionTurnResult /
+SessionControlAction.CANCEL_TURN). The ACP callback contract is gone from this
+module; dispatch output extraction still expects AcpResult and is migrated in a
+later slice.
 """
 from __future__ import annotations
 
@@ -49,9 +56,31 @@ from audiagentic.components.agents.agents_gateway_turn_events import (
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
-from audiagentic.foundation.transports import AcpLaunch, AcpResult, AcpSessionTransport
+from audiagentic.foundation.transports.agent_session import (
+    SessionPrompt,
+    SessionTurnResult,
+)
+from audiagentic.foundation.transports.session_surface import PreparedSessionTransport
 
 logger = logging.getLogger(__name__)
+
+# ── AS28 slice 4a: default provider preparation seam ──────────────
+def _default_prepare_fn(
+    project_root: Path,
+    *,
+    provider_id: str,
+    surface_hint: Any,
+    model_id: str | None = None,
+) -> PreparedSessionTransport:
+    """Default provider preparation via the public providers_api seam."""
+    from audiagentic.components.providers import providers_api
+
+    return providers_api.prepare_provider_session_transport(
+        project_root,
+        provider_id=provider_id,
+        surface_hint=surface_hint,
+        model_id=model_id,
+    )
 
 # Gateway defaults — overridable per session at open time (config over code:
 # dispatch resolves per-profile params session-idle-timeout-seconds /
@@ -73,6 +102,7 @@ _OPEN_TIMEOUT_SECONDS = 120.0
 _CLOSE_TIMEOUT_SECONDS = 30.0
 
 
+
 class _SessionHandle:
     """Loop-side state for one live session. Touched only on the loop thread."""
 
@@ -89,6 +119,7 @@ class _SessionHandle:
         turn_silence_timeout_seconds: float,
         created_clock: float,
         correlation_id: str | None,
+        surface_snapshot: Any = None,
     ) -> None:
         self.session_id = session_id
         self.transport = transport
@@ -100,11 +131,18 @@ class _SessionHandle:
         self.turn_silence_timeout_seconds = turn_silence_timeout_seconds
         self.created_clock = created_clock
         self.correlation_id = correlation_id
+        # AS28 slice 4a: resolved surface snapshot (provider-neutral metadata)
+        self.surface_snapshot = surface_snapshot
         self.last_activity_clock = created_clock
         # In-turn liveness: refreshed by every transport event during a turn
         # (RV680 silence watchdog); meaningful only while a turn is running.
         self.last_event_clock = created_clock
         self.current_request_id: str | None = None
+        # Bounded, redacted projection of the most recent turn event this
+        # handle has observed (kind/sequence/request-id/timestamp only — no
+        # prompt text, tool args, output, or provider refs). Exposed via
+        # session_runtime_status() for live diagnostics.
+        self.latest_turn_event: dict[str, Any] | None = None
         # AS17/RV681: OS facts for the transport child, captured at open.
         self.child_pid: int | None = None
         self.child_creation_identity: str | None = None
@@ -136,9 +174,6 @@ class _SessionHandle:
             self.max_lifetime_seconds = max_lifetime_seconds
 
 
-TransportFactory = Callable[..., Any]
-"""Builds a transport from (launch, cwd=...). Injected for tests; defaults to
-AcpSessionTransport."""
 
 
 class SessionRuntime:
@@ -154,19 +189,15 @@ class SessionRuntime:
         *,
         clock: Callable[[], float] = time.monotonic,
         reap_interval_seconds: float = DEFAULT_REAP_INTERVAL_SECONDS,
-        transport_factory: TransportFactory | None = None,
+        provider_prepare_fn: Any = None,
         session_queue_max: int = DEFAULT_SESSION_QUEUE_MAX,
     ) -> None:
         self._clock = clock
         self._reap_interval = reap_interval_seconds
         self._session_queue_max = session_queue_max
-        # compact_events: the gateway consumes text/kind/counts only — raw
-        # update payloads are never persisted or surfaced, so buffering them
-        # is pure memory cost and what exhausts the byte budget on long
-        # implementation turns (MA29 truncation finding).
-        self._transport_factory = transport_factory or (
-            lambda launch, cwd: AcpSessionTransport(launch, cwd=cwd, compact_events=True)
-        )
+        # Provider preparation seam (AS28 slice 4a): injected for tests;
+        # defaults to the real providers_api.prepare_provider_session_transport.
+        self._provider_prepare_fn = provider_prepare_fn or _default_prepare_fn
         self._handles: dict[str, _SessionHandle] = {}
         # request-id → cancel event for the turn currently owning that request
         # (loop-thread only). request_cancel() sets these threadsafe (RV680).
@@ -218,23 +249,31 @@ class SessionRuntime:
         project_root: Path,
         *,
         agent_profile_id: str,
-        launch: AcpLaunch,
-        provider_id: str | None = None,
+        provider_id: str,
         model_id: str | None = None,
+        surface_hint: Any = None,
         idle_timeout_seconds: float | None = None,
         max_lifetime_seconds: float | None = None,
         turn_timeout_seconds: float | None = None,
         turn_silence_timeout_seconds: float | None = None,
         correlation_id: str | None = None,
     ) -> dict[str, Any]:
-        """Open a live session; returns the persisted session record."""
+        """Open a live session; returns the persisted session record.
+
+        AS28 slice 4a: the open path resolves a provider-neutral transport via
+        ``providers_api.prepare_provider_session_transport``. The caller supplies
+        *provider_id* and *model_id*; no AcpLaunch crosses this boundary.
+
+        When the resolved surface is unsupported or the transport is None,
+        raises CON-AGW-095 — no child starts, no live session exposed.
+        """
         return self._call(
             self._open_session(
                 project_root,
                 agent_profile_id=agent_profile_id,
-                launch=launch,
                 provider_id=provider_id,
                 model_id=model_id,
+                surface_hint=surface_hint,
                 # None → gateway default; an explicit 0 DISABLES the bound
                 # (needed for long-lived remote-control sessions, RV513).
                 idle_timeout_seconds=(
@@ -268,7 +307,7 @@ class SessionRuntime:
         request_id: str | None = None,
         correlation_id: str | None = None,
         timeout_seconds: float | None = None,
-    ) -> AcpResult:
+    ) -> SessionTurnResult:
         """Run one turn on a live session; refreshes its idle clock."""
         return self._call(
             self._prompt(
@@ -364,25 +403,60 @@ class SessionRuntime:
 
         return self._call(_check(), timeout=10)
 
-    def request_cancel(self, request_id: str) -> bool:
+    def request_cancel(self, request_id: str, *, session_id: str | None = None) -> bool:
         """Signal protocol-level cancel to the turn owning *request_id*.
 
-        Best-effort and threadsafe (RV680): returns True when the signal was
-        scheduled on the session loop; the turn observes it via the transport's
-        cancel_signal race and finishes with stop_reason 'cancelled'. A
-        request not currently in a turn is a no-op.
+        AS28 slice 4b-A: issues SessionControlAction.CANCEL_TURN via the
+        neutral transport.control() seam when *session_id* is provided. When
+        only *request_id* is given, falls back to the local cancel event map
+        (retained for callers that cannot resolve the session id; this is a
+        migration path). Returns True when the signal was scheduled; False
+        otherwise. Best-effort and threadsafe (RV680): the turn observes it
+        via the transport's internal cancel race and finishes with
+        stop_reason 'cancelled'. A request not currently in a turn is a no-op.
         """
         with self._loop_lock:
             loop = self._loop
         if loop is None or not loop.is_running():
             return False
 
-        def _set() -> None:
+        if session_id is not None:
+            # AS28 slice 4b-A: neutral control path.
+            async def _cancel() -> bool:
+                handle = self._handles.get(session_id)
+                if handle is None or not handle.transport.is_alive():
+                    return False
+                control_req = SessionControlRequest(
+                    ag_session_id=session_id,
+                    turn_id=request_id,
+                    action=SessionControlAction.CANCEL_TURN,
+                )
+                result = await handle.transport.control(control_req)
+                return bool(getattr(result, "disposition", None) in (
+                    "accepted",
+                    "already-terminal",
+                ))
+
+            try:
+                return self._call(_cancel(), timeout=5.0)
+            except Exception:  # noqa: BLE001 — cancel must never raise
+                logger.warning(
+                    "cancel control request failed",
+                    extra={"session-id": session_id, "request-id": request_id},
+                    exc_info=True,
+                )
+                return False
+
+        # Fallback: local cancel event map (migration path for callers that
+        # cannot resolve session_id from the request record). This sets the
+        # per-request asyncio.Event so the transport's internal cancel race
+        # sees it. The _turn_cancels dict is populated in _prompt().
+        def _set_local() -> None:
             event = self._turn_cancels.get(request_id)
             if event is not None:
                 event.set()
 
-        loop.call_soon_threadsafe(_set)
+        loop.call_soon_threadsafe(_set_local)
         return True
 
     def shutdown(self) -> None:
@@ -431,6 +505,7 @@ class SessionRuntime:
             "turn-active": handle.turn_lock.locked(),
             "current-request-id": handle.current_request_id,
             "child-pid": handle.child_pid,
+            "latest-turn-event": handle.latest_turn_event,
         }
 
     async def _open_session(
@@ -438,9 +513,9 @@ class SessionRuntime:
         project_root: Path,
         *,
         agent_profile_id: str,
-        launch: AcpLaunch,
-        provider_id: str | None,
+        provider_id: str,
         model_id: str | None,
+        surface_hint: Any,
         idle_timeout_seconds: float,
         max_lifetime_seconds: float,
         turn_timeout_seconds: float,
@@ -454,7 +529,28 @@ class SessionRuntime:
                 message="session runtime has been shut down",
                 details={},
             )
-        transport = self._transport_factory(launch, cwd=project_root)
+        # AS28 slice 4a: resolve provider-neutral transport via the public
+        # prepare seam. No AcpLaunch / AcpSessionTransport construction here.
+        prepared = self._provider_prepare_fn(
+            project_root,
+            provider_id=provider_id,
+            surface_hint=surface_hint,
+            model_id=model_id,
+        )
+        if prepared.transport is None:
+            raise AudiaGenticError(
+                code="CON-AGW-095",
+                kind="agents",
+                message="resolved session surface is unsupported; cannot open session",
+                details={
+                    "provider-id": provider_id,
+                    "surface-validation-state": getattr(
+                        getattr(prepared, "surface", None), "validation", None
+                    )
+                    and getattr(prepared.surface.validation, "state", "unknown"),
+                },
+            )
+        transport = prepared.transport
         provider_session_ref = await transport.open()
 
         record = session_store.build_session_record(
@@ -536,6 +632,7 @@ class SessionRuntime:
             turn_silence_timeout_seconds=turn_silence_timeout_seconds,
             created_clock=self._clock(),
             correlation_id=correlation_id,
+            surface_snapshot=getattr(prepared, "surface", None),
         )
         handle.child_pid = child_pid
         handle.child_creation_identity = child_creation_identity
@@ -576,7 +673,7 @@ class SessionRuntime:
         *,
         request_id: str | None,
         correlation_id: str | None,
-    ) -> AcpResult:
+    ) -> SessionTurnResult:
         handle = self._require_handle(session_id)
         # Turns queue FIFO on the session lock (RV513) — reject only when the
         # backlog itself is full, so back-pressure stays visible.
@@ -635,27 +732,62 @@ class SessionRuntime:
                 project_root, session_id, "session.turn.started", state="active",
                 attributes={"request-id": request_id, "correlation-id": correlation_id},
             )
+            handle.latest_turn_event = {
+                "event": "session.turn.started",
+                "request-id": request_id,
+                "timestamp": now_iso_z(),
+            }
 
             # RV680: every turn gets a cancel signal (so agent_llm_cancel can
             # reach it via protocol-level session/cancel) and an activity
             # clock the reaper can watch for in-turn silence.
             handle.current_request_id = request_id
             handle.last_event_clock = self._clock()
-            cancel_event = asyncio.Event()
+            # Local cancel token for timeout/owner cleanup (AS28 slice 4b-A).
+            # The neutral control path (SessionControlAction.CANCEL_TURN) is the
+            # protocol-level contract; this local event remains for the fallback
+            # cancel path when callers cannot resolve session_id.
+            _local_cancel_event = asyncio.Event()
             if request_id is not None:
-                self._turn_cancels[request_id] = cancel_event
+                self._turn_cancels[request_id] = _local_cancel_event
 
             def _mark_activity() -> None:
                 handle.last_event_clock = self._clock()
 
-            # AS18: wire on_event callback for intra-turn visibility
-            on_event_cb = _make_on_event_callback(
+            def _record_latest_turn_event(topic: str, payload: dict[str, Any]) -> None:
+                handle.latest_turn_event = {
+                    "event": topic,
+                    "request-id": payload.get("request-id"),
+                    "sequence": payload.get("sequence"),
+                    "timestamp": now_iso_z(),
+                }
+
+            # AS28 slice 4b-A: build the neutral observation sink that feeds
+            # the turn-event pipeline (agents_gateway_turn_events.py).
+            _on_event_cb = _make_on_event_callback(
                 session_id, project_root, request_id, handle.agent_profile_id, correlation_id,
                 activity_marker=_mark_activity,
+                latest_event_recorder=_record_latest_turn_event,
+            )
+
+            async def _observation_sink(obs):
+                # Pass TransportObservation directly to the turn-event pipeline.
+                # No ACP-specific reconstruction needed.
+                result = _on_event_cb(obs)
+                if result is not None:
+                    await result
+
+            # AS28 slice 4b-A: call transport.prompt() with the neutral contract.
+            # Include cancel_token so the transport can check it for cancellation.
+            session_prompt = SessionPrompt(
+                turn_id=request_id or "turn-0",
+                body=prompt,
+                cancel_token=_local_cancel_event if request_id is not None else None,
             )
             try:
+                # Call the neutral seam: AgentSessionTransport.prompt().
                 prompt_coro = handle.transport.prompt(
-                    prompt, on_event=on_event_cb, cancel_signal=cancel_event
+                    session_prompt, _observation_sink
                 )
                 if handle.turn_timeout_seconds:
                     # RV680: bound the turn so a wedged harness cannot hold the
@@ -697,19 +829,16 @@ class SessionRuntime:
                 handle.turn_lock.release()
         if request_id is not None:
             session_store.record_session_turn(project_root, session_id, request_id)
-        # SH15: record dropped-events and callback-health at turn end for
-        # richer progress summary
+        # SH15: record dropped-events at turn end for richer progress summary
         turn_end_attrs: dict[str, Any] = {
             "request-id": request_id,
             "stop-reason": result.stop_reason,
             "correlation-id": correlation_id,
         }
-        if result.dropped_events is not None:
-            turn_end_attrs["dropped-events"] = result.dropped_events
-        if result.total_events is not None:
-            turn_end_attrs["total-events"] = result.total_events
-        if result.callback_disabled is not None:
-            turn_end_attrs["callback-disabled"] = bool(result.callback_disabled)
+        if result.dropped_observations:
+            turn_end_attrs["dropped-events"] = result.dropped_observations
+        if result.observations_delivered or result.dropped_observations:
+            turn_end_attrs["total-events"] = result.observations_delivered + result.dropped_observations
         session_store.record_session_timeline(
             project_root, session_id, "session.turn.finished", state="active",
             attributes=turn_end_attrs,

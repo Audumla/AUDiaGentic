@@ -19,7 +19,10 @@ from audiagentic.components.agents.agents_event_topics import (
     TURN_TOOL_COMPLETED_TOPIC,
     TURN_TOOL_STARTED_TOPIC,
 )
-from audiagentic.foundation.transports.acp import AcpEvent
+from audiagentic.foundation.transports.agent_session import (
+    TransportObservation,
+    TransportObservationKind,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,12 +65,11 @@ def _publish_session_event(
 class _TurnEventProjector:
     """Stateful per-turn projection of canonical transport events to turn topics.
 
-    Keys on the transport's CANONICAL kinds only (RV679: the old mapping
-    depended on raw wire kinds leaking through the normalization layer).
+    Keys on the transport's CANONICAL kinds only (TransportObservationKind).
     Dedupes model.started to once per turn and tool.started to once per
     tool-call id; emits tool.completed for both completed and failed statuses
-    with the status attached; emits model.completed from the terminal result
-    event, which the transport now delivers through the callback.
+    with the status attached; emits model.completed from the terminal
+    observation, which the transport now delivers through the callback.
     """
 
     def __init__(self) -> None:
@@ -75,53 +77,35 @@ class _TurnEventProjector:
         self._tools_started: set[str] = set()
         self._tools_finished: set[str] = set()
 
-    @staticmethod
-    def _acp_ext(event: AcpEvent) -> dict[str, Any]:
-        ext = event.ext.get("acp") if event.ext else None
-        return ext if isinstance(ext, dict) else {}
-
-    def _tool_identity(self, event: AcpEvent) -> str:
-        acp = self._acp_ext(event)
-        tool_call_id = acp.get("tool_call_id")
-        if tool_call_id is None:
-            payload = acp.get("payload")
-            if isinstance(payload, dict):
-                tool_call_id = payload.get("toolCallId") or payload.get("tool_call_id")
-        return str(tool_call_id) if tool_call_id is not None else "unidentified"
-
-    def _tool_status(self, event: AcpEvent) -> str | None:
-        acp = self._acp_ext(event)
-        status = acp.get("status")
-        if status is None:
-            payload = acp.get("payload")
-            if isinstance(payload, dict):
-                status = payload.get("status")
-        return str(status) if status is not None else None
-
-    def resolve(self, event: AcpEvent) -> tuple[str, dict[str, Any]] | None:
-        """Return (topic, extra-payload) for a projectable event, else None."""
-        if event.kind in ("thought", "assistant-message"):
+    def resolve(self, obs: TransportObservation) -> tuple[str, dict[str, Any]] | None:
+        """Return (topic, extra-payload) for a projectable observation, else None."""
+        if obs.kind == TransportObservationKind.ACTIVITY:
             if self._model_started:
                 return None
             self._model_started = True
             return TURN_MODEL_STARTED_TOPIC, {}
-        if event.kind == "result":
+        if obs.kind == TransportObservationKind.TERMINAL:
             return TURN_MODEL_COMPLETED_TOPIC, {}
-        if event.kind == "tool-call":
-            status = self._tool_status(event)
-            identity = self._tool_identity(event)
+        if obs.kind == TransportObservationKind.TOOL_REQUESTED:
+            tool_call_id = obs.attributes.get("tool_call_id") if obs.attributes else None
+            status = obs.attributes.get("tool_status") if obs.attributes else None
+            identity = str(tool_call_id) if tool_call_id is not None else "unidentified"
             if status in _TOOL_ACTIVE_STATUSES:
                 if identity in self._tools_started:
                     return None
                 self._tools_started.add(identity)
                 return TURN_TOOL_STARTED_TOPIC, {"tool-call-id": identity}
+        if obs.kind == TransportObservationKind.TOOL_FINISHED:
+            tool_call_id = obs.attributes.get("tool_call_id") if obs.attributes else None
+            status = obs.attributes.get("tool_status") if obs.attributes else None
+            identity = str(tool_call_id) if tool_call_id is not None else "unidentified"
             if status in _TOOL_TERMINAL_STATUSES:
                 if identity in self._tools_finished:
                     return None
                 self._tools_finished.add(identity)
                 return TURN_TOOL_COMPLETED_TOPIC, {
                     "tool-call-id": identity,
-                    "status": status,
+                    "status": str(status) if status else "",
                 }
         return None
 
@@ -150,7 +134,7 @@ def _record_turn_timeline(
     session_id: str,
     request_id: str | None,
     correlation_id: str | None,
-    event: AcpEvent,
+    obs: TransportObservation,
     topic: str,
     *,
     extra_attrs: dict[str, Any] | None = None,
@@ -162,8 +146,8 @@ def _record_turn_timeline(
     """
     attrs = {
         "request-id": request_id,
-        "sequence": event.sequence,
-        "kind": event.kind,
+        "sequence": obs.sequence,
+        "kind": obs.kind.value if hasattr(obs.kind, "value") else str(obs.kind),
         "native-topic": topic,
         "semantic-strength": _TURN_EVENT_SEMANTIC_STRENGTH,
         "verification-tier": _TURN_EVENT_VERIFICATION_TIER,
@@ -174,14 +158,15 @@ def _record_turn_timeline(
             if isinstance(v, (str, int, float, bool)):
                 attrs[k] = v
     try:
+        kind_str = obs.kind.value if hasattr(obs.kind, "value") else str(obs.kind)
         session_store.record_session_timeline(
-            project_root, session_id, f"session.turn.{event.kind}", state="active",
+            project_root, session_id, f"session.turn.{kind_str}", state="active",
             attributes=attrs,
         )
     except Exception:  # noqa: BLE001
         logger.debug(
             "failed to record turn timeline event",
-            extra={"session-id": session_id, "kind": event.kind},
+            extra={"session-id": session_id, "kind": obs.kind},
             exc_info=True,
         )
 
@@ -194,51 +179,56 @@ def _make_on_event_callback(
     correlation_id: str | None,
     *,
     activity_marker: Callable[[], None] | None = None,
+    latest_event_recorder: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> Any:
     """Build an on_event callback for transport.prompt that publishes normalized events.
 
     The callback is observational only — it never completes a turn, releases a slot,
     or changes session reuse policy (AS18 scope boundary). ``activity_marker``
-    is invoked for EVERY event (mapped or not) so the runtime's in-turn
+    is invoked for EVERY observation (mapped or not) so the runtime's in-turn
     liveness clock reflects real transport activity (RV680 silence watchdog).
+    ``latest_event_recorder`` is invoked with (topic, payload) only for
+    projectable (mapped) observations, so a live session handle can track its most
+    recent turn event for diagnostics (request_runtime_status).
     """
     projector = _TurnEventProjector()
 
-    async def _on_event(event: AcpEvent) -> None:
+    async def _on_event(obs: TransportObservation) -> None:
         if activity_marker is not None:
             activity_marker()
-        resolved = projector.resolve(event)
+        resolved = projector.resolve(obs)
         if resolved is None:
             return
         topic, extra = resolved
 
         # Redacted evidence envelope — no prompt text, output, tool args, or secrets
+        kind_str = obs.kind.value if hasattr(obs.kind, "value") else str(obs.kind)
         payload: dict[str, Any] = {
             "session-id": session_id,
             "agent-profile-id": agent_profile_id,
             "request-id": request_id,
-            "kind": event.kind,
-            "sequence": event.sequence,
-            "native_kind": event.ext.get("acp", {}).get("raw_kind") if event.ext else None,
+            "kind": kind_str,
+            "sequence": obs.sequence,
             "semantic-strength": _TURN_EVENT_SEMANTIC_STRENGTH,
             "verification-tier": _TURN_EVENT_VERIFICATION_TIER,
             **extra,
         }
 
         _publish_turn_event(topic, payload, correlation_id=correlation_id)
+        if latest_event_recorder is not None:
+            latest_event_recorder(topic, payload)
         # SH15: pass tool-call-id and status into the timeline for richer progress summary
         extra_attrs: dict[str, Any] | None = None
-        if event.kind == "tool-call":
-            acp_ext = event.ext.get("acp") if event.ext else None
-            if isinstance(acp_ext, dict):
+        if obs.kind == TransportObservationKind.TOOL_REQUESTED or obs.kind == TransportObservationKind.TOOL_FINISHED:
+            if obs.attributes:
                 extra_attrs = {}
-                tid = acp_ext.get("tool_call_id") or acp_ext.get("toolCallId")
+                tid = obs.attributes.get("tool_call_id")
                 if tid is not None:
                     extra_attrs["tool-call-id"] = str(tid)
-                status = acp_ext.get("status")
+                status = obs.attributes.get("tool_status")
                 if status is not None:
                     extra_attrs["status"] = str(status)
-        _record_turn_timeline(project_root, session_id, request_id, correlation_id, event, topic,
+        _record_turn_timeline(project_root, session_id, request_id, correlation_id, obs, topic,
                              extra_attrs=extra_attrs)
 
     return _on_event
