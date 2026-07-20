@@ -7,6 +7,7 @@ subscribers inside the owning component.
 
 GATEWAY_REQUESTED_TOPIC = "agents.llm.gateway.requested"
 GATEWAY_CANCEL_REQUESTED_TOPIC = "agents.llm.gateway.cancel-requested"
+GATEWAY_PROFILE_RELOADED_TOPIC = "agents.llm.gateway.profile-reloaded"
 
 LLM_QUEUED_TOPIC = "agents.llm.queued"
 LLM_STARTED_TOPIC = "agents.llm.started"
@@ -14,12 +15,14 @@ LLM_COMPLETED_TOPIC = "agents.llm.completed"
 LLM_FAILED_TOPIC = "agents.llm.failed"
 LLM_CANCELLED_TOPIC = "agents.llm.cancelled"
 LLM_REJECTED_TOPIC = "agents.llm.rejected"
+LLM_INTERRUPTED_TOPIC = "agents.llm.interrupted"
 
 SESSION_OPENED_TOPIC = "agents.session.opened"
 SESSION_TURN_FINISHED_TOPIC = "agents.session.turn-finished"
 SESSION_CLOSED_TOPIC = "agents.session.closed"
 SESSION_EXPIRED_TOPIC = "agents.session.expired"
 SESSION_FAILED_TOPIC = "agents.session.failed"
+SESSION_ORPHANED_TOPIC = "agents.session.orphaned"
 
 TURN_MODEL_STARTED_TOPIC = "agents.turn.model.started"
 TURN_MODEL_COMPLETED_TOPIC = "agents.turn.model.completed"
