@@ -11,6 +11,11 @@ Usage
   audiagentic component disable ID [--project PATH]
   audiagentic component status ID [--project PATH]
   audiagentic release-bootstrap [--project PATH] [--release-id ID]
+  audiagentic gateway status                       Query gateway service state (SH10)
+  audiagentic gateway drain                        Begin graceful drain (SH10)
+  audiagentic gateway resume                       Cancel draining; resume running (SH10)
+  audiagentic gateway stop [--force]               Request operator stop (SH10)
+  audiagentic gateway recover [--confirm] [--reason TEXT]  Recover dead owner, record-only (SH10)
   audiagentic [ARGS...]                            Launch agent from current project directory
   audiagentic --project PATH [ARGS]                Launch with explicit project root
 """
@@ -23,7 +28,14 @@ from collections.abc import Callable
 from pathlib import Path
 
 from audiagentic.commands.component import _cmd_component
-from audiagentic.commands.gateway import cmd_gateway
+from audiagentic.commands.gateway import (
+    cmd_gateway,
+    cmd_gateway_drain,
+    cmd_gateway_recover,
+    cmd_gateway_resume,
+    cmd_gateway_status,
+    cmd_gateway_stop,
+)
 from audiagentic.commands.install import cmd_install
 from audiagentic.commands.job_control import cmd_job_control
 from audiagentic.commands.launch import _cmd_launch
@@ -49,11 +61,20 @@ def _cmd_update_binaries(args: argparse.Namespace, project_root: Path) -> int:
     return 0
 
 
+# SH10 lifecycle command aliases — keyed by gateway sub-command name.
+_GATEWAY_LIFECYCLE_HANDLERS: dict[str, Callable] = {
+    "status": cmd_gateway_status,
+    "drain": cmd_gateway_drain,
+    "resume": cmd_gateway_resume,
+    "stop": cmd_gateway_stop,
+    "recover": cmd_gateway_recover,
+}
+
 _COMMAND_HANDLERS: dict[str, Callable] = {
     "install": cmd_install,
     "uninstall": cmd_uninstall,
     "component": _cmd_component,
-    "gateway": cmd_gateway,
+    "gateway": cmd_gateway,  # legacy: only 'serve' (argparse dispatch)
     "update": cmd_update,
     "mcp": cmd_mcp,
     "job-control": cmd_job_control,
@@ -141,6 +162,16 @@ def _main(argv: list[str] | None = None) -> int:
     gateway_serve.add_argument("--port", type=int, default=0)
     gateway_serve.add_argument("--token-file", metavar="PATH")
 
+    # SH10 lifecycle sub-commands (no extra flags except where noted)
+    gateway_sub.add_parser("status", help="Query gateway service state")
+    gateway_sub.add_parser("drain", help="Begin graceful drain")
+    gateway_sub.add_parser("resume", help="Cancel draining; resume running")
+    gw_stop = gateway_sub.add_parser("stop", help="Request operator stop")
+    gw_stop.add_argument("--force", action="store_true", default=False, help="Force stop even if busy")
+    gw_recover = gateway_sub.add_parser("recover", help="Recover dead/unprovable owner (record-only)")
+    gw_recover.add_argument("--confirm", action="store_true", default=False, help="Confirm mutation of durable record")
+    gw_recover.add_argument("--reason", metavar="TEXT", default=None, help="Reason for recovery")
+
     subparsers.add_parser("update", help="Check for a new audiagentic version and update")
 
     job_control_parser = subparsers.add_parser("job-control", help="Request job control action")
@@ -212,6 +243,12 @@ def _main(argv: list[str] | None = None) -> int:
         logger.info("audiagentic exit", extra={"project_root": str(project_root), "command": args.command})
 
     atexit.register(_log_exit)
+
+    # Dispatch to command handler via registry
+    # SH10: gateway lifecycle sub-commands dispatch through a separate
+    # registry keyed by the gateway_cmd value (avoids argparse collision).
+    if args.command == "gateway" and args.gateway_cmd in _GATEWAY_LIFECYCLE_HANDLERS:
+        return _GATEWAY_LIFECYCLE_HANDLERS[args.gateway_cmd](args, project_root)
 
     # Dispatch to command handler via registry
     handler = _COMMAND_HANDLERS.get(args.command)
