@@ -15,6 +15,14 @@ agents.llm.gateway.cancel-requested:
   delivery: sync
   since: v1.0.0
 
+agents.llm.gateway.profile-reloaded:
+  description: "Gateway profile registry reloaded (redacted generation metadata only)"
+  payload-required: ["config-path", "old-generation-summary", "new-generation-summary"]
+  payload-optional: []
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0
+
 # Agent LLM Gateway lifecycle events — published by agents_gateway_queue
 agents.llm.queued:
   description: "Gateway request accepted and queued for dispatch"
@@ -64,6 +72,14 @@ agents.llm.rejected:
   delivery: async
   since: v1.0.0
 
+agents.llm.interrupted:
+  description: "Gateway request interrupted by recovery (stale owner gone; replay required)"
+  payload-required: ["request-id", "agent-profile-id", "state"]
+  payload-optional: ["provider-id", "model-id", "error", "attempt_count", "replay_required"]
+  metadata-keys: []
+  delivery: async
+  since: v1.0.0
+
 # Agent session lifecycle events — published by agents_gateway_sessions
 agents.session.opened:
   description: "Session opened and registered with SessionRuntime"
@@ -101,6 +117,14 @@ agents.session.failed:
   description: "Session failed (child process died or transport error)"
   payload-required: ["session-id", "agent-profile-id", "state"]
   payload-optional: ["provider-id", "model-id", "close-reason", "turn-count"]
+  metadata-keys: ["correlation_id"]
+  delivery: async
+  since: v1.0.0
+
+agents.session.orphaned:
+  description: "Owned session turn recovery observed proven orphan/dead ownership evidence"
+  payload-required: ["session-id", "agent-profile-id", "state", "request-id", "evidence-tier"]
+  payload-optional: ["provider-id", "model-id", "close-reason", "turn-count", "owner-epoch"]
   metadata-keys: ["correlation_id"]
   delivery: async
   since: v1.0.0

@@ -56,6 +56,8 @@ VAL-SEC-001: "The secret reference is invalid or uses an unsupported scheme. Use
 CON-SEC-001: "The referenced environment variable is unset. Set the named variable in the process environment and retry."
 VAL-MCFG-001: "The managed configuration contract or path is invalid. Check the declared path and ownership mapping."
 CON-MCFG-001: "The managed configuration ownership registry is unreadable or invalid. Restore a valid registry before applying changes."
+CFG-IO-003: "The JSON config file is corrupt. Fix or remove it before the next write; a corrupt file is no longer silently treated as empty."
+CFG-MCPJSON-001: "The MCP JSON config file (claude/roo/antigravity/cline/gemini/copilot/qwen/pi format) is corrupt. Fix or remove it before the next managed MCP write; it will not be silently overwritten."
 VAL-CAP-001: "An unknown core field was found in the capability declaration. Remove it — only the approved schema fields are accepted. See PROVIDER_CAPABILITY_REFERENCE/model/capability-operation-contract.md §5."
 VAL-CAP-002: "A kind, support state, mode, or other enum value is not recognized. Use a value from the closed taxonomy set. See PROVIDER_CAPABILITY_REFERENCE/model/capability-operation-contract.md §2 and §3."
 VAL-CAP-003: "The schema version is not supported. Only capability-catalog@1 is accepted — no migration layer exists. Update your declaration to the current schema or file a review for a new version (MA19)."

@@ -30,6 +30,11 @@ automation_capabilities:
     payload_contract: provider-generated-surface-payload/v1
     result_contract: provider-generated-surface-result/v1
     ownership_scope_required: true
+  - family_id: model-projection
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-model-projection-payload/v1
+    result_contract: provider-model-projection-result/v1
+    ownership_scope_required: false
 display_name: "OpenCode"
 description: "Terminal-based AI coding assistant. Supports multiple LLM providers via a unified CLI."
 url: "https://opencode.ai"
@@ -238,11 +243,26 @@ agent_files:
 
 fetch_catalog_fn: "audiagentic.components.providers.adapters.opencode.catalog:_fetch_opencode_catalog"
 
+model_entry_renderer: "audiagentic.components.providers.adapters.opencode.model_entry:render_opencode_model_entry"
+
+supported_connectors:
+  - openai-compatible
+  - openai
+  - anthropic
+
+model_config:
+  config_path: ".opencode/opencode.json"
+  reader: "audiagentic.components.providers.adapters.opencode.model_config:read_opencode_models"
+  writer: "audiagentic.components.providers.adapters.opencode.model_config:write_opencode_models"
+  remover: "audiagentic.components.providers.adapters.opencode.model_config:remove_opencode_model"
+  format: "opencode-models-json"
+  refresh_mode: "none"
+
 mcp_config:
   config_path: ".opencode/opencode.json"
-  reader: "audiagentic.components.providers.adapters.mcp_opencode:read_opencode_mcp"
-  writer: "audiagentic.components.providers.adapters.mcp_opencode:write_opencode_mcp"
-  remover: "audiagentic.components.providers.adapters.mcp_opencode:remove_opencode_mcp"
+  reader: "audiagentic.components.providers.adapters.opencode.mcp_format:read_opencode_mcp"
+  writer: "audiagentic.components.providers.adapters.opencode.mcp_format:write_opencode_mcp"
+  remover: "audiagentic.components.providers.adapters.opencode.mcp_format:remove_opencode_mcp"
   format: "opencode-mcp"
   refresh_mode: "file-watch"
 

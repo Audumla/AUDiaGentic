@@ -2,7 +2,7 @@
 # Custom case: callable install/uninstall, custom probe, on_lsp_enabled hook
 
 provider_id: pi
-execution_isolation_tier: no-isolation
+execution_isolation_tier: full-isolation
 automation_capabilities:
   - family_id: cli-lifecycle
     supported_modes: [plan, apply, prune, status]
@@ -162,6 +162,21 @@ supported_connectors:
   - openai-compatible
   - openai
   - anthropic
+
+# One-shot gateway execution uses the shared YAML-driven CLI runner. Live
+# sessions use the provider ACP builder in adapters/pi/acp.py instead.
+execution:
+  mode: cli
+  executable: pi
+  aliases: [pi]
+  prompt-title: Pi
+  error-code: EXT-PI-001
+  extractor-name: pi-plaintext
+  args-template: ["--print", "{model-flags}", "{prompt}"]
+  model-flag: "--model"
+  approval-mode-flags:
+    yolo: []
+    auto-edit: []
 
 vendor_key_injection:
   openai: {mechanism: env, key: OPENAI_API_KEY}
