@@ -34,6 +34,19 @@ def version_info(project_root: Path | None = None) -> dict[str, str]:
     }
 
 
+def _package_recipe(pi_cfg: dict) -> tuple[str, str, str, str, str]:
+    """Return managed package names, ACP version, and runtime extra."""
+    agent_cfg = pi_cfg.get("agent", {})
+    packages = agent_cfg.get("packages", {})
+    return (
+        str(packages.get("cli", "@earendil-works/pi-coding-agent")),
+        str(packages.get("mcp_adapter", "pi-mcp-adapter")),
+        str(packages.get("acp", "pi-acp")),
+        str(agent_cfg.get("acp_version", "0.0.31")),
+        str(agent_cfg.get("runtime_extra", "acp")),
+    )
+
+
 def _npm_env() -> dict[str, str]:
     env = os.environ.copy()
     # Node 22 in Docker can intermittently crash compiling large npm installs.
@@ -173,19 +186,23 @@ def install_to(target: Path, project_root: Path | None = None) -> int:
     agent_cfg = pi_cfg.get("agent", {})
     agent_version = _c.AGENT_VERSION or agent_cfg.get("version", "latest")
     mcp_adapter_version = _c.AGENT_MCP_ADAPTER_VERSION or agent_cfg.get("mcp_adapter_version", "latest")
+    cli_package, mcp_package, acp_package, acp_version, runtime_extra = _package_recipe(pi_cfg)
 
     # Install both packages in one npm install call so npm resolves the full
     # dependency tree in a single pass. Sequential installs cause npm to
     # reorganize the tree on the second call, which can leave nested package
     # dist/ directories empty (observed with pi-tui on Node 22+).
     print_message(
-        f"Installing AudiaGentic agent {agent_version} + MCP adapter {mcp_adapter_version} into {npm_dir}"
+        f"Installing {cli_package}@{agent_version} + {mcp_package}@{mcp_adapter_version}"
+        f" + {acp_package}@{acp_version}"
+        f" into {npm_dir} (runtime extra: audiagentic[{runtime_extra}])"
     )
     subprocess.run(
         [
             npm, "install", "--prefer-offline", "--prefix", str(npm_dir),
-            f"@earendil-works/pi-coding-agent@{agent_version}",
-            f"pi-mcp-adapter@{mcp_adapter_version}",
+            f"{cli_package}@{agent_version}",
+            f"{mcp_package}@{mcp_adapter_version}",
+            f"{acp_package}@{acp_version}",
         ],
         check=True,
         env=_npm_env(),

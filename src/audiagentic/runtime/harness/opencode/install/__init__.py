@@ -166,18 +166,27 @@ def materialize_agent_config(
 def install_to(target: Path, project_root: Path | None = None) -> int:
     import subprocess
 
-    npm = shutil.which("npm")
-    if npm is None:
-        raise make_error(
-            prefix="CFG",
-            component="OCINST",
-            number=1,
-            kind="opencode-harness",
-            message="npm is required to install opencode.",
-        )
+    opencode = shutil.which("opencode")
+    if opencode is not None:
+        probe = subprocess.run([opencode, "--version"], capture_output=True, text=True, check=False)
+        if probe.returncode == 0:
+            print_message(f"Using existing opencode CLI at {opencode}")
+        else:
+            opencode = None
 
-    print_message("Installing opencode CLI")
-    subprocess.run([npm, "install", "-g", "opencode-ai"], check=True)
+    if opencode is None:
+        npm = shutil.which("npm")
+        if npm is None:
+            raise make_error(
+                prefix="CFG",
+                component="OCINST",
+                number=1,
+                kind="opencode-harness",
+                message="npm is required to install opencode.",
+            )
+
+        print_message("Installing opencode CLI")
+        subprocess.run([npm, "install", "-g", "opencode-ai"], check=True)
 
     root = _resolve_project_root(project_root)
     from audiagentic.runtime.harness.config import load_harness_config
