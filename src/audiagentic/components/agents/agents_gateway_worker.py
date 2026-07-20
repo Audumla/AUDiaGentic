@@ -41,7 +41,16 @@ _PASSTHROUGH_ENV = frozenset(
     }
 )
 _PROTECTED_WORKER_ENV = frozenset(
-    {"HOME", "USERPROFILE", "XDG_CONFIG_HOME", "TMP", "TEMP", "PYTHONPATH"}
+    {
+        "HOME",
+        "USERPROFILE",
+        "XDG_CONFIG_HOME",
+        "TMP",
+        "TEMP",
+        "PYTHONPATH",
+        "PI_CODING_AGENT_DIR",
+        "PI_CODING_AGENT_SESSION_DIR",
+    }
 )
 
 
@@ -71,6 +80,19 @@ def _replacement_environment(component_profile: str, private_home: Path) -> dict
         for name, value in os.environ.items()
         if name.upper() in _PASSTHROUGH_ENV or name.upper().startswith("LC_")
     }
+    pi_agent_dir = private_home / ".pi" / "agent"
+    pi_agent_dir.mkdir(parents=True, exist_ok=True)
+    # Preserve the managed Pi model registry without copying the caller's
+    # extensions, sessions, or other mutable agent state into the worker.
+    source_pi_dir = os.environ.get("PI_CODING_AGENT_DIR")
+    source_models = (
+        Path(source_pi_dir) / "models.json"
+        if source_pi_dir
+        else Path.home() / ".pi" / "agent" / "models.json"
+    )
+    if source_models.is_file():
+        shutil.copy2(source_models, pi_agent_dir / "models.json")
+
     environment.update(
         {
             "HOME": str(private_home),
@@ -78,6 +100,12 @@ def _replacement_environment(component_profile: str, private_home: Path) -> dict
             "XDG_CONFIG_HOME": str(private_home / ".config"),
             "TMP": str(private_home / "tmp"),
             "TEMP": str(private_home / "tmp"),
+            # Pi otherwise inherits a caller-scoped PI_CODING_AGENT_DIR and
+            # discovers extensions/configuration outside this worker home.
+            "PI_CODING_AGENT_DIR": str(pi_agent_dir),
+            "PI_CODING_AGENT_SESSION_DIR": str(
+                private_home / ".pi" / "sessions"
+            ),
             "PYTHONIOENCODING": "utf-8",
         }
     )

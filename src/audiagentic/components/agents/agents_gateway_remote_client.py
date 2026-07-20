@@ -162,6 +162,9 @@ class StandaloneGatewayClient:
     def cancel_llm_request(self, project_root: Path, request_id: str) -> dict[str, Any]:
         return cast(dict[str, Any], self._call("cancel_llm_request", project_root, {"request_id": request_id}))
 
+    def request_runtime_status(self, project_root: Path, request_id: str) -> dict[str, Any]:
+        return cast(dict[str, Any], self._call("request_runtime_status", project_root, {"request_id": request_id}))
+
     def run_llm_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]:
         if "component_profile" not in kwargs:
             from audiagentic.foundation.paths.names import get_active_profile

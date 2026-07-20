@@ -113,7 +113,7 @@ def canonicalize_project_root(raw: str | Path, *, windows: bool | None = None) -
 @dataclass(frozen=True)
 class SessionSpec:
     session_id: str | None = None
-    keep_alive: bool = False
+    keep_alive: bool | None = None
     idle_timeout_seconds: float | None = None
     max_lifetime_seconds: float | None = None
 
@@ -123,7 +123,7 @@ class SessionSpec:
             raise _err("VAL-AGW-082", "gateway submission session must be a mapping")
         return cls(
             session_id=value.get("session_id"),
-            keep_alive=value.get("keep_alive", False),
+            keep_alive=value.get("keep_alive"),
             idle_timeout_seconds=value.get("idle_timeout_seconds"),
             max_lifetime_seconds=value.get("max_lifetime_seconds"),
         )
@@ -324,7 +324,7 @@ def _validate_session_spec(session: SessionSpec) -> None:
     if not isinstance(session, SessionSpec):
         raise _wire_error("session", "gateway submission session is invalid")
     _require_optional_string("session.session_id", session.session_id)
-    if not isinstance(session.keep_alive, bool):
+    if session.keep_alive is not None and not isinstance(session.keep_alive, bool):
         raise _wire_error("session.keep_alive", "gateway submission session.keep_alive must be a boolean")
     _require_optional_number("session.idle_timeout_seconds", session.idle_timeout_seconds, nonnegative=True)
     _require_optional_number("session.max_lifetime_seconds", session.max_lifetime_seconds, nonnegative=True)
@@ -447,10 +447,20 @@ def derive_idempotency_key(
     prompt_digest: str,
     session_id: str | None,
 ) -> str:
-    """Client key wins; else deterministic derivation (design doc §5.2)."""
+    """Client key wins; else a fresh unique key per admission.
+
+    Deriving a key from context+prompt+session (the original design doc §5.2
+    behavior) silently replayed the first request when an agent legitimately
+    repeated an identical prompt ("continue", "try again", identical tool
+    instructions). Deduplication is opt-in: only an explicit caller key (or a
+    durable spool event ID used as one) expresses retry intent.
+    """
     if explicit_key:
         return explicit_key
-    return sha256_hex(context_fingerprint + prompt_digest + (session_id or ""))
+    del context_fingerprint, prompt_digest, session_id
+    import uuid
+
+    return f"auto-{uuid.uuid4().hex}"
 
 
 @dataclass(frozen=True)

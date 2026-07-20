@@ -17,14 +17,19 @@ import time
 import uuid
 from collections import deque
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.agents import (
+    agents_gateway_profiles as profiles_mod,
+)
 from audiagentic.components.agents import agents_gateway_store as store
 from audiagentic.components.agents.agents_event_topics import (
     LLM_CANCELLED_TOPIC,
     LLM_COMPLETED_TOPIC,
     LLM_FAILED_TOPIC,
+    LLM_INTERRUPTED_TOPIC,
     LLM_QUEUED_TOPIC,
     LLM_REJECTED_TOPIC,
     LLM_STARTED_TOPIC,
@@ -112,7 +117,7 @@ async def notify_turn_done(request_id: str) -> None:
     """Release the profile compute slot owned by this session turn."""
     await _TURNCB.turn_done(request_id)
 
-_TERMINAL_EVENT_SUFFIXES = {"completed", "failed", "cancelled", "rejected"}
+_TERMINAL_EVENT_SUFFIXES = {"completed", "failed", "cancelled", "rejected", "interrupted"}
 
 # BU02: explicit suffix→topic-constant map replaces the f-string publish.
 # Each value matches a registered agents-owned topic in events.yaml.
@@ -123,6 +128,7 @@ _LIFECYCLE_SUFFIX_TOPIC_MAP: dict[str, str] = {
     "failed": LLM_FAILED_TOPIC,
     "cancelled": LLM_CANCELLED_TOPIC,
     "rejected": LLM_REJECTED_TOPIC,
+    "interrupted": LLM_INTERRUPTED_TOPIC,
 }
 
 
@@ -151,6 +157,9 @@ def _publish_lifecycle_event(event_suffix: str, record: dict[str, Any]) -> None:
         payload["model-id"] = record.get("model-id")
         payload["error"] = record.get("error")
         payload["attempt_count"] = len(record.get("attempts") or [])
+    if event_suffix == "interrupted":
+        recovery_info = record.get("recovery") or {}
+        payload["replay_required"] = recovery_info.get("outcome") == "replay-required"
 
     topic = _LIFECYCLE_SUFFIX_TOPIC_MAP.get(event_suffix)
     if topic is None:
@@ -177,6 +186,26 @@ RequestRunnerWithContext = Callable[[Path, dict[str, Any], str | None], dict[str
 """SH02: runner that also receives the dispatch_prompt (raw prompt body)
 separately from the persisted record. The persisted record only carries
 prompt_digest; dispatch needs the raw prompt for provider execution."""
+
+
+@dataclass(frozen=True)
+class QueuedDispatch:
+    """Immutable per-request dispatch entry. Carries everything _drain/_run_one
+    needs so that concurrent enqueues for the same profile never substitute
+    caller context for a different request's context (SH07).
+
+    SH07 C2: lane_key and snapshot provide gateway-owned execution identity;
+    params comes from the resolved snapshot, not the caller.
+    """
+
+    request_id: str
+    project_root: Path
+    agent_profile_id: str
+    lane_key: profiles_mod.GatewayExecutionLaneKey
+    snapshot: profiles_mod.GatewayProfileSnapshot
+    runner: RequestRunner
+    owner_epoch: str
+    service_root: Path | None
 
 
 def _params_get(params: dict[str, Any], *keys: str) -> Any:
@@ -248,8 +277,7 @@ class _ProfileQueue:
         self.max_concurrency = max_concurrency
         self.queue_max_size = queue_max_size
         self.lock = threading.Lock()
-        self.pending: deque[str] = deque()
-        self.dispatch_owners: dict[str, str] = {}
+        self.pending: deque[QueuedDispatch] = deque()
         self.running: set[str] = set()
         self.idle: set[str] = set()
         self.cancel_requested: set[str] = set()
@@ -269,17 +297,16 @@ class GatewayQueueManager:
     """
 
     def __init__(self) -> None:
-        self._profiles: dict[str, _ProfileQueue] = {}
+        self._lanes: dict[tuple[str, str, str], _ProfileQueue] = {}
         self._manager_lock = threading.Lock()
 
-    def _profile_queue(self, agent_profile_id: str, params: dict[str, Any]) -> _ProfileQueue:
+    def _execution_lane(self, snapshot: profiles_mod.GatewayProfileSnapshot) -> _ProfileQueue:
+        lane_key_tuple = (snapshot.profile_id, snapshot.generation, snapshot.config_digest)
         with self._manager_lock:
-            pq = self._profiles.get(agent_profile_id)
+            pq = self._lanes.get(lane_key_tuple)
             if pq is None:
-                max_concurrency = resolve_max_concurrency(params)
-                queue_max_size = resolve_queue_max_size(params, max_concurrency)
-                pq = _ProfileQueue(max_concurrency, queue_max_size)
-                self._profiles[agent_profile_id] = pq
+                pq = _ProfileQueue(snapshot.max_concurrency, snapshot.queue_max_size)
+                self._lanes[lane_key_tuple] = pq
             return pq
 
     def enqueue(
@@ -290,27 +317,93 @@ class GatewayQueueManager:
         runner: RequestRunner,
         *,
         dispatch_owner_epoch: str | None = None,
+        dispatch_service_root: Path | None = None,
     ) -> dict[str, Any]:
         """Accept a queued record, enqueueing it if capacity exists.
+
+        Uses the snapshot identity persisted in the record at admission time
+        (SH07 C2).  This prevents project-local params from re-defining lane
+        limits — the gateway-owned snapshot is authoritative.
 
         Returns the (possibly rejected) record. The record must already be
         persisted in 'queued' state by the caller (agents_gateway_api).
         """
         request_id = record["request-id"]
         agent_profile_id = record["agent-profile-id"]
+
+        # SH07 C2: reconstruct snapshot from record's admission-time identity.
+        # The record was built with snapshot fields by submit_llm_request;
+        # using them here prevents any project-local params override.
+        snapshot = profiles_mod.snapshot_from_record(record)
+        if snapshot is None:
+            # Pre-SH07 C2 record or test path: derive from caller params as fallback.
+            resolved_provider_id = params.get("provider_id") or params.get("provider-id", "")
+            resolved_model_id = params.get("model_id") or params.get("model-id")
+            snapshot = profiles_mod.snapshot_from_resolved_profile(
+                profile_id=agent_profile_id,
+                provider_id=resolved_provider_id,
+                model_id=resolved_model_id,
+                params=params,
+            )
+        lane_key = snapshot.lane_key()
+
+        # SH07 C2: validate snapshot is current before admission.
+        # A stale snapshot means the gateway profile changed; reject with
+        # CON-AGW-101 resubmit-required. The default AlwaysCurrentValidator
+        # preserves existing behavior; tests inject a validator to simulate
+        # generation changes.
+        validator = profiles_mod.get_snapshot_validator()
+        if not validator.validate_snapshot_current(snapshot):
+            logger.info(
+                "gateway request rejected: stale profile snapshot",
+                extra={"request-id": request_id, "agent-profile-id": agent_profile_id, "lane-key": lane_key.public_id()},
+            )
+            rejected = store.transition_record(
+                project_root, request_id, "rejected",
+                updates={"error": {
+                    "code": "CON-AGW-101",
+                    "message": "gateway profile changed; resubmit required",
+                    "kind": "agents",
+                }},
+            )
+            store.record_gateway_timeline(
+                project_root,
+                request_id,
+                "queue.rejected-stale-snapshot",
+                state=rejected["state"],
+                attributes={
+                    "agent-profile-id": agent_profile_id,
+                    "lane-key": lane_key.public_id(),
+                    "gateway-profile-generation": snapshot.generation,
+                    "correlation_id": (rejected.get("metadata") or {}).get("correlation_id"),
+                },
+            )
+            _publish_lifecycle_event("rejected", rejected)
+            return rejected
+
         owner_epoch = dispatch_owner_epoch or f"local-{uuid.uuid4().hex}"
-        pq = self._profile_queue(agent_profile_id, params)
+        pq = self._execution_lane(snapshot)
 
         # Lifecycle event publish is SYNC dispatch — a subscriber that calls
         # back into cancel()/enqueue() for the same profile would try to
         # re-acquire pq.lock and deadlock (threading.Lock is not reentrant).
         # Keep the critical section limited to the pending-deque mutation
         # itself; do all I/O and event publish after releasing the lock (RV31).
+        entry = QueuedDispatch(
+            request_id=request_id,
+            project_root=project_root,
+            agent_profile_id=agent_profile_id,
+            lane_key=lane_key,
+            snapshot=snapshot,
+            runner=runner,
+            owner_epoch=owner_epoch,
+            service_root=dispatch_service_root,
+        )
+        pending_count = 0
         with pq.lock:
             queue_full = len(pq.pending) >= pq.queue_max_size
             if not queue_full:
-                pq.pending.append(request_id)
-                pq.dispatch_owners[request_id] = owner_epoch
+                pq.pending.append(entry)
                 pending_count = len(pq.pending)
 
         if queue_full:
@@ -357,17 +450,10 @@ class GatewayQueueManager:
         )
         _publish_lifecycle_event("queued", record)
 
-        self._drain(project_root, agent_profile_id, pq, params, runner)
+        self._drain(pq)
         return store.read_record(project_root, request_id)
 
-    def _drain(
-        self,
-        project_root: Path,
-        agent_profile_id: str,
-        pq: _ProfileQueue,
-        params: dict[str, Any],
-        runner: RequestRunner,
-    ) -> None:
+    def _drain(self, pq: _ProfileQueue) -> None:
         """Start worker threads for as many pending requests as capacity allows.
 
         AS15: uses active_running() (running - idle) so that session requests
@@ -377,31 +463,25 @@ class GatewayQueueManager:
             with pq.lock:
                 if pq.active_running() >= pq.max_concurrency or not pq.pending:
                     return
-                request_id = pq.pending.popleft()
+                entry = pq.pending.popleft()
+                request_id = entry.request_id
                 pq.running.add(request_id)
-                owner_epoch = pq.dispatch_owners.get(request_id)
-                if owner_epoch is None:
-                    logger.error("gateway queue lost dispatch owner", extra={"request-id": request_id})
-                    pq.running.discard(request_id)
-                    continue
             thread = threading.Thread(
                 target=self._run_one,
-                args=(project_root, agent_profile_id, pq, request_id, owner_epoch, params, runner),
+                args=(pq, entry),
                 daemon=True,
-                name=f"gateway-{agent_profile_id}-{request_id}",
+                name=f"gateway-{entry.agent_profile_id}-{request_id}",
             )
             thread.start()
 
-    def _run_one(
-        self,
-        project_root: Path,
-        agent_profile_id: str,
-        pq: _ProfileQueue,
-        request_id: str,
-        owner_epoch: str,
-        params: dict[str, Any],
-        runner: RequestRunner,
-    ) -> None:
+    def _run_one(self, pq: _ProfileQueue, entry: QueuedDispatch) -> None:
+        project_root = entry.project_root
+        agent_profile_id = entry.agent_profile_id
+        request_id = entry.request_id
+        owner_epoch = entry.owner_epoch
+        runner = entry.runner
+        service_root = entry.service_root
+
         is_session = False
         non_session_slot_held = False
 
@@ -413,11 +493,45 @@ class GatewayQueueManager:
                     store.record_gateway_timeline(project_root, request_id, "queue.cancelled-before-dispatch", state="cancelled")
                     _publish_lifecycle_event("cancelled", cancelled)
                 return
+
+            # SH07 C2: validate snapshot is still current before dispatch.
+            # Queued work must not silently drain under old profile limits;
+            # if the gateway profile changed while this request was pending,
+            # reject it terminally with CON-AGW-101 resubmit-required.
+            validator = profiles_mod.get_snapshot_validator()
+            if not validator.validate_snapshot_current(entry.snapshot):
+                logger.info(
+                    "gateway request rejected before dispatch: stale profile snapshot",
+                    extra={"request-id": request_id, "lane-key": entry.lane_key.public_id()},
+                )
+                rejected = store.transition_record(
+                    project_root, request_id, "rejected",
+                    updates={"error": {
+                        "code": "CON-AGW-101",
+                        "message": "gateway profile changed; resubmit required",
+                        "kind": "agents",
+                    }},
+                )
+                store.record_gateway_timeline(
+                    project_root,
+                    request_id,
+                    "queue.rejected-stale-dispatch",
+                    state=rejected["state"],
+                    attributes={
+                        "agent-profile-id": agent_profile_id,
+                        "lane-key": entry.lane_key.public_id(),
+                        "gateway-profile-generation": entry.snapshot.generation,
+                    },
+                )
+                _publish_lifecycle_event("rejected", rejected)
+                return
+
             current = store.read_record(project_root, request_id)
             try:
                 claimed = store.claim_dispatch(
                     project_root, request_id, owner_epoch=owner_epoch,
                     expected_revision=current["revision"],
+                    service_root=service_root,
                 )
             except AudiaGenticError as exc:
                 # Cancellation may linearize after this worker has dequeued the
@@ -483,12 +597,12 @@ class GatewayQueueManager:
                         pq.idle.add(rid)
                     if release_slot:
                         pq.compute_slots.release()
-                    self._drain(project_root, agent_profile_id, pq, params, runner)
+                    self._drain(pq)
 
                 _TURNCB.set_callbacks(request_id, _on_turn_starting, _on_turn_done)
                 # This worker is waiting at the session/turn boundary, so let
                 # another request reach the same bounded compute gate.
-                self._drain(project_root, agent_profile_id, pq, params, runner)
+                self._drain(pq)
             else:
                 pq.compute_slots.acquire()
                 non_session_slot_held = True
@@ -543,9 +657,24 @@ class GatewayQueueManager:
                 pq.running.discard(request_id)
                 pq.idle.discard(request_id)
                 pq.cancel_requested.discard(request_id)
-                pq.dispatch_owners.pop(request_id, None)
             _TURNCB.clear(request_id)
-            self._drain(project_root, agent_profile_id, pq, params, runner)
+            self._drain(pq)
+
+    def _find_lane_for_request(self, agent_profile_id: str, request_id: str) -> _ProfileQueue | None:
+        """Scan lanes to find the queue that contains or tracks this request.
+
+        Backward-compat: caller only knows agent_profile_id, not the full lane key.
+        """
+        with self._manager_lock:
+            for lane_key_tuple, pq in self._lanes.items():
+                if lane_key_tuple[0] == agent_profile_id:
+                    # Profile matches; check if this request is tracked here
+                    with pq.lock:
+                        if request_id in pq.running or any(
+                            e.request_id == request_id for e in pq.pending
+                        ):
+                            return pq
+        return None
 
     def cancel(self, project_root: Path, agent_profile_id: str, request_id: str) -> dict[str, Any]:
         """Cancel a queued request, or mark a running one cancel-requested (best-effort).
@@ -555,7 +684,7 @@ class GatewayQueueManager:
         assume the terminal state will be 'cancelled' for a cancel issued
         against a running request (RV15 finding).
         """
-        pq = self._profiles.get(agent_profile_id)
+        pq = self._find_lane_for_request(agent_profile_id, request_id)
         if pq is None:
             # A remote service/process can own the in-memory queue.  Durable
             # cancellation still has to reach the record even when this local
@@ -563,11 +692,13 @@ class GatewayQueueManager:
             return store.cancel_queued_or_mark_requested(project_root, request_id)
 
         with pq.lock:
-            if request_id in pq.pending:
-                pq.pending.remove(request_id)
-                removed_from_queue = True
-            else:
-                removed_from_queue = False
+            # Search deque for matching entry (pending entries are QueuedDispatch objects)
+            removed_from_queue = False
+            for i, e in enumerate(pq.pending):
+                if e.request_id == request_id:
+                    del pq.pending[i]
+                    removed_from_queue = True
+                    break
             is_running = request_id in pq.running
             if is_running:
                 pq.cancel_requested.add(request_id)
@@ -649,32 +780,94 @@ class GatewayQueueManager:
                 backoff_seconds = min(backoff_seconds * 2, _WAIT_MAX_BACKOFF_SECONDS)
 
     def queue_depth(self, agent_profile_id: str) -> dict[str, int]:
-        pq = self._profiles.get(agent_profile_id)
-        if pq is None:
-            return {"pending": 0, "running": 0, "active_running": 0, "idle": 0, "max_concurrency": 0}
-        with pq.lock:
-            return {
-                "pending": len(pq.pending),
-                "running": len(pq.running),
-                "active_running": pq.active_running(),
-                "idle": len(pq.idle),
-                "max_concurrency": pq.max_concurrency,
-            }
+        """Return aggregate queue depth across all lanes for this profile.
+
+        SH07 C2: multiple lanes (generations/digests) can exist for the same
+        profile id; aggregate across them so the caller sees total capacity.
+        """
+        pending = 0
+        running = 0
+        active_running = 0
+        idle = 0
+        max_concurrency = 0
+
+        with self._manager_lock:
+            for lane_key_tuple, pq in self._lanes.items():
+                if lane_key_tuple[0] == agent_profile_id:
+                    with pq.lock:
+                        pending += len(pq.pending)
+                        running += len(pq.running)
+                        active_running += pq.active_running()
+                        idle += len(pq.idle)
+                    max_concurrency += pq.max_concurrency
+
+        return {
+            "pending": pending,
+            "running": running,
+            "active_running": active_running,
+            "idle": idle,
+            "max_concurrency": max_concurrency,
+        }
 
     def request_slot_status(self, agent_profile_id: str, request_id: str) -> str | None:
-        pq = self._profiles.get(agent_profile_id)
+        pq = self._find_lane_for_request(agent_profile_id, request_id)
         if pq is None:
             return None
         with pq.lock:
             if request_id in pq.running:
                 return "idle" if request_id in pq.idle else "active"
-            if request_id in pq.pending:
-                return "pending"
+            for e in pq.pending:
+                if e.request_id == request_id:
+                    return "pending"
         return None
 
     def all_queue_depths(self) -> dict[str, dict[str, int]]:
-        """Return queue_depth() for every profile that has ever had a request
-        submitted in this process (used by the component status hook)."""
+        """Return queue depth keyed by redacted lane public id (no paths/secrets).
+
+        SH07 C2: lanes are identified by their public lane key, not bare profile
+        ids. Multiple projects sharing a lane see one entry for that lane.
+        """
         with self._manager_lock:
-            profile_ids = list(self._profiles)
-        return {profile_id: self.queue_depth(profile_id) for profile_id in profile_ids}
+            items = list(self._lanes.items())
+
+        result: dict[str, dict[str, int]] = {}
+        for lane_key_tuple, pq in items:
+            lane_key = profiles_mod.GatewayExecutionLaneKey(*lane_key_tuple)
+            public_id = lane_key.public_id()
+            with pq.lock:
+                result[public_id] = {
+                    "pending": len(pq.pending),
+                    "running": len(pq.running),
+                    "active_running": pq.active_running(),
+                    "idle": len(pq.idle),
+                    "max_concurrency": pq.max_concurrency,
+                }
+        return result
+
+    def _snapshot_all(self) -> dict[str, dict[str, int]]:
+        """Immutable cross-lane snapshot of all queue depths.
+
+        Acquires every lane lock simultaneously so the returned dict is a
+        consistent view: running >= idle and active_running == running - idle
+        hold for each lane *and* across lanes at the same instant.
+        Lock ordering (sorted by lane key tuple) avoids deadlock with _drain.
+        """
+        with self._manager_lock:
+            lane_key_tuples = sorted(self._lanes)
+        pqs = [self._lanes[lkt] for lkt in lane_key_tuples]
+        for pq in pqs:
+            pq.lock.acquire()
+        try:
+            return {
+                profiles_mod.GatewayExecutionLaneKey(*lkt).public_id(): {
+                    "pending": len(pq.pending),
+                    "running": len(pq.running),
+                    "active_running": pq.active_running(),
+                    "idle": len(pq.idle),
+                    "max_concurrency": pq.max_concurrency,
+                }
+                for lkt, pq in zip(lane_key_tuples, pqs)
+            }
+        finally:
+            for pq in reversed(pqs):
+                pq.lock.release()

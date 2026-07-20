@@ -42,214 +42,16 @@ from audiagentic.components.agents.agents_event_topics import (
     SESSION_FAILED_TOPIC,
     SESSION_OPENED_TOPIC,
     SESSION_TURN_FINISHED_TOPIC,
-    TURN_MODEL_COMPLETED_TOPIC,
-    TURN_MODEL_STARTED_TOPIC,
-    TURN_TOOL_COMPLETED_TOPIC,
-    TURN_TOOL_STARTED_TOPIC,
+)
+from audiagentic.components.agents.agents_gateway_turn_events import (
+    _make_on_event_callback,
+    _publish_session_event,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports import AcpLaunch, AcpResult, AcpSessionTransport
-from audiagentic.foundation.transports.acp import AcpEvent
 
 logger = logging.getLogger(__name__)
-
-# AS19/RV679: runtime events may report observations but cannot self-attest
-# semantic strength or verification tier. Until provider-declared,
-# surface/version-specific observability resolution lands (AS19), every
-# projection is honestly labelled unknown — never "precise"/"execution".
-_TURN_EVENT_SEMANTIC_STRENGTH = "unknown"
-_TURN_EVENT_VERIFICATION_TIER = "unknown"
-
-# Tool statuses that mean the tool finished; carried on the completed event so
-# observers can distinguish success from failure (RV679: failed was invisible).
-_TOOL_TERMINAL_STATUSES = {"completed", "failed"}
-_TOOL_ACTIVE_STATUSES = {None, "pending", "in_progress"}
-
-
-def _event_metadata(correlation_id: str | None) -> dict[str, str]:
-    return {"correlation_id": correlation_id} if correlation_id else {}
-
-
-def _publish_session_event(
-    topic: str,
-    payload: dict[str, Any],
-    *,
-    correlation_id: str | None = None,
-) -> None:
-    """Publish a session lifecycle event. Never raises (RV38 pattern)."""
-    from audiagentic.foundation.event import get_bus
-
-    try:
-        get_bus().publish(topic, payload, metadata=_event_metadata(correlation_id))
-    except Exception:  # noqa: BLE001
-        logger.error(
-            "failed to publish session lifecycle event",
-            extra={"session-id": payload.get("session-id"), "event": topic},
-            exc_info=True,
-        )
-
-
-class _TurnEventProjector:
-    """Stateful per-turn projection of canonical transport events to turn topics.
-
-    Keys on the transport's CANONICAL kinds only (RV679: the old mapping
-    depended on raw wire kinds leaking through the normalization layer).
-    Dedupes model.started to once per turn and tool.started to once per
-    tool-call id; emits tool.completed for both completed and failed statuses
-    with the status attached; emits model.completed from the terminal result
-    event, which the transport now delivers through the callback.
-    """
-
-    def __init__(self) -> None:
-        self._model_started = False
-        self._tools_started: set[str] = set()
-        self._tools_finished: set[str] = set()
-
-    @staticmethod
-    def _acp_ext(event: AcpEvent) -> dict[str, Any]:
-        ext = event.ext.get("acp") if event.ext else None
-        return ext if isinstance(ext, dict) else {}
-
-    def _tool_identity(self, event: AcpEvent) -> str:
-        acp = self._acp_ext(event)
-        tool_call_id = acp.get("tool_call_id")
-        if tool_call_id is None:
-            payload = acp.get("payload")
-            if isinstance(payload, dict):
-                tool_call_id = payload.get("toolCallId") or payload.get("tool_call_id")
-        return str(tool_call_id) if tool_call_id is not None else "unidentified"
-
-    def _tool_status(self, event: AcpEvent) -> str | None:
-        acp = self._acp_ext(event)
-        status = acp.get("status")
-        if status is None:
-            payload = acp.get("payload")
-            if isinstance(payload, dict):
-                status = payload.get("status")
-        return str(status) if status is not None else None
-
-    def resolve(self, event: AcpEvent) -> tuple[str, dict[str, Any]] | None:
-        """Return (topic, extra-payload) for a projectable event, else None."""
-        if event.kind in ("thought", "assistant-message"):
-            if self._model_started:
-                return None
-            self._model_started = True
-            return TURN_MODEL_STARTED_TOPIC, {}
-        if event.kind == "result":
-            return TURN_MODEL_COMPLETED_TOPIC, {}
-        if event.kind == "tool-call":
-            status = self._tool_status(event)
-            identity = self._tool_identity(event)
-            if status in _TOOL_ACTIVE_STATUSES:
-                if identity in self._tools_started:
-                    return None
-                self._tools_started.add(identity)
-                return TURN_TOOL_STARTED_TOPIC, {"tool-call-id": identity}
-            if status in _TOOL_TERMINAL_STATUSES:
-                if identity in self._tools_finished:
-                    return None
-                self._tools_finished.add(identity)
-                return TURN_TOOL_COMPLETED_TOPIC, {
-                    "tool-call-id": identity,
-                    "status": status,
-                }
-        return None
-
-
-def _publish_turn_event(
-    topic: str,
-    payload: dict[str, Any],
-    *,
-    correlation_id: str | None = None,
-) -> None:
-    """Publish an intra-turn event. Never raises (RV38 pattern)."""
-    from audiagentic.foundation.event import get_bus
-
-    try:
-        get_bus().publish(topic, payload, metadata=_event_metadata(correlation_id))
-    except Exception:  # noqa: BLE001
-        logger.error(
-            "failed to publish turn event",
-            extra={"session-id": payload.get("session-id"), "event": topic},
-            exc_info=True,
-        )
-
-
-def _record_turn_timeline(
-    project_root: Path,
-    session_id: str,
-    request_id: str | None,
-    correlation_id: str | None,
-    event: AcpEvent,
-    topic: str,
-) -> None:
-    """Record a best-effort per-turn timeline event. Never raises."""
-    try:
-        session_store.record_session_timeline(
-            project_root, session_id, f"session.turn.{event.kind}", state="active",
-            attributes={
-                "request-id": request_id,
-                "sequence": event.sequence,
-                "kind": event.kind,
-                "native-topic": topic,
-                "semantic-strength": _TURN_EVENT_SEMANTIC_STRENGTH,
-                "verification-tier": _TURN_EVENT_VERIFICATION_TIER,
-                "correlation-id": correlation_id,
-            },
-        )
-    except Exception:  # noqa: BLE001
-        logger.debug(
-            "failed to record turn timeline event",
-            extra={"session-id": session_id, "kind": event.kind},
-            exc_info=True,
-        )
-
-
-def _make_on_event_callback(
-    session_id: str,
-    project_root: Path,
-    request_id: str | None,
-    agent_profile_id: str,
-    correlation_id: str | None,
-    *,
-    activity_marker: Callable[[], None] | None = None,
-) -> Any:
-    """Build an on_event callback for transport.prompt that publishes normalized events.
-
-    The callback is observational only — it never completes a turn, releases a slot,
-    or changes session reuse policy (AS18 scope boundary). ``activity_marker``
-    is invoked for EVERY event (mapped or not) so the runtime's in-turn
-    liveness clock reflects real transport activity (RV680 silence watchdog).
-    """
-    projector = _TurnEventProjector()
-
-    async def _on_event(event: AcpEvent) -> None:
-        if activity_marker is not None:
-            activity_marker()
-        resolved = projector.resolve(event)
-        if resolved is None:
-            return
-        topic, extra = resolved
-
-        # Redacted evidence envelope — no prompt text, output, tool args, or secrets
-        payload: dict[str, Any] = {
-            "session-id": session_id,
-            "agent-profile-id": agent_profile_id,
-            "request-id": request_id,
-            "kind": event.kind,
-            "sequence": event.sequence,
-            "native_kind": event.ext.get("acp", {}).get("raw_kind") if event.ext else None,
-            "semantic-strength": _TURN_EVENT_SEMANTIC_STRENGTH,
-            "verification-tier": _TURN_EVENT_VERIFICATION_TIER,
-            **extra,
-        }
-
-        _publish_turn_event(topic, payload, correlation_id=correlation_id)
-        _record_turn_timeline(project_root, session_id, request_id, correlation_id, event, topic)
-
-    return _on_event
-
 
 # Gateway defaults — overridable per session at open time (config over code:
 # dispatch resolves per-profile params session-idle-timeout-seconds /
@@ -259,9 +61,9 @@ DEFAULT_SESSION_MAX_LIFETIME_SECONDS = 14_400.0  # 4 h; 0 disables the cap
 # RV680: a session turn with no deadline wedges the profile's compute slot
 # forever when the harness hangs. Generous default; 0 disables the bound.
 DEFAULT_TURN_TIMEOUT_SECONDS = 3_600.0
-# In-turn event-silence watchdog: 0 (default) disables — some harnesses run
-# long silent tool executions, so silence is only evidence when the operator
-# has declared an expected cadence for the profile.
+# In-turn event-silence watchdog: 0 (default) disables. Silence is a configured
+# policy timeout for profiles that declare an expected event cadence; it is not
+# proof of process death or orphaning.
 DEFAULT_TURN_SILENCE_TIMEOUT_SECONDS = 0.0
 DEFAULT_REAP_INTERVAL_SECONDS = 30.0
 # Max turns waiting on one session's FIFO before new prompts are rejected —
@@ -314,6 +116,24 @@ class _SessionHandle:
     def quiescent(self) -> bool:
         """True when no turn is running and none are queued."""
         return not self.turn_lock.locked() and self.pending == 0
+
+    def update_bounds(
+        self,
+        *,
+        idle_timeout_seconds: float | None = None,
+        max_lifetime_seconds: float | None = None,
+    ) -> None:
+        """Update lifetime bounds on an existing handle.
+
+        Only mutates the fields that are explicitly provided (not None).
+        Called by dispatch when continuing a session with keep-alive and new
+        policy values; best-effort — no durable write here, just the in-memory
+        handle (the persisted record retains its original values).
+        """
+        if idle_timeout_seconds is not None:
+            self.idle_timeout_seconds = idle_timeout_seconds
+        if max_lifetime_seconds is not None:
+            self.max_lifetime_seconds = max_lifetime_seconds
 
 
 TransportFactory = Callable[..., Any]
@@ -480,11 +300,69 @@ class SessionRuntime:
             return []
         return self._call(self._snapshot_ids(), timeout=10)
 
+    def session_snapshot_all(self) -> dict[str, dict[str, Any]]:
+        """Immutable snapshot of all live sessions' state at one instant.
+
+        Returns {session-id: {turn-active, pending-turns, current-request-id}}
+        for every handle alive at read time. Empty when the loop is not started.
+        """
+        if self._loop is None:
+            return {}
+        return self._call(self._session_snapshot_all(), timeout=10)
+
     def session_runtime_status(self, session_id: str) -> dict[str, Any]:
         """Read-only, redacted live facts for one session in this process."""
         if self._loop is None:
             return {"available": False}
         return self._call(self._session_runtime_status(session_id), timeout=10)
+
+    def update_session_bounds(
+        self,
+        session_id: str,
+        *,
+        idle_timeout_seconds: float | None = None,
+        max_lifetime_seconds: float | None = None,
+    ) -> None:
+        """Update lifetime bounds on a live session handle.
+
+        Used when continuing an existing session with keep-alive and new
+        policy values. Only mutates the in-memory handle; the persisted
+        session record retains its original values (bounds are fixed at
+        open time for durable records).
+
+        Raises RES-AGW-003 if the session is not live in this process.
+        """
+        if self._loop is None:
+            raise AudiaGenticError(
+                code="RES-AGW-003",
+                kind="agents",
+                message="session is not active in this gateway process",
+                details={"session-id": session_id},
+            )
+
+        async def _update() -> None:
+            handle = self._require_handle(session_id)
+            handle.update_bounds(
+                idle_timeout_seconds=idle_timeout_seconds,
+                max_lifetime_seconds=max_lifetime_seconds,
+            )
+
+        self._call(_update(), timeout=10)
+
+    def session_is_quiescent(self, session_id: str) -> bool:
+        """Check if a live session has no active or pending turns.
+
+        Used by dispatch to decide post-turn close policy for continued
+        sessions with keep-alive=false.
+        """
+        if self._loop is None:
+            return True  # not live → treat as quiescent for close purposes
+
+        async def _check() -> bool:
+            handle = self._handles.get(session_id)
+            return handle.quiescent() if handle else True
+
+        return self._call(_check(), timeout=10)
 
     def request_cancel(self, request_id: str) -> bool:
         """Signal protocol-level cancel to the turn owning *request_id*.
@@ -525,6 +403,23 @@ class SessionRuntime:
 
     async def _snapshot_ids(self) -> list[str]:
         return list(self._handles)
+
+    async def _session_snapshot_all(self) -> dict[str, dict[str, Any]]:
+        """Immutable snapshot of every live session's state at one instant.
+
+        Reads all handles on the loop thread (no additional locking needed —
+        _handles is only mutated on this thread). The returned dict maps
+        session-id → {turn-active, pending-turns, current-request-id} for
+        each handle present at read time.
+        """
+        return {
+            sid: {
+                "turn-active": h.turn_lock.locked(),
+                "pending-turns": h.pending,
+                "current-request-id": h.current_request_id,
+            }
+            for sid, h in self._handles.items()
+        }
 
     async def _session_runtime_status(self, session_id: str) -> dict[str, Any]:
         handle = self._handles.get(session_id)
@@ -580,8 +475,11 @@ class SessionRuntime:
             raise
         # AS17/RV681: capture OS process facts for the child at open time so
         # diagnostics and reaping have real evidence, not just a transport flag.
+        # The transport's _adopted_child holds the AdoptedChild token with
+        # ProcessEvidence; we project its facts into session events.
         child_pid = getattr(transport, "child_pid", None)
         child_creation_identity: str | None = None
+        child_evidence_available: bool = False
         if child_pid is not None:
             try:
                 from audiagentic.foundation.system.managed_process import (
@@ -591,6 +489,16 @@ class SessionRuntime:
                 child_creation_identity = process_creation_identity(child_pid)
             except Exception:  # noqa: BLE001 — evidence is best-effort
                 logger.debug("failed to capture child creation identity", exc_info=True)
+            # Check if foundation adopted the child (AS17 contract).
+            try:
+                from audiagentic.foundation.system.adopted_process import AdoptedChild
+
+                adopted_token = getattr(transport, "_adopted_child", None)
+                child_evidence_available = isinstance(
+                    adopted_token, AdoptedChild
+                ) and adopted_token.evidence is not None
+            except Exception:  # noqa: BLE001 — evidence check is best-effort
+                pass
         try:
             session_store.record_session_timeline(
                 project_root, session_id, "session.opened", state="active",
@@ -602,6 +510,10 @@ class SessionRuntime:
                     "max-lifetime-seconds": max_lifetime_seconds,
                     "turn-timeout-seconds": turn_timeout_seconds,
                     "child-pid": child_pid,
+                    # AS17: project foundation process facts — not just pid,
+                    # but ownership evidence that proves identity.
+                    "child-creation-identity": child_creation_identity,
+                    "foundation-evidence-available": child_evidence_available,
                     "binding": binding_store.public_binding_projection(record.get("binding")),
                     "correlation-id": correlation_id,
                 },
@@ -634,6 +546,9 @@ class SessionRuntime:
             "state": "active",
             "provider-id": record.get("provider-id"),
             "model-id": record.get("model-id"),
+            # AS17: project foundation process facts into session events.
+            "child-pid": child_pid,
+            "child-creation-identity": child_creation_identity,
         }, correlation_id=correlation_id)
         logger.info("gateway session opened", extra={"session-id": session_id, "agent-profile-id": agent_profile_id})
         return record
@@ -782,13 +697,22 @@ class SessionRuntime:
                 handle.turn_lock.release()
         if request_id is not None:
             session_store.record_session_turn(project_root, session_id, request_id)
+        # SH15: record dropped-events and callback-health at turn end for
+        # richer progress summary
+        turn_end_attrs: dict[str, Any] = {
+            "request-id": request_id,
+            "stop-reason": result.stop_reason,
+            "correlation-id": correlation_id,
+        }
+        if result.dropped_events is not None:
+            turn_end_attrs["dropped-events"] = result.dropped_events
+        if result.total_events is not None:
+            turn_end_attrs["total-events"] = result.total_events
+        if result.callback_disabled is not None:
+            turn_end_attrs["callback-disabled"] = bool(result.callback_disabled)
         session_store.record_session_timeline(
             project_root, session_id, "session.turn.finished", state="active",
-            attributes={
-                "request-id": request_id,
-                "stop-reason": result.stop_reason,
-                "correlation-id": correlation_id,
-            },
+            attributes=turn_end_attrs,
         )
         try:
             turn_record = session_store.read_session_record(project_root, session_id)
@@ -903,11 +827,11 @@ class SessionRuntime:
             if handle is None:
                 continue
             if not handle.quiescent():
-                # RV680: read-only inspection of busy sessions. When the
+                # RV680/AS26: read-only inspection of busy sessions. When the
                 # profile declared an expected event cadence, prolonged
-                # in-turn silence is proven-stalled evidence; otherwise
-                # unknown stays conservative and the turn deadline is the
-                # only in-turn bound.
+                # in-turn silence is a configured timeout policy, not proof
+                # of process death. Otherwise unknown stays conservative and
+                # the turn deadline is the only in-turn bound.
                 silence_cap = handle.turn_silence_timeout_seconds
                 if (
                     silence_cap
@@ -915,7 +839,7 @@ class SessionRuntime:
                     and (now - handle.last_event_clock) > silence_cap
                 ):
                     logger.warning(
-                        "session turn stalled: no transport events within bound",
+                        "session turn silence timeout: no transport events within bound",
                         extra={
                             "session-id": session_id,
                             "silence-timeout-seconds": silence_cap,
@@ -924,7 +848,7 @@ class SessionRuntime:
                     )
                     try:
                         session_store.record_session_timeline(
-                            handle.project_root, session_id, "session.turn.stalled",
+                            handle.project_root, session_id, "session.turn.silence-timeout",
                             state="active",
                             attributes={
                                 "request-id": handle.current_request_id,
@@ -935,7 +859,7 @@ class SessionRuntime:
                         logger.debug("failed to record stall timeline", exc_info=True)
                     # Closing the transport aborts the in-flight prompt; its
                     # exception path owns the durable failure + slot release.
-                    await self._fail_session(handle, reason="turn-stalled")
+                    await self._fail_session(handle, reason="turn-silence-timeout")
                 continue
             if not handle.transport.is_alive():
                 await self._fail_session(handle, reason="failed")

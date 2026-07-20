@@ -70,6 +70,7 @@ class GatewayServiceHost:
         token_path: Path | None = None,
         application: GatewayApplication | None = None,
         service_root: Path | None = None,
+        gateway_profiles_config: Path | None = None,
     ) -> GatewayServiceHost:
         if host != "127.0.0.1" or isinstance(port, bool) or not 0 <= port <= 65535:
             from audiagentic.components.agents.agents_gateway_http_transport import transport_error
@@ -77,6 +78,25 @@ class GatewayServiceHost:
             if host != "127.0.0.1":
                 raise transport_error(3, "gateway service must bind to IPv4 loopback")
             raise transport_error(17, "gateway service port is outside the valid range", port=port)
+        # SH07 C2/RV745: the gateway host is the composition root for the
+        # gateway-owned profile registry. Load it from the machine-scoped
+        # config before any request can be admitted so shared-mode queue
+        # limits/generations are gateway-authoritative from first request.
+        from audiagentic.components.agents import (
+            agents_gateway_profiles as profiles_mod,
+        )
+        from audiagentic.foundation.paths.home import global_config_dir
+
+        resolved_profiles_config = (
+            gateway_profiles_config or global_config_dir() / "gateway-profiles.yaml"
+        )
+        registry = profiles_mod.load_gateway_registry_from_config(resolved_profiles_config)
+        profiles_mod.set_gateway_registry(registry)
+        # SH13 step 3: record the config path so reload can re-read the source
+        profiles_mod.set_gateway_registry_config_path(
+            resolved_profiles_config if registry is not None else None
+        )
+
         store = ManagedServiceStore(GATEWAY_SERVICE_KEY, root=service_root)
         resolved_token_path = token_path or store.root / "auth.token"
         token = load_or_create_auth_token(resolved_token_path)
@@ -140,6 +160,16 @@ class GatewayServiceHost:
         )
 
     def serve_forever(self) -> None:
+        # SH07: reconcile durable active work from the prior service generation
+        # BEFORE readiness and before ingress admits new work. A recovery
+        # failure propagates and prevents the service from reporting ready.
+        from audiagentic.components.agents.agents_gateway_recovery import (
+            recover_gateway_requests,
+        )
+
+        recover_gateway_requests(
+            self.service_store.root, live_owner_epoch=self.owner_epoch
+        )
         if not self._externally_managed:
             self.service_store.heartbeat(
                 {"ready": True}, expected_epoch=self.owner_epoch
@@ -188,6 +218,11 @@ class GatewayServiceHost:
             return
         self._closed = True
         self._stop_background()
+        from audiagentic.components.agents import (
+            agents_gateway_profiles as profiles_mod,
+        )
+
+        profiles_mod.set_gateway_registry(None)
         self.server.server_close()
         try:
             self.owner.retire(expected_epoch=self.owner_epoch)

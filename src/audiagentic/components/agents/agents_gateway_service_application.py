@@ -26,6 +26,7 @@ CAPABILITIES = (
     "sessions.close",
     "client-leases.v1",
     "service-lifecycle.v1",
+    "gateway-profiles.reload",  # SH13 step 3-4
 )
 
 
@@ -133,7 +134,8 @@ class GatewayServiceApplication:
         if operation == "submit_llm_request":
             submitted = _validated_submission_arguments(root, arguments)
             return self._application.submit_llm_request(
-                root, **submitted, _dispatch_owner_epoch=owner_epoch
+                root, **submitted, _dispatch_owner_epoch=owner_epoch,
+                _dispatch_service_root=str(self._service_store.root),
             )
         if operation == "get_llm_request":
             return self._application.get_llm_request(root, _required(arguments, "request_id"))
@@ -143,10 +145,13 @@ class GatewayServiceApplication:
             )
         if operation == "cancel_llm_request":
             return self._application.cancel_llm_request(root, _required(arguments, "request_id"))
+        if operation == "request_runtime_status":
+            return self._application.request_runtime_status(root, _required(arguments, "request_id"))
         if operation == "run_llm_request":
             submitted = _validated_submission_arguments(root, arguments)
             return self._application.run_llm_request(
-                root, **submitted, _dispatch_owner_epoch=owner_epoch
+                root, **submitted, _dispatch_owner_epoch=owner_epoch,
+                _dispatch_service_root=str(self._service_store.root),
             )
         if operation == "list_llm_requests":
             _reject_unknown(arguments, {"state", "limit"})
@@ -170,6 +175,23 @@ class GatewayServiceApplication:
             return self._lifecycle_controller().request_drain()
         if operation == "service_resume":
             return self._lifecycle_controller().request_resume()
+        # SH13 step 3-4: reload gateway profile registry atomically; publish
+        # only redacted generation metadata on success.
+        if operation == "reload_gateway_profiles":
+            _reject_unknown(arguments, {"config-path"})
+            from audiagentic.components.agents import (
+                agents_gateway_profiles as profiles_mod,
+            )
+
+            config_path: Path | None = None
+            if "config-path" in arguments:
+                raw_path = arguments["config-path"]
+                if not isinstance(raw_path, str) or not raw_path:
+                    raise service_validation_error(
+                        23, "gateway reload config-path must be a string", field="config-path"
+                    )
+                config_path = Path(raw_path)
+            return profiles_mod.reload_profile_registry(config_path)
         if operation == "service_stop":
             _reject_unknown(arguments, {"force"})
             force = arguments.get("force", False)
@@ -232,7 +254,7 @@ def _validated_submission_arguments(
             "timeout_seconds": arguments.get("timeout_seconds"),
             "session": {
                 "session_id": arguments.get("session_id"),
-                "keep_alive": arguments.get("session_keep_alive", False),
+                "keep_alive": arguments.get("session_keep_alive"),
                 "idle_timeout_seconds": arguments.get("session_idle_timeout_seconds"),
                 "max_lifetime_seconds": arguments.get("session_max_lifetime_seconds"),
             },
