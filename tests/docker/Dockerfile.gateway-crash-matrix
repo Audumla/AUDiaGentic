@@ -1,0 +1,19 @@
+FROM audia-test-base:latest
+
+WORKDIR /app
+ENV AUDIAGENTIC_DOCKER_TESTS=1
+ENV AUDIAGENTIC_GATEWAY_CRASH_MATRIX_DOCKER=1
+ENV PYTHONPATH="/app/src"
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+
+# SH07 production crash matrix: real gateway service SUBPROCESS killed at
+# specific control-plane phases (admitted/running), then restarted against
+# the same service-root to prove recovery, not in-process fault injection.
+#
+# Build:
+#   docker build -f tests/docker/Dockerfile.gateway-crash-matrix -t audiagentic-gateway-crash-matrix:local .
+# Run:
+#   docker run --rm audiagentic-gateway-crash-matrix:local
+COPY . /app
+
+CMD ["bash", "-c", "uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp,test]' && /venv/bin/pytest tests/integration/agents/test_gateway_crash_matrix_docker.py -q --tb=short --timeout=180"]

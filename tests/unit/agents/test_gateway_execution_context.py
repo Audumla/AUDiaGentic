@@ -117,16 +117,16 @@ class TestDeterminism:
         assert base == reordered
         assert base != changed
 
-    def test_derived_idempotency_key_is_deterministic_and_client_key_wins(self) -> None:
-        derived = derive_idempotency_key(
+    def test_derived_idempotency_key_is_unique_and_client_key_wins(self) -> None:
+        # SH review C8: no explicit key means a fresh request every time —
+        # identical repeated prompts are separate turns, never silent replays.
+        first = derive_idempotency_key(
             None, context_fingerprint="f" * 64, prompt_digest="p" * 64, session_id=None
         )
-        assert derived == derive_idempotency_key(
+        second = derive_idempotency_key(
             None, context_fingerprint="f" * 64, prompt_digest="p" * 64, session_id=None
         )
-        assert derived != derive_idempotency_key(
-            None, context_fingerprint="f" * 64, prompt_digest="q" * 64, session_id=None
-        )
+        assert first != second
         assert (
             derive_idempotency_key(
                 "client-key", context_fingerprint="f" * 64, prompt_digest="p" * 64, session_id=None

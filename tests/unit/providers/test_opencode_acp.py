@@ -110,6 +110,40 @@ class TestBuildAcpLaunch:
         config = json.loads(launch.environment["OPENCODE_CONFIG_CONTENT"])
         assert config["model"] == "test-model"
 
+    def test_enabled_providers_set_from_project_config(self, tmp_path):
+        """Build acp_launch must include enabled_providers from project provider keys."""
+        import json
+
+        # Create project opencode config with a custom provider
+        opencode_dir = tmp_path / ".opencode"
+        opencode_dir.mkdir()
+        (opencode_dir / "opencode.json").write_text(
+            json.dumps({
+                "provider": {
+                    "audiagentic": {
+                        "npm": "@ai-sdk/openai-compatible",
+                        "name": "audiagentic",
+                        "options": {
+                            "baseURL": "http://127.0.0.1:42001/v1",
+                            "apiKey": "{env:AUDIAGENTIC_RIG_API_KEY}",
+                        },
+                    }
+                }
+            })
+        )
+
+        with patch(
+            "audiagentic.components.providers.adapters.cli.require_executable",
+            return_value="opencode",
+        ):
+            from audiagentic.components.providers.adapters.opencode.acp import build_acp_launch
+
+            launch = build_acp_launch(tmp_path, model_id="audiagentic/test-model")
+
+        config = json.loads(launch.environment["OPENCODE_CONFIG_CONTENT"])
+        assert "enabled_providers" in config
+        assert "audiagentic" in config["enabled_providers"]
+
     def test_no_file_mutation(self, tmp_path):
         """build_acp_launch must not create or modify any files."""
         # Create a baseline of file tree before the call

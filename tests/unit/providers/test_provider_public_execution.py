@@ -221,3 +221,48 @@ def test_prepare_acp_launch_rejects_unsupported_provider(
             tmp_path, provider_id="fixture", model_id="wanted", model_alias=None
         )
     assert captured.value.code == "UNS-PEXE-002"
+
+
+def test_prepare_execution_env_uses_project_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The execution environment builder must read from project-level config
+    so that custom providers added by model_source_add/apply_model_sources are
+    included in the inline OPENCODE_CONFIG_CONTENT passed to isolated workers."""
+    import json
+
+    from audiagentic.components.providers.services import models
+
+    # Write a global config WITHOUT the custom provider (simulates real state).
+    global_config = Path.home() / ".config" / "opencode"
+    global_config.mkdir(parents=True, exist_ok=True)
+    (global_config / "opencode.json").write_text(
+        json.dumps({"provider": {"anthropic": {}}}), encoding="utf-8"
+    )
+
+    # Write project-level config WITH the custom provider.
+    project_config = tmp_path / ".opencode" / "opencode.json"
+    project_config.parent.mkdir(parents=True, exist_ok=True)
+    (project_config).write_text(
+        json.dumps({"provider": {"anthropic": {}, "audiagentic": {}}}), encoding="utf-8"
+    )
+
+    monkeypatch.setattr(
+        public_execution,
+        "get_provider_runtime_config_state",
+        lambda *_args: {"provider-id": "opencode", "enabled": True, "config": {}},
+    )
+
+    monkeypatch.setattr(
+        models,
+        "resolve_model_selection",
+        lambda **_kwargs: {"model-id": "model-a"},
+    )
+
+    result = providers_api.prepare_provider_execution_environment(_request(tmp_path, provider_id="opencode"))
+
+    doc = json.loads(result["OPENCODE_CONFIG_CONTENT"])
+    assert "audiagentic" in doc.get("enabled_providers", [])
+
+    # Restore global config.
+    (global_config / "opencode.json").write_text(
+        json.dumps({"provider": {"anthropic": {}, "audiagentic": {}}}), encoding="utf-8"
+    )

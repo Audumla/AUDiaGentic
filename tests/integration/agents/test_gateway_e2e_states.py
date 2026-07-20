@@ -19,7 +19,7 @@ from audiagentic.components.providers.providers_api import (
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state
-from audiagentic.foundation.transports import AcpLaunch
+from audiagentic.foundation.transports import AcpEvent, AcpLaunch, AcpResult
 
 
 @pytest.fixture(autouse=True)
@@ -261,6 +261,130 @@ def test_session_states_open_turn_close_and_orphan_detection(
         runtime.shutdown()
 
 
+def test_continued_session_explicit_false_closes_after_turn_if_quiescent(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Continuing a session with session_keep_alive=False explicitly closes
+    it after the turn if quiescent."""
+    _make_profile(tmp_path, provider_id="opencode", model_id="m1")
+    transports: list[FakeTransport] = []
+
+    def factory(launch, cwd):
+        transport = FakeTransport(launch, cwd)
+        transports.append(transport)
+        return transport
+
+    runtime = SessionRuntime(
+        clock=_Clock(),
+        reap_interval_seconds=60,
+        transport_factory=factory,
+    )
+    monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
+    monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
+    monkeypatch.setattr(
+        "audiagentic.components.providers.providers_api.prepare_provider_acp_launch",
+        lambda root, **kwargs: ProviderAcpLaunchResult(
+            provider_id=kwargs["provider_id"],
+            model_id="m1",
+            launch=AcpLaunch("fake-acp-agent"),
+        ),
+    )
+
+    try:
+        opened = gateway.run_llm_request(
+            tmp_path,
+            prompt_body="open session",
+            session_keep_alive=True,
+            timeout_seconds=5,
+        )
+        assert opened["state"] == "completed"
+        session_id = opened["session-id"]
+
+        # Continue with explicit keep_alive=False — should close after turn
+        continued = gateway.run_llm_request(
+            tmp_path,
+            prompt_body="one-shot continue",
+            session_id=session_id,
+            session_keep_alive=False,
+            timeout_seconds=5,
+        )
+        assert continued["state"] == "completed"
+        assert continued["session-id"] == session_id
+
+        # Session should be closed (not orphaned/failed) by post-turn close
+        stored = gateway.list_llm_sessions(tmp_path)
+        row = [s for s in stored if s["session-id"] == session_id][0]
+        assert row["state"] == "closed"
+        assert row["live"] is False
+    finally:
+        runtime.shutdown()
+
+
+def test_continued_session_explicit_true_keeps_live_after_turn(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Continuing a session with session_keep_alive=True keeps it live after
+    the turn and allows bounds updates."""
+    _make_profile(tmp_path, provider_id="opencode", model_id="m1")
+    transports: list[FakeTransport] = []
+
+    def factory(launch, cwd):
+        transport = FakeTransport(launch, cwd)
+        transports.append(transport)
+        return transport
+
+    runtime = SessionRuntime(
+        clock=_Clock(),
+        reap_interval_seconds=60,
+        transport_factory=factory,
+    )
+    monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
+    monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
+    monkeypatch.setattr(
+        "audiagentic.components.providers.providers_api.prepare_provider_acp_launch",
+        lambda root, **kwargs: ProviderAcpLaunchResult(
+            provider_id=kwargs["provider_id"],
+            model_id="m1",
+            launch=AcpLaunch("fake-acp-agent"),
+        ),
+    )
+
+    try:
+        opened = gateway.run_llm_request(
+            tmp_path,
+            prompt_body="open session",
+            session_keep_alive=True,
+            timeout_seconds=5,
+        )
+        assert opened["state"] == "completed"
+        session_id = opened["session-id"]
+
+        # Continue with explicit keep_alive=True — should stay live
+        continued = gateway.run_llm_request(
+            tmp_path,
+            prompt_body="continue keeping alive",
+            session_id=session_id,
+            session_keep_alive=True,
+            timeout_seconds=5,
+        )
+        assert continued["state"] == "completed"
+        assert continued["session-id"] == session_id
+
+        # Session should still be live
+        stored = gateway.list_llm_sessions(tmp_path)
+        row = [s for s in stored if s["session-id"] == session_id][0]
+        assert row["live"] is True
+        assert row["state"] == "active"
+
+        # Can close it normally
+        closed = gateway.close_llm_session(tmp_path, session_id)
+        assert closed["state"] == "closed"
+    finally:
+        runtime.shutdown()
+
+
 def test_wait_does_not_mask_terminal_state_after_timeout(
     tmp_path: Path,
     monkeypatch,
@@ -336,3 +460,479 @@ def test_request_runtime_status_is_redacted_and_does_not_start_session_runtime(
     assert "secret prompt" not in repr(runtime_status)
     assert "secret-ish output" not in repr(runtime_status)
     assert "provider-session-ref" not in repr(runtime_status)
+
+
+def test_request_runtime_status_projects_latest_session_turn_event(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _make_profile(tmp_path, provider_id="opencode", model_id="m1")
+    gate = threading.Event()
+    transports: list[FakeTransport] = []
+
+    def factory(launch, cwd):
+        transport = FakeTransport(launch, cwd)
+        transport.block_event = gate
+        transports.append(transport)
+        return transport
+
+    runtime = SessionRuntime(
+        clock=_Clock(),
+        reap_interval_seconds=60,
+        transport_factory=factory,
+    )
+    monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
+    monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
+    monkeypatch.setattr(
+        "audiagentic.components.providers.providers_api.prepare_provider_acp_launch",
+        lambda root, **kwargs: ProviderAcpLaunchResult(
+            provider_id=kwargs["provider_id"],
+            model_id="m1",
+            launch=AcpLaunch("fake-acp-agent"),
+        ),
+    )
+
+    try:
+        submitted = gateway.submit_llm_request(
+            tmp_path,
+            prompt_body="long architecture review",
+            mode="async",
+            session_keep_alive=True,
+            timeout_seconds=5,
+        )
+
+        deadline = time.time() + 2
+        status = {}
+        while time.time() < deadline:
+            status = gateway.request_runtime_status(tmp_path, submitted["request-id"])
+            latest = status.get("session", {}).get("latest-turn-event")
+            if latest and latest.get("event") == "session.turn.started":
+                break
+            time.sleep(0.02)
+
+        latest = status["session"]["latest-turn-event"]
+        assert latest["event"] == "session.turn.started"
+        assert latest["request-id"] == submitted["request-id"]
+        assert "long architecture review" not in repr(status)
+        assert "provider-session-ref" not in repr(status)
+
+        gate.set()
+        finished = gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=5)
+        assert finished["state"] == "completed"
+    finally:
+        gate.set()
+        runtime.shutdown()
+
+
+def test_cancelled_session_turn_preserves_bounded_result_diagnostics(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _make_profile(tmp_path, provider_id="opencode", model_id="m1")
+    started = threading.Event()
+
+    class OutputOnCancelTransport(FakeTransport):
+        async def prompt(self, prompt: str, **kwargs) -> AcpResult:
+            cancel_signal = kwargs.get("cancel_signal")
+            started.set()
+            while cancel_signal is None or not cancel_signal.is_set():
+                import asyncio
+
+                await asyncio.sleep(0.01)
+            self.turns.append(prompt)
+            event = AcpEvent(
+                sequence=1,
+                kind="assistant-message",
+                timestamp="2026-07-19T00:00:00Z",
+                session_id="prov-ses-1",
+                text="partial review finding",
+                terminal=False,
+                error=None,
+                ext={},
+            )
+            return AcpResult(
+                session_id="prov-ses-1",
+                stop_reason="cancelled",
+                events=(event,),
+                total_events=2,
+                dropped_events=0,
+                bytes_buffered=len(event.text or ""),
+                terminal_event=None,
+                callback_disabled=False,
+            )
+
+    transports: list[OutputOnCancelTransport] = []
+
+    def factory(launch, cwd):
+        transport = OutputOnCancelTransport(launch, cwd)
+        transports.append(transport)
+        return transport
+
+    runtime = SessionRuntime(
+        clock=_Clock(),
+        reap_interval_seconds=60,
+        transport_factory=factory,
+    )
+    monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
+    monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
+    monkeypatch.setattr(
+        "audiagentic.components.providers.providers_api.prepare_provider_acp_launch",
+        lambda root, **kwargs: ProviderAcpLaunchResult(
+            provider_id=kwargs["provider_id"],
+            model_id="m1",
+            launch=AcpLaunch("fake-acp-agent"),
+        ),
+    )
+
+    try:
+        submitted = gateway.submit_llm_request(
+            tmp_path,
+            prompt_body="cancel after output",
+            mode="async",
+            session_keep_alive=True,
+            timeout_seconds=5,
+        )
+        assert started.wait(timeout=2)
+        cancelled = gateway.cancel_llm_request(tmp_path, submitted["request-id"])
+        assert cancelled["cancel-requested"] is True
+        finished = gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=5)
+        assert finished["state"] == "cancelled"
+        assert finished["output"] == "partial review finding"
+        assert finished["completion"]["stop-reason"] == "cancelled"
+        assert finished["completion"]["total-events"] == 2
+        assert "provider-session-ref" not in repr(finished)
+    finally:
+        runtime.shutdown()
+
+
+# AS33: capability projection tests.
+
+def test_as33_capabilities_absent_when_no_snapshot(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """AS33: capabilities key is absent when session record has no captured snapshot."""
+    _make_profile(tmp_path, provider_id="opencode", model_id="m1")
+    transports: list[FakeTransport] = []
+
+    def factory(launch, cwd):
+        transport = FakeTransport(launch, cwd)
+        transports.append(transport)
+        return transport
+
+    runtime = SessionRuntime(
+        clock=_Clock(),
+        reap_interval_seconds=60,
+        transport_factory=factory,
+    )
+    monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
+    monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
+    monkeypatch.setattr(
+        "audiagentic.components.providers.providers_api.prepare_provider_acp_launch",
+        lambda root, **kwargs: ProviderAcpLaunchResult(
+            provider_id=kwargs["provider_id"],
+            model_id="m1",
+            launch=AcpLaunch("fake-acp-agent"),
+        ),
+    )
+
+    try:
+        completed = gateway.run_llm_request(
+            tmp_path,
+            prompt_body="open session",
+            session_keep_alive=True,
+            session_idle_timeout_seconds=30,
+            timeout_seconds=5,
+        )
+        assert completed["state"] == "completed"
+        runtime_status = gateway.request_runtime_status(tmp_path, completed["request-id"])
+        assert "capabilities" not in runtime_status
+    finally:
+        runtime.shutdown()
+
+
+def test_as33_capabilities_exposed_from_explicit_snapshot(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """AS33: explicit capability-snapshot on session record is projected as capabilities."""
+    import json
+
+    _make_profile(tmp_path, provider_id="opencode", model_id="m1")
+    transports: list[FakeTransport] = []
+
+    def factory(launch, cwd):
+        transport = FakeTransport(launch, cwd)
+        transports.append(transport)
+        return transport
+
+    runtime = SessionRuntime(
+        clock=_Clock(),
+        reap_interval_seconds=60,
+        transport_factory=factory,
+    )
+    monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
+    monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
+    monkeypatch.setattr(
+        "audiagentic.components.providers.providers_api.prepare_provider_acp_launch",
+        lambda root, **kwargs: ProviderAcpLaunchResult(
+            provider_id=kwargs["provider_id"],
+            model_id="m1",
+            launch=AcpLaunch("fake-acp-agent"),
+        ),
+    )
+
+    try:
+        completed = gateway.run_llm_request(
+            tmp_path,
+            prompt_body="open session",
+            session_keep_alive=True,
+            session_idle_timeout_seconds=30,
+            timeout_seconds=5,
+        )
+        assert completed["state"] == "completed"
+        session_id = completed["session-id"]
+
+        # Inject capability-snapshot into raw JSON (bypassing schema validation).
+        from audiagentic.components.agents.agents_paths import gateway_session_path
+
+        record_path = gateway_session_path(tmp_path, session_id)
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        record["capability-snapshot"] = {
+            "surface-id": "acp-session",
+            "surface-version": "1.0",
+            "declared-controls": ["cancel", "observe"],
+            "observation-mechanism": "polling",
+            "observation-source": "gateway-diagnostic",
+            "supported-statuses": ["active", "idle", "closed"],
+            "evidence-tier": "resolved",
+        }
+        record_path.write_text(json.dumps(record), encoding="utf-8")
+
+        runtime_status = gateway.request_runtime_status(tmp_path, completed["request-id"])
+        capabilities = runtime_status.get("capabilities")
+        assert capabilities is not None
+        assert capabilities["surface-id"] == "acp-session"
+        assert capabilities["surface-version"] == "1.0"
+        assert "declared-controls" in capabilities
+        assert capabilities["observation-mechanism"] == "polling"
+
+        # Clean up injected field before shutdown so schema validation passes.
+        record.pop("capability-snapshot", None)
+        record_path.write_text(json.dumps(record), encoding="utf-8")
+    finally:
+        runtime.shutdown()
+
+
+def test_as33_capabilities_redacts_unsafe_fields(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """AS33: unsafe fields (provider-session-ref, raw-payload, prompt, etc.) are dropped."""
+    import json
+
+    _make_profile(tmp_path, provider_id="opencode", model_id="m1")
+    transports: list[FakeTransport] = []
+
+    def factory(launch, cwd):
+        transport = FakeTransport(launch, cwd)
+        transports.append(transport)
+        return transport
+
+    runtime = SessionRuntime(
+        clock=_Clock(),
+        reap_interval_seconds=60,
+        transport_factory=factory,
+    )
+    monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
+    monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
+    monkeypatch.setattr(
+        "audiagentic.components.providers.providers_api.prepare_provider_acp_launch",
+        lambda root, **kwargs: ProviderAcpLaunchResult(
+            provider_id=kwargs["provider_id"],
+            model_id="m1",
+            launch=AcpLaunch("fake-acp-agent"),
+        ),
+    )
+
+    try:
+        completed = gateway.run_llm_request(
+            tmp_path,
+            prompt_body="open session",
+            session_keep_alive=True,
+            session_idle_timeout_seconds=30,
+            timeout_seconds=5,
+        )
+        assert completed["state"] == "completed"
+        session_id = completed["session-id"]
+
+        from audiagentic.components.agents.agents_paths import gateway_session_path
+
+        record_path = gateway_session_path(tmp_path, session_id)
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        record["capability-snapshot"] = {
+            "surface-id": "acp-session",
+            "provider-session-ref": "secret-provider-ref-12345",
+            "raw-payload": {"some": "raw data"},
+            "prompt": "the actual prompt text",
+            "output": "the actual output text",
+            "tool-arguments": {"arg": "value"},
+            "native-ref": "native-123",
+            "evidence-tier": "resolved",
+        }
+        record_path.write_text(json.dumps(record), encoding="utf-8")
+
+        runtime_status = gateway.request_runtime_status(tmp_path, completed["request-id"])
+        capabilities = runtime_status.get("capabilities")
+        assert capabilities is not None
+        # Safe field present
+        assert capabilities["surface-id"] == "acp-session"
+        assert capabilities["evidence-tier"] == "resolved"
+        # Unsafe fields dropped
+        for unsafe_key in (
+            "provider-session-ref",
+            "raw-payload",
+            "prompt",
+            "output",
+            "tool-arguments",
+            "native-ref",
+        ):
+            assert unsafe_key not in capabilities, f"{unsafe_key} leaked into capabilities"
+
+        # Also verify no raw prompt/output/provider refs in the full runtime_status
+        status_repr = repr(runtime_status)
+        assert "secret-provider-ref-12345" not in status_repr
+        assert "the actual prompt text" not in status_repr
+
+        # Clean up injected field before shutdown so schema validation passes.
+        record.pop("capability-snapshot", None)
+        record_path.write_text(json.dumps(record), encoding="utf-8")
+    finally:
+        runtime.shutdown()
+
+
+def test_as33_terminal_diagnostics_do_not_start_session_runtime(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """AS33: request_runtime_status does not start session runtime for terminal requests."""
+    _make_profile(tmp_path)
+
+    def fake_provider(*, identity, execution_request, timeout_seconds):
+        return ProviderExecutionResult(
+            provider_id="local-openai",
+            model_id="gpt-4o",
+            worker_id=identity.worker_id,
+            attempt_epoch=identity.attempt_epoch,
+            result_data={
+                "provider-id": "local-openai",
+                "model": "gpt-4o",
+                "output": "done",
+            },
+        )
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+        fake_provider,
+    )
+    monkeypatch.setattr(
+        sessions_module,
+        "get_session_runtime",
+        lambda: (_ for _ in ()).throw(AssertionError("diagnostic started runtime")),
+    )
+    monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: None)
+
+    completed = gateway.run_llm_request(tmp_path, prompt_body="test", timeout_seconds=5)
+    assert completed["state"] == "completed"
+    # This should not raise: peek_session_runtime returns None for terminal.
+    runtime_status = gateway.request_runtime_status(tmp_path, completed["request-id"])
+    assert runtime_status["queue-state"] == "terminal"
+    assert "capabilities" not in runtime_status  # no session, no snapshot
+
+
+def test_running_session_request_has_latest_turn_event_but_no_output_yet(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """RV735 production symptom: while an async keep-alive session request is
+    still running, get_llm_request has no output but request_runtime_status
+    exposes session.latest-turn-event for that same request. No prompt text,
+    provider-session-ref, full provider-ref-key, or output leaks."""
+    _make_profile(tmp_path, provider_id="opencode", model_id="m1")
+    gate = threading.Event()
+    transports: list[FakeTransport] = []
+
+    def factory(launch, cwd):
+        transport = FakeTransport(launch, cwd)
+        transport.block_event = gate
+        transports.append(transport)
+        return transport
+
+    runtime = SessionRuntime(
+        clock=_Clock(),
+        reap_interval_seconds=60,
+        transport_factory=factory,
+    )
+    monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
+    monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
+    monkeypatch.setattr(
+        "audiagentic.components.providers.providers_api.prepare_provider_acp_launch",
+        lambda root, **kwargs: ProviderAcpLaunchResult(
+            provider_id=kwargs["provider_id"],
+            model_id="m1",
+            launch=AcpLaunch("fake-acp-agent"),
+        ),
+    )
+
+    try:
+        submitted = gateway.submit_llm_request(
+            tmp_path,
+            prompt_body="secret architecture review prompt",
+            mode="async",
+            session_keep_alive=True,
+            timeout_seconds=5,
+        )
+        assert submitted["state"] == "queued"
+        request_id = submitted["request-id"]
+
+        status = {}
+        latest = None
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            status = gateway.request_runtime_status(tmp_path, request_id)
+            latest = status.get("session", {}).get("latest-turn-event")
+            if latest and latest.get("event") == "session.turn.started":
+                break
+            time.sleep(0.02)
+
+        assert latest is not None, f"timeout waiting for session.turn.started: {status}"
+        assert latest["event"] == "session.turn.started"
+        assert latest["request-id"] == request_id
+
+        # The production symptom: public status has no output yet, but runtime
+        # status shows active turn evidence.
+        public_status = gateway.get_llm_request(tmp_path, request_id)
+        assert public_status["output"] is None, "output should be None while running"
+
+        # No prompt text leak in runtime status
+        status_repr = repr(status)
+        assert "secret architecture review prompt" not in status_repr
+
+        # No provider-session-ref leak in runtime status
+        assert "provider-session-ref" not in status_repr
+
+        # No full provider-ref-key leak. The public binding may expose the
+        # prefix, so assert against the actual protected full key.
+        from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+
+        session_id = status["session-id"]
+        durable_session = session_store.read_session_record(tmp_path, session_id)
+        full_key = durable_session["binding"]["provider-ref-key"]
+        assert full_key not in status_repr
+
+        gate.set()
+        finished = gateway.wait_llm_request(tmp_path, request_id, timeout_seconds=5)
+        assert finished["state"] == "completed"
+    finally:
+        gate.set()
+        runtime.shutdown()

@@ -45,8 +45,8 @@ def test_describe_provider_full_composition(tmp_path: Path) -> None:
     assert mcp_surface["configured"] is True
     assert mcp_surface["resolved_path"].endswith("opencode.json")
     assert mcp_surface["path_scope"] in {"project", "home", "absolute"}
-    # model-endpoints not yet declared for opencode
-    assert surfaces["model-endpoints"]["configured"] is False
+    # model-endpoints now declared for opencode (model_config in descriptor)
+    assert surfaces["model-endpoints"]["configured"] is True
     # managed registries report names/counts only
     registries = {block["registry"]: block for block in result["managed"]}
     assert set(registries) == {"managed-mcp-servers", "managed-model-endpoints"}
