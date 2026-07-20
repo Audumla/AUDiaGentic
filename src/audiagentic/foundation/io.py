@@ -63,13 +63,19 @@ def atomic_write_text(path: Path, content: str) -> None:
 
 
 def load_json_file(path: Path) -> dict[str, Any]:
-    """Load JSON mapping from path. Missing file or malformed content returns {}."""
+    """Load JSON mapping from path.
+
+    A missing file returns {} — legitimate "nothing here yet". Malformed
+    content raises AudiaGenticError instead of silently returning {}: treating
+    corruption the same as absence lets the next write silently overwrite and
+    discard whatever was actually on disk (RV713).
+    """
     if not path.exists():
         return {}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return {}
+    except json.JSONDecodeError as exc:
+        raise _io_error(3, f"Invalid JSON config: {path}", path=str(path)) from exc
     return _ensure_dict(data)
 
 

@@ -80,10 +80,11 @@
         "max-lifetime",
         "shutdown",
         "cancelled-turn",
+        "post-turn-close",
         "failed",
         "orphaned",
         "turn-timeout",
-        "turn-stalled",
+        "turn-silence-timeout",
         null
       ]
     },

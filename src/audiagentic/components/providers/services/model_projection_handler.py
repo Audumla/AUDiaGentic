@@ -110,7 +110,15 @@ def _do_status(
     project_root: Path,
 ) -> ModelProjectionResult:
     """Return current managed model config status."""
-    config = _list_config(provider_id, project_root)
+    try:
+        config = _list_config(provider_id, project_root)
+    except Exception:  # noqa: BLE001 — corrupt registry is a report, not a crash
+        return ModelProjectionResult(
+            ok=False,
+            supported=True,
+            provider_id=provider_id,
+            error_code="CON-MCFG-001",
+        )
     if not config.get("ok"):
         return ModelProjectionResult(
             ok=False,

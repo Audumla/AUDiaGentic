@@ -75,6 +75,8 @@ def write_opencode_models(
         options = provider.setdefault("options", {})
         if payload.get("baseURL"):
             options["baseURL"] = payload["baseURL"]
+        if payload.get("apiKey"):
+            options["apiKey"] = payload["apiKey"]
         models = provider.setdefault("models", {})
         entry = dict(payload)
         managed_id = str(entry.pop("managed_id"))

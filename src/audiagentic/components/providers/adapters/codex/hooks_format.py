@@ -14,7 +14,10 @@ import json
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.contracts.errors import make_error_factory
 from audiagentic.foundation.io import atomic_write_text
+
+_hooks_error = make_error_factory("CFG", "CDXHK", "providers-codex")
 
 
 def _read_text(path: Path) -> str:
@@ -25,12 +28,15 @@ def _read_text(path: Path) -> str:
 
 
 def _load_hooks(path: Path) -> dict[str, Any]:
+    """Missing hooks.json returns {}; malformed content raises instead of
+    being silently treated the same as absent (RV713) — the next managed
+    write would otherwise overwrite and discard whatever was on disk."""
     if not path.exists():
         return {}
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {}
+    except json.JSONDecodeError as exc:
+        raise _hooks_error(1, f"Invalid Codex hooks.json: {path}", path=str(path)) from exc
 
 
 def _save_hooks(path: Path, data: dict[str, Any]) -> None:

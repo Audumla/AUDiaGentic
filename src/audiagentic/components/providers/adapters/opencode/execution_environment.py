@@ -43,6 +43,23 @@ def build_execution_environment(*, model_id: str) -> dict[str, str]:
             kind="providers",
             message="OpenCode execution configuration must be a JSON object",
         )
+    # OpenCode uses enabled_providers as a whitelist; when we pass inline config
+    # via OPENCODE_CONFIG_CONTENT, missing enabled_providers causes opencode to
+    # fall back to the machine's global config whitelist instead of failing —
+    # silently running against whatever providers happen to be configured on
+    # this machine, which has nothing to do with this project. A project with
+    # no declared providers must fail loudly here, not inherit unrelated
+    # global state (see the 2026-07-19 SH07 batch incident where a worker's
+    # config probe clobbered the global whitelist and later launches silently
+    # picked up the wrong providers).
+    provider_map = document.get("provider")
+    if not isinstance(provider_map, dict) or not provider_map:
+        raise AudiaGenticError(
+            code="CFG-OPENC-002",
+            kind="providers",
+            message="OpenCode execution configuration declares no providers",
+        )
+    document["enabled_providers"] = list(provider_map.keys())
     document["model"] = model_id
     return {
         "OPENCODE_CONFIG_CONTENT": json.dumps(

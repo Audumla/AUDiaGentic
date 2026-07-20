@@ -118,6 +118,8 @@ def prepare_provider_execution_environment(
     request: ProviderExecutionRequest,
 ) -> dict[str, str]:
     """Materialize transient provider-owned environment before HOME isolation."""
+    import os
+
     from audiagentic.components.providers.services.execution import (
         load_execution_environment_builder,
     )
@@ -133,7 +135,28 @@ def prepare_provider_execution_environment(
     builder = load_execution_environment_builder(request.provider_id)
     if builder is None:
         return {}
-    result = builder(model_id=str(model["model-id"]))
+
+    # Ensure the builder reads from the project-level config that contains
+    # custom providers applied by model_source_add/apply_model_sources, not
+    # the global ~/.config/opencode/opencode.json which lacks them.
+    # Also clear any pre-existing OPENCODE_CONFIG_CONTENT so the builder
+    # doesn't short-circuit on a stale inline document.
+    project_config = request.project_root / ".opencode" / "opencode.json"
+    prev_open_code_config = os.environ.get("OPENCODE_CONFIG")
+    prev_open_code_content = os.environ.get("OPENCODE_CONFIG_CONTENT")
+    if project_config.is_file():
+        os.environ["OPENCODE_CONFIG"] = str(project_config)
+        os.environ.pop("OPENCODE_CONFIG_CONTENT", None)
+    try:
+        result = builder(model_id=str(model["model-id"]))
+    finally:
+        if prev_open_code_config is not None:
+            os.environ["OPENCODE_CONFIG"] = prev_open_code_config
+        elif "OPENCODE_CONFIG" in os.environ:
+            del os.environ["OPENCODE_CONFIG"]
+        if prev_open_code_content is not None:
+            os.environ["OPENCODE_CONFIG_CONTENT"] = prev_open_code_content
+
     if not isinstance(result, dict) or not all(
         isinstance(name, str) and isinstance(value, str)
         for name, value in result.items()
@@ -152,6 +175,7 @@ def prepare_provider_acp_launch(
     provider_id: str,
     model_id: str | None,
     model_alias: str | None,
+    request_runtime_root: Path | None = None,
 ) -> ProviderAcpLaunchResult:
     """Resolve one provider-owned ACP launch without exposing adapter internals."""
     from audiagentic.components.providers.services.execution import load_acp_launch_builder
@@ -189,10 +213,13 @@ def prepare_provider_acp_launch(
             message="provider ACP launch did not resolve a model identifier",
             details={"provider-id": provider_id},
         )
+    launch_kwargs = {"model_id": resolved_model_id}
+    if request_runtime_root is not None:
+        launch_kwargs["request_runtime_root"] = request_runtime_root
     return ProviderAcpLaunchResult(
         provider_id=provider_id,
         model_id=resolved_model_id,
-        launch=builder(project_root, model_id=resolved_model_id),
+        launch=builder(project_root, **launch_kwargs),
     )
 
 

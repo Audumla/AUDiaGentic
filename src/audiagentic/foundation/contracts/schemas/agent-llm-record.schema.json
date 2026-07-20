@@ -51,6 +51,35 @@
     "correlation-id": {
       "type": ["string", "null"]
     },
+    "gateway-profile-id": {
+      "type": ["string", "null"]
+    },
+    "gateway-profile-generation": {
+      "type": ["string", "null"]
+    },
+    "gateway-profile-config-digest": {
+      "type": ["string", "null"]
+    },
+    "gateway-execution-lane-key": {
+      "type": ["string", "null"]
+    },
+    "resolved-provider-id": {
+      "type": ["string", "null"]
+    },
+    "resolved-model-id": {
+      "type": ["string", "null"]
+    },
+    "resolved-queue-limits": {
+      "type": ["object", "null"],
+      "properties": {
+        "max-concurrency": {"type": "integer"},
+        "queue-max-size": {"type": "integer"}
+      },
+      "additionalProperties": false
+    },
+    "admission-policy-digest": {
+      "type": ["string", "null"]
+    },
     "mode": {
       "type": "string",
       "enum": ["async", "blocking"]
@@ -65,7 +94,7 @@
       "type": ["string", "null"]
     },
     "session-keep-alive": {
-      "type": "boolean"
+      "type": ["boolean", "null"]
     },
     "session-idle-timeout-seconds": {
       "type": ["number", "null"]
@@ -105,10 +134,22 @@
         },
         "outcome": {
           "type": "string",
-          "enum": ["resubmit-required", "manual-review-required"]
+          "enum": ["resubmit-required", "replay-required", "manual-review-required"]
         }
       },
       "additionalProperties": false
+    },
+    "replay-required": {
+      "type": ["boolean", "null"]
+    },
+    "replay-reason": {
+      "type": ["string", "null"]
+    },
+    "replayed-by-request-id": {
+      "type": ["string", "null"]
+    },
+    "resumed-from-request-id": {
+      "type": ["string", "null"]
     },
     "provider-id": {
       "type": ["string", "null"]
@@ -145,7 +186,7 @@
           "model-id": {"type": ["string", "null"]},
           "state": {
             "type": "string",
-            "enum": ["running", "completed", "failed"]
+            "enum": ["running", "completed", "failed", "cancelled"]
           },
           "error": {
             "type": ["object", "null"]

@@ -20,7 +20,6 @@ resume-after-death here (deferred to AS10).
 from __future__ import annotations
 
 import asyncio
-import os
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AsyncExitStack, suppress
 from dataclasses import dataclass, field
@@ -428,7 +427,8 @@ class AcpSessionTransport:
         self._current_turn: _TurnPipeline | None = None
         self._closed = False
         self._dead = False
-        self._kill_job: object | None = None
+        # AS17: foundation adopted child token (None before open or on refusal).
+        self._adopted_child: object | None = None  # AdoptedChild | AdoptionRefusal | None
         self.dropped_between_turns = 0
 
     @property
@@ -549,17 +549,20 @@ class AcpSessionTransport:
         self._connection = connection
         self._proc = proc
         self._session_id = str(session.session_id)
-        # Windows: adopt the SDK-spawned child into a kill-on-close Job Object
-        # so a hard-killed host cannot orphan the agent tree (AS17/RV681 —
-        # atexit/close never run on hard kill). Best-effort: refusal (nested
-        # non-nestable job, old OS) leaves the existing close() teardown as
-        # the only guarantee, which is the pre-existing behavior.
-        if os.name == "nt" and self.child_pid is not None:
-            from audiagentic.foundation.system.supervised_process import (
-                adopt_pid_into_kill_job,
-            )
+        # AS17: adopt the SDK-spawned child into foundation ownership.
+        # Captures ProcessEvidence + Windows kill-on-close Job Object
+        # (hard-death guarantee). Best-effort: refusal leaves close() teardown
+        # as the only guarantee — same as pre-existing behavior.
+        if self.child_pid is not None:
+            from audiagentic.foundation.system.adopted_process import adopt_child
 
-            self._kill_job = adopt_pid_into_kill_job(self.child_pid)
+            adopted = adopt_child(
+                pid=self.child_pid,
+                command=(self._launch.executable, *self._launch.args),
+                owner_epoch="gateway-session",
+                scope="session-child",
+            )
+            self._adopted_child = adopted
         return self._session_id
 
     async def prompt(
@@ -729,15 +732,18 @@ class AcpSessionTransport:
                     with suppress(Exception):
                         proc.kill()
 
-        # Closing the kill-on-close Job Object last: if anything above failed
-        # to reap the child tree, the kernel finishes the job here.
-        if self._kill_job is not None:
-            from audiagentic.foundation.system.supervised_process import (
-                _close_job_handle,
+        # AS17: close the foundation adopted-child token last.
+        # Windows: closing the Job Object handle triggers kill-on-close for
+        # any descendants that survived above. POSIX: no-op (no Job Object).
+        if self._adopted_child is not None:
+            from audiagentic.foundation.system.adopted_process import (
+                AdoptedChild,
+                close_kill_job,
             )
 
-            _close_job_handle(self._kill_job)
-            self._kill_job = None
+            if isinstance(self._adopted_child, AdoptedChild):
+                close_kill_job(self._adopted_child)
+            self._adopted_child = None
 
 
 async def run_acp_prompt(
