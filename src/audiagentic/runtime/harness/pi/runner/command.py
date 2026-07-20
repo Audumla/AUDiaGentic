@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from audiagentic.runtime.harness.context import AgentContext
 from audiagentic.runtime.harness.run_common import build_base_run_env
 
@@ -78,4 +80,19 @@ def _build_run_env(ctx: AgentContext) -> dict[str, str]:
     env["HOME"] = str(ctx.agent_home)
     env["PI_CODING_AGENT_DIR"] = str(ctx.agent_dir)
     env["PI_CODING_AGENT_SESSION_DIR"] = str(ctx.project_root / ".audiagentic" / "sessions")
+    request_root = env.get("AUDIAGENTIC_PI_REQUEST_ROOT")
+    if request_root:
+        from audiagentic.runtime.harness.pi.request_runtime import PiRequestRuntime
+        root = Path(request_root)
+        runtime = PiRequestRuntime(
+            request_id=root.name,
+            root=root,
+            agent_dir=root / "agent",
+            session_dir=root / "sessions",
+            temp_dir=root / "tmp",
+            cache_dir=root / "cache",
+            project_root=ctx.project_root,
+            project_mcp_path=ctx.project_root / ".audiagentic" / "mcp.json",
+        )
+        env.update(runtime.environment())
     return env

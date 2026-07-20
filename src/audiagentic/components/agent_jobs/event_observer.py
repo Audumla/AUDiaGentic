@@ -65,6 +65,7 @@ GW_OUTCOME_TOPICS = (
     "agents.llm.failed",
     "agents.llm.rejected",
     "agents.llm.cancelled",
+    "agents.llm.interrupted",
 )
 
 
@@ -492,6 +493,9 @@ class EventObserver:
         "agents.llm.failed": "failed",
         "agents.llm.rejected": "failed",
         "agents.llm.cancelled": "cancelled",
+        # C11: interrupted gateway request maps to failed job (SH12 N2 may
+        # later introduce a dedicated 'interrupted' job state).
+        "agents.llm.interrupted": "failed",
     }
 
     def _handle_gateway_outcome(
