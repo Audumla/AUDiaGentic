@@ -13,6 +13,10 @@ status ('unreleased'). Other fields are auto-generated.
 - Keep release artifacts and job records synchronized with implementation and review outcomes.
 - Do not bypass ledger updates by editing generated release outputs only.
 
+When recording a change event for work associated with one or more plan items,
+include "plan-item-ids" in the event dict (e.g. {"plan-item-ids": ["CC07", "CC08"]}).
+The planning component will automatically link the ledger event ID to those items.
+
 ## Planning process
 
 Use the ag-planning MCP tools to manage plan items in docs/planning/.
@@ -76,13 +80,6 @@ Use Hindsight memory when prior project context may help.
 - Retain durable decisions, user preferences, architecture constraints, and outcomes.
 - Do not retain secrets, credentials, or transient noise.
 
-## Release doctrine
-
-Use the configured release manager for versioning and publication.
-Do not edit generated release artifacts (CHANGELOG.md, RELEASE_NOTES.md) directly.
-Run finalize_release only after ledger audit review is complete.
-The ledger is archived as part of finalization — this cannot be undone.
-
 ## Component profile doctrine
 
 Component profiles select an alternative set of component configurations for a
@@ -137,8 +134,4 @@ requesting a different profile later in the same process raises
 VAL-COMP-010. To switch profiles, stop the current session and restart
 with a different `--component-profile` value or updated environment
 variable.
-
-## Source control doctrine
-
-Do not invoke git or GitHub APIs directly — use the MCP tools.
 <!-- ag:managed:end -->
