@@ -493,8 +493,9 @@ class AcpSessionTransport:
         class _SessionClient(Client):
             async def request_permission(
                 self, session_id, tool_call, options, **kwargs
-            ) -> dict[str, Any]:
+            ) -> RequestPermissionResponse:
                 """Default-deny unless policy_fn grants access."""
+                from acp import RequestPermissionResponse
                 turn = transport._current_turn
                 if turn is not None:
                     tc_info = {
@@ -507,9 +508,11 @@ class AcpSessionTransport:
                     result = transport._policy_fn(str(session_id), _plain(tool_call))
                     if isinstance(result, Awaitable):
                         result = await result
-                    return result
+                    return RequestPermissionResponse.model_validate(result)
 
-                return {"outcome": {"outcome": "cancelled"}}
+                return RequestPermissionResponse.model_validate(
+                    {"outcome": {"outcome": "cancelled"}}
+                )
 
             async def session_update(self, session_id, update, **kwargs) -> None:
                 """Forward session updates with malformed-update normalization."""
@@ -530,6 +533,65 @@ class AcpSessionTransport:
                         f"Malformed ACP update: {type(exc).__name__}",
                         None,
                     )
+
+            # This session-control seam never performs file or terminal I/O on
+            # behalf of the agent (AS28 scope: control/observation only) — the
+            # remaining Client protocol methods are unsupported here rather than
+            # silently no-op, so a provider that actually needs them fails loud.
+            async def write_text_file(self, session_id, path, content, **kwargs):
+                raise NotImplementedError(
+                    "AcpAgentSessionTransport's session client does not support write_text_file"
+                )
+
+            async def read_text_file(self, session_id, path, line=None, limit=None, **kwargs):
+                raise NotImplementedError(
+                    "AcpAgentSessionTransport's session client does not support read_text_file"
+                )
+
+            async def create_terminal(
+                self, session_id, command, args=None, env=None, cwd=None,
+                output_byte_limit=None, **kwargs,
+            ):
+                raise NotImplementedError(
+                    "AcpAgentSessionTransport's session client does not support create_terminal"
+                )
+
+            async def terminal_output(self, session_id, terminal_id, **kwargs):
+                raise NotImplementedError(
+                    "AcpAgentSessionTransport's session client does not support terminal_output"
+                )
+
+            async def release_terminal(self, session_id, terminal_id, **kwargs):
+                raise NotImplementedError(
+                    "AcpAgentSessionTransport's session client does not support release_terminal"
+                )
+
+            async def wait_for_terminal_exit(self, session_id, terminal_id, **kwargs):
+                raise NotImplementedError(
+                    "AcpAgentSessionTransport's session client does not support wait_for_terminal_exit"
+                )
+
+            async def kill_terminal(self, session_id, terminal_id, **kwargs):
+                raise NotImplementedError(
+                    "AcpAgentSessionTransport's session client does not support kill_terminal"
+                )
+
+            async def create_elicitation(self, message, mode, **kwargs):
+                raise NotImplementedError(
+                    "AcpAgentSessionTransport's session client does not support create_elicitation"
+                )
+
+            async def complete_elicitation(self, elicitation_id, **kwargs) -> None:
+                return None
+
+            async def ext_method(self, method, params) -> dict[str, Any]:
+                return {}
+
+            async def ext_notification(self, method, params) -> None:
+                return None
+
+            def on_connect(self, conn) -> None:
+                return None
 
         stack = AsyncExitStack()
         try:
@@ -951,8 +1013,15 @@ class AcpAgentSessionTransport:
         await self._inner.open()
         # Use the ACP-provided session id as the canonical AG session id.
         # (AS30 binding will later map provider session ref ↔ AG session id.)
-        self._ag_session_id = self._inner.session_id
-        return SessionOpenResult(ag_session_id=self._ag_session_id)
+        session_id = self._inner.session_id
+        if session_id is None:
+            raise AudiaGenticError(
+                code="CON-ACP-002",
+                kind="execution",
+                message="ACP transport opened without a session id",
+            )
+        self._ag_session_id = session_id
+        return SessionOpenResult(ag_session_id=session_id)
 
     async def prompt(
         self,
