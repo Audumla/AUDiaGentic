@@ -137,6 +137,7 @@ def _assign_handle_to_kill_job(process_handle: int) -> object | None:
         job, _JobObjectExtendedLimitInformation, ctypes.byref(info), ctypes.sizeof(info)
     ):
         logger.debug("SetInformationJobObject failed (err=%s)", ctypes.get_last_error())
+        kernel32.CloseHandle(job)
         return None
 
     if not kernel32.AssignProcessToJobObject(job, process_handle):

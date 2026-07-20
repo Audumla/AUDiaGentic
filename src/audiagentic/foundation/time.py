@@ -22,3 +22,9 @@ def now_iso_z(timespec: str = "auto") -> str:
 def now_compact_z() -> str:
     """Return current UTC timestamp as ``YYYYMMDDTHHMMSSZ`` (filename-safe)."""
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def now_utc_epoch_s() -> float:
+    """Return the current UTC epoch seconds (floating point)."""
+    import time  # noqa: PLC0414
+    return time.time()

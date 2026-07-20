@@ -5,7 +5,7 @@ and compare them, but must not parse, display, log, or use them as paths.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 
 
@@ -24,7 +24,15 @@ class SessionOwnership(StrEnum):
 
 @dataclass(frozen=True)
 class ProviderSessionRef:
-    value: str
+    """Opaque protected ref. Never appears in repr/str/logs — access .value
+    only at the storage or provider-surface boundary."""
+
+    value: str = field(repr=False)
+
+    def __repr__(self) -> str:
+        return "ProviderSessionRef(<redacted>)"
+
+    __str__ = __repr__
 
 
 @dataclass(frozen=True)

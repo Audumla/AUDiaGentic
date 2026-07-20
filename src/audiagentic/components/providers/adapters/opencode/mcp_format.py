@@ -9,17 +9,27 @@ import json
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.contracts.errors import make_error_factory
 from audiagentic.foundation.io import atomic_write_json
 from audiagentic.foundation.mcp import McpServerEntry
 
+_opencode_mcp_error = make_error_factory("CFG", "OCMCP", "providers-opencode")
 
-def read_opencode_mcp(path: Path) -> dict[str, McpServerEntry]:
+
+def _load_opencode_json(path: Path) -> dict[str, Any]:
+    """Missing opencode.json returns {}; malformed content raises instead of
+    being silently treated the same as absent (RV713) — the next managed
+    write would otherwise overwrite and discard whatever was on disk."""
     if not path.exists():
         return {}
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return {}
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise _opencode_mcp_error(1, f"Invalid opencode.json: {path}", path=str(path)) from exc
+
+
+def read_opencode_mcp(path: Path) -> dict[str, McpServerEntry]:
+    data = _load_opencode_json(path)
     result: dict[str, McpServerEntry] = {}
     for name, cfg in data.get("mcp", {}).items():
         if cfg.get("type") == "remote":
@@ -45,12 +55,7 @@ def read_opencode_mcp(path: Path) -> dict[str, McpServerEntry]:
 
 def write_opencode_mcp(path: Path, entries: dict[str, McpServerEntry]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    existing: dict[str, Any] = {}
-    if path.exists():
-        try:
-            existing = json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            pass
+    existing = _load_opencode_json(path)
     servers: dict[str, Any] = existing.get("mcp", {})
     for name, entry in entries.items():
         if entry.is_remote:
@@ -70,10 +75,7 @@ def write_opencode_mcp(path: Path, entries: dict[str, McpServerEntry]) -> None:
 def remove_opencode_mcp(path: Path, name: str) -> bool:
     if not path.exists():
         return False
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return False
+    data = _load_opencode_json(path)
     servers = data.get("mcp", {})
     if name not in servers:
         return False

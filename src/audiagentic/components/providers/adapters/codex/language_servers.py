@@ -14,8 +14,10 @@ import tomllib
 from audiagentic.components.providers.contracts.language_server_projection import (
     LanguageServerEntry,
 )
-from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error_factory
 from audiagentic.foundation.io import atomic_write_text
+
+_codex_lsp_error = make_error_factory("CFG", "CDXLSP", "providers-codex")
 
 _BARE_KEY_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
@@ -56,14 +58,15 @@ def _format_inline_table(d: dict[str, Any]) -> str:
 
 
 def _load_toml(path: Path) -> dict[str, Any]:
+    """Missing config.toml returns {}; malformed content raises instead of
+    being silently treated the same as absent (RV713) — the next managed
+    write would otherwise overwrite and discard whatever was on disk."""
     if not path.exists():
         return {}
     try:
         return tomllib.loads(path.read_text(encoding="utf-8"))
-    except tomllib.TOMLDecodeError:
-        return {}
-    except OSError:
-        return {}
+    except tomllib.TOMLDecodeError as exc:
+        raise _codex_lsp_error(1, f"Invalid Codex config.toml: {path}", path=str(path)) from exc
 
 
 def _save_toml(path: Path, data: dict[str, Any]) -> None:

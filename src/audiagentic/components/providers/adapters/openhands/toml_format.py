@@ -6,7 +6,7 @@ from typing import Any
 
 import tomllib
 
-from audiagentic.foundation.contracts.errors import make_error
+from audiagentic.foundation.contracts.errors import make_error, make_error_factory
 from audiagentic.foundation.io import atomic_write_text
 
 try:
@@ -16,15 +16,24 @@ except ImportError:
 
 from audiagentic.foundation.mcp import McpServerEntry
 
+_openhands_toml_error = make_error_factory("CFG", "OHTOML", "providers-openhands")
 
-def read_mcp_toml(path: Path) -> dict[str, McpServerEntry]:
-    """Read MCP server entries from a TOML file's [mcp_servers] section."""
+
+def _load_mcp_toml(path: Path) -> dict[str, Any]:
+    """Missing config.toml returns {}; malformed content raises instead of
+    being silently treated the same as absent (RV713) — the next managed
+    write would otherwise overwrite and discard whatever was on disk."""
     if not path.exists():
         return {}
     try:
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
-    except (tomllib.TOMLDecodeError, OSError):
-        return {}
+        return tomllib.loads(path.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as exc:
+        raise _openhands_toml_error(1, f"Invalid OpenHands config.toml: {path}", path=str(path)) from exc
+
+
+def read_mcp_toml(path: Path) -> dict[str, McpServerEntry]:
+    """Read MCP server entries from a TOML file's [mcp_servers] section."""
+    data = _load_mcp_toml(path)
     entries: dict[str, McpServerEntry] = {}
     for name, cfg in data.get("mcp_servers", {}).items():
         if not isinstance(cfg, dict):
@@ -57,13 +66,7 @@ def write_mcp_toml(path: Path, entries: dict[str, McpServerEntry]) -> None:
             message="tomli_w required; pip install tomli-w",
         )
     path.parent.mkdir(parents=True, exist_ok=True)
-    existing: dict[str, Any] = {}
-    if path.exists():
-        try:
-            existing = tomllib.loads(path.read_text(encoding="utf-8"))
-        except (tomllib.TOMLDecodeError, OSError):
-            pass
-
+    existing = _load_mcp_toml(path)
     servers: dict[str, Any] = existing.get("mcp_servers", {})
     for name, entry in entries.items():
         if entry.is_remote:
@@ -91,10 +94,7 @@ def remove_mcp_toml(path: Path, name: str) -> bool:
         )
     if not path.exists():
         return False
-    try:
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
-    except (tomllib.TOMLDecodeError, OSError):
-        return False
+    data = _load_mcp_toml(path)
     servers = data.get("mcp_servers", {})
     if name not in servers:
         return False

@@ -10,8 +10,23 @@ import json
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.contracts.errors import make_error_factory
 from audiagentic.foundation.io import atomic_write_json
 from audiagentic.foundation.mcp import McpServerEntry
+
+_continue_error = make_error_factory("CFG", "CONTJS", "providers-continue")
+
+
+def _load_continue_json(path: Path) -> dict[str, Any]:
+    """Missing config.json returns {}; malformed content raises instead of
+    being silently treated the same as absent (RV713) — the next managed
+    write would otherwise overwrite and discard whatever was on disk."""
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise _continue_error(1, f"Invalid Continue config.json: {path}", path=str(path)) from exc
 
 
 def _server_items(value: Any) -> list[dict[str, Any]]:
@@ -27,12 +42,7 @@ def _server_items(value: Any) -> list[dict[str, Any]]:
 
 
 def read_continue_json(path: Path) -> dict[str, McpServerEntry]:
-    if not path.exists():
-        return {}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return {}
+    data = _load_continue_json(path)
     result = {}
     for server in _server_items(data.get("mcpServers", [])):
         name = server.get("name", "")
@@ -56,12 +66,7 @@ def read_continue_json(path: Path) -> dict[str, McpServerEntry]:
 
 
 def write_continue_json(path: Path, entries: dict[str, McpServerEntry]) -> None:
-    existing: dict[str, Any] = {}
-    if path.exists():
-        try:
-            existing = json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            pass
+    existing = _load_continue_json(path)
     servers = _server_items(existing.get("mcpServers", []))
     by_name = {s.get("name"): i for i, s in enumerate(servers)}
     for name, entry in entries.items():
@@ -92,10 +97,7 @@ def write_continue_json(path: Path, entries: dict[str, McpServerEntry]) -> None:
 def remove_continue_json(path: Path, name: str) -> bool:
     if not path.exists():
         return False
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return False
+    data = _load_continue_json(path)
     servers = _server_items(data.get("mcpServers", []))
     new_servers = [s for s in servers if s.get("name") != name]
     if len(new_servers) == len(servers):
