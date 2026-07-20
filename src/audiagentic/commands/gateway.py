@@ -1,9 +1,40 @@
-"""Explicit standalone gateway service command."""
+"""Explicit standalone gateway service command and lifecycle CLI (SH10 Slice A).
+
+This module owns ``gateway serve`` (existing) and the SH10 operator lifecycle
+sub-commands: ``status``, ``drain``, ``resume``, ``stop [--force]``, and
+``recover [--confirm] [--reason]``.  Lifecycle handlers dispatch exactly once
+through the standalone gateway client (HTTP) or the record-only recovery
+helper; they contain no lifecycle/store/signal logic.
+"""
 from __future__ import annotations
 
 import argparse
+import json
+import os
+import sys
 from pathlib import Path
 
+
+def _standalone_client_from_env() -> StandaloneGatewayClient:  # noqa: F821 - resolved at runtime
+    """Build a StandaloneGatewayClient from environment (same env as get_gateway_client)."""
+    from audiagentic.components.agents.agents_gateway_remote_client import (
+        StandaloneGatewayClient,
+        load_auth_token,
+    )
+
+    endpoint = os.environ.get("AUDIAGENTIC_GATEWAY_ENDPOINT")
+    token_file = os.environ.get("AUDIAGENTIC_GATEWAY_TOKEN_FILE")
+    if not endpoint or not token_file:
+        print(
+            "error: standalone gateway client requires "
+            "AUDIAGENTIC_GATEWAY_ENDPOINT and AUDIAGENTIC_GATEWAY_TOKEN_FILE",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return StandaloneGatewayClient(endpoint, load_auth_token(Path(token_file)))
+
+
+# - serve (existing) -
 
 def cmd_gateway(args: argparse.Namespace, project_root: Path) -> int:
     del project_root
@@ -27,4 +58,83 @@ def cmd_gateway(args: argparse.Namespace, project_root: Path) -> int:
     return 0
 
 
-__all__ = ["cmd_gateway"]
+# - SH10 lifecycle operators -
+
+def _json_out(data: object) -> None:
+    """Print redacted JSON to stdout."""
+    print(json.dumps(data, indent=2, default=str))
+
+
+def cmd_gateway_status(args: argparse.Namespace, project_root: Path) -> int:
+    """gateway status - query service state via HTTP client."""
+    client = _standalone_client_from_env()
+    try:
+        result = client.service_status(project_root)
+    finally:
+        client.close()
+    _json_out(result)
+    return 0
+
+
+def cmd_gateway_drain(args: argparse.Namespace, project_root: Path) -> int:
+    """gateway drain - begin graceful drain via HTTP client."""
+    del args
+    client = _standalone_client_from_env()
+    try:
+        result = client.service_drain(project_root)
+    finally:
+        client.close()
+    _json_out(result)
+    return 0
+
+
+def cmd_gateway_resume(args: argparse.Namespace, project_root: Path) -> int:
+    """gateway resume - cancel draining via HTTP client."""
+    del args
+    client = _standalone_client_from_env()
+    try:
+        result = client.service_resume(project_root)
+    finally:
+        client.close()
+    _json_out(result)
+    return 0
+
+
+def cmd_gateway_stop(args: argparse.Namespace, project_root: Path) -> int:
+    """gateway stop [--force] - request operator stop via HTTP client."""
+    client = _standalone_client_from_env()
+    try:
+        result = client.service_stop(project_root, force=args.force)
+    finally:
+        client.close()
+    _json_out(result)
+    return 0
+
+
+def cmd_gateway_recover(args: argparse.Namespace, project_root: Path) -> int:
+    """gateway recover - record-only dead-owner recovery (never HTTP).
+
+    Deliberately bypasses the HTTP client because recovery targets a
+    dead/unprovable service; it goes straight to the store via the
+    lifecycle module.
+    """
+    from audiagentic.components.agents.agents_gateway_lifecycle import (
+        recover_unprovable_owner,
+    )
+
+    result = recover_unprovable_owner(
+        confirm=args.confirm,
+        reason=args.reason,
+    )
+    _json_out(result)
+    return 0
+
+
+__all__ = [
+    "cmd_gateway",
+    "cmd_gateway_drain",
+    "cmd_gateway_recover",
+    "cmd_gateway_resume",
+    "cmd_gateway_status",
+    "cmd_gateway_stop",
+]
