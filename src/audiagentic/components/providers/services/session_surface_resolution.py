@@ -326,13 +326,17 @@ def _select_declaration(
         compatible = []
         for d in matching:
             result = _version_satisfies(installed_version, d.version_constraint)
-            if result is True:
+            if result:
                 compatible.append(d)
         if not compatible:
             return None, "version-mismatch"
-        # Step 4: prefer most specific constraint (highest minimum version)
-        compatible.sort(key=lambda d: _parse_version(
-            d.version_constraint.lstrip(">=") or "0"), reverse=True)
+        # Step 4: prefer most specific constraint (highest minimum version).
+        # _parse_version can return None for an unparseable constraint; sort
+        # those last instead of failing the comparison.
+        compatible.sort(
+            key=lambda d: _parse_version(d.version_constraint.lstrip(">=") or "0") or (),
+            reverse=True,
+        )
         matching = compatible
 
     # Select the best match: most specific constraint first (already sorted).
