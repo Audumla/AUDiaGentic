@@ -21,6 +21,11 @@ def global_service_runtime() -> Path:
     return audiagentic_home() / "services"
 
 
+def global_config_dir() -> Path:
+    """Return the machine-scoped shared-service configuration directory."""
+    return audiagentic_home() / "config"
+
+
 def global_log_dir(component: str) -> Path:
     """Return the global log directory for a named component."""
     return audiagentic_home() / "logs" / component

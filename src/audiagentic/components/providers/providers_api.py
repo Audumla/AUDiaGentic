@@ -213,6 +213,7 @@ def prepare_provider_acp_launch(
     provider_id: str,
     model_id: str | None,
     model_alias: str | None,
+    request_runtime_root: Path | None = None,
 ) -> ProviderAcpLaunchResult:
     """Prepare a provider-owned ACP launch for an agents-owned live session."""
     from audiagentic.components.providers.services.public_execution import (
@@ -224,6 +225,7 @@ def prepare_provider_acp_launch(
         provider_id=provider_id,
         model_id=model_id,
         model_alias=model_alias,
+        request_runtime_root=request_runtime_root,
     )
 
 
