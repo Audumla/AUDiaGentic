@@ -190,7 +190,8 @@ contributions:
         - detailed_solution: Detailed Solution & Technical Design (architecture, components, design)
         - code_samples: Code Samples & Guidance (including config samples and schemas)
         - files: Files to create/update
-        - validation: How to validate the implementation (include comprehensive tests where possible)
+        - validation: How to validate the implementation
+          (include comprehensive tests where possible)
         - effort_risk: Complexity and risk assessment
         - standards: Applicable standards/rules
         - notes: Key design principles and additional context

@@ -57,6 +57,8 @@ from audiagentic.components.agents.agents_gateway_turn_events import (
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports.agent_session import (
+    SessionControlAction,
+    SessionControlRequest,
     SessionPrompt,
     SessionTurnResult,
 )
