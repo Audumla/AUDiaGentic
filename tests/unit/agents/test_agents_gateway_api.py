@@ -185,6 +185,33 @@ def test_core_wait_still_bounded_when_no_timeout_requested(tmp_path: Path, monke
     assert manager.calls["timeout"] == gateway.DEFAULT_BLOCKING_TIMEOUT_SECONDS
 
 
+class _SessionRecordingManager:
+    def wait(self, project_root, request_id, timeout_seconds):
+        return {"request-id": "req_x", "state": "running", "session-id": "ses_1"}
+
+
+def test_wait_timeout_progress_reflects_live_session_turn_evidence(tmp_path: Path, monkeypatch):
+    """RV744: a blocking wait that times out must not falsely read as stalled
+    when the session timeline has active turn evidence — the projection must
+    consult the same live session timeline that request diagnostics uses."""
+    monkeypatch.setattr(gateway, "_QUEUE_MANAGER", _SessionRecordingManager())
+    monkeypatch.setattr(
+        "audiagentic.components.agents.agents_gateway_sessions_store.latest_turn_projection",
+        lambda project_root, session_id, request_id=None: {
+            "kind": "tool-call", "session-id": session_id, "request-id": request_id,
+            "timestamp": "2026-07-19T00:00:00+00:00",
+        },
+    )
+
+    result = gateway.wait_llm_request(tmp_path, "req_x", timeout_seconds=0.1)
+
+    assert result["wait-timeout"] is True
+    assert result["progress"]["phase"] == "tool-active"
+    assert result["progress"]["latest-session-event"] == {
+        "kind": "tool-call", "timestamp": "2026-07-19T00:00:00+00:00",
+    }
+
+
 def test_cancel_queued_request_reaches_cancelled_state(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai", **{"max-concurrency": 1})
     hold = threading.Event()

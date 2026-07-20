@@ -13,6 +13,7 @@ import pytest
 from tests.unit.agents.test_agents_gateway_sessions import FakeTransport, _Clock
 
 from audiagentic.components.agents import agents_gateway_dispatch as dispatch
+from audiagentic.components.agents import agents_gateway_session_dispatch as session_dispatch
 from audiagentic.components.agents import agents_gateway_sessions as sessions_module
 from audiagentic.components.agents import agents_gateway_store as store
 from audiagentic.components.agents.agents_gateway_sessions import SessionRuntime
@@ -101,6 +102,10 @@ def test_keep_alive_opens_session_and_completes(rig):
     # raw prompt through its in-memory argument instead.
     assert transports[0].turns == ["do the thing"]
     assert not transports[0].closed  # keep-alive: session survives the request
+    request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-llm-gateway" / record["request-id"]
+    assert (request_dir / "runtime" / "pi" / "manifest.json").exists()
+    assert (request_dir / "runtime" / "pi" / "agent").is_dir()
+    assert (request_dir / "runtime" / "pi" / "sessions").is_dir()
 
 
 def test_session_id_continues_same_live_transport(rig):
@@ -141,12 +146,13 @@ def test_unsupported_provider_terminal(rig, monkeypatch):
         "audiagentic.components.providers.providers_api.get_provider_runtime_config_state",
         lambda root, provider_id: {"provider-id": provider_id, "enabled": True, "config": {}},
     )
-    result = _dispatch(
-        tmp_path, _running_record(tmp_path, session_keep_alive=True), dispatch_prompt="hello"
-    )
+    record = _running_record(tmp_path, session_keep_alive=True)
+    result = _dispatch(tmp_path, record, dispatch_prompt="hello")
     assert result["state"] == "failed"
     assert result["error"]["code"] == "UNS-PEXE-002"
     assert transports == []
+    request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-llm-gateway" / record["request-id"]
+    assert (request_dir / "quarantine" / record["request-id"] / "manifest.json").exists()
 
 
 def test_profile_mismatch_terminal(rig, monkeypatch):
@@ -198,7 +204,7 @@ def test_session_output_concatenates_stream_chunks():
         events=(chunk("TOKEN"), chunk(" STORE"), chunk("D"), chunk("."),
                 SimpleNamespace(kind="result", text=None)),
     )
-    assert dispatch._session_output_from_result(result) == "TOKEN STORED."
+    assert session_dispatch._session_output_from_result(result) == "TOKEN STORED."
 
 
 def test_plain_record_does_not_touch_session_path(rig, monkeypatch):

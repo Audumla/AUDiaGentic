@@ -373,6 +373,7 @@ class TestMirrorTopicEquality:
             "agents.llm.failed",
             "agents.llm.rejected",
             "agents.llm.cancelled",
+            "agents.llm.interrupted",
         }
 
         # Agent-jobs mirror constants (defined in event_observer.py, control.py)

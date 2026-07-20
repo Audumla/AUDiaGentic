@@ -2,8 +2,9 @@
 
 test_provider_full_lifecycle.py and test_provider_surface_lifecycle.py already
 cover mcp_config and skill/instruction surfaces end to end, but only on the
-happy path. This module fills two real gaps found while auditing MA
-(managed-config-consistency) closure:
+happy path, for whichever providers each test hand-enumerates. This module
+fills two real gaps found while auditing MA (managed-config-consistency)
+closure:
 
 1. plugin_config (opencode), hooks_config (codex), and model_config (pi) had
    ZERO Docker/mutation coverage anywhere in the suite — hooks_config and
@@ -15,13 +16,27 @@ happy path. This module fills two real gaps found while auditing MA
    repeated cycles, purge idempotency, purge completeness across every
    capability kind at once, duplicate-entry handling, or HOME-path isolation.
 
-Several tests here are xfail(strict=True): they encode the CORRECT behavior
-and currently fail against real defects found while writing this suite (see
-plan item MA34 / review RV713 — foundation/io.py:load_json_file and
-codex/hooks_format.py:_load_hooks silently discard corrupted config content
-instead of raising). strict=True means the suite goes red the moment those
-xfails start passing, forcing the marker to be removed rather than the fix
-going unnoticed.
+The mcp_config classes below are TEMPLATE suites, not per-provider
+hand-written tests: they parametrize over every provider the shared
+``tests.integration.providers.harness`` module considers installable that
+declares an ``mcp_config`` (discovered from the live descriptor registry, via
+``_mcp_provider_ids``), and drive corruption behavior off a small
+format-keyed fixture table in ``mcp_format_fixtures.py`` — one row per wire
+format (mcp-json, codex-toml, goose-yaml, continue-json, opencode-mcp,
+mcp-toml), reused across every provider sharing that format. Foreign-content
+and purge-idempotency tests need no format-specific fixtures at all, since
+they only exercise the service layer's add/remove/list functions. A new
+provider reusing an existing format, or a new format with one new fixture
+row, is covered automatically without touching this file's test bodies.
+
+RV713 (foundation/io.py:load_json_file, foundation/mcp/json_format.py,
+codex/hooks_format.py, codex/language_servers.py, opencode/mcp_format.py,
+continue_/mcp_format.py, openhands/toml_format.py all silently discarding
+corrupted config content instead of raising) has been fixed. The corruption
+tests below now assert the fix directly rather than xfail-documenting the
+defect; ``mcp_format_fixtures.py``'s ``write_is_safe`` flag stays in place so
+a future regression that reintroduces the swallow pattern for any format is
+caught automatically instead of silently passing.
 
 Run via: docker run --rm audiagentic-provider-config-matrix-e2e
 """
@@ -32,6 +47,8 @@ import os
 from pathlib import Path
 
 import pytest
+from tests.integration.providers import harness
+from tests.integration.providers.mcp_format_fixtures import MCP_FORMAT_FIXTURES
 
 from audiagentic.components.providers.adapters.pi.model_config import (
     read_pi_models,
@@ -57,6 +74,7 @@ from audiagentic.components.providers.services.mcp import (
 from audiagentic.components.providers.services.plugin_entries import manage_plugin_entry
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.lifecycle.components import install_component
+from audiagentic.foundation.toolchains.managed_config import resolve_managed_config_path
 
 pytestmark = [
     pytest.mark.mutates_host,
@@ -76,6 +94,44 @@ _REAL_CLI = pytest.mark.skipif(
 )
 
 
+def _mcp_provider_ids() -> list[str]:
+    """Every provider the shared harness considers installable that also
+    declares mcp_config — discovered live, never hand-enumerated."""
+    return [
+        pid
+        for pid in harness.filtered_provider_ids()
+        if (desc := get_descriptor(pid)) is not None and desc.mcp_config is not None
+    ]
+
+
+def _mcp_corruption_params() -> list[object]:
+    """One pytest.param per mcp_config provider. Marked xfail(strict=True)
+    only if a provider's format is still (or again) known to swallow
+    corruption; skip if a provider uses a format with no registered fixture
+    row yet. Every currently-registered format is write_is_safe=True post
+    RV713-fix, so no param carries a mark today — the mechanism stays live
+    for regression protection."""
+    params = []
+    for provider_id in _mcp_provider_ids():
+        fmt = get_descriptor(provider_id).mcp_config.format
+        fixture = MCP_FORMAT_FIXTURES.get(fmt)
+        marks = []
+        if fixture is None:
+            marks.append(
+                pytest.mark.skip(reason=f"no corruption fixture registered for mcp format {fmt!r}")
+            )
+        elif not fixture.write_is_safe:
+            marks.append(
+                pytest.mark.xfail(
+                    strict=True,
+                    reason=f"RV713: {provider_id} mcp_config writer ({fmt}) silently "
+                    "discards corrupt config instead of raising",
+                )
+            )
+        params.append(pytest.param(provider_id, id=provider_id, marks=marks))
+    return params
+
+
 def _project(tmp_path: Path) -> Path:
     project_root = tmp_path / "project"
     project_root.mkdir()
@@ -85,12 +141,35 @@ def _project(tmp_path: Path) -> Path:
 
 
 def _isolated_home(tmp_path: Path, monkeypatch, name: str = "home") -> Path:
-    """Redirect HOME so ~-relative managed-config paths never touch the real
-    container home. Returns the redirected home directory."""
+    """Redirect the home directory so ~-relative managed-config paths never
+    touch the real one. Returns the redirected home directory.
+
+    HOME alone is NOT enough: Windows Path.expanduser resolves USERPROFILE
+    (then HOMEDRIVE/HOMEPATH) and ignores HOME entirely, so a HOME-only
+    monkeypatch silently escapes isolation on a Windows host and mutates the
+    operator's real ~/.claude, ~/.codex, ~/.gemini configs — which actually
+    happened during this suite's development. Patch every resolution route."""
     home = tmp_path / name
     home.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setenv("HOMEDRIVE", str(home.drive) or "C:")
+    monkeypatch.setenv("HOMEPATH", str(home)[len(home.drive):] if home.drive else str(home))
     return home
+
+
+@pytest.fixture(autouse=True)
+def _sandbox_home_for_every_test(tmp_path: Path, monkeypatch) -> Path:
+    """Every test in this module gets an isolated home, opted-in or not.
+
+    install_component(\"providers\") fires the lifecycle observer, which syncs
+    MCP config for ALL providers — including HOME-relative paths like
+    ~/.claude/mcp.json and ~/.gemini/antigravity/mcp_config.json — so even a
+    test that only targets a project-relative provider config transitively
+    touches the home directory. Isolation therefore cannot be per-test
+    opt-in. Explicit _isolated_home calls in test bodies are idempotent on
+    top of this."""
+    return _isolated_home(tmp_path, monkeypatch)
 
 
 # --------------------------------------------------------------------------- #
@@ -231,24 +310,108 @@ class TestModelConfigCapability:
 
 
 # --------------------------------------------------------------------------- #
+# Template suite: mcp_config across every harness the shared test policy
+# considers installable. Parametrized off the live descriptor registry, not
+# hand-enumerated — a new provider or format is picked up automatically.
+# --------------------------------------------------------------------------- #
+
+
+class TestMcpConfigAcrossAllHarnesses:
+    """Foreign-content preservation and purge idempotency need no
+    format-specific fixtures: they only drive the service layer's
+    add/remove/list functions, so one test body covers every mcp_config
+    provider regardless of wire format."""
+
+    @pytest.mark.parametrize("provider_id", _mcp_provider_ids())
+    def test_foreign_entry_survives_managed_add_remove_cycles(
+        self, provider_id: str, tmp_path: Path, monkeypatch
+    ) -> None:
+        harness.maybe_skip_provider(provider_id)
+        _isolated_home(tmp_path, monkeypatch)
+        project_root = _project(tmp_path)
+
+        add_provider_mcp_server(provider_id, "ma34-foreign-fixture", "echo", project_root, args=("foreign",))
+        for _ in range(3):
+            add_provider_mcp_server(provider_id, "ma34-managed", "echo", project_root, args=("managed",))
+            remove_provider_mcp_server(provider_id, "ma34-managed", project_root)
+
+        names = {s["name"] for s in list_provider_mcp_servers(provider_id, project_root)["servers"]}
+        assert "ma34-foreign-fixture" in names, (
+            f"{provider_id}: foreign entry lost across managed add/remove cycles"
+        )
+        assert "ma34-managed" not in names
+
+    @pytest.mark.parametrize("provider_id", _mcp_provider_ids())
+    def test_purge_is_idempotent(self, provider_id: str, tmp_path: Path, monkeypatch) -> None:
+        harness.maybe_skip_provider(provider_id)
+        _isolated_home(tmp_path, monkeypatch)
+        project_root = _project(tmp_path)
+
+        add_provider_mcp_server(provider_id, "ma34-idempotent", "echo", project_root)
+
+        first = remove_provider_mcp_server(provider_id, "ma34-idempotent", project_root)
+        assert first["ok"] and first["removed"] is True
+
+        second = remove_provider_mcp_server(provider_id, "ma34-idempotent", project_root)
+        assert second["ok"], f"{provider_id}: second removal must not error"
+        assert second["removed"] is False, f"{provider_id}: second removal must be a no-op"
+
+    @pytest.mark.parametrize("provider_id", _mcp_provider_ids())
+    def test_duplicate_add_upserts_not_duplicates(self, provider_id: str, tmp_path: Path, monkeypatch) -> None:
+        harness.maybe_skip_provider(provider_id)
+        _isolated_home(tmp_path, monkeypatch)
+        project_root = _project(tmp_path)
+
+        add_provider_mcp_server(provider_id, "ma34-dup", "echo", project_root, args=("v1",))
+        add_provider_mcp_server(provider_id, "ma34-dup", "echo", project_root, args=("v2",))
+
+        matches = [
+            s for s in list_provider_mcp_servers(provider_id, project_root)["servers"]
+            if s["name"] == "ma34-dup"
+        ]
+        assert len(matches) == 1, f"{provider_id}: expected one upserted entry, found {len(matches)}"
+        assert matches[0]["args"] == ["v2"], f"{provider_id}: second add did not upsert args"
+
+
+class TestMcpConfigCorruptionAcrossAllHarnesses:
+    """RV713 (fixed): mcp_config writers must raise on corrupted existing
+    content rather than silently discard it. codex-toml and goose-yaml
+    already raised correctly before the fix; every other format is fixed as
+    of this suite."""
+
+    @pytest.mark.parametrize("provider_id", _mcp_corruption_params())
+    def test_corrupted_mcp_config_apply_must_not_silently_discard(
+        self, provider_id: str, tmp_path: Path, monkeypatch
+    ) -> None:
+        harness.maybe_skip_provider(provider_id)
+        _isolated_home(tmp_path, monkeypatch)
+        project_root = _project(tmp_path)
+        spec = get_descriptor(provider_id).mcp_config
+        config_path = resolve_managed_config_path(spec, project_root)
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        corrupt = MCP_FORMAT_FIXTURES[spec.format].corrupt
+        config_path.write_text(corrupt, encoding="utf-8")
+
+        with pytest.raises(Exception):
+            add_provider_mcp_server(provider_id, "ma34-corrupt-probe", "echo", project_root)
+
+        assert config_path.read_text(encoding="utf-8") == corrupt, (
+            f"{provider_id} ({spec.format}): corrupted mcp config silently overwritten"
+        )
+
+
+# --------------------------------------------------------------------------- #
 # Negative path: corrupted pre-existing config must never be silently discarded
 # --------------------------------------------------------------------------- #
 
 
 class TestCorruptedConfigMustNotBeSilentlyDiscarded:
-    """RV713: foundation/io.py:load_json_file and codex hooks_format.py's
-    hand-rolled reader both currently swallow JSONDecodeError and return {},
-    identical to the missing-file case. The next managed write then overwrites
-    the corrupted file with only the newly-desired entries, silently destroying
-    whatever was there. These tests encode the correct contract and are
-    xfail(strict=True) against the current, defective behavior."""
+    """RV713 (fixed): foundation/io.py:load_json_file and codex
+    hooks_format.py's hand-rolled reader used to swallow JSONDecodeError and
+    return {}, identical to the missing-file case, so the next managed write
+    silently overwrote the corrupted file. Both now raise; these tests assert
+    the fix directly."""
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="RV713: codex hooks_format._load_hooks silently discards corrupt "
-        "hooks.json instead of raising; the apply below currently succeeds and "
-        "overwrites it",
-    )
     def test_corrupted_hooks_json_apply_raises_and_leaves_file_untouched(
         self, tmp_path: Path, monkeypatch
     ) -> None:
@@ -276,12 +439,6 @@ class TestCorruptedConfigMustNotBeSilentlyDiscarded:
             "corrupted hooks.json was silently overwritten instead of raising"
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="RV713: foundation/io.py:load_json_file silently discards corrupt "
-        "opencode.json instead of raising; the apply below currently succeeds "
-        "and overwrites it",
-    )
     def test_corrupted_opencode_json_apply_raises_and_leaves_file_untouched(
         self, tmp_path: Path
     ) -> None:
@@ -464,15 +621,9 @@ class TestDuplicateAndMissingEntryHandling:
         ]
         assert len(matches) == 1, f"expected exactly one entry, found {len(matches)}"
 
-    def test_removing_nonexistent_mcp_server_is_a_safe_noop(self, tmp_path: Path) -> None:
-        project_root = _project(tmp_path)
-        config_path = project_root / ".codex" / "config.toml"
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        config_path.write_text("", encoding="utf-8")
-
-        result = remove_provider_mcp_server("codex", "never-existed", project_root)
-        assert result["ok"]
-        assert result["removed"] is False
+    # test_removing_nonexistent_mcp_server_is_a_safe_noop is now covered,
+    # for every mcp_config provider, by
+    # TestMcpConfigAcrossAllHarnesses.test_purge_is_idempotent.
 
     def test_removing_nonexistent_hook_is_a_safe_noop(self, tmp_path: Path, monkeypatch) -> None:
         _isolated_home(tmp_path, monkeypatch)

@@ -6,8 +6,11 @@ and max-lifetime reaping, busy rejection, dead-child failure, shutdown.
 """
 from __future__ import annotations
 
+import functools
+import multiprocessing
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -218,6 +221,36 @@ def test_concurrent_prompts_queue_fifo(rig):
     assert len(results) == 2
 
 
+def test_session_snapshot_all_reports_active_turn(rig):
+    runtime, clock, transports, tmp_path = rig
+    record = _open(runtime, tmp_path)
+    session_id = record["session-id"]
+    gate = threading.Event()
+    transports[0].block_event = gate
+
+    result: list[Any] = []
+    worker = threading.Thread(
+        target=lambda: result.append(
+            runtime.prompt_in_session(tmp_path, session_id, "snapshot", request_id="req_snap_1")
+        )
+    )
+    worker.start()
+    time.sleep(0.1)
+
+    snapshot = runtime.session_snapshot_all()
+    assert snapshot == {
+        session_id: {
+            "turn-active": True,
+            "pending-turns": 0,
+            "current-request-id": "req_snap_1",
+        }
+    }
+
+    gate.set()
+    worker.join(timeout=2)
+    assert result and result[0].stop_reason == "end_turn"
+
+
 def test_turn_queue_full_rejects(rig, tmp_path):
     clock = _Clock()
     transports: list[FakeTransport] = []
@@ -339,6 +372,7 @@ def test_api_list_and_close_sessions(rig, monkeypatch):
 
     runtime, clock, transports, tmp_path = rig
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
+    monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
 
     record = _open(runtime, tmp_path)
     listed = api.list_llm_sessions(tmp_path)
@@ -382,6 +416,38 @@ def test_session_record_validation():
     )
     assert record["idle-timeout-seconds"] == 0
     assert record["max-lifetime-seconds"] == 0
+
+
+def test_cross_process_session_turn_appends_do_not_lose_updates(tmp_path: Path) -> None:
+    """RV733: session mutation now uses the foundation StartupLock (like
+    request records), so concurrent processes recording turns on the same
+    session cannot lose an update — every request-id and the turn-count
+    both reflect all N appends."""
+    record = session_store.build_session_record(agent_profile_id="p")
+    session_store.write_session_record(tmp_path, record)
+    session_id = record["session-id"]
+    context = multiprocessing.get_context("spawn")
+    count = 12
+    processes = [
+        context.Process(
+            target=functools.partial(
+                session_store.record_session_turn,
+                tmp_path,
+                session_id,
+                f"req_{index}",
+            ),
+        )
+        for index in range(count)
+    ]
+    for process in processes:
+        process.start()
+    for process in processes:
+        process.join(timeout=20)
+
+    assert [process.exitcode for process in processes] == [0] * count
+    final = session_store.read_session_record(tmp_path, session_id)
+    assert final["turn-count"] == count
+    assert sorted(final["request-ids"]) == sorted(f"req_{index}" for index in range(count))
 
 
 def test_v1_session_record_migrates_to_v2_binding(tmp_path):
@@ -470,26 +536,25 @@ def test_closed_owned_binding_allows_later_same_ref(tmp_path):
 def test_request_record_session_field_validation():
     from audiagentic.components.agents import agents_gateway_store as store
 
-    with pytest.raises(AudiaGenticError, match="VAL-AGW-057"):
-        store.build_record(
-            agent_profile_id="p", prompt_body="x",
-            session_id="ses_1", session_keep_alive=True,
-        )
+    # session_idle_timeout without keep_alive still rejected (VAL-AGW-059)
     with pytest.raises(AudiaGenticError, match="VAL-AGW-059"):
         store.build_record(
             agent_profile_id="p", prompt_body="x",
             session_idle_timeout_seconds=60,
         )
+    # session_max_lifetime without keep_alive still rejected (VAL-AGW-061)
     with pytest.raises(AudiaGenticError, match="VAL-AGW-061"):
         store.build_record(
             agent_profile_id="p", prompt_body="x",
             session_max_lifetime_seconds=60,  # requires keep-alive
         )
+    # Negative max_lifetime rejected
     with pytest.raises(AudiaGenticError, match="VAL-AGW-061"):
         store.build_record(
             agent_profile_id="p", prompt_body="x",
             session_keep_alive=True, session_max_lifetime_seconds=-1,
         )
+    # New session with keep-alive and bounds (unchanged)
     record = store.build_record(
         agent_profile_id="p", prompt_body="x",
         session_keep_alive=True, session_idle_timeout_seconds=60,
@@ -498,6 +563,159 @@ def test_request_record_session_field_validation():
     assert record["session-keep-alive"] is True
     assert record["session-idle-timeout-seconds"] == 60
     assert record["session-max-lifetime-seconds"] == 0
+
+
+def test_session_id_with_keep_alive_allowed():
+    """session_id + session_keep_alive=true is valid: continue session and
+    leave it live after the turn."""
+    from audiagentic.components.agents import agents_gateway_store as store
+
+    record = store.build_record(
+        agent_profile_id="p", prompt_body="x",
+        session_id="ses_1", session_keep_alive=True,
+    )
+    assert record["session-id"] == "ses_1"
+    assert record["session-keep-alive"] is True
+
+
+def test_session_id_with_keep_alive_omitted_is_none():
+    """session_id without keep_alive (omitted) stores None — preserves
+    existing behavior: continued session stays live after the turn."""
+    from audiagentic.components.agents import agents_gateway_store as store
+
+    record = store.build_record(
+        agent_profile_id="p", prompt_body="x",
+        session_id="ses_1",
+    )
+    assert record["session-id"] == "ses_1"
+    assert record["session-keep-alive"] is None
+
+
+def test_session_id_with_keep_alive_false_allowed():
+    """session_id + session_keep_alive=false is valid: continue session and
+    close it after the turn if quiescent."""
+    from audiagentic.components.agents import agents_gateway_store as store
+
+    record = store.build_record(
+        agent_profile_id="p", prompt_body="x",
+        session_id="ses_1", session_keep_alive=False,
+    )
+    assert record["session-id"] == "ses_1"
+    assert record["session-keep-alive"] is False
+
+
+def test_session_id_with_keep_alive_and_bounds_allowed():
+    """session_id + keep_alive=true + bounds is valid: continue session,
+    update its lifetime policy after the turn."""
+    from audiagentic.components.agents import agents_gateway_store as store
+
+    record = store.build_record(
+        agent_profile_id="p", prompt_body="x",
+        session_id="ses_1",
+        session_keep_alive=True,
+        session_idle_timeout_seconds=120,
+        session_max_lifetime_seconds=3600,
+    )
+    assert record["session-id"] == "ses_1"
+    assert record["session-keep-alive"] is True
+    assert record["session-idle-timeout-seconds"] == 120
+    assert record["session-max-lifetime-seconds"] == 3600
+
+
+def test_session_id_with_keep_alive_false_and_bounds_rejected():
+    """session_id + keep_alive=false + bounds is rejected: without
+    keep-alive, no lifetime policy update happens after the turn, so bounds
+    are meaningless."""
+    from audiagentic.components.agents import agents_gateway_store as store
+
+    with pytest.raises(AudiaGenticError, match="VAL-AGW-059"):
+        store.build_record(
+            agent_profile_id="p", prompt_body="x",
+            session_id="ses_1",
+            session_keep_alive=False,
+            session_idle_timeout_seconds=60,
+        )
+    with pytest.raises(AudiaGenticError, match="VAL-AGW-061"):
+        store.build_record(
+            agent_profile_id="p", prompt_body="x",
+            session_id="ses_1",
+            session_keep_alive=False,
+            session_max_lifetime_seconds=3600,
+        )
+
+
+def test_update_session_bounds_on_live_handle(rig):
+    """update_session_bounds mutates the in-memory handle's timeout fields."""
+    runtime, clock, transports, tmp_path = rig
+    record = _open(runtime, tmp_path, idle_timeout_seconds=100, max_lifetime_seconds=200)
+    session_id = record["session-id"]
+
+    # Verify initial bounds
+    snapshot = runtime.session_snapshot_all()
+    assert snapshot[session_id]  # handle exists
+
+    # Update bounds via runtime API
+    runtime.update_session_bounds(
+        session_id,
+        idle_timeout_seconds=500,
+        max_lifetime_seconds=1000,
+    )
+
+    # Verify the handle's bounds changed by checking reaping behavior.
+    # After update, idle timeout is 500 (was 100). Advance clock past 200
+    # but not past 500 — session should still be alive.
+    clock.now += 200  # past original 100s idle, within new 500s
+    time.sleep(0.3)  # several reaper sweeps
+    assert runtime.live_session_ids() == [session_id]
+
+    runtime.close_session(tmp_path, session_id)
+
+
+def test_update_session_bounds_unknown_session_raises(rig):
+    """update_session_bounds on a non-live session raises RES-AGW-003."""
+    runtime, clock, transports, tmp_path = rig
+    with pytest.raises(AudiaGenticError, match="RES-AGW-003"):
+        runtime.update_session_bounds("ses_nonexistent", idle_timeout_seconds=100)
+
+
+def test_session_is_quiescent_true_when_no_turns(rig):
+    """session_is_quiescent returns True when no turn is active or queued."""
+    runtime, clock, transports, tmp_path = rig
+    record = _open(runtime, tmp_path)
+    session_id = record["session-id"]
+    assert runtime.session_is_quiescent(session_id) is True
+    runtime.close_session(tmp_path, session_id)
+
+
+def test_session_is_quiescent_false_during_active_turn(rig):
+    """session_is_quiescent returns False while a turn is running."""
+    runtime, clock, transports, tmp_path = rig
+    record = _open(runtime, tmp_path)
+    session_id = record["session-id"]
+    gate = threading.Event()
+    transports[0].block_event = gate
+
+    def _turn():
+        runtime.prompt_in_session(tmp_path, session_id, "busy")
+
+    worker = threading.Thread(target=_turn)
+    worker.start()
+    time.sleep(0.1)  # turn is in flight
+    assert runtime.session_is_quiescent(session_id) is False
+
+    gate.set()
+    worker.join(timeout=2)
+    # After turn completes, should be quiescent again
+    time.sleep(0.05)
+    assert runtime.session_is_quiescent(session_id) is True
+    runtime.close_session(tmp_path, session_id)
+
+
+def test_session_is_quiescent_nonexistent_returns_true(rig):
+    """session_is_quiescent returns True for a session that isn't live —
+    treating it as already closed for post-turn close purposes."""
+    runtime, clock, transports, tmp_path = rig
+    assert runtime.session_is_quiescent("ses_nonexistent") is True
 
 
 def test_session_lifecycle_events_published(rig, monkeypatch):
@@ -738,9 +956,9 @@ def test_request_cancel_interrupts_running_turn(rig):
     runtime.close_session(tmp_path, session_id)
 
 
-def test_silence_watchdog_fails_stalled_turn(rig):
+def test_silence_watchdog_fails_silent_turn_as_policy_timeout(rig):
     """With an explicit silence bound, a turn producing no transport events
-    is proven stalled and the reaper fails the session."""
+    hits a configured policy timeout and the reaper fails the session."""
     runtime, clock, transports, tmp_path = rig
     record = _open(runtime, tmp_path, turn_silence_timeout_seconds=5.0, turn_timeout_seconds=0)
     session_id = record["session-id"]
@@ -760,4 +978,263 @@ def test_silence_watchdog_fails_stalled_turn(rig):
     worker.join(timeout=5.0)
     stored = session_store.read_session_record(tmp_path, session_id)
     assert stored["state"] == "failed"
-    assert stored["close-reason"] == "turn-stalled"
+    assert stored["close-reason"] == "turn-silence-timeout"
+
+
+# AS34: stale persisted active session diagnostics.
+
+def test_stale_persisted_session_lists_not_live_no_runtime_started(tmp_path, monkeypatch):
+    """A persisted active session with no live runtime lists as not-live with a
+    stale diagnostic flag, and listing does NOT start a new runtime."""
+    from audiagentic.components.agents import agents_gateway_api as api
+    from audiagentic.components.agents import agents_gateway_sessions as sessions_module
+
+    # No runtime — ensure by resetting the singleton.
+    saved_runtime = getattr(sessions_module, "_SESSION_RUNTIME", None)
+    try:
+        sessions_module._SESSION_RUNTIME = None  # type: ignore[attr-defined]
+
+        # Persisted active record — no live handle in this process
+        record = session_store.build_session_record(agent_profile_id="profile-1")
+        stale_id = record["session-id"]
+        session_store.write_session_record(tmp_path, record)
+
+        listed = api.list_llm_sessions(tmp_path)
+        row = [s for s in listed if s["session-id"] == stale_id][0]
+        assert row["live"] is False
+        # A stale persisted active session should carry a diagnostic flag.
+        assert row.get("runtime-state") == "stale-non-live"
+
+        # The stored record must remain unchanged (no mutation of stale rows)
+        stored = session_store.read_session_record(tmp_path, stale_id)
+        assert stored["state"] == "active"
+
+        # Listing did not start a runtime
+        assert sessions_module.peek_session_runtime() is None
+    finally:
+        if saved_runtime is not None:
+            sessions_module._SESSION_RUNTIME = saved_runtime  # type: ignore[attr-defined]
+
+
+def test_live_session_lists_without_stale_flag(rig, monkeypatch):
+    """A live active session from the runtime lists as live=True and does NOT
+    carry a stale diagnostic flag."""
+    from audiagentic.components.agents import agents_gateway_api as api
+    from audiagentic.components.agents import agents_gateway_sessions as sessions_module
+
+    runtime, clock, transports, tmp_path = rig
+    monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
+    monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
+
+    record = _open(runtime, tmp_path)
+    session_id = record["session-id"]
+
+    listed = api.list_llm_sessions(tmp_path)
+    row = [s for s in listed if s["session-id"] == session_id][0]
+    assert row["live"] is True
+    # Live sessions must not carry a stale flag.
+    assert row.get("runtime-state") != "stale-non-live"
+
+
+def test_gateway_overview_active_count_excludes_stale(rig, monkeypatch):
+    """gateway_overview counts only live sessions in active-count, not stale
+    persisted active rows."""
+    from audiagentic.components.agents import agents_gateway_api as api
+    from audiagentic.components.agents import agents_gateway_sessions as sessions_module
+
+    runtime, clock, transports, tmp_path = rig
+    monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
+    monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
+
+    # One live session from the runtime
+    live_record = _open(runtime, tmp_path)
+
+    # One stale persisted active session (no live handle)
+    stale_record = session_store.build_session_record(agent_profile_id="profile-1")
+    session_store.write_session_record(tmp_path, stale_record)
+
+    overview = api.gateway_overview(tmp_path)
+    assert overview["sessions"]["active-count"] == 1  # only the live one
+    # The stale session should appear in the detail list but not count as active
+    session_ids = [s["session-id"] for s in overview["sessions"]["sessions"]]
+    assert live_record["session-id"] in session_ids
+    assert stale_record["session-id"] in session_ids
+
+    # Clean up
+    runtime.close_session(tmp_path, live_record["session-id"])
+
+
+def test_list_sessions_no_provider_ref_leak(rig, monkeypatch):
+    """Public session rows must not leak provider-session-ref or full
+    provider-ref-key; only the prefix is allowed (binding projection)."""
+    from audiagentic.components.agents import agents_gateway_api as api
+    from audiagentic.components.agents import agents_gateway_sessions as sessions_module
+
+    runtime, clock, transports, tmp_path = rig
+    monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
+    monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
+
+    record = _open(runtime, tmp_path)
+    listed = api.list_llm_sessions(tmp_path)
+    row = [s for s in listed if s["session-id"] == record["session-id"]][0]
+
+    # repr of the entire listing must not contain provider-session-ref or
+    # the full provider-ref-key hash (only the 12-char prefix is allowed).
+    listing_repr = repr(listed)
+    assert "provider-session-ref" not in listing_repr
+    # The full key is 64 hex chars; if it leaked, we'd see >12 hex chars.
+    full_key = record["binding"]["provider-ref-key"]
+    assert full_key not in listing_repr
+
+    # Only the prefix should be present
+    binding_row = row.get("binding", {})
+    assert "provider-ref-key-prefix" in binding_row
+    assert len(binding_row["provider-ref-key-prefix"]) == 12
+
+
+# AS35: close result redaction.
+
+
+def test_api_close_live_session_result_is_redacted(rig, monkeypatch):
+    """Live close returns public session shape: no provider-session-ref or full
+    provider-ref-key in the close result, but useful fields are retained."""
+    from audiagentic.components.agents import agents_gateway_api as api
+    from audiagentic.components.agents import agents_gateway_sessions as sessions_module
+
+    runtime, clock, transports, tmp_path = rig
+    monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
+
+    record = _open(runtime, tmp_path)
+    session_id = record["session-id"]
+
+    closed = api.close_llm_session(tmp_path, session_id)
+    assert closed["state"] == "closed"
+    assert closed["close-reason"] == "client-request"
+    assert closed["session-id"] == session_id
+    assert closed["agent-profile-id"] == "profile-1"
+
+    # Redaction: no provider-session-ref or full provider-ref-key in output
+    close_repr = repr(closed)
+    assert "provider-session-ref" not in close_repr
+    full_key = record["binding"]["provider-ref-key"]
+    assert full_key not in close_repr
+
+    # Public binding projection is present with prefix
+    pub_binding = closed.get("binding", {})
+    assert "provider-ref-key-prefix" in pub_binding
+    assert len(pub_binding["provider-ref-key-prefix"]) == 12
+
+
+def test_api_close_durable_record_retains_protected_binding(rig, monkeypatch):
+    """After close, the durable persisted session record still carries the
+    protected binding internals for ownership/recovery (AS35 requirement 4)."""
+    from audiagentic.components.agents import agents_gateway_api as api
+    from audiagentic.components.agents import agents_gateway_sessions as sessions_module
+
+    runtime, clock, transports, tmp_path = rig
+    monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
+
+    record = _open(runtime, tmp_path)
+    session_id = record["session-id"]
+    original_ref = record["binding"]["provider-session-ref"]
+
+    closed = api.close_llm_session(tmp_path, session_id)
+    # Public result is redacted
+    assert "provider-session-ref" not in repr(closed)
+
+    # Durable record retains protected binding
+    durable = session_store.read_session_record(tmp_path, session_id)
+    assert durable["binding"]["provider-session-ref"] == original_ref
+    assert durable["binding"]["provider-ref-key"]  # full key present
+
+
+def test_api_close_idempotent_terminal_result_is_redacted(rig, monkeypatch):
+    """Idempotent close of an already-terminal session returns a redacted
+    public result (AS35 requirement 5 — idempotent path)."""
+    from audiagentic.components.agents import agents_gateway_api as api
+    from audiagentic.components.agents import agents_gateway_sessions as sessions_module
+
+    runtime, clock, transports, tmp_path = rig
+    monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
+
+    record = _open(runtime, tmp_path)
+    session_id = record["session-id"]
+
+    # Close first time
+    api.close_llm_session(tmp_path, session_id)
+    full_key = record["binding"]["provider-ref-key"]
+
+    # Idempotent second close reads from durable store.
+    again = api.close_llm_session(tmp_path, session_id)
+    assert again["state"] == "closed"
+    again_repr = repr(again)
+    assert "provider-session-ref" not in again_repr
+    assert full_key not in again_repr
+
+
+def test_api_close_orphaned_stale_result_is_redacted(rig, monkeypatch):
+    """Close of a stale non-live active session (orphaned by restart) returns
+    a redacted public result with state=failed/close-reason=orphaned (AS35
+    requirement 5 - stale non-live active path)."""
+    from audiagentic.components.agents import agents_gateway_api as api
+    from audiagentic.components.agents import agents_gateway_sessions as sessions_module
+
+    runtime, clock, transports, tmp_path = rig
+    monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
+
+    # Build a fresh persisted active record (no live handle) to simulate orphan
+    orphan_record = session_store.build_session_record(
+        agent_profile_id="profile-1",
+        provider_id="opencode",
+        provider_session_ref="orphan-ref",
+    )
+    orphan_id = orphan_record["session-id"]
+    full_key = orphan_record["binding"]["provider-ref-key"]
+    session_store.write_session_record(tmp_path, orphan_record)
+
+    closed = api.close_llm_session(tmp_path, orphan_id)
+    assert closed["state"] == "failed"
+    assert closed["close-reason"] == "orphaned"
+    # Redacted public result
+    close_repr = repr(closed)
+    assert "provider-session-ref" not in close_repr
+    assert full_key not in close_repr
+
+    # Durable record still has protected binding for recovery
+    durable = session_store.read_session_record(tmp_path, orphan_id)
+    assert durable["binding"]["provider-session-ref"] == "orphan-ref"
+
+
+def test_latest_turn_projection_excludes_native_topic(tmp_path: Path) -> None:
+    """native-topic is not public; latest_turn_projection must not leak it."""
+    import json
+
+    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+    from audiagentic.components.agents.agents_paths import gateway_session_timeline_path
+
+    # Build a minimal session record so timeline path exists
+    record = session_store.build_session_record(agent_profile_id="default")
+    session_id = record["session-id"]
+    session_store.write_session_record(tmp_path, record)
+
+    # Write a turn timeline entry with native-topic (NDJSON format)
+    timeline_path = gateway_session_timeline_path(tmp_path, session_id)
+    entry = {
+        "event": "session.turn.started",
+        "state": "active",
+        "timestamp": "2026-07-19T00:00:00Z",
+        "attributes": {
+            "request-id": "req_test",
+            "native-topic": "provider.internal.secret-topic",
+            "turn-count": 1,
+        },
+    }
+    timeline_path.write_text(json.dumps(entry), encoding="utf-8")
+
+    projected = session_store.latest_turn_projection(tmp_path, session_id, request_id="req_test")
+    assert projected is not None
+    assert projected["event"] == "session.turn.started"
+    assert projected["turn-count"] == 1
+    # native-topic must not leak
+    assert "native-topic" not in projected
+    assert "provider.internal.secret-topic" not in repr(projected)
