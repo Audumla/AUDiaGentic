@@ -3,9 +3,8 @@ id: <ID>
 order: <N>
 plan: plan-<plan-name>
 state: not_done
-validate-first: true
-priority: <P0|P1|P2|P3|MEDIUM|HIGH|INVESTIGATE>
-complexity: <simple|mid|complex>
+breadth: <small|medium|large>
+skill: <lite|medium|high>
 ---
 
 # <Title>
@@ -13,6 +12,10 @@ complexity: <simple|mid|complex>
 ## Description
 
 ## Steps
+
+## Detailed Solution & Technical Design
+
+## Code Samples & Guidance
 
 ## Files
 

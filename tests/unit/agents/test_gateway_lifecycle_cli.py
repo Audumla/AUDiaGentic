@@ -69,8 +69,14 @@ class FakeRecoverUnprovable:
     def __init__(self) -> None:
         self.calls: list[dict] = []
 
-    def __call__(self, *, confirm: bool = False, reason: str | None = None) -> dict:
-        self.calls.append({"confirm": confirm, "reason": reason})
+    def __call__(
+        self,
+        *,
+        service_root: Path | None = None,
+        confirm: bool = False,
+        reason: str | None = None,
+    ) -> dict:
+        self.calls.append({"service_root": service_root, "confirm": confirm, "reason": reason})
         if not confirm:
             from audiagentic.components.agents.agents_gateway_lifecycle import (
                 lifecycle_validation_error,
@@ -229,7 +235,7 @@ class TestGatewayRecover:
             rc = cmd_gateway_recover(args, tmp_path)
 
         assert rc == 0
-        assert fake_recover.calls == [{"confirm": True, "reason": "stale-owner"}]
+        assert fake_recover.calls == [{"service_root": tmp_path, "confirm": True, "reason": "stale-owner"}]
         out = json.loads(capsys.readouterr().out)
         assert out["recovered"] is True
         assert out["diagnostics"]["failure-class"] == "unprovable-owner-recovered"

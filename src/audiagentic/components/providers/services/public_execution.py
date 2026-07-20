@@ -10,7 +10,13 @@ from audiagentic.components.providers.contracts.provider_execution import (
     ProviderExecutionResult,
     ProviderIsolationTier,
 )
+from audiagentic.components.providers.contracts.session_surface import SurfaceHint
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.transports.session_surface import (
+    PreparedSessionTransport,
+    SessionSurfaceRef,
+    SurfaceValidationState,
+)
 
 
 def get_provider_execution_isolation_tier(provider_id: str) -> ProviderIsolationTier:
@@ -223,10 +229,174 @@ def prepare_provider_acp_launch(
     )
 
 
+def _build_transport_from_launch(
+    project_root: Path,
+    launch: Any,
+) -> Any:
+    """Wrap an AcpLaunch in the private AcpAgentSessionTransport adapter.
+
+    Returns a neutral :class:`AcpAgentSessionTransport` instance — no process is
+    launched at this stage. The caller must call ``open()`` to start the child.
+
+    This is provider-side factory composition: it uses the private
+    :class:`AcpAgentSessionTransport` wrapper that maps ACP frames to bounded
+    :class:`TransportObservation` values.
+
+    Args:
+        project_root: Working directory for the agent child process.
+        launch: An :class:`AcpLaunch` instance from the provider adapter's
+            ``build_acp_launch`` function.
+
+    Returns:
+        An :class:`AcpAgentSessionTransport` (implements ``AgentSessionTransport``).
+    """
+    from audiagentic.foundation.transports.acp import AcpAgentSessionTransport
+
+    return AcpAgentSessionTransport(
+        launch,
+        cwd=project_root,
+    )
+
+
+def prepare_provider_session_transport(
+    project_root: Path,
+    *,
+    provider_id: str,
+    surface_hint: SurfaceHint,
+    model_id: str | None = None,
+    model_alias: str | None = None,
+    request_runtime_root: Path | None = None,
+) -> PreparedSessionTransport:
+    """Resolve a session-surface snapshot and build the transport factory.
+
+    Resolves the AS29 surface exactly once, then wires provider-local factory
+    composition for supported ACP surfaces. Returns a typed
+    :class:`PreparedSessionTransport` carrying:
+
+    - ``surface`` — the same frozen :class:`ResolvedSessionSurface` snapshot.
+    - ``effective_provider_ref`` — the resolved :class:`SessionSurfaceRef`.
+    - ``transport`` — an :class:`AcpAgentSessionTransport` (implements
+      :class:`AgentSessionTransport`) for supported ACP surfaces, or ``None``
+      when the surface is unsupported.
+
+    **Unsupported-surface contract:** any failure path — disabled provider,
+    missing/invalid factory, version/platform mismatch, unvalidated high-level,
+    blocked declaration — returns the unsupported snapshot with
+    ``transport=None``. No process is ever launched and no fallback to another
+    surface occurs.
+
+    Adapter refs are resolved provider-side only (existence check) and never
+    returned in the snapshot or transport.
+
+    Args:
+        project_root: Explicit project root for provider enablement checks.
+        provider_id: Canonical provider identifier.
+        surface_hint: Typed request carrying surface id and optional
+            version/platform hints.
+        model_id: Optional model id for launch preparation.
+        model_alias: Optional model alias for launch preparation.
+        request_runtime_root: Optional runtime root for provider-local
+            environment setup (e.g. Pi session dirs).
+
+    Returns:
+        A frozen :class:`PreparedSessionTransport` instance.
+    """
+    from audiagentic.components.providers.services.session_surface_resolution import (
+        resolve_session_surface,
+    )
+
+    # ── Resolve the surface exactly once (AS29 resolver) ──────────────
+    surface = resolve_session_surface(project_root, provider_id, surface_hint)
+
+    effective_ref = SessionSurfaceRef(
+        provider_id=provider_id,
+        surface_id=surface_hint.surface_id,
+        resolved_version=surface.ref.resolved_version,
+    )
+
+    # ── Unsupported: return with transport=None (never launch) ─────────
+    if surface.validation.state == SurfaceValidationState.UNSUPPORTED:
+        return PreparedSessionTransport(
+            transport=None,
+            surface=surface,
+            effective_provider_ref=effective_ref,
+        )
+
+    # ── Supported ACP surface: wire provider-local factory composition ──
+    from audiagentic.components.providers.services.execution import (
+        load_acp_launch_builder,
+    )
+    from audiagentic.components.providers.services.models import resolve_model_selection
+    from audiagentic.foundation.transports.acp import AcpLaunch
+
+    builder = load_acp_launch_builder(provider_id)
+    if builder is None:
+        # No factory — return unsupported snapshot with transport=None.
+        # The surface was declared supported but the factory is missing at
+        # runtime (possible if adapter module was removed or renamed).
+        unsupported_surface = surface  # reuse same snapshot
+        return PreparedSessionTransport(
+            transport=None,
+            surface=unsupported_surface,
+            effective_provider_ref=effective_ref,
+        )
+
+    # Resolve the model for launch preparation.
+    runtime = get_provider_runtime_config_state(project_root, provider_id)
+    provider_config = runtime["config"]
+    if not isinstance(provider_config, dict):
+        provider_config = {}
+    model = resolve_model_selection(
+        provider_id=provider_id,
+        provider_config=provider_config,
+        job_request={"model-id": model_id, "model-alias": model_alias},
+    )
+    resolved_model_id = str(model.get("model-id") or model.get("resolved") or "")
+    if not resolved_model_id:
+        # Could not resolve a model — return unsupported snapshot.
+        return PreparedSessionTransport(
+            transport=None,
+            surface=surface,
+            effective_provider_ref=effective_ref,
+        )
+
+    # Build the ACP launch via the provider adapter's build_acp_launch.
+    launch_kwargs: dict[str, Any] = {"model_id": resolved_model_id}
+    if request_runtime_root is not None:
+        launch_kwargs["request_runtime_root"] = request_runtime_root
+    try:
+        acp_launch = builder(project_root, **launch_kwargs)
+    except Exception:
+        # Factory error — return unsupported snapshot with transport=None.
+        return PreparedSessionTransport(
+            transport=None,
+            surface=surface,
+            effective_provider_ref=effective_ref,
+        )
+
+    if not isinstance(acp_launch, AcpLaunch):
+        # Neutral protocol violation — the factory must return an AcpLaunch.
+        return PreparedSessionTransport(
+            transport=None,
+            surface=surface,
+            effective_provider_ref=effective_ref,
+        )
+
+    # Wrap in private AcpAgentSessionTransport (AS28 slice 2 adapter).
+    transport = _build_transport_from_launch(project_root, acp_launch)
+
+    return PreparedSessionTransport(
+        transport=transport,
+        surface=surface,
+        effective_provider_ref=effective_ref,
+    )
+
+
 __all__ = [
     "execute_provider_turn",
     "get_provider_execution_isolation_tier",
     "get_provider_runtime_config_state",
     "prepare_provider_execution_environment",
     "prepare_provider_acp_launch",
+    "prepare_provider_session_transport",
 ]

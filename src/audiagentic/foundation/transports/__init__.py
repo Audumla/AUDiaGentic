@@ -1,5 +1,84 @@
 """Provider-neutral agent transport protocols."""
 
-from .acp import AcpEvent, AcpLaunch, AcpResult, AcpSessionTransport, run_acp_prompt
+from .acp import (
+    AcpEvent,
+    AcpLaunch,
+    AcpResult,
+    AcpSessionTransport,
+    run_acp_prompt,
+)
+from .agent_session import (
+    AgentSessionTransport,
+    ControlDisposition,
+    CorrelationQuality,
+    ObservationSink,
+    SessionControlAction,
+    SessionControlRequest,
+    SessionControlResult,
+    SessionOpenResult,
+    SessionPrompt,
+    SessionTurnResult,
+    TransportObservation,
+    TransportObservationKind,
+)
+from .session_surface import (
+    ContentChannelCapability,
+    ContentChannelId,
+    ContentStreamCapabilities,
+    ControlSupport,
+    EffectiveObservationLevel,
+    LifecycleInstallation,
+    LifecycleObservationCapabilities,
+    LifecycleSource,
+    PlatformEvidence,
+    PreparedSessionTransport,
+    ResolvedSessionSurface,
+    SessionIdentityCapabilities,
+    SessionIdentityOperation,
+    SessionMappingFacts,
+    SessionOwnershipMode,
+    SessionSurfaceRef,
+    SurfaceValidation,
+    SurfaceValidationState,
+)
 
-__all__ = ["AcpEvent", "AcpLaunch", "AcpResult", "AcpSessionTransport", "run_acp_prompt"]
+__all__ = [
+    # ACP transport (AcpAgentSessionTransport is private to acp.py / provider adapters)
+    "AcpEvent",
+    "AcpLaunch",
+    "AcpResult",
+    "AcpSessionTransport",
+    "run_acp_prompt",
+    # AS28 neutral agent-session contract
+    "AgentSessionTransport",
+    "ControlDisposition",
+    "CorrelationQuality",
+    "ObservationSink",
+    "SessionControlAction",
+    "SessionControlRequest",
+    "SessionControlResult",
+    "SessionOpenResult",
+    "SessionPrompt",
+    "SessionTurnResult",
+    "TransportObservation",
+    "TransportObservationKind",
+    # AS29 session-surface value types
+    "ControlSupport",
+    "PreparedSessionTransport",
+    "ContentChannelCapability",
+    "ContentChannelId",
+    "ContentStreamCapabilities",
+    "EffectiveObservationLevel",
+    "LifecycleInstallation",
+    "LifecycleObservationCapabilities",
+    "LifecycleSource",
+    "PlatformEvidence",
+    "ResolvedSessionSurface",
+    "SessionIdentityCapabilities",
+    "SessionIdentityOperation",
+    "SessionMappingFacts",
+    "SessionOwnershipMode",
+    "SessionSurfaceRef",
+    "SurfaceValidation",
+    "SurfaceValidationState",
+]

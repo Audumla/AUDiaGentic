@@ -1,0 +1,21 @@
+FROM audia-test-base:latest
+
+WORKDIR /app
+ENV AUDIAGENTIC_DOCKER_TESTS=1
+ENV AUDIAGENTIC_GATEWAY_PI_SMOKE_DOCKER=1
+ENV PYTHONPATH="/app/src"
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+
+# SH16: real npm-installed Pi CLI + real embedded llama-server rig + real
+# local GGUF model, dispatched through the gateway's disposable full-isolation
+# worker subprocess. No external API keys, no mocked HTTP rig — complements
+# Dockerfile.gateway-opencode (real external-CLI-provider happy path) with a
+# provider that instead needs a fully local model backend.
+#
+# Build:
+#   docker build -f tests/docker/Dockerfile.gateway-pi-smoke -t audiagentic-gateway-pi-smoke:local .
+# Run:
+#   docker run --rm audiagentic-gateway-pi-smoke:local
+COPY . /app
+
+CMD ["bash", "-c", "uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp,test]' && /venv/bin/pytest tests/integration/agents/test_gateway_pi_smoke.py -q --tb=short --timeout=900"]

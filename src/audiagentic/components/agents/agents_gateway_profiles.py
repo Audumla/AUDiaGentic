@@ -200,7 +200,6 @@ class InMemoryGatewayRegistry:
 
     def __init__(self) -> None:
         self._profiles: dict[str, _GatewayProfileDef] = {}
-        self._versions: dict[str, int] = {}
 
     def register(
         self,
@@ -213,16 +212,32 @@ class InMemoryGatewayRegistry:
         queue_max_size: int = 8,
         execution_params: Mapping[str, Any] | None = None,
     ) -> None:
-        """Register or update a gateway-owned profile definition."""
-        self._versions[profile_id] = self._versions.get(profile_id, 0) + 1
+        """Register or update a gateway-owned profile definition.
+
+        ``generation`` is content-derived (a digest of provider/model/limits
+        and non-secret execution params) rather than an incrementing counter:
+        callers such as ``load_gateway_registry_from_config`` build a fresh
+        registry instance on every reload, so a per-instance counter would
+        reset to the same value every time and generation would never
+        actually change across a config edit — silently breaking the
+        stale-generation rejection (CON-AGW-101) this registry exists to
+        support. A content digest changes exactly when the config changes,
+        and is stable (idempotent) when it doesn't.
+        """
+        params = execution_params or {}
         if generation is None:
             gen_payload = json.dumps(
-                {"profile_id": profile_id, "provider_id": provider_id, "version": self._versions[profile_id]},
+                {
+                    "profile_id": profile_id,
+                    "provider_id": provider_id,
+                    "model_id": model_id,
+                    "max_concurrency": max_concurrency,
+                    "queue_max_size": queue_max_size,
+                    "params_digest": _config_digest(params),
+                },
                 sort_keys=True, separators=(",", ":"),
             )
             generation = "gen_" + hashlib.sha256(gen_payload.encode("utf-8")).hexdigest()[:12]
-
-        params = execution_params or {}
 
         self._profiles[profile_id] = _GatewayProfileDef(
             provider_id=provider_id,

@@ -19,6 +19,12 @@ dependencies:
     uninstall-package: ruff
     requires:
       min-version: "0.4.0"
+pre-commit-hooks:
+  check:
+    - ruff,check
+    - --fix
+  format:
+    - ruff,format
 options-schema:
   server-settings:
     type: object

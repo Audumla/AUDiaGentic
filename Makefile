@@ -6,7 +6,10 @@
         test-docker test-lsp-docker test-packaging-docker \
         test-providers-docker test-providers-real-docker test-provider-real-one \
         test-provider-lifecycle-docker build-base build-test build-lsp-install \
-        build-packaging build-provider-lifecycle clean-docker
+        build-packaging build-provider-lifecycle clean-docker \
+        build-gateway-crash-matrix build-gateway-opencode build-gateway-concurrency build-gateway-pi-smoke \
+        test-gateway-crash-matrix-docker test-gateway-opencode-docker test-gateway-concurrency-docker \
+        test-gateway-pi-smoke-docker
 
 PYTHON     ?= python3
 PYTEST     ?= $(PYTHON) -m pytest
@@ -14,6 +17,10 @@ BASE_IMAGE  = audia-test-base:latest
 TEST_IMAGE  = audiagentic-test:latest
 LSP_IMAGE   = audiagentic-lsp-install-test:latest
 PROVIDER_LIFECYCLE_IMAGE = audiagentic-provider-lifecycle-e2e:latest
+GATEWAY_CRASH_MATRIX_IMAGE = audiagentic-gateway-crash-matrix:local
+GATEWAY_OPENCODE_IMAGE = audiagentic-gateway-opencode:local
+GATEWAY_CONCURRENCY_IMAGE = audiagentic-gateway-concurrency:local
+GATEWAY_PI_SMOKE_IMAGE = audiagentic-gateway-pi-smoke:local
 
 # On Windows with Git Bash / MSYS2, Docker Desktop requires Windows-style paths
 # for volume mounts (e.g. C:/path, not /c/path). cygpath -m converts MSYS → mixed.
@@ -35,11 +42,19 @@ DOCKER_MOUNT := $(shell cygpath -m "$(CURDIR)" 2>/dev/null || pwd)
 	@echo "  test-provider-real-one PROVIDER=<id>  Run one real provider CLI test in isolated docker"
 	@echo "  test-provider-lifecycle-docker Run provider lifecycle/Hindsight/prompt-launch docker image"
 	@echo "  test-lsp-docker      Run LSP installation test in docker"
+	@echo "  test-gateway-crash-matrix-docker Run SH07 real-subprocess crash/recovery matrix in docker"
+	@echo "  test-gateway-opencode-docker    Run real npm-CLI-provider gateway dispatch (dynamic discovery) in docker"
+	@echo "  test-gateway-concurrency-docker Run real concurrent gateway load/negative-path suite in docker"
+	@echo "  test-gateway-pi-smoke-docker    Run real Pi CLI + embedded rig gateway dispatch (SH16) in docker"
 	@echo "  build-base           Build audia-test-base image"
 	@echo "  build-test           Build audiagentic-test image (requires base)"
 	@echo "  build-lsp-install    Build LSP install test image (requires base)"
 	@echo "  build-packaging      Build clean-room packaging image"
 	@echo "  build-provider-lifecycle Build provider lifecycle docker image"
+	@echo "  build-gateway-crash-matrix  Build gateway crash-matrix docker image"
+	@echo "  build-gateway-opencode      Build gateway real-CLI-provider docker image"
+	@echo "  build-gateway-concurrency   Build gateway concurrency docker image"
+	@echo "  build-gateway-pi-smoke      Build gateway Pi smoke docker image"
 	@echo "  clean-docker         Remove all audia test images"
 
 # ── Consolidated entrypoint ──────────────────────────────────────────────────
@@ -91,6 +106,18 @@ build-packaging:
 build-provider-lifecycle: build-base
 	docker build -f tests/docker/Dockerfile.provider-lifecycle-e2e -t $(PROVIDER_LIFECYCLE_IMAGE) .
 
+build-gateway-crash-matrix: build-base
+	docker build -f tests/docker/Dockerfile.gateway-crash-matrix -t $(GATEWAY_CRASH_MATRIX_IMAGE) .
+
+build-gateway-opencode: build-base
+	docker build -f tests/docker/Dockerfile.gateway-opencode -t $(GATEWAY_OPENCODE_IMAGE) .
+
+build-gateway-concurrency: build-base
+	docker build -f tests/docker/Dockerfile.gateway-concurrency -t $(GATEWAY_CONCURRENCY_IMAGE) .
+
+build-gateway-pi-smoke: build-base
+	docker build -f tests/docker/Dockerfile.gateway-pi-smoke -t $(GATEWAY_PI_SMOKE_IMAGE) .
+
 # ── Docker test run targets ──────────────────────────────────────────────────
 
 # Runs the whole CLEAN, non-mutating suite inside the standard test image
@@ -129,6 +156,29 @@ test-provider-lifecycle-docker: build-provider-lifecycle
 test-lsp-docker: build-lsp-install
 	docker run --rm -v "$(DOCKER_MOUNT):/app" $(LSP_IMAGE)
 
+# SH07 real-subprocess crash-matrix: kills a real gateway service process at
+# specific control-plane phases and proves recovery on restart.
+test-gateway-crash-matrix-docker: build-gateway-crash-matrix
+	docker run --rm $(GATEWAY_CRASH_MATRIX_IMAGE)
+
+# Real npm-CLI-provider install + real gateway dispatch. Provider(s) covered
+# are discovered dynamically (npm-installable + model-projection-capable),
+# not hardcoded — see tests/integration/agents/gateway_docker_harness.py.
+test-gateway-opencode-docker: build-gateway-opencode
+	docker run --rm $(GATEWAY_OPENCODE_IMAGE)
+
+# Real concurrent load against a real gateway subprocess: max-concurrency
+# saturation, cross-project lane sharing, queue-max-size rejection,
+# reload-vs-load races, cancel-vs-concurrent-dispatch.
+test-gateway-concurrency-docker: build-gateway-concurrency
+	docker run --rm $(GATEWAY_CONCURRENCY_IMAGE)
+
+# SH16: real npm-installed Pi CLI + real embedded llama-server rig + real
+# local GGUF model, dispatched through the gateway's disposable full-isolation
+# worker subprocess.
+test-gateway-pi-smoke-docker: build-gateway-pi-smoke
+	docker run --rm $(GATEWAY_PI_SMOKE_IMAGE)
+
 # Shell stdout capture on Linux is now covered by the clean suite image
 # (run_suite.sh runs the test_steps.py shell case inside Linux). The host-side
 # e2e wrapper invokes that same image; no dedicated shell image is needed.
@@ -136,4 +186,5 @@ test-lsp-docker: build-lsp-install
 # ── Cleanup ──────────────────────────────────────────────────────────────────
 
 clean-docker:
-	-docker rmi $(BASE_IMAGE) $(TEST_IMAGE) $(LSP_IMAGE) $(PACKAGING_IMAGE) $(PROVIDER_LIFECYCLE_IMAGE) 2>/dev/null || true
+	-docker rmi $(BASE_IMAGE) $(TEST_IMAGE) $(LSP_IMAGE) $(PACKAGING_IMAGE) $(PROVIDER_LIFECYCLE_IMAGE) \
+		$(GATEWAY_CRASH_MATRIX_IMAGE) $(GATEWAY_OPENCODE_IMAGE) $(GATEWAY_CONCURRENCY_IMAGE) $(GATEWAY_PI_SMOKE_IMAGE) 2>/dev/null || true

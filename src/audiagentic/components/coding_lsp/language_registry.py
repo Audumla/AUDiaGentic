@@ -10,6 +10,7 @@ installation.
 extensions, detection markers, LSP language IDs, and probe/install recipes are
 LSP-domain facts rather than foundation feature fields.
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -46,6 +47,7 @@ class LanguageDependency:
     foundation dependency workflow consumes: probe + toolchain/package or
     via/platform-fallback, optional display-name/uninstall-package/requires.
     """
+
     id: str
     cfg: dict[str, Any]
 
@@ -63,6 +65,7 @@ class LanguageSpec:
     dependency: LanguageDependency | None = None
     settings: dict[str, Any] = field(default_factory=dict)
     options_schema: dict[str, OptionSchema] = field(default_factory=dict)
+    pre_commit_hooks: dict[str, list[str]] | None = None
 
 
 def _is_language_feature(data: dict[str, Any]) -> bool:
@@ -102,6 +105,19 @@ def language_spec_from_data(data: dict[str, Any], *, source: str = "<descriptor>
         cfg = {k: v for k, v in dep_raw.items() if k != "id"}
         dependency = LanguageDependency(id=dep_id, cfg=cfg)
     lang_id = data["id"]
+    pre_commit_hooks = None
+    if "pre-commit-hooks" in data:
+        hooks_data = data["pre-commit-hooks"]
+        pre_commit_hooks = {
+            k: v
+            for k, v in hooks_data.items()
+            if isinstance(v, list) and all(isinstance(x, str) for x in v)
+        }
+    init_wait_val = server.get("init-wait", 0)
+    try:
+        init_wait_float = float(init_wait_val) if init_wait_val is not None else 0.0
+    except (ValueError, TypeError):
+        init_wait_float = 0.0
     return LanguageSpec(
         id=lang_id,
         display_name=data.get("display-name", lang_id),
@@ -110,10 +126,11 @@ def language_spec_from_data(data: dict[str, Any], *, source: str = "<descriptor>
         file_extensions=tuple(server.get("file-extensions", [])),
         workspace_config_files=tuple(server.get("workspace-config-files", [])),
         detection_markers=tuple(data.get("detection-markers", [])),
-        init_wait=float(server.get("init-wait", 0)),
+        init_wait=init_wait_float,
         dependency=dependency,
         settings=dict(server.get("settings", {})),
         options_schema=load_option_schema(data.get("options-schema")),
+        pre_commit_hooks=pre_commit_hooks,
     )
 
 
@@ -131,6 +148,7 @@ def language_spec_from_feature(descriptor: FeatureDescriptor) -> LanguageSpec:
         dependency=spec.dependency,
         settings=spec.settings,
         options_schema=descriptor.options_schema,
+        pre_commit_hooks=spec.pre_commit_hooks,
     )
 
 
@@ -195,8 +213,10 @@ def dependency_cfgs(language_ids: list[str] | None = None) -> dict[str, dict[str
     language's server never enters the workflow.
     """
     registry = _REGISTRY.all()
-    langs = registry.values() if language_ids is None else (
-        registry[lid] for lid in language_ids if lid in registry
+    langs = (
+        registry.values()
+        if language_ids is None
+        else (registry[lid] for lid in language_ids if lid in registry)
     )
     result: dict[str, dict[str, Any]] = {}
     for spec in langs:
@@ -208,8 +228,10 @@ def dependency_cfgs(language_ids: list[str] | None = None) -> dict[str, dict[str
 def dependency_ids(language_ids: list[str] | None = None) -> list[str]:
     """Dep ids for the given languages (or all)."""
     registry = _REGISTRY.all()
-    langs = registry.values() if language_ids is None else (
-        registry[lid] for lid in language_ids if lid in registry
+    langs = (
+        registry.values()
+        if language_ids is None
+        else (registry[lid] for lid in language_ids if lid in registry)
     )
     return [spec.dependency.id for spec in langs if spec.dependency is not None]
 

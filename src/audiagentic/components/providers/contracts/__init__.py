@@ -13,6 +13,7 @@ from .managed_mcp import (
     ManagedMcpResult,
 )
 from .plugin_entry import PluginEntryMode, PluginEntryRequest, PluginEntryResult
+from .session_surface import ResolvedSessionSurface, SurfaceHint
 
 __all__ = [
     "LanguageServerEntry",
@@ -26,4 +27,6 @@ __all__ = [
     "PluginEntryMode",
     "PluginEntryRequest",
     "PluginEntryResult",
+    "ResolvedSessionSurface",
+    "SurfaceHint",
 ]

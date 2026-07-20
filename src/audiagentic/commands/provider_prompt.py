@@ -82,4 +82,4 @@ def _try_provider_prompt(prompt: str | None, project_root: Path) -> int | None:
         providers_api.manage_cli_lifecycle(project_root, provider_id, mode=mode)
     )
     print_json(result)
-    return 0 if result.get("ok") else 1
+    return 0 if result.ok else 1

@@ -4,20 +4,26 @@ Real SessionRuntime + fake transport; provider/profile seams monkeypatched.
 Pins: keep-alive opens and completes, session-id continues on the SAME live
 transport, unsupported provider is terminal UNS-AGW-001, profile mismatch is
 terminal VAL-AGW-060, and the one-shot path is untouched for plain records.
+
+AS28 slice 4a: injects PreparedSessionTransport via provider_prepare_fn —
+no AcpLaunch/AcpSessionTransport in the open path.
 """
 from __future__ import annotations
 
 from types import SimpleNamespace
 
 import pytest
-from tests.unit.agents.test_agents_gateway_sessions import FakeTransport, _Clock
+from tests.unit.agents.test_agents_gateway_sessions import (
+    FakeAgentSessionTransport,
+    _build_fake_prepared,
+    _Clock,
+)
 
 from audiagentic.components.agents import agents_gateway_dispatch as dispatch
 from audiagentic.components.agents import agents_gateway_session_dispatch as session_dispatch
 from audiagentic.components.agents import agents_gateway_sessions as sessions_module
 from audiagentic.components.agents import agents_gateway_store as store
 from audiagentic.components.agents.agents_gateway_sessions import SessionRuntime
-from audiagentic.foundation.transports import AcpLaunch
 
 PROFILE = {
     "profile_id": "profile-1",
@@ -31,26 +37,21 @@ PROFILE = {
 @pytest.fixture
 def rig(tmp_path, monkeypatch):
     clock = _Clock()
-    transports: list[FakeTransport] = []
+    transports: list[FakeAgentSessionTransport] = []
 
-    def factory(launch, cwd):
-        transport = FakeTransport(launch, cwd)
+    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None):
+        transport = FakeAgentSessionTransport()
         transports.append(transport)
-        return transport
+        return _build_fake_prepared(transport)
 
-    runtime = SessionRuntime(clock=clock, reap_interval_seconds=60, transport_factory=factory)
+    runtime = SessionRuntime(
+        clock=clock, reap_interval_seconds=60, provider_prepare_fn=fake_prepare,
+    )
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
 
     import audiagentic.components.agents.agents_api as agents_api
-    from audiagentic.components.providers.providers_api import ProviderAcpLaunchResult
 
     monkeypatch.setattr(agents_api, "resolve_profile", lambda root, pid: dict(PROFILE))
-    monkeypatch.setattr(
-        "audiagentic.components.providers.providers_api.prepare_provider_acp_launch",
-        lambda root, **kwargs: ProviderAcpLaunchResult(
-            provider_id=kwargs["provider_id"], model_id="m1", launch=AcpLaunch("agent")
-        ),
-    )
     monkeypatch.setattr(
         "audiagentic.components.providers.providers_api.get_provider_runtime_config_state",
         lambda root, provider_id: {
@@ -126,30 +127,18 @@ def test_session_id_continues_same_live_transport(rig):
 
 def test_unsupported_provider_terminal(rig, monkeypatch):
     runtime, transports, tmp_path = rig
-    from audiagentic.foundation.contracts.errors import AudiaGenticError
 
-    monkeypatch.setattr(
-        "audiagentic.components.providers.providers_api.prepare_provider_acp_launch",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AudiaGenticError(
-                code="UNS-PEXE-002",
-                kind="providers",
-                message="provider does not support ACP live sessions",
-            )
-        ),
-    )
-    monkeypatch.setattr(
-        "audiagentic.components.providers.providers_api.get_provider_runtime_config_state",
-        lambda _root, provider_id: {"provider-id": provider_id, "enabled": True, "config": {}},
-    )
-    monkeypatch.setattr(
-        "audiagentic.components.providers.providers_api.get_provider_runtime_config_state",
-        lambda root, provider_id: {"provider-id": provider_id, "enabled": True, "config": {}},
-    )
+    # AS28 slice 4a: unsupported surface path — provider_prepare_fn returns
+    # PreparedSessionTransport with transport=None, which raises CON-AGW-095.
+    def unsupported_prepare(project_root, *, provider_id, surface_hint, model_id=None):
+
+        return _build_fake_prepared(None)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(runtime, "_provider_prepare_fn", unsupported_prepare)
     record = _running_record(tmp_path, session_keep_alive=True)
     result = _dispatch(tmp_path, record, dispatch_prompt="hello")
     assert result["state"] == "failed"
-    assert result["error"]["code"] == "UNS-PEXE-002"
+    assert result["error"]["code"] == "CON-AGW-095"
     assert transports == []
     request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-llm-gateway" / record["request-id"]
     assert (request_dir / "quarantine" / record["request-id"] / "manifest.json").exists()
@@ -193,16 +182,12 @@ def test_unknown_session_terminal(rig):
 
 
 def test_session_output_concatenates_stream_chunks():
-    """agent_message_chunk fragments split mid-word — join with NO separator
-    (AS07 live-gate finding: '\\n'.join corrupted 'TOKEN STORED')."""
+    """AS28: final_summary carries bounded assistant-text fragments."""
     from types import SimpleNamespace
 
-    def chunk(text):
-        return SimpleNamespace(kind="assistant-message", text=text)
-
+    # SessionTurnResult with final_summary containing concatenated text fragments
     result = SimpleNamespace(
-        events=(chunk("TOKEN"), chunk(" STORE"), chunk("D"), chunk("."),
-                SimpleNamespace(kind="result", text=None)),
+        final_summary="TOKEN STORED.",
     )
     assert session_dispatch._session_output_from_result(result) == "TOKEN STORED."
 

@@ -2,7 +2,14 @@
 # No CLI, no MCP, no LSP — REST endpoint only
 
 provider_id: local-openai
-execution_isolation_tier: no-isolation
+# SH19: pure REST client (access_mode: none, no cli_probe/cli_install, no
+# os.environ reads in adapter.py/catalog.py, no execution_environment.py
+# provider-owned env contributions) — has nothing for the disposable worker's
+# private-HOME subprocess isolation to break, unlike CLI-based providers with
+# fixed real config paths (claude/cline/gemini). Declaring "no-isolation" here
+# made the gateway's full-isolation-only dispatch gate (UNS-AGW-076) reject
+# every real local-openai request outright. See docs/planning SH19.
+execution_isolation_tier: full-isolation
 automation_capabilities:
   - family_id: generated-surfaces
     supported_modes: [plan, apply, prune, status]

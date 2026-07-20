@@ -79,13 +79,19 @@ class SharedApplication:
         return {"session-id": session_id, "state": "closed"}
 
 
-def _start_host(tmp_path: Path, application: SharedApplication):
+def _start_host(
+    tmp_path: Path,
+    application: SharedApplication,
+    *,
+    gateway_profiles_config: Path | None = None,
+):
     service_root = tmp_path / "services"
     token_path = tmp_path / "gateway.token"
     host = GatewayServiceHost.create(
         application=application,  # type: ignore[arg-type]
         service_root=service_root,
         token_path=token_path,
+        gateway_profiles_config=gateway_profiles_config,
     )
     thread = threading.Thread(target=host.serve_forever, name="test-gateway-service")
     thread.start()
@@ -723,7 +729,7 @@ def test_reload_gateway_profiles_atomic_swap(tmp_path: Path) -> None:
         from audiagentic.foundation.event import get_bus
         captured_events: list[dict] = []
 
-        def _on_reload(topic: str, payload: dict) -> None:
+        def _on_reload(topic: str, payload: dict, metadata: dict) -> None:
             captured_events.append(payload)
 
         get_bus().subscribe(GATEWAY_PROFILE_RELOADED_TOPIC, _on_reload)
@@ -824,20 +830,15 @@ def test_reload_via_service_operation(tmp_path: Path) -> None:
     ])
 
     application = SharedApplication()
-    host, thread, _service_root, token_path = _start_host(tmp_path, application)
+    host, thread, _service_root, token_path = _start_host(
+        tmp_path, application, gateway_profiles_config=config_path
+    )
     token = load_auth_token(token_path)
     try:
         with StandaloneGatewayClient(host.endpoint, token) as client:
-            # Acquire a lease for the operation
-            lease = client._acquire_lease()
-            result = client._invoke(
-                "reload_gateway_profiles",
-                str(tmp_path),
-                protocol_version="gateway-service-v1",
-                owner_epoch=host.owner_epoch,
-                lease_id=lease["lease-id"],
-            )
-            # Reload via the service operation
+            # Reload via the service operation — _call() manages lease
+            # acquisition/renewal the same way every other client method does.
+            result = client._call("reload_gateway_profiles", tmp_path, {})
             assert result["success"] is True
     finally:
         _stop_host(host, thread)
@@ -924,15 +925,24 @@ def test_stale_queued_snapshot_rejected_on_reload(tmp_path: Path, monkeypatch) -
             reload_result = profiles_mod.reload_profile_registry()
             assert reload_result["success"] is True
 
-            # Step 7: queued stale snapshot (B) should be rejected with CON-AGW-101
-            status_b_after = client_b.get_llm_request(root_b, submitted_b["request-id"])
-            assert status_b_after["state"] == "rejected"
-            assert "CON-AGW-101" in (status_b_after.get("error") or {}).get("code", "")
-
-            # Step 7: running request (A) keeps its snapshot and completes
+            # Step 7: running request (A) keeps its original snapshot and
+            # completes uninterrupted. B is still pending in A's (now stale)
+            # lane — staleness is validated lazily right before dispatch, not
+            # proactively at reload time, so releasing A (freeing the lane's
+            # only slot) is what triggers B's dispatch attempt and rejection.
             provider_release.set()
             result_a = client_a.wait_llm_request(root_a, submitted_a["request-id"], timeout_seconds=5)
             assert result_a["state"] == "completed"
+
+            # Step 7: queued stale snapshot (B) is rejected with CON-AGW-101
+            # once its dispatch was attempted.
+            deadline = time.monotonic() + 5
+            status_b_after = client_b.get_llm_request(root_b, submitted_b["request-id"])
+            while status_b_after["state"] == "queued" and time.monotonic() < deadline:
+                time.sleep(0.05)
+                status_b_after = client_b.get_llm_request(root_b, submitted_b["request-id"])
+            assert status_b_after["state"] == "rejected"
+            assert "CON-AGW-101" in (status_b_after.get("error") or {}).get("code", "")
         finally:
             provider_release.set()
             client_a.close()
@@ -1020,24 +1030,24 @@ def test_absent_shared_profile_rejected_not_fallback(tmp_path: Path) -> None:
         },
     ])
 
-    application = SharedApplication()
-    host, thread, _service_root, token_path = _start_host(tmp_path, application)
-    token = load_auth_token(token_path)
+    # Use the real application (not the SharedApplication test double, which
+    # stubs submit_llm_request and never touches the gateway registry) so
+    # this actually exercises registry-backed rejection.
+    host = GatewayServiceHost.create(
+        service_root=tmp_path / "service-state-absent",
+        token_path=tmp_path / "absent.token",
+        gateway_profiles_config=config_path,
+    )
+    thread = threading.Thread(target=host.serve_forever)
+    thread.start()
+    token = load_auth_token(host.token_path)
     try:
         with StandaloneGatewayClient(host.endpoint, token) as client:
-            # Acquire lease for the call
-            lease = client._acquire_lease()
-            # Requesting 'default' — not in shared registry → should fail
-            result = client._invoke(
-                "submit_llm_request",
-                str(root),
-                protocol_version="gateway-service-v1",
-                owner_epoch=host.owner_epoch,
-                lease_id=lease["lease-id"],
-                params={"prompt_body": "hello", "mode": "async"},
-            )
-            # Should be an error (RES-AGP-001: profile not found in shared registry)
-            assert result.get("error-code") == "RES-AGP-001"
+            # Requesting 'default' — not in shared registry → should fail,
+            # not silently fall back to the project-local profile's limits.
+            with pytest.raises(AudiaGenticError) as exc_info:
+                client.submit_llm_request(root, prompt_body="hello", mode="async")
+            assert exc_info.value.code == "RES-AGP-001"
     finally:
         _stop_host(host, thread)
 

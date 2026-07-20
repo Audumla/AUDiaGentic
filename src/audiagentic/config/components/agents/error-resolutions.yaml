@@ -73,6 +73,7 @@ VAL-AGW-086: "Provide the non-empty component identity acknowledging a gateway c
 UNS-AGW-076: "Use a provider with a proven full-isolation execution materializer; partial and fixed configuration cannot run concurrently through the shared gateway."
 TO-AGW-076: "Increase the request timeout or investigate the provider worker that exceeded its bounded execution time."
 TO-AGW-090: "The session turn exceeded its deadline and the session was closed. Raise params.session-turn-timeout-seconds (0 disables) or investigate the hung agent harness."
+CON-AGW-095: "The resolved session surface is unsupported for this provider — no transport could be prepared. Check that the provider is enabled, installed, and declares a supported session surface for this platform."
 CON-AGW-096: "A provider session already has an active owned AG binding. Close or retire the existing session before opening another owner; use explicit attach only when the resolved surface supports it."
 IO-AGW-096: "The gateway session binding index is unreadable. Rebuild it from validated session records under the project lock."
 VAL-AGW-096: "The gateway session binding index failed validation. Rebuild it from validated session records under the project lock."

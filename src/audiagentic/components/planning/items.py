@@ -2,6 +2,7 @@
 
 Storage layout, ID allocation, and markdown round-trips live in item_store.
 """
+
 from __future__ import annotations
 
 import fnmatch
@@ -27,13 +28,21 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
     title = item.get("title")
 
     if not plan:
-        raise AudiaGenticError(code="VAL-PLN-003", kind="validation", message="item 'plan' is required")
+        raise AudiaGenticError(
+            code="VAL-PLN-003", kind="validation", message="item 'plan' is required"
+        )
     if not title:
-        raise AudiaGenticError(code="VAL-PLN-004", kind="validation", message="item 'title' is required")
+        raise AudiaGenticError(
+            code="VAL-PLN-004", kind="validation", message="item 'title' is required"
+        )
 
-    created_by = item.get("created-by") or item.get("created_by") or item.get("creator_id") or "agent"
+    created_by = (
+        item.get("created-by") or item.get("created_by") or item.get("creator_id") or "agent"
+    )
     if not created_by:
-        raise AudiaGenticError(code="VAL-PLN-025", kind="validation", message="item 'created-by' is required")
+        raise AudiaGenticError(
+            code="VAL-PLN-025", kind="validation", message="item 'created-by' is required"
+        )
 
     if not item_id:
         item_id = item_store.next_item_id(project_root, plan)
@@ -50,10 +59,8 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
         "order": item.get("order", 0),
         "plan": item_store.plan_frontmatter_value(plan),
         "state": "pending",
-        "validate-first": item.get("validate_first", True),
-        "priority": item.get("priority", "P2"),
-        "complexity": item.get("complexity", "simple"),
-        "created-by": created_by,
+        "breadth": item.get("breadth", ""),
+        "skill": item.get("skill", ""),
     }
     sections = {k: item.get(k, "") for k in item_store.ITEM_SECTION_HEADING}
     body = item_store.build_item_body(title, sections)
@@ -119,16 +126,18 @@ def list_items(
             item_id = fm.get("id", path.stem)
             if prefix and not str(item_id).upper().startswith(prefix):
                 continue
-            results.append({
-                "id": item_id,
-                "plan": fm.get("plan", ""),
-                "state": fm.get("state", "pending"),
-                "priority": fm.get("priority", ""),
-                "complexity": fm.get("complexity", ""),
-                "created-by": fm.get("created-by", ""),
-                "title": parse_title(body) or "",
-                "path": str(path.relative_to(project_root)),
-            })
+            results.append(
+                {
+                    "id": item_id,
+                    "plan": fm.get("plan", ""),
+                    "state": fm.get("state", "pending"),
+                    "priority": fm.get("priority", ""),
+                    "complexity": fm.get("complexity", ""),
+                    "created-by": fm.get("created-by", ""),
+                    "title": parse_title(body) or "",
+                    "path": str(path.relative_to(project_root)),
+                }
+            )
 
     return results
 
@@ -161,7 +170,7 @@ def list_items_page(
     query_state = None if effective_state == "all" else effective_state
     items = list_items(project_root, query_state, plan, id_prefix)
     total = len(items)
-    page = items[offset:offset + limit] if limit else items[offset:]
+    page = items[offset : offset + limit] if limit else items[offset:]
     result: dict[str, Any] = {
         "items": page,
         "total": total,
@@ -212,13 +221,15 @@ def list_items_grouped(
     for plan_key, plan_items in sorted(groups.items()):
         active_count = sum(1 for i in plan_items if i["state"] in ("pending", "not_done"))
         completed_count = sum(1 for i in plan_items if i["state"] == "completed")
-        result.append({
-            "plan": plan_key,
-            "item_count": len(plan_items),
-            "active_count": active_count,
-            "completed_count": completed_count,
-            "items": plan_items,
-        })
+        result.append(
+            {
+                "plan": plan_key,
+                "item_count": len(plan_items),
+                "active_count": active_count,
+                "completed_count": completed_count,
+                "items": plan_items,
+            }
+        )
 
     return result
 
@@ -259,7 +270,12 @@ def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any
     )
     item_store.cleanup_empty_plan_dirs(project_root, path.parent.name, [source_dir])
 
-    result = {"ok": True, "id": item_id, "state": canonical_state, "path": str(target.relative_to(project_root))}
+    result = {
+        "ok": True,
+        "id": item_id,
+        "state": canonical_state,
+        "path": str(target.relative_to(project_root)),
+    }
     events.publish_planning_event(
         events.PLANNING_ITEM_STATE_CHANGED,
         {

@@ -3,6 +3,7 @@
 Imported by the harness via lifecycle-observer in coding-lsp.yaml.
 Subscribes to component lifecycle events.
 """
+
 from __future__ import annotations
 
 import logging
@@ -81,6 +82,7 @@ def _on_enabled(project_root: Path) -> None:
             sync_generic_lsp_mcp_to_providers,
             sync_language_servers_to_providers,
         )
+
         native_result = sync_language_servers_to_providers(project_root)
         generic_result = sync_generic_lsp_mcp_to_providers(project_root)
         if native_result.get("synced"):
@@ -96,10 +98,32 @@ def _on_enabled(project_root: Path) -> None:
     except AudiaGenticError:
         logger.warning("Failed to sync coding-lsp provider config", exc_info=True)
 
+    # Sync pre-commit hooks for all configured languages
+    try:
+        # Get configured languages and sync their hooks
+        from audiagentic.foundation.features.state import get_feature_state
+
+        from .git_hooks_sync import _sync_hook_for_language
+
+        state = get_feature_state(project_root, _COMPONENT_ID, "coding-lsp", "coding-lsp")
+        if state.options.get("pre-commit-hooks-enabled", True):
+            for language_id in configured_language_ids(project_root):
+                _sync_hook_for_language(project_root, language_id, install=True)
+    except Exception:
+        logger.warning("Failed to sync coding-lsp pre-commit hooks", exc_info=True)
+
+
+def configured_language_ids(project_root: Path) -> list[str]:
+    """Return configured language IDs for the project."""
+    from audiagentic.components.coding_lsp.lsp_config_api import _configured_language_ids
+
+    return _configured_language_ids(project_root)
+
 
 def _on_disabled(project_root: Path | None = None) -> None:
     """Shutdown all sessions and prune language server configs."""
     from audiagentic.components.coding_lsp.lsp_api import shutdown_all_sessions
+
     shutdown_all_sessions()
 
     if project_root is not None:
@@ -108,6 +132,7 @@ def _on_disabled(project_root: Path | None = None) -> None:
                 prune_generic_lsp_mcp_from_providers,
                 prune_language_servers_from_providers,
             )
+
             native_result = prune_language_servers_from_providers(project_root)
             generic_result = prune_generic_lsp_mcp_from_providers(project_root)
             if native_result.get("pruned"):
@@ -122,6 +147,18 @@ def _on_disabled(project_root: Path | None = None) -> None:
                 )
         except AudiaGenticError:
             logger.warning("Failed to prune coding-lsp provider config", exc_info=True)
+
+    # Remove pre-commit hooks for all configured languages
+    if project_root is not None:
+        try:
+            from audiagentic.components.coding_lsp.lsp_config_api import _configured_language_ids
+
+            from .git_hooks_sync import _sync_hook_for_language
+
+            for language_id in _configured_language_ids(project_root):
+                _sync_hook_for_language(project_root, language_id, install=False)
+        except Exception:
+            logger.warning("Failed to prune coding-lsp pre-commit hooks", exc_info=True)
 
 
 def register() -> None:
@@ -148,6 +185,7 @@ def _active_dependency_ids(project_root: Path | None) -> list[str]:
     is selected. lsp.json is only a generated runtime cache/projection.
     """
     from audiagentic.components.coding_lsp.lsp_config_api import active_dependency_ids
+
     return active_dependency_ids(project_root)
 
 
@@ -163,6 +201,7 @@ def status_payload(project_root: Path | None = None) -> ComponentStatusPayload:
     active_impl = None
     if project_root is not None:
         from audiagentic.components.coding_lsp.runtime_resolver import active_lsp_implementation
+
         active_impl = active_lsp_implementation(project_root)
     if not active_dep_ids:
         return ComponentStatusPayload(

@@ -343,6 +343,33 @@ class TestAssertEventPayload:
             metadata={"x-correlation-id": "abc-123"},
         )
 
+    def test_session_opened_payload_conforms(self):
+        """AS17: agents.session.opened publisher payload validates against schema.
+
+        The adopted-process projection emits child-pid and child-creation-identity;
+        both must be declared optional in the topic spec so the payload conforms."""
+        from audiagentic.foundation.event.topic_registry import assert_event_payload
+
+        # Minimal required payload (as emitted when transport has no child_pid)
+        assert_event_payload(
+            "agents.session.opened",
+            {"session-id": "ses_1", "agent-profile-id": "profile-1", "state": "active"},
+        )
+
+        # Full payload with AS17 adopted-process fields (as emitted in production)
+        assert_event_payload(
+            "agents.session.opened",
+            {
+                "session-id": "ses_1",
+                "agent-profile-id": "profile-1",
+                "state": "active",
+                "provider-id": "opencode",
+                "model-id": "m1",
+                "child-pid": 12345,
+                "child-creation-identity": "spawn",
+            },
+        )
+
 
 class TestMirrorTopicEquality:
     """BU02 mirror-equality test: every consumer-side mirror constant equals
