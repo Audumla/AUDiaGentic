@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from audiagentic.components.providers.adapters.mcp_opencode import (
+from audiagentic.components.providers.adapters.opencode.mcp_format import (
     read_opencode_mcp,
     write_opencode_mcp,
 )

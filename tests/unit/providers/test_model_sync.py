@@ -415,7 +415,7 @@ def test_holistic_apply_fans_out_only_registered_model_family(monkeypatch, tmp_p
     result = providers_api.apply_model_sources(tmp_path)
 
     assert result["ok"] is True
-    assert calls == ["pi"]
+    assert calls == ["opencode", "pi"]
 
 
 def test_add_duplicate_rejected(tmp_path: Path) -> None:

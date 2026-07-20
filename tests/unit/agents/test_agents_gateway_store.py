@@ -569,6 +569,20 @@ def test_append_attempt_does_not_change_state(tmp_path: Path) -> None:
     assert timeline[-1]["attributes"]["attempt-count"] == 1
 
 
+def test_append_attempt_accepts_cancelled_state(tmp_path: Path) -> None:
+    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+
+    updated = store.append_attempt(
+        tmp_path, record["request-id"],
+        agent_profile_id="default", provider_id="opencode", model_id="m1",
+        state="cancelled", started_at="2026-01-01T00:00:00Z",
+        finished_at="2026-01-01T00:00:01Z",
+    )
+
+    assert updated["attempts"][0]["state"] == "cancelled"
+
+
 def test_terminal_states() -> None:
     assert store.TERMINAL_STATES == {"completed", "failed", "cancelled", "rejected", "interrupted"}
 

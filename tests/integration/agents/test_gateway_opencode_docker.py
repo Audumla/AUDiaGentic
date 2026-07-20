@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -137,31 +138,12 @@ def _write_opencode_harness_config(project_root: Path) -> None:
     )
 
 
-def _collect_opencode_state() -> dict[str, str]:
-    roots = [
-        Path.home() / ".local" / "share" / "opencode",
-        Path.home() / ".config" / "opencode",
-    ]
-    found: dict[str, str] = {}
-    interesting = {"auth.json", "log.txt", "package.json", "package-lock.json"}
-    for root in roots:
-        if not root.exists():
-            continue
-        for path in root.rglob("*"):
-            if path.is_file() and path.name in interesting:
-                try:
-                    found[str(path)] = path.read_text(encoding="utf-8", errors="replace")[-4000:]
-                except OSError:
-                    found[str(path)] = "<unreadable>"
-    return found
-
-
 def test_gateway_runs_opencode_against_local_rig(tmp_path: Path, monkeypatch, rig_server) -> None:
     if os.environ.get("AUDIAGENTIC_GATEWAY_OPENCODE_DOCKER") != "1":
         pytest.skip("opt-in Docker gate; set AUDIAGENTIC_GATEWAY_OPENCODE_DOCKER=1")
 
     monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", str(tmp_path))
-    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_MODE", "automatic")
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_MODE", "in-process")
     monkeypatch.setenv("AUDIAGENTIC_RIG_API_KEY", "dummy")
 
     from audiagentic.components.agents.agents_gateway_client import (
@@ -216,13 +198,25 @@ def test_gateway_runs_opencode_against_local_rig(tmp_path: Path, monkeypatch, ri
             "execution-policy": {"output-format": "json"},
         },
     )
-    assert (tmp_path / ".opencode" / "config.json").is_file()
     assert (tmp_path / ".opencode" / "opencode.json").is_file()
-    completed = subprocess.run(["opencode", "--version"], capture_output=True, text=True, check=True)
+    opencode = shutil.which("opencode")
+    assert opencode is not None
+    completed = subprocess.run([opencode, "--version"], capture_output=True, text=True, check=True)
     assert completed.stdout.strip()
+    opencode_config = json.loads((tmp_path / ".opencode" / "opencode.json").read_text(encoding="utf-8"))
+    opencode_config["provider"]["audiagentic"]["options"]["apiKey"] = os.environ["AUDIAGENTIC_RIG_API_KEY"]
+    # OpenCode uses enabled_providers as a whitelist; without it, custom providers
+    # are blocked when OPENCODE_CONFIG_CONTENT is used with a global config present.
+    if "enabled_providers" not in opencode_config:
+        provider_keys = list(opencode_config.get("provider", {}).keys())
+        if provider_keys:
+            opencode_config["enabled_providers"] = provider_keys
+    opencode_config["model"] = "audiagentic/audiagentic-rig"
+    direct_env = os.environ.copy()
+    direct_env["OPENCODE_CONFIG_CONTENT"] = json.dumps(opencode_config)
     direct = subprocess.run(
         [
-            "opencode",
+            opencode,
             "run",
             "--format",
             "json",
@@ -233,6 +227,7 @@ def test_gateway_runs_opencode_against_local_rig(tmp_path: Path, monkeypatch, ri
             "Reply exactly GATEWAY_OPENCODE_OK",
         ],
         cwd=tmp_path,
+        env=direct_env,
         capture_output=True,
         text=True,
         timeout=60,
@@ -243,9 +238,10 @@ def test_gateway_runs_opencode_against_local_rig(tmp_path: Path, monkeypatch, ri
                 "direct_stdout": direct.stdout,
                 "direct_stderr": direct.stderr,
                 "direct_returncode": direct.returncode,
-                "project_opencode_config": (tmp_path / ".opencode" / "opencode.json").read_text(encoding="utf-8"),
+                "project_opencode_config_exists": (tmp_path / ".opencode" / "opencode.json").is_file(),
+                "project_opencode_model": opencode_config.get("model"),
+                "project_opencode_providers": sorted((opencode_config.get("provider") or {}).keys()),
                 "rig_requests": _RigHandler.requests,
-                "opencode_state": _collect_opencode_state(),
             },
             indent=2,
             sort_keys=True,
@@ -255,7 +251,9 @@ def test_gateway_runs_opencode_against_local_rig(tmp_path: Path, monkeypatch, ri
         "stdout": direct.stdout,
         "stderr": direct.stderr,
         "returncode": direct.returncode,
-        "config": (tmp_path / ".opencode" / "opencode.json").read_text(encoding="utf-8"),
+        "config_exists": (tmp_path / ".opencode" / "opencode.json").is_file(),
+        "config_model": opencode_config.get("model"),
+        "config_providers": sorted((opencode_config.get("provider") or {}).keys()),
         "requests": _RigHandler.requests,
     }
 

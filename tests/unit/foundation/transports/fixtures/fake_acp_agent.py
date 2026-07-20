@@ -66,6 +66,23 @@ class FakeAgent:
         if conn is None:
             return PromptResponse(stop_reason="end_turn")
 
+        # AS06 completion (RV590): a "flood" prompt emits enough
+        # assistant-message chunks within ONE turn to exceed the transport's
+        # MAX_EVENTS count budget (the budget that actually bounds the
+        # gateway's compact-mode path, since only the small `ext` header —
+        # never `event.text` — counts toward the byte budget), driving the
+        # real bounded-eviction path over a live subprocess rather than only
+        # a mocked connection. Count is env-controlled for speed/tuning.
+        prompt_text = _first_text(prompt)
+        if prompt_text == "flood":
+            count = int(os.environ.get("FAKE_ACP_FLOOD_EVENTS", "10200"))
+            await conn.session_update(
+                session_id, update_agent_thought_text("[model] flood starting")
+            )
+            for i in range(count):
+                await conn.session_update(session_id, update_agent_message_text(f"m{i}"))
+            return PromptResponse(stop_reason="end_turn")
+
         # Emit normalized intra-turn events for AS18/AS20 testing.
         # Sequence mirrors real ACP agent lifecycle:
         #   thought (model starting) → assistant-message (response)
@@ -94,6 +111,14 @@ class FakeAgent:
         )
 
         return PromptResponse(stop_reason="end_turn")
+
+
+def _first_text(prompt: list[Any]) -> str | None:
+    for block in prompt:
+        text = getattr(block, "text", None)
+        if text is not None:
+            return str(text)
+    return None
 
 
 def main() -> None:

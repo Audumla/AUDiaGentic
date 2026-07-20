@@ -5,6 +5,32 @@ from pathlib import Path
 from audiagentic.runtime.harness.pi.install import install_to
 
 
+def test_pi_recipe_declares_managed_packages_and_acp_runtime() -> None:
+    from audiagentic.runtime.harness.pi.install import _package_recipe
+
+    assert _package_recipe({"agent": {
+        "packages": {
+            "cli": "example/pi",
+            "mcp_adapter": "example/pi-mcp",
+            "acp": "example/pi-acp",
+        },
+        "acp_version": "1.2.3",
+        "runtime_extra": "acp",
+    }}) == ("example/pi", "example/pi-mcp", "example/pi-acp", "1.2.3", "acp")
+
+
+def test_pi_recipe_defaults_preserve_existing_overrides() -> None:
+    from audiagentic.runtime.harness.pi.install import _package_recipe
+
+    assert _package_recipe({"agent": {}}) == (
+        "@earendil-works/pi-coding-agent",
+        "pi-mcp-adapter",
+        "pi-acp",
+        "0.0.31",
+        "acp",
+    )
+
+
 def test_install_to_provisions_embedded_rig_in_docker(
     tmp_path: Path,
     monkeypatch,

@@ -12,7 +12,7 @@ Contract cases per adapter row:
   remove_present          - removes entry, returns True, others preserved
   remove_absent           - file exists but name missing -> False, file unchanged
   read_missing_file       -> {}
-  read_malformed          -> {} (graceful degradation)
+  read_malformed          -> raises (RV713; never silently treated as {})
   failure_atomicity       - interrupted write leaves original bytes intact
 
 All adapters must satisfy the FragmentStore protocol regardless of format.
@@ -32,15 +32,15 @@ from audiagentic.components.providers.adapters.codex.language_servers import (
     remove_language_servers_codex,
     write_language_servers_codex,
 )
-from audiagentic.components.providers.adapters.mcp_opencode import (
-    read_opencode_mcp,
-    remove_opencode_mcp,
-    write_opencode_mcp,
-)
 from audiagentic.components.providers.adapters.opencode.language_servers import (
     read_language_servers_opencode,
     remove_language_servers_opencode,
     write_language_servers_opencode,
+)
+from audiagentic.components.providers.adapters.opencode.mcp_format import (
+    read_opencode_mcp,
+    remove_opencode_mcp,
+    write_opencode_mcp,
 )
 from audiagentic.components.providers.adapters.openhands.toml_format import (
     read_mcp_toml,
@@ -98,7 +98,7 @@ def _make_rows() -> list[AdapterContractRow]:
     # Excluded: opencode/plugin_array.py (single-entry API, not dict-of-entries),
     # surfaces/extensions_json.py (surface renderer, different ownership model).
 
-    # opencode-mcp (rows 2-3: write + remove in mcp_opencode.py)
+    # opencode-mcp (rows 2-3: write + remove in opencode/mcp_format.py)
     rows.append(AdapterContractRow(
         adapter_id="opencode-mcp",
         format="json",
@@ -181,12 +181,20 @@ class TestAdapterReadMissingFile:
 
 
 class TestAdapterReadMalformed:
-    """read(path) when file contains garbage -> {} (graceful degradation)."""
+    """read(path) when file contains garbage -> raises, never {} (RV713).
 
-    def test_read_malformed_returns_empty(self, adapter_row: AdapterContractRow, adapter_path: Path):
+    Treating malformed content the same as a missing file used to be this
+    suite's documented "graceful degradation" contract, but it is a data-loss
+    trap: the next managed write silently overwrites and discards whatever
+    was actually on disk. Every FragmentStore-compatible adapter must now
+    raise on unparseable existing content instead of returning {}, matching
+    the missing-file-is-empty / corrupt-file-must-raise split already used by
+    ManagedFragmentRegistry (CON-MCFG-001)."""
+
+    def test_read_malformed_raises(self, adapter_row: AdapterContractRow, adapter_path: Path):
         adapter_path.write_text("THIS IS NOT VALID CONTENT {{{{}", encoding="utf-8")
-        result = adapter_row.read(adapter_path)
-        assert result == {}
+        with pytest.raises(Exception):
+            adapter_row.read(adapter_path)
 
 
 class TestAdapterWriteAndRoundtrip:
