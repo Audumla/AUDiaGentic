@@ -18,6 +18,11 @@ dependencies:
       win: [cargo, install, --locked, --features, lsp, taplo-cli]
       darwin: [cargo, install, --locked, --features, lsp, taplo-cli]
       linux: [cargo, install, --locked, --features, lsp, taplo-cli]
+pre-commit-hooks:
+  check:
+    - taplo,format
+  format:
+    - taplo,format
 options-schema:
   server-settings:
     type: object

@@ -13,9 +13,15 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from audiagentic.components.agents.agents_gateway_remote_client import (
+        StandaloneGatewayClient,
+    )
 
 
-def _standalone_client_from_env() -> StandaloneGatewayClient:  # noqa: F821 - resolved at runtime
+def _standalone_client_from_env() -> StandaloneGatewayClient:
     """Build a StandaloneGatewayClient from environment (same env as get_gateway_client)."""
     from audiagentic.components.agents.agents_gateway_remote_client import (
         StandaloneGatewayClient,
@@ -123,6 +129,7 @@ def cmd_gateway_recover(args: argparse.Namespace, project_root: Path) -> int:
     )
 
     result = recover_unprovable_owner(
+        service_root=project_root,
         confirm=args.confirm,
         reason=args.reason,
     )

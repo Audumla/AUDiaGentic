@@ -70,6 +70,22 @@ jobs:
             dockerfile: Dockerfile.lsp-install-test
             tag: audiagentic-lsp-install-test
             base: true
+          - name: gateway-crash-matrix   # SH07 real-subprocess crash/recovery
+            dockerfile: Dockerfile.gateway-crash-matrix
+            tag: audiagentic-gateway-crash-matrix
+            base: true
+          - name: gateway-opencode       # real npm-CLI-provider dispatch (dynamic discovery)
+            dockerfile: Dockerfile.gateway-opencode
+            tag: audiagentic-gateway-opencode
+            base: true
+          - name: gateway-concurrency    # real concurrent load + negative paths
+            dockerfile: Dockerfile.gateway-concurrency
+            tag: audiagentic-gateway-concurrency
+            base: true
+          - name: gateway-pi-smoke       # SH16 real Pi CLI + embedded rig gateway dispatch
+            dockerfile: Dockerfile.gateway-pi-smoke
+            tag: audiagentic-gateway-pi-smoke
+            base: true
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3

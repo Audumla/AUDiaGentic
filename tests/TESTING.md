@@ -394,6 +394,17 @@ The historical per-scenario image sprawl is collapsed only where safe (see
 | `audia-provider-lsp-e2e`           | `Dockerfile.provider-lsp-e2e`       | Provider LSP install recipe (isolated)                     |
 | `audia-mcp-tools-e2e`              | `Dockerfile.mcp-tools-e2e`          | LSP MCP tools — *consumes* pre-baked servers (isolated)    |
 | `audiagentic-lsp-install-test`     | `Dockerfile.lsp-install-test`       | Clean LSP install recipe; slow rust compile (~15 min)      |
+| `audiagentic-gateway-crash-matrix` | `Dockerfile.gateway-crash-matrix`   | SH07 real-subprocess crash/recovery matrix (isolated)       |
+| `audiagentic-gateway-opencode`     | `Dockerfile.gateway-opencode`       | Real npm-CLI-provider install + gateway dispatch; provider(s) discovered dynamically, see `tests/integration/agents/gateway_docker_harness.py` (isolated) |
+| `audiagentic-gateway-concurrency`  | `Dockerfile.gateway-concurrency`    | Real concurrent gateway load + negative-path recipe (isolated) |
+| `audiagentic-gateway-pi-smoke`     | `Dockerfile.gateway-pi-smoke`       | SH16 real Pi CLI + embedded rig gateway dispatch (isolated) |
+
+All four gateway recipe images share
+`tests/integration/agents/gateway_docker_harness.py` for real provisioning
+(agent-profile creation, provider CLI install, subprocess lifecycle) — the
+same role `tests/integration/providers/harness.py` plays for the provider
+recipe images above. Extend that module, don't hand-roll config in a new
+gateway test file.
 
 The former `install-test`, `release-test` and `server-smoke` images merged into
 `audia-packaging`; `shell-stdout-test` folded into the clean suite image; the

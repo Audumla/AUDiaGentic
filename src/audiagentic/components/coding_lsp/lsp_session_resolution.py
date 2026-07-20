@@ -5,6 +5,7 @@ warmed sessions: project/language root walking, server discovery, per-file
 server resolution (with auto-enable/auto-install), capability-aware session
 picking, and the PATH-refresh helpers used after package installs.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -33,7 +34,9 @@ def shutdown_all_sessions() -> None:
 
 
 def _get_session_or_none(
-    project_root: Path, language: str, cfg: ServerConfig,
+    project_root: Path,
+    language: str,
+    cfg: ServerConfig,
 ) -> LspSession | None:
     """Best-effort session acquisition.
 
@@ -43,9 +46,10 @@ def _get_session_or_none(
     try:
         return _session_manager.get_or_create(project_root, language, cfg)
     except Exception:
+        server_id = cfg.server_id or (cfg.command[0] if cfg.command else "unknown")
         logger.warning(
             "Failed to start LSP server %s for %s",
-            cfg.server_id or cfg.command[:1],
+            server_id,
             language,
             exc_info=True,
         )
@@ -76,9 +80,8 @@ def _refresh_path_after_install() -> None:
         return
     try:
         import winreg
-        with winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER, r"Environment", 0, winreg.KEY_READ
-        ) as key:
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment", 0, winreg.KEY_READ) as key:
             path_val, _ = winreg.QueryValueEx(key, "PATH")
             os.environ["PATH"] = path_val
     except Exception:
@@ -100,6 +103,7 @@ def _sync_to_providers(project_root: Path) -> None:
             sync_generic_lsp_mcp_to_providers,
             sync_language_servers_to_providers,
         )
+
         sync_language_servers_to_providers(project_root)
         sync_generic_lsp_mcp_to_providers(project_root)
     except Exception:
@@ -185,13 +189,12 @@ def _auto_install_dependency(project_root: Path, language: str, dependency_id: s
         asyncio.run(install_lsp_dependencies([dependency_id], root=str(project_root)))
         _refresh_path_after_install()
     except Exception:
-        logger.warning(
-            "Auto-install failed for %s (%s)", language, dependency_id, exc_info=True
-        )
+        logger.warning("Auto-install failed for %s (%s)", language, dependency_id, exc_info=True)
 
 
 def _resolve_language_servers_for_file(
-    file_path: Path, project_root: Path,
+    file_path: Path,
+    project_root: Path,
 ) -> list[tuple[str, ServerConfig]]:
     """Return all (language, server) pairs that handle this file.
 
@@ -221,11 +224,17 @@ def _resolve_language_servers_for_file(
 
     if not matches:
         for lang_id, spec in _lr.all_languages().items():
-            if _file_matches_patterns(file_path, spec.file_extensions) and lang_id not in servers_by_lang:
+            if (
+                _file_matches_patterns(file_path, spec.file_extensions)
+                and lang_id not in servers_by_lang
+            ):
                 state = get_feature_state(project_root, "coding-lsp", "language", lang_id)
                 if not state.enabled:
                     set_feature_state(
-                        project_root, "coding-lsp", "language", lang_id,
+                        project_root,
+                        "coding-lsp",
+                        "language",
+                        lang_id,
                         FeatureState(enabled=True, options=dict(state.options)),
                     )
                     # Auto-install missing server binary from recipe
@@ -233,6 +242,24 @@ def _resolve_language_servers_for_file(
                         binary = spec.command[0] if spec.command else None
                         if binary and not _find_binary_after_install(binary):
                             _auto_install_dependency(project_root, lang_id, spec.dependency.id)
+
+                    # Sync pre-commit hook for auto-enabled language
+                    try:
+                        from audiagentic.components.coding_lsp.git_hooks_sync import (
+                            _sync_hook_for_language,
+                        )
+
+                        coding_lsp_state = get_feature_state(
+                            project_root, "coding-lsp", "coding-lsp", "coding-lsp"
+                        )
+                        if coding_lsp_state.options.get("pre-commit-hooks-enabled", True):
+                            _sync_hook_for_language(project_root, lang_id, install=True)
+                    except Exception:
+                        logger.warning(
+                            "Failed to sync pre-commit hook for auto-enabled language",
+                            exc_info=True,
+                        )
+
                     servers_by_lang = discover_servers_multi(project_root)
                     for cfg in servers_by_lang.get(lang_id, []):
                         if _file_matches_patterns(file_path, cfg.file_extensions):
@@ -242,7 +269,9 @@ def _resolve_language_servers_for_file(
 
 
 def pick_capable(
-    project_root: Path, file_path: Path, method: str,
+    project_root: Path,
+    file_path: Path,
+    method: str,
 ) -> LspSession | None:
     """Return the first session (for this file's language) that supports method.
 
@@ -259,7 +288,8 @@ def pick_capable(
 
 
 def all_sessions_for_file(
-    project_root: Path, file_path: Path,
+    project_root: Path,
+    file_path: Path,
 ) -> list[LspSession]:
     """Return all warmed sessions that handle this file (across all servers)."""
     sessions = []
@@ -314,6 +344,7 @@ def _open_file_session(file: str, method: str = "") -> tuple[Any, str]:
             if any(kw in cmd_str for kw in ("ruff", "clippy", "eslint")):
                 return 2  # Lowest priority: linter
             return 1  # Unknown server: medium priority
+
         sessions_for_method.sort(key=_server_priority)
         chosen = sessions_for_method[0]
     else:

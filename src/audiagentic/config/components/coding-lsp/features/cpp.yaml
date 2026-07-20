@@ -22,6 +22,11 @@ dependencies:
       apt: clangd
       dnf: clangd
       pacman: clangd
+pre-commit-hooks:
+  check:
+    - clang-format,--dry-run,--Werror
+  format:
+    - clang-format,-i
 options-schema:
   server-settings:
     type: object
