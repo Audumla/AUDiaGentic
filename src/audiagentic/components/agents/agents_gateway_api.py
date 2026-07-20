@@ -44,6 +44,58 @@ def _resolve_provider_isolation_tier(provider_id: str) -> str:
     return get_provider_execution_isolation_tier(provider_id)
 
 
+def _classify_terminal_quality(
+    project_root: Path,
+    record: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Classify terminal output quality and return report dict, or None for non-terminal.
+
+    Invokes agents_terminal_quality.classify_terminal_output only for records in
+    TERMINAL_STATES. Gathers session-side evidence (latest-turn projection and
+    quality summary) when a session is attached, but never mutates the record
+    or persists any data.
+    """
+    if record["state"] not in store.TERMINAL_STATES:
+        return None
+    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+    from audiagentic.components.agents.agents_terminal_quality import classify_terminal_output
+
+    session_id = record.get("session-id")
+    request_id = record.get("request-id")
+    latest_turn: dict[str, Any] | None = None
+    quality_summary: dict[str, Any] | None = None
+    if session_id:
+        latest_turn = session_store.latest_turn_projection(
+            project_root, session_id, request_id=request_id,
+        )
+        quality_summary = session_store.latest_turn_quality_summary(
+            project_root, session_id, request_id=request_id,
+        )
+    report = classify_terminal_output(
+        record=record,
+        latest_turn=latest_turn,
+        session_event_summary=quality_summary,
+    )
+    return report.to_dict()
+
+
+def _enrich_terminal_result(
+    result: dict[str, Any],
+    project_root: Path,
+) -> dict[str, Any]:
+    """Add terminal-quality to a copy of *result* when the state is terminal.
+
+    Returns the original *result* unchanged when non-terminal (no copy made).
+    """
+    if result["state"] in store.TERMINAL_STATES:
+        enriched = dict(result)
+        tq = _classify_terminal_quality(project_root, enriched)
+        if tq is not None:
+            enriched["terminal-quality"] = tq
+        return enriched
+    return result
+
+
 def submit_llm_request(
     project_root: Path,
     *,
@@ -232,7 +284,8 @@ def submit_llm_request(
 
     if mode == "blocking":
         wait_timeout = timeout_seconds or DEFAULT_BLOCKING_TIMEOUT_SECONDS
-        return _QUEUE_MANAGER.wait(project_root, record["request-id"], wait_timeout)
+        raw = _QUEUE_MANAGER.wait(project_root, record["request-id"], wait_timeout)
+        return _enrich_terminal_result(raw, project_root)
     return record
 
 
@@ -271,7 +324,7 @@ def request_runtime_status(project_root: Path, request_id: str) -> dict[str, Any
         if runtime is not None:
             session_status = runtime.session_runtime_status(session_id)
 
-    return {
+    result: dict[str, Any] = {
         "request-id": request_id,
         "queue-state": queue_state,
         "profile-slot": profile_slot,
@@ -281,6 +334,11 @@ def request_runtime_status(project_root: Path, request_id: str) -> dict[str, Any
         "session-id": session_id,
         "session": session_status,
     }
+    if state in store.TERMINAL_STATES:
+        tq = _classify_terminal_quality(project_root, record)
+        if tq is not None:
+            result["terminal-quality"] = tq
+    return result
 
 
 def wait_llm_request(project_root: Path, request_id: str, timeout_seconds: float | None = None) -> dict[str, Any]:
@@ -288,10 +346,18 @@ def wait_llm_request(project_root: Path, request_id: str, timeout_seconds: float
 
     The caller's timeout is honoured; the MCP boundary applies its own transport
     cap. The MCP adapter applies its own transport-specific bound.
+    Terminal results are enriched with ``terminal-quality``; timeout responses
+    carry ``wait-timeout: True`` and omit it.
     """
-    return _QUEUE_MANAGER.wait(
+    raw = _QUEUE_MANAGER.wait(
         project_root, request_id, timeout_seconds or DEFAULT_BLOCKING_TIMEOUT_SECONDS
     )
+    if raw["state"] in store.TERMINAL_STATES:
+        return _enrich_terminal_result(raw, project_root)
+    # Non-terminal: timeout — signal it and omit terminal-quality
+    result = dict(raw)
+    result["wait-timeout"] = True
+    return result
 
 
 def cancel_llm_request(project_root: Path, request_id: str) -> dict[str, Any]:

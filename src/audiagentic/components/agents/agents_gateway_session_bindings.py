@@ -1,4 +1,4 @@
-"""Durable AG ↔ provider session binding index (AS30).
+"""Durable AG to provider session binding index (AS30).
 
 The protected session record owns the raw provider ref. This module owns the
 project-local index over a redacted hash so callers never use the ref as a path
@@ -48,8 +48,12 @@ def provider_ref_key(
         identity_context_fingerprint or DEFAULT_IDENTITY_CONTEXT,
         provider_session_ref,
     ):
-        hasher.update(part.encode("utf-8"))
-        hasher.update(b"\0")
+        # Length-prefixed fields: provider refs are opaque and may contain any
+        # byte (including NUL), so delimiter-based encoding would be ambiguous.
+        encoded = part.encode("utf-8")
+        hasher.update(str(len(encoded)).encode("ascii"))
+        hasher.update(b":")
+        hasher.update(encoded)
     return hasher.hexdigest()
 
 
@@ -94,6 +98,53 @@ def build_binding(
     }
 
 
+def build_migrated_v1_binding(
+    *,
+    session_id: str,
+    provider_id: str | None,
+    provider_session_ref: str | None,
+    created_at: str,
+) -> dict[str, Any] | None:
+    """Build the v2 binding for a legacy v1 record, deterministically.
+
+    A v1 record is only migrated in memory on read, so every field must be a
+    pure function of the legacy record: re-reading the same file must yield
+    the identical binding (identity, timestamp, key). No random binding-id,
+    no read-time clock.
+    """
+    if provider_session_ref is None:
+        return None
+    seed = hashlib.sha256()
+    for part in ("v1-migration", session_id, provider_id or "", provider_session_ref):
+        encoded = part.encode("utf-8")
+        seed.update(str(len(encoded)).encode("ascii"))
+        seed.update(b":")
+        seed.update(encoded)
+    key = provider_ref_key(
+        provider_id=provider_id,
+        surface_id=None,
+        ref_namespace=None,
+        identity_context_fingerprint=None,
+        provider_session_ref=provider_session_ref,
+    )
+    return {
+        "binding-id": f"sbind_{seed.hexdigest()[:16]}",
+        "generation": 1,
+        "provider-id": provider_id,
+        "surface-id": DEFAULT_SURFACE_ID,
+        "surface-version": None,
+        "ref-namespace": DEFAULT_REF_NAMESPACE,
+        "provider-session-ref": provider_session_ref,
+        "provider-ref-key": key,
+        "relation": BindingRelation.OPENED.value,
+        "ownership": SessionOwnership.OWNED.value,
+        "predecessor-binding-id": None,
+        "identity-context-fingerprint": DEFAULT_IDENTITY_CONTEXT,
+        "execution-context-fingerprint": DEFAULT_EXECUTION_CONTEXT,
+        "created-at": created_at,
+    }
+
+
 def public_binding_projection(binding: dict[str, Any] | None) -> dict[str, Any] | None:
     if not binding:
         return None
@@ -109,6 +160,128 @@ def public_binding_projection(binding: dict[str, Any] | None) -> dict[str, Any] 
         "predecessor-binding-id": binding.get("predecessor-binding-id"),
         "provider-ref-key-prefix": key[:12] if key else None,
     }
+
+
+def project_public_session(record: dict[str, Any]) -> dict[str, Any]:
+    """Project a session record to its public shape: redacted binding, no
+    protected provider refs. Used by both list_llm_sessions and close_llm_session
+    so public surfaces are consistent (AS35)."""
+    projected = dict(record)
+    projected["binding"] = public_binding_projection(record.get("binding"))
+    projected.pop("provider-session-ref", None)
+    return projected
+
+
+# AS33: capability-snapshot projection helpers.
+
+# Keys that must never reach public diagnostics: provider refs, raw payloads,
+# prompts, outputs, and tool arguments are not capability facts.
+_CAPABILITIES_FORBIDDEN_KEYS = frozenset({
+    "provider-session-ref",
+    "raw-payload",
+    "prompt",
+    "output",
+    "tool-args",
+    "tool_args",
+    "tool-calls",
+    "tool_calls",
+    "tool-arguments",
+    "provider-surface",
+    "surface-ref",
+    "native-ref",
+})
+
+# Whitelist of safe capability-snapshot keys (enum/id/scalar only).
+_CAPABILITIES_SAFE_KEYS = frozenset({
+    "surface-id",
+    "surface-version",
+    "declared-controls",
+    "observation-mechanism",
+    "observation-source",
+    "supported-statuses",
+    "evidence-tier",
+})
+
+# Recognized session-record keys for the capability snapshot.
+_CAPABILITIES_SNAPSHOT_KEYS = (
+    "capability-snapshot",
+    "resolved-capabilities",
+    "session-capabilities",
+)
+
+
+def _is_safe_scalar(value: Any) -> bool:
+    """Return True for strings, bools, and numbers (safe enum-like values)."""
+    return isinstance(value, (str, bool, int, float)) and not isinstance(value, complex)
+
+
+def _redact_capabilities_value(value: Any, *, key: str | None = None) -> Any | None:
+    """Recursively redact a capability-snapshot value to safe scalars only."""
+    if key in _CAPABILITIES_FORBIDDEN_KEYS:
+        return None
+    if _is_safe_scalar(value):
+        return value
+    if isinstance(value, list):
+        filtered = []
+        for item in value:
+            redacted = _redact_capabilities_value(item)
+            if redacted is not None:
+                filtered.append(redacted)
+        return filtered if filtered else None
+    if isinstance(value, dict):
+        filtered = {}
+        for k, v in value.items():
+            if not isinstance(k, str):
+                continue
+            redacted = _redact_capabilities_value(v, key=k)
+            if redacted is not None:
+                filtered[k] = redacted
+        return filtered if filtered else None
+    # Complex types (sets, tuples, custom objects) are dropped.
+    return None
+
+
+def project_session_capabilities(
+    session_record: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Project a redacted capabilities object from an explicit capability-snapshot.
+
+    If the session record does not carry a recognized capability snapshot, or
+    the projection yields nothing after redaction, return None so the caller
+    omits the field entirely. Never infers capabilities from provider id,
+    model id, adapter behavior, runtime liveness, or queue state.
+
+    Recognized snapshot keys: "capability-snapshot", "resolved-capabilities",
+    "session-capabilities".
+    """
+    if not session_record or not isinstance(session_record, dict):
+        return None
+
+    raw = (
+        session_record.get("capability-snapshot")
+        or session_record.get("resolved-capabilities")
+        or session_record.get("session-capabilities")
+    )
+    if not raw or not isinstance(raw, dict):
+        return None
+
+    projected: dict[str, Any] = {}
+
+    # Only whitelist keys; drop forbidden keys and anything else.
+    for key in _CAPABILITIES_SAFE_KEYS:
+        value = raw.get(key)
+        if value is None:
+            continue
+        if key in _CAPABILITIES_FORBIDDEN_KEYS:
+            continue
+        redacted = _redact_capabilities_value(value, key=key)
+        if redacted is not None:
+            projected[key] = redacted
+
+    return projected if projected else None
+
+
+# Binding index persistence.
 
 
 def _read_index(path: Path) -> dict[str, Any]:

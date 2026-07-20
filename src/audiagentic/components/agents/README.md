@@ -11,9 +11,11 @@ execution parameters. Profiles are stored per-project in
 - `agents_api.py` — Pure-logic CRUD API (load, save, list, get, create, update, delete, resolve), agent_status status-hook
 - `agents_manage_mcp.py` — Management MCP server (CRUD tools, CLI-side only)
 - `agents_mcp.py` — Operational MCP server (resolve tools, provider-facing)
-- `agents_gateway_store.py` — Gateway request/result record contract and persisted state (AG08)
+- `agents_gateway_store/` — Gateway request/result record contract and persisted state (AG08), split into _shared, _admission, _records, _transitions (SH18)
 - `agents_gateway_queue.py` — Per-profile FIFO queue, concurrency limiting, cancel, wait, lifecycle events (AG09)
 - `agents_gateway_dispatch.py` — Provider dispatch, retry, fallback (AG10)
+- `agents_gateway_session_dispatch.py` — Sessionful dispatch path extracted from dispatch.py (SH18)
+- `agents_gateway_turn_events.py` — Turn-event projection and publishing extracted from sessions.py (SH18)
 - `agents_gateway_api.py` — Public submit/status/wait/cancel/run API (AG11)
 - `agents_gateway_mcp.py` — Gateway MCP server (AG11)
 - `agents_gateway_events.py` — Event-triggered submission via `agents.llm.gateway.requested` (AG12)
@@ -99,7 +101,8 @@ defaulting) — resolved via `agents_gateway_queue.resolve_*` / `agents_gateway_
 - `session-turn-silence-timeout-seconds` (number, default 0 = disabled) —
   opt-in in-turn liveness watchdog: if a running turn produces no transport
   events for this long, the reaper fails the session with close-reason
-  `turn-stalled`. Only enable for harnesses with a known event cadence.
+  `turn-silence-timeout`. This is configured timeout policy, not proof of
+  process death or orphaning. Only enable for harnesses with a known event cadence.
 
 Cancelling a running SESSION request now also signals protocol-level
 `session/cancel` to the in-flight turn (best-effort); an interrupted turn
@@ -121,10 +124,11 @@ must never prevent a request from reaching its real terminal state.
 ### Restart reconciliation
 
 `GatewayQueueManager` is an in-process singleton. A restarted host cannot recover
-the old worker's execution state, so `agents_gateway_api.reconcile_gateway_state(project_root)`
-performs one-shot cleanup for persisted non-terminal records: `running` requests become
-`failed` with an orphaned-after-restart error, and `queued` requests become `rejected`.
-The reconciliation is idempotent and leaves already-terminal records untouched.
+the old worker's execution state. Shared-gateway recovery is owned by the SH07
+active-work index: `agents_gateway_recovery.recover_gateway_requests(...)`
+releases stale queued claims and interrupts stale running claims only when the
+recorded service owner epoch is no longer live. The public gateway API does not
+perform a second project-wide orphan sweep.
 
 ### Explicit standalone mode (SH04)
 
@@ -204,8 +208,9 @@ recovered record-only via `agents_gateway_lifecycle.recover_unprovable_owner`
   project-root. Fine in practice (one project per process), but worth knowing.
 - **Recovery boundary**: SH04 proves explicit service ownership, client-exit
   survival, and deterministic idle process restart. Durable recovery of queued
-  or running work after service-process failure is owned by SH07; the existing
-  one-shot reconciliation remains the current orphan classifier until then.
+  or running work after service-process failure is owned by SH07 active-work
+  recovery; session orphan/death handling continues through the session runtime
+  and AS26 process-evidence path.
 - **Automatic mode is not yet the default**: SH11 owns consumer cutover and
   removal of in-process ownership. SH04 standalone and SH05 automatic modes
   remain explicit migration choices.
