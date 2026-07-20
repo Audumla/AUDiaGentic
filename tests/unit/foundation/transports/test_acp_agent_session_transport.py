@@ -399,7 +399,7 @@ class TestAcpAgentSessionTransportOpenClose:
         with pytest.raises(AudiaGenticError):
             await transport.prompt(
                 SimpleNamespace(turn_id="t-1", body="hello"),  # type: ignore
-                lambda obs: None,  # type: ignore
+                lambda observation: None,  # type: ignore
             )
 
 
@@ -414,8 +414,8 @@ class TestAcpAgentSessionTransportPrompt:
 
         delivered: list[TransportObservation] = []
 
-        async def sink(obs: TransportObservation) -> None:
-            delivered.append(obs)
+        async def sink(observation: TransportObservation) -> None:
+            delivered.append(observation)
 
         from audiagentic.foundation.transports.agent_session import SessionPrompt
         result = await transport.prompt(SessionPrompt(turn_id="t-1", body="hello"), sink)
@@ -436,8 +436,8 @@ class TestAcpAgentSessionTransportPrompt:
 
         delivered: list[TransportObservation] = []
 
-        async def sink(obs: TransportObservation) -> None:
-            delivered.append(obs)
+        async def sink(observation: TransportObservation) -> None:
+            delivered.append(observation)
 
         from audiagentic.foundation.transports.agent_session import SessionPrompt
         result = await transport.prompt(
@@ -456,8 +456,8 @@ class TestAcpAgentSessionTransportPrompt:
 
         delivered: list[TransportObservation] = []
 
-        async def sink(obs: TransportObservation) -> None:
-            delivered.append(obs)
+        async def sink(observation: TransportObservation) -> None:
+            delivered.append(observation)
 
         from audiagentic.foundation.transports.agent_session import SessionPrompt
         result = await transport.prompt(
@@ -476,7 +476,7 @@ class TestAcpAgentSessionTransportPrompt:
 
         from audiagentic.foundation.transports.agent_session import SessionPrompt
 
-        async def sink(obs: TransportObservation) -> None:
+        async def sink(observation: TransportObservation) -> None:
             pass
 
         result = await transport.prompt(
@@ -494,7 +494,7 @@ class TestAcpAgentSessionTransportPrompt:
 
         from audiagentic.foundation.transports.agent_session import SessionPrompt
 
-        async def sink(obs: TransportObservation) -> None:
+        async def sink(observation: TransportObservation) -> None:
             pass
 
         result = await transport.prompt(
@@ -534,8 +534,8 @@ class TestAcpAgentSessionTransportPrompt:
 
         delivered: list[TransportObservation] = []
 
-        async def sink(obs: TransportObservation) -> None:
-            delivered.append(obs)
+        async def sink(observation: TransportObservation) -> None:
+            delivered.append(observation)
 
         from audiagentic.foundation.transports.agent_session import SessionPrompt
         result = await transport.prompt(
@@ -560,7 +560,7 @@ class TestAcpAgentSessionTransportPrompt:
 
         from audiagentic.foundation.transports.agent_session import SessionPrompt
 
-        async def sink(obs: TransportObservation) -> None:
+        async def sink(observation: TransportObservation) -> None:
             pass
 
         r1 = await transport.prompt(SessionPrompt(turn_id="t-1", body="one"), sink)
@@ -588,7 +588,7 @@ class TestSinkCallbackExceptionIsolation:
 
         sink_called = [0]
 
-        async def failing_sink(obs: TransportObservation) -> None:
+        async def failing_sink(observation: TransportObservation) -> None:
             sink_called[0] += 1
             raise RuntimeError("sink error")
 
@@ -611,7 +611,7 @@ class TestSinkCallbackExceptionIsolation:
 
         call_count = [0]
 
-        async def intermittent_sink(obs: TransportObservation) -> None:
+        async def intermittent_sink(observation: TransportObservation) -> None:
             call_count[0] += 1
             if call_count[0] == 2:
                 raise RuntimeError("intermittent error")
@@ -676,7 +676,7 @@ class TestControlCancelTurn:
         # Replace conn.prompt with slow version
         conn.prompt = AsyncMock(side_effect=slow_prompt)
 
-        async def sink(obs: TransportObservation) -> None:
+        async def sink(observation: TransportObservation) -> None:
             pass
 
         prompt_task = asyncio.ensure_future(
@@ -800,7 +800,7 @@ class TestProtocolConformance:
 
         from audiagentic.foundation.transports.agent_session import SessionPrompt
 
-        async def sink(obs: TransportObservation) -> None:
+        async def sink(observation: TransportObservation) -> None:
             pass
 
         result = await transport.prompt(
@@ -823,7 +823,7 @@ class TestProtocolConformance:
 
         from audiagentic.foundation.transports.agent_session import SessionPrompt
 
-        async def sink(obs: TransportObservation) -> None:
+        async def sink(observation: TransportObservation) -> None:
             pass
 
         prompt_result = await transport.prompt(
@@ -864,11 +864,11 @@ class TestAcpRegressionParity:
         delivered_1: list[TransportObservation] = []
         delivered_2: list[TransportObservation] = []
 
-        async def sink_1(obs: TransportObservation) -> None:
-            delivered_1.append(obs)
+        async def sink_1(observation: TransportObservation) -> None:
+            delivered_1.append(observation)
 
-        async def sink_2(obs: TransportObservation) -> None:
-            delivered_2.append(obs)
+        async def sink_2(observation: TransportObservation) -> None:
+            delivered_2.append(observation)
 
         r1 = await transport.prompt(SessionPrompt(turn_id="t-1", body="one"), sink_1)
         r2 = await transport.prompt(SessionPrompt(turn_id="t-2", body="two"), sink_2)
@@ -890,8 +890,8 @@ class TestAcpRegressionParity:
 
         delivered: list[TransportObservation] = []
 
-        async def sink(obs: TransportObservation) -> None:
-            delivered.append(obs)
+        async def sink(observation: TransportObservation) -> None:
+            delivered.append(observation)
 
         from audiagentic.foundation.transports.agent_session import SessionPrompt
         result = await transport.prompt(
@@ -919,8 +919,8 @@ class TestRequestCorrelation:
 
         delivered: list[TransportObservation] = []
 
-        async def sink(obs: TransportObservation) -> None:
-            delivered.append(obs)
+        async def sink(observation: TransportObservation) -> None:
+            delivered.append(observation)
 
         from audiagentic.foundation.transports.agent_session import SessionPrompt
         await transport.prompt(
@@ -941,8 +941,8 @@ class TestRequestCorrelation:
 
         delivered: list[TransportObservation] = []
 
-        async def sink(obs: TransportObservation) -> None:
-            delivered.append(obs)
+        async def sink(observation: TransportObservation) -> None:
+            delivered.append(observation)
 
         from audiagentic.foundation.transports.agent_session import SessionPrompt
         my_turn_id = "gateway-turn-99"

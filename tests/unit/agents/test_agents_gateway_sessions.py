@@ -81,6 +81,7 @@ class FakeAgentSessionTransport:
             prompt_text = prompt
             cancel_signal = kwargs.get("cancel_signal")
             sink = None
+            turn_id = None
 
         stop_reason = "end_turn"
         if self.block_event is not None:
@@ -296,6 +297,7 @@ def test_provider_prepare_called_once_with_explicit_context(tmp_path):
     runtime = SessionRuntime(
         clock=clock, reap_interval_seconds=60, provider_prepare_fn=tracking_prepare,
     )
+    record: dict[str, Any] | None = None
     try:
         record = runtime.open_session(
             tmp_path,
@@ -315,7 +317,8 @@ def test_provider_prepare_called_once_with_explicit_context(tmp_path):
         assert record["state"] == "active"
         assert runtime.live_session_ids() == [record["session-id"]]
     finally:
-        runtime.close_session(tmp_path, record["session-id"])
+        if record is not None:
+            runtime.close_session(tmp_path, record["session-id"])
         runtime.shutdown()
 
 
@@ -341,6 +344,7 @@ def test_open_passes_exact_snapshot_and_transport(tmp_path):
     runtime = SessionRuntime(
         clock=clock, reap_interval_seconds=60, provider_prepare_fn=prepare_with_surface,
     )
+    record: dict[str, Any] | None = None
     try:
         record = runtime.open_session(
             tmp_path,
@@ -356,7 +360,8 @@ def test_open_passes_exact_snapshot_and_transport(tmp_path):
         status = runtime.session_runtime_status(session_id)
         assert status["available"] is True
     finally:
-        runtime.close_session(tmp_path, record["session-id"])
+        if record is not None:
+            runtime.close_session(tmp_path, record["session-id"])
         runtime.shutdown()
 
 
@@ -376,6 +381,7 @@ def test_open_failure_cleans_partial_runtime(tmp_path):
     runtime = SessionRuntime(
         clock=clock, reap_interval_seconds=60, provider_prepare_fn=prepare_fn,
     )
+    record: dict[str, Any] | None = None
     try:
         # The transport opens successfully (provider_session_ref returned).
         # If session_store.write_session_record or binding_store.register_open_binding
@@ -391,7 +397,8 @@ def test_open_failure_cleans_partial_runtime(tmp_path):
         assert transports[0].opened
         assert not transports[0].closed
     finally:
-        runtime.close_session(tmp_path, record["session-id"])
+        if record is not None:
+            runtime.close_session(tmp_path, record["session-id"])
         runtime.shutdown()
 
 
@@ -402,7 +409,9 @@ def test_open_prompt_close_lifecycle(rig):
     assert record["state"] == "active"
     assert record["contract-version"] == "v2"
     assert record["binding"]["provider-session-ref"] == "prov-ses-1"
-    assert "provider-session-ref" not in binding_store.public_binding_projection(record["binding"])
+    public_binding = binding_store.public_binding_projection(record["binding"])
+    assert public_binding is not None
+    assert "provider-session-ref" not in public_binding
     assert runtime.live_session_ids() == [session_id]
 
     result = runtime.prompt_in_session(tmp_path, session_id, "hello", request_id="req_1")
