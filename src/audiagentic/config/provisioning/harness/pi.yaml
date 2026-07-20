@@ -14,8 +14,17 @@
 # Use "latest" to always pull the current release.
 # Overridden by env vars: AUDIAGENTIC_PI_AGENT_VERSION, AUDIAGENTIC_PI_MCP_ADAPTER_VERSION
 agent:
+  # The installer consumes this package recipe; keep package identities here
+  # so clean installs do not depend on hand-run npm commands.
+  packages:
+    cli: "@earendil-works/pi-coding-agent"
+    mcp_adapter: "pi-mcp-adapter"
+    acp: "pi-acp"
+  # Pi ACP is a separate community bridge, not a Pi native capability.
+  acp_version: "0.0.31"
+  runtime_extra: "acp"
   version: "0.77.0"
-  mcp_adapter_version: latest
+  mcp_adapter_version: "2.11.0"
 
 # --- Built-in tool access control ---
 #
