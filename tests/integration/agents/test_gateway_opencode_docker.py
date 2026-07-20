@@ -92,7 +92,7 @@ class _RigHandler(BaseHTTPRequestHandler):
     # process) instead of racing against however fast the fake rig replies.
     hold: threading.Event = threading.Event()
 
-    def log_message(self, _format: str, *_args: object) -> None:
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A002
         return
 
     def do_GET(self) -> None:  # noqa: N802
