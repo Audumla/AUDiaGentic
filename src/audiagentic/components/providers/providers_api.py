@@ -66,6 +66,11 @@ from audiagentic.components.providers.contracts.self_provided_lsp import (
     SelfProvidedLspRequest,
     SelfProvidedLspResult,
 )
+from audiagentic.components.providers.contracts.session_surface import (
+    ResolvedSessionSurface,
+    SurfaceHint,
+)
+from audiagentic.foundation.transports.session_surface import PreparedSessionTransport
 
 
 def get_provider_execution_isolation_tier(provider_id: str) -> ProviderIsolationTier:
@@ -1217,9 +1222,83 @@ async def reconcile_all_providers(project_root: Path, *, fetch_catalogs: bool) -
         _reconcile_all, project_root=project_root, fetch_catalogs=fetch_catalogs
     )
 
+# --- AS29 slice 5a: resolved session-surface through public boundary --------
+
+
+def resolve_session_surface(
+    project_root: Path,
+    provider_id: str,
+    surface_hint: SurfaceHint,
+) -> ResolvedSessionSurface:
+    """Resolve a session-surface snapshot through the public boundary.
+
+    Delegates to the resolver service and returns only frozen foundation
+    snapshot types. Never raises — unsupported surfaces produce an
+    ``UNSUPPORTED``-state snapshot with neutral version metadata.
+
+    Args:
+        project_root: Explicit project root for provider enablement checks.
+        provider_id: Canonical provider identifier.
+        surface_hint: Typed request carrying surface id and optional
+            version/platform hints.
+
+    Returns:
+        A frozen :class:`ResolvedSessionSurface` instance.
+    """
+    from audiagentic.components.providers.services.session_surface_resolution import (
+        resolve_session_surface as _resolve,
+    )
+
+    return _resolve(project_root, provider_id, surface_hint)
+
+
+def prepare_provider_session_transport(
+    project_root: Path,
+    *,
+    provider_id: str,
+    surface_hint: SurfaceHint,
+    model_id: str | None = None,
+    model_alias: str | None = None,
+    request_runtime_root: Path | None = None,
+) -> PreparedSessionTransport:
+    """Prepare a session transport with resolved surface snapshot.
+
+    Resolves the AS29 surface exactly once, then wires provider-local factory
+    composition for supported ACP surfaces. Returns a typed
+    :class:`PreparedSessionTransport` carrying:
+
+    - ``surface`` — the same frozen :class:`ResolvedSessionSurface` snapshot.
+    - ``effective_provider_ref`` — the resolved :class:`SessionSurfaceRef`.
+    - ``transport`` — an :class:`AcpAgentSessionTransport` (implements
+      :class:`AgentSessionTransport`) for supported ACP surfaces, or ``None``
+      when the surface is unsupported.
+
+    Unsupported-surface contract: disabled provider, missing factory,
+    version/platform mismatch, unvalidated high-level, blocked declaration
+    all produce ``transport=None``. No process is launched and no fallback
+    to another surface occurs.
+
+    Adapter refs are resolved provider-side only and never returned.
+
+    Does not expose descriptor/adapter/protocol/native values.
+    """
+    from audiagentic.components.providers.services.public_execution import (
+        prepare_provider_session_transport as _prepare,
+    )
+
+    return _prepare(
+        project_root,
+        provider_id=provider_id,
+        surface_hint=surface_hint,
+        model_id=model_id,
+        model_alias=model_alias,
+        request_runtime_root=request_runtime_root,
+    )
+
 
 __all__ = [
     # One-shot provider execution
+    "PreparedSessionTransport",
     "ProviderExecutionRequest",
     "ProviderExecutionResult",
     "ProviderAcpLaunchResult",
@@ -1228,6 +1307,7 @@ __all__ = [
     "get_provider_runtime_config_state",
     "execute_provider_turn",
     "prepare_provider_acp_launch",
+    "prepare_provider_session_transport",
     "prepare_provider_execution_environment",
     # Prompt launch/query operations
     "list_canonical_provider_ids",
@@ -1261,6 +1341,10 @@ __all__ = [
     "manage_cli_lifecycle",
     "reconcile_provider",
     "reconcile_all_providers",
+    # AS29 slice 5a — session-surface resolution through public boundary
+    "ResolvedSessionSurface",
+    "SurfaceHint",
+    "resolve_session_surface",
     # Surfaces
     "operate_provider_surface",
     "operate_provider_surfaces",

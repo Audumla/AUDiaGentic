@@ -79,6 +79,73 @@ def _classify_terminal_quality(
     return report.to_dict()
 
 
+def _session_progress_context(
+    project_root: Path, record: dict[str, Any]
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Return (latest_session_event, progress_summary) for a record's session.
+
+    Both are bounded, redacted projections built from the persisted session
+    timeline — no prompt text, tool args, output, provider refs, or project
+    roots. Returns (None, None) when the record has no session or no timeline
+    exists yet (e.g. before the first turn event lands).
+    """
+    session_id = record.get("session-id")
+    if not session_id:
+        return None, None
+    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+
+    request_id = record.get("request-id")
+    latest_turn = session_store.latest_turn_projection(
+        project_root, session_id, request_id=request_id,
+    )
+    progress_summary = session_store.build_session_progress_summary(
+        project_root, session_id, request_id,
+    )
+    return latest_turn, progress_summary
+
+
+def _request_progress(project_root: Path, record: dict[str, Any]) -> dict[str, Any]:
+    """SH15: bounded progress projection for one request, including the
+    richer session-evidence fields when a session is attached."""
+    from audiagentic.components.agents.agents_gateway_progress import (
+        project_request_progress,
+    )
+
+    latest_session_event, progress_summary = _session_progress_context(project_root, record)
+    return project_request_progress(
+        record,
+        latest_session_event=latest_session_event,
+        progress_summary=progress_summary,
+    )
+
+
+def _runtime_fingerprint() -> dict[str, str]:
+    """Redacted runtime identity for operator diagnostics: package version
+    plus a short source stamp identifying the running code (git HEAD short
+    hash when available). Cached — the running code does not change mid-process."""
+    return _cached_runtime_fingerprint()
+
+
+@functools.lru_cache(maxsize=1)
+def _cached_runtime_fingerprint() -> dict[str, str]:
+    from audiagentic import __version__
+
+    source_stamp = "unknown"
+    try:
+        import subprocess
+
+        repo_root = Path(__file__).resolve().parents[4]
+        result = subprocess.run(
+            ["git", "rev-parse", "--short=12", "HEAD"],
+            capture_output=True, text=True, timeout=2, cwd=repo_root,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            source_stamp = result.stdout.strip()
+    except Exception:
+        pass
+    return {"version": __version__, "source-stamp": source_stamp}
+
+
 def _enrich_terminal_result(
     result: dict[str, Any],
     project_root: Path,
@@ -111,6 +178,7 @@ def submit_llm_request(
     session_max_lifetime_seconds: float | None = None,
     component_profile: str | None = None,
     _dispatch_owner_epoch: str | None = None,
+    _dispatch_service_root: str | None = None,
 ) -> dict[str, Any]:
     """Submit a gateway request. Returns immediately with request-id and initial state
     unless mode='blocking', in which case it waits for a terminal result (see run_llm_request).
@@ -178,6 +246,23 @@ def submit_llm_request(
     resolved_model_id = profile["model_id"]
     params = profile.get("params", {})
 
+    # SH07 C2: when a gateway-owned registry is installed (shared mode), it
+    # is authoritative for provider/model/queue-limits — project-local
+    # profile data only selects which gateway profile id to reference. The
+    # resolved snapshot is persisted on the record so the queue can validate
+    # staleness on reload (CON-AGW-101) without re-deriving from mutable
+    # caller params. In embedded mode (no registry installed) this stays
+    # None; the queue's own embedded-compatibility fallback covers that case.
+    from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
+
+    gateway_snapshot = None
+    gateway_registry = profiles_mod.get_gateway_registry()
+    if gateway_registry is not None:
+        gateway_snapshot = gateway_registry.resolve_snapshot(resolved_profile_id)
+        resolved_provider_id = gateway_snapshot.provider_id
+        resolved_model_id = gateway_snapshot.model_id
+        params = dict(gateway_snapshot.execution_params)
+
     # --- 3. Resolve provider isolation tier and runtime digest --------------
     isolation_tier = _resolve_provider_isolation_tier(resolved_provider_id)
 
@@ -243,11 +328,36 @@ def submit_llm_request(
         prompt_digest=manifest.prompt_digest,
         idempotency_key=None,
         correlation_id=envelope.correlation_id,
+        # SH07 C2: gateway profile snapshot identity, resolved above.
+        gateway_profile_id=gateway_snapshot.profile_id if gateway_snapshot else None,
+        gateway_profile_generation=gateway_snapshot.generation if gateway_snapshot else None,
+        gateway_profile_config_digest=gateway_snapshot.config_digest if gateway_snapshot else None,
+        gateway_execution_lane_key=(
+            gateway_snapshot.lane_key().public_id() if gateway_snapshot else None
+        ),
+        resolved_provider_id=resolved_provider_id,
+        resolved_model_id=resolved_model_id,
+        resolved_queue_limits=(
+            {
+                "max-concurrency": gateway_snapshot.max_concurrency,
+                "queue-max-size": gateway_snapshot.queue_max_size,
+            }
+            if gateway_snapshot
+            else None
+        ),
+        admission_policy_digest=(
+            gateway_snapshot.admission_policy_digest if gateway_snapshot else None
+        ),
     )
     record, created = store.admit_record(
         project_root,
         record,
         idempotency_key=idempotency_key,
+        # C7: without this, the admission-phase work-index entry (which
+        # recovery relies on to discover admitted-but-unclaimed requests
+        # after a crash) is never written — service_root defaults to None
+        # inside admit_record and the write is silently skipped.
+        service_root=Path(_dispatch_service_root) if _dispatch_service_root else None,
     )
 
     if created:
@@ -280,6 +390,9 @@ def submit_llm_request(
         record = _QUEUE_MANAGER.enqueue(
             project_root, record, params, runner,
             dispatch_owner_epoch=_dispatch_owner_epoch,
+            dispatch_service_root=(
+                Path(_dispatch_service_root) if _dispatch_service_root else None
+            ),
         )
 
     if mode == "blocking":
@@ -333,7 +446,18 @@ def request_runtime_status(project_root: Path, request_id: str) -> dict[str, Any
         "cancel-acknowledged-by": record.get("cancel-acknowledged-by"),
         "session-id": session_id,
         "session": session_status,
+        "progress": _request_progress(project_root, record),
     }
+    if session_id:
+        from audiagentic.components.agents import agents_gateway_session_bindings as binding_store
+        from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+
+        # AS33: read the raw session payload (schema-tolerant) so a
+        # capability-snapshot field ahead of the formal schema isn't rejected.
+        raw_session = session_store.read_session_record_raw(project_root, session_id)
+        capabilities = binding_store.project_session_capabilities(raw_session)
+        if capabilities is not None:
+            result["capabilities"] = capabilities
     if state in store.TERMINAL_STATES:
         tq = _classify_terminal_quality(project_root, record)
         if tq is not None:
@@ -357,6 +481,7 @@ def wait_llm_request(project_root: Path, request_id: str, timeout_seconds: float
     # Non-terminal: timeout — signal it and omit terminal-quality
     result = dict(raw)
     result["wait-timeout"] = True
+    result["progress"] = _request_progress(project_root, raw)
     return result
 
 
@@ -384,6 +509,7 @@ def run_llm_request(
     session_max_lifetime_seconds: float | None = None,
     component_profile: str | None = None,
     _dispatch_owner_epoch: str | None = None,
+    _dispatch_service_root: str | None = None,
 ) -> dict[str, Any]:
     """Submit and block until a terminal result or timeout. Not for event-triggered
     paths (AG12 handles those asynchronously through lifecycle events)."""
@@ -401,6 +527,7 @@ def run_llm_request(
         session_max_lifetime_seconds=session_max_lifetime_seconds,
         component_profile=component_profile,
         _dispatch_owner_epoch=_dispatch_owner_epoch,
+        _dispatch_service_root=_dispatch_service_root,
     )
 
 
@@ -444,29 +571,47 @@ def list_llm_requests(
     ]
 
 
+def _public_session_projection(record: dict[str, Any]) -> dict[str, Any]:
+    """Redact a raw session record for client return: drop the internal
+    provider-session-ref and project the binding through its public form."""
+    from audiagentic.components.agents import agents_gateway_session_bindings as binding_store
+
+    projected = dict(record)
+    projected["binding"] = binding_store.public_binding_projection(record.get("binding"))
+    projected.pop("provider-session-ref", None)
+    return projected
+
+
 def list_llm_sessions(
     project_root: Path,
     *,
     state: str | None = None,
 ) -> list[dict[str, Any]]:
     """List persisted gateway sessions, newest first, with a 'live' flag for
-    sessions whose transport is held by THIS process's SessionRuntime."""
-    from audiagentic.components.agents import agents_gateway_session_bindings as binding_store
-    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
-    from audiagentic.components.agents.agents_gateway_sessions import get_session_runtime
+    sessions whose transport is held by THIS process's SessionRuntime.
 
-    live_ids = set(get_session_runtime().live_session_ids())
+    Listing must never start a runtime as a side effect (peek only) — a
+    session with no live handle in this process is simply reported as
+    not-live, including the stale-non-live diagnostic when it was persisted
+    active/non-terminal but nothing here is actually holding it.
+    """
+    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+    from audiagentic.components.agents.agents_gateway_sessions import peek_session_runtime
+
+    runtime = peek_session_runtime()
+    live_ids = set(runtime.live_session_ids()) if runtime is not None else set()
     records = session_store.list_session_records(project_root)
     if state is not None:
         records = [r for r in records if r["state"] == state]
     records.sort(key=lambda r: r["created-at"], reverse=True)
-    public_records: list[dict[str, Any]] = []
+    rows = []
     for record in records:
-        projected = dict(record)
-        projected["binding"] = binding_store.public_binding_projection(record.get("binding"))
-        projected.pop("provider-session-ref", None)
-        public_records.append({**projected, "live": record["session-id"] in live_ids})
-    return public_records
+        live = record["session-id"] in live_ids
+        row = {**_public_session_projection(record), "live": live}
+        if not live and record["state"] not in session_store.SESSION_TERMINAL_STATES:
+            row["runtime-state"] = "stale-non-live"
+        rows.append(row)
+    return rows
 
 
 def close_llm_session(project_root: Path, session_id: str) -> dict[str, Any]:
@@ -478,7 +623,8 @@ def close_llm_session(project_root: Path, session_id: str) -> dict[str, Any]:
 
     runtime = get_session_runtime()
     if session_id in set(runtime.live_session_ids()):
-        return runtime.close_session(project_root, session_id, reason="client-request")
+        record = runtime.close_session(project_root, session_id, reason="client-request")
+        return _public_session_projection(record)
     record = session_store.read_session_record(project_root, session_id)
     if record["state"] not in session_store.SESSION_TERMINAL_STATES:
         # Persisted active but not live here: orphaned by a restart.
@@ -487,70 +633,7 @@ def close_llm_session(project_root: Path, session_id: str) -> dict[str, Any]:
             updates={"close-reason": "orphaned"},
         )
         binding_store.retire_binding(project_root, record, state="failed")
-    return record
-
-
-def reconcile_gateway_state(project_root: Path) -> dict[str, Any]:
-    """Resolve orphaned queued/running records after a process restart.
-
-    The in-memory GatewayQueueManager cannot recover worker execution state.
-    Running records become failed; queued records become rejected. Terminal
-    records are ignored, making this safe to call repeatedly.
-    """
-    reconciled: list[dict[str, str]] = []
-    for record in store.list_records(project_root):
-        request_id = record["request-id"]
-        if record["state"] == "running":
-            updated = store.transition_record(
-                project_root,
-                request_id,
-                "failed",
-                updates={
-                    "error": {
-                        "code": "INT-AGW-ORPHANED",
-                        "kind": "agents",
-                        "message": "gateway request orphaned after process restart",
-                    },
-                    "finished_at": None,
-                },
-            )
-            reconciled.append({"request-id": request_id, "state": updated["state"]})
-        elif record["state"] == "queued":
-            updated = store.transition_record(
-                project_root,
-                request_id,
-                "rejected",
-                updates={
-                    "error": {
-                        "code": "INT-AGW-ORPHANED",
-                        "kind": "agents",
-                        "message": "queued gateway request rejected after process restart",
-                    },
-                    "finished_at": None,
-                },
-            )
-            reconciled.append({"request-id": request_id, "state": updated["state"]})
-
-    # Sessions persisted 'active'/'closing' with no live handle in this
-    # process were orphaned by a restart — mirror the request treatment.
-    from audiagentic.components.agents import agents_gateway_session_bindings as binding_store
-    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
-    from audiagentic.components.agents.agents_gateway_sessions import get_session_runtime
-
-    live_ids = set(get_session_runtime().live_session_ids())
-    reconciled_sessions: list[dict[str, str]] = []
-    for session_record in session_store.list_session_records(project_root):
-        session_id = session_record["session-id"]
-        if session_id in live_ids:
-            continue
-        if session_record["state"] not in session_store.SESSION_TERMINAL_STATES:
-            updated = session_store.transition_session_record(
-                project_root, session_id, "failed",
-                updates={"close-reason": "orphaned"},
-            )
-            binding_store.retire_binding(project_root, updated, state="failed")
-            reconciled_sessions.append({"session-id": session_id, "state": updated["state"]})
-    return {"ok": True, "reconciled": reconciled, "reconciled-sessions": reconciled_sessions}
+    return _public_session_projection(record)
 
 
 def gateway_overview(project_root: Path) -> dict[str, Any]:
@@ -595,4 +678,5 @@ def gateway_overview(project_root: Path) -> dict[str, Any]:
                 for s in sessions[:10]
             ],
         },
+        "runtime-fingerprint": _runtime_fingerprint(),
     }

@@ -76,6 +76,10 @@ RECIPE_IMAGES = [
     Img("audiagentic-provider-lifecycle-e2e:latest", "Dockerfile.provider-lifecycle-e2e", note="provider full lifecycle recipe"),
     Img("audia-provider-lsp-e2e:latest", "Dockerfile.provider-lsp-e2e", note="provider LSP install recipe"),
     Img("audia-mcp-tools-e2e:latest", "Dockerfile.mcp-tools-e2e", note="LSP MCP tools (consumes baked servers)"),
+    Img("audiagentic-gateway-crash-matrix:local", "Dockerfile.gateway-crash-matrix", note="SH07 real-subprocess crash/recovery matrix"),
+    Img("audiagentic-gateway-opencode:local", "Dockerfile.gateway-opencode", note="real npm-CLI-provider gateway dispatch (dynamic discovery)"),
+    Img("audiagentic-gateway-concurrency:local", "Dockerfile.gateway-concurrency", note="real concurrent gateway load + negative paths"),
+    Img("audiagentic-gateway-pi-smoke:local", "Dockerfile.gateway-pi-smoke", note="SH16 real Pi CLI + embedded rig gateway dispatch"),
 ]
 # Very slow clean-toolchain install (rust-analyzer compiles ~15 min) — opt-in.
 LSP_INSTALL = Img("audiagentic-lsp-install-test:latest", "Dockerfile.lsp-install-test", slow=True, note="clean LSP install recipe (rust compile)")

@@ -115,6 +115,12 @@ label-maps:
 # This component owns orchestration only — enabling, installing, and
 # propagating LSP capability.
 
+options:
+  pre-commit-hooks-enabled:
+    type: boolean
+    default: true
+    description: Enable automatic installation of pre-commit hooks for supported languages
+
 files:
   - path: .coding-lsp/logs
     lifecycle: runtime-only
@@ -158,23 +164,30 @@ mcp-servers:
       lsp_add_language: >
         Enable a language and install its language-server dependency if missing.
         Rolls back newly enabled languages when dependency installation fails.
-      lsp_list_languages: List all supported languages with their default server commands
+      lsp_list_languages:
+        List all supported languages with their default server commands
         and detection markers. Use this to discover which languages are available for configuration.
-      lsp_remove_language: Remove a language from the project configuration. Does not uninstall
+      lsp_remove_language:
+        Remove a language from the project configuration. Does not uninstall
         binaries or remove installed packages — only removes the language entry from config.
-      lsp_list_implementations: List available LSP implementations and their current active status.
+      lsp_list_implementations:
+        List available LSP implementations and their current active status.
         Shows which implementation (e.g., ag-lsp) is selected for each configured language.
-      lsp_select_implementation: Switch the active LSP implementation. Requires implementation-id
+      lsp_select_implementation:
+        Switch the active LSP implementation. Requires implementation-id
         to match an available implementation from lsp_list_implementations.
       lsp_get_config: >
         Return resolved config plus the settable-option schema for an LSP implementation.
         The schema field describes every option the implementation accepts (type, description,
         required, default, allowed values). Use it to discover what can be set via lsp_set_config.
-      lsp_set_config: Validate and persist config updates for an LSP implementation. See
+      lsp_set_config:
+        Validate and persist config updates for an LSP implementation. See
         lsp_get_config for the option schema the implementation accepts.
-      lsp_set_language_option: Update a supported language feature option. The key must match
+      lsp_set_language_option:
+        Update a supported language feature option. The key must match
         an option in the language's capability definition; value is validated against the schema.
-      lsp_reset_language_option: Clear a previously set language feature option, reverting to
+      lsp_reset_language_option:
+        Clear a previously set language feature option, reverting to
         the default value defined in the language descriptor.
 
   - name: ag-lsp
@@ -205,7 +218,8 @@ mcp-servers:
         Search workspace symbols by name or identifier (not arbitrary text).
         Prefer over grep for symbol lookups. Returns matching symbols with location,
         kind, and container information.
-      lsp_doc_symbols: Get the symbol outline for a file — all symbols with their
+      lsp_doc_symbols:
+        Get the symbol outline for a file — all symbols with their
         hierarchical parent-child structure and ranges.
       lsp_definition: Go to definition at a position (line:column, 1-based).
         Returns all definition locations for the symbol under the cursor.
@@ -213,14 +227,17 @@ mcp-servers:
         Returns hover content including type signature and docstring.
       lsp_references: Find all references to a symbol at a position. Optionally
         include the declaration itself. Returns file, range, and context for each use.
-      lsp_type_definition: Go to the type definition at a position — resolves through
+      lsp_type_definition:
+        Go to the type definition at a position — resolves through
         aliases to the underlying type declaration.
-      lsp_implementation: Find implementations of an abstract method or interface at a
+      lsp_implementation:
+        Find implementations of an abstract method or interface at a
         position. Returns all concrete implementation locations.
       lsp_call_hierarchy: >
         List callers or callees of a function at a position. Direction is
         "incoming" (who calls this) or "outgoing" (who does this call).
-      lsp_symbol_context: Get the containing symbol context at a position — the nearest
+      lsp_symbol_context:
+        Get the containing symbol context at a position — the nearest
         enclosing class, method, or function definition with its range.
       lsp_code_actions:
         description: >
@@ -234,7 +251,8 @@ mcp-servers:
             List of action kinds to filter by. Common values: "quickfix", "refactor",
             "refactor.extract", "refactor.rewrite", "source.organizeImports".
             Omit to get all available actions.
-      lsp_format_preview: Preview formatting changes for a file range or whole file
+      lsp_format_preview:
+        Preview formatting changes for a file range or whole file
         without applying them. Returns a unified diff of proposed changes.
       lsp_organize_imports_preview: Preview import reordering/removal for a file
         without applying it. Returns a unified diff of proposed changes.
@@ -248,19 +266,26 @@ mcp-servers:
             Minimum severity level to include. Values: 1=error, 2=warning, 3=info, 4=hint.
             Results include this level and higher severities. Default is 4 (all levels).
           limit: Maximum number of diagnostics to return across all files. 0 means no limit.
-      lsp_rename_preview: Preview a symbol rename refactor across the codebase without
+      lsp_rename_preview:
+        Preview a symbol rename refactor across the codebase without
         applying it. Returns all affected files and the unified diff.
-      lsp_file_diagnostics: List diagnostics for a specific file. Filter by minimum
+      lsp_file_diagnostics:
+        List diagnostics for a specific file. Filter by minimum
         severity (1=error, 2=warning, 3=info, 4=hint). Useful for checking a changed file.
-      lsp_changed_diagnostics: List diagnostics that changed across a set of files since
+      lsp_changed_diagnostics:
+        List diagnostics that changed across a set of files since
         the last check. Returns per-file deltas filtered by minimum severity.
-      lsp_inlay_hints: Get inline type hints and parameter name hints within a file range.
+      lsp_inlay_hints:
+        Get inline type hints and parameter name hints within a file range.
         Requires start and end positions as line:column (1-based).
-      lsp_signature_help: Get function signature information at a position — current
+      lsp_signature_help:
+        Get function signature information at a position — current
         parameter index, all parameters with types, and documentation.
-      lsp_type_hierarchy: Navigate supertypes or subtypes of a type at a position.
+      lsp_type_hierarchy:
+        Navigate supertypes or subtypes of a type at a position.
         Direction is "supertypes" (what this extends/implements) or "subtypes" (what extends this).
-      lsp_completion: Get completion suggestions at a position — matching symbols with kind,
+      lsp_completion:
+        Get completion suggestions at a position — matching symbols with kind,
         sort text, and insert snippet. Optionally triggered by a character (e.g., ".", "@").
 
 # No instruction-file contribution for LSP tools: the ag-lsp / ag-lsp-mgmt MCP

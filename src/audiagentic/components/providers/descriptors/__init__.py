@@ -15,6 +15,7 @@ from .base import (
     ProviderPermissions,
 )
 from .registry import all_descriptors, get_descriptor, interrogate, provider_alias_map, register
+from .session_surface_declarations import SessionSurfaceDeclaration
 
 __all__ = [
     "AgentFile",
@@ -23,6 +24,7 @@ __all__ = [
     "ProviderCapabilityFact",
     "ProviderDescriptor",
     "ProviderPermissions",
+    "SessionSurfaceDeclaration",
     "register",
     "get_descriptor",
     "all_descriptors",

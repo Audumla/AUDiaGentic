@@ -227,6 +227,26 @@ def read_session_record(project_root: Path, session_id: str) -> dict[str, Any]:
     return _validate(payload, code="VAL-AGW-055")
 
 
+def read_session_record_raw(project_root: Path, session_id: str) -> dict[str, Any] | None:
+    """Read a session record's raw JSON payload without schema validation.
+
+    AS33: capability-snapshot/resolved-capabilities/session-capabilities are
+    forward-looking fields a future session-surface resolver may write before
+    they are formally added to the session schema. A schema-validating read
+    would reject the whole record on an unrecognized field, so capability
+    projection reads the raw payload directly instead. Returns None (not an
+    error) when the session doesn't exist or fails to parse — capability
+    projection is best-effort diagnostic sugar, never a hard dependency.
+    """
+    import json
+
+    path = gateway_session_path(project_root, session_id)
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
 def list_session_records(project_root: Path) -> list[dict[str, Any]]:
     root = gateway_sessions_root(project_root)
     if not root.exists():

@@ -83,6 +83,8 @@ def main() -> int:
     frame = sys.stdin.readline(_MAX_FRAME_CHARS + 1)
     if not frame or len(frame) > _MAX_FRAME_CHARS:
         return 2
+    request: WorkerExecuteEnvelope | None = None
+    evidence: WorkerProcessEvidence | None = None
     try:
         decoded = decode_worker_message(frame)
         if not isinstance(decoded, WorkerExecuteEnvelope):
@@ -142,12 +144,12 @@ def main() -> int:
         )
         return 0
     except AudiaGenticError as exc:
-        if "request" in locals() and "evidence" in locals():
+        if request is not None and evidence is not None:
             _write(_safe_error(request, evidence, exc))
         return 1
     except Exception as exc:  # noqa: BLE001 - raw worker failures never cross the pipe
         _emit_worker_diagnostic(exc)
-        if "request" in locals() and "evidence" in locals():
+        if request is not None and evidence is not None:
             _write(
                 WorkerErrorEnvelope(
                     identity=request.identity,

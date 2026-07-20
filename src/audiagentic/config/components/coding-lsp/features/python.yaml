@@ -9,13 +9,19 @@ server:
   command: [pyright-langserver, --stdio]
   file-extensions: [.py, .pyi]
   workspace-config-files: [pyrightconfig.json]
-detection-markers: [pyproject.toml, setup.py, requirements.txt, setup.cfg, Pipfile]
+detection-markers:
+  [pyproject.toml, setup.py, requirements.txt, setup.cfg, Pipfile]
 dependencies:
   pyright:
     display-name: Pyright (Python LSP)
     probe: binary:pyright-langserver
     toolchain: uv
     package: pyright
+pre-commit-hooks:
+  check:
+    - flake8
+  format:
+    - black,--quiet
 options-schema:
   server-settings:
     type: object

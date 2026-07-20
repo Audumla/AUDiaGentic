@@ -26,7 +26,7 @@ def test_agent_llm_submit_delegates():
     mock.assert_called_once_with(
         _ROOT, agent_profile_id="p", prompt_body="hi", mode="async",
         timeout_seconds=None, source=None, metadata=None,
-        session_id=None, session_keep_alive=None, session_idle_timeout_seconds=None,
+        session_id=None, session_keep_alive=False, session_idle_timeout_seconds=None,
         session_max_lifetime_seconds=None,
     )
 
@@ -75,7 +75,7 @@ def test_agent_llm_run_delegates():
         _ROOT, agent_profile_id="p", prompt_body="hi",
         timeout_seconds=agents_gateway_mcp.MCP_BLOCKING_TIMEOUT_SECONDS,
         source=None, metadata=None,
-        session_id=None, session_keep_alive=None, session_idle_timeout_seconds=None,
+        session_id=None, session_keep_alive=False, session_idle_timeout_seconds=None,
         session_max_lifetime_seconds=None,
     )
 

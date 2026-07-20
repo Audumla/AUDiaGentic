@@ -3,7 +3,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from .session_surface_declarations import SessionSurfaceDeclaration
 
 from audiagentic.foundation.steps import CallableStep, SequenceStep, ShellStep
 from audiagentic.foundation.toolchains.managed_config import ManagedConfigSpec
@@ -228,6 +231,12 @@ class ProviderDescriptor:
     # for anything that drives code behavior. Example keys: migration_guide,
     # deprecation_notes, beta_status_links.
     annotations: dict[str, Any] = field(default_factory=dict)
+    # AS29 stage 2: descriptor-local session-surface declarations. Each
+    # :class:`~session_surface_declarations.SessionSurfaceDeclaration` carries
+    # an ``adapter_ref`` (dotted path string, unresolved) that must NOT appear
+    # in the foundation :class:`ResolvedSessionSurface`. Empty by default for
+    # backward compatibility.
+    session_surfaces: tuple[SessionSurfaceDeclaration, ...] = field(default_factory=tuple)
 
     def host_extensions(self, host_id: str) -> tuple[HostCapability, ...]:
         """Capabilities declared for one editor host."""

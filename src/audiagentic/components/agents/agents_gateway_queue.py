@@ -44,6 +44,28 @@ logger = logging.getLogger(__name__)
 _WAIT_INITIAL_BACKOFF_SECONDS = 0.05
 _WAIT_MAX_BACKOFF_SECONDS = 0.5
 
+# SH07 crash-matrix test-only hook: widens the claim-to-start control-plane
+# window so a real OS process kill can be observed landing inside it (the
+# window is otherwise two adjacent synchronous store calls with no I/O
+# between them — far too narrow to hit reliably from outside the process).
+# No-op unless explicitly set; reading an unset env var costs nothing and
+# changes no production behavior. See gateway_docker_harness.py callers.
+_ENV_TEST_STALL_CLAIM_TO_START_MS = "AUDIAGENTIC_GATEWAY_TEST_STALL_CLAIM_TO_START_MS"
+
+
+def _test_stall_claim_to_start() -> None:
+    import os
+
+    raw = os.environ.get(_ENV_TEST_STALL_CLAIM_TO_START_MS)
+    if not raw:
+        return
+    try:
+        ms = int(raw)
+    except ValueError:
+        return
+    if ms > 0:
+        time.sleep(ms / 1000.0)
+
 
 def _record_signature(path: Path) -> tuple[int, int, int] | None:
     """Return a cheap change marker for a durable gateway record.
@@ -555,6 +577,7 @@ class GatewayQueueManager:
                 raise
             if claimed["state"] != "queued":
                 return
+            _test_stall_claim_to_start()
             record = store.start_owned_attempt(
                 project_root, request_id, owner_epoch=owner_epoch,
                 worker_id=f"worker_{uuid.uuid4().hex[:16]}",

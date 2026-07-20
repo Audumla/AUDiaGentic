@@ -8,6 +8,8 @@ edges only.
 from __future__ import annotations
 
 import logging
+import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +37,26 @@ from ._shared import (
 )
 
 logger = logging.getLogger(__name__)
+
+# SH07 crash-matrix test-only hook: widens the terminal-write-to-index-cleanup
+# control-plane window so a real OS process kill can be observed landing
+# inside it (the window is otherwise a single-thread gap between two adjacent
+# calls with no I/O in between — too narrow to hit reliably from outside the
+# process). No-op unless explicitly set; reading an unset env var costs
+# nothing and changes no production behavior.
+_ENV_TEST_STALL_TERMINAL_TO_CLEANUP_MS = "AUDIAGENTIC_GATEWAY_TEST_STALL_TERMINAL_TO_CLEANUP_MS"
+
+
+def _test_stall_terminal_to_cleanup() -> None:
+    raw = os.environ.get(_ENV_TEST_STALL_TERMINAL_TO_CLEANUP_MS)
+    if not raw:
+        return
+    try:
+        ms = int(raw)
+    except ValueError:
+        return
+    if ms > 0:
+        time.sleep(ms / 1000.0)
 
 
 def ensure_transition(current_state: str, new_state: str) -> None:
@@ -655,6 +677,7 @@ def transition_owned_terminal(
     if service_root_for_cleanup is None:
         stored_root = updated.get("dispatch-service-root")
         service_root_for_cleanup = Path(stored_root) if isinstance(stored_root, str) and stored_root else None
+    _test_stall_terminal_to_cleanup()
     # C7: best-effort non-throwing index cleanup after terminalization
     if service_root_for_cleanup is not None:
         try:

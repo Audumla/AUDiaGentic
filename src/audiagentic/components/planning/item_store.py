@@ -5,6 +5,7 @@ this module owns only the planning-specific storage layout
 (active/completed trees, ``<plan>/reviews/<parent>/`` nesting) and the
 item/review guards shared by the CRUD modules.
 """
+
 from __future__ import annotations
 
 import logging
@@ -77,7 +78,7 @@ def _load_section_headings() -> tuple[dict[str, str], dict[str, str]]:
 
 ITEM_SECTION_HEADING, REVIEW_SECTIONS = _load_section_headings()
 HEADING_TO_FIELD: dict[str, str] = {v: k for k, v in ITEM_SECTION_HEADING.items()}
-FRONTMATTER_FIELDS = {"id", "order", "plan", "state", "validate-first", "priority", "complexity", "created-by"}
+FRONTMATTER_FIELDS = {"id", "order", "plan", "state", "breadth", "skill"}
 
 _ITEM_ID_RE = re.compile(r"^([A-Z]+)(\d+)$", re.IGNORECASE)
 
@@ -176,7 +177,7 @@ def next_item_id(project_root: Path, plan: str) -> str:
 
     prefix = dir_item_prefix(active_dir) or dir_item_prefix(completed_dir)
     if prefix is None:
-        prefix = re.sub(r'[^A-Z]', '', slug[:2]).upper() or slug[:2].upper()
+        prefix = re.sub(r"[^A-Z]", "", slug[:2]).upper() or slug[:2].upper()
         _check_prefix_collision(project_root, slug, prefix)
 
     max_num = 0
@@ -195,7 +196,10 @@ def next_item_id(project_root: Path, plan: str) -> str:
 
 def _check_prefix_collision(project_root: Path, slug: str, prefix: str) -> None:
     """Raise if a guessed prefix is already used by a different plan's items."""
-    for root_dir in (planning_paths.plans_active_dir(project_root), planning_paths.plans_completed_dir(project_root)):
+    for root_dir in (
+        planning_paths.plans_active_dir(project_root),
+        planning_paths.plans_completed_dir(project_root),
+    ):
         if not root_dir.exists():
             continue
         for other_dir in root_dir.iterdir():
@@ -222,7 +226,10 @@ def next_review_id(project_root: Path, slug: str, parent_id: str) -> str:
     RV01 owned by another plan. Scan all plans' review dirs and take the max.
     """
     max_num = 0
-    for directory in (planning_paths.plans_active_dir(project_root), planning_paths.plans_completed_dir(project_root)):
+    for directory in (
+        planning_paths.plans_active_dir(project_root),
+        planning_paths.plans_completed_dir(project_root),
+    ):
         if not directory.exists():
             continue
         for path in directory.glob("*/reviews/**/*.md"):
