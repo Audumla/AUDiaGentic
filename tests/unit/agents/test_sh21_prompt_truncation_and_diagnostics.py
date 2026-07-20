@@ -6,6 +6,7 @@ bounded redacted diagnostics on stderr without contaminating the protocol pipe.
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -667,20 +668,28 @@ class TestPiStdinTransport:
         then read it back and verify newlines are intact. This simulates the
         exact data path of the Pi adapter's stdin delivery.
 
-        The test uses cat (which reads stdin and writes to stdout) to prove that
-        the Python → subprocess → stdin → process boundary preserves newlines.
+        The test uses Python's subprocess to pipe stdin → process → file, proving
+        that the Python → subprocess → stdin → process boundary preserves newlines.
         """
         import subprocess
 
         prompt = "Line1\nLine2\nLine3"
         newline_count = prompt.count("\n")
 
-        # Write via stdin to a file using cat
+        # Write a helper script to avoid embedding Windows paths in python -c
+        # strings (which causes unicodeescape errors on Windows due to backslashes).
+        script = tmp_path / "pipe_writer.py"
+        script.write_text(
+            "import sys, os; "
+            "path = os.environ['PIPE_TARGET']; "
+            "open(path, 'w').write(sys.stdin.read())\n"
+        )
         subprocess.run(
-            ["cat", ">", str(tmp_path / "prompt.txt")],
+            [sys.executable, str(script)],
             input=prompt,
             text=True,
             check=True,
+            env={**os.environ, "PIPE_TARGET": str(tmp_path / "prompt.txt")},
         )
 
         # Read back and verify

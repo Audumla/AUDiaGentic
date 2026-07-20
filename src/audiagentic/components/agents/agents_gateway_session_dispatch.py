@@ -134,7 +134,6 @@ def _dispatch_session_request(
                 model_id=profile_model_id,
                 surface_hint=_build_default_surface_hint(provider_id),
                 correlation_id=record.get("correlation-id"),
-                context_fingerprint=context_fingerprint,
                 # Request value wins over profile params; 0 disables the bound
                 # (RV513) — use explicit None checks so 0 survives resolution.
                 idle_timeout_seconds=(
