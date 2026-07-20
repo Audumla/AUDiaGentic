@@ -84,7 +84,7 @@ agents.llm.interrupted:
 agents.session.opened:
   description: "Session opened and registered with SessionRuntime"
   payload-required: ["session-id", "agent-profile-id", "state"]
-  payload-optional: ["provider-id", "model-id"]
+  payload-optional: ["provider-id", "model-id", "child-pid", "child-creation-identity"]
   metadata-keys: ["correlation_id"]
   delivery: async
   since: v1.0.0
