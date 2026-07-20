@@ -183,9 +183,13 @@ def execute_isolated_provider_turn(
                     message="isolated provider worker creation evidence is unavailable",
                 )
             try:
-                stdout, _stderr = child.communicate(
+                stdout, stderr_text = child.communicate(
                     encode_worker_message(envelope) + "\n", timeout=timeout_seconds
                 )
+                # stderr_text is a string (spawn_supervised uses text=True);
+                # the worker writes bounded traceback data here on unexpected
+                # exceptions.
+                stderr_text = (stderr_text or "").strip()
             except subprocess.TimeoutExpired as exc:
                 raise AudiaGenticError(
                     code="TO-AGW-076",
@@ -232,11 +236,23 @@ def execute_isolated_provider_turn(
                         kind="agents",
                         message="isolated provider worker error identity does not match its handshake",
                     )
+                error_details: dict[str, object] = {
+                    "worker-id": identity.worker_id,
+                }
+                # INT-AGW-076 means the worker had an unexpected exception;
+                # include a bounded redacted diagnostic from stderr so the
+                # operator has an actionable reference.
+                if terminal.error_code == "INT-AGW-076" and stderr_text:
+                    _DIAGNOSTIC_MAX = 2 * 1024  # 2 KB bounded diagnostic in error details
+                    diag = stderr_text[:_DIAGNOSTIC_MAX]
+                    if len(stderr_text) > _DIAGNOSTIC_MAX:
+                        diag += "\n<truncated>"
+                    error_details["worker-diagnostic"] = diag
                 raise AudiaGenticError(
                     code=terminal.error_code,
                     kind=terminal.error_kind,
                     message=terminal.message,
-                    details={"worker-id": identity.worker_id},
+                    details=error_details,
                 )
             if not isinstance(terminal, WorkerResultEnvelope):
                 raise AudiaGenticError(

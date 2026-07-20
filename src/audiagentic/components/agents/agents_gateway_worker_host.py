@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import sys
+import traceback
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -19,6 +20,9 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.system.managed_process import process_creation_identity
 
 _MAX_FRAME_CHARS = 8 * 1024 * 1024
+# Bounded diagnostic payload: enough for a useful traceback, small enough to
+# prevent an OOM attack via unbounded error reporting.
+_MAX_DIAGNOSTIC_BYTES = 64 * 1024
 
 
 def _write(message: object) -> None:
@@ -47,6 +51,32 @@ def _safe_error(
             error_kind="agents",
             message="isolated provider execution failed",
         )
+
+
+def _emit_worker_diagnostic(exc: Exception) -> None:
+    """Write a bounded, redacted diagnostic to operator-only stderr.
+
+    The worker protocol pipe (stdout) must never carry raw traceback data;
+    this function writes a redacted diagnostic to stderr for the operator.
+    The payload is bounded at _MAX_DIAGNOSTIC_BYTES to prevent unbounded
+    error-reporting amplification.
+    """
+    diagnostic_lines: list[str] = [
+        f"WORKER-EXCEPTION: {type(exc).__name__}: {exc}",
+    ]
+    tb_text = traceback.format_exception(type(exc), exc, exc.__traceback__)
+    # Bounded truncation: keep the head of the traceback (most actionable)
+    raw = "".join(tb_text)
+    if len(raw) > _MAX_DIAGNOSTIC_BYTES:
+        raw = raw[:_MAX_DIAGNOSTIC_BYTES]
+        diagnostic_lines.append("<truncated-diagnostic>")
+    diagnostic_lines.append(raw)
+    # Write to stderr (operator channel, never crosses the protocol pipe).
+    try:
+        sys.stderr.write("\n".join(diagnostic_lines) + "\n")
+        sys.stderr.flush()
+    except OSError:
+        pass  # stderr may be unavailable in some environments
 
 
 def main() -> int:
@@ -115,7 +145,8 @@ def main() -> int:
         if "request" in locals() and "evidence" in locals():
             _write(_safe_error(request, evidence, exc))
         return 1
-    except Exception:  # noqa: BLE001 - raw worker failures never cross the pipe
+    except Exception as exc:  # noqa: BLE001 - raw worker failures never cross the pipe
+        _emit_worker_diagnostic(exc)
         if "request" in locals() and "evidence" in locals():
             _write(
                 WorkerErrorEnvelope(
