@@ -54,14 +54,20 @@
 /agent/
 /test/planning/
 
-# --- Python build artifacts ---
+# --- Python build artifacts and virtual environment ---
 __pycache__/
 .py[cod]
 **/*.pyc
+*.pyd
+*.so
+*.dll
 src/*.egg-info/
 dist/
 build/
 *.egg
+.venv/
+venv/
+env/
 
 # --- Docker test logs ---
 /docker-build-test*.log
