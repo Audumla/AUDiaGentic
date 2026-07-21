@@ -169,6 +169,47 @@ This allows Claude’s own supervisor to own a persistent session while a termin
 
 `claude remote-control` exposes a Claude Code session for control from Claude.ai or the Claude application. It is another native control surface and does not expose a general ACP endpoint.
 
+## OS and Platform Support Matrix
+
+| Provider | Windows | macOS | Linux | Notes |
+| --- | ---: | ---: | ---: | --- |
+| OpenCode | ✅ Yes | ✅ Yes | ✅ Yes | Binary distribution across six platforms, SHA-256 verified |
+| Kilo Code | ✅ Yes | ✅ Yes | ✅ Yes | Fork of OpenCode; binary and npx distributions |
+| Qwen Code | ✅ Yes | ✅ Yes | ✅ Yes | Official Alibaba entry |
+| Gemini CLI | ✅ Yes | ✅ Yes | ✅ Yes | Google official |
+| Claude Code | ✅ Yes | ✅ Yes | ✅ Yes | Native across platforms |
+| Codex CLI | ✅ Yes | ✅ Yes | ✅ Yes | OpenAI/Windows/macOS/Linux |
+| GitHub Copilot CLI | ✅ Yes | ✅ Yes | ✅ Yes | Public preview ACP support |
+| Cline | ✅ Yes | ✅ Yes | ✅ Yes | Official entry from Cline Bot Inc. |
+| Cursor | ✅ Yes | ✅ Yes | ✅ Yes | Official Cursor entry with binary distribution |
+| Goose | ✅ Yes | ✅ Yes | ✅ Yes | Binary distribution with SHA-256 verification |
+| Pi | ✅ Yes | ✅ Yes | ✅ Yes | Home-scoped config `~/.pi/agent/models.json` |
+| Zed | ✅ Yes | ✅ Yes | ✅ Yes | Native support for Ollama, LM Studio, llama.cpp |
+
+## Hooks and Plugins Documentation
+
+### Claude Code Hooks
+* **Official docs**: <https://code.claude.com/docs/en/hooks.md> and <https://code.claude.com/docs/en/hooks-guide>
+* **Hook locations**:
+  * `~/.claude/settings.json` (all projects, local to machine)
+  * `.claude/settings.json` (single project, shareable/committed)
+  * `.claude/settings.local.json` (single project, gitignored)
+  * Managed policy settings (organization-wide)
+  * Plugin `hooks/hooks.json` or Skill/agent frontmatter
+* **Event types**: SessionStart/End, UserPromptSubmit/Expansion, PreToolUse/PostToolUse, PermissionRequest/Denied, SubagentStart/Stop, TaskCreated/Completed, StopFailure, Notification, MessageDisplay, Elicitation/ElicitationResult, ConfigChange, CwdChanged, FileChanged, WorktreeCreate/Remove, PreCompact/PostCompact
+* **Hook types**: Command hooks (stdin JSON input), HTTP hooks (POST request body), MCP tool hooks, prompt hooks
+
+### OpenCode Plugins and Skills
+* **Plugins location**: `.opencode/plugins/` directory
+* **Skills**: Agent skills with on-demand activation based on task type matching
+* **LSP servers**: Supported via `.opencode/opencode.json` with `lspServers` configuration
+* **MCP servers**: Configured via `mcp-servers` key in config
+
+### Pi Extensions/Ecosystem
+* **ACP compatibility**: Community ACP adapter `vkozak/pi-acp` (513 stars)
+* **Active extensions**: `pi-mcp-adapter`, `pi-web-access`, `pi-skills`, `piclaw`
+* **RPC mode**: JSONL protocol over stdin/stdout for headless operation
+
 ## Key findings
 
 ### Native versus adapter distinction matters

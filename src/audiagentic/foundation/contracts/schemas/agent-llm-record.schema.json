@@ -210,6 +210,15 @@
     },
     "finished-at": {
       "type": ["string", "null"]
+    },
+    "worker-evidence": {
+      "description": "Private operator-only bounded redacted diagnostic for INT-AGW-076 worker failures. Never exposed in public status.",
+      "type": ["object", "null"],
+      "properties": {
+        "error-type": {"type": "string"},
+        "worker-diagnostic": {"type": "string"}
+      },
+      "additionalProperties": false
     }
   }
 }

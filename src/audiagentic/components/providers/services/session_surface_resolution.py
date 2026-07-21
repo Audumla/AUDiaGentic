@@ -20,6 +20,11 @@ Resolution rules (no exceptions — always returns a stable snapshot):
    enforce the validation/effective-observation ceiling against the selected
    per-platform evidence (or declaration level if no per-platform evidence
    legitimately applies). Non-validated O2+ → unsupported.
+7b. **Inventory proof gate** (AS27 RV770) — a validated O1+ claim requires
+    that the target platform appear in the AS27 inventory's locally-validated
+    ``platform_evidence`` for this (provider_id, surface_id) pair. Descriptor
+    YAML cannot bypass inventory evidence; vendor product support alone does
+    not prove local observability validation.
 8. **Missing adapter factory** (adapter_ref is set but cannot be resolved) →
    unsupported snapshot.
 
@@ -73,6 +78,7 @@ _UNSUPPORTED_REASONS = frozenset({
     "unvalidated-high-level",
     "no-platform-match",
     "missing-adapter-factory",
+    "no-inventory-proof",  # YAML claims O1+ but inventory lacks platform evidence
 })
 
 # ---------------------------------------------------------------------------
@@ -410,6 +416,44 @@ def _build_resolved_surface(
 
 
 # ---------------------------------------------------------------------------
+# Inventory proof lookup (AS27 RV770 — inventory cross-check)
+# ---------------------------------------------------------------------------
+
+def _get_inventory_proof(
+    provider_id: str,
+    surface_id: str,
+    target_platform: str,
+) -> bool:
+    """Check whether the AS27 inventory has local probe evidence for this
+    platform on the given (provider_id, surface_id) pair.
+
+    Returns True when:
+    - The (provider_id, surface_id) is NOT in the inventory (no inventory to
+      bypass — the gate does not apply to unknown surfaces).
+    - The platform appears in the capability fact's ``platform_evidence``
+      tuple — i.e. an exact local probe has been recorded.
+
+    Returns False only when:
+    - The surface IS in the inventory but the target platform is NOT listed
+      in its ``platform_evidence`` — meaning YAML claims validation on a
+      platform without local probe proof (the bypass scenario).
+    """
+    try:
+        from audiagentic.components.providers.services.harness_observability_inventory import (
+            get_harness_surface_capability_fact,
+        )
+    except ImportError:
+        # Inventory module unavailable — conservative: no gate.
+        return True
+
+    fact = get_harness_surface_capability_fact(provider_id, surface_id)
+    if fact is None:
+        # Not in inventory — no bypass possible; gate does not apply.
+        return True
+    return target_platform in fact.platform_evidence
+
+
+# ---------------------------------------------------------------------------
 # Public resolver entry point (Fix 1: explicit project_root + provider_id)
 # ---------------------------------------------------------------------------
 
@@ -501,6 +545,23 @@ def resolve_session_surface(
             provider_id, surface_hint.surface_id, reason,
             requested_version=declaration.version_constraint,
         )
+
+    # ── 7b. Inventory proof gate (AS27 RV770) ─────────────────────
+    # Prevent descriptor YAML from bypassing inventory evidence: a validated
+    # O1+ claim on the resolved surface requires that the target platform
+    # appear in the inventory's locally-validated platform_evidence for this
+    # (provider_id, surface_id) pair. This gate applies only to observability
+    # / effective lifecycle claim resolution; it does not prevent launching
+    # a surface whose observer publication is unavailable.
+    if eff_state == SurfaceValidationState.VALIDATED and eff_level.numeric >= 1:
+        has_inventory_proof = _get_inventory_proof(
+            provider_id, declaration.surface_id, target_platform,
+        )
+        if not has_inventory_proof:
+            return _unsupported_snapshot(
+                provider_id, surface_hint.surface_id, "no-inventory-proof",
+                requested_version=declaration.version_constraint,
+            )
 
     # ── 8. Missing adapter factory (existence check only) ──────────
     if declaration.adapter_ref:

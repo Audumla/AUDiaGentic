@@ -34,6 +34,7 @@ _REDACTED_ERROR_KEYS = {"code", "message", "kind"}
 # record is admission identity or fenced ownership (SH review C12).
 _MUTABLE_RESULT_FIELDS = {
     "provider-id", "model-id", "output", "completion", "usage", "error",
+    "worker-evidence",
     "started-at", "finished-at", "session-id", "recovery",
     "replay-required", "replay-reason", "replayed-by-request-id",
 }
@@ -88,3 +89,38 @@ def is_known_state_fn(state: str) -> bool:
 def transition_allowed_fn(current: str, new: str) -> bool:
     """Thin wrapper so _transitions doesn't import workflow directly."""
     return transition_allowed(_WORKFLOW, current, new)
+
+
+def extract_worker_evidence(error: BaseException | dict | None) -> dict | None:
+    """Extract bounded redacted worker diagnostic evidence from an error.
+
+    For INT-AGW-076 errors that carry a ``worker-diagnostic`` in their
+    details (the bounded stderr traceback from the isolated worker host),
+    return a private evidence dict for operator-only persistence.  Only
+    the error type and the redacted diagnostic string are captured — no
+    raw prompt, secret, or unbounded data survives this boundary.
+
+    Returns None when there is no INT-AGW-076 worker diagnostic to extract.
+    """
+    if error is None:
+        return None
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    if not isinstance(error, AudiaGenticError):
+        return None
+    if error.code != "INT-AGW-076":
+        return None
+    details = getattr(error, "details", None)
+    if not isinstance(details, dict):
+        return None
+    diag = details.get("worker-diagnostic")
+    if not isinstance(diag, str) or not diag:
+        return None
+    # Bounded: enforce 2 KB limit on persisted diagnostic (same as the
+    # parent worker pipe limit in agents_gateway_worker.py).
+    _MAX_EVIDENCE = 2 * 1024
+    if len(diag) > _MAX_EVIDENCE:
+        diag = diag[:_MAX_EVIDENCE] + "\n<truncated>"
+    return {
+        "error-type": type(error).__name__,
+        "worker-diagnostic": diag,
+    }

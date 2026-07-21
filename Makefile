@@ -8,8 +8,10 @@
         test-provider-lifecycle-docker build-base build-test build-lsp-install \
         build-packaging build-provider-lifecycle clean-docker \
         build-gateway-crash-matrix build-gateway-opencode build-gateway-concurrency build-gateway-pi-smoke \
+        build-consumer-pipeline \
         test-gateway-crash-matrix-docker test-gateway-opencode-docker test-gateway-concurrency-docker \
-        test-gateway-pi-smoke-docker
+        test-gateway-pi-smoke-docker \
+        test-consumer-pipeline-docker
 
 PYTHON     ?= python3
 PYTEST     ?= $(PYTHON) -m pytest
@@ -21,6 +23,7 @@ GATEWAY_CRASH_MATRIX_IMAGE = audiagentic-gateway-crash-matrix:local
 GATEWAY_OPENCODE_IMAGE = audiagentic-gateway-opencode:local
 GATEWAY_CONCURRENCY_IMAGE = audiagentic-gateway-concurrency:local
 GATEWAY_PI_SMOKE_IMAGE = audiagentic-gateway-pi-smoke:local
+CONSUMER_PIPELINE_IMAGE = audiagentic-consumer-pipeline:local
 
 # On Windows with Git Bash / MSYS2, Docker Desktop requires Windows-style paths
 # for volume mounts (e.g. C:/path, not /c/path). cygpath -m converts MSYS → mixed.
@@ -46,6 +49,7 @@ DOCKER_MOUNT := $(shell cygpath -m "$(CURDIR)" 2>/dev/null || pwd)
 	@echo "  test-gateway-opencode-docker    Run real npm-CLI-provider gateway dispatch (dynamic discovery) in docker"
 	@echo "  test-gateway-concurrency-docker Run real concurrent gateway load/negative-path suite in docker"
 	@echo "  test-gateway-pi-smoke-docker    Run real Pi CLI + embedded rig gateway dispatch (SH16) in docker"
+	@echo "  test-consumer-pipeline-docker   Run AS19/AS30/AS31 consumer pipeline integration tests in docker"
 	@echo "  build-base           Build audia-test-base image"
 	@echo "  build-test           Build audiagentic-test image (requires base)"
 	@echo "  build-lsp-install    Build LSP install test image (requires base)"
@@ -55,6 +59,7 @@ DOCKER_MOUNT := $(shell cygpath -m "$(CURDIR)" 2>/dev/null || pwd)
 	@echo "  build-gateway-opencode      Build gateway real-CLI-provider docker image"
 	@echo "  build-gateway-concurrency   Build gateway concurrency docker image"
 	@echo "  build-gateway-pi-smoke      Build gateway Pi smoke docker image"
+	@echo "  build-consumer-pipeline     Build consumer pipeline (AS19/AS30/AS31) docker image"
 	@echo "  clean-docker         Remove all audia test images"
 
 # ── Consolidated entrypoint ──────────────────────────────────────────────────
@@ -118,6 +123,10 @@ build-gateway-concurrency: build-base
 build-gateway-pi-smoke: build-base
 	docker build -f tests/docker/Dockerfile.gateway-pi-smoke -t $(GATEWAY_PI_SMOKE_IMAGE) .
 
+# AS19/AS30/AS31: consumer pipeline integration test image.
+build-consumer-pipeline: build-base
+	docker build -f tests/docker/Dockerfile.consumer-pipeline -t $(CONSUMER_PIPELINE_IMAGE) .
+
 # ── Docker test run targets ──────────────────────────────────────────────────
 
 # Runs the whole CLEAN, non-mutating suite inside the standard test image
@@ -179,6 +188,10 @@ test-gateway-concurrency-docker: build-gateway-concurrency
 test-gateway-pi-smoke-docker: build-gateway-pi-smoke
 	docker run --rm $(GATEWAY_PI_SMOKE_IMAGE)
 
+
+# AS19/AS30/AS31: consumer pipeline (observer, binding, output relay) integration.
+test-consumer-pipeline-docker: build-consumer-pipeline
+	docker run --rm $(CONSUMER_PIPELINE_IMAGE)
 # Shell stdout capture on Linux is now covered by the clean suite image
 # (run_suite.sh runs the test_steps.py shell case inside Linux). The host-side
 # e2e wrapper invokes that same image; no dedicated shell image is needed.
@@ -187,4 +200,4 @@ test-gateway-pi-smoke-docker: build-gateway-pi-smoke
 
 clean-docker:
 	-docker rmi $(BASE_IMAGE) $(TEST_IMAGE) $(LSP_IMAGE) $(PACKAGING_IMAGE) $(PROVIDER_LIFECYCLE_IMAGE) \
-		$(GATEWAY_CRASH_MATRIX_IMAGE) $(GATEWAY_OPENCODE_IMAGE) $(GATEWAY_CONCURRENCY_IMAGE) $(GATEWAY_PI_SMOKE_IMAGE) 2>/dev/null || true
+		$(GATEWAY_CRASH_MATRIX_IMAGE) $(GATEWAY_OPENCODE_IMAGE) $(GATEWAY_CONCURRENCY_IMAGE) $(GATEWAY_PI_SMOKE_IMAGE) $(CONSUMER_PIPELINE_IMAGE) 2>/dev/null || true

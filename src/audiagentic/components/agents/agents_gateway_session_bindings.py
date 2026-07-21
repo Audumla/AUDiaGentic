@@ -318,15 +318,30 @@ def register_open_binding(project_root: Path, session_record: dict[str, Any]) ->
         index_path = gateway_session_binding_index_path(project_root)
         payload = _read_index(index_path)
         entries = list(payload["bindings"].get(key) or [])
+        incoming_ownership = binding.get("ownership", "owned")  # default: owned
         for entry in entries:
-            if entry.get("ownership") == "owned" and entry.get("state") == "active":
+            # Skip if already registered by the same session (idempotent).
+            if entry.get("session-id") == session_record["session-id"]:
+                continue
+            # Only block duplicate OWNED bindings from a different session.
+            # EXTERNAL bindings never block, and an OWNED binding is blocked
+            # only by another active OWNED binding (not by EXTERNAL ones).
+            if (
+                entry.get("ownership") == "owned"
+                and entry.get("state") == "active"
+                and incoming_ownership == "owned"
+            ):
                 raise AudiaGenticError(
                     code="CON-AGW-096",
                     kind="agents",
                     message="duplicate owned provider session binding",
                     details={"provider-ref-key-prefix": str(key)[:12]},
                 )
-        entries.append({
+        # Idempotent: skip adding a duplicate entry for the same session.
+        if not any(
+            e.get("session-id") == session_record["session-id"] for e in entries
+        ):
+            entries.append({
             "binding-id": binding_id,
             "session-id": session_record["session-id"],
             "ownership": binding.get("ownership"),
@@ -361,8 +376,114 @@ def retire_binding(project_root: Path, session_record: dict[str, Any], *, state:
             atomic_write_json(index_path, payload)
 
 
+# ── Convenience entry points (create / attach) ────────────────────
+
+def create_open_binding(
+    *,
+    session_id: str,
+    provider_id: str | None,
+    surface_id: str | None,
+    provider_ref: str,
+    ref_namespace: str | None = None,
+    identity_context_fingerprint: str | None = None,
+    execution_context_fingerprint: str | None = None,
+) -> dict[str, Any]:
+    """Create an OPENED binding for a freshly opened provider session.
+
+    Builds the binding dict with a fresh UUID and registers it in the project
+    index. Returns the full binding record (including the opaque
+    provider-session-ref that callers must not log).
+
+    Raises AudiaGenticError if a duplicate owned active binding already exists
+    for this provider ref key — cross-process lock guarantees atomicity.
+    """
+    binding = build_binding(
+        provider_id=provider_id,
+        provider_session_ref=provider_ref,
+        relation=BindingRelation.OPENED,
+        surface_id=surface_id,
+        ref_namespace=ref_namespace,
+        identity_context_fingerprint=identity_context_fingerprint,
+        execution_context_fingerprint=execution_context_fingerprint,
+    )
+    if binding is None:
+        raise AudiaGenticError(
+            code="VAL-AGW-098",
+            kind="agents",
+            message="provider ref is empty; cannot create open binding",
+            details={},
+        )
+    return binding
+
+
+def attach_binding(
+    *,
+    session_id: str,
+    provider_id: str | None,
+    surface_id: str | None,
+    provider_ref: str,
+    generation: int = 1,
+    ownership: SessionOwnership = SessionOwnership.EXTERNAL,
+    predecessor_binding_id: str | None = None,
+    ref_namespace: str | None = None,
+    identity_context_fingerprint: str | None = None,
+    execution_context_fingerprint: str | None = None,
+) -> dict[str, Any]:
+    """Attach to an existing provider session (ATTACHED relation).
+
+    Unlike OPENED bindings which default to OWNED ownership, attached
+    sessions default to EXTERNAL — the external system owns the lifecycle.
+
+    Raises AudiaGenticError on duplicate owned active binding.
+    """
+    if not provider_ref:
+        raise AudiaGenticError(
+            code="VAL-AGW-099",
+            kind="agents",
+            message="provider ref is empty; cannot attach to existing session",
+            details={},
+        )
+    binding = build_binding(
+        provider_id=provider_id,
+        provider_session_ref=provider_ref,
+        generation=generation,
+        relation=BindingRelation.ATTACHED,
+        ownership=ownership,
+        surface_id=surface_id,
+        ref_namespace=ref_namespace,
+        predecessor_binding_id=predecessor_binding_id,
+        identity_context_fingerprint=identity_context_fingerprint,
+        execution_context_fingerprint=execution_context_fingerprint,
+    )
+    if binding is None:
+        raise AudiaGenticError(
+            code="VAL-AGW-099",
+            kind="agents",
+            message="provider ref is empty; cannot create attach binding",
+            details={},
+        )
+    return binding
+
+
+# Binding index persistence.
+
+
 def rebuild_index(project_root: Path) -> dict[str, Any]:
+    """Rebuild the binding index from all persisted session records.
+
+    Scans every session directory under the gateway sessions root, extracts
+    active bindings, and writes a fresh index. Detects duplicate active
+    owned bindings as an error condition (two sessions claiming ownership
+    of the same provider ref is invalid).
+
+    Returns the rebuilt payload (for callers that need to inspect it).
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
     payload: dict[str, Any] = {"contract-version": "v1", "bindings": {}}
+    recovered_count = 0
+    duplicate_keys: list[str] = []
     root = gateway_sessions_root(project_root)
     if root.exists():
         for session_dir in sorted(root.iterdir()):
@@ -379,6 +500,7 @@ def rebuild_index(project_root: Path) -> dict[str, Any]:
             key = binding.get("provider-ref-key")
             if not key:
                 continue
+            recovered_count += 1
             payload["bindings"].setdefault(key, []).append({
                 "binding-id": binding.get("binding-id"),
                 "session-id": record.get("session-id"),
@@ -387,6 +509,33 @@ def rebuild_index(project_root: Path) -> dict[str, Any]:
                 "state": record.get("state"),
                 "created-at": binding.get("created-at"),
             })
+
+    # Detect duplicate active owned bindings (error condition).
+    for key, entries in payload["bindings"].items():
+        owned_active = [
+            e for e in entries
+            if e.get("ownership") == "owned" and e.get("state") not in {"closed", "expired", "failed"}
+        ]
+        if len(owned_active) > 1:
+            duplicate_keys.append(str(key)[:12])
+            logger.error(
+                "duplicate active owned bindings detected during index rebuild",
+                extra={
+                    "provider-ref-key-prefix": str(key)[:12],
+                    "binding-ids": [e["binding-id"] for e in owned_active],
+                    "session-ids": [e["session-id"] for e in owned_active],
+                },
+            )
+
     with StartupLock(gateway_session_binding_lock_path(project_root)):
         atomic_write_json(gateway_session_binding_index_path(project_root), payload)
+
+    logger.info(
+        "binding index rebuilt",
+        extra={
+            "recovered-bindings": recovered_count,
+            "total-keys": len(payload["bindings"]),
+            "duplicate-owned-keys": len(duplicate_keys),
+        },
+    )
     return payload

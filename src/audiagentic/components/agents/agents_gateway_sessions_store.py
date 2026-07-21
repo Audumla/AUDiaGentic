@@ -247,6 +247,57 @@ def read_session_record_raw(project_root: Path, session_id: str) -> dict[str, An
         return None
 
 
+# ── Binding-specific read/write helpers (AS30 Stage-2) ──────────────
+
+def write_session_binding(
+    project_root: Path,
+    session_id: str,
+    *,
+    binding: dict[str, Any],
+) -> Path:
+    """Atomically write a v2 session record with the given binding object.
+
+    The binding object must carry at least the keys required by the session
+    schema (binding-id, provider-id, surface-id, provider-session-ref,
+    relation, ownership, created-at). This is the authoritative write path
+    for creating a new session with its provider binding — it validates the
+    full record shape and writes atomically.
+
+    Raises AudiaGenticError on schema validation failure.
+    """
+    # Build a minimal v2 session record carrying the binding.
+    record = {
+        "contract-version": "v2",
+        "session-id": session_id,
+        "binding": binding,
+        "state": "active",
+    }
+    _validate(record, code="VAL-AGW-100")
+    target = gateway_session_path(project_root, session_id)
+    atomic_write_json(target, record)
+    return target
+
+
+def read_session_binding(project_root: Path, session_id: str) -> dict[str, Any] | None:
+    """Read the binding object for a session.
+
+    Returns the full binding dict (including the opaque provider-session-ref)
+    from the persisted v2 record. Returns None when the session does not
+    exist or has no binding.
+
+    On a v1 record, migrates in memory and returns the deterministically
+    derived binding — never writes back unless explicitly requested.
+    """
+    try:
+        record = read_session_record(project_root, session_id)
+    except AudiaGenticError:
+        return None
+    binding = record.get("binding")
+    if not isinstance(binding, dict):
+        return None
+    return binding
+
+
 def list_session_records(project_root: Path) -> list[dict[str, Any]]:
     root = gateway_sessions_root(project_root)
     if not root.exists():
