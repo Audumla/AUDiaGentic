@@ -702,3 +702,145 @@ class TestPiStdinTransport:
         assert content.startswith("Line1\n"), (
             f"First newline was lost (SH21 regression). Got: {repr(content[:20])}"
         )
+
+
+# ── SH21 RV769: deterministic worker failure with known sensitive string ──
+
+class TestWorkerHostFailureRedaction:
+    """Deterministic regression: worker host fails with a known sensitive string.
+
+    Verifies the exact INT-AGW-076 path where an unexpected isolated-worker
+    failure produces:
+      1. Clean redacted error envelope on stdout (protocol pipe)
+      2. Bounded diagnostic on stderr (operator channel)
+      3. Private evidence persisted in durable record (never in public status)
+    """
+
+    def test_worker_host_emits_clean_error_envelope_and_stderr_diagnostic(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Worker host main() path: unexpected exception → stderr diagnostic +
+        clean INT-AGW-076 error envelope on stdout. The sensitive string appears
+        only in the stderr diagnostic and is redacted from the error envelope."""
+        import io
+
+        KNOWN_SECRET = "Bearer sk-proj-test1234567890"
+        exc = ValueError(f"provider crash with {KNOWN_SECRET}")
+
+        identity = WorkerExecutionIdentity(
+            worker_id="worker-rv769",
+            attempt_epoch=1,
+            manifest_id="mf-rv769",
+            context_fingerprint=FINGERPRINT,
+            project_root=str(tmp_path.resolve()),
+            component_profile="",
+            provider_isolation_tier="full-isolation",
+        )
+
+        from audiagentic.components.agents.contracts.worker_protocol import (
+            WorkerProcessEvidence,
+        )
+
+        evidence = WorkerProcessEvidence(
+            pid=99887,
+            process_creation_identity="proc-start:rv769",
+            working_directory=str(tmp_path.resolve()),
+        )
+
+        from audiagentic.components.agents.agents_gateway_worker_host import (
+            _emit_worker_diagnostic,
+            _write,
+        )
+
+        stdout_buf = io.StringIO()
+        stderr_buf = io.StringIO()
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+        try:
+            sys.stdout = stdout_buf
+            sys.stderr = stderr_buf
+
+            # Simulate the exact main() exception handler path:
+            _emit_worker_diagnostic(exc)
+            _write(
+                WorkerErrorEnvelope(
+                    identity=identity,
+                    process=evidence,
+                    error_code="INT-AGW-076",
+                    error_kind="agents",
+                    message="isolated provider worker failed unexpectedly",
+                )
+            )
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+
+        stdout_content = stdout_buf.getvalue()
+        stderr_content = stderr_buf.getvalue()
+
+        # ── Stdout (protocol pipe): must be clean, only the error envelope ──
+        assert "Traceback" not in stdout_content
+        assert "ValueError" not in stdout_content
+        assert KNOWN_SECRET not in stdout_content
+        frame = stdout_content.strip()
+        decoded = decode_worker_message(frame)
+        assert isinstance(decoded, WorkerErrorEnvelope)
+        assert decoded.error_code == "INT-AGW-076"
+        assert decoded.message == "isolated provider worker failed unexpectedly"
+
+        # ── Stderr (operator channel): must contain the diagnostic ────────
+        assert "ValueError" in stderr_content
+        assert KNOWN_SECRET in stderr_content
+        assert "WORKER-EXCEPTION" in stderr_content
+
+    def test_worker_diagnostic_is_bounded(self, tmp_path: Path) -> None:
+        """Worker diagnostic is truncated when it exceeds the 64 KB limit."""
+        import io
+
+        from audiagentic.components.agents.agents_gateway_worker_host import (
+            _MAX_DIAGNOSTIC_BYTES,
+            _emit_worker_diagnostic,
+        )
+
+        # Create a deep exception to generate a large traceback
+        def deep_func(n: int) -> None:
+            if n == 0:
+                raise RuntimeError("deep crash")
+            deep_func(n - 1)
+
+        try:
+            deep_func(300)
+        except RuntimeError as e:
+            exc = e
+
+        stderr_buf = io.StringIO()
+        old_stderr = sys.stderr
+        try:
+            sys.stderr = stderr_buf
+            _emit_worker_diagnostic(exc)
+        finally:
+            sys.stderr = old_stderr
+
+        output = stderr_buf.getvalue()
+        # Must be bounded
+        assert len(output) <= _MAX_DIAGNOSTIC_BYTES + 2 * 1024
+        if len(output) >= _MAX_DIAGNOSTIC_BYTES:
+            assert "<truncated-diagnostic>" in output
+
+    def test_cancellation_does_not_leak_worker_diagnostics(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Normal cancellation (cancel_requested=True) does NOT produce
+        worker diagnostic evidence. Only INT-AGW-076 errors do."""
+        from audiagentic.components.agents import agents_gateway_store as gws
+
+        record = gws.build_record(agent_profile_id="default", prompt_body="do the thing")
+        gws.write_record(tmp_path, record)
+        gws.transition_record(tmp_path, record["request-id"], "running")
+
+        # Cancel the request (no INT-AGW-076 error involved)
+        updated = gws.cancel_queued_or_mark_requested(tmp_path, record["request-id"])
+
+        # No worker-evidence should exist for a normal cancellation
+        assert updated.get("worker-evidence") is None

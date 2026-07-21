@@ -1,16 +1,48 @@
 # Check-In Summary
 
-Total changes: 12
+Total changes: 44
 
-- Delegated a real MA28 closeout to the OpenCode worker, verified its work, and recorded the result in the agent capability log.
-- ACP/live-session support is now a declared, per-provider capability with honest support states (opencode largely working, codex in progress), so session features can be requested and tracked while they are being built out.
-- Live agent sessions passed their end-to-end gate: conversations retain context across requests, closed and idle sessions reliably terminate their agent processes, and a streaming output-corruption bug found by the gate was fixed.
-- Added real-subprocess tests for ACP session transport: fake agent fixture + 4 tests proving context retention and no-orphan guarantee
-- Real-process testing of live agent sessions caught and fixed two subtle transport bugs: streamed agent messages could be lost at the end of a turn, and closing a session under timeout could corrupt the transport's shutdown.
-- Added typed desired-state dataclasses and schemas for Codex and Pi Hindsight integration (MA26 step 2)
-- Consolidated LSP MCP projection into the canonical managed-MCP family: coding-lsp now uses manage_mcp_entries with ownership scope 'coding-lsp/ag-lsp', replacing the duplicated lsp-mcp-projection family. Registry entries migrate automatically from legacy scope to scoped key for continuity.
-- Plugin entry management now uses shared managed-config engine with ownership tracking; foreign entries are preserved on apply/prune operations.
-- Long agent work sessions no longer lose the end of the agent's final report when event volume is high, and gateway sessions stopped buffering bulky raw event payloads nobody reads.
-- Planned the migration from an in-process agent gateway to a self-managed machine-wide service, including safe multi-project execution and role-based capability launches, without expanding the existing agent-sessions plan into another catch-all.
-- Tightened the shared-gateway roadmap so MCP and other transport modules remain logic-free adapters over reusable APIs, and added an architecture-enforcement item to prevent future layering drift.
-- Added provider telemetry capability model and per-harness capability matrix documentation
+- Added the shared session-surface capability contract needed for provider-managed agent sessions.
+- Improved session-open event conformance while keeping process identity details safely bounded.
+- Fixed several real bugs in the shared gateway that were silently breaking profile-reload rejection, session-close redaction, session capability diagnostics, and service-path request submission — found by independently re-verifying worker-reported completions rather than trusting their self-reports.
+- Session-surface provider descriptors now use the documented field name and carry an accurate typed declaration contract.
+- Gateway session listing now correctly identifies stale persisted sessions without starting a runtime.
+- Provider session surfaces now resolve through a safe, platform-specific capability snapshot without overstating unverified OpenCode support.
+- Resolved session-surface snapshots now available through the public providers API; prepare_provider_session_transport returns typed result with surface snapshot and transport.
+- Resolved session-surface snapshots now available through the public providers API; prepare_provider_session_transport returns typed result with surface snapshot and transport.
+- Fixed a gap where the gateway's crash-recovery evidence for admitted-but-unclaimed requests was never actually written in production, and enabled the real gateway subprocess to run in shared multi-project mode for testing.
+- Session transport migration now has behavior-preservation tests and an explicit inventory of ACP dependencies to remove.
+- Agent sessions now have a provider-neutral transport and control contract ready for the ACP adapter migration.
+- ACP sessions can now be adapted through the neutral transport contract without exposing ACP internals to gateway code.
+- Provider session transport preparation now respects exact capability snapshots and safely declines unsupported routes.
+- Fixed the shared agent gateway rejecting every real request to the local OpenAI-compatible provider; concurrent gateway load against it now works end-to-end.
+- Agent status planning now distinguishes trustworthy evidence-backed state from future diagnostic detail.
+- Gateway session opening now uses the provider-neutral transport bridge and safely rejects unsupported surfaces before launch.
+- Session-surface descriptor validation now has an accurate set-like type contract.
+- Implemented immutable contention snapshots with resolved resource keys and genuine project-count tracking for gateway capacity planning.
+- Gateway durability and recovery behavior is now validated through focused tests and real Docker crash scenarios.
+- Session transport now carries bounded assistant output through final_summary field instead of raw event reconstruction. ACP adapter collects text fragments safely.
+- Worker diagnostics: unexpected exceptions now produce bounded tracebacks in operator stderr without contaminating the protocol pipe or public response.
+- Added CLI lifecycle commands for the gateway service: status, drain, resume, stop (with optional --force), and recover (record-only dead-owner recovery with --confirm guard).
+- Added CLI commands for gateway operator lifecycle control (drain, resume, stop, recover)
+- Simplified the agent session pipeline to use the provider-neutral transport contract end-to-end, removing a legacy ACP-specific reconstruction step.
+- Fix gateway recover to honor --project path argument
+- Unexpected gateway worker failures now carry a bounded diagnostic traceback for operators instead of a fully opaque error.
+- Cleaned boundary between agents and ACP: agents layer now uses neutral SessionTurnResult contract instead of ACP-specific types. Output delivered via final_summary instead of event list. All session and dispatch tests passing.
+- SH21: fixed Windows portability bug in stdin transport test and added production-path tests for Pi adapter selection and multiline prompt delivery.
+- Complete AS28 slice 4b-B cancellation path migration; add control request imports; fix dispatch signature violation
+- SH21: Gateway-managed Pi smoke test proves multiline prompt delivery via stdin. Fake pi executable records exact argv and stdin; confirms pi --print command (no prompt arg), newline preservation, and clean redacted output.
+- Added foundation contract types for three AS items: AS19 (status observer leases and evidence), AS30 (provider session binding relations and opaque refs), AS31 (streaming assistant output events). Also fixed 6 issues found during self-review including a naming collision, a type duplication, and error code numbering bugs.
+- Added foundation types for the unified agent status projection (AS37) — the read-facing status model that will sit above AS19/AS21 lifecycle evidence.
+- Cleaned up type-checker findings in AS28/AS29 test files with no behavior change; all affected tests still pass.
+- Fixed type-safety issues in the session-surface resolution and ACP transport code with no behavior change for supported paths.
+- AS19: agents-side evidence sink for harness status observations with validation, dedup, and redacted timeline/event publishing.
+- AS19: agents-side evidence sink for harness status observations with validation, dedup, and redacted timeline/event publishing.
+- Session lifecycle evidence projection registry that consumes AS19 status observations and projects coarse session decisions without terminal inference.
+- AS27 harness observability inventory and conformance: only OpenCode ACP eligible for transport-observation publishing; all other surfaces require probes
+- Fixed: rejected status evidence (duplicate, lower sequence, binding mismatch) no longer alters session lifecycle decisions
+- AS27: correct OpenCode ACP platform metadata to cross-platform (Windows/macOS/Linux); preserve AS29 validation gate; add platform-neutral conformance tests
+- AS27: Pi RPC capability probe confirms --mode rpc exists (v0.80.10) with 28 commands, strict JSONL protocol, and full event lifecycle; usable via gateway with adaptation layer; no separate pi-acp package
+- Audited Pi ACP implementation against AS28 transport contract. Report identifies 5 AS27 gaps blocking AS19 evidence pipeline and 3 unmapped ACP event kinds. No protocol leakage exists - gaps are in coverage only.
+- OpenCode ACP is now validated only for linux-amd64 (the only platform with local probe evidence). Windows and macOS remain vendor-supported but unproven — the resolver will reject O1 claims on those platforms until local probes pass.
+- Added agent session status projection and harness status observer transport resolution. Introduced session capability families foundation and Pi native RPC session surface selection infrastructure. Added consumer pipeline Docker tests and updated provider capability profiles.

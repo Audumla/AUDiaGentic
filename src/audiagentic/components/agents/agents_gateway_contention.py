@@ -84,7 +84,7 @@ def capture_contention_sample(
     service_root: Path,
     *,
     per_profile: dict[str, dict[str, int]],
-    profile_provider_ids: dict[str, str],
+    profile_provider_ids: dict[str, str] | None = None,
     profile_project_keys: dict[str, str] | None = None,
     ingress_pending: int = 0,
     wait_seconds: Sequence[float] | None = None,
@@ -96,8 +96,10 @@ def capture_contention_sample(
         service_root: base path for operational record storage.
         per_profile: profile-level queue facts keyed by profile_id.
             Values must contain at least ``running`` and ``pending`` int fields.
-        profile_provider_ids: mapping from profile_id to provider_id.
-            Used to resolve the canonical resource key via resource_key_for().
+        profile_provider_ids: optional mapping from profile_id to provider_id.
+            When provided, resource keys are resolved via resource_key_for().
+            When absent (None or empty), profiles fall back to the legacy
+            ``profile:{profile_id}`` keying.
         profile_project_keys: optional mapping from profile_id to opaque project key.
             When provided, distinct_projects per resource bucket is computed from
             the unique project keys that contribute to that resource.
@@ -105,6 +107,8 @@ def capture_contention_sample(
         wait_seconds: optional sequence of queued-wait-seconds values for p50/p95.
         config_generation: gateway config generation counter at sample time.
     """
+    if profile_provider_ids is None:
+        profile_provider_ids = {}
     if profile_project_keys is None:
         profile_project_keys = {}
     if wait_seconds is None:
@@ -117,8 +121,11 @@ def capture_contention_sample(
     _project_sets: dict[str, set[str]] = {}
 
     for profile_id, facts in per_profile.items():
-        provider_id = profile_provider_ids.get(profile_id, "unknown")
-        key = resource_key_for(provider_id)  # R1 fix: actually call resource_key_for
+        provider_id = profile_provider_ids.get(profile_id)
+        if provider_id is not None:
+            key = resource_key_for(provider_id)  # R1 fix: resolve via provider mapping
+        else:
+            key = f"profile:{profile_id}"
         bucket = per_resource.setdefault(key, {"running": 0, "pending": 0, "distinct_projects": 0})
         project_set = _project_sets.setdefault(key, set())
 

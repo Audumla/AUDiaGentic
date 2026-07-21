@@ -10,9 +10,11 @@ authorities that consume the projection exactly once under their own authority.
 """
 from __future__ import annotations
 
+import datetime
 import logging
-from collections.abc import Iterable
+from collections.abc import Iterable, MutableMapping
 from dataclasses import dataclass
+from threading import Lock
 from typing import Literal
 
 logger = logging.getLogger(__name__)
@@ -435,4 +437,329 @@ def evidence_from_latest_turn_projection(
         timestamp=projection.get("timestamp"),
         validation_state=default_validation_state,
         source="timeline",
+    )
+
+# ---------------------------------------------------------------------------
+# Ephemeral keyed projection registry (AS21 consumer slice)
+#
+# Receives only accepted AS19 StatusEvidence, maps known statuses to EvidenceKind,
+# feeds the pure projector, and retains the latest decision for status read
+# projection. No terminal inference: observer data never produces terminal-success,
+# terminal-failed, etc.
+# ---------------------------------------------------------------------------
+
+# Mapping from AS19 StatusEvidence.status strings → EvidenceKind.
+# Only non-terminal statuses are mapped; terminal events come from the turn-state
+# pipeline (TransportObservationKind.TERMINAL), not from status observation.
+_STATUS_TO_EVIDENCE_KIND: dict[str, EvidenceKind] = {
+    "model-thinking": "activity",
+    "model-generating": "activity",
+    "tool-calling": "tool-active",
+    "tool-pending": "tool-active",
+    "waiting-permission": "permission-wait",
+    "tool-completed": "tool-completed",
+}
+
+
+def _map_status_to_evidence_kind(status: str) -> EvidenceKind | None:
+    """Map a StatusEvidence.status string to an AS21 EvidenceKind.
+
+    Returns None for unknown or terminal statuses — observer data never
+    produces terminal-success, terminal-failed, etc. (no terminal inference).
+    """
+    return _STATUS_TO_EVIDENCE_KIND.get(status)
+
+
+@dataclass(frozen=True)
+class _EvidenceEntry:
+    """Internal: one accepted evidence item with allocated sequence."""
+    kind: EvidenceKind
+    sequence: int
+    source: str
+
+
+class SessionEvidenceProjection:
+    """Ephemeral keyed projection registry (AS21 consumer slice).
+
+    Keyed by (session_id, request_id). Accepts only accepted AS19 scalar
+    StatusEvidence, maps known statuses to EvidenceKind, feeds the pure
+    projector, and retains the latest decision for status read projection.
+
+    Thread-safe: uses a Lock for registry mutations. No durable storage —
+    in-memory only, lifetime bounded by the session handle.
+
+    No terminal inference: observer data never produces terminal-success,
+    terminal-failed, etc. Only non-terminal status-bearing observations are
+    mapped.
+
+    No SH07/agent-jobs mutation: this class reads and projects only; it
+    never mutates request or job state.
+    """
+
+    def __init__(self) -> None:
+        # (session_id, request_id) → list of SessionLifecycleEvidence
+        self._registry: MutableMapping[
+            tuple[str, str], list[SessionLifecycleEvidence]
+        ] = {}
+        # (session_id, request_id) → latest projected decision
+        self._decisions: MutableMapping[
+            tuple[str, str], SessionLifecycleDecision
+        ] = {}
+        # (session_id, request_id) → next sequence counter
+        self._sequence_counters: MutableMapping[
+            tuple[str, str], int
+        ] = {}
+        self._lock = Lock()
+
+    def accept(self, evidence: object) -> bool:
+        """Accept a normalized AS19 StatusEvidence and update the projection.
+
+        Validates the evidence is accepted (non-None, known status, non-terminal).
+        Maps to EvidenceKind, preserves source sequence or allocates strict local
+        sequence, feeds project_session_lifecycle(), and retains latest decision.
+
+        Args:
+            evidence: A StatusEvidence instance from the AS19 observer lease.
+
+        Returns:
+            True if evidence was accepted and projected; False if rejected
+            (unknown status, terminal status, or invalid).
+        """
+        # Import lazily to avoid circular deps at module level
+        from audiagentic.foundation.transports.harness_status_observer import (
+            StatusEvidence,
+        )
+
+        if not isinstance(evidence, StatusEvidence):
+            return False
+
+        if not evidence.session_id:
+            return False
+
+        # No request_id → session-level only; use a sentinel.
+        request_key = evidence.request_id or "__session__"
+
+        # Map status → EvidenceKind; reject unknown/terminal statuses.
+        kind = _map_status_to_evidence_kind(evidence.status)
+        if kind is None:
+            return False  # unknown status or terminal — no inference
+
+        key = (evidence.session_id, request_key)
+
+        with self._lock:
+            # Allocate or preserve sequence.
+            if evidence.sequence is not None and evidence.sequence > 0:
+                seq = evidence.sequence
+            else:
+                seq = self._sequence_counters.get(key, 0) + 1
+                self._sequence_counters[key] = seq
+
+            lifecycle_ev = SessionLifecycleEvidence(
+                session_id=evidence.session_id,
+                turn_id=request_key,
+                sequence=seq,
+                kind=kind,
+                correlation_id=evidence.correlation_id,
+                timestamp=evidence.observed_at,
+                validation_state="validated",
+                source="status-observer",
+            )
+
+            # Append to registry.
+            if key not in self._registry:
+                self._registry[key] = []
+            self._registry[key].append(lifecycle_ev)
+
+            # Project through the pure projector.
+            decision = project_session_lifecycle(self._registry[key])
+            self._decisions[key] = decision
+
+        return True
+
+    def latest_decision(
+        self,
+        session_id: str,
+        request_id: str | None = None,
+    ) -> SessionLifecycleDecision | None:
+        """Return the latest projected decision for a session/request key.
+
+        Args:
+            session_id: The AG session ID.
+            request_id: The request/turn ID (optional; None → session-level).
+
+        Returns:
+            The latest SessionLifecycleDecision, or None if no evidence
+            has been accepted for this key.
+        """
+        request_key = request_id or "__session__"
+        with self._lock:
+            return self._decisions.get((session_id, request_key))
+
+    def latest_decision_for_key(
+        self,
+        session_id: str,
+        request_id: str,
+    ) -> SessionLifecycleDecision | None:
+        """Return the latest projected decision for a specific (session, request) key.
+
+        Unlike ``latest_decision``, this requires an explicit request_id
+        and does not fall back to a sentinel.
+        """
+        with self._lock:
+            return self._decisions.get((session_id, request_id))
+
+    def redacted_status_snapshot(
+        self,
+        session_id: str,
+        request_id: str | None = None,
+    ) -> dict:
+        """Expose a redacted lifecycle-decision status snapshot.
+
+        Returns only scalar decision fields — no raw evidence, no content,
+        no provider refs. Used by session_runtime_status() for live diagnostics.
+        """
+        decision = self.latest_decision(session_id, request_id)
+        if decision is None:
+            return {
+                "lifecycle-decision": None,
+                "coarse-state": "unknown",
+                "evidence-accepted": False,
+            }
+        return {
+            "lifecycle-decision": {
+                "coarse-state": decision.coarse_state,
+                "accepts-new-turn": decision.accepts_new_turn,
+                "session-reusable": decision.session_reusable,
+                "turn-terminal": decision.turn_terminal,
+                "dependent-work-releasable": decision.dependent_work_releasable,
+                "evidence-state": decision.evidence_state,
+                "reason": decision.reason,
+            },
+            "coarse-state": decision.coarse_state,
+            "evidence-accepted": True,
+        }
+
+    def _get_evidence_list(
+        self,
+        session_id: str,
+        request_id: str | None = None,
+    ) -> list[SessionLifecycleEvidence]:
+        """Internal: get the evidence list for a key (read-only access).
+
+        Returns a copy of the list to prevent external mutation.
+        """
+        request_key = request_id or "__session__"
+        with self._lock:
+            return list(self._registry.get((session_id, request_key), []))
+
+    def clear_for_session(self, session_id: str) -> None:
+        """Clear all entries for a specific session (e.g. on session close)."""
+        with self._lock:
+            keys_to_remove = [
+                k for k in self._registry if k[0] == session_id
+            ]
+            for key in keys_to_remove:
+                self._registry.pop(key, None)
+                self._decisions.pop(key, None)
+                self._sequence_counters.pop(key, None)
+
+    def clear(self) -> None:
+        """Clear all registry state (e.g. on runtime shutdown)."""
+        with self._lock:
+            self._registry.clear()
+            self._decisions.clear()
+            self._sequence_counters.clear()
+
+
+# ---------------------------------------------------------------------------
+# AS21 → AS37 adapter: SessionLifecycleDecision → AgentStatusSnapshot
+# ---------------------------------------------------------------------------
+
+_EVIDENCE_STATE_TO_CONFIDENCE: dict[str, str] = {
+    "accepted": "validated",
+    "candidate-only": "candidate",
+    "contradictory": "contradictory",
+    "insufficient": "insufficient",
+    "rejected": "rejected",
+}
+
+_COARSE_TO_LIFECYCLE: dict[str, str] = {
+    "active": "active",
+    "waiting": "waiting",
+    "completing": "completing",
+    "available": "available",
+    "failed": "terminal",
+    "unknown": "unknown",
+}
+
+
+def snapshot_from_decision(
+    decision: SessionLifecycleDecision,
+    *,
+    scope: str = "execution-request",
+    request_id: str | None = None,
+    session_id: str | None = None,
+    turn_id: str | None = None,
+    generation: int | None = None,
+    attempt: int | None = None,
+    observed_at: str | None = None,
+) -> object:
+    """Map an AS21 SessionLifecycleDecision to an AS37 AgentStatusSnapshot.
+
+    ``scope`` accepts an ``AgentStatusScope`` member or its string value
+    (e.g. ``"execution-request"``).  AS37 types are imported lazily so the
+    module remains importable in isolation.
+    """
+    from audiagentic.foundation.transports.agent_status import (
+        AgentLifecycle,
+        AgentOutcome,
+        AgentStatusDecisions,
+        AgentStatusScope,
+        AgentStatusSnapshot,
+        StatusEvidenceConfidence,
+    )
+
+    # Normalise scope to the enum instance.
+    if isinstance(scope, str):
+        scope = AgentStatusScope(scope)
+
+    lifecycle_value = _COARSE_TO_LIFECYCLE[decision.coarse_state]
+
+    # Determine outcome: only set for terminal lifecycle.
+    outcome: AgentOutcome | None = None
+    if decision.coarse_state == "failed":
+        outcome = AgentOutcome.FAILED
+
+    confidence_key = _EVIDENCE_STATE_TO_CONFIDENCE.get(
+        decision.evidence_state, "insufficient"
+    )
+    evidence_confidence = StatusEvidenceConfidence(confidence_key)
+
+    projected_at = observed_at or datetime.datetime.now(
+        tz=datetime.timezone.utc
+    ).isoformat()
+
+    lifecycle = AgentLifecycle(lifecycle_value)
+
+    decisions = AgentStatusDecisions(
+        accepts_new_turn=decision.accepts_new_turn,
+        session_reusable=decision.session_reusable,
+        turn_terminal=decision.turn_terminal,
+        dependent_work_releasable=decision.dependent_work_releasable,
+        evidence_confidence=evidence_confidence,
+        reason=decision.reason,
+    )
+
+    return AgentStatusSnapshot(
+        scope=scope,
+        lifecycle=lifecycle,
+        projected_at=projected_at,
+        outcome=outcome,
+        decisions=decisions,
+        request_id=request_id,
+        session_id=session_id,
+        turn_id=turn_id,
+        generation=generation,
+        attempt=attempt,
+        observed_at=observed_at,
     )

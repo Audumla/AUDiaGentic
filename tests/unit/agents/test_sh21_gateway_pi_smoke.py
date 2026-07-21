@@ -61,22 +61,24 @@ def fake_pi_setup(
 ) -> tuple[Path, Path]:
     """Create the fake Pi executable that records argv and stdin.
 
+    On Windows the worker subprocess resolves commands via ``shutil.which``
+    which uses PATHEXT (.cmd/.bat/.exe).  A bare ``pi`` script has no
+    PATHEXT extension so it is invisible to command resolution.  We create
+    both a Unix-style ``pi`` shebang script **and** a Windows ``pi.cmd``
+    batch wrapper so ``shutil.which("pi")`` succeeds on every platform.
+
     The fake Pi writes its argv and stdin to fixed paths under recording_dir
     (not via env vars — those aren't passed through the worker environment).
     Returns (exe_path, recording_dir) so the test can inspect recordings.
     """
-    # Generate a unique filename prefix for this test's recordings
-    test_id = pytest.current_test_name if hasattr(pytest, 'current_test_name') else "pi"
-    argv_file = recording_dir / f"{test_id}_argv.json"
-    stdin_file = recording_dir / f"{test_id}_stdin.txt"
+    # Shared Python recorder script (extensionless on Unix, .py on Windows)
+    # Use forward-slash POSIX path so backslashes don't become escape sequences
+    # in the generated Python source (e.g. "\U" → SyntaxError on Windows).
+    recording_dir_posix = recording_dir.as_posix()
+    recorder_py = fake_pi_dir / "_pi_recorder.py"
+    recorder_py.write_text(f"""import json, os, sys
 
-    # Create the fake Pi script — it uses recording_dir + fixed filenames
-    # based on argv[0] to find its output location.
-    exe_path = fake_pi_dir / "pi"
-    exe_path.write_text(f"""#!/usr/bin/env python3
-import json, os, sys
-
-recording_dir = "{recording_dir}"
+recording_dir = "{recording_dir_posix}"
 
 def main():
     argv_file = os.path.join(recording_dir, "test_argv.json")
@@ -97,7 +99,25 @@ def main():
 if __name__ == "__main__":
     main()
 """)
-    exe_path.chmod(0o755)
+
+    # Unix-style shebang script — works on Linux/macOS where PATHEXT is N/A
+    exe_path = fake_pi_dir / "pi"
+    recorder_py_posix = recorder_py.as_posix()
+    exe_path.write_text(
+        f"#!/usr/bin/env python3\nexec(open({recorder_py_posix!r}).read())\n"
+    )
+    try:
+        exe_path.chmod(0o755)
+    except OSError:
+        # chmod may fail on Windows; the .cmd path handles that case
+        pass
+
+    # Windows PATHEXT-compatible launcher — ``shutil.which("pi")`` finds this
+    # via the .cmd extension and invokes it through COMSPEC (cmd.exe).
+    pi_cmd = fake_pi_dir / "pi.cmd"
+    pi_cmd.write_text(
+        f'@echo off\npython "{recorder_py}" %*\n',
+    )
 
     return exe_path, recording_dir
 

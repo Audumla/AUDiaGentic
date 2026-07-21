@@ -226,6 +226,35 @@ capability_facts:
       tool_version: "1.17.18"
       fact_anchor: "docs/planning/active/agent-sessions/AS09.md"
       review_state: pending-review
+  # --- AS27 harness observability capability facts -----------------------
+  # Inventory and conformance for agent-loop status observation.
+  - capability_id: hinv-opencode-acp
+    subject: "external:harness-observability/opencode-acp"
+    mechanism: "AS27 inventory: Recipe A transport-observation; validated O1 publisher on linux-amd64 only (local probe proven); opencode acp stdio supports windows/macOS/linux as vendor product platforms but local observability validation requires exact per-platform probe"
+    constraints: []
+    limitations:
+      - "cancel-turn not supported in current version"
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: execution
+      tool_version: repository
+      fact_anchor: "src/audiagentic/components/providers/services/harness_observability_inventory.py#opencode-opencode-acp"
+      review_state: verified
+  - capability_id: hinv-opencode-cli-session
+    subject: "external:harness-observability/opencode-cli-session"
+    mechanism: "AS27 inventory: Recipe A/C candidate; blocked pending synchronous completion / idle/status probe; never parse prose"
+    constraints:
+      - "requires server event/status API and plugin route proof"
+    limitations:
+      - "no validated transport observation mechanism"
+    support_assessment: blocked
+    action_needed: "prove synchronous completion, session idle/status, SSE ordering and correlation"
+    evidence:
+      evidence_tier: unverified
+      tool_version: repository
+      fact_anchor: "src/audiagentic/components/providers/services/harness_observability_inventory.py#opencode-opencode-cli-session"
+      review_state: pending-review
 
 permissions:
   can_write_files: true
@@ -307,13 +336,30 @@ session_surfaces:
         max_events: 100
     validation_state: "declared"
     effective_level: "O1"
+    # Platform evidence — only linux-amd64 has exact local probe evidence.
+    # Windows/macOS/Linux are vendor-supported platforms (product capability
+    # fact), but local observability validation is proven only for linux-amd64.
+    # Parent VALIDATED because at least one platform is validated.
+    # Other platforms remain DECLARED/O0 until their own probes pass.
     platforms:
       - platform: "linux-amd64"
         tool_version: "repository"
         probe_artifact: "tests/e2e/agents/test_opencode_acp_e2e.py"
         validation_state: "validated"
         effective_level: "O1"
+      # Vendor-supported platforms — no local probe evidence yet.
+      # Validation state remains DECLARED; effective level O0 until proven.
       - platform: "windows-amd64"
+        tool_version: "repository"
+        probe_artifact: "tests/e2e/agents/test_opencode_acp_e2e.py"
+        validation_state: "declared"
+        effective_level: "O0"
+      - platform: "darwin-arm64"
+        tool_version: "repository"
+        probe_artifact: "tests/e2e/agents/test_opencode_acp_e2e.py"
+        validation_state: "declared"
+        effective_level: "O0"
+      - platform: "darwin-amd64"
         tool_version: "repository"
         probe_artifact: "tests/e2e/agents/test_opencode_acp_e2e.py"
         validation_state: "declared"

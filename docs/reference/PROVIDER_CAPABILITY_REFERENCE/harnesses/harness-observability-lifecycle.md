@@ -100,7 +100,7 @@ process, session, turn, model, tool, interaction, output, background-work, and
 health states remain orthogonal evidence projections for diagnostics and policy.
 
 | Operational state | Meaning | Automatic dispatch |
-|---|---|---:|
+| --- | --- | ---: |
 | `STARTING` | Process, connection, or session is initializing or restoring | No |
 | `AVAILABLE` | No turn is active and the target can accept work | Yes, subject to decision flags |
 | `ACTIVE` | A correlated turn is in progress | No |
@@ -144,7 +144,7 @@ States at each layer are independent. A session can be idle while the process is
 ### Process state
 
 | State | Meaning |
-|---|---|
+| --- | --- |
 | starting | Harness process launching |
 | ready | Process alive and accepting connections |
 | alive | Process running (general) |
@@ -155,7 +155,7 @@ States at each layer are independent. A session can be idle while the process is
 ### Session state
 
 | State | Meaning | Dispatch? | Reuse? |
-|---|---|---:|---:|
+| --- | --- | ---: | ---: |
 | opening | Session being created | No | No |
 | ready | Ready to accept turns | Yes | — |
 | active | Turn in progress | No | No |
@@ -172,7 +172,7 @@ evidence for the previous turn, and no policy-blocking background work.
 ### Turn state
 
 | State | Meaning |
-|---|---|
+| --- | --- |
 | submitted | Prompt sent to harness |
 | accepted | Harness acknowledged the turn |
 | queued | Turn waiting in session queue |
@@ -192,7 +192,7 @@ These are orthogonal indicators of what the harness is currently doing. Multiple
 **Model phase:**
 
 | State | Meaning |
-|---|---|
+| --- | --- |
 | preparing | Context assembly, model loading |
 | thinking | Direct evidence that a model call or explicit reasoning phase is active; no hidden reasoning content is required or stored |
 | streaming | Producing assistant-message text |
@@ -203,7 +203,7 @@ These are orthogonal indicators of what the harness is currently doing. Multiple
 **Tool lifecycle:**
 
 | State | Meaning |
-|---|---|
+| --- | --- |
 | requested | Tool-call event received |
 | awaiting_permission | Permission-request pending |
 | executing | Tool is running (bash, file edit, etc.) |
@@ -213,7 +213,7 @@ These are orthogonal indicators of what the harness is currently doing. Multiple
 **Interaction:**
 
 | State | Meaning |
-|---|---|
+| --- | --- |
 | awaiting_user | User input required |
 | awaiting_permission | Approval gate active |
 | awaiting_external_event | Third-party webhook/callback |
@@ -409,7 +409,7 @@ harness version.
 Highest confidence wins. Lower-confidence evidence **cannot** override stronger evidence.
 
 | Priority | Source | Reliability class |
-|---:|---|---|
+| ---: | --- | --- |
 | 1 | Protocol terminal response (ACP end_turn, CLI exit 0) | definitive |
 | 2 | Native correlated terminal event (turn.completed) | definitive |
 | 3 | End-of-agent hook/plugin event (AfterAgent) | explicit |
@@ -511,7 +511,7 @@ separate resource concerns. A held `turn_lock` proves only serialization; it doe
 not prove model activity or terminal completion.
 
 | Condition | Turn slot | Model/LLM slot | Process slot |
-|---|---:|---:|---:|
+| --- | ---: | ---: | ---: |
 | Waiting for the session `turn_lock` | Retain queue ownership | Release | Retain if process exists |
 | Model preparing/thinking/streaming | Retain | Retain | Retain |
 | Tool executing with O3 evidence | Retain | Release | Retain |
@@ -562,7 +562,7 @@ consume the same normalized evidence; they do not require the earlier stage to
 implement the whole reference model up front.
 
 | Stage | Plan item | Smallest useful result | Explicitly deferred |
-|---:|---|---|---|
+| ---: | --- | --- | --- |
 | 1 | AS15 | O2 session-aware `pq.running`/`pq.idle` accounting | Intra-turn phase inference |
 | 2 | AS18 | ACP callback publishes a minimal correlated model/tool event slice | Scheduler control, full event taxonomy, completion arbitration |
 | 3 | AS19 | Minimal descriptor schema and YAML transitions for the first validated ACP harness | Fleet-wide declarations and speculative capability claims |
@@ -672,7 +672,7 @@ harness_observability:
 ## Capability levels
 
 | Level | Name | What it provides | Turn completion | Session reuse |
-|---:|---|---|---|---|
+| ---: | --- | --- | --- | --- |
 | O0 | Process only | PID liveness, exit code | Process exit only | Unsafe |
 | O1 | Heuristic | Output silence, polling, resource activity | Inferred from heuristics | Restricted |
 | O2 | Explicit turn boundary | Correlated completion signal (end_turn, AfterAgent) | Explicit | Allowed |
@@ -714,38 +714,49 @@ An O1 harness can still run, but conservatively: one-shot mode, keep the slot oc
 
 All rows are capability facts, not runtime declarations. `effective` is O0
 unless and until the exact version/mode has a passing Docker probe and the
-provider descriptor has been enabled. “Candidate” does not authorize an adapter,
+provider descriptor has been enabled. "Candidate" does not authorize an adapter,
 hook installation, status enum, or control action.
 
-| Harness surface/mode | Declared route / level | Validation | Effective | Planned recipe and constraint |
-|---|---|---|---:|---|
-| OpenCode ACP | Native ACP, O2/O3 candidate | Probe required | O0 | A; first AS28/AS19 transport proof |
-| OpenCode server/plugin/CLI | Server event/status API and plugin route, O2/O3-partial candidate | Probe required | O0 | A/C; prove synchronous completion, idle/status, SSE ordering and correlation; never parse prose |
-| Codex ACP bridge | ACP adapter, O2/O3 candidate | Probe required | O0 | A; AS13 bridge/version proof first |
-| Codex CLI hooks | Native hooks, O2/O3 candidate | Probe required | O0 | B; installed TOML/hooks reader-writer-remover proof |
-| Claude Code ACP | ACP adapter, O2 candidate | Probe required | O0 | A; verify package, launch, terminal and correlation |
-| Claude Code CLI | Native hooks, O2/O3 candidate | Probe required | O0 | B; prove project hook lifecycle and non-vetoing emitter |
-| Cline ACP | ACP, O2/O3 candidate | Probe required | O0 | A; prove correlation and event fidelity |
-| Cline SDK/core/hooks/JSON CLI | [Runtime/core event stream](https://docs.cline.bot/sdk/events), hooks, structured output; O2/O3 candidate | Probe required | O0 | A/B/C by mode; prove task/run semantics and persistence before reuse |
-| Gemini ACP | Native ACP, O2/O3 candidate | Probe required | O0 | A; independent of CLI hooks |
-| Gemini CLI | Native lifecycle hooks, O3 candidate | Probe required | O0 | B; prove exact installed hook config and event semantics |
-| Qwen ACP | Native ACP, O2/O3 candidate | Probe required | O0 | A; prove experimental flag/event behavior |
-| Kilo ACP | Native ACP, O2/O3 candidate | Probe required | O0 | A; descriptor and transport proof first |
-| Copilot ACP | [Official ACP server](https://docs.github.com/en/enterprise-cloud@latest/copilot/reference/copilot-cli-reference/acp-server) and correlated terminal result, O2 candidate; public preview | Probe required | O0 | A; pin CLI/protocol and test stdio or loopback TCP |
-| Pi native RPC | [JSONL agent/turn/message/tool events](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/rpc.md), O2/O3 candidate | Probe required | O0 | A; primary Pi route, prove schema/correlation/lifecycle |
-| Pi community ACP | Community adapter, optional O2 candidate | Probe required | O0 | A only after maintained pinned-Docker proof; never required for Pi coverage |
-| Goose ACP/API | [Official ACP/API route](https://block.github.io/goose/index.html), O2 candidate | Probe required | O0 | A; prove prompt terminal response and correlation |
-| OpenHands Agent Canvas / remote server | [WebSocket event stream and conversation state](https://docs.openhands.dev/sdk/guides/agent-server/local-server), O2/O3 candidate | Probe required | O0 | A; probe exact Canvas/SDK event terminal semantics and correlation |
-| Zed external-agent thread | Delegates to the selected external agent's ACP/native route | Inherits child surface | O0 | A only through the child agent; not a Zed-native observer |
-| Zed terminal thread | Process/terminal path only | Unresolved | O0 if adopted | D; no UI or terminal scraping |
-| Zed native agent UI | UI states may exist; machine API not evidenced | Investigation required | O0 | D pending supported consumable event API |
-| Antigravity CLI | Hooks/plugins/status mentioned, candidate route not source-pinned | Primary-source probe required | O0 | B candidate; prove machine terminal event and config lifecycle; no Gemini inference |
-| Continue headless | Structured one-shot result candidate | Probe required | O0 | C; one-shot terminal evidence is not reusable-session O2 without explicit persistent boundary |
-| Continue persistent TUI | Machine-readable persistent lifecycle not evidenced | Unresolved | O0 | D |
-| Crush native backend | Possible server/session event route needs primary-source evidence | Investigation required | O0 | D until source/version probe establishes event/status semantics |
-| Aider CLI | No supported lifecycle route found | Unresolved | O0 if owned | D |
-| Plandex CLI | No supported lifecycle route found | Unresolved | O0 if owned | D |
-| Roo CLI | No supported lifecycle route found | Unresolved | O0 if owned | D |
+**Platform eligibility**: a validated surface publishes only on platforms
+listed in its `platform_evidence` (AS27 inventory). OpenCode native `opencode acp`
+supports Windows, macOS, and Linux as vendor product platforms; Windows config
+handles pwsh/cmd. However, local observability validation is proven only for
+**linux-amd64** — the AS27 inventory's `platform_evidence` contains only that
+platform. Vendor product support (windows/macOS/linux) does NOT imply local
+validation: the session-surface resolver enforces an inventory proof gate
+(AS27 RV770) that rejects O1+ validated claims on platforms absent from the
+inventory. Platform support alone is not status evidence — AS29 surface validation
+with exact launch/version/correlation proof gates publication.
+
+| Harness surface/mode | Declared route / level | Validation | Effective | Platform evidence | Online docs / evidence reference |
+| --- | --- | --- | ---: | --- | --- |
+| OpenCode ACP | Native ACP, O2/O3 candidate | Validated | O1 | linux-amd64 (vendor supports windows/macOS/linux; local probe only proven on linux-amd64) | [ACP docs](https://opencode.ai/docs/acp/), [CLI docs](https://opencode.ai/docs/cli/) |
+| OpenCode server/plugin/CLI | Server event/status API and plugin route, O2/O3-partial candidate | Probe required | O0 | windows/macOS/Linux | [Config docs](https://opencode.ai/docs/config/), plugins in `.opencode/plugins/`, LSP via `lspServers` key |
+| Codex ACP bridge | ACP adapter, O2/O3 candidate | Probe required | O0 | windows/macOS/Linux | [codex-acp adapter](https://github.com/agentclientprotocol/codex-acp), [Codex App Server API](https://developers.openai.com/codex/) |
+| Codex CLI hooks | Native hooks, O2/O3 candidate | Probe required | O0 | windows/macOS/Linux | Config: `~/.codex/config.toml` (global), `.codex/config.toml` (project-local), CLI overrides: `-c`, `--config-dir` |
+| Claude Code ACP | ACP adapter, O2 candidate | Probe required | O0 | windows/macOS/Linux | [claude-agent-acp adapter](https://github.com/agentclientprotocol/claude-agent-acp), [Agent SDK hooks](https://code.claude.com/docs/en/agent-sdk/hooks.md) |
+| Claude Code CLI | Native lifecycle hooks, O2/O3 candidate | Probe required | O0 | windows/macOS/Linux | [Hooks reference](https://code.claude.com/docs/en/hooks.md), hook locations: `~/.claude/settings.json`, `.claude/settings.json`, `.claude/settings.local.json` |
+| Cline ACP | ACP, O2/O3 candidate | Probe required | O0 | windows/macOS/Linux | [Cline ACP registry entry](https://github.com/agentclientprotocol/registry), launch: `npx cline --acp`, version 3.0.42 |
+| Cline SDK/core/hooks/JSON CLI | [Runtime/core event stream](https://docs.cline.bot/sdk/events), hooks, structured output; O2/O3 candidate | Probe required | O0 | windows/macOS/Linux | [SDK events docs](https://docs.cline.bot/sdk/events), `AgentRuntimeEvent` from `@cline/agents`, `agent.subscribe(listener)` |
+| Gemini ACP | Native ACP, O2/O3 candidate | Probe required | O0 | windows/macOS/Linux | Registry ID: `gemini`, launch: `npx @google/gemini-cli@0.50.0 --acp` |
+| Gemini CLI | Native lifecycle hooks, O3 candidate | Probe required | O0 | windows/macOS/Linux | Prove exact installed hook config and event semantics |
+| Qwen ACP | Native ACP, O2/O3 candidate | Probe required | O0 | windows/macOS/Linux | Registry ID: `qwen-code`, launch: `npx @qwen-code/qwen-code --acp --experimental-skills`, [Alibaba docs](https://www.alibabacloud.com/help/doc-detail/3023091.html) |
+| Kilo ACP | Native ACP, O2/O3 candidate | Probe required | O0 | windows/macOS/Linux | Registry ID: `kilo`, launch: `kilo acp`, [Kilo CLI reference](https://kilo.ai/docs/code-with-ai/platforms/cli-reference) |
+| Copilot ACP | [Official ACP server](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) and correlated terminal result, O2 candidate; public preview | Probe required | O0 | windows/macOS/Linux | [GitHub Copilot CLI ACP docs](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server), [Changelog](https://github.blog/changelog/2026-01-28-acp-support-in-copilot-cli-is-now-in-public-preview/) |
+| Pi native RPC | [JSONL agent/turn/message/tool events](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md), O2/O3 candidate | Probe required | O0 | windows/macOS/Linux | [Pi RPC docs](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md), strict JSONL semantics with LF (`\n`) record delimiter |
+| Pi community ACP | Community adapter, optional O2 candidate | Probe required | O0 | windows/macOS/Linux | [vkozak/pi-acp](https://github.com/vkozak/pi-acp) (513 stars), community adapter not native to Pi |
+| Goose ACP/API | [Official ACP/API route](https://block-goose.mintlify.app/advanced/acp-protocol), O2 candidate | Probe required | O0 | windows/macOS/Linux | [Goose ACP Protocol docs](https://block-goose.mintlify.app/advanced/acp-protocol), registry ID: `goose`, launch: `goose acp`, version 1.43.0 |
+| OpenHands Agent Canvas / remote server | [WebSocket event stream and conversation state](https://docs.openhands.dev/openhands/usage/agent-canvas/acp-agents), O2/O3 candidate | Probe required | O0 | windows/macOS/Linux | [OpenHands ACP Agents docs](https://docs.openhands.dev/openhands/usage/agent-canvas/acp-agents), uses `ACPAgent` to delegate conversations to external ACP-compatible servers |
+| Zed external-agent thread | Delegates to the selected external agent's ACP/native route | Inherits child surface | O0 | windows/macOS/Linux | [Zed External Agents docs](https://zed.dev/docs/ai/external-agents), [Zed ACP docs](https://zed.dev/acp), MCP servers forwarded via ACP |
+| Zed terminal thread | Process/terminal path only | Unresolved | O0 if adopted | windows/macOS/Linux | No UI or terminal scraping |
+| Zed native agent UI | UI states may exist; machine API not evidenced | Investigation required | O0 | windows/macOS/Linux | Pending supported consumable event API |
+| Antigravity CLI | Hooks/plugins/status mentioned, candidate route not source-pinned | Primary-source probe required | O0 | windows/macOS/Linux | B candidate; prove machine terminal event and config lifecycle; no Gemini inference |
+| Continue headless | Structured one-shot result candidate | Probe required | O0 | windows/macOS/Linux | [Continue headless docs](https://docs.continue.dev/cli/headless-mode), `cn -p "prompt"` mode, tools requiring approval automatically excluded |
+| Continue persistent TUI | Machine-readable persistent lifecycle not evidenced | Unresolved | O0 | windows/macOS/Linux | [Continue TUI docs](https://docs.continue.dev/cli/tui-mode), interactive session with `cn`, reference files with `@`, approve tool calls |
+| Crush native backend | Possible server/session event route needs primary-source evidence | Investigation required | O0 | windows/macOS/Linux | [Crush server mode docs](https://deepwiki.com/charmbracelet/crush/3.9-server-mode-and-backend), enabled via `CRUSH_CLIENT_SERVER` env var |
+| Aider CLI | No supported lifecycle route found | Unresolved | O0 if owned | windows/macOS/Linux | Scriptable via CLI (`--message`) or Python APIs; hooks/plugins not currently implemented (see [issue #2557](https://github.com/Aider-AI/aider/issues/2557)) |
+| Plandex CLI | No supported lifecycle route found | Unresolved | O0 if owned | windows/macOS/Linux | [Plandex docs](https://docs.plandex.ai/install), install via `curl -sL <https://plandex.ai/install.sh> | bash`, Windows supported via WSL |
+| Roo CLI | No supported lifecycle route found | Unresolved | O0 if owned | windows/macOS/Linux | [Roo Code docs](https://docs.roocode.com/features/skills), skills package task-specific instructions loaded on-demand, custom instructions/rules supported |
 
 `local-openai` is intentionally absent: it is an endpoint/protocol family that
 can expose provider request/response/usage telemetry, not an agent-loop harness
@@ -795,7 +806,7 @@ Capability declarations are claims until probes establish their evidence tier.
 At minimum, adapters must cover:
 
 | Probe | Required observation |
-|---|---|
+| --- | --- |
 | Readiness | Process and connection readiness are distinct from turn availability |
 | Simple prompt | Correlated terminal proof and committed output |
 | Streaming | Partial output never becomes terminal by itself |
@@ -845,3 +856,37 @@ The scheduler must always be able to answer these six questions unambiguously an
 6. **Is the process still healthy?** — Is process Alive/Ready, or Degraded/Exited?
 
 Everything else belongs to the detailed activity model and does not need to be visible to the scheduler.
+
+## Consolidated ACP Capabilities & Protocol Mapping
+
+This section consolidates all ACP (Agent Client Protocol) capabilities, OS/platform support, hooks/plugins, and configuration details for all harnesses.
+
+### ACP Provider Matrix
+
+| Provider | ACP status | Type | Registry ID | Launch command | Platform support |
+| --- | --- | --- | --- | --- | --- |
+| OpenCode | Supported | Native | `opencode` | `opencode acp` | Windows/macOS/Linux |
+| Kilo Code | Supported | Native | `kilo` | `kilo acp` | Windows/macOS/Linux |
+| Qwen Code | Supported | Native | `qwen-code` | `npx @qwen-code/qwen-code --acp --experimental-skills` | Windows/macOS/Linux |
+| Gemini CLI | Supported | Native | `gemini` | `npx @google/gemini-cli@0.50.0 --acp` | Windows/macOS/Linux |
+| Claude Code | Supported | Adapter | `claude-acp` | `npx -y @agentclientprotocol/claude-agent-acp` | Windows/macOS/Linux |
+| Codex CLI | Supported | Adapter | `codex-acp` | `npx -y @agentclientprotocol/codex-acp` | Windows/macOS/Linux |
+| GitHub Copilot | Supported | Native | `github-copilot-cli` | `npx @GitHub/copilot@1.0.71 --acp` | Windows/macOS/Linux |
+| Cline | Supported | Native | `cline` | `npx cline --acp` | Windows/macOS/Linux |
+| Cursor | Supported | Native | `cursor` | `cursor-agent acp` | Windows/macOS/Linux |
+| Pi | Supported | Adapter | `pi-acp` | `npx pi-acp@0.0.31` | Windows/macOS/Linux |
+| Goose | Supported | Native | `goose` | `goose acp` | Windows/macOS/Linux |
+| OpenHands | No registered agent | N/A | — | — | ACP consumer/host |
+| Crush | No registered agent | N/A | — | — | No ACP agent entry found |
+| Continue | No registered agent | N/A | — | — | No ACP agent entry found |
+| Aider | No registered agent | N/A | — | — | No ACP agent entry found |
+| Zed | No registered agent | N/A | — | — | ACP consumer (via extensions)
+
+### Session and External-Control Matrix
+
+| Provider | ACP-created session | Persisted resume through ACP | Attach ACP to independently started TUI | Native shared/live control path | Out-of-band injection |
+| --- | --- | --- | --- | --- | --- |
+| Codex CLI | Yes, through `codex-acp` | Yes | No direct attachment mechanism established | **Codex App Server** can own the session while the Codex TUI and another controller connect to the same server | App Server supports `turn/start` for a new turn and `turn/steer` for the active turn |
+| Claude Code | Yes, through `claude-agent-acp` | Yes | No direct attachment mechanism established | Claude background-session tooling, Remote Control, and Channels are separate native control mechanisms | **Channels** can push events into an already-running session started with `--channels` |
+| Native ACP providers | Yes | Provider and ACP-capability dependent | Not implied by native ACP support | Provider-specific | Provider-specific |
+| Adapter-based providers | Yes, when launched through the adapter | Adapter-dependent | Normally no; the adapter owns a separate runtime | Provider-specific native interface may exist | Provider-specific |
