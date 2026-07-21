@@ -348,9 +348,10 @@ class TestValidationRule3b:
             validation_state=SurfaceValidationState.VALIDATED,
             effective_level=EffectiveObservationLevel.O1,
             platforms=(
+                # No validated platform at all — rule 3b requires at least one.
                 PlatformEvidence(
                     platform="linux-amd64",
-                    validation_state=SurfaceValidationState.VALIDATED,
+                    validation_state=SurfaceValidationState.DECLARED,
                 ),
                 PlatformEvidence(
                     platform="windows-amd64",
@@ -358,20 +359,27 @@ class TestValidationRule3b:
                 ),
             ),
         )
-        with pytest.raises(AudiaGenticError, match="all platforms to be validated"):
+        with pytest.raises(AudiaGenticError, match="at least one validated platform"):
             _validate_declarations([bad_decl])
 
     def test_opencode_surfaces_pass_rule_3b(self):
         """OpenCode YAML surfaces should pass the rule — parent is DECLARED.
 
         Since ACP is DECLARED (not VALIDATED), it won't be caught by Rule 3b
-        even though Windows is only declared. This is the conservative model."""
+        even though Windows is only declared. This is the conservative model.
+        Mixed platform states are now allowed: linux-amd64 is validated while
+        other platforms remain declared."""
         desc = _load_opencode()
-        for s in desc.session_surfaces:
-            if s.validation_state == SurfaceValidationState.VALIDATED:
-                # If somehow a surface IS validated, all platforms must be too
-                for pe in s.platforms:
-                    assert pe.validation_state == SurfaceValidationState.VALIDATED
+        acp = next(s for s in desc.session_surfaces if s.surface_id == "opencode-acp")
+        # ACP parent is DECLARED, so Rule 3b doesn't apply (it only triggers
+        # when the parent is VALIDATED). Mixed platform states are allowed.
+        assert acp.validation_state != SurfaceValidationState.VALIDATED or (
+            # If parent were ever validated, at least one platform must be too.
+            any(
+                pe.validation_state == SurfaceValidationState.VALIDATED
+                for pe in acp.platforms
+            )
+        )
 
 
 class TestNoCrossSurfaceFallback:

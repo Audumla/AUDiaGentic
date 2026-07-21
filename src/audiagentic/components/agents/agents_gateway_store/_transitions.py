@@ -33,6 +33,7 @@ from ._records import (
 )
 from ._shared import (
     _request_lock,
+    extract_worker_evidence,
     record_gateway_timeline,
 )
 
@@ -122,7 +123,16 @@ def transition_record(
         updated["revision"] = record["revision"] + 1
         if updates:
             for key, value in updates.items():
-                updated[key.replace("_", "-")] = _redact_error(value) if key in ("error",) else value
+                if key == "error":
+                    # Extract bounded worker diagnostic evidence BEFORE
+                    # redaction strips it (SH21 RV769 — private operator
+                    # evidence for INT-AGW-076 failures).
+                    evidence = extract_worker_evidence(value)
+                    if evidence is not None:
+                        updated["worker-evidence"] = evidence
+                    updated[key.replace("_", "-")] = _redact_error(value)
+                else:
+                    updated[key.replace("_", "-")] = value
         write_record(project_root, updated)
         record_gateway_timeline(
             project_root,
@@ -391,6 +401,8 @@ def transition_recovered_terminal(
         updated = dict(record)
         recovery_outcome = "replay-required" if replay_required else "resubmit-required"
         recovery_meta: dict[str, str] = {"reason": "service-restart", "outcome": recovery_outcome}
+        # Extract worker evidence before redaction (SH21 RV769).
+        recovered_evidence = extract_worker_evidence(error)
         updated.update({
             "state": new_state,
             "error": _redact_error(error),
@@ -400,6 +412,8 @@ def transition_recovered_terminal(
             "revision": record["revision"] + 1,
             "recovery": recovery_meta,
         })
+        if recovered_evidence is not None:
+            updated["worker-evidence"] = recovered_evidence
         if replay_required is not None:
             updated["replay-required"] = replay_required
         if replay_reason is not None:

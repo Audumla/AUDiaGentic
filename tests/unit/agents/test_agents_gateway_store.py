@@ -725,3 +725,231 @@ def test_public_status_projection_excludes_submission_secrets() -> None:
     assert "context-fingerprint" not in status
     assert "idempotency-key" not in status
     assert "metadata" not in status
+
+
+# ── SH21 RV769: private worker diagnostic evidence ───────────────────────
+
+def test_sh21_rv769_int_agw_076_persists_private_worker_evidence(
+    tmp_path: Path,
+) -> None:
+    """INT-AGW-076 error with worker-diagnostic in details persists a bounded
+    redacted private evidence field. The public error remains generic/redacted.
+
+    Regression for the gap where req_0764e2e390f644ca failed INT-AGW-076 yet
+    its durable record/timeline held only a generic public error despite the
+    initial worker diagnostics patch.
+
+    The worker-diagnostic is already redacted by AudiaGenticError at construction
+    (secrets in details are replaced with [REDACTED]). The private evidence field
+    carries this already-redacted diagnostic — operators see the structure but
+    secrets are stripped at the error-envelope boundary.
+    """
+    SENSITIVE_STRING = "Bearer sk-proj-abcdef1234567890"
+    worker_diagnostic = (
+        f"WORKER-EXCEPTION: ValueError: provider failed with secret={SENSITIVE_STRING}\n"
+        f"Traceback (most recent call last):\n"
+        f"  File \"agents_gateway_worker_host.py\", line 120, in main\n"
+        f"    raise ValueError(\"provider failed\")\n"
+    )
+
+    err = AudiaGenticError(
+        code="INT-AGW-076",
+        kind="agents",
+        message="isolated provider worker failed unexpectedly",
+        details={"worker-diagnostic": worker_diagnostic},
+    )
+
+    # AudiaGenticError redacts secrets in details; the diagnostic becomes [REDACTED]
+    assert err.details["worker-diagnostic"] == "[REDACTED]"
+
+    record = store.build_record(agent_profile_id="default", prompt_body="do the thing")
+    store.write_record(tmp_path, record)
+    store.transition_record(tmp_path, record["request-id"], "running")
+    updated = store.transition_record(
+        tmp_path, record["request-id"], "failed",
+        updates={"error": err},
+    )
+
+    # ── Public error must remain generic/redacted (only code/message/kind) ──
+    assert updated["error"] == {
+        "code": "INT-AGW-076",
+        "message": "isolated provider worker failed unexpectedly",
+        "kind": "agents",
+    }
+    assert "worker-diagnostic" not in updated["error"]
+    assert SENSITIVE_STRING not in str(updated["error"])
+
+    # ── Private worker-evidence must contain the redacted diagnostic ─────
+    assert updated.get("worker-evidence") is not None
+    evidence = updated["worker-evidence"]
+    assert "error-type" in evidence
+    # error-type is type(error).__name__; AudiaGenticError is aliased as _Error
+    assert evidence["error-type"] in ("AudiaGenticError", "_Error")
+    assert "worker-diagnostic" in evidence
+    # The diagnostic was redacted by AudiaGenticError at construction time,
+    # so the private field carries the already-redacted value.
+    assert evidence["worker-diagnostic"] == "[REDACTED]"
+    # Secret must NOT be present anywhere in the persisted record
+    assert SENSITIVE_STRING not in str(updated)
+
+    # ── Public status must NOT expose worker-evidence ──────────────────
+    status = store.project_public_status(updated)
+    assert "worker-evidence" not in status
+    assert SENSITIVE_STRING not in str(status)
+
+
+def test_sh21_rv769_safe_worker_diagnostic_survives_in_evidence(
+    tmp_path: Path,
+) -> None:
+    """A worker diagnostic WITHOUT secrets survives intact in private evidence
+    and is NOT exposed in public error or public status."""
+    safe_diagnostic = (
+        "WORKER-EXCEPTION: ValueError: provider failed unexpectedly\n"
+        "Traceback (most recent call last):\n"
+        "  File \"agents_gateway_worker_host.py\", line 120, in main\n"
+        "    raise ValueError(\"provider failed\")\n"
+    )
+
+    err = AudiaGenticError(
+        code="INT-AGW-076",
+        kind="agents",
+        message="isolated provider worker failed unexpectedly",
+        details={"worker-diagnostic": safe_diagnostic},
+    )
+    # Safe diagnostic is NOT redacted (no secret patterns)
+    assert err.details["worker-diagnostic"] == safe_diagnostic
+
+    record = store.build_record(agent_profile_id="default", prompt_body="do the thing")
+    store.write_record(tmp_path, record)
+    store.transition_record(tmp_path, record["request-id"], "running")
+    updated = store.transition_record(
+        tmp_path, record["request-id"], "failed",
+        updates={"error": err},
+    )
+
+    # Public error is redacted (no diagnostics)
+    assert updated["error"] == {
+        "code": "INT-AGW-076",
+        "message": "isolated provider worker failed unexpectedly",
+        "kind": "agents",
+    }
+
+    # Private evidence contains the safe diagnostic intact
+    assert updated.get("worker-evidence") is not None
+    evidence = updated["worker-evidence"]
+    # error-type is type(error).__name__; AudiaGenticError is aliased as _Error
+    assert evidence["error-type"] in ("AudiaGenticError", "_Error")
+    assert evidence["worker-diagnostic"] == safe_diagnostic
+    assert "Traceback" in evidence["worker-diagnostic"]
+    assert "ValueError" in evidence["worker-diagnostic"]
+
+    # Public status does NOT expose worker-evidence
+    status = store.project_public_status(updated)
+    assert "worker-evidence" not in status
+    assert "Traceback" not in str(status)
+
+
+def test_sh21_rv769_non_076_errors_no_worker_evidence(tmp_path: Path) -> None:
+    """Non-INT-AGW-076 errors must NOT create a worker-evidence field."""
+    err = AudiaGenticError(
+        code="EXT-CLAUDE-001",
+        kind="providers",
+        message="claude execution failed",
+        details={"stdout": "some output"},
+    )
+
+    record = store.build_record(agent_profile_id="default", prompt_body="do the thing")
+    store.write_record(tmp_path, record)
+    store.transition_record(tmp_path, record["request-id"], "running")
+    updated = store.transition_record(
+        tmp_path, record["request-id"], "failed",
+        updates={"error": err},
+    )
+
+    assert updated["error"] == {
+        "code": "EXT-CLAUDE-001",
+        "message": "claude execution failed",
+        "kind": "providers",
+    }
+    assert updated.get("worker-evidence") is None
+
+
+def test_sh21_rv769_int_agw_076_without_diagnostic_no_evidence(
+    tmp_path: Path,
+) -> None:
+    """INT-AGW-076 error WITHOUT worker-diagnostic in details must NOT
+    create a worker-evidence field."""
+    err = AudiaGenticError(
+        code="INT-AGW-076",
+        kind="agents",
+        message="isolated provider worker failed unexpectedly",
+        details={"worker-id": "worker-test"},
+    )
+
+    record = store.build_record(agent_profile_id="default", prompt_body="do the thing")
+    store.write_record(tmp_path, record)
+    store.transition_record(tmp_path, record["request-id"], "running")
+    updated = store.transition_record(
+        tmp_path, record["request-id"], "failed",
+        updates={"error": err},
+    )
+
+    assert updated["error"] == {
+        "code": "INT-AGW-076",
+        "message": "isolated provider worker failed unexpectedly",
+        "kind": "agents",
+    }
+    assert updated.get("worker-evidence") is None
+
+
+def test_sh21_rv769_to_agw_076_no_worker_evidence(tmp_path: Path) -> None:
+    """TO-AGW-076 (timeout) must NOT leak worker diagnostics."""
+    err = AudiaGenticError(
+        code="TO-AGW-076",
+        kind="agents",
+        message="isolated provider worker exceeded its execution timeout",
+        details={"worker-id": "worker-test"},
+    )
+
+    record = store.build_record(agent_profile_id="default", prompt_body="do the thing")
+    store.write_record(tmp_path, record)
+    store.transition_record(tmp_path, record["request-id"], "running")
+    updated = store.transition_record(
+        tmp_path, record["request-id"], "failed",
+        updates={"error": err},
+    )
+
+    assert updated["error"] == {
+        "code": "TO-AGW-076",
+        "message": "isolated provider worker exceeded its execution timeout",
+        "kind": "agents",
+    }
+    assert updated.get("worker-evidence") is None
+
+
+def test_sh21_rv769_worker_evidence_is_bounded(tmp_path: Path) -> None:
+    """Worker diagnostic evidence is bounded to 2 KB."""
+    _MAX = 2 * 1024
+    oversized_diagnostic = "x" * (_MAX + 500)
+
+    err = AudiaGenticError(
+        code="INT-AGW-076",
+        kind="agents",
+        message="isolated provider worker failed unexpectedly",
+        details={"worker-diagnostic": oversized_diagnostic},
+    )
+
+    record = store.build_record(agent_profile_id="default", prompt_body="do the thing")
+    store.write_record(tmp_path, record)
+    store.transition_record(tmp_path, record["request-id"], "running")
+    updated = store.transition_record(
+        tmp_path, record["request-id"], "failed",
+        updates={"error": err},
+    )
+
+    assert updated.get("worker-evidence") is not None
+    evidence = updated["worker-evidence"]
+    diag = evidence["worker-diagnostic"]
+    # Must be truncated to 2 KB + "\n<truncated>"
+    assert len(diag) <= _MAX + len("\n<truncated>")
+    assert diag.endswith("\n<truncated>")

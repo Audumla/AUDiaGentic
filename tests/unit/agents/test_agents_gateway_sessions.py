@@ -1568,3 +1568,296 @@ def test_latest_turn_projection_excludes_native_topic(tmp_path: Path) -> None:
     # native-topic must not leak
     assert "native-topic" not in projected
     assert "provider.internal.secret-topic" not in repr(projected)
+
+
+# ── AS19/AS21: accepted-evidence-only contract and request_id binding ──
+
+
+def _build_fake_observer_lease(evidence_queue: list) -> Any:
+    """Build a fake StatusObserverLease that returns evidence from the queue.
+
+    Pops one StatusEvidence per call (or None when empty). Used to inject
+    controlled evidence into the observation sink for AS21 contract testing.
+    """
+    from audiagentic.foundation.transports.harness_status_observer import (
+        StatusObserverLease,
+    )
+
+    def _observe(observation):
+        return evidence_queue.pop(0) if evidence_queue else None
+
+    return StatusObserverLease(
+        binding_id="obsbnd_test_lease",
+        observe_transport=_observe,
+    )
+
+
+def test_as21_accepted_evidence_only_rejected_does_not_change_decision(rig):
+    """AS21 accepted-evidence-only contract: rejected evidence (duplicate/lower/
+    mismatched) must not change the lifecycle decision. Valid activity is accepted
+    and changes the decision; subsequent rejected evidence leaves it unchanged."""
+    runtime, clock, transports, tmp_path = rig
+    record = _open(runtime, tmp_path)
+    session_id = record["session-id"]
+
+    from audiagentic.foundation.transports.harness_status_observer import (
+        StatusEvidence,
+        StatusEvidenceSemanticStrength,
+        StatusEvidenceSourceKind,
+    )
+
+    def _inject_lease(evidence_items: list) -> None:
+        lease = _build_fake_observer_lease(evidence_items)
+        async def _set_lease():
+            handle = runtime._handles[session_id]
+            handle.observer_lease = lease
+        runtime._call(_set_lease(), timeout=2)
+
+    def _make_emit_one(session_id: str, turn_id: str):
+        """Return an on_event_emitter coroutine that triggers one TransportObservation."""
+        async def _sink(obs_sink, provider_session_id):
+            from audiagentic.foundation.transports.agent_session import (
+                CorrelationQuality,
+                TransportObservation,
+                TransportObservationKind,
+            )
+            obs = TransportObservation(
+                ag_session_id=session_id,
+                turn_id=turn_id,
+                sequence=1,
+                kind=TransportObservationKind.ACTIVITY,
+                observed_at="2025-01-01T00:00:00Z",
+                correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+                attributes={},
+            )
+            result = obs_sink(obs)
+            if result is not None:
+                await result
+        return _sink
+
+    # Turn 1: valid activity evidence accepted → decision goes to "active".
+    ev_activity = StatusEvidence(
+        status="model-thinking",
+        session_id=session_id,
+        request_id="req_as21_1",
+        correlation_id="obsbnd_test_lease",
+        observed_at="2025-01-01T00:00:00Z",
+        sequence=1,
+        source_kind=StatusEvidenceSourceKind.TRANSPORT_OBSERVATION,
+        semantic_strength=StatusEvidenceSemanticStrength.UNKNOWN,
+        verification_tier="unknown",
+    )
+    _inject_lease([ev_activity])
+    transports[0].on_event_emitter = _make_emit_one(session_id, "req_as21_1")
+    runtime.prompt_in_session(
+        tmp_path, session_id, "turn 1", request_id="req_as21_1",
+    )
+
+    # Check decision for the specific (session, request) key.
+    dec = runtime._evidence_projection.latest_decision_for_key(
+        session_id, "req_as21_1",
+    )
+    assert dec is not None
+    assert dec.coarse_state == "active"
+
+    # Turn 2: inject a duplicate-sequence evidence (same sequence=1 within turn).
+    # The StatusEvidenceSink will reject it; the projection must NOT change.
+    ev_duplicate = StatusEvidence(
+        status="model-generating",
+        session_id=session_id,
+        request_id="req_as21_2",
+        correlation_id="obsbnd_test_lease",
+        observed_at="2025-01-01T00:01:00Z",
+        sequence=1,  # first in this turn, but same as previous turn's seq
+        source_kind=StatusEvidenceSourceKind.TRANSPORT_OBSERVATION,
+        semantic_strength=StatusEvidenceSemanticStrength.UNKNOWN,
+        verification_tier="unknown",
+    )
+    _inject_lease([ev_duplicate])
+    transports[0].on_event_emitter = _make_emit_one(session_id, "req_as21_2")
+    runtime.prompt_in_session(
+        tmp_path, session_id, "turn 2", request_id="req_as21_2",
+    )
+
+    # Turn 1 decision should be unchanged (still active) — rejected evidence
+    # did not alter it. Also verify turn 2 has no projection (evidence was
+    # rejected by sink).
+    dec1 = runtime._evidence_projection.latest_decision_for_key(
+        session_id, "req_as21_1",
+    )
+    assert dec1 is not None
+    assert dec1.coarse_state == "active"
+
+    # Turn 3: inject a lower-sequence evidence within its own turn (seq=0 after
+    # seq=5 was accepted in this turn). We send two pieces of evidence: first
+    # accepted, then a lower one rejected.
+    ev_ok = StatusEvidence(
+        status="waiting-permission",
+        session_id=session_id,
+        request_id="req_as21_3",
+        correlation_id="obsbnd_test_lease",
+        observed_at="2025-01-01T00:02:00Z",
+        sequence=5,  # accepted
+        source_kind=StatusEvidenceSourceKind.TRANSPORT_OBSERVATION,
+        semantic_strength=StatusEvidenceSemanticStrength.UNKNOWN,
+        verification_tier="unknown",
+    )
+    ev_lower = StatusEvidence(
+        status="tool-calling",
+        session_id=session_id,
+        request_id="req_as21_3",
+        correlation_id="obsbnd_test_lease",
+        observed_at="2025-01-01T00:02:01Z",
+        sequence=3,  # lower than 5 — rejected
+        source_kind=StatusEvidenceSourceKind.TRANSPORT_OBSERVATION,
+        semantic_strength=StatusEvidenceSemanticStrength.UNKNOWN,
+        verification_tier="unknown",
+    )
+    _inject_lease([ev_ok, ev_lower])
+
+    async def _emit_two(obs_sink, provider_session_id):
+        from audiagentic.foundation.transports.agent_session import (
+            CorrelationQuality,
+            TransportObservation,
+            TransportObservationKind,
+        )
+        for i, kind in enumerate([
+            TransportObservationKind.ACTIVITY,
+            TransportObservationKind.TOOL_REQUESTED,
+        ]):
+            obs = TransportObservation(
+                ag_session_id=session_id,
+                turn_id="req_as21_3",
+                sequence=i + 1,
+                kind=kind,
+                observed_at="2025-01-01T00:02:00Z",
+                correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+                attributes={},
+            )
+            result = obs_sink(obs)
+            if result is not None:
+                await result
+
+    transports[0].on_event_emitter = _emit_two
+    runtime.prompt_in_session(
+        tmp_path, session_id, "turn 3", request_id="req_as21_3",
+    )
+
+    # Turn 3: first evidence accepted (waiting-permission → waiting), second
+    # rejected (lower-sequence). Decision should be waiting, not active+tool.
+    dec3 = runtime._evidence_projection.latest_decision_for_key(
+        session_id, "req_as21_3",
+    )
+    assert dec3 is not None
+    # First evidence was waiting-permission → waiting; rejected one didn't change it
+    assert dec3.coarse_state == "waiting"
+
+    # Turn 4: inject a binding-mismatch evidence (wrong session_id).
+    ev_mismatch = StatusEvidence(
+        status="tool-calling",
+        session_id="ses_wrong_session",  # wrong — rejected
+        request_id="req_as21_4",
+        correlation_id="obsbnd_test_lease",
+        observed_at="2025-01-01T00:03:00Z",
+        sequence=1,
+        source_kind=StatusEvidenceSourceKind.TRANSPORT_OBSERVATION,
+        semantic_strength=StatusEvidenceSemanticStrength.UNKNOWN,
+        verification_tier="unknown",
+    )
+    _inject_lease([ev_mismatch])
+    transports[0].on_event_emitter = _make_emit_one(session_id, "req_as21_4")
+    runtime.prompt_in_session(
+        tmp_path, session_id, "turn 4", request_id="req_as21_4",
+    )
+
+    # Turn 4 has no projected decision (evidence was rejected by sink).
+    dec4 = runtime._evidence_projection.latest_decision_for_key(
+        session_id, "req_as21_4",
+    )
+    assert dec4 is None
+
+    # Previous turns' decisions are unchanged.
+    dec1_after = runtime._evidence_projection.latest_decision_for_key(
+        session_id, "req_as21_1",
+    )
+    assert dec1_after.coarse_state == "active"
+
+    runtime.close_session(tmp_path, session_id)
+
+
+def test_as19_request_id_binding_no_spurious_reject(rig):
+    """AS19 request_id binding: a lease opened at session open with
+    request_id=None must NOT cause per-turn evidence to be spuriously rejected.
+    The StatusEvidenceSink uses immutable per-turn correlation; the lease's
+    initial request_id=None is irrelevant because StatusEvidence from
+    observe_transport carries observation.turn_id as its request_id."""
+    runtime, clock, transports, tmp_path = rig
+    record = _open(runtime, tmp_path)
+    session_id = record["session-id"]
+
+    from audiagentic.foundation.transports.harness_status_observer import (
+        StatusEvidence,
+        StatusEvidenceSemanticStrength,
+        StatusEvidenceSourceKind,
+    )
+
+    def _inject_lease(evidence_items: list) -> None:
+        lease = _build_fake_observer_lease(evidence_items)
+        async def _set_lease():
+            handle = runtime._handles[session_id]
+            handle.observer_lease = lease
+        runtime._call(_set_lease(), timeout=2)
+
+    # The observer lease was opened at session open with request_id=None.
+    # But observe_transport produces StatusEvidence with request_id from
+    # the TransportObservation's turn_id. Per-turn sinks use immutable
+    # per-turn correlation — they should accept this evidence.
+    ev_for_turn = StatusEvidence(
+        status="model-thinking",
+        session_id=session_id,
+        request_id="req_binding_1",  # from observation.turn_id, not None
+        correlation_id="obsbnd_test_lease",
+        observed_at="2025-01-01T00:00:00Z",
+        sequence=1,
+        source_kind=StatusEvidenceSourceKind.TRANSPORT_OBSERVATION,
+        semantic_strength=StatusEvidenceSemanticStrength.UNKNOWN,
+        verification_tier="unknown",
+    )
+    _inject_lease([ev_for_turn])
+
+    async def _emit_one(obs_sink, provider_session_id):
+        from audiagentic.foundation.transports.agent_session import (
+            CorrelationQuality,
+            TransportObservation,
+            TransportObservationKind,
+        )
+        obs = TransportObservation(
+            ag_session_id=session_id,
+            turn_id="req_binding_1",
+            sequence=1,
+            kind=TransportObservationKind.ACTIVITY,
+            observed_at="2025-01-01T00:00:00Z",
+            correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+            attributes={},
+        )
+        result = obs_sink(obs)
+        if result is not None:
+            await result
+
+    transports[0].on_event_emitter = _emit_one
+    runtime.prompt_in_session(
+        tmp_path, session_id, "binding test", request_id="req_binding_1",
+    )
+
+    # The evidence should have been accepted (not spuriously rejected due to
+    # the lease's request_id=None at session open). Decision should be active.
+    dec = runtime._evidence_projection.latest_decision_for_key(
+        session_id, "req_binding_1",
+    )
+    assert dec is not None, (
+        "Evidence was spuriously rejected — lease request_id=None caused "
+        "per-turn evidence to fail binding"
+    )
+    assert dec.coarse_state == "active"
+
+    runtime.close_session(tmp_path, session_id)

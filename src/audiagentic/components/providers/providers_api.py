@@ -26,6 +26,10 @@ from audiagentic.components.providers.contracts.generated_surface import (
     GeneratedSurfaceRequest,
     GeneratedSurfaceResult,
 )
+from audiagentic.components.providers.contracts.harness_status_observer import (
+    HarnessStatusObserverCapability,
+    normalize_harness_status_observation,
+)
 from audiagentic.components.providers.contracts.language_server_projection import (
     LanguageServerEntry,
     LanguageServerProjectionMode,
@@ -69,6 +73,11 @@ from audiagentic.components.providers.contracts.self_provided_lsp import (
 from audiagentic.components.providers.contracts.session_surface import (
     ResolvedSessionSurface,
     SurfaceHint,
+)
+from audiagentic.foundation.transports.harness_status_observer import (
+    StatusObserverLease,
+    StatusObserverRequest,
+    StatusObserverResult,
 )
 from audiagentic.foundation.transports.session_surface import PreparedSessionTransport
 
@@ -1296,6 +1305,98 @@ def prepare_provider_session_transport(
     )
 
 
+# ── AS19 Stage-2 Slice A: harness status observer resolution ────────
+
+# In-memory lease store for open_harness_status_observer / close_harness_status_observer.
+# Slice A uses an in-memory dict only; no durable registry (that is a future slice).
+_observer_lease_store: dict[str, StatusObserverLease] = {}
+
+
+def open_harness_status_observer(
+    request: StatusObserverRequest,
+    *,
+    agents_enabled: bool = True,
+) -> tuple[StatusObserverResult, StatusObserverLease | None]:
+    """Open a harness status observer for the given session.
+
+    Resolves a transport-observation (Recipe A) lease. On success returns both
+    the StatusObserverResult and the StatusObserverLease; on failure returns
+    the error result with lease=None.
+
+    The lease's observe_transport callable normalizes TransportObservation values
+    into canonical StatusEvidence. The lease is also stored in the in-memory
+    store keyed by binding_id so close_harness_status_observer can invalidate it.
+
+    Args:
+        request: Observer request with project/provider/surface/session context.
+        agents_enabled: Whether the agents component is enabled. Defaults to True;
+            the caller should resolve this from its own lifecycle state.
+
+    Returns:
+        A tuple of (StatusObserverResult, StatusObserverLease | None).
+        On success: (ok=True result, lease). On failure: (ok=False result, None).
+    """
+    from audiagentic.components.providers.services.harness_status_observer_resolution import (
+        resolve_transport_observation_lease,
+    )
+
+    # Check provider enabled status via the public seam.
+    try:
+        provider_enabled = is_provider_enabled_for_launch(
+            Path(request.project_root), request.provider_id
+        )
+    except Exception:  # noqa: BLE001 — treat any error as provider not enabled.
+        provider_enabled = False
+
+    result = resolve_transport_observation_lease(
+        request,
+        agents_enabled=agents_enabled,
+        provider_enabled=provider_enabled,
+    )
+
+    if result.ok and result.binding_id is not None:
+        # Build the lease and store it for later invalidation.
+        lease = _build_transport_lease(result.binding_id)
+        _observer_lease_store[result.binding_id] = lease
+        return result, lease
+
+    return result, None
+
+
+def close_harness_status_observer(binding_id: str) -> None:
+    """Invalidate a harness status observer binding.
+
+    Removes the lease from the in-memory store. Idempotent — no error if
+    the binding was already removed or never existed.
+
+    Args:
+        binding_id: The opaque binding ID from open_harness_status_observer.
+    """
+    _observer_lease_store.pop(binding_id, None)
+
+
+def _build_transport_lease(binding_id: str) -> StatusObserverLease:
+    """Build a transport observer lease for the given binding_id.
+
+    Internal helper: wraps normalize_harness_status_observation so the
+    in-memory store holds a callable lease that can be queried.
+
+    Args:
+        binding_id: The binding ID to embed in the lease.
+
+    Returns:
+        A StatusObserverLease with observe_transport wired to the normalizer.
+    """
+    def _observe(observation):
+        return normalize_harness_status_observation(lease, observation)
+
+    lease = StatusObserverLease(
+        binding_id=binding_id,
+        observe_transport=_observe,
+    )
+    return lease
+
+
 __all__ = [
     # One-shot provider execution
     "PreparedSessionTransport",
@@ -1380,4 +1481,9 @@ __all__ = [
     # Self-provided LSP
     "manage_self_provided_lsp",
     "manage_self_provided_lsp_all",
+    # AS19 Stage-2 Slice A: harness status observer resolution
+    "HarnessStatusObserverCapability",
+    "open_harness_status_observer",
+    "close_harness_status_observer",
+    "normalize_harness_status_observation",
 ]

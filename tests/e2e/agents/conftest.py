@@ -35,6 +35,7 @@ GATEWAY_CRASH_MATRIX_IMAGE = "audiagentic-gateway-crash-matrix:local"
 GATEWAY_OPENCODE_IMAGE = "audiagentic-gateway-opencode:local"
 GATEWAY_CONCURRENCY_IMAGE = "audiagentic-gateway-concurrency:local"
 GATEWAY_PI_SMOKE_IMAGE = "audiagentic-gateway-pi-smoke:local"
+CONSUMER_PIPELINE_IMAGE = "audiagentic-consumer-pipeline:local"
 DOCKER_EXE = shutil.which("docker")
 
 
@@ -73,4 +74,9 @@ requires_gateway_concurrency_image = pytest.mark.skipif(
 requires_gateway_pi_smoke_image = pytest.mark.skipif(
     not _docker_image_exists(GATEWAY_PI_SMOKE_IMAGE),
     reason=f"Docker image '{GATEWAY_PI_SMOKE_IMAGE}' not built — run: make build-gateway-pi-smoke",
+)
+
+requires_consumer_pipeline_image = pytest.mark.skipif(
+    not _docker_image_exists(CONSUMER_PIPELINE_IMAGE),
+    reason=f"Docker image '{CONSUMER_PIPELINE_IMAGE}' not built — run: make build-consumer-pipeline",
 )

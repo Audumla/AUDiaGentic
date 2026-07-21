@@ -28,3 +28,6 @@ TURN_MODEL_STARTED_TOPIC = "agents.turn.model.started"
 TURN_MODEL_COMPLETED_TOPIC = "agents.turn.model.completed"
 TURN_TOOL_STARTED_TOPIC = "agents.turn.tool.started"
 TURN_TOOL_COMPLETED_TOPIC = "agents.turn.tool.completed"
+
+# AS19 Stage-3: status observation topic (observation-only, never transitions turn state)
+TURN_STATUS_OBSERVED_TOPIC = "agents.turn.status.observed"

@@ -130,6 +130,14 @@ mcp-servers:
         Operator summary: persisted request counts by state, the 5 most recent
         failures (redacted error only), and in-process per-profile queue depths.
 
+# AS31 Stage-2: output relay policy
+# Defaults: disabled until surface is validated, 64KiB fragment limit, 512KB turn limit
+gateway:
+  output:
+    enabled: false
+    max-fragment-bytes: 65536
+    max-turn-bytes: 524288
+
 contributions:
   - id: agents/profile-doctrine
     owner: agents

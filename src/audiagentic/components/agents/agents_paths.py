@@ -120,3 +120,39 @@ def gateway_session_binding_index_path(project_root: Path) -> Path:
 def gateway_session_binding_lock_path(project_root: Path) -> Path:
     """Return the project-local lock protecting the binding index."""
     return gateway_sessions_root(project_root) / "session-binding-index.lock"
+
+# ── AS31 Stage-2: output event paths ───────────────────────────────────────
+
+_OUTPUT_DIR = Path("output")
+_OUTPUT_EVENTS_DIR = _OUTPUT_DIR / "events"
+
+
+def gateway_output_dir(project_root: Path, request_id: str) -> Path:
+    """Return the output directory for a gateway request
+    (.../agent-llm-gateway/<request-id>/output)."""
+    return gateway_request_dir(project_root, request_id) / _OUTPUT_DIR
+
+
+def gateway_output_events_dir(project_root: Path, request_id: str) -> Path:
+    """Return the output events subdirectory for a gateway request
+    (.../agent-llm-gateway/<request-id>/output/events)."""
+    return gateway_output_dir(project_root, request_id) / _OUTPUT_EVENTS_DIR
+
+
+def gateway_output_event_path(
+    project_root: Path, request_id: str, sequence: int
+) -> Path:
+    """Return the per-event JSON path for a given sequence number.
+    (.../agent-llm-gateway/<request-id>/output/events/<seq>.json)."""
+    return gateway_output_events_dir(project_root, request_id) / f"{sequence}.json"
+
+
+def gateway_output_index_path(project_root: Path, request_id: str) -> Path:
+    """Return the output index path for a gateway request.
+    (.../agent-llm-gateway/<request-id>/output/index.json)."""
+    return gateway_output_dir(project_root, request_id) / "index.json"
+
+
+def gateway_output_lock_path(project_root: Path, request_id: str) -> Path:
+    """Return the per-request lock protecting output append operations."""
+    return gateway_request_dir(project_root, request_id) / "output.lock"

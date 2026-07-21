@@ -54,6 +54,18 @@ from audiagentic.components.agents.agents_gateway_turn_events import (
     _make_on_event_callback,
     _publish_session_event,
 )
+from audiagentic.components.agents.agents_harness_status_evidence import (
+    AcceptedEvidence,
+    RejectedEvidence,
+    StatusEvidenceSink,
+)
+from audiagentic.components.agents.agents_harness_status_observer_ingress import (
+    SessionObserverIngress,
+)
+# AS21 consumer slice: ephemeral evidence projection registry
+from audiagentic.components.agents.agents_session_lifecycle_projection import (
+    SessionEvidenceProjection,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports.agent_session import (
@@ -135,6 +147,12 @@ class _SessionHandle:
         self.correlation_id = correlation_id
         # AS28 slice 4a: resolved surface snapshot (provider-neutral metadata)
         self.surface_snapshot = surface_snapshot
+        # AS19 Stage-3: observer binding (tied to session lifecycle)
+        self.observer_binding_id: str | None = None
+        # AS19 Stage-2 Slice A: transport-observation lease from providers_api.
+        # Tied to session lifecycle — created on open, used on each turn,
+        # invalidated on close/failure.
+        self.observer_lease: Any | None = None
         self.last_activity_clock = created_clock
         # In-turn liveness: refreshed by every transport event during a turn
         # (RV680 silence watchdog); meaningful only while a turn is running.
@@ -204,6 +222,12 @@ class SessionRuntime:
         # request-id → cancel event for the turn currently owning that request
         # (loop-thread only). request_cancel() sets these threadsafe (RV680).
         self._turn_cancels: dict[str, asyncio.Event] = {}
+        # AS19 Stage-2: observer ingress — manages per-session observer bindings.
+        self._observer_ingress = SessionObserverIngress(clock=self._clock)
+        # AS21 consumer slice: ephemeral keyed projection registry.
+        # Receives accepted AS19 StatusEvidence, feeds project_session_lifecycle,
+        # retains latest decision for status read projection only.
+        self._evidence_projection = SessionEvidenceProjection()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._loop_thread: threading.Thread | None = None
         self._loop_lock = threading.Lock()
@@ -461,6 +485,37 @@ class SessionRuntime:
         loop.call_soon_threadsafe(_set_local)
         return True
 
+    # ── AS19 Stage-2: observer binding management ────────────────
+
+    def create_observer_binding(
+        self,
+        session_id: str,
+        project_root: str,
+    ) -> tuple[str, str, str]:
+        """Create an observer binding for a session.
+
+        Returns (binding_id, token, ingress_endpoint). The token is used to
+        validate incoming observation requests from hooks/plugins.
+
+        Binding lifecycle is tied to session lifecycle — the binding is
+        automatically invalidated when the session closes or fails.
+
+        Raises:
+            AudiaGenticError: if the session already has an active observer
+                binding (one binding per session).
+        """
+        return self._observer_ingress.create_observer_binding(
+            session_id=session_id,
+            project_root=project_root,
+        )
+
+    def invalidate_binding(self, binding_id: str) -> None:
+        """Invalidate an observer binding.
+
+        Called directly or indirectly via session close/failure. Idempotent.
+        """
+        self._observer_ingress.invalidate_binding(binding_id)
+
     def shutdown(self) -> None:
         """Close every live session and stop accepting new ones. Idempotent."""
         with self._loop_lock:
@@ -501,6 +556,12 @@ class SessionRuntime:
         handle = self._handles.get(session_id)
         if handle is None:
             return {"available": False}
+        # AS21 consumer slice: surface redacted lifecycle-decision from
+        # the evidence projection registry (no raw evidence, no provider refs).
+        current_request = handle.current_request_id
+        status_snapshot = self._evidence_projection.redacted_status_snapshot(
+            session_id, request_id=current_request,
+        )
         return {
             "available": True,
             "pending-turns": handle.pending,
@@ -508,6 +569,8 @@ class SessionRuntime:
             "current-request-id": handle.current_request_id,
             "child-pid": handle.child_pid,
             "latest-turn-event": handle.latest_turn_event,
+            "lifecycle-decision": status_snapshot["lifecycle-decision"],
+            "coarse-state": status_snapshot["coarse-state"],
         }
 
     async def _open_session(
@@ -638,6 +701,74 @@ class SessionRuntime:
         )
         handle.child_pid = child_pid
         handle.child_creation_identity = child_creation_identity
+        # AS19 Stage-2 Slice A: resolve transport-observation lease from
+        # providers_api. The lease normalizes TransportObservation values into
+        # canonical StatusEvidence. Best-effort — session still opens if this
+        # fails (unsupported surface or provider disabled).
+        try:
+            from audiagentic.components.providers import providers_api
+            from audiagentic.foundation.transports.harness_status_observer import (
+                StatusObserverRequest,
+            )
+
+            _surface_id = (
+                getattr(prepared.surface, "surface_id", None)
+                if hasattr(prepared, "surface") and prepared.surface is not None
+                else None
+            )
+            if _surface_id is not None:
+                _observer_request = StatusObserverRequest(
+                    project_root=str(project_root),
+                    provider_id=provider_id,
+                    surface_id=_surface_id,
+                    session_id=session_id,
+                    request_id=None,
+                    correlation_id=correlation_id,
+                )
+                _obs_result, _obs_lease = providers_api.open_harness_status_observer(
+                    _observer_request,
+                    agents_enabled=True,
+                )
+                if _obs_result.ok and _obs_lease is not None:
+                    handle.observer_lease = _obs_lease
+                    logger.info(
+                        "harness status observer lease acquired",
+                        extra={"session-id": session_id, "binding-id": _obs_lease.binding_id},
+                    )
+                else:
+                    logger.debug(
+                        "harness status observer not supported for surface",
+                        extra={
+                            "session-id": session_id,
+                            "surface-id": _surface_id,
+                            "error-code": _obs_result.error_code,
+                        },
+                    )
+        except Exception:  # noqa: BLE001 — observer is best-effort; don't fail open.
+            logger.debug(
+                "harness status observer resolution failed",
+                extra={"session-id": session_id},
+                exc_info=True,
+            )
+        # AS19 Stage-3: create observer binding for the session.
+        # Binding lifecycle is tied to session — created on open, invalidated
+        # automatically on close/failure via invalidate_all_for_session.
+        try:
+            binding_id, _token, _ingress_endpoint = (
+                self._observer_ingress.create_observer_binding(
+                    session_id=session_id,
+                    project_root=str(project_root),
+                )
+            )
+            handle.observer_binding_id = binding_id
+        except AudiaGenticError:
+            # Binding already exists (should not happen in normal flow) or
+            # runtime error — best-effort; session still opens.
+            logger.warning(
+                "failed to create observer binding on session open",
+                extra={"session-id": session_id},
+                exc_info=True,
+            )
         self._handles[session_id] = handle
         _publish_session_event(SESSION_OPENED_TOPIC, {
             "session-id": session_id,
@@ -772,7 +903,52 @@ class SessionRuntime:
                 latest_event_recorder=_record_latest_turn_event,
             )
 
+            # AS19 Stage-2 Slice B: create per-turn evidence sink with immutable
+            # session/request/turn correlation. Validates exact binding, monotonic
+            # dedupe, scalar allowlist, redacted timeline append, and publishes
+            # agents.turn.status.observed. Best-effort — never raises.
+            _evidence_sink = StatusEvidenceSink(
+                session_id=session_id,
+                request_id=request_id,
+                correlation_id=correlation_id,
+                project_root=project_root,
+            )
+
             async def _observation_sink(obs):
+                # AS19 Stage-2 Slice A: thread TransportObservation through the
+                # observer lease (if one was resolved). The lease normalizes it
+                # into canonical StatusEvidence. Best-effort — never block or
+                # raise in the observation path.
+                if handle.observer_lease is not None:
+                    try:
+                        status_evidence = handle.observer_lease.observe_transport(obs)
+                        if status_evidence is not None:
+                            # AS19 Stage-2 Slice B: accept through the evidence sink
+                            # (validates binding, monotonic dedupe, scalar allowlist,
+                            # redacted timeline append, agents.turn.status.observed).
+                            _sink_result = _evidence_sink.accept(status_evidence)
+                            if isinstance(_sink_result, RejectedEvidence):
+                                logger.debug(
+                                    "evidence sink rejected",
+                                    extra={
+                                        "session-id": session_id,
+                                        "reason": _sink_result.reason,
+                                    },
+                                )
+                            # AS21 consumer slice: forward ONLY accepted evidence
+                            # into the ephemeral projection registry. Rejected
+                            # evidence (duplicate, lower sequence, binding mismatch)
+                            # must not change the lifecycle decision.
+                            elif isinstance(_sink_result, AcceptedEvidence):
+                                self._evidence_projection.accept(
+                                    _sink_result.status_evidence,
+                                )
+                    except Exception:  # noqa: BLE001 — observer must never break turns.
+                        logger.debug(
+                            "observer lease observe_transport failed",
+                            extra={"session-id": session_id},
+                            exc_info=True,
+                        )
                 # Pass TransportObservation directly to the turn-event pipeline.
                 # No ACP-specific reconstruction needed.
                 result = _on_event_cb(obs)
@@ -872,7 +1048,9 @@ class SessionRuntime:
                     updates={"close-reason": reason, "closed-at": now_iso_z()},
                 )
                 binding_store.retire_binding(handle.project_root, updated, state="failed")
-                _publish_session_event(SESSION_FAILED_TOPIC, {
+            # AS19 Stage-2: invalidate observer bindings on session failure.
+            self._observer_ingress.invalidate_all_for_session(handle.session_id)
+            _publish_session_event(SESSION_FAILED_TOPIC, {
                     "session-id": handle.session_id,
                     "agent-profile-id": record["agent-profile-id"],
                     "state": "failed",
@@ -907,6 +1085,10 @@ class SessionRuntime:
                 updates={"close-reason": reason, "closed-at": now_iso_z()},
             )
             binding_store.retire_binding(project_root, record, state=new_state)
+            # AS19 Stage-2: invalidate observer bindings on session close.
+            self._observer_ingress.invalidate_all_for_session(session_id)
+            # AS21 consumer slice: clear evidence projection for this session.
+            self._evidence_projection.clear_for_session(session_id)
             session_store.record_session_timeline(
                 project_root, session_id, "session.closed", state=record["state"],
                 attributes={

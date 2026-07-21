@@ -174,19 +174,22 @@ def _validate_declarations(declarations: Sequence[SessionSurfaceDeclaration]) ->
                 version_constraint=decl.version_constraint,
             )
 
-        # Rule 3b: validated parent requires ALL platforms also validated
-        # A source test file named in probe_artifact is not proof of execution;
-        # cross-platform borrowing is not allowed.
+        # Rule 3b: validated parent requires at least one platform also validated
+        # (local probe evidence). Unvalidated platforms under a VALIDATED parent
+        # are allowed — they represent vendor-supported platforms without local
+        # probe evidence yet. Cross-platform borrowing of proof is not allowed;
+        # the resolver enforces that O1+ claims require inventory proof.
         if decl.validation_state == SurfaceValidationState.VALIDATED:
-            for pe in decl.platforms:
-                if pe.validation_state != SurfaceValidationState.VALIDATED:
-                    raise _error(
-                        "validated session surface requires all platforms to be validated",
-                        surface_id=decl.surface_id,
-                        version_constraint=decl.version_constraint,
-                        platform=pe.platform,
-                        platform_state=pe.validation_state.value,
-                    )
+            has_validated_platform = any(
+                pe.validation_state == SurfaceValidationState.VALIDATED
+                for pe in decl.platforms
+            )
+            if not has_validated_platform:
+                raise _error(
+                    "validated session surface requires at least one validated platform",
+                    surface_id=decl.surface_id,
+                    version_constraint=decl.version_constraint,
+                )
 
         # Rule 4: content channel with zero/absent bounds
         for ch in decl.content_channels:

@@ -22,7 +22,7 @@ For each harness, four dimensions are evaluated:
 ### Harness provider support
 
 | Harness | Anthropic | OpenAI | OpenRouter | Gemini | Azure OpenAI | Ollama | llama.cpp | LM Studio | vLLM | LiteLLM | Local OpenAI compat | Custom endpoint |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Claude Code | Native | No | No | No | No | No | No | No | No | No | No | No |
 | Codex CLI | Gateway (Responses) | Native | Custom (Responses only) | Gateway (Responses) | Yes | Ollama/LM Studio | No | LM Studio | No | No | Yes | Yes |
 | OpenCode | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
@@ -42,7 +42,7 @@ For each harness, four dimensions are evaluated:
 ### Authentication mechanisms
 
 | Harness | API key | OAuth | Subscription login | Browser login | PAT | Local only |
-|---|---:|---:|---:|---:|---:|---:|
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Claude Code | No | Yes | Yes | Yes | No | No |
 | Codex CLI | Yes | No | Yes | No | No | Ollama/LM Studio |
 | OpenCode | Yes | Yes | Yes | Yes | No | Yes |
@@ -62,7 +62,7 @@ For each harness, four dimensions are evaluated:
 ### Endpoint configuration flexibility
 
 | Harness | Custom base URL | Multiple providers | Per-model provider | Failover | Routing |
-|---|---:|---:|---:|---:|---:|
+| --- | ---: | ---: | ---: | ---: | ---: |
 | Claude Code | No | No | No | No | No |
 | Codex CLI | Yes (Responses only) | Yes | Yes | No | No |
 | OpenCode | Yes | Yes | Yes | No | AI SDK routing |
@@ -87,7 +87,7 @@ separate capability axis and uses O0–O4 from
 Do not infer safe turn completion or session reuse from the telemetry tier below.
 
 | Harness | Credits | Quota | Session remaining | Rate limits | Cost estimation | Context remaining | Streaming tokens | Token events | Provider latency | Retries | Billing info |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Claude Code | No (internal) | Yes (CLI display) | Partial (CLI %) | Yes (CLI reset time) | No | Partial (CLI %) | No | No | No | No | No |
 | Codex CLI | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | No | No | Dashboard |
 | OpenCode | Varies | Varies | Yes | Varies | Varies | Yes | Provider dependent | Provider dependent | No | No | No |
@@ -126,6 +126,16 @@ These harnesses can report context window state but not budget or rate limits. S
 ### Tier 4 — No telemetry (Claude Code, Cursor, Aider, OpenHands legacy)
 
 These harnesses expose no budget or quota data. Claude Code is the most important case: it knows about its own subscription usage windows and rate limits (displayed in the CLI), but has no public API to surface that data. AUDiaGentic would need a provider plugin to scrape/observe this telemetry.
+
+### Harness Config & Features Summary
+
+| Harness | Global Config | Project Config | MCPs Config | LSP Config | Agent Management |
+| --- | --- | --- | --- | --- | --- |
+| OpenCode | `~/.config/opencode/opencode.json` | `.opencode/config.json` / `opencode.json` | `mcp-servers` key | `lspServers` key | `agents`, `default-agent` |
+| Codex | `~/.codex/config.toml` | `.codex/config.toml` | Via `[model_providers]` | N/A | Vendor account based |
+| Claude Code | `~/.claude/settings.json` | `.claude/settings.json` / `.claude/settings.local.json` | Via plugins/hooks | N/A | Agent teams, skills, rules |
+| Pi | `~/.pi/agent/models.json` | N/A (home-scoped) | Via extensions | N/A | Model profiles, provider configs |
+| Zed | `~/.config/zed/settings.json` | Project `.zed/settings.json` | Via ACP forwarding | Native Zed LSP | External agents via ACP |
 
 ## Open questions
 

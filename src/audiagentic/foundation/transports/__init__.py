@@ -7,6 +7,11 @@ from .acp import (
     AcpSessionTransport,
     run_acp_prompt,
 )
+from .agent_output import (
+    AgentOutputEvent,
+    AgentOutputKind,
+    OutputSink,
+)
 from .agent_session import (
     AgentSessionTransport,
     ControlDisposition,
@@ -20,6 +25,31 @@ from .agent_session import (
     SessionTurnResult,
     TransportObservation,
     TransportObservationKind,
+)
+from .agent_status import (
+    AgentLifecycle,
+    AgentOutcome,
+    AgentStatusDecisions,
+    AgentStatusScope,
+    AgentStatusSnapshot,
+    AgentWaitReason,
+    StatusEvidenceConfidence,
+)
+from .harness_status_observer import (
+    StatusEvidence,
+    StatusEvidenceSourceKind,
+    StatusObserverLease,
+    StatusObserverRequest,
+    StatusObserverResult,
+    StatusObserverState,
+)
+from .session_binding import (
+    BindingRelation,
+    ProviderSessionRef,
+    SessionBindingIntent,
+    SessionMappingCapabilities,
+    SessionMappingCapability,
+    SessionOwnership,
 )
 from .session_surface import (
     ContentChannelCapability,
@@ -81,4 +111,30 @@ __all__ = [
     "SessionSurfaceRef",
     "SurfaceValidation",
     "SurfaceValidationState",
+    # AS30 session-binding foundation contract
+    "BindingRelation",
+    "ProviderSessionRef",
+    "SessionBindingIntent",
+    "SessionMappingCapabilities",
+    "SessionMappingCapability",
+    "SessionOwnership",
+    # AS31 agent-output foundation contract
+    "AgentOutputEvent",
+    "AgentOutputKind",
+    "OutputSink",
+    # AS19 status-observer foundation contract
+    "StatusEvidence",
+    "StatusEvidenceSourceKind",
+    "StatusObserverLease",
+    "StatusObserverRequest",
+    "StatusObserverResult",
+    "StatusObserverState",
+    # AS37 agent-status projection contract
+    "AgentOutcome",
+    "AgentLifecycle",
+    "AgentStatusDecisions",
+    "AgentStatusScope",
+    "AgentStatusSnapshot",
+    "AgentWaitReason",
+    "StatusEvidenceConfidence",
 ]

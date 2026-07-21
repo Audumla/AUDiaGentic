@@ -196,6 +196,7 @@ def build_record(
         "completion": None,
         "usage": None,
         "error": None,
+        "worker-evidence": None,
         "attempts": [],
         "created-at": timestamp,
         "updated-at": timestamp,

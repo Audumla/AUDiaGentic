@@ -133,3 +133,5 @@ NET-AGSV-003: "The gateway returned an invalid response; verify client/server ve
 CFG-AGSV-001: "Set AUDIAGENTIC_GATEWAY_ENDPOINT and AUDIAGENTIC_GATEWAY_TOKEN_FILE when AUDIAGENTIC_GATEWAY_MODE=standalone."
 CFG-AGSV-002: "Set AUDIAGENTIC_GATEWAY_MODE to either in-process or standalone."
 CFG-AGSV-003: "Set AUDIAGENTIC_GATEWAY_PORT to an integer from 1 through 65535."
+# AS19 Stage-2: harness status observer ingress error codes
+CON-AGW-OBS-001: "Session already has an active observer binding; only one observer binding per session is allowed."

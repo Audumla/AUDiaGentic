@@ -2,6 +2,12 @@
 
 Providers execute operations against resolved surfaces and return opaque refs.
 They do not mutate AUDiaGentic session records or binding indexes.
+
+``SessionMappingCapabilities`` is the authoritative foundation type from
+``foundation.transports.session_binding`` — do not duplicate it here.
+The ``BindingResolutionContext`` carries only the fields the provider surface
+operation layer needs; it is NOT a substitute for ``ResolvedSessionSurface``
+from the AS29 session-surface snapshot.
 """
 from __future__ import annotations
 
@@ -9,28 +15,22 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.transports.session_binding import ProviderSessionRef, SessionOwnership
+from audiagentic.foundation.transports.session_binding import (
+    ProviderSessionRef,
+    SessionMappingCapabilities,
+    SessionOwnership,
+)
 
 
 @dataclass(frozen=True)
-class SessionMappingCapabilities:
-    open_new: bool = False
-    returns_opaque_ref: bool = False
-    resume_by_ref: bool = False
-    attach_existing: bool = False
-    discover_existing: bool = False
-    share_existing: bool = False
-    replace_existing: bool = False
-    concurrent_attachments: bool = False
-    attach_while_turn_active: bool = False
-    ref_scope: str = "unknown"
-    ref_namespace: str = "provider-session-ref"
-    requires_same_project: bool = True
-    requires_same_execution_context: bool = True
+class BindingResolutionContext:
+    """Minimal surface context for capability-gated binding operations.
 
+    Carries only the fields needed by provider surface operation adapters
+    to validate and execute a binding operation. This is NOT the full AS29
+    ``ResolvedSessionSurface`` snapshot — use the foundation type for that.
+    """
 
-@dataclass(frozen=True)
-class ResolvedSessionSurface:
     provider_id: str
     surface_id: str
     surface_version: str | None
@@ -40,11 +40,11 @@ class ResolvedSessionSurface:
 
 
 class SessionBindingSurface(Protocol):
-    def open_session_binding(self, surface: ResolvedSessionSurface, **kwargs: Any) -> ProviderSessionRef: ...
+    def open_session_binding(self, context: BindingResolutionContext, **kwargs: Any) -> ProviderSessionRef: ...
 
     def attach_session_binding(
         self,
-        surface: ResolvedSessionSurface,
+        context: BindingResolutionContext,
         provider_session_ref: ProviderSessionRef,
         *,
         ownership: SessionOwnership,
@@ -53,21 +53,21 @@ class SessionBindingSurface(Protocol):
 
     def resume_session_binding(
         self,
-        surface: ResolvedSessionSurface,
+        context: BindingResolutionContext,
         provider_session_ref: ProviderSessionRef,
         **kwargs: Any,
     ) -> ProviderSessionRef: ...
 
 
-def require_capability(surface: ResolvedSessionSurface, capability: str) -> None:
-    if not bool(getattr(surface.capabilities, capability, False)):
+def require_capability(context: BindingResolutionContext, capability: str) -> None:
+    if not bool(getattr(context.capabilities, capability, False)):
         raise AudiaGenticError(
             code="CON-PROV-096",
             kind="providers",
             message="provider session binding operation is not supported by the resolved surface",
             details={
-                "provider-id": surface.provider_id,
-                "surface-id": surface.surface_id,
+                "provider-id": context.provider_id,
+                "surface-id": context.surface_id,
                 "capability": capability,
             },
         )

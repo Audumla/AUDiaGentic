@@ -11,6 +11,7 @@ from audiagentic.components.agents.agents_session_lifecycle_projection import (
     SessionLifecycleEvidence,
     evidence_from_latest_turn_projection,
     project_session_lifecycle,
+    snapshot_from_decision,
 )
 
 
@@ -444,3 +445,97 @@ class TestAdapterRedaction:
             "provider-ref-key": "ref-abc",
         }
         assert evidence_from_latest_turn_projection(proj) is None
+
+# ---------------------------------------------------------------------------
+# AS21 → AS37 adapter: snapshot_from_decision
+# ---------------------------------------------------------------------------
+
+
+class TestSnapshotFromDecision:
+    """Adapter tests mapping SessionLifecycleDecision → AgentStatusSnapshot."""
+
+    def test_active_decision_to_active_snapshot(self) -> None:
+        decision = project_session_lifecycle([_ev("turn-started")])
+        assert decision.coarse_state == "active"
+        snap = snapshot_from_decision(decision, session_id="ses-1")
+        from audiagentic.foundation.transports.agent_status import (
+            AgentLifecycle,
+            StatusEvidenceConfidence,
+        )
+
+        assert snap.lifecycle == AgentLifecycle.ACTIVE
+        assert snap.outcome is None
+        assert snap.decisions is not None
+        assert snap.decisions.accepts_new_turn is False
+        assert snap.decisions.session_reusable is False
+        assert snap.decisions.evidence_confidence == StatusEvidenceConfidence.VALIDATED
+        assert snap.session_id == "ses-1"
+
+    def test_failed_decision_to_terminal_with_outcome(self) -> None:
+        decision = project_session_lifecycle([_ev("terminal-failed")])
+        assert decision.coarse_state == "failed"
+        snap = snapshot_from_decision(decision)
+        from audiagentic.foundation.transports.agent_status import (
+            AgentLifecycle,
+            AgentOutcome,
+        )
+
+        assert snap.lifecycle == AgentLifecycle.TERMINAL
+        assert snap.outcome == AgentOutcome.FAILED
+        assert snap.decisions is not None
+        assert snap.decisions.session_reusable is False
+
+    def test_available_decision_all_flags_true(self) -> None:
+        decision = project_session_lifecycle([
+            _ev("terminal-success", sequence=1),
+            _ev("finalization-committed", sequence=2),
+            _ev("blocking-work-cleared", sequence=3),
+        ])
+        assert decision.coarse_state == "available"
+        snap = snapshot_from_decision(decision)
+        from audiagentic.foundation.transports.agent_status import AgentLifecycle
+
+        assert snap.lifecycle == AgentLifecycle.AVAILABLE
+        assert snap.outcome is None
+        assert snap.decisions is not None
+        assert snap.decisions.accepts_new_turn is True
+        assert snap.decisions.session_reusable is True
+        assert snap.decisions.turn_terminal is True
+        assert snap.decisions.dependent_work_releasable is True
+
+    def test_contradictory_evidence_unknown_snapshot(self) -> None:
+        """Contradictory evidence produces UNKNOWN lifecycle, not terminal."""
+        decision = project_session_lifecycle([
+            _ev("terminal-success", sequence=5),
+            _ev("turn-started", sequence=2),
+        ])
+        assert decision.coarse_state == "unknown"
+        assert decision.evidence_state == "contradictory"
+        snap = snapshot_from_decision(decision)
+        from audiagentic.foundation.transports.agent_status import (
+            AgentLifecycle,
+            StatusEvidenceConfidence,
+        )
+
+        assert snap.lifecycle == AgentLifecycle.UNKNOWN
+        assert snap.outcome is None  # unknown is not terminal
+        assert snap.decisions is not None
+        assert snap.decisions.evidence_confidence == StatusEvidenceConfidence.CONTRADICTORY
+
+    def test_empty_evidence_unknown_snapshot(self) -> None:
+        """Empty evidence produces UNKNOWN lifecycle with insufficient confidence."""
+        decision = project_session_lifecycle([])
+        assert decision.coarse_state == "unknown"
+        assert decision.evidence_state == "insufficient"
+        snap = snapshot_from_decision(decision, request_id="req-1", turn_id="turn-1")
+        from audiagentic.foundation.transports.agent_status import (
+            AgentLifecycle,
+            StatusEvidenceConfidence,
+        )
+
+        assert snap.lifecycle == AgentLifecycle.UNKNOWN
+        assert snap.outcome is None
+        assert snap.decisions is not None
+        assert snap.decisions.evidence_confidence == StatusEvidenceConfidence.INSUFFICIENT
+        assert snap.request_id == "req-1"
+        assert snap.turn_id == "turn-1"
