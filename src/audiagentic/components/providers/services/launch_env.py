@@ -13,7 +13,7 @@ Channel-priority note (RV338): providers run OUTSIDE AUDiaGentic in normal
 operation. This seam is a SUPPLEMENT for AG-launched sessions only — a
 provider whose only working key channel is this seam must report "works in
 AG-launched sessions only", never plain enabled/auto. Ambient-environment
-verification (``foundation.secrets.has_ambient_value``) defines enablement.
+verification by the provider secret-reference service defines enablement.
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from audiagentic.foundation.secrets import (
+from audiagentic.components.providers.services.secrets import (
     is_registered_scheme,
     parse_secret_ref,
     resolve_secret_ref,

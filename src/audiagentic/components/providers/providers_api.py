@@ -48,6 +48,10 @@ from audiagentic.components.providers.contracts.managed_mcp import (
     ManagedMcpRequest,
     ManagedMcpResult,
 )
+from audiagentic.components.providers.contracts.mcp_launch_surface import (
+    McpLaunchServerEntry,
+    McpLaunchSurfaceResult,
+)
 from audiagentic.components.providers.contracts.model_projection import (
     ModelProjectionEntry,
     ModelProjectionMode,
@@ -228,6 +232,8 @@ def prepare_provider_acp_launch(
     model_id: str | None,
     model_alias: str | None,
     request_runtime_root: Path | None = None,
+    mcp_entries: tuple[McpLaunchServerEntry, ...] | None = None,
+    require_isolated_mcp: bool = False,
 ) -> ProviderAcpLaunchResult:
     """Prepare a provider-owned ACP launch for an agents-owned live session."""
     from audiagentic.components.providers.services.public_execution import (
@@ -240,7 +246,78 @@ def prepare_provider_acp_launch(
         model_id=model_id,
         model_alias=model_alias,
         request_runtime_root=request_runtime_root,
+        mcp_entries=mcp_entries,
+        require_isolated_mcp=require_isolated_mcp,
     )
+
+
+def prepare_provider_mcp_surface(
+    project_root: Path,
+    *,
+    provider_id: str,
+    entries: tuple[McpLaunchServerEntry, ...],
+    runtime_root: Path | None = None,
+    require_exact_isolation: bool = False,
+) -> McpLaunchSurfaceResult:
+    """Ask one provider to build an AUDiaGentic-curated MCP launch surface.
+
+    The caller (interactive launcher, isolated-agent-job dispatch) computes
+    WHICH servers belong in the surface and supplies them as *entries*; the
+    provider decides HOW to deliver them for its own process (patched CLI
+    flags, an env var, a generated file) without exposing that mechanism.
+    Soft-fails to ``supported=False`` when the provider has none.
+    """
+    from audiagentic.components.providers.services.public_execution import (
+        prepare_provider_mcp_surface as _prepare,
+    )
+
+    return _prepare(
+        project_root,
+        provider_id=provider_id,
+        entries=entries,
+        runtime_root=runtime_root,
+        require_exact_isolation=require_exact_isolation,
+    )
+
+
+def collect_management_mcp_launch_entries(
+    project_root: Path,
+) -> tuple[McpLaunchServerEntry, ...]:
+    """Return the management projection as provider launch entries."""
+    from audiagentic.components.providers.services.public_execution import (
+        collect_management_mcp_launch_entries as _collect,
+    )
+
+    return _collect(project_root)
+
+
+def prepare_projected_provider_mcp_surface(
+    project_root: Path,
+    *,
+    provider_id: str,
+    runtime_root: Path | None,
+    require_exact_isolation: bool = False,
+) -> McpLaunchSurfaceResult:
+    """Collect and materialize the standard projection for a provider launch."""
+    from audiagentic.components.providers.services.public_execution import (
+        prepare_projected_provider_mcp_surface as _prepare,
+    )
+
+    return _prepare(
+        project_root,
+        provider_id=provider_id,
+        runtime_root=runtime_root,
+        require_exact_isolation=require_exact_isolation,
+    )
+
+
+def get_pi_coding_agent_package_dir() -> Path | None:
+    """Return the system-installed pi-coding-agent package dir, or None."""
+    from audiagentic.components.providers.services.public_execution import (
+        get_pi_coding_agent_package_dir as _get,
+    )
+
+    return _get()
 
 
 def manage_plugin_entry(
@@ -990,7 +1067,7 @@ def list_model_inventory(project_root: Path) -> dict[str, Any]:
         harnesses: dict[tuple[str, str], dict[str, Any]] = {}
         for provider_id, descriptor in sorted(descriptors.items()):
             if vendor_id and vendor_id in descriptor.vendor_key_injection:
-                from audiagentic.foundation.secrets import has_ambient_value
+                from audiagentic.components.providers.services.secrets import has_ambient_value
 
                 spec = descriptor.vendor_key_injection[vendor_id]
                 key_name = spec.get("key", "")
@@ -1269,6 +1346,8 @@ def prepare_provider_session_transport(
     model_id: str | None = None,
     model_alias: str | None = None,
     request_runtime_root: Path | None = None,
+    mcp_entries: tuple[McpLaunchServerEntry, ...] | None = None,
+    require_isolated_mcp: bool = False,
 ) -> PreparedSessionTransport:
     """Prepare a session transport with resolved surface snapshot.
 
@@ -1302,6 +1381,8 @@ def prepare_provider_session_transport(
         model_id=model_id,
         model_alias=model_alias,
         request_runtime_root=request_runtime_root,
+        mcp_entries=mcp_entries,
+        require_isolated_mcp=require_isolated_mcp,
     )
 
 
@@ -1410,6 +1491,12 @@ __all__ = [
     "prepare_provider_acp_launch",
     "prepare_provider_session_transport",
     "prepare_provider_execution_environment",
+    "McpLaunchServerEntry",
+    "McpLaunchSurfaceResult",
+    "prepare_provider_mcp_surface",
+    "collect_management_mcp_launch_entries",
+    "prepare_projected_provider_mcp_surface",
+    "get_pi_coding_agent_package_dir",
     # Prompt launch/query operations
     "list_canonical_provider_ids",
     "get_prompt_syntax_defaults",

@@ -65,11 +65,6 @@ def is_provider_enabled(project_root: Path, provider_id: str) -> bool:
     return get_implementation_state(project_root, _COMPONENT_ID, provider_id).enabled
 
 
-# Back-compat-free alias kept for call sites that read enablement during resolution.
-def resolve_provider_enabled(project_root: Path, provider_id: str) -> bool:
-    return is_provider_enabled(project_root, provider_id)
-
-
 def apply_feature_enabled_state(
     project_root: Path,
     provider_id: str,

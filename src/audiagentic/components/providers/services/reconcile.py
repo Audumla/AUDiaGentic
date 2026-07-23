@@ -127,7 +127,7 @@ def reconcile_provider(
         probe_provider_cli,
     )
     from audiagentic.components.providers.services.provider_config import (
-        resolve_provider_enabled,
+        is_provider_enabled,
         set_provider_enabled,
     )
 
@@ -138,7 +138,7 @@ def reconcile_provider(
     _emit(on_progress, f"CLI {'available' if cli_available else 'not found'}")
 
     # Enablement is feature state, independent of providers.yaml.
-    currently_enabled = resolve_provider_enabled(project_root, provider_id)
+    currently_enabled = is_provider_enabled(project_root, provider_id)
 
     action_taken: str
     surfaces_result: dict[str, Any] | None = None

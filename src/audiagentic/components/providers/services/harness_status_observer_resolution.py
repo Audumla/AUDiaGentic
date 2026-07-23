@@ -16,18 +16,15 @@ import secrets
 from audiagentic.components.providers.contracts.harness_status_observer import (
     normalize_harness_status_observation,
 )
+
+# Slice A: the only currently-declared Recipe-A surface. Do not pre-populate
+# future surfaces here — each addition requires its own probe per AS27.
+# Conformance: use the AS27 inventory to derive the eligible set.
 from audiagentic.foundation.transports.harness_status_observer import (
     StatusObserverLease,
     StatusObserverRequest,
     StatusObserverResult,
     StatusObserverState,
-)
-
-# Slice A: the only currently-declared Recipe-A surface. Do not pre-populate
-# future surfaces here — each addition requires its own probe per AS27.
-# Conformance: use the AS27 inventory to derive the eligible set.
-from audiagentic.components.providers.services.harness_observability_inventory import (
-    get_harness_surface_capability_fact,
 )
 
 # No static eligible-surface set — platform eligibility is checked at

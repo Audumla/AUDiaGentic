@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 from audiagentic.foundation.steps import CallableStep, SequenceStep, ShellStep
 from audiagentic.foundation.toolchains.managed_config import ManagedConfigSpec
 
+from ..contracts.mcp_launch_surface import McpLaunchIsolationTier
 from .automation_capabilities import ProviderAutomationCapability
 
 IsolationTier = Literal["full-isolation", "partial-isolation", "no-isolation"]
@@ -123,6 +124,9 @@ class ProviderDescriptor:
     # automation-family property: gateway admission and worker materialization
     # need one provider-wide declaration, independently of supported families.
     execution_isolation_tier: IsolationTier = "no-isolation"
+    # Provider-wide MCP launch capability.  This is an inherent harness fact,
+    # not mutable feature state and not a per-launch configuration choice.
+    mcp_launch_isolation_tier: McpLaunchIsolationTier = "unsupported"
     # Explicitly declared automation families. These declarations are only
     # capability metadata; explicit provider+family code registration is still
     # required before an operation can execute.

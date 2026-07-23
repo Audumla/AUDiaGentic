@@ -7,8 +7,8 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+from audiagentic.components.providers.services.secrets import resolve_secret_ref
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.secrets import resolve_secret_ref
 
 _logger = logging.getLogger(__name__)
 

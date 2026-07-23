@@ -14,7 +14,7 @@ Lives with its only consumer (the provider descriptor loader); promote back to
 foundation only if a second descriptor type actually adopts it.
 
 Error codes:
-    VAL-DESC-001 — ref resolution failure (from foundation.refs)
+    VAL-DESC-001 — declarative configuration reference resolution failure
     VAL-DESC-002 — step build failure (from workflow.invocation.from_spec)
     VAL-DESC-003 — required field missing from YAML
 """
@@ -27,8 +27,8 @@ from typing import Any
 
 import yaml
 
+from audiagentic.foundation.config.refs import resolve_ref
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.refs import resolve_ref
 
 
 @dataclass(frozen=True)

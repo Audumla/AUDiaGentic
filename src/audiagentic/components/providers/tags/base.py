@@ -61,9 +61,3 @@ class ActionDescriptor:
     def skill_content(self) -> str:
         return self.skill_path.read_text(encoding="utf-8")
 
-
-# Backwards-compatible aliases
-TagDescriptor = ActionDescriptor
-TagSurfaceContribution = ActionInstruction
-TagFile = ActionFile
-TagPrompt = ActionPrompt

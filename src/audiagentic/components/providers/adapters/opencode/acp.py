@@ -20,9 +20,36 @@ def _resolve_env_placeholders(value):
     return value
 
 
-def build_acp_launch(project_root: Path, *, model_id: str | None = None) -> AcpLaunch:
+def _merge_mcp_surface(document: dict, mcp_surface) -> dict:
+    if mcp_surface is None:
+        return document
+    inline = dict(mcp_surface.extra_env).get("OPENCODE_CONFIG_CONTENT")
+    if not inline:
+        return document
+    try:
+        overlay = json.loads(inline)
+    except json.JSONDecodeError:
+        return document
+    if isinstance(overlay, dict) and isinstance(overlay.get("mcp"), dict):
+        current = document.get("mcp")
+        merged = dict(current) if isinstance(current, dict) else {}
+        merged.update(overlay["mcp"])
+        document["mcp"] = merged
+    if isinstance(overlay, dict) and overlay.get("plugin") == []:
+        document["plugin"] = []
+    return document
+
+
+def build_acp_launch(
+    project_root: Path,
+    *,
+    model_id: str | None = None,
+    request_runtime_root: Path | None = None,
+    mcp_surface=None,
+) -> AcpLaunch:
+    del request_runtime_root
     environment = {}
-    if model_id:
+    if model_id or mcp_surface is not None:
         # OpenCode documents inline config as highest-precedence runtime config.
         # Snapshot the project config so session workers do not fall through to
         # user-global auth/config when the provider was materialized locally.
@@ -45,8 +72,14 @@ def build_acp_launch(project_root: Path, *, model_id: str | None = None) -> AcpL
             provider_map = document.get("provider")
             if isinstance(provider_map, dict):
                 document["enabled_providers"] = list(provider_map.keys())
-        document["model"] = model_id
+        if model_id:
+            document["model"] = model_id
+        document = _merge_mcp_surface(document, mcp_surface)
         environment["OPENCODE_CONFIG_CONTENT"] = json.dumps(document)
+        if mcp_surface is not None:
+            for key, value in mcp_surface.extra_env:
+                if key != "OPENCODE_CONFIG_CONTENT":
+                    environment[key] = value
     return AcpLaunch(
         executable=require_executable("opencode", "opencode"),
         args=("acp", "--cwd", str(project_root.resolve())),

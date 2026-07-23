@@ -8,13 +8,11 @@ from typing import Any
 
 from audiagentic.components.providers.adapters.base_runner import (
     finalize_run,
+    make_plaintext_extractor,
     resolve_execution_model,
 )
 from audiagentic.components.providers.adapters.cli import require_executable
 from audiagentic.components.providers.prompt_tags import parse_tagged_prompt
-from audiagentic.components.providers.protocols.streaming.base_extractor import (
-    BaseEventExtractor,
-)
 from audiagentic.components.providers.protocols.streaming.completion import (
     ResultSource,
     try_extract_json_from_stdout,
@@ -25,24 +23,7 @@ from audiagentic.components.providers.protocols.streaming.provider_streaming imp
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
-
-class GeminiEventExtractor(BaseEventExtractor):
-    """Parse Gemini plain-text output into canonical provider-stream-event records."""
-
-    extractor_name = "gemini-plaintext"
-
-    def write(self, line: str) -> None:
-        text = line.rstrip("\r\n")
-        if not text:
-            return
-        try:
-            message = json.loads(text)
-            if isinstance(message, dict):
-                self._emit_event("task-progress", text, message)
-            else:
-                self._emit_event("task-progress", text)
-        except json.JSONDecodeError:
-            self._emit_event("task-progress", text)
+GeminiEventExtractor = make_plaintext_extractor("gemini-plaintext")
 
 
 def _handle_prompt_tags(

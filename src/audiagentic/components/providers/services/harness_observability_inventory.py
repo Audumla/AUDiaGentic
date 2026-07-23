@@ -20,11 +20,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
 
-import platform as _std_platform
-
-from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.foundation.transports.session_surface import (
     EffectiveObservationLevel,
     LifecycleSource,
@@ -459,32 +456,6 @@ def get_all_harness_surface_facts() -> dict[tuple[str, str], HarnessSurfaceCapab
     return _build_inventory()
 
 
-def _detect_platform_triple() -> str:
-    """Detect the current platform as a normalised target triple.
-
-    Returns strings like 'windows-amd64', 'linux-amd64', 'darwin-arm64'.
-    Uses runtime.system.platform.platform_key() for base OS detection and
-    the standard library ``platform.machine()`` for architecture.
-    """
-    from audiagentic.runtime.system.platform import platform_key
-
-    base = platform_key()  # "win", "darwin", "linux"
-    os_name = {"win": "windows", "darwin": "darwin", "linux": "linux"}[base]
-
-    arch_raw = _std_platform.machine().lower()
-    # Normalise common architecture names to the declaration format.
-    if arch_raw in ("amd64", "x86_64"):
-        arch = "amd64"
-    elif arch_raw in ("arm64", "aarch64"):
-        arch = "arm64"
-    elif arch_raw == "x86":
-        arch = "386"
-    else:
-        arch = arch_raw
-
-    return f"{os_name}-{arch}"
-
-
 def is_eligible_transport_observation_publisher(
     provider_id: str,
     surface_id: str,
@@ -510,7 +481,11 @@ def is_eligible_transport_observation_publisher(
         platform_evidence includes the target platform (or is empty).
     """
     if platform is None:
-        platform = _detect_platform_triple()
+        from audiagentic.components.providers.services.platform_target import (
+            detect_platform_triple,
+        )
+
+        platform = detect_platform_triple()
 
     fact = get_harness_surface_capability_fact(provider_id, surface_id)
     if fact is None:
