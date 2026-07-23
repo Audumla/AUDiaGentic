@@ -3,6 +3,7 @@
 
 provider_id: opencode
 execution_isolation_tier: full-isolation
+mcp_launch_isolation_tier: exact
 automation_capabilities:
   - family_id: cli-lifecycle
     supported_modes: [plan, apply, prune, status]
@@ -57,6 +58,18 @@ host_capabilities:
     display_name: "OpenCode"
 
 capability_facts:
+  - capability_id: mcp-launch-isolation
+    subject: mcp_launch_isolation_tier
+    mechanism: "isolated XDG config plus per-process OPENCODE_CONFIG_CONTENT"
+    constraints: []
+    limitations: []
+    support_assessment: verified
+    action_needed: null
+    evidence:
+      evidence_tier: execution
+      tool_version: "1.18.3"
+      fact_anchor: "tests/unit/providers/test_mcp_launch_isolation.py"
+      review_state: verified
   - capability_id: cli-install
     subject: cli_install
     mechanism: "npm install: opencode-ai with shell probe opencode --version"
