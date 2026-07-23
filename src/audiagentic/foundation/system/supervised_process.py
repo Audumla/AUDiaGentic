@@ -3,7 +3,7 @@
 Harness host processes (the pi node CLI, opencode) spawn stdio MCP/LSP servers
 as grandchildren. Without OS-enforced cleanup those orphan and accumulate when
 the python launcher exits abnormally (crash, kill, terminal close) — the exact
-leak that leaves stale ``audiagentic mcp`` and ``yaml-language-server`` processes
+leak that leaves stale component MCP-server and ``yaml-language-server`` processes
 running for days.
 
 ``supervised_run`` closes that gap on both platforms:

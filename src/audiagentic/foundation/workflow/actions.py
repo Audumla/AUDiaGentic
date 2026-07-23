@@ -34,7 +34,7 @@ def render(value, context: dict) -> Any:
     ``{{...}}`` literal-brace escaping, ``str()`` coercion). The contracts
     are characterized in ``tests/unit/foundation/test_actions_render_compat.py``
     — any future consolidation must keep those tests green. Also distinct
-    from :func:`audiagentic.foundation.refs.resolve_ref`, which resolves
+    from :func:`audiagentic.foundation.config.refs.resolve_ref`, which resolves
     ``module:object`` config references, never data paths.
     """
     if value is None:

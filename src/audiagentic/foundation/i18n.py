@@ -162,15 +162,6 @@ class _I18n:
                 else:
                     _deep_merge(locale_catalog[component], data)
 
-    @staticmethod
-    def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> None:
-        """Deep-merge *override* into *base* in-place."""
-        for k, v in override.items():
-            if isinstance(v, dict) and isinstance(base.get(k), dict):
-                _deep_merge(base[k], v)
-            else:
-                base[k] = v
-
     # ── Locale management ────────────────────────────────────────────────────
 
     def set_locale(self, locale: str) -> None:
