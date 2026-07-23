@@ -26,6 +26,7 @@ from audiagentic.components.agents.agents_event_topics import (
     GATEWAY_CANCEL_REQUESTED_TOPIC,
     GATEWAY_REQUESTED_TOPIC,
 )
+from audiagentic.components.agents.agents_mapping import first_present
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.event.durable_spool import DurableSpoolTransport, SpoolPoison
 
@@ -64,19 +65,12 @@ def publish_gateway_trigger(
     return gateway_ingress_spool(service_root).publish(topic, payload, metadata=metadata)
 
 
-def _payload_get(payload: dict[str, Any], *keys: str) -> Any:
-    for key in keys:
-        if key in payload:
-            return payload[key]
-    return None
-
-
 def _admit_request(application: Any, event: dict[str, Any]) -> None:
     payload = event.get("payload") or {}
-    project_root_raw = _payload_get(payload, "project-root", "project_root")
+    project_root_raw = first_present(payload, "project-root", "project_root")
     if not project_root_raw or not isinstance(project_root_raw, str):
         raise SpoolPoison("payload missing required 'project-root'")
-    prompt_body = _payload_get(payload, "prompt-body", "prompt_body")
+    prompt_body = first_present(payload, "prompt-body", "prompt_body")
     if not prompt_body or not isinstance(prompt_body, str):
         raise SpoolPoison("payload missing required 'prompt-body'")
 
@@ -87,19 +81,19 @@ def _admit_request(application: Any, event: dict[str, Any]) -> None:
 
     application.submit_llm_request(
         Path(project_root_raw),
-        agent_profile_id=_payload_get(payload, "agent-profile-id", "agent_profile_id"),
+        agent_profile_id=first_present(payload, "agent-profile-id", "agent_profile_id"),
         prompt_body=prompt_body,
         # Spooled triggers are fire-and-forget: async regardless of payload.
         mode="async",
-        source=_payload_get(payload, "source") or f"spool:{GATEWAY_REQUESTED_TOPIC}",
+        source=first_present(payload, "source") or f"spool:{GATEWAY_REQUESTED_TOPIC}",
         metadata=metadata,
     )
 
 
 def _admit_cancel(application: Any, event: dict[str, Any]) -> None:
     payload = event.get("payload") or {}
-    project_root_raw = _payload_get(payload, "project-root", "project_root")
-    request_id = _payload_get(payload, "request-id", "request_id")
+    project_root_raw = first_present(payload, "project-root", "project_root")
+    request_id = first_present(payload, "request-id", "request_id")
     if not project_root_raw or not isinstance(project_root_raw, str):
         raise SpoolPoison("cancel payload missing required 'project-root'")
     if not request_id or not isinstance(request_id, str):

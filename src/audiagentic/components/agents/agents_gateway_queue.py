@@ -34,6 +34,7 @@ from audiagentic.components.agents.agents_event_topics import (
     LLM_REJECTED_TOPIC,
     LLM_STARTED_TOPIC,
 )
+from audiagentic.components.agents.agents_mapping import first_present
 from audiagentic.components.agents.agents_paths import gateway_request_path
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
@@ -230,13 +231,6 @@ class QueuedDispatch:
     service_root: Path | None
 
 
-def _params_get(params: dict[str, Any], *keys: str) -> Any:
-    for key in keys:
-        if key in params:
-            return params[key]
-    return None
-
-
 def resolve_max_concurrency(params: dict[str, Any]) -> int:
     """Resolve params.max-concurrency (or max_concurrency); default 1, minimum 1.
 
@@ -244,7 +238,7 @@ def resolve_max_concurrency(params: dict[str, Any]) -> int:
     the default — a typo'd key or wrong type should be loud, not silently
     treated as max_concurrency=1 (RV19 finding on AG09).
     """
-    value = _params_get(params, "max-concurrency", "max_concurrency")
+    value = first_present(params, "max-concurrency", "max_concurrency")
     if value is None:
         return 1
     if not isinstance(value, int) or isinstance(value, bool):
@@ -266,7 +260,7 @@ def resolve_max_concurrency(params: dict[str, Any]) -> int:
 
 def resolve_queue_max_size(params: dict[str, Any], max_concurrency: int) -> int:
     """Resolve params.queue-max-size (or queue_max_size); default max(8, max_concurrency*2)."""
-    value = _params_get(params, "queue-max-size", "queue_max_size")
+    value = first_present(params, "queue-max-size", "queue_max_size")
     if value is None:
         return max(8, max_concurrency * 2)
     if not isinstance(value, int) or isinstance(value, bool):

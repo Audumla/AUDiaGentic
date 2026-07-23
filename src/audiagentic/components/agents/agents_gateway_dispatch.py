@@ -23,6 +23,7 @@ from audiagentic.components.agents.agents_gateway_session_dispatch import (
     _is_session_request,
     _transition_owned_attempt,
 )
+from audiagentic.components.agents.agents_mapping import first_present
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
 
@@ -92,17 +93,10 @@ def classify_failure(exc: AudiaGenticError) -> str:
     return "transient"
 
 
-def _params_get(params: dict[str, Any], *keys: str) -> Any:
-    for key in keys:
-        if key in params:
-            return params[key]
-    return None
-
-
 def resolve_retry_count(params: dict[str, Any]) -> int:
     """Resolve params.retry-count (or retry_count): additional attempts after
     the first failure, per profile. Default 1 (i.e. up to 2 total tries)."""
-    value = _params_get(params, "retry-count", "retry_count")
+    value = first_present(params, "retry-count", "retry_count")
     if value is None:
         return 1
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
@@ -408,6 +402,5 @@ def dispatch_request(
         project_root, record, "failed",
         updates={"error": error, "finished-at": now_iso_z()},
     )
-
 
 
