@@ -290,7 +290,7 @@ def _refresh_from_list_api(
     api_key: str | None = None
     key_ref = source.get("api-key-ref")
     if key_ref:
-        from audiagentic.foundation.secrets import resolve_secret_ref
+        from audiagentic.components.providers.services.secrets import resolve_secret_ref
 
         try:
             # Resolved only inside this call frame; passed to the fetcher and

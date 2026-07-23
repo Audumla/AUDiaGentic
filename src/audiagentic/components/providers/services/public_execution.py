@@ -182,6 +182,8 @@ def prepare_provider_acp_launch(
     model_id: str | None,
     model_alias: str | None,
     request_runtime_root: Path | None = None,
+    mcp_entries=None,
+    require_isolated_mcp: bool = False,
 ) -> ProviderAcpLaunchResult:
     """Resolve one provider-owned ACP launch without exposing adapter internals."""
     from audiagentic.components.providers.services.execution import load_acp_launch_builder
@@ -222,11 +224,142 @@ def prepare_provider_acp_launch(
     launch_kwargs = {"model_id": resolved_model_id}
     if request_runtime_root is not None:
         launch_kwargs["request_runtime_root"] = request_runtime_root
+    if mcp_entries is not None:
+        surface = prepare_provider_mcp_surface(
+            project_root,
+            provider_id=provider_id,
+            entries=tuple(mcp_entries),
+            runtime_root=request_runtime_root,
+            require_exact_isolation=require_isolated_mcp,
+        )
+        launch_kwargs["mcp_surface"] = surface
     return ProviderAcpLaunchResult(
         provider_id=provider_id,
         model_id=resolved_model_id,
         launch=builder(project_root, **launch_kwargs),
     )
+
+
+def prepare_provider_mcp_surface(
+    project_root: Path,
+    *,
+    provider_id: str,
+    entries,
+    runtime_root: Path | None = None,
+    require_exact_isolation: bool = False,
+):
+    """Ask one provider to build an AUDiaGentic-curated MCP launch surface.
+
+    Soft-fails rather than raising when the provider has no launch-surface
+    mechanism (``McpLaunchSurfaceResult(supported=False)``) — the caller
+    decides whether to proceed additively or fall back to a different
+    provider, matching ``ManagedMcpResult``'s ``supported`` convention rather
+    than ``prepare_provider_acp_launch``'s hard failure.
+    """
+    from audiagentic.components.providers.contracts.mcp_launch_surface import (
+        McpLaunchSurfaceRequest,
+        McpLaunchSurfaceResult,
+    )
+    from audiagentic.components.providers.descriptors.registry import get_descriptor
+    from audiagentic.components.providers.services.execution import load_mcp_surface_builder
+
+    descriptor = get_descriptor(provider_id)
+    declared_isolation = descriptor.mcp_launch_isolation_tier if descriptor is not None else "unsupported"
+    if require_exact_isolation and declared_isolation != "exact":
+        raise AudiaGenticError(
+            code="UNS-PEXE-004",
+            kind="providers",
+            message="provider does not declare exact MCP launch isolation",
+            details={"provider-id": provider_id, "declared-isolation": declared_isolation},
+        )
+    builder = load_mcp_surface_builder(provider_id)
+    if builder is None:
+        return McpLaunchSurfaceResult(ok=True, supported=False)
+    request = McpLaunchSurfaceRequest(
+        project_root=str(project_root),
+        runtime_root=str(runtime_root) if runtime_root is not None else None,
+        entries=tuple(entries),
+    )
+    result = builder(request)
+    if require_exact_isolation and (
+        not result.ok or not result.supported or result.applied_isolation != "exact"
+    ):
+        raise AudiaGenticError(
+            code="UNS-PEXE-004",
+            kind="providers",
+            message="provider cannot guarantee the required isolated MCP launch surface",
+            details={
+                "provider-id": provider_id,
+                "supported": result.supported,
+                "declared-isolation": declared_isolation,
+                "applied-isolation": result.applied_isolation,
+                "mechanism": result.mechanism,
+            },
+        )
+    return result
+
+
+def collect_management_mcp_launch_entries(project_root: Path):
+    """Translate the management projection into the provider launch contract.
+
+    Projection policy remains foundation-owned.  This provider service owns the
+    one shared translation into :class:`McpLaunchServerEntry`, preventing every
+    runtime/product consumer from rebuilding the same boundary mapping.
+    """
+    from audiagentic.components.providers.contracts.mcp_launch_surface import (
+        McpLaunchServerEntry,
+    )
+    from audiagentic.foundation.mcp.projection import (
+        collect_component_mcp_entries,
+    )
+
+    collected = collect_component_mcp_entries(
+        project_root,
+        propagation_target="audiagentic",
+        require_enabled=False,
+    )
+    return tuple(
+        McpLaunchServerEntry(
+            name=name,
+            command=entry.command,
+            args=entry.args,
+            env=tuple(sorted(entry.env.items())),
+        )
+        for name, entry in collected.items()
+        if entry.command
+    )
+
+
+def prepare_projected_provider_mcp_surface(
+    project_root: Path,
+    *,
+    provider_id: str,
+    runtime_root: Path | None,
+    require_exact_isolation: bool = False,
+):
+    """Collect and prepare the standard component projection for one launch."""
+    return prepare_provider_mcp_surface(
+        project_root,
+        provider_id=provider_id,
+        entries=collect_management_mcp_launch_entries(project_root),
+        runtime_root=runtime_root,
+        require_exact_isolation=require_exact_isolation,
+    )
+
+
+def get_pi_coding_agent_package_dir() -> Path | None:
+    """The system-installed pi-coding-agent package dir, or None.
+
+    Narrow, single-consumer seam: pi's runtime-orchestration install path
+    reads bundled theme assets from the same system install the CLI resolves
+    to. Provider-owned (pi's own system-resolution knowledge) so runtime
+    orchestration never re-implements or reaches into the adapter directly.
+    """
+    from audiagentic.components.providers.adapters.pi.system import (
+        resolve_system_pi_coding_agent,
+    )
+
+    return resolve_system_pi_coding_agent()
 
 
 def _build_transport_from_launch(
@@ -266,6 +399,8 @@ def prepare_provider_session_transport(
     model_id: str | None = None,
     model_alias: str | None = None,
     request_runtime_root: Path | None = None,
+    mcp_entries=None,
+    require_isolated_mcp: bool = False,
 ) -> PreparedSessionTransport:
     """Resolve a session-surface snapshot and build the transport factory.
 
@@ -364,6 +499,15 @@ def prepare_provider_session_transport(
     launch_kwargs: dict[str, Any] = {"model_id": resolved_model_id}
     if request_runtime_root is not None:
         launch_kwargs["request_runtime_root"] = request_runtime_root
+    if mcp_entries is not None:
+        surface = prepare_provider_mcp_surface(
+            project_root,
+            provider_id=provider_id,
+            entries=tuple(mcp_entries),
+            runtime_root=request_runtime_root,
+            require_exact_isolation=require_isolated_mcp,
+        )
+        launch_kwargs["mcp_surface"] = surface
     try:
         acp_launch = builder(project_root, **launch_kwargs)
     except Exception:

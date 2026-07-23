@@ -37,7 +37,6 @@ they are never carried into the foundation snapshot.
 """
 from __future__ import annotations
 
-import platform as _std_platform
 import re
 from pathlib import Path
 from typing import Any
@@ -84,32 +83,6 @@ _UNSUPPORTED_REASONS = frozenset({
 # ---------------------------------------------------------------------------
 # Platform triple detection (Fix 3: exact normalized target triples)
 # ---------------------------------------------------------------------------
-
-def _detect_platform_triple() -> str:
-    """Detect the current platform as a normalised target triple.
-
-    Returns strings like 'windows-amd64', 'linux-amd64', 'darwin-arm64'.
-    Uses runtime.system.platform.platform_key() for base OS detection and
-    the standard library ``platform.machine()`` for architecture.
-    """
-    from audiagentic.runtime.system.platform import platform_key
-
-    base = platform_key()  # "win", "darwin", "linux"
-    os_name = {"win": "windows", "darwin": "darwin", "linux": "linux"}[base]
-
-    arch_raw = _std_platform.machine().lower()
-    # Normalise common architecture names to the declaration format.
-    if arch_raw in ("amd64", "x86_64"):
-        arch = "amd64"
-    elif arch_raw in ("arm64", "aarch64"):
-        arch = "arm64"
-    elif arch_raw == "x86":
-        arch = "386"
-    else:
-        arch = arch_raw
-
-    return f"{os_name}-{arch}"
-
 
 # ---------------------------------------------------------------------------
 # Version constraint parsing (local helpers — no YAML/runtime load)
@@ -237,7 +210,7 @@ def _adapter_factory_exists(adapter_ref: str) -> bool:
     callable object. The resolved object is *not* retained or returned.
     """
     try:
-        from audiagentic.foundation.refs import resolve_ref
+        from audiagentic.foundation.config.refs import resolve_ref
         obj = resolve_ref(adapter_ref)
         return callable(obj)
     except Exception:  # noqa: BLE001 — existence check only
@@ -606,4 +579,8 @@ def _resolve_target_platform(platform_hint: str | None) -> str:
     """
     if platform_hint:
         return platform_hint
-    return _detect_platform_triple()
+    from audiagentic.components.providers.services.platform_target import (
+        detect_platform_triple,
+    )
+
+    return detect_platform_triple()

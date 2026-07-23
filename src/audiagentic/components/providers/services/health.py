@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from audiagentic.foundation.secrets import has_ambient_value
+from audiagentic.components.providers.services.secrets import has_ambient_value
 from audiagentic.foundation.time import now_iso_z
 
 
