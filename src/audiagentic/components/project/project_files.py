@@ -10,12 +10,18 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 def read_project_file(project_root: Path, relative_path: str) -> dict[str, Any]:
-    rel = Path(relative_path)
+    # "." / "" have no valid interpretation under the .audiagentic/-prefix rule below;
+    # treat them as "list the root" so agents have a discovery path instead of a guessing game.
+    rel = Path(".audiagentic") if relative_path in ("", ".") else Path(relative_path)
     if not rel.parts or rel.parts[0] != ".audiagentic":
         raise AudiaGenticError(
             code="VAL-PROJFILE-001",
             kind="project",
-            message="path must start with .audiagentic/",
+            message=(
+                "path must start with .audiagentic/ (e.g. "
+                "'.audiagentic/config/runtime/features/memory.yaml'); "
+                "pass a directory path, or '.', to list its contents"
+            ),
             details={"path": relative_path},
         )
 
@@ -38,6 +44,11 @@ def read_project_file(project_root: Path, relative_path: str) -> dict[str, Any]:
             message="project file not found",
             details={"path": relative_path},
         )
+    if target.is_dir():
+        entries = sorted(
+            p.name + ("/" if p.is_dir() else "") for p in target.iterdir()
+        )
+        return {"path": relative_path, "is_dir": True, "entries": entries}
     if not target.is_file():
         raise AudiaGenticError(
             code="VAL-PROJFILE-003",

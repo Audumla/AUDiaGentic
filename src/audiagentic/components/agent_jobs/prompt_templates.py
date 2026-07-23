@@ -7,7 +7,7 @@ from typing import Any
 
 from audiagentic.components.providers.providers_api import load_packaged_prompt_template
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.path_safety import ensure_contained
+from audiagentic.foundation.paths.safety import ensure_contained
 from audiagentic.foundation.templates import render_template as _render_dotted
 
 logger = logging.getLogger(__name__)
