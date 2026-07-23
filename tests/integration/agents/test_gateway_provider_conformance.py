@@ -5,6 +5,8 @@ from pathlib import Path
 import pytest
 from tests.helpers import gateway_provider_conformance as conformance
 
+pytestmark = pytest.mark.no_parallel
+
 
 def test_gateway_provider_conformance_covers_every_descriptor() -> None:
     assert conformance.provider_ids() == (

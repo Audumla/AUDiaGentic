@@ -40,12 +40,10 @@ def test_pi_descriptor_declares_lsp_hook() -> None:
 
 
 def test_ensure_lens_skips_when_harness_absent(tmp_path: Path, monkeypatch) -> None:
-    missing = tmp_path / "cli" / "node_modules" / ".bin" / "pi"
     monkeypatch.setattr(
-        "audiagentic.runtime.harness.context.resolve_agent_bin",
-        lambda runtime: missing,
+        "audiagentic.components.providers.adapters.pi.system.resolve_system_pi_executable",
+        lambda: None,
     )
-    monkeypatch.setattr("audiagentic.foundation.paths.home.global_harness_runtime", lambda: tmp_path)
 
     def _boom(*a, **k):
         raise AssertionError("subprocess must not run when pi bin is absent")
@@ -63,10 +61,9 @@ def test_ensure_lens_starts_background_install_when_harness_present(tmp_path: Pa
     pi_bin.write_text("#!/bin/sh\n", encoding="utf-8")
 
     monkeypatch.setattr(
-        "audiagentic.runtime.harness.context.resolve_agent_bin",
-        lambda runtime: pi_bin,
+        "audiagentic.components.providers.adapters.pi.system.resolve_system_pi_executable",
+        lambda: str(pi_bin),
     )
-    monkeypatch.setattr("audiagentic.foundation.paths.home.global_harness_runtime", lambda: tmp_path)
 
     captured: dict[str, object] = {}
 
@@ -93,10 +90,9 @@ def test_install_pi_lens_runs_install_command(tmp_path: Path, monkeypatch) -> No
 
     monkeypatch.setattr(pi_desc.subprocess, "run", _fake_run)
     monkeypatch.setattr(
-        "audiagentic.runtime.harness.context.resolve_agent_bin",
-        lambda runtime: pi_bin,
+        "audiagentic.components.providers.adapters.pi.system.resolve_system_pi_executable",
+        lambda: str(pi_bin),
     )
-    monkeypatch.setattr("audiagentic.foundation.paths.home.global_harness_runtime", lambda: tmp_path)
 
     pi_desc._pi_ensure_lens(tmp_path)
 
@@ -315,10 +311,12 @@ def test_pi_lens_probe_does_not_shell_out(tmp_path, monkeypatch):
     pi_bin = tmp_path / "pi"
     pi_bin.write_text("#!/bin/sh\n", encoding="utf-8")
     monkeypatch.setattr(
-        "audiagentic.runtime.harness.context.resolve_agent_bin", lambda runtime: pi_bin
+        "audiagentic.components.providers.adapters.pi.system.resolve_system_pi_executable",
+        lambda: str(pi_bin),
     )
     monkeypatch.setattr(
-        "audiagentic.foundation.paths.home.global_harness_runtime", lambda: tmp_path
+        "audiagentic.components.providers.adapters.pi.system.resolve_system_pi_package",
+        lambda name: (tmp_path / name) if (tmp_path / name).is_dir() else None,
     )
 
     def _fail(*a, **k):
@@ -328,6 +326,6 @@ def test_pi_lens_probe_does_not_shell_out(tmp_path, monkeypatch):
 
     assert pi_desc._pi_lens_present(tmp_path)["ok"] is False
 
-    package = tmp_path / "agent" / "npm" / "node_modules" / "pi-lens"
+    package = tmp_path / "pi-lens"
     package.mkdir(parents=True)
     assert pi_desc._pi_lens_present(tmp_path)["ok"] is True

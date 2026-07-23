@@ -2,7 +2,7 @@
 
 The provider surface lifecycle suite covers the *provider* projection
 (.opencode/opencode.json, .codex/config.toml, ...). This suite covers the
-*harness* materialization path: collect_mcp_servers → the active harness's
+*harness* materialization path: collect_component_mcp_entries → the active harness's
 MCP config file, for every harness implementation — and, separately, that the
 real lifecycle-event chain (disable_component → event bus → harness subscriber
 → refresh) rewrites that config without any manual refresh call. Regression
@@ -141,15 +141,15 @@ def test_harness_mcp_follows_component_lifecycle(
 # Event-driven refresh — the full chain a live harness session relies on
 # --------------------------------------------------------------------------- #
 
-def _fake_pi_harness_installed(home: Path) -> None:
-    """Satisfy the pi refresh gate: harness runtime dir with cli/node_modules/.bin."""
-    (home / "harness" / "cli" / "node_modules" / ".bin").mkdir(parents=True, exist_ok=True)
+def _fake_harness_on_path(name: str, bin_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Satisfy the refresh gate (harness_cli_available -> shutil.which). Never executed.
 
-
-def _fake_opencode_on_path(bin_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Satisfy the opencode refresh gate (shutil.which). Never executed."""
+    Both pi and opencode are now resolved from the system PATH — AUDiaGentic no
+    longer bundles an embedded harness — so a single stub-on-PATH helper serves
+    every harness type.
+    """
     bin_dir.mkdir(parents=True, exist_ok=True)
-    stub = bin_dir / "opencode"
+    stub = bin_dir / name
     stub.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
@@ -178,10 +178,7 @@ def test_disable_event_prunes_harness_mcp_without_manual_refresh(
 
         fake_home = sb.root / "home"
         monkeypatch.setenv("AUDIAGENTIC_HOME", str(fake_home))
-        if harness_type == "pi":
-            _fake_pi_harness_installed(fake_home)
-        else:
-            _fake_opencode_on_path(sb.root / "bin", monkeypatch)
+        _fake_harness_on_path(harness_type, sb.root / "bin", monkeypatch)
 
         install_with_deps("project", sb.repo)
         install_with_deps(component_id, sb.repo)

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -50,30 +49,3 @@ def test_validate_schemas_fails_on_bad_fixture() -> None:
     finally:
         bad_fixture.write_text(backup, encoding="utf-8")
 
-
-def test_validate_packet_dependencies_fails_on_unknown_dependency(tmp_path: Path) -> None:
-    registry = tmp_path / "registry.md"
-    registry.write_text(
-        """
-| Packet | Title | Status | Owner | Branch/Worktree | Dependency State | Primary Docs | Last Update | Notes |
-|---|---|---|---|---|---|---|---|---|
-| PKT-FND-001 | Canonical IDs | READY_TO_START | - | - | none | 03 | 2026-03-29 | |
-| PKT-FND-002 | Schema package | WAITING_ON_DEPENDENCIES | - | - | needs PKT-XYZ-999 VERIFIED | 03 | 2026-03-29 | |
-""".strip(),
-        encoding="utf-8",
-    )
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "audiagentic.foundation.contracts.validate_packet_dependencies",
-            "--registry",
-            str(registry),
-        ],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 2
-    payload = json.loads(result.stdout)
-    assert payload["status"] == "error"

@@ -3,6 +3,8 @@ FROM audia-test-base:latest
 WORKDIR /app
 ENV AUDIAGENTIC_DOCKER_TESTS=1
 ENV AUDIAGENTIC_REAL_PROVIDER_CLI_TESTS=1
+ENV HOME=/tmp/audiagentic-test-home
+ENV AUDIAGENTIC_HOME=/tmp/audiagentic-test-home/.audiagentic
 
 COPY pyproject.toml README.md ./
 COPY src ./src

@@ -5,85 +5,43 @@ from pathlib import Path
 from audiagentic.runtime.harness.pi.install import install_to
 
 
-def test_pi_recipe_declares_managed_packages_and_acp_runtime() -> None:
-    from audiagentic.runtime.harness.pi.install import _package_recipe
-
-    assert _package_recipe({"agent": {
-        "packages": {
-            "cli": "example/pi",
-            "mcp_adapter": "example/pi-mcp",
-            "acp": "example/pi-acp",
-        },
-        "acp_version": "1.2.3",
-        "runtime_extra": "acp",
-    }}) == ("example/pi", "example/pi-mcp", "example/pi-acp", "1.2.3", "acp")
-
-
-def test_pi_recipe_defaults_preserve_existing_overrides() -> None:
-    from audiagentic.runtime.harness.pi.install import _package_recipe
-
-    assert _package_recipe({"agent": {}}) == (
-        "@earendil-works/pi-coding-agent",
-        "pi-mcp-adapter",
-        "pi-acp",
-        "0.0.31",
-        "acp",
-    )
-
-
-def test_install_to_provisions_embedded_rig_in_docker(
+def test_install_to_provisions_rig_and_materializes_no_embedded_cli(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    # install_to no longer bundles a harness CLI (no npm install); it only
+    # provisions the rig backend and materializes the agent config.
     target = tmp_path / "harness"
     project_root = tmp_path / "project"
-    src_root = tmp_path / "src" / "audiagentic"
-    fixture_model = tmp_path / "tests" / "unit" / "runtime" / "Qwen3.5-0.8B-UD-Q5_K_XL.gguf"
     project_root.mkdir(parents=True)
-    src_root.mkdir(parents=True)
-    fixture_model.parent.mkdir(parents=True, exist_ok=True)
-    fixture_model.write_bytes(b"gguf")
 
-    calls: list[Path] = []
+    rig_calls: list[Path] = []
+    materialize_calls: list[Path] = []
 
-    monkeypatch.setenv("AUDIAGENTIC_DOCKER_TESTS", "1")
-    monkeypatch.setattr(
-        "audiagentic.runtime.harness.pi.install._c._npm",
-        lambda: "npm",
-    )
-    monkeypatch.setattr(
-        "audiagentic.runtime.harness.pi.install._c.load_pi_config",
-        lambda project_root=None: {"agent": {"version": "latest", "mcp_adapter_version": "latest"}},
-    )
     monkeypatch.setattr(
         "audiagentic.runtime.harness.pi.install._c.load_harness_config",
         lambda project_root=None: {},
     )
     monkeypatch.setattr(
-        "audiagentic.runtime.harness.pi.install.subprocess.run",
-        lambda *args, **kwargs: None,
-    )
-    monkeypatch.setattr(
-        "audiagentic.runtime.harness.pi.install._validate_agent_install",
-        lambda npm_dir: None,
-    )
-    monkeypatch.setattr(
-        "audiagentic.runtime.harness.pi.install.apply_lockdown_patches",
-        lambda npm_dir, project_root=None: None,
-    )
-    monkeypatch.setattr(
         "audiagentic.runtime.harness.pi.install.materialize_agent_config",
-        lambda target, harness_cfg, project_root=None: None,
+        lambda target, harness_cfg, project_root=None: materialize_calls.append(target),
+    )
+    monkeypatch.setattr(
+        "audiagentic.runtime.harness.pi.install._should_provision_embedded_rig",
+        lambda: True,
     )
     monkeypatch.setattr(
         "audiagentic.runtime.harness.pi.install._provision_embedded_rig",
-        lambda target, project_root=None: calls.append(target),
+        lambda target, project_root=None: rig_calls.append(target),
     )
 
     rc = install_to(target, project_root=project_root)
 
     assert rc == 0
-    assert calls == [target]
+    assert rig_calls == [target]
+    assert materialize_calls == [target]
+    # No embedded harness CLI is created.
+    assert not (target / "cli" / "node_modules" / ".bin").exists()
 
 
 def test_install_to_seeds_test_model_when_repo_fixture_exists(

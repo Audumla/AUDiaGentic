@@ -314,7 +314,7 @@ class TestPlanningMcpServer:
 # ---------------------------------------------------------------------------
 
 class TestPlanningHarnessMcpCollection:
-    """Verify collect_mcp_servers — the source of harness mcp.json — contains only mgmt servers.
+    """Verify management projection — the source of harness mcp.json — contains only mgmt servers.
 
     Architecture rule: the harness MCP config must only contain management servers
     (propagate: audiagentic). Operational servers (propagate: providers) go to
@@ -324,12 +324,14 @@ class TestPlanningHarnessMcpCollection:
     def test_collect_mcp_includes_mgmt_server_when_installed(self, tmp_path: Path) -> None:
         from audiagentic.foundation.components.loader import register_all_components
         from audiagentic.foundation.lifecycle.components import install_component
-        from audiagentic.runtime.harness.mcp_collector import collect_mcp_servers
+        from audiagentic.foundation.mcp.projection import collect_component_mcp_entries
 
         register_all_components()
         install_component("agent-planning", tmp_path)
 
-        servers = collect_mcp_servers(tmp_path)
+        servers = collect_component_mcp_entries(
+            tmp_path, propagation_target="audiagentic", require_enabled=False
+        )
         assert "ag-planning-mgmt" in servers, (
             f"ag-planning-mgmt missing from harness mcp collection after install. "
             f"Present: {set(servers)}"
@@ -339,12 +341,14 @@ class TestPlanningHarnessMcpCollection:
         """ag-planning has propagate: providers — must never appear in the harness config."""
         from audiagentic.foundation.components.loader import register_all_components
         from audiagentic.foundation.lifecycle.components import install_component
-        from audiagentic.runtime.harness.mcp_collector import collect_mcp_servers
+        from audiagentic.foundation.mcp.projection import collect_component_mcp_entries
 
         register_all_components()
         install_component("agent-planning", tmp_path)
 
-        servers = collect_mcp_servers(tmp_path)
+        servers = collect_component_mcp_entries(
+            tmp_path, propagation_target="audiagentic", require_enabled=False
+        )
         assert "ag-planning" not in servers, (
             "ag-planning is an operational server (propagate: providers) and must not "
             "appear in the harness mcp collection. Only ag-planning-mgmt belongs here."
@@ -352,10 +356,12 @@ class TestPlanningHarnessMcpCollection:
 
     def test_collect_mcp_excludes_planning_servers_when_not_installed(self, tmp_path: Path) -> None:
         from audiagentic.foundation.components.loader import register_all_components
-        from audiagentic.runtime.harness.mcp_collector import collect_mcp_servers
+        from audiagentic.foundation.mcp.projection import collect_component_mcp_entries
 
         register_all_components()
-        servers = collect_mcp_servers(tmp_path)
+        servers = collect_component_mcp_entries(
+            tmp_path, propagation_target="audiagentic", require_enabled=False
+        )
         assert "ag-planning-mgmt" not in servers, (
             "ag-planning-mgmt should not be collected when agent-planning is not installed"
         )
@@ -366,15 +372,17 @@ class TestPlanningHarnessMcpCollection:
     def test_collect_mcp_excludes_planning_servers_when_disabled(self, tmp_path: Path) -> None:
         from audiagentic.foundation.components.loader import register_all_components
         from audiagentic.foundation.lifecycle.components import disable_component, install_component
-        from audiagentic.runtime.harness.mcp_collector import collect_mcp_servers
+        from audiagentic.foundation.mcp.projection import collect_component_mcp_entries
 
         register_all_components()
         install_component("agent-planning", tmp_path)
         disable_component("agent-planning", tmp_path)
 
-        servers = collect_mcp_servers(tmp_path)
-        assert "ag-planning-mgmt" not in servers, (
-            "ag-planning-mgmt should not be collected when agent-planning is disabled"
+        servers = collect_component_mcp_entries(
+            tmp_path, propagation_target="audiagentic", require_enabled=False
+        )
+        assert "ag-planning-mgmt" in servers, (
+            "management remains reachable so a disabled component can be enabled"
         )
         assert "ag-planning" not in servers, (
             "ag-planning should not be collected when agent-planning is disabled"
@@ -383,12 +391,14 @@ class TestPlanningHarnessMcpCollection:
     def test_planning_mgmt_server_has_correct_entry_structure(self, tmp_path: Path) -> None:
         from audiagentic.foundation.components.loader import register_all_components
         from audiagentic.foundation.lifecycle.components import install_component
-        from audiagentic.runtime.harness.mcp_collector import collect_mcp_servers
+        from audiagentic.foundation.mcp.projection import collect_component_mcp_entries
 
         register_all_components()
         install_component("agent-planning", tmp_path)
 
-        servers = collect_mcp_servers(tmp_path)
+        servers = collect_component_mcp_entries(
+            tmp_path, propagation_target="audiagentic", require_enabled=False
+        )
         entry = servers["ag-planning-mgmt"]
         assert entry.command, "ag-planning-mgmt: command is empty"
         assert entry.args, "ag-planning-mgmt: args is empty"
@@ -397,20 +407,21 @@ class TestPlanningHarnessMcpCollection:
         """Full pi mcp.json build: collect -> build_pi_mcp_dict -> only mgmt server present."""
         from audiagentic.foundation.components.loader import register_all_components
         from audiagentic.foundation.lifecycle.components import install_component
-        from audiagentic.runtime.harness.mcp_collector import collect_mcp_servers
+        from audiagentic.foundation.mcp.projection import collect_component_mcp_entries
         from audiagentic.runtime.harness.pi.mcp_format import build_pi_mcp_dict
 
         register_all_components()
         install_component("agent-planning", tmp_path)
 
-        entries = collect_mcp_servers(tmp_path)
+        entries = collect_component_mcp_entries(
+            tmp_path, propagation_target="providers", require_enabled=True
+        )
         pi_config = build_pi_mcp_dict(entries)
 
         servers = pi_config.get("mcpServers", {})
-        assert "ag-planning-mgmt" in servers, (
-            f"ag-planning-mgmt missing from pi mcp dict. Present: {set(servers)}"
+        assert "ag-planning" in servers, (
+            f"ag-planning missing from native pi mcp dict. Present: {set(servers)}"
         )
-        assert "ag-planning" not in servers, (
-            "ag-planning is an operational server (propagate: providers) and must not "
-            "appear in the pi harness mcp.json. Only ag-planning-mgmt belongs here."
+        assert "ag-planning-mgmt" not in servers, (
+            "management-only servers belong to bootstrap launches, not native functional config"
         )

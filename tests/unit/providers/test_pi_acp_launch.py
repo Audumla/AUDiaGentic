@@ -2,40 +2,31 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 import pytest
 
 from audiagentic.components.providers.services.execution import load_acp_launch_builder
 
-
-def _runtime(root: Path) -> Path:
-    bridge = root / "cli" / "node_modules" / ".bin" / (
-        "pi-acp.cmd" if os.name == "nt" else "pi-acp"
-    )
-    bridge.parent.mkdir(parents=True)
-    bridge.touch()
-    return root
+# The pi-acp bridge is resolved from the system install (PATH, else npx), not an
+# embedded copy. Tests stub that resolver rather than a managed-runtime path.
+_RESOLVER = "audiagentic.components.providers.adapters.pi.system.resolve_system_pi_acp_argv"
 
 
 def test_pi_exposes_acp_launch_builder():
     assert load_acp_launch_builder("pi") is not None
 
 
-def test_pi_launch_uses_managed_bridge_and_model(monkeypatch, tmp_path):
+def test_pi_launch_uses_system_bridge_and_model(monkeypatch, tmp_path):
     import audiagentic.components.providers.adapters.pi.acp as pi_acp
 
-    runtime = _runtime(tmp_path / "harness")
-    monkeypatch.setattr(pi_acp, "global_harness_runtime", lambda: runtime)
+    monkeypatch.setattr(_RESOLVER, lambda version=None: ["/usr/bin/pi-acp"])
 
     request_root = tmp_path / "request-a"
     launch = pi_acp.build_acp_launch(
         tmp_path / "project", model_id="local/model", request_runtime_root=request_root
     )
 
-    assert launch.executable == str(runtime / "cli" / "node_modules" / ".bin" / (
-        "pi-acp.cmd" if os.name == "nt" else "pi-acp"
-    ))
+    assert launch.executable == "/usr/bin/pi-acp"
     assert launch.args == (
         "--cwd", str((tmp_path / "project").resolve()),
         "--session-dir", str((request_root / "pi" / "sessions").resolve()),
@@ -45,11 +36,21 @@ def test_pi_launch_uses_managed_bridge_and_model(monkeypatch, tmp_path):
     assert "HOME" not in launch.environment or os.name == "nt"
 
 
+def test_pi_launch_uses_npx_prefix_when_no_direct_bridge(monkeypatch, tmp_path):
+    import audiagentic.components.providers.adapters.pi.acp as pi_acp
+
+    # npx-style resolution: executable is npx, the package name leads the args.
+    monkeypatch.setattr(_RESOLVER, lambda version=None: ["/usr/bin/npx", "--yes", "pi-acp"])
+    launch = pi_acp.build_acp_launch(tmp_path / "project")
+
+    assert launch.executable == "/usr/bin/npx"
+    assert launch.args[:3] == ("--yes", "pi-acp", "--cwd")
+
+
 def test_pi_launch_request_roots_are_distinct(monkeypatch, tmp_path):
     import audiagentic.components.providers.adapters.pi.acp as pi_acp
 
-    runtime = _runtime(tmp_path / "harness")
-    monkeypatch.setattr(pi_acp, "global_harness_runtime", lambda: runtime)
+    monkeypatch.setattr(_RESOLVER, lambda version=None: ["/usr/bin/pi-acp"])
     project = tmp_path / "project"
     first = pi_acp.build_acp_launch(project, request_runtime_root=tmp_path / "request-a")
     second = pi_acp.build_acp_launch(project, request_runtime_root=tmp_path / "request-b")
@@ -59,10 +60,10 @@ def test_pi_launch_request_roots_are_distinct(monkeypatch, tmp_path):
     assert first.args[first.args.index("--cwd") + 1] == second.args[second.args.index("--cwd") + 1]
 
 
-def test_pi_launch_fails_when_managed_bridge_is_missing(monkeypatch, tmp_path):
+def test_pi_launch_fails_when_system_bridge_is_missing(monkeypatch, tmp_path):
     import audiagentic.components.providers.adapters.pi.acp as pi_acp
 
-    monkeypatch.setattr(pi_acp, "global_harness_runtime", lambda: tmp_path / "harness")
+    monkeypatch.setattr(_RESOLVER, lambda version=None: None)
 
-    with pytest.raises(Exception, match="Managed Pi ACP bridge is not installed"):
+    with pytest.raises(Exception, match="pi-acp bridge not found"):
         pi_acp.build_acp_launch(tmp_path / "project")

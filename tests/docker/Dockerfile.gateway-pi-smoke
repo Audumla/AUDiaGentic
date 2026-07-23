@@ -3,6 +3,8 @@ FROM audia-test-base:latest
 WORKDIR /app
 ENV AUDIAGENTIC_DOCKER_TESTS=1
 ENV AUDIAGENTIC_GATEWAY_PI_SMOKE_DOCKER=1
+ENV HOME=/tmp/audiagentic-test-home
+ENV AUDIAGENTIC_HOME=/tmp/audiagentic-test-home/.audiagentic
 ENV PYTHONPATH="/app/src"
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
@@ -16,6 +18,8 @@ ENV PIP_BREAK_SYSTEM_PACKAGES=1
 #   docker build -f tests/docker/Dockerfile.gateway-pi-smoke -t audiagentic-gateway-pi-smoke:local .
 # Run:
 #   docker run --rm audiagentic-gateway-pi-smoke:local
-COPY . /app
+COPY pyproject.toml README.md ./
+COPY src ./src
+COPY tests ./tests
 
 CMD ["bash", "-c", "uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp,test]' && /venv/bin/pytest tests/integration/agents/test_gateway_pi_smoke.py -q --tb=short --timeout=900"]

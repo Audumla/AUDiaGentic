@@ -17,7 +17,11 @@ from audiagentic.components.providers.descriptors.registry import all_descriptor
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state
 from audiagentic.foundation.transports import AcpLaunch
-from tests.unit.agents.test_agents_gateway_sessions import FakeTransport, _Clock
+from tests.unit.agents.test_agents_gateway_sessions import (
+    FakeAgentSessionTransport,
+    _build_fake_prepared,
+    _Clock,
+)
 
 
 def provider_ids() -> tuple[str, ...]:
@@ -140,18 +144,18 @@ def assert_session_binding_open_flow(project_root: Path, provider_id: str, monke
     reset_gateway_queue()
     enable_profile(project_root, provider_id)
     patch_gateway_provider_boundaries(monkeypatch)
-    transports: list[FakeTransport] = []
+    transports: list[FakeAgentSessionTransport] = []
 
-    def factory(launch, cwd):
-        transport = FakeTransport(launch, cwd)
+    def factory(project_root, **kwargs):
+        transport = FakeAgentSessionTransport()
         transport.provider_session_ref = f"{provider_id}-session-ref"
         transports.append(transport)
-        return transport
+        return _build_fake_prepared(transport)
 
     runtime = sessions_module.SessionRuntime(
         clock=_Clock(),
         reap_interval_seconds=60,
-        transport_factory=factory,
+        provider_prepare_fn=factory,
     )
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
     monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
@@ -186,3 +190,4 @@ def assert_session_binding_open_flow(project_root: Path, provider_id: str, monke
         assert "provider-session-ref" not in repr(listed)
     finally:
         runtime.shutdown()
+

@@ -176,9 +176,6 @@ class TestOpencodeNonLinuxRejection:
         We mock _get_inventory_proof to simulate an inventory that lacks
         windows-amd64 evidence — same as the real AS27 inventory state.
         """
-        from audiagentic.components.providers.services.session_surface_resolution import (
-            _get_inventory_proof,
-        )
 
         # Mock: inventory has no proof for (opencode, opencode-acp, windows-amd64)
         def fake_inventory_check(provider_id, surface_id, target_platform):
@@ -235,9 +232,6 @@ class TestOpencodeNonLinuxRejection:
         resolver returns DECLARED/O0 — the surface is available but without
         advanced observability.
         """
-        from audiagentic.components.providers.services.session_surface_resolution import (
-            _get_inventory_proof,
-        )
 
         # Mock: inventory has no proof for windows-amd64
         def fake_inventory_check(provider_id, surface_id, target_platform):

@@ -45,7 +45,6 @@ COPY pyproject.toml ./pyproject.toml
 # Static template root + tests + smoke script used by the three checks.
 COPY .audiagentic/config ./.audiagentic/config
 COPY .audiagentic/skills ./.audiagentic/skills
-COPY .claude ./.claude
 COPY .gemini ./.gemini
 COPY .github/workflows ./.github/workflows
 COPY .opencode ./.opencode

@@ -7,7 +7,6 @@ No real transport, no Docker.
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import MagicMock, patch
 
 from audiagentic.components.agents.agents_harness_status_evidence import (
