@@ -1,9 +1,9 @@
 # Agent Capability Reviews
 
-This folder is the tracked review record for delegated agent work. The older
-R&D log still exists at `.audiagentic/research/agent-overseer/capability-log.yaml`,
-but `.audiagentic/` is local-only/ignored. Use this folder for durable reviews
-that should survive across sessions and support later competency analysis.
+This folder is the tracked review record for delegated agent work. Local files
+under `.audiagentic/research/` are optional, ignored working data and are not a
+test or documentation dependency. Use this folder for durable reviews that
+must survive across sessions and support later competency analysis.
 
 ## Review Rules
 
@@ -32,4 +32,3 @@ that should survive across sessions and support later competency analysis.
 - `reviewability`: produced changes and summary that were easy to inspect.
 - `runtime-lifecycle`: handled session/process/gateway lifecycle cleanly.
 - `independence`: completed without needing controller repair.
-

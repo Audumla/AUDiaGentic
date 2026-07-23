@@ -147,3 +147,4 @@ shared lower-layer seams, not general component-to-component exceptions.
 - [Architecture Implementation Guidelines](ARCHITECTURE_GUIDELINES.md)
 - [Observability Standards](OBSERVABILITY_STANDARDS.md)
 - [Creating Components](CREATING_A_COMPONENT.md)
+- [Creating a Harness](CREATING_A_HARNESS.md)
