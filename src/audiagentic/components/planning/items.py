@@ -63,6 +63,22 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
         "skill": item.get("skill", ""),
     }
     sections = {k: item.get(k, "") for k in item_store.ITEM_SECTION_HEADING}
+    # Include any custom section keys not consumed as frontmatter/metadata
+    _consumed = item_store.FRONTMATTER_FIELDS | {
+        "id",
+        "order",
+        "plan",
+        "state",
+        "breadth",
+        "skill",
+        "created-by",
+        "created_by",
+        "creator_id",
+        "title",
+    }
+    for k, v in item.items():
+        if k not in _consumed and k not in item_store.ITEM_SECTION_HEADING:
+            sections[k] = v
     body = item_store.build_item_body(title, sections)
 
     slug = item_store.plan_slug(plan)
@@ -308,7 +324,7 @@ def update_item(project_root: Path, item_id: str, updates: dict[str, Any]) -> di
         frontmatter_key = "created-by" if key in ("created_by", "creator_id") else key
         if frontmatter_key in item_store.FRONTMATTER_FIELDS:
             fm[frontmatter_key] = value
-        elif key in item_store.ITEM_SECTION_HEADING or key == "title":
+        elif key in item_store.ITEM_SECTION_HEADING or key == "title" or key in sections:
             sections[key] = value
 
     title = sections.pop("title", None)

@@ -34,7 +34,11 @@ mcp-servers:
       uninstall_component: Uninstall a component from target project. Harness config is regenerated automatically — no manual refresh needed.
       enable_component: Enable a component in target project. Harness config is regenerated automatically — no manual refresh needed.
       disable_component: Disable a component in target project. Harness config is regenerated automatically — no manual refresh needed.
-      read_project_file: Read a file inside project .audiagentic directory.
+      read_project_file: >
+        Read a file inside the project .audiagentic directory. relative_path must
+        start with '.audiagentic/' (e.g. '.audiagentic/config/runtime/features/memory.yaml').
+        Pass a directory path — or '.' for the root — to list its contents instead
+        of reading a file, when you need to discover what exists before reading it.
       runtime_sync_contract: Return the runtime sync contract — describes what harness
         refresh actions follow component mutations and which are automatic.
       get_option_provenance: Show where each option value came from (project config,
