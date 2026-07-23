@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agents import agents_gateway_store as store
+from audiagentic.components.agents.agents_mapping import first_present
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
 
@@ -112,16 +113,10 @@ def _dispatch_session_request(
     try:
         if session_id is None:
             # keep-alive: open a new session bound to this profile
-            from audiagentic.runtime.harness.config import load_harness_config
-            from audiagentic.runtime.harness.pi.request_runtime import create_request_runtime
-
-            request_runtime = create_request_runtime(
-                request_runtime_root,
-                project_root,
-                request_id,
-                load_harness_config(project_root=project_root),
-                runtime_root=request_runtime_root / "pi",
-            )
+            request_runtime_root.mkdir(parents=True, exist_ok=True)
+            request_runtime = request_runtime_root
+            from audiagentic.components.providers import providers_api
+            mcp_entries = providers_api.collect_management_mcp_launch_entries(project_root)
             # AS28 slice 4a: pass provider context — the session runtime
             # resolves the transport via providers_api.prepare_provider_session_transport.
             # AS08: persist execution-context fingerprint on session create.
@@ -134,24 +129,26 @@ def _dispatch_session_request(
                 model_id=profile_model_id,
                 surface_hint=_build_default_surface_hint(provider_id),
                 correlation_id=record.get("correlation-id"),
+                request_runtime_root=request_runtime_root,
+                mcp_entries=mcp_entries,
                 # Request value wins over profile params; 0 disables the bound
                 # (RV513) — use explicit None checks so 0 survives resolution.
                 idle_timeout_seconds=(
                     record.get("session-idle-timeout-seconds")
                     if record.get("session-idle-timeout-seconds") is not None
-                    else _params_get(params, "session-idle-timeout-seconds", "session_idle_timeout_seconds")
+                    else first_present(params, "session-idle-timeout-seconds", "session_idle_timeout_seconds")
                 ),
                 max_lifetime_seconds=(
                     record.get("session-max-lifetime-seconds")
                     if record.get("session-max-lifetime-seconds") is not None
-                    else _params_get(params, "session-max-lifetime-seconds", "session_max_lifetime_seconds")
+                    else first_present(params, "session-max-lifetime-seconds", "session_max_lifetime_seconds")
                 ),
                 # RV680: per-turn deadline and opt-in event-silence watchdog,
                 # profile-param driven; None → runtime defaults, 0 disables.
-                turn_timeout_seconds=_params_get(
+                turn_timeout_seconds=first_present(
                     params, "session-turn-timeout-seconds", "session_turn_timeout_seconds"
                 ),
-                turn_silence_timeout_seconds=_params_get(
+                turn_silence_timeout_seconds=first_present(
                     params,
                     "session-turn-silence-timeout-seconds",
                     "session_turn_silence_timeout_seconds",
@@ -242,13 +239,11 @@ def _dispatch_session_request(
         )
     except _CancelledDuringDispatch:
         if request_runtime is not None:
-            from audiagentic.runtime.harness.pi.request_runtime import cleanup_request_runtime
-            cleanup_request_runtime(request_runtime)
+            _cleanup_request_runtime(request_runtime)
         return _transition_owned_attempt(project_root, record, "cancelled")
     except AudiaGenticError as exc:
         if request_runtime is not None:
-            from audiagentic.runtime.harness.pi.request_runtime import quarantine_request_runtime
-            quarantine_request_runtime(request_runtime, request_runtime_root.parent / "quarantine")
+            _quarantine_request_runtime(request_runtime, request_runtime_root.parent / "quarantine")
         store.append_owned_attempt(
             project_root, request_id,
             owner_epoch=record["dispatch-owner-epoch"],
@@ -295,8 +290,7 @@ def _dispatch_session_request(
                 project_root, session_id, runtime,
             )
         if request_runtime is not None and record.get("session-keep-alive") is not True:
-            from audiagentic.runtime.harness.pi.request_runtime import cleanup_request_runtime
-            cleanup_request_runtime(request_runtime)
+            _cleanup_request_runtime(request_runtime)
         return _transition_owned_attempt(
             project_root, record, "cancelled",
             updates={
@@ -341,8 +335,7 @@ def _dispatch_session_request(
             project_root, session_id, runtime,
         )
     if request_runtime is not None and record.get("session-keep-alive") is not True:
-        from audiagentic.runtime.harness.pi.request_runtime import cleanup_request_runtime
-        cleanup_request_runtime(request_runtime)
+        _cleanup_request_runtime(request_runtime)
     return _transition_owned_attempt(
         project_root, record, "completed",
         updates={
@@ -366,11 +359,29 @@ class _CancelledDuringDispatch(Exception):
     """Raised when a persisted cancel-requested flag is observed between attempts."""
 
 
-def _params_get(params: dict[str, Any], *keys: str) -> Any:
-    for key in keys:
-        if key in params:
-            return params[key]
-    return None
+def _cleanup_request_runtime(runtime_root: Path) -> None:
+    import shutil
+
+    shutil.rmtree(runtime_root, ignore_errors=True)
+
+
+def _quarantine_request_runtime(runtime_root: Path, quarantine_root: Path) -> Path:
+    import shutil
+
+    quarantine_root.mkdir(parents=True, exist_ok=True)
+    destination = quarantine_root / runtime_root.parent.name
+    if destination.exists():
+        shutil.rmtree(destination)
+    shutil.move(str(runtime_root), str(destination))
+    return destination
+
+
+def _get_stored_context_fingerprint(session_record: dict[str, Any]) -> str | None:
+    binding = session_record.get("binding")
+    if not isinstance(binding, dict):
+        return None
+    value = binding.get("execution-context-fingerprint")
+    return value if isinstance(value, str) and value else None
 
 
 def _raise_if_cancelled(project_root: Path, request_id: str) -> None:

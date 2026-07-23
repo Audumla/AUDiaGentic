@@ -62,6 +62,7 @@ from audiagentic.components.agents.agents_harness_status_evidence import (
 from audiagentic.components.agents.agents_harness_status_observer_ingress import (
     SessionObserverIngress,
 )
+
 # AS21 consumer slice: ephemeral evidence projection registry
 from audiagentic.components.agents.agents_session_lifecycle_projection import (
     SessionEvidenceProjection,
@@ -85,6 +86,8 @@ def _default_prepare_fn(
     provider_id: str,
     surface_hint: Any,
     model_id: str | None = None,
+    request_runtime_root: Path | None = None,
+    mcp_entries=None,
 ) -> PreparedSessionTransport:
     """Default provider preparation via the public providers_api seam."""
     from audiagentic.components.providers import providers_api
@@ -94,6 +97,9 @@ def _default_prepare_fn(
         provider_id=provider_id,
         surface_hint=surface_hint,
         model_id=model_id,
+        request_runtime_root=request_runtime_root,
+        mcp_entries=None if mcp_entries is None else tuple(mcp_entries),
+        require_isolated_mcp=mcp_entries is not None,
     )
 
 # Gateway defaults — overridable per session at open time (config over code:
@@ -134,6 +140,7 @@ class _SessionHandle:
         created_clock: float,
         correlation_id: str | None,
         surface_snapshot: Any = None,
+        request_runtime_root: Path | None = None,
     ) -> None:
         self.session_id = session_id
         self.transport = transport
@@ -147,6 +154,7 @@ class _SessionHandle:
         self.correlation_id = correlation_id
         # AS28 slice 4a: resolved surface snapshot (provider-neutral metadata)
         self.surface_snapshot = surface_snapshot
+        self.request_runtime_root = request_runtime_root
         # AS19 Stage-3: observer binding (tied to session lifecycle)
         self.observer_binding_id: str | None = None
         # AS19 Stage-2 Slice A: transport-observation lease from providers_api.
@@ -283,6 +291,8 @@ class SessionRuntime:
         turn_timeout_seconds: float | None = None,
         turn_silence_timeout_seconds: float | None = None,
         correlation_id: str | None = None,
+        request_runtime_root: Path | None = None,
+        mcp_entries=(),
     ) -> dict[str, Any]:
         """Open a live session; returns the persisted session record.
 
@@ -320,6 +330,8 @@ class SessionRuntime:
                     else turn_silence_timeout_seconds
                 ),
                 correlation_id=correlation_id,
+                request_runtime_root=request_runtime_root,
+                mcp_entries=tuple(mcp_entries),
             ),
             timeout=_OPEN_TIMEOUT_SECONDS,
         )
@@ -586,6 +598,8 @@ class SessionRuntime:
         turn_timeout_seconds: float,
         turn_silence_timeout_seconds: float,
         correlation_id: str | None,
+        request_runtime_root: Path | None,
+        mcp_entries,
     ) -> dict[str, Any]:
         if self._shutdown:
             raise AudiaGenticError(
@@ -596,12 +610,15 @@ class SessionRuntime:
             )
         # AS28 slice 4a: resolve provider-neutral transport via the public
         # prepare seam. No AcpLaunch / AcpSessionTransport construction here.
-        prepared = self._provider_prepare_fn(
-            project_root,
-            provider_id=provider_id,
-            surface_hint=surface_hint,
-            model_id=model_id,
-        )
+        prepare_kwargs = {
+            "provider_id": provider_id,
+            "surface_hint": surface_hint,
+            "model_id": model_id,
+        }
+        if request_runtime_root is not None:
+            prepare_kwargs["request_runtime_root"] = request_runtime_root
+            prepare_kwargs["mcp_entries"] = tuple(mcp_entries)
+        prepared = self._provider_prepare_fn(project_root, **prepare_kwargs)
         if prepared.transport is None:
             raise AudiaGenticError(
                 code="CON-AGW-095",
@@ -698,6 +715,7 @@ class SessionRuntime:
             created_clock=self._clock(),
             correlation_id=correlation_id,
             surface_snapshot=getattr(prepared, "surface", None),
+            request_runtime_root=request_runtime_root,
         )
         handle.child_pid = child_pid
         handle.child_creation_identity = child_creation_identity
@@ -1040,6 +1058,7 @@ class SessionRuntime:
     async def _fail_session(self, handle: _SessionHandle, *, reason: str) -> None:
         self._handles.pop(handle.session_id, None)
         await handle.transport.close()
+        self._cleanup_handle_runtime(handle)
         try:
             record = session_store.read_session_record(handle.project_root, handle.session_id)
             if record["state"] not in session_store.SESSION_TERMINAL_STATES:
@@ -1072,6 +1091,7 @@ class SessionRuntime:
         handle = self._handles.pop(session_id, None)
         if handle is not None:
             await handle.transport.close()
+            self._cleanup_handle_runtime(handle)
         try:
             record = session_store.read_session_record(project_root, session_id)
         except AudiaGenticError:
@@ -1108,6 +1128,14 @@ class SessionRuntime:
             }, correlation_id=handle.correlation_id if handle else None)
         logger.info("gateway session closed", extra={"session-id": session_id, "close-reason": reason})
         return record if record is not None else {"session-id": session_id, "state": "closed"}
+
+    @staticmethod
+    def _cleanup_handle_runtime(handle: _SessionHandle) -> None:
+        if handle.request_runtime_root is None:
+            return
+        import shutil
+
+        shutil.rmtree(handle.request_runtime_root, ignore_errors=True)
 
     async def _close_all(self, *, reason: str) -> None:
         for session_id in list(self._handles):

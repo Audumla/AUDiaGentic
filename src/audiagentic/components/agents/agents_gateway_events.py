@@ -26,6 +26,7 @@ from audiagentic.components.agents.agents_event_topics import (
     GATEWAY_REQUESTED_TOPIC,
     LLM_REJECTED_TOPIC,
 )
+from audiagentic.components.agents.agents_mapping import first_present
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.event import get_bus
 
@@ -36,13 +37,6 @@ _REGISTERED = False
 # name is broad enough that an unrelated future publisher could accidentally
 # trigger real provider dispatch by publishing to what looked like a neutral
 # "an LLM request happened" marker (RV32 finding).
-
-
-def _payload_get(payload: dict[str, Any], *keys: str) -> Any:
-    for key in keys:
-        if key in payload:
-            return payload[key]
-    return None
 
 
 def _publish_rejected(reason: str, metadata: dict[str, Any]) -> None:
@@ -65,13 +59,13 @@ def _on_llm_requested(event_type: str, payload: dict[str, Any], metadata: dict[s
     to hold the event dispatch thread for the whole request — run_llm_request
     via the direct API/MCP tools is the normal way to get blocking behavior).
     """
-    project_root_raw = _payload_get(payload, "project-root", "project_root")
+    project_root_raw = first_present(payload, "project-root", "project_root")
     if not project_root_raw:
         logger.warning("gateway request event missing project-root; rejecting", extra={"event_type": event_type})
         _publish_rejected("payload missing required 'project-root'", metadata)
         return
 
-    prompt_body = _payload_get(payload, "prompt-body", "prompt_body")
+    prompt_body = first_present(payload, "prompt-body", "prompt_body")
     if not prompt_body:
         logger.warning("gateway request event missing prompt-body; rejecting", extra={"event_type": event_type})
         _publish_rejected("payload missing required 'prompt-body'", metadata)
@@ -80,9 +74,9 @@ def _on_llm_requested(event_type: str, payload: dict[str, Any], metadata: dict[s
     from audiagentic.components.agents.agents_gateway_client import get_gateway_client
 
     project_root = Path(project_root_raw)
-    agent_profile_id = _payload_get(payload, "agent-profile-id", "agent_profile_id")
+    agent_profile_id = first_present(payload, "agent-profile-id", "agent_profile_id")
     blocking = bool(payload.get("blocking"))
-    source = _payload_get(payload, "source") or f"event:{GATEWAY_REQUESTED_TOPIC}"
+    source = first_present(payload, "source") or f"event:{GATEWAY_REQUESTED_TOPIC}"
 
     try:
         get_gateway_client().submit_llm_request(
@@ -119,14 +113,14 @@ def _on_cancel_requested(event_type: str, payload: dict[str, Any], metadata: dic
     the originating control event's durable audit — so this handler logs and
     returns on failure rather than dead-lettering. Never raises.
     """
-    project_root_raw = _payload_get(payload, "project-root", "project_root")
+    project_root_raw = first_present(payload, "project-root", "project_root")
     if not project_root_raw or not isinstance(project_root_raw, str):
         logger.warning(
             "gateway cancel event missing project-root; ignoring", extra={"event_type": event_type}
         )
         return
 
-    request_id = _payload_get(payload, "request-id", "request_id")
+    request_id = first_present(payload, "request-id", "request_id")
     if not request_id or not isinstance(request_id, str):
         logger.warning(
             "gateway cancel event missing request-id; ignoring", extra={"event_type": event_type}

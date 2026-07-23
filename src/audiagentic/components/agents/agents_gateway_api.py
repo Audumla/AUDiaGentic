@@ -126,23 +126,57 @@ def _runtime_fingerprint() -> dict[str, str]:
     return _cached_runtime_fingerprint()
 
 
+def _git_source_stamp(repo_root: Path) -> str:
+    """Read the current Git revision without launching a child process.
+
+    Status projection runs inside MCP stdio servers. A subprocess launched from
+    that request path can inherit the server's stdio handles and block the tool
+    indefinitely. Git's HEAD/ref files contain the same identity needed here,
+    without process or transport involvement.
+    """
+    git_entry = repo_root / ".git"
+    git_dir = git_entry
+    if git_entry.is_file():
+        marker = git_entry.read_text(encoding="utf-8").strip()
+        prefix = "gitdir:"
+        if not marker.lower().startswith(prefix):
+            return "unknown"
+        git_dir = Path(marker[len(prefix):].strip())
+        if not git_dir.is_absolute():
+            git_dir = (repo_root / git_dir).resolve()
+    if not git_dir.is_dir():
+        return "unknown"
+
+    head = (git_dir / "HEAD").read_text(encoding="utf-8").strip()
+    if head.startswith("ref:"):
+        ref_name = head.partition(":")[2].strip()
+        ref_path = git_dir.joinpath(*ref_name.split("/"))
+        if ref_path.is_file():
+            head = ref_path.read_text(encoding="utf-8").strip()
+        else:
+            packed_refs = git_dir / "packed-refs"
+            if not packed_refs.is_file():
+                return "unknown"
+            head = next(
+                (
+                    line.split(" ", 1)[0]
+                    for line in packed_refs.read_text(encoding="utf-8").splitlines()
+                    if not line.startswith(("#", "^")) and line.endswith(f" {ref_name}")
+                ),
+                "",
+            )
+    return head[:12] if len(head) >= 12 and all(char in "0123456789abcdefABCDEF" for char in head) else "unknown"
+
+
 @functools.lru_cache(maxsize=1)
 def _cached_runtime_fingerprint() -> dict[str, str]:
     from audiagentic import __version__
 
-    source_stamp = "unknown"
     try:
-        import subprocess
-
         repo_root = Path(__file__).resolve().parents[4]
-        result = subprocess.run(
-            ["git", "rev-parse", "--short=12", "HEAD"],
-            capture_output=True, text=True, timeout=2, cwd=repo_root,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            source_stamp = result.stdout.strip()
+        source_stamp = _git_source_stamp(repo_root)
     except Exception:
-        pass
+        source_stamp = "unknown"
     return {"version": __version__, "source-stamp": source_stamp}
 
 
