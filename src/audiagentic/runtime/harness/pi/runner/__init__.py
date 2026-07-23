@@ -13,6 +13,7 @@ from audiagentic.runtime.harness.config import (
 from audiagentic.runtime.harness.context import (
     AgentContext,
     env_with_pythonpath,
+    new_launch_runtime_root,
     resolve_agent_bin,
 )
 from audiagentic.runtime.harness.rig import launch_rig_if_needed
@@ -109,4 +110,5 @@ def build_global_context(*, project_root: Path, agent_runtime: Path, enable_mcp:
         enable_mcp=resolved_enable_mcp,
         server_version=server_version,
         harness_cfg=harness_cfg,
+        launch_runtime_root=new_launch_runtime_root(agent_runtime),
     )
