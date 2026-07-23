@@ -1,4 +1,4 @@
-"""Dotpath reference resolver for declarative config.
+"""Dotpath reference resolver for declarative configuration.
 
 Resolves ``module:dotpath`` references to live Python objects. Uses colon
 separator to avoid ambiguity with Python attribute access. This is the single

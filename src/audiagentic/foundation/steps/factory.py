@@ -220,7 +220,7 @@ def _build_shell(data: dict[str, Any], params: dict[str, str] | None = None) -> 
 
 
 def _build_callable(data: dict[str, Any]) -> CallableStep:
-    from audiagentic.foundation.refs import resolve_ref
+    from audiagentic.foundation.config.refs import resolve_ref
 
     fn = resolve_ref(data["fn"])
     return CallableStep(
@@ -249,7 +249,7 @@ def _build_confirm(data: dict[str, Any]) -> ConfirmStep:
 
 
 def _build_select(data: dict[str, Any], params: dict[str, str] | None = None) -> SelectStep:
-    from audiagentic.foundation.refs import resolve_ref
+    from audiagentic.foundation.config.refs import resolve_ref
 
     select_fn = resolve_ref(data["select"])
     fallback_ref = data.get("fallback")

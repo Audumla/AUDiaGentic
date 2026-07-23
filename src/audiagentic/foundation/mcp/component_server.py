@@ -16,7 +16,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 from audiagentic.foundation.contracts.output import (
     ComponentOutputEvent,
     ComponentOutputSink,
@@ -209,8 +209,10 @@ def project_root_from_env() -> Path:
 
     root = find_project_root()
     if root is None:
-        raise AudiaGenticError(
-            code="CFG-MCP-001",
+        raise make_error(
+            prefix="CFG",
+            component="MCP",
+            number=1,
             kind="mcp",
             message="could not locate project root",
             details={

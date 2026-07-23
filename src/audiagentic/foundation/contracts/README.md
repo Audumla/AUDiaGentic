@@ -20,7 +20,6 @@ Defines the canonical data formats, error envelopes, and ID generation rules for
 - **canonical_ids.py**: `validate_ids()`, provider and packet ID validation
 - **schemas/**: Flat JSON Schema files (job-record, review-report, etc.)
 - **validate_ids.py**: ID validation utilities
-- **validate_packet_dependencies.py**: Packet dependency validation
 - **validate_schemas.py**: Schema validation utilities
 
 ## Must not own

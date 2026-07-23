@@ -256,7 +256,7 @@ def probe_from_spec(spec: str) -> Probe:
         return CommandProbe(command=argv, timeout=10)
 
     if spec.startswith("custom:"):
-        from audiagentic.foundation.refs import resolve_ref
+        from audiagentic.foundation.config.refs import resolve_ref
 
         ref = _spec_payload(spec, "custom:")
         try:

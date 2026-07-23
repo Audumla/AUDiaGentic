@@ -13,7 +13,6 @@ from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error_factory
 
-from .action_executor import ActionExecutor
 from .healing_validator import HealingValidator
 from .log_recorder import LogRecorder
 from .propagation_config import load_config, validate
@@ -45,7 +44,6 @@ class StatePropagationEngine:
         self._workflow_config: dict[str, Any] | None = None
         self._log_recorder = LogRecorder(ctx, log_path)
         self._rule_evaluator: PropagationRuleEvaluator | None = None
-        self._action_executor: ActionExecutor | None = None
         self._healing_validator = HealingValidator(self)
 
     # ------------------------------------------------------------------ public
@@ -71,7 +69,6 @@ class StatePropagationEngine:
         self._rule_evaluator = PropagationRuleEvaluator(
             self.ctx, config, config.get("global", {}).get("max_depth", 10)
         )
-        self._action_executor = ActionExecutor(config)
         return config
 
     def propagate(

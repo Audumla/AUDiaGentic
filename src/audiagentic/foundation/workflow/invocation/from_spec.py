@@ -48,7 +48,7 @@ def _build_shell_step(spec: dict[str, Any]) -> ShellStep:
 
 
 def _build_callable_step(spec: dict[str, Any]) -> CallableStep:
-    from audiagentic.foundation.refs import resolve_ref
+    from audiagentic.foundation.config.refs import resolve_ref
 
     fn_ref = spec.get("fn")
     if not fn_ref:
@@ -77,7 +77,7 @@ def _build_sequence_step(spec: dict[str, Any]) -> SequenceStep:
 
 
 def _build_select_step(spec: dict[str, Any]) -> SelectStep:
-    from audiagentic.foundation.refs import resolve_ref
+    from audiagentic.foundation.config.refs import resolve_ref
 
     select_ref = spec.get("select")
     if not select_ref:

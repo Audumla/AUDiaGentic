@@ -1,4 +1,4 @@
-"""Path containment safety for file-based configuration loading.
+"""Project-root containment safety for filesystem paths.
 
 Ensures that user-supplied paths (from YAML config, prompt templates, etc.)
 cannot escape the project root via ``../`` traversal, absolute paths outside

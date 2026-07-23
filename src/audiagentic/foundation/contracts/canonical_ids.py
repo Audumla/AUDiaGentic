@@ -12,6 +12,7 @@ from pathlib import Path
 CANONICAL_SCHEMA_IDS = (
     "agent-llm-record",
     "agent-llm-session",
+    "agent-output-event",
     "approval-request",
     "change-event",
     "component-config",
@@ -37,6 +38,7 @@ CANONICAL_SCHEMA_IDS = (
     "review-bundle",
     "review-report",
     "stage-result",
+    "status-evidence",
     "validation-report",
 )
 

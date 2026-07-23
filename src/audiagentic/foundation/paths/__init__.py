@@ -12,6 +12,7 @@ from .resolution import (
     resolve_required_dir,
     resolve_required_file,
 )
+from .safety import ensure_contained
 
 __all__ = [
     "PACKAGE_ROOT",
@@ -21,6 +22,7 @@ __all__ = [
     "deep_merge",
     "find_project_root",
     "find_repo_root",
+    "ensure_contained",
     "iter_layered_candidates",
     "load_component_paths",
     "load_layered_mapping",
