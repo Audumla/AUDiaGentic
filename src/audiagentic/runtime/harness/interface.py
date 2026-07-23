@@ -10,10 +10,11 @@ No harness-specific imports are permitted in the facade or this file.
 install submodule
 -----------------
 install_to(target, project_root) -> int
-    Install the harness CLI and generate agent config under target/.
+    Verify an installed harness and generate AUDiaGentic configuration.
 
-uninstall_from(target) -> int
-    Remove CLI and generated config. Leave user assets (models, logs) intact.
+cleanup_runtime(target) -> int
+    Remove AUDiaGentic-generated runtime files. Never remove a user-installed
+    harness CLI or user assets (models, logs).
 
 build_runtime_sync(*, reason, component_id, target) -> dict
     Build a structured runtime-sync payload (no I/O).
@@ -47,9 +48,41 @@ env_flag(name, default) -> bool
 
 MCP management
 --------------
-Each harness must register a ProviderDescriptor with provider_id
-"audiagentic-harness" (or a harness-specific id) that includes a McpConfigSpec
-wired to the harness-specific mcp_format module. This is the sole mechanism
-through which MCP entries are added, removed, listed, and reloaded for the
-harness — no harness install module should implement its own MCP management.
+Two distinct MCP concerns, two distinct mechanisms — do not conflate them:
+
+1. Durable provider-facing config. The harness's matching provider descriptor
+   (``config/providers/<id>.yaml``) declares an ``mcp_config`` ManagedConfigSpec
+   wired to the provider's ``mcp_format`` module. This is the sole mechanism for
+   entries durably added/removed/listed/reloaded in the harness's own native
+   config file (e.g. for a user running the CLI standalone, outside AUDiaGentic).
+2. Launch-time curated surface. What MCP servers are visible for THIS
+   AUDiaGentic-driven launch — see "MCP launch surface" below. Provider-owned,
+   mechanism-hidden, requested through ``providers_api``, never a durable file
+   write from the harness's own install/runner code.
+
+No harness install or runner module implements its own MCP file management for
+either concern — see [CREATING_A_HARNESS.md](../../../../docs/standards/CREATING_A_HARNESS.md).
+
+MCP launch surface
+-------------------
+A harness that wants launch-time MCP tool-set control (curated vs. whatever the
+CLI natively discovers) does NOT implement this itself. Instead:
+
+1. The harness's ``runner`` calls
+   ``providers_api.prepare_projected_provider_mcp_surface(...)``. The provider
+   component owns management projection policy and delegates neutral descriptor
+   collection to ``foundation.mcp.projection`` before invoking the provider
+   materializer. Harnesses never duplicate that policy or import an adapter
+   module directly (architecture §1).
+2. The matching provider adapter package
+   (``components/providers/adapters/<id>/mcp_surface.py``) implements
+   ``prepare_mcp_surface(request) -> McpLaunchSurfaceResult`` — the ONLY place
+   that knows HOW to deliver curated entries for that specific CLI (patched
+   flags, an env var, a generated file). Optional: a provider with no such
+   module returns ``supported=False`` and callers decide how to proceed.
+
+This split exists because ``runtime.harness`` (runtime orchestration) may
+depend on ``components.providers`` via its approved public API, but
+``components.providers`` (a platform component) must never depend back on
+``runtime.harness`` — see ARCHITECTURE_STANDARDS.md §1's dependency table.
 """

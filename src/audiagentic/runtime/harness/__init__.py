@@ -63,14 +63,40 @@ def default_config_path() -> Path:
 
 
 def get_harness_type(project_root: Path | None = None) -> str:
-    """Return the configured harness type for the given project root."""
+    """Resolve which harness to use for the given project root.
+
+    Config-driven (``harness/ag`` namespace), no hardcoded harness name:
+
+    1. An explicit ``harness.type`` pin wins if set (forces that harness).
+    2. Otherwise ``harness.order`` is tried in order and the first harness whose
+       CLI is installed on the system is used.
+    3. If none in the order is installed, the most-preferred configured harness
+       (``order[0]``) is returned so config/dispatch still target a valid
+       harness; the not-installed condition surfaces at launch time.
+    """
     from audiagentic.foundation.config import load_layered_config
     cfg = load_layered_config(
         pkg_default_path=default_config_path(),
         project_root=project_root,
         namespace="harness/ag",
     )
-    return cfg.get("harness", {}).get("type", "pi")
+    harness_cfg = cfg.get("harness", {})
+
+    pinned = harness_cfg.get("type")
+    if pinned:
+        return pinned
+
+    order = harness_cfg.get("order") or []
+    if not order:
+        raise _harness_error(
+            3,
+            "no harness configured: set harness.type or harness.order in the "
+            "harness/ag config.",
+        )
+
+    from .resolution import resolve_launch_harness
+    resolved = resolve_launch_harness(order)
+    return resolved.harness_type if resolved is not None else order[0]
 
 
 def _mod(subpath: str, project_root: Path | None = None):
@@ -107,8 +133,15 @@ def version_info(project_root: Path | None = None) -> dict[str, str]:
     return _forward("install", "version_info", project_root=project_root)
 
 
-def uninstall_from(target: Path) -> int:
-    return _forward("install", "uninstall_from", target)
+def cleanup_runtime(target: Path) -> int:
+    """Remove only AUDiaGentic-generated runtime state.
+
+    A system-installed harness belongs to the user and is never removed by
+    AUDiaGentic cleanup.
+    """
+    from .pi.install import cleanup_runtime as _cleanup_runtime
+
+    return _cleanup_runtime(target)
 
 
 def build_runtime_sync(

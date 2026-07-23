@@ -1,9 +1,24 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from audiagentic.runtime.harness.context import AgentContext
 from audiagentic.runtime.harness.run_common import build_base_run_env
+
+
+def _prepare_mcp_surface(ctx: AgentContext):
+    """Compute WHAT AUDiaGentic servers belong in this launch (this module's
+    job) and ask the pi provider adapter HOW to deliver them (its job) —
+    routed through the sanctioned providers_api boundary, never an adapter
+    import directly (architecture §1)."""
+    from audiagentic.components.providers import providers_api
+    if ctx.prepared_mcp_surface is not None:
+        return ctx.prepared_mcp_surface
+    ctx.prepared_mcp_surface = providers_api.prepare_projected_provider_mcp_surface(
+        ctx.project_root,
+        provider_id="pi",
+        runtime_root=ctx.launch_runtime_root,
+        require_exact_isolation=True,
+    )
+    return ctx.prepared_mcp_surface
 
 
 def build_agent_command(ctx: AgentContext, *, smoke: bool) -> list[str]:
@@ -59,18 +74,22 @@ def build_agent_command(ctx: AgentContext, *, smoke: bool) -> list[str]:
         for flag in pi_cfg.get("extra_flags", []):
             command.append(flag)
 
-    if not smoke:
+    # Disable extension auto-discovery unconditionally — including in smoke
+    # mode, which previously omitted this. Without it, smoke checks silently
+    # also loaded whatever extensions are globally configured for pi (e.g.
+    # pi-lens), on top of our explicit MCP adapter — extra, unbounded work in
+    # exactly the path meant to be a fast, isolated health check, and the
+    # likely cause of smoke hanging once the curated MCP set grew past a
+    # couple of servers. Only the extensions we explicitly add below load.
+    if not ctx.enable_mcp:
         command.append("--no-extensions")
+    if not smoke:
         command.extend(["--extension", str(ctx.agent_dir / "extensions" / "footer.ts")])
         for ext in ext_cfg.get("load", []):
             command.extend(["--extension", str(ext)])
 
     if ctx.enable_mcp:
-        from audiagentic.runtime.harness.pi.mcp_format import pi_mcp_path
-        command.extend([
-            "--extension", str(ctx.agent_runtime / "cli" / "node_modules" / "pi-mcp-adapter"),
-            "--mcp-config", str(pi_mcp_path(ctx.project_root)),
-        ])
+        command.extend(_prepare_mcp_surface(ctx).extra_args)
 
     return command
 
@@ -80,19 +99,6 @@ def _build_run_env(ctx: AgentContext) -> dict[str, str]:
     env["HOME"] = str(ctx.agent_home)
     env["PI_CODING_AGENT_DIR"] = str(ctx.agent_dir)
     env["PI_CODING_AGENT_SESSION_DIR"] = str(ctx.project_root / ".audiagentic" / "sessions")
-    request_root = env.get("AUDIAGENTIC_PI_REQUEST_ROOT")
-    if request_root:
-        from audiagentic.runtime.harness.pi.request_runtime import PiRequestRuntime
-        root = Path(request_root)
-        runtime = PiRequestRuntime(
-            request_id=root.name,
-            root=root,
-            agent_dir=root / "agent",
-            session_dir=root / "sessions",
-            temp_dir=root / "tmp",
-            cache_dir=root / "cache",
-            project_root=ctx.project_root,
-            project_mcp_path=ctx.project_root / ".audiagentic" / "mcp.json",
-        )
-        env.update(runtime.environment())
+    if ctx.enable_mcp:
+        env.update(dict(_prepare_mcp_surface(ctx).extra_env))
     return env
