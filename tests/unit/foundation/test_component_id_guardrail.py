@@ -1,8 +1,8 @@
 """Guardrail: component ID string literals live only where the doctrine allows.
 
-Post-AR16 doctrine: YAML descriptors are the canonical source for optional
-component IDs. In Python, a component ID literal may appear only in:
-  - foundation/components/ids.py            (core IDs — no YAML descriptor)
+Post-AR16 doctrine: YAML descriptors are the canonical source for component
+IDs. In Python, a component ID literal may appear only in:
+  - foundation/components/ids.py            (core semantic branches)
   - the owning component's own package      (self-ID ``_COMPONENT_ID`` pattern)
   - explicitly allowlisted cross-component references (each with a comment)
 
@@ -99,3 +99,15 @@ def test_no_raw_component_ids_outside_allowed_locations() -> None:
             f"Use the descriptor registry, the owning component's _COMPONENT_ID, "
             f"or add a justified _CROSS_REF_ALLOW entry:\n\n  {report}"
         )
+
+
+def test_core_semantic_ids_match_core_descriptors() -> None:
+    from audiagentic.foundation.components.ids import CORE_COMPONENT_IDS
+    from audiagentic.foundation.components.registry import all_descriptors
+
+    descriptor_ids = frozenset(
+        component_id
+        for component_id, descriptor in all_descriptors().items()
+        if descriptor.core
+    )
+    assert CORE_COMPONENT_IDS == descriptor_ids

@@ -234,7 +234,7 @@ def test_probe_from_spec_custom_wraps_resolved_callable(monkeypatch, returns):
     # resolve_ref binds the target at parse time, so patch the resolver itself
     # to keep this independent of what is installed on the host.
     monkeypatch.setattr(
-        "audiagentic.foundation.refs.resolve_ref", lambda ref: (lambda: returns)
+        "audiagentic.foundation.config.refs.resolve_ref", lambda ref: (lambda: returns)
     )
     probe = probe_from_spec("custom:some.module:some_predicate")
     assert probe.check().passed is returns
@@ -242,7 +242,7 @@ def test_probe_from_spec_custom_wraps_resolved_callable(monkeypatch, returns):
 
 def test_probe_from_spec_custom_rejects_non_callable(monkeypatch):
     monkeypatch.setattr(
-        "audiagentic.foundation.refs.resolve_ref", lambda ref: "not-callable"
+        "audiagentic.foundation.config.refs.resolve_ref", lambda ref: "not-callable"
     )
     with pytest.raises(AudiaGenticError) as excinfo:
         probe_from_spec("custom:some.module:some_value")

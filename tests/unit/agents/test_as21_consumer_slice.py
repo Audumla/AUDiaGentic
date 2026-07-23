@@ -15,7 +15,6 @@ Tests:
 """
 from __future__ import annotations
 
-import pytest
 from audiagentic.components.agents.agents_session_lifecycle_projection import (
     SessionEvidenceProjection,
     _map_status_to_evidence_kind,

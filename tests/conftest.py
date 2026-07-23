@@ -75,6 +75,20 @@ def _reset_test_registries():
 
     clear()
 
+    # Component and provider descriptor registries are lazy and treat any
+    # non-empty registry as populated. Tests that install a small fixture set
+    # must not leave that partial set visible to the next test, otherwise the
+    # lazy loader never restores canonical descriptors (for example qwen).
+    from audiagentic.foundation.components.registry import reset as reset_components
+
+    reset_components()
+    try:
+        from audiagentic.components.providers.descriptors import registry as provider_registry
+
+        provider_registry._registry.reset()
+    except ImportError:
+        pass
+
     # Reset the coding-lsp language_registry so its lazy loader re-populates
     # from (now-cleared) feature registry on next access.
     try:

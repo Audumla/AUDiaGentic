@@ -99,3 +99,30 @@ def test_every_provider_error_code_literal_has_a_resolution() -> None:
         "config/components/providers/error-resolutions.yaml:\n  "
         + "\n  ".join(missing)
     )
+
+
+def test_every_foundation_error_code_literal_has_a_resolution() -> None:
+    """Foundation typed results and constants cannot bypass runtime validation."""
+    repo_root = Path(__file__).resolve().parents[3]
+    load_all_error_resolutions(
+        [repo_root / "src" / "audiagentic" / "config" / "components"]
+    )
+    foundation_src = repo_root / "src" / "audiagentic" / "foundation"
+    pattern = re.compile(
+        r'["\']((?:VAL|CON|RES|IO|INT|EXT|TO|CFG|VER|NET|UNS)-'
+        r'[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-\d{3})["\']'
+    )
+    emitted: dict[str, str] = {}
+    for path in foundation_src.rglob("*.py"):
+        for code in pattern.findall(path.read_text(encoding="utf-8")):
+            emitted.setdefault(code, str(path.relative_to(repo_root)))
+
+    missing = sorted(
+        f"{code} (emitted by {source})"
+        for code, source in emitted.items()
+        if get_error_resolution(code) is None
+    )
+    assert not missing, (
+        "foundation error codes emitted in code but absent from the error catalogue:\n  "
+        + "\n  ".join(missing)
+    )

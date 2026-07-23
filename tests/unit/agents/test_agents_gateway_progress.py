@@ -346,6 +346,29 @@ def test_gateway_overview_includes_runtime_fingerprint(tmp_path: Path, monkeypat
     assert len(fingerprint["source-stamp"]) == 12
 
 
+def test_git_source_stamp_reads_symbolic_head_without_subprocess(tmp_path: Path) -> None:
+    git_dir = tmp_path / ".git"
+    ref = git_dir / "refs" / "heads" / "main"
+    ref.parent.mkdir(parents=True)
+    (git_dir / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+    ref.write_text("0123456789abcdef0123456789abcdef01234567\n", encoding="utf-8")
+
+    assert gateway._git_source_stamp(tmp_path) == "0123456789ab"
+
+
+def test_git_source_stamp_reads_packed_ref_without_subprocess(tmp_path: Path) -> None:
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir()
+    (git_dir / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+    (git_dir / "packed-refs").write_text(
+        "# pack-refs with: peeled fully-peeled sorted\n"
+        "abcdef0123456789abcdef0123456789abcdef01 refs/heads/main\n",
+        encoding="utf-8",
+    )
+
+    assert gateway._git_source_stamp(tmp_path) == "abcdef012345"
+
+
 def test_terminal_wait_does_not_add_timeout_marker(tmp_path: Path, monkeypatch) -> None:
     _make_profile(tmp_path, "default", "local-openai")
 
@@ -687,11 +710,12 @@ def test_request_runtime_status_includes_sh15_progress_summary(tmp_path: Path, m
     req_id = submitted["request-id"]
 
     # Give the worker time to start (but it'll block on hold)
-    import time; time.sleep(0.3)
+    import time
+
+    time.sleep(0.3)
 
     status = gateway.request_runtime_status(tmp_path, req_id)
     assert "progress" in status
 
     hold.set()
     gateway.wait_llm_request(tmp_path, req_id, timeout_seconds=5)
-

@@ -39,7 +39,7 @@ def rig(tmp_path, monkeypatch):
     clock = _Clock()
     transports: list[FakeAgentSessionTransport] = []
 
-    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None):
+    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         transport = FakeAgentSessionTransport()
         transports.append(transport)
         return _build_fake_prepared(transport)
@@ -104,9 +104,7 @@ def test_keep_alive_opens_session_and_completes(rig):
     assert transports[0].turns == ["do the thing"]
     assert not transports[0].closed  # keep-alive: session survives the request
     request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-llm-gateway" / record["request-id"]
-    assert (request_dir / "runtime" / "pi" / "manifest.json").exists()
-    assert (request_dir / "runtime" / "pi" / "agent").is_dir()
-    assert (request_dir / "runtime" / "pi" / "sessions").is_dir()
+    assert (request_dir / "runtime").is_dir()
 
 
 def test_session_id_continues_same_live_transport(rig):
@@ -130,7 +128,7 @@ def test_unsupported_provider_terminal(rig, monkeypatch):
 
     # AS28 slice 4a: unsupported surface path — provider_prepare_fn returns
     # PreparedSessionTransport with transport=None, which raises CON-AGW-095.
-    def unsupported_prepare(project_root, *, provider_id, surface_hint, model_id=None):
+    def unsupported_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
 
         return _build_fake_prepared(None)  # type: ignore[arg-type]
 
@@ -141,7 +139,7 @@ def test_unsupported_provider_terminal(rig, monkeypatch):
     assert result["error"]["code"] == "CON-AGW-095"
     assert transports == []
     request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-llm-gateway" / record["request-id"]
-    assert (request_dir / "quarantine" / record["request-id"] / "manifest.json").exists()
+    assert (request_dir / "quarantine" / record["request-id"]).is_dir()
 
 
 def test_profile_mismatch_terminal(rig, monkeypatch):

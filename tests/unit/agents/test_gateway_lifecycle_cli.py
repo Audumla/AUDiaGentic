@@ -117,12 +117,9 @@ class TestGatewayStatus:
         fake = FakeStandaloneClient()
 
         from audiagentic.commands.gateway import cmd_gateway_status
-        from audiagentic.components.agents.agents_gateway_remote_client import (
-            StandaloneGatewayClient,
-        )
-
-        with mock.patch.object(
-            StandaloneGatewayClient, "__new__", return_value=fake, autospec=False
+        with mock.patch(
+            "audiagentic.components.agents.agents_gateway_remote_client.StandaloneGatewayClient",
+            return_value=fake,
         ):
             rc = cmd_gateway_status(mock.MagicMock(), tmp_path)
 
@@ -138,12 +135,9 @@ class TestGatewayDrain:
         fake = FakeStandaloneClient()
 
         from audiagentic.commands.gateway import cmd_gateway_drain
-        from audiagentic.components.agents.agents_gateway_remote_client import (
-            StandaloneGatewayClient,
-        )
-
-        with mock.patch.object(
-            StandaloneGatewayClient, "__new__", return_value=fake, autospec=False
+        with mock.patch(
+            "audiagentic.components.agents.agents_gateway_remote_client.StandaloneGatewayClient",
+            return_value=fake,
         ):
             rc = cmd_gateway_drain(mock.MagicMock(), tmp_path)
 
@@ -159,12 +153,9 @@ class TestGatewayResume:
         fake = FakeStandaloneClient()
 
         from audiagentic.commands.gateway import cmd_gateway_resume
-        from audiagentic.components.agents.agents_gateway_remote_client import (
-            StandaloneGatewayClient,
-        )
-
-        with mock.patch.object(
-            StandaloneGatewayClient, "__new__", return_value=fake, autospec=False
+        with mock.patch(
+            "audiagentic.components.agents.agents_gateway_remote_client.StandaloneGatewayClient",
+            return_value=fake,
         ):
             rc = cmd_gateway_resume(mock.MagicMock(), tmp_path)
 
@@ -181,13 +172,10 @@ class TestGatewayStop:
         fake = FakeStandaloneClient()
 
         from audiagentic.commands.gateway import cmd_gateway_stop
-        from audiagentic.components.agents.agents_gateway_remote_client import (
-            StandaloneGatewayClient,
-        )
-
         args = mock.MagicMock(force=True)
-        with mock.patch.object(
-            StandaloneGatewayClient, "__new__", return_value=fake, autospec=False
+        with mock.patch(
+            "audiagentic.components.agents.agents_gateway_remote_client.StandaloneGatewayClient",
+            return_value=fake,
         ):
             rc = cmd_gateway_stop(args, tmp_path)
 
@@ -202,13 +190,10 @@ class TestGatewayStop:
         fake = FakeStandaloneClient()
 
         from audiagentic.commands.gateway import cmd_gateway_stop
-        from audiagentic.components.agents.agents_gateway_remote_client import (
-            StandaloneGatewayClient,
-        )
-
         args = mock.MagicMock(force=False)
-        with mock.patch.object(
-            StandaloneGatewayClient, "__new__", return_value=fake, autospec=False
+        with mock.patch(
+            "audiagentic.components.agents.agents_gateway_remote_client.StandaloneGatewayClient",
+            return_value=fake,
         ):
             from audiagentic.foundation.contracts.errors import AudiaGenticError
             with pytest.raises(AudiaGenticError):
@@ -265,12 +250,11 @@ class TestGatewayRecover:
 
         from audiagentic.commands.gateway import cmd_gateway_recover
         from audiagentic.components.agents import agents_gateway_lifecycle as lc_mod
-        from audiagentic.components.agents.agents_gateway_remote_client import (
-            StandaloneGatewayClient,
-        )
-
         args = mock.MagicMock(confirm=True, reason="test")
-        with mock.patch.object(StandaloneGatewayClient, "__new__", side_effect=AssertionError("HTTP client created!")):
+        with mock.patch(
+            "audiagentic.components.agents.agents_gateway_remote_client.StandaloneGatewayClient",
+            side_effect=AssertionError("HTTP client created!"),
+        ):
             with mock.patch.object(lc_mod, "recover_unprovable_owner", fake_recover):
                 rc = cmd_gateway_recover(args, tmp_path)
 
@@ -420,4 +404,3 @@ class TestLauncherDispatch:
             proc.kill()
             _stdout, _stderr = proc.communicate()
         assert 'unrecognized arguments' not in _stderr
-

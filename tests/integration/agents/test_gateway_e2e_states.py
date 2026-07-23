@@ -5,7 +5,11 @@ import time
 from pathlib import Path
 
 import pytest
-from tests.unit.agents.test_agents_gateway_sessions import FakeTransport, _Clock
+from tests.unit.agents.test_agents_gateway_sessions import (
+    FakeAgentSessionTransport,
+    _build_fake_prepared,
+    _Clock,
+)
 
 from audiagentic.components.agents import agents_gateway_api as gateway
 from audiagentic.components.agents import agents_gateway_queue
@@ -19,7 +23,10 @@ from audiagentic.components.providers.providers_api import (
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state
-from audiagentic.foundation.transports import AcpEvent, AcpLaunch, AcpResult
+from audiagentic.foundation.transports import AcpLaunch
+from audiagentic.foundation.transports.agent_session import SessionTurnResult
+
+pytestmark = pytest.mark.no_parallel
 
 
 @pytest.fixture(autouse=True)
@@ -126,6 +133,10 @@ def test_request_state_matrix_completed_failed_timeout_cancelled_rejected(
     hold.set()
     finished_running = gateway.wait_llm_request(tmp_path, running["request-id"], timeout_seconds=5)
     assert finished_running["state"] == "completed"
+    finished_queued = gateway.wait_llm_request(
+        tmp_path, still_queued["request-id"], timeout_seconds=5
+    )
+    assert finished_queued["state"] == "completed"
     terminal_status = gateway.request_runtime_status(tmp_path, running["request-id"])
     assert terminal_status["queue-state"] == "terminal"
     assert terminal_status["profile-slot"] is None
@@ -198,17 +209,17 @@ def test_session_states_open_turn_close_and_orphan_detection(
     monkeypatch,
 ) -> None:
     _make_profile(tmp_path, provider_id="opencode", model_id="m1")
-    transports: list[FakeTransport] = []
+    transports: list[FakeAgentSessionTransport] = []
 
-    def factory(launch, cwd):
-        transport = FakeTransport(launch, cwd)
+    def factory(project_root, **kwargs):
+        transport = FakeAgentSessionTransport()
         transports.append(transport)
-        return transport
+        return _build_fake_prepared(transport)
 
     runtime = SessionRuntime(
         clock=_Clock(),
         reap_interval_seconds=60,
-        transport_factory=factory,
+        provider_prepare_fn=factory,
     )
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
     monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
@@ -268,17 +279,17 @@ def test_continued_session_explicit_false_closes_after_turn_if_quiescent(
     """Continuing a session with session_keep_alive=False explicitly closes
     it after the turn if quiescent."""
     _make_profile(tmp_path, provider_id="opencode", model_id="m1")
-    transports: list[FakeTransport] = []
+    transports: list[FakeAgentSessionTransport] = []
 
-    def factory(launch, cwd):
-        transport = FakeTransport(launch, cwd)
+    def factory(project_root, **kwargs):
+        transport = FakeAgentSessionTransport()
         transports.append(transport)
-        return transport
+        return _build_fake_prepared(transport)
 
     runtime = SessionRuntime(
         clock=_Clock(),
         reap_interval_seconds=60,
-        transport_factory=factory,
+        provider_prepare_fn=factory,
     )
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
     monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
@@ -328,17 +339,17 @@ def test_continued_session_explicit_true_keeps_live_after_turn(
     """Continuing a session with session_keep_alive=True keeps it live after
     the turn and allows bounds updates."""
     _make_profile(tmp_path, provider_id="opencode", model_id="m1")
-    transports: list[FakeTransport] = []
+    transports: list[FakeAgentSessionTransport] = []
 
-    def factory(launch, cwd):
-        transport = FakeTransport(launch, cwd)
+    def factory(project_root, **kwargs):
+        transport = FakeAgentSessionTransport()
         transports.append(transport)
-        return transport
+        return _build_fake_prepared(transport)
 
     runtime = SessionRuntime(
         clock=_Clock(),
         reap_interval_seconds=60,
-        transport_factory=factory,
+        provider_prepare_fn=factory,
     )
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
     monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
@@ -468,18 +479,18 @@ def test_request_runtime_status_projects_latest_session_turn_event(
 ) -> None:
     _make_profile(tmp_path, provider_id="opencode", model_id="m1")
     gate = threading.Event()
-    transports: list[FakeTransport] = []
+    transports: list[FakeAgentSessionTransport] = []
 
-    def factory(launch, cwd):
-        transport = FakeTransport(launch, cwd)
+    def factory(project_root, **kwargs):
+        transport = FakeAgentSessionTransport()
         transport.block_event = gate
         transports.append(transport)
-        return transport
+        return _build_fake_prepared(transport)
 
     runtime = SessionRuntime(
         clock=_Clock(),
         reap_interval_seconds=60,
-        transport_factory=factory,
+        provider_prepare_fn=factory,
     )
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
     monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
@@ -531,47 +542,34 @@ def test_cancelled_session_turn_preserves_bounded_result_diagnostics(
     _make_profile(tmp_path, provider_id="opencode", model_id="m1")
     started = threading.Event()
 
-    class OutputOnCancelTransport(FakeTransport):
-        async def prompt(self, prompt: str, **kwargs) -> AcpResult:
-            cancel_signal = kwargs.get("cancel_signal")
+    class OutputOnCancelTransport(FakeAgentSessionTransport):
+        async def prompt(self, prompt, sink=None, **kwargs) -> SessionTurnResult:
+            cancel_signal = prompt.cancel_token
             started.set()
             while cancel_signal is None or not cancel_signal.is_set():
                 import asyncio
 
                 await asyncio.sleep(0.01)
-            self.turns.append(prompt)
-            event = AcpEvent(
-                sequence=1,
-                kind="assistant-message",
-                timestamp="2026-07-19T00:00:00Z",
-                session_id="prov-ses-1",
-                text="partial review finding",
-                terminal=False,
-                error=None,
-                ext={},
-            )
-            return AcpResult(
-                session_id="prov-ses-1",
+            self.turns.append(prompt.body)
+            return SessionTurnResult(
+                turn_id=prompt.turn_id,
                 stop_reason="cancelled",
-                events=(event,),
-                total_events=2,
-                dropped_events=0,
-                bytes_buffered=len(event.text or ""),
-                terminal_event=None,
-                callback_disabled=False,
+                observations_delivered=2,
+                dropped_observations=0,
+                final_summary="partial review finding",
             )
 
     transports: list[OutputOnCancelTransport] = []
 
-    def factory(launch, cwd):
-        transport = OutputOnCancelTransport(launch, cwd)
+    def factory(project_root, **kwargs):
+        transport = OutputOnCancelTransport()
         transports.append(transport)
-        return transport
+        return _build_fake_prepared(transport)
 
     runtime = SessionRuntime(
         clock=_Clock(),
         reap_interval_seconds=60,
-        transport_factory=factory,
+        provider_prepare_fn=factory,
     )
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
     monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
@@ -613,17 +611,17 @@ def test_as33_capabilities_absent_when_no_snapshot(
 ) -> None:
     """AS33: capabilities key is absent when session record has no captured snapshot."""
     _make_profile(tmp_path, provider_id="opencode", model_id="m1")
-    transports: list[FakeTransport] = []
+    transports: list[FakeAgentSessionTransport] = []
 
-    def factory(launch, cwd):
-        transport = FakeTransport(launch, cwd)
+    def factory(project_root, **kwargs):
+        transport = FakeAgentSessionTransport()
         transports.append(transport)
-        return transport
+        return _build_fake_prepared(transport)
 
     runtime = SessionRuntime(
         clock=_Clock(),
         reap_interval_seconds=60,
-        transport_factory=factory,
+        provider_prepare_fn=factory,
     )
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
     monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
@@ -659,17 +657,17 @@ def test_as33_capabilities_exposed_from_explicit_snapshot(
     import json
 
     _make_profile(tmp_path, provider_id="opencode", model_id="m1")
-    transports: list[FakeTransport] = []
+    transports: list[FakeAgentSessionTransport] = []
 
-    def factory(launch, cwd):
-        transport = FakeTransport(launch, cwd)
+    def factory(project_root, **kwargs):
+        transport = FakeAgentSessionTransport()
         transports.append(transport)
-        return transport
+        return _build_fake_prepared(transport)
 
     runtime = SessionRuntime(
         clock=_Clock(),
         reap_interval_seconds=60,
-        transport_factory=factory,
+        provider_prepare_fn=factory,
     )
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
     monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
@@ -732,17 +730,17 @@ def test_as33_capabilities_redacts_unsafe_fields(
     import json
 
     _make_profile(tmp_path, provider_id="opencode", model_id="m1")
-    transports: list[FakeTransport] = []
+    transports: list[FakeAgentSessionTransport] = []
 
-    def factory(launch, cwd):
-        transport = FakeTransport(launch, cwd)
+    def factory(project_root, **kwargs):
+        transport = FakeAgentSessionTransport()
         transports.append(transport)
-        return transport
+        return _build_fake_prepared(transport)
 
     runtime = SessionRuntime(
         clock=_Clock(),
         reap_interval_seconds=60,
-        transport_factory=factory,
+        provider_prepare_fn=factory,
     )
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
     monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
@@ -860,18 +858,18 @@ def test_running_session_request_has_latest_turn_event_but_no_output_yet(
     provider-session-ref, full provider-ref-key, or output leaks."""
     _make_profile(tmp_path, provider_id="opencode", model_id="m1")
     gate = threading.Event()
-    transports: list[FakeTransport] = []
+    transports: list[FakeAgentSessionTransport] = []
 
-    def factory(launch, cwd):
-        transport = FakeTransport(launch, cwd)
+    def factory(project_root, **kwargs):
+        transport = FakeAgentSessionTransport()
         transport.block_event = gate
         transports.append(transport)
-        return transport
+        return _build_fake_prepared(transport)
 
     runtime = SessionRuntime(
         clock=_Clock(),
         reap_interval_seconds=60,
-        transport_factory=factory,
+        provider_prepare_fn=factory,
     )
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
     monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
@@ -936,3 +934,4 @@ def test_running_session_request_has_latest_turn_event_but_no_output_yet(
     finally:
         gate.set()
         runtime.shutdown()
+

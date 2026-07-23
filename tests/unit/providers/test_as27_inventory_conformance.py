@@ -559,10 +559,8 @@ class TestPlatformNeutralEligibility:
     def test_cross_platform_eligible_set_consistent(self):
         """Eligible set is the same on all validated platforms for opencode-acp."""
         from audiagentic.components.providers.services.harness_observability_inventory import (
-            list_eligible_transport_observation_surfaces,
-        )
-        from audiagentic.components.providers.services.harness_observability_inventory import (
             get_harness_surface_capability_fact,
+            list_eligible_transport_observation_surfaces,
         )
 
         fact = get_harness_surface_capability_fact("opencode", "opencode-acp")

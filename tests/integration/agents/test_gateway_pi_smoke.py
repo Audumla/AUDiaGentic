@@ -29,6 +29,7 @@ gateway-profiles.yaml in gateway_docker_harness.py.
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 from pathlib import Path
@@ -47,6 +48,7 @@ pytestmark = [
 
 _DOCKER_GATE_ENV = "AUDIAGENTIC_GATEWAY_PI_SMOKE_DOCKER"
 _MODEL_PROFILE = "qwen3.5-0.8b"
+_PI_MODEL_REF = "audiagentic/audiagentic-rig"
 _PROMPT = "Reply with exactly: OK"
 
 
@@ -102,7 +104,7 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
         tmp_path,
         profile_id="pi-smoke",
         provider_id="pi",
-        model_id=_MODEL_PROFILE,
+        model_id=_PI_MODEL_REF,
         max_concurrency=1,
     )
 
@@ -117,10 +119,9 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
     assert_install_result_ok("pi", install_result)
 
     harness_runtime = global_harness_runtime()
-    pi_bin_dir = harness_runtime / "cli" / "node_modules" / ".bin"
-    assert pi_bin_dir.is_dir(), f"Pi CLI bin dir missing after real install: {pi_bin_dir}"
-    monkeypatch.setenv("PATH", str(pi_bin_dir) + os.pathsep + os.environ.get("PATH", ""))
-    assert shutil.which("pi") is not None, "pi executable not resolvable on PATH after real install"
+    # Provider lifecycle installs the harness in the system npm prefix.  The
+    # runtime intentionally no longer carries a second embedded CLI copy.
+    assert shutil.which("pi") is not None, "system Pi executable not resolvable after real install"
 
     # The gateway's full-isolation worker copies models.json from
     # PI_CODING_AGENT_DIR (agents_gateway_worker._replacement_environment)
@@ -137,7 +138,7 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
         {
             "access-mode": "cli",
             "install-mode": "external-configured",
-            "default-model": _MODEL_PROFILE,
+            "default-model": _PI_MODEL_REF,
         },
     )
 
@@ -161,7 +162,7 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
         finally:
             reset_gateway_client()
 
-        assert result["state"] == "completed", result
+        assert result["state"] == "completed", json.dumps(result, indent=2, default=str)
         assert result["provider-id"] == "pi"
         assert (result.get("output") or "").strip(), f"pi produced no output: {result}"
     finally:

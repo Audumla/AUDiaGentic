@@ -211,7 +211,7 @@ def _provision_provider_project(tmp_path: Path, provider_id: str, monkeypatch) -
     )
     _write_harness_config(tmp_path, provider_id)
     harness_runtime = tmp_path / "harness-runtime"
-    assert _main(["--project", str(tmp_path), "install", "--target", str(harness_runtime)]) == 0
+    assert _main(["--project", str(tmp_path), "bootstrap", "--target", str(harness_runtime)]) == 0
 
     # Real CLI install, through the same recipe tests/integration/providers/harness.py
     # uses for its own clean-room tests — the fix for the old test's
