@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .lsp_bridge import LspJsonRpc
-from .lsp_diagnostics import LspDiagnostics
+from .lsp_diagnostics import LspDiagnostics, supports_workspace_diagnostic
 from .lsp_protocol_ops import LspProtocolOps
 from .uri_utils import canonical_uri, path_to_language_id, path_to_uri, uri_to_path
 
@@ -285,10 +285,7 @@ class LspSession:
 
     def _supports_workspace_diagnostic(self) -> bool:
         """True if the server advertises LSP 3.17 workspace pull diagnostics."""
-        provider = self._capabilities.get("diagnosticProvider")
-        if isinstance(provider, dict):
-            return bool(provider.get("workspaceDiagnostics"))
-        return bool(provider)
+        return supports_workspace_diagnostic(self._capabilities)
 
     def _batch_cli_name(self) -> str | None:
         return self._diagnostics_handler._batch_cli_name()

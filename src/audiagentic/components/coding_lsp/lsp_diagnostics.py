@@ -332,7 +332,12 @@ class LspDiagnostics:
 
     def _supports_workspace_diagnostic(self) -> bool:
         """True if the server advertises LSP 3.17 workspace pull diagnostics."""
-        provider = self._capabilities.get("diagnosticProvider")
-        if isinstance(provider, dict):
-            return bool(provider.get("workspaceDiagnostics"))
-        return bool(provider)
+        return supports_workspace_diagnostic(self._capabilities)
+
+
+def supports_workspace_diagnostic(capabilities: dict[str, Any]) -> bool:
+    """Interpret the LSP 3.17 workspace pull-diagnostics capability."""
+    provider = capabilities.get("diagnosticProvider")
+    if isinstance(provider, dict):
+        return bool(provider.get("workspaceDiagnostics"))
+    return bool(provider)

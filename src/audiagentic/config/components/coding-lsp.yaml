@@ -4,7 +4,7 @@ id: coding-lsp
 display-name: Coding LSP
 description: Language server protocol bridge for AI-assisted code navigation and editing
 lifecycle-observer: audiagentic.components.coding_lsp.coding_lsp_bootstrap
-status-hook: audiagentic.components.coding_lsp.coding_lsp_bootstrap.status_hook
+status-hook: audiagentic.components.coding_lsp.coding_lsp_bootstrap.status_payload
 implementation-cardinality: exclusive
 feature-kinds:
   - language
@@ -294,4 +294,3 @@ mcp-servers:
 # tool list duplicated into every provider's instruction file drifts out of sync
 # (e.g. advertised to opencode/pi, which self-provide LSP and never get ag-lsp).
 # Usage doctrine lives in each MCP server's `instructions` field above.
-
