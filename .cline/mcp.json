@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "ag-ledger": {
-      "command": "C:\\example-dev-root\\audiagentic\\.venv\\Scripts\\python.exe",
+      "command": "C:\\example-home\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\python.exe",
       "args": [
         "-m",
         "audiagentic.launcher",
@@ -13,7 +13,7 @@
       }
     },
     "ag-agents": {
-      "command": "C:\\example-dev-root\\audiagentic\\.venv\\Scripts\\python.exe",
+      "command": "C:\\example-home\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\python.exe",
       "args": [
         "-m",
         "audiagentic.launcher",
@@ -25,7 +25,7 @@
       }
     },
     "ag-agents-gateway": {
-      "command": "C:\\example-dev-root\\audiagentic\\.venv\\Scripts\\python.exe",
+      "command": "C:\\example-home\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\python.exe",
       "args": [
         "-m",
         "audiagentic.launcher",
@@ -37,7 +37,7 @@
       }
     },
     "ag-lsp": {
-      "command": "C:\\example-dev-root\\audiagentic\\.venv\\Scripts\\python.exe",
+      "command": "C:\\example-home\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\python.exe",
       "args": [
         "-m",
         "audiagentic.launcher",
@@ -49,7 +49,7 @@
       }
     },
     "ag-planning": {
-      "command": "C:\\example-dev-root\\audiagentic\\.venv\\Scripts\\python.exe",
+      "command": "C:\\example-home\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\python.exe",
       "args": [
         "-m",
         "audiagentic.launcher",
@@ -92,11 +92,7 @@
     },
     "hindsight": {
       "type": "http",
-      "url": "http://192.0.2.123:8888/mcp",
-      "headers": {
-        "Authorization": "Bearer NONE",
-        "X-Bank-Id": "audiagentic"
-      }
+      "url": "http://192.0.2.123:8888/mcp"
     }
   }
 }
