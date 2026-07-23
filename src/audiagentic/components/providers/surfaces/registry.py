@@ -17,9 +17,11 @@ def _ensure_provider_modules_registered() -> None:
         if adapters is not None:
             load_providers = getattr(adapters, "load_providers", None)
             if callable(load_providers):
-                # Clear before reload so re-registration isn't seen as collision
-                _renderer_registry._items.clear()
-                _contribution_renderer_registry._items.clear()
+                # Registry.reset() already removed the old registrations. Reload
+                # custom surface modules, whose import-time registrations would
+                # otherwise remain cached, then rebuild descriptor-driven ones.
+                # Do not clear here: callers may have registered an intentional
+                # custom renderer before the first lazy read, and custom wins.
                 for module_name, module in list(sys.modules.items()):
                     if (
                         module_name.startswith("audiagentic.components.providers.adapters.")
@@ -27,9 +29,21 @@ def _ensure_provider_modules_registered() -> None:
                     ):
                         importlib.reload(module)
                 load_providers()
+                _renderer_registry._loaded = True
+                _contribution_renderer_registry._loaded = True
         return
     importlib.import_module("audiagentic.components.providers")
     _providers_imported = True
+    # The package may already have been imported through another provider API
+    # before this lazy registry was read. In that case import_module is a no-op
+    # and a preceding reset left the registry empty, so explicitly repopulate it.
+    if not _renderer_registry._items and not _contribution_renderer_registry._items:
+        adapters = importlib.import_module("audiagentic.components.providers.adapters")
+        adapters.load_providers()
+    # Both registries are populated by this one loader. Mark the pair together
+    # so reading the other registry cannot repeat import-time registration.
+    _renderer_registry._loaded = True
+    _contribution_renderer_registry._loaded = True
 
 
 _renderer_registry: Registry[ProviderSurfaceRenderer] = Registry(

@@ -80,6 +80,29 @@ def load_acp_launch_builder(provider_id: str) -> Callable[..., Any] | None:
     return getattr(module, "build_acp_launch", None)
 
 
+def load_mcp_surface_builder(provider_id: str) -> Callable[..., Any] | None:
+    """Return the provider's MCP launch-surface builder, if it has one.
+
+    Convention, mirroring ``load_acp_launch_builder``: an adapter package that
+    can build an AUDiaGentic-curated MCP launch surface exposes
+    ``prepare_mcp_surface(request: McpLaunchSurfaceRequest) -> McpLaunchSurfaceResult``
+    in its ``mcp_surface`` submodule. Returns None when the provider has no
+    such support — the caller decides how to fail (or falls back to whatever
+    the provider natively discovers).
+    """
+    name = provider_id.replace("-", "_")
+    if keyword.iskeyword(name):
+        name = name + "_"
+    module_path = f"{_ADAPTER_BASE}.{name}.mcp_surface"
+    try:
+        if not importlib.util.find_spec(module_path):
+            return None
+    except (ModuleNotFoundError, AttributeError):
+        return None
+    module = import_module(module_path)
+    return getattr(module, "prepare_mcp_surface", None)
+
+
 def load_execution_environment_builder(provider_id: str) -> Callable[..., Any] | None:
     """Load an optional provider-owned isolated-worker environment builder."""
     name = provider_id.replace("-", "_")

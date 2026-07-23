@@ -25,7 +25,7 @@ from audiagentic.foundation.features.state import get_implementation_feature_ena
 from ..descriptors.base import ProviderDescriptor
 from ..descriptors.feature_mapping import impl_features_for
 from ..descriptors.registry import all_descriptors
-from .provider_config import resolve_provider_enabled
+from .provider_config import is_provider_enabled
 
 _COMPONENT_ID = "providers"
 
@@ -61,14 +61,14 @@ def enabled_provider_ids(project_root: Path) -> set[str]:
     return {
         provider_id
         for provider_id in all_descriptors()
-        if resolve_provider_enabled(project_root, provider_id)
+        if is_provider_enabled(project_root, provider_id)
     }
 
 
 def resolve_active_provider_features(project_root: Path) -> list[ResolvedProviderFeature]:
     resolved: list[ResolvedProviderFeature] = []
     for provider_id, descriptor in sorted(all_descriptors().items()):
-        if not resolve_provider_enabled(project_root, provider_id):
+        if not is_provider_enabled(project_root, provider_id):
             continue
         for feature in impl_features_for(descriptor):
             if _feature_active(project_root, provider_id, feature.kind, feature.feature_id):

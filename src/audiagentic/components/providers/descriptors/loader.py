@@ -13,9 +13,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.config.refs import resolve_ref
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.paths.names import get_package_providers_config_dir
-from audiagentic.foundation.refs import resolve_ref
 from audiagentic.foundation.toolchains.managed_config import (
     REMOTE_CAPABILITY,
     ManagedConfigSpec,
@@ -607,6 +607,16 @@ def _construct_provider_descriptor(**values: Any) -> ProviderDescriptor:
                 "execution_isolation_tier": descriptor.execution_isolation_tier,
             },
         )
+    if descriptor.mcp_launch_isolation_tier not in {"exact", "additive", "unsupported"}:
+        raise AudiaGenticError(
+            code="VAL-PCAP-011",
+            kind="providers",
+            message="mcp_launch_isolation_tier must be exact, additive, or unsupported",
+            details={
+                "provider_id": descriptor.provider_id,
+                "mcp_launch_isolation_tier": descriptor.mcp_launch_isolation_tier,
+            },
+        )
     validate_provider_capability_facts(descriptor)
     validate_automation_capabilities(descriptor.automation_capabilities)
     from .session_surface_declarations import validate_session_surface_declarations
@@ -627,6 +637,7 @@ PROVIDER_SPEC.add("cli_install", yaml_key="cli_install", kind="nested", builder=
 PROVIDER_SPEC.add("host_capabilities", yaml_key="host_capabilities", kind="nested", builder=_build_host_capabilities, default=tuple())
 PROVIDER_SPEC.add("capability_facts", yaml_key="capability_facts", kind="nested", builder=_build_capability_facts, default=tuple())
 PROVIDER_SPEC.add("execution_isolation_tier", yaml_key="execution_isolation_tier", kind="data", required=True)
+PROVIDER_SPEC.add("mcp_launch_isolation_tier", yaml_key="mcp_launch_isolation_tier", kind="data", default="unsupported")
 PROVIDER_SPEC.add("automation_capabilities", yaml_key="automation_capabilities", kind="nested", builder=_build_automation_capabilities, default=tuple())
 PROVIDER_SPEC.add("permissions", yaml_key="permissions", kind="nested", builder=_build_permissions, default=ProviderPermissions())
 PROVIDER_SPEC.add("agent_files", yaml_key="agent_files", kind="nested", builder=_build_agent_files, default=tuple())
