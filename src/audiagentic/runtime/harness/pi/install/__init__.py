@@ -3,12 +3,11 @@ from __future__ import annotations
 import logging
 import os
 import shutil
-import subprocess
 import urllib.request
 from pathlib import Path
 
 from audiagentic.foundation.cli_io import print_message
-from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.runtime.harness.reload import (
     build_runtime_sync as _build_sync,
 )
@@ -18,7 +17,6 @@ from audiagentic.runtime.harness.reload import (
 
 from . import constants as _c
 from .config import materialize_agent_config
-from .patches import apply_lockdown_patches
 
 logger = logging.getLogger(__name__)
 _TARGET = "pi-runtime"
@@ -32,27 +30,6 @@ def version_info(project_root: Path | None = None) -> dict[str, str]:
         "agent": _c.AGENT_VERSION or agent_cfg.get("version", "latest"),
         "mcp_adapter": _c.AGENT_MCP_ADAPTER_VERSION or agent_cfg.get("mcp_adapter_version", "latest"),
     }
-
-
-def _package_recipe(pi_cfg: dict) -> tuple[str, str, str, str, str]:
-    """Return managed package names, ACP version, and runtime extra."""
-    agent_cfg = pi_cfg.get("agent", {})
-    packages = agent_cfg.get("packages", {})
-    return (
-        str(packages.get("cli", "@earendil-works/pi-coding-agent")),
-        str(packages.get("mcp_adapter", "pi-mcp-adapter")),
-        str(packages.get("acp", "pi-acp")),
-        str(agent_cfg.get("acp_version", "0.0.31")),
-        str(agent_cfg.get("runtime_extra", "acp")),
-    )
-
-
-def _npm_env() -> dict[str, str]:
-    env = os.environ.copy()
-    # Node 22 in Docker can intermittently crash compiling large npm installs.
-    # JIT-less mode is slower but materially more stable for deterministic tests.
-    env.setdefault("NODE_OPTIONS", "--jitless")
-    return env
 
 
 def _repo_root(project_root: Path | None) -> Path | None:
@@ -134,39 +111,8 @@ def request_runtime_reload(
     return write_reload_marker(project_root, reason=reason, component_id=component_id, target=_TARGET, has_mcp_servers=has_mcp_servers)
 
 
-def _validate_agent_install(npm_dir: Path) -> None:
-    """Verify that the agent install is complete — detect empty dist/ in nested packages."""
-    pi_pkg = npm_dir / "node_modules" / "@earendil-works" / "pi-coding-agent"
-    if not pi_pkg.exists():
-        raise make_error(
-            prefix="RES",
-            component="PIINST",
-            number=6,
-            kind="pi-harness",
-            message=f"Agent install failed: {pi_pkg} not found after npm install",
-            details={"path": str(pi_pkg)},
-        )
-    # Walk nested @earendil-works packages and check that each dist/ is non-empty.
-    for pkg_dir in (pi_pkg / "node_modules" / "@earendil-works").glob("*"):
-        dist = pkg_dir / "dist"
-        if dist.exists() and not any(dist.iterdir()):
-            raise make_error(
-                prefix="RES",
-                component="PIINST",
-                number=7,
-                kind="pi-harness",
-                message=(
-                f"Agent install incomplete: {pkg_dir.name}/dist is empty.\n"
-                f"Run: npm install --prefix {npm_dir} to retry."
-                ),
-                details={"package": pkg_dir.name, "path": str(dist)},
-            )
-
-
 def install_to(target: Path, project_root: Path | None = None) -> int:
-    npm_dir = target / "cli"
-
-    for path in (npm_dir, target / "agent", target / "logs"):
+    for path in (target / "agent", target / "logs"):
         path.mkdir(parents=True, exist_ok=True)
 
     rig_bin = target / "rig" / "bin"
@@ -181,47 +127,21 @@ def install_to(target: Path, project_root: Path | None = None) -> int:
         print_message("Provisioning embedded rig assets for Pi runtime")
         _provision_embedded_rig(target, project_root)
 
-    npm = _c._npm()
-    pi_cfg = _c.load_pi_config(project_root=project_root)
-    agent_cfg = pi_cfg.get("agent", {})
-    agent_version = _c.AGENT_VERSION or agent_cfg.get("version", "latest")
-    mcp_adapter_version = _c.AGENT_MCP_ADAPTER_VERSION or agent_cfg.get("mcp_adapter_version", "latest")
-    cli_package, mcp_package, acp_package, acp_version, runtime_extra = _package_recipe(pi_cfg)
-
-    # Install both packages in one npm install call so npm resolves the full
-    # dependency tree in a single pass. Sequential installs cause npm to
-    # reorganize the tree on the second call, which can leave nested package
-    # dist/ directories empty (observed with pi-tui on Node 22+).
-    print_message(
-        f"Installing {cli_package}@{agent_version} + {mcp_package}@{mcp_adapter_version}"
-        f" + {acp_package}@{acp_version}"
-        f" into {npm_dir} (runtime extra: audiagentic[{runtime_extra}])"
-    )
-    subprocess.run(
-        [
-            npm, "install", "--prefer-offline", "--prefix", str(npm_dir),
-            f"{cli_package}@{agent_version}",
-            f"{mcp_package}@{mcp_adapter_version}",
-            f"{acp_package}@{acp_version}",
-        ],
-        check=True,
-        env=_npm_env(),
-    )
-    _validate_agent_install(npm_dir)
-    apply_lockdown_patches(npm_dir, project_root=project_root)
-
+    # AUDiaGentic no longer bundles a harness CLI. The harness is whichever
+    # supported one is installed on the system (config-driven order); install
+    # only provisions the rig backend and materializes the agent config.
     harness_cfg = _c.load_harness_config(project_root=project_root)
     materialize_agent_config(target, harness_cfg, project_root=project_root)
     return 0
 
 
-def uninstall_from(target: Path) -> int:
-    """Remove the Pi harness CLI and generated agent config.
+def cleanup_runtime(target: Path) -> int:
+    """Remove generated agent config while preserving user-owned assets.
 
     Rig binaries, models, and logs are left in place because they may be large
     user-managed assets or useful diagnostics.
     """
-    for path in (target / "cli", target / "agent"):
+    for path in (target / "agent",):
         if path.exists():
             shutil.rmtree(path)
     return 0
@@ -265,8 +185,11 @@ def refresh_harness_config_if_installed(
     Returns True if harness was present and config was refreshed.
     """
     from audiagentic.foundation.paths.home import global_harness_runtime
+    from audiagentic.runtime.harness import get_harness_type
+    from audiagentic.runtime.harness.resolution import harness_cli_available
+
     harness_runtime = global_harness_runtime()
-    if not (harness_runtime / "cli" / "node_modules" / ".bin").exists():
+    if harness_cli_available(get_harness_type(project_root)) is None:
         return False
     try:
         refresh_materialized_agent_config(harness_runtime, project_root=project_root)
@@ -277,5 +200,4 @@ def refresh_harness_config_if_installed(
     except AudiaGenticError:
         logger.warning("Failed to request runtime reload for %s", component_id, exc_info=True, extra={"component": component_id})
     return True
-
 

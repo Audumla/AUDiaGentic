@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import logging
 import sys
-from pathlib import Path
 
 from audiagentic.foundation.cli_io import print_message
 
@@ -46,7 +45,7 @@ def prompt_update(info: dict) -> str:
     return "no"
 
 
-def maybe_prompt_update(project_root: Path | None = None) -> None:
+def maybe_prompt_update() -> None:
     """Check for an update and prompt if running interactively.
 
     Called at launch when auto-update is enabled via AUDIAGENTIC_AUTO_UPDATE_ENABLED.
@@ -67,7 +66,7 @@ def maybe_prompt_update(project_root: Path | None = None) -> None:
             result = install_version(info["latest"])
             exit_code, should_exit = _handle_install_result(result, info["latest"])
             if should_exit:
-                sys.exit(0)
+                raise SystemExit(exit_code)
             record_failed_install(info["latest"])
             if not result.get("locked"):
                 print_message(f"\n  Update failed: {result.get('error')}. Continuing with current version.\n")

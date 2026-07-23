@@ -14,7 +14,8 @@ from pathlib import Path
 
 from audiagentic.foundation.cli_io import print_message
 from audiagentic.foundation.contracts.errors import make_error
-from audiagentic.runtime.harness.context import AgentContext
+from audiagentic.runtime.harness.config import env_flag as env_flag
+from audiagentic.runtime.harness.context import AgentContext, new_launch_runtime_root
 from audiagentic.runtime.harness.run_common import (
     build_base_run_env,
     make_log_path,
@@ -26,10 +27,21 @@ from audiagentic.runtime.harness.run_common import (
 logger = logging.getLogger(__name__)
 
 
-def env_flag(name: str, default: bool = False) -> bool:
-    truthy = {"1", "true", "yes", "on"}
-    value = os.environ.get(name)
-    return default if value is None else value.strip().lower() in truthy
+def _prepare_mcp_surface(ctx: AgentContext):
+    """Compute WHAT AUDiaGentic servers belong in this launch (this module's
+    job) and ask the opencode provider adapter HOW to deliver them (its job) —
+    routed through the sanctioned providers_api boundary, never an adapter
+    import directly (architecture §1)."""
+    from audiagentic.components.providers import providers_api
+    if ctx.prepared_mcp_surface is not None:
+        return ctx.prepared_mcp_surface
+    ctx.prepared_mcp_surface = providers_api.prepare_projected_provider_mcp_surface(
+        ctx.project_root,
+        provider_id="opencode",
+        runtime_root=ctx.launch_runtime_root,
+        require_exact_isolation=True,
+    )
+    return ctx.prepared_mcp_surface
 
 
 def build_global_context(
@@ -59,7 +71,7 @@ def build_global_context(
             kind="opencode-harness",
             message=(
                 "opencode CLI not found on PATH. "
-                "Install it with: audiagentic install  or  npm install -g opencode-ai"
+                "Install opencode, then run: audiagentic bootstrap"
             ),
         )
 
@@ -111,6 +123,8 @@ def build_global_context(
         enable_mcp=resolved_enable_mcp,
         server_version=server_version,
         harness_cfg=harness_cfg,
+        agent_runtime=agent_runtime,
+        launch_runtime_root=new_launch_runtime_root(agent_runtime),
     )
 
 
@@ -125,7 +139,10 @@ def translate_agent_args(params) -> list[str]:
 
 
 def _build_run_env(ctx: AgentContext) -> dict[str, str]:
-    return build_base_run_env(ctx)
+    env = build_base_run_env(ctx)
+    if ctx.enable_mcp:
+        env.update(dict(_prepare_mcp_surface(ctx).extra_env))
+    return env
 
 
 def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:

@@ -68,14 +68,18 @@ def _resolve_project_root(project_root: Path | None = None) -> Path:
 
 def _build_mcp_config(harness_cfg: dict, *, project_root: Path | None = None) -> dict:
     """Build pi mcp.json from installed components via the pi harness adaptor."""
-    from audiagentic.runtime.harness.mcp_collector import collect_mcp_servers
+    from audiagentic.foundation.mcp.projection import collect_component_mcp_entries
     from audiagentic.runtime.harness.pi.mcp_format import build_pi_mcp_dict
 
     enabled = harness_cfg.get("mcp", {}).get("enabled", True)
     if not enabled:
         return build_pi_mcp_dict({}, enabled=False)
 
-    entries = collect_mcp_servers(_resolve_project_root(project_root))
+    entries = collect_component_mcp_entries(
+        _resolve_project_root(project_root),
+        propagation_target="providers",
+        require_enabled=True,
+    )
     return build_pi_mcp_dict(entries)
 
 
@@ -85,10 +89,12 @@ def _build_settings_config(pi_cfg: dict, target: Path) -> dict:
     theme_colors = ui.get("theme_colors") or {}
 
     if theme_colors:
+        from audiagentic.components.providers import providers_api
+
+        pkg = providers_api.get_pi_coding_agent_package_dir()
         base_theme_dir = (
-            target / "cli" / "node_modules"
-            / "@earendil-works" / "pi-coding-agent"
-            / "dist" / "modes" / "interactive" / "theme"
+            pkg / "dist" / "modes" / "interactive" / "theme" if pkg is not None
+            else target / "dist" / "modes" / "interactive" / "theme"  # absent -> guarded below
         )
         base_path = base_theme_dir / f"{theme_name}.json"
         base = json.loads(base_path.read_text(encoding="utf-8")) if base_path.exists() else {"vars": {}, "colors": {}, "export": {}}
@@ -153,7 +159,7 @@ def materialize_agent_config(
     project_root: Path | None = None,
 ) -> None:
     """Write all agent config files. Called at install and refresh time."""
-    pi_cfg = _c.load_ag_config(project_root=project_root)
+    pi_cfg = _c.load_pi_config(project_root=project_root)
 
     agent_dir = target / "agent"
     agent_dir.mkdir(parents=True, exist_ok=True)

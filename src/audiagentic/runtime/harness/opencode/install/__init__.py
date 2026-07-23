@@ -1,8 +1,8 @@
-"""Opencode harness install.
+"""OpenCode harness configuration materialization.
 
-Mirrors pi/install: populates .mcp.json at project root, materializes
-AGENTS.md with component injections, and manages the reload-request marker.
-Opencode is installed as an npm package — no runtime directory to populate.
+This module materializes configuration for an available OpenCode CLI. Explicit
+CLI installation and removal belong to the provider lifecycle, not config
+materialization or launch-time discovery.
 """
 from __future__ import annotations
 
@@ -55,13 +55,17 @@ def _resolve_project_root(project_root: Path | None = None) -> Path:
 
 
 def _build_mcp_config(harness_cfg: dict, *, project_root: Path) -> dict:
-    from audiagentic.runtime.harness.mcp_collector import collect_mcp_servers
+    from audiagentic.foundation.mcp.projection import collect_component_mcp_entries
     from audiagentic.runtime.harness.opencode.mcp_format import build_opencode_mcp_dict
 
     enabled = harness_cfg.get("mcp", {}).get("enabled", True)
     if not enabled:
         return build_opencode_mcp_dict({}, enabled=False)
-    entries = collect_mcp_servers(project_root)
+    entries = collect_component_mcp_entries(
+        project_root,
+        propagation_target="providers",
+        require_enabled=True,
+    )
     return build_opencode_mcp_dict(entries)
 
 
@@ -143,10 +147,12 @@ def materialize_agent_config(
         except AudiaGenticError:
             logger.warning("could not resolve model profile, using empty", exc_info=True)
 
-    (root / ".mcp.json").write_text(
-        json.dumps(_build_mcp_config(harness_cfg, project_root=root), indent=2) + "\n",
-        encoding="utf-8",
-    )
+    # No .mcp.json write here: stock opencode never reads bare .mcp.json (only
+    # its own opencode.json/.jsonc — confirmed empirically and against
+    # upstream, which closed a request for .mcp.json support as not planned).
+    # That path collides with pi's PROVIDER mcp_config target besides. The
+    # AUDiaGentic-curated MCP surface for opencode is delivered at launch time
+    # via OPENCODE_CONFIG_CONTENT (see opencode/mcp_surface.py), not a file.
 
     agents_md = _build_agents_md(root)
     if agents_md:
@@ -164,30 +170,6 @@ def materialize_agent_config(
 
 
 def install_to(target: Path, project_root: Path | None = None) -> int:
-    import subprocess
-
-    opencode = shutil.which("opencode")
-    if opencode is not None:
-        probe = subprocess.run([opencode, "--version"], capture_output=True, text=True, check=False)
-        if probe.returncode == 0:
-            print_message(f"Using existing opencode CLI at {opencode}")
-        else:
-            opencode = None
-
-    if opencode is None:
-        npm = shutil.which("npm")
-        if npm is None:
-            raise make_error(
-                prefix="CFG",
-                component="OCINST",
-                number=1,
-                kind="opencode-harness",
-                message="npm is required to install opencode.",
-            )
-
-        print_message("Installing opencode CLI")
-        subprocess.run([npm, "install", "-g", "opencode-ai"], check=True)
-
     root = _resolve_project_root(project_root)
     from audiagentic.runtime.harness.config import load_harness_config
     harness_cfg = load_harness_config(project_root=root)
@@ -195,12 +177,9 @@ def install_to(target: Path, project_root: Path | None = None) -> int:
     return 0
 
 
-def uninstall_from(target: Path) -> int:
-    npm = shutil.which("npm")
-    if npm is None:
-        return 1
-    import subprocess
-    subprocess.run([npm, "uninstall", "-g", "opencode-ai"], check=False)
+def cleanup_runtime(target: Path) -> int:
+    """OpenCode materializes project-local files, not runtime-owned state."""
+    del target
     return 0
 
 

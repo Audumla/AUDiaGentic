@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 _RELEASES_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 _CHECK_INTERVAL = timedelta(hours=24)
+_FAILED_INSTALL_SUPPRESSION = timedelta(hours=24)
 
 
 def current_version() -> str:
@@ -90,12 +91,14 @@ def record_failed_install(version: str) -> None:
 
 
 def _is_install_failed(version: str, cache: dict) -> bool:
-    """True if a prior install attempt for this version was recorded.
-
-    Failed installs suppress auto-prompts permanently; the user can still retry
-    via an explicit ``audiagentic update`` command.
-    """
-    return version in cache.get("failed_installs", {})
+    """Whether a failed attempt should temporarily suppress auto-prompts."""
+    recorded = cache.get("failed_installs", {}).get(version)
+    if not isinstance(recorded, str):
+        return False
+    try:
+        return datetime.now(timezone.utc) - datetime.fromisoformat(recorded) < _FAILED_INSTALL_SUPPRESSION
+    except ValueError:
+        return False
 
 
 def _is_version_available(latest: str | None, cache: dict, current: str) -> bool:

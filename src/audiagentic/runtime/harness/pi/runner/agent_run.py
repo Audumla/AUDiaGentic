@@ -25,7 +25,7 @@ def check_endpoint(ctx: AgentContext) -> None:
 
 def direct_mcp_smoke(ctx: AgentContext, env: dict[str, str]) -> None:
     completed = subprocess.run(
-        [sys.executable, "-m", "audiagentic.components.session.session_mcp", "--readonly", "--smoke-only", "--direct-smoke"],
+        [sys.executable, "-m", "audiagentic.components.session.session_mcp", "--readonly", "--smoke-only"],
         cwd=ctx.project_root,
         env=env,
         check=False,
@@ -48,7 +48,7 @@ def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
             component="PIRUN",
             number=2,
             kind="pi-harness",
-            message="AudiaGentic agent not found. Run: audiagentic install",
+            message="Pi harness not found. Install pi, then run: audiagentic bootstrap",
             details={"path": str(ctx.agent_bin) if ctx.agent_bin else "not set"},
         )
 

@@ -43,18 +43,13 @@ def load_harness_config(project_root: Path | None = None) -> dict:
     )
 
 
-def load_ag_config(project_root: Path | None = None) -> dict:
+def load_pi_config(project_root: Path | None = None) -> dict:
     from audiagentic.foundation.config import load_layered_config
     return load_layered_config(
         pkg_default_path=_PI_CONFIG,
         project_root=project_root,
         namespace="harness/pi",
     )
-
-
-def load_pi_config(project_root: Path | None = None) -> dict:
-    """Backward-compatible alias for Pi harness config loader."""
-    return load_ag_config(project_root=project_root)
 
 
 def _audiagentic_pkg_dir(npm_dir: Path) -> Path:
