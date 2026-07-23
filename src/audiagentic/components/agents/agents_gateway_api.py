@@ -9,6 +9,7 @@ SH02: submit_llm_request now validates through SubmissionEnvelope and persists a
 redacted ExecutionManifest alongside each request record. The raw prompt body is
 never persisted (only its digest); it is threaded to dispatch via functools.partial.
 """
+
 from __future__ import annotations
 
 import functools
@@ -66,10 +67,14 @@ def _classify_terminal_quality(
     quality_summary: dict[str, Any] | None = None
     if session_id:
         latest_turn = session_store.latest_turn_projection(
-            project_root, session_id, request_id=request_id,
+            project_root,
+            session_id,
+            request_id=request_id,
         )
         quality_summary = session_store.latest_turn_quality_summary(
-            project_root, session_id, request_id=request_id,
+            project_root,
+            session_id,
+            request_id=request_id,
         )
     report = classify_terminal_output(
         record=record,
@@ -96,10 +101,14 @@ def _session_progress_context(
 
     request_id = record.get("request-id")
     latest_turn = session_store.latest_turn_projection(
-        project_root, session_id, request_id=request_id,
+        project_root,
+        session_id,
+        request_id=request_id,
     )
     progress_summary = session_store.build_session_progress_summary(
-        project_root, session_id, request_id,
+        project_root,
+        session_id,
+        request_id,
     )
     return latest_turn, progress_summary
 
@@ -119,65 +128,62 @@ def _request_progress(project_root: Path, record: dict[str, Any]) -> dict[str, A
     )
 
 
+_PROCESS_INSTANCE_ID: str | None = None
+_STARTED_AT: str | None = None
+
+
+def _init_process_identity() -> None:
+    """Generate process identity at module load (gateway startup)."""
+    global _PROCESS_INSTANCE_ID, _STARTED_AT
+    if _PROCESS_INSTANCE_ID is None:
+        import uuid
+        from datetime import datetime, timezone
+
+        _PROCESS_INSTANCE_ID = uuid.uuid4().hex
+        _STARTED_AT = datetime.now(timezone.utc).isoformat()
+
+
 def _runtime_fingerprint() -> dict[str, str]:
-    """Redacted runtime identity for operator diagnostics: package version
-    plus a short source stamp identifying the running code (git HEAD short
-    hash when available). Cached — the running code does not change mid-process."""
-    return _cached_runtime_fingerprint()
+    """Redacted runtime identity for operator diagnostics.
 
+    Replaces the former Git-based source-stamp with process lifecycle identity:
+    - runtime-version: installed package version (always present)
+    - build-id: optional immutable identifier embedded at wheel/container build time
+    - process-instance-id: random identifier generated once at gateway startup
+    - started-at: ISO timestamp when this process began
+    - owner-epoch: managed-service ownership generation (when available)
 
-def _git_source_stamp(repo_root: Path) -> str:
-    """Read the current Git revision without launching a child process.
+    This answers the actual operational questions:
+    - Which build is installed? → runtime-version (+ build-id if present)
+    - Is this still the old running process? → process-instance-id + started-at
+    - Did ownership transfer or restart? → owner-epoch change
 
-    Status projection runs inside MCP stdio servers. A subprocess launched from
-    that request path can inherit the server's stdio handles and block the tool
-    indefinitely. Git's HEAD/ref files contain the same identity needed here,
-    without process or transport involvement.
+    No Git dependency — works in wheel installs, non-Git projects, containers.
     """
-    git_entry = repo_root / ".git"
-    git_dir = git_entry
-    if git_entry.is_file():
-        marker = git_entry.read_text(encoding="utf-8").strip()
-        prefix = "gitdir:"
-        if not marker.lower().startswith(prefix):
-            return "unknown"
-        git_dir = Path(marker[len(prefix):].strip())
-        if not git_dir.is_absolute():
-            git_dir = (repo_root / git_dir).resolve()
-    if not git_dir.is_dir():
-        return "unknown"
-
-    head = (git_dir / "HEAD").read_text(encoding="utf-8").strip()
-    if head.startswith("ref:"):
-        ref_name = head.partition(":")[2].strip()
-        ref_path = git_dir.joinpath(*ref_name.split("/"))
-        if ref_path.is_file():
-            head = ref_path.read_text(encoding="utf-8").strip()
-        else:
-            packed_refs = git_dir / "packed-refs"
-            if not packed_refs.is_file():
-                return "unknown"
-            head = next(
-                (
-                    line.split(" ", 1)[0]
-                    for line in packed_refs.read_text(encoding="utf-8").splitlines()
-                    if not line.startswith(("#", "^")) and line.endswith(f" {ref_name}")
-                ),
-                "",
-            )
-    return head[:12] if len(head) >= 12 and all(char in "0123456789abcdefABCDEF" for char in head) else "unknown"
-
-
-@functools.lru_cache(maxsize=1)
-def _cached_runtime_fingerprint() -> dict[str, str]:
+    _init_process_identity()
     from audiagentic import __version__
 
+    result: dict[str, str] = {
+        "runtime-version": __version__,
+        "process-instance-id": _PROCESS_INSTANCE_ID or "unknown",
+        "started-at": _STARTED_AT or "unknown",
+    }
+
+    # Optional build-id from embedded package metadata (PEP 639 / custom)
     try:
-        repo_root = Path(__file__).resolve().parents[4]
-        source_stamp = _git_source_stamp(repo_root)
+        import importlib.metadata as meta
+
+        dist = meta.distribution("audiagentic")
+        md = dist.metadata
+        for key in ("build-id", "Build-Id", "X-Build-Id"):
+            val = md.get(key)
+            if val:
+                result["build-id"] = val
+                break
     except Exception:
-        source_stamp = "unknown"
-    return {"version": __version__, "source-stamp": source_stamp}
+        pass  # build-id is optional — absent is fine
+
+    return result
 
 
 def _enrich_terminal_result(
@@ -422,7 +428,10 @@ def submit_llm_request(
             worker_timeout_seconds=manifest.timeout_seconds or DEFAULT_BLOCKING_TIMEOUT_SECONDS,
         )
         record = _QUEUE_MANAGER.enqueue(
-            project_root, record, params, runner,
+            project_root,
+            record,
+            params,
+            runner,
             dispatch_owner_epoch=_dispatch_owner_epoch,
             dispatch_service_root=(
                 Path(_dispatch_service_root) if _dispatch_service_root else None
@@ -499,7 +508,9 @@ def request_runtime_status(project_root: Path, request_id: str) -> dict[str, Any
     return result
 
 
-def wait_llm_request(project_root: Path, request_id: str, timeout_seconds: float | None = None) -> dict[str, Any]:
+def wait_llm_request(
+    project_root: Path, request_id: str, timeout_seconds: float | None = None
+) -> dict[str, Any]:
     """Block until a request reaches a terminal state or the timeout elapses.
 
     The caller's timeout is honoured; the MCP boundary applies its own transport
@@ -599,7 +610,9 @@ def list_llm_requests(
     return [
         store.project_public_status(
             record,
-            latest_transition=store.latest_transition_projection(project_root, record["request-id"]),
+            latest_transition=store.latest_transition_projection(
+                project_root, record["request-id"]
+            ),
         )
         for record in records
     ]
@@ -663,7 +676,9 @@ def close_llm_session(project_root: Path, session_id: str) -> dict[str, Any]:
     if record["state"] not in session_store.SESSION_TERMINAL_STATES:
         # Persisted active but not live here: orphaned by a restart.
         record = session_store.transition_session_record(
-            project_root, session_id, "failed",
+            project_root,
+            session_id,
+            "failed",
             updates={"close-reason": "orphaned"},
         )
         binding_store.retire_binding(project_root, record, state="failed")
@@ -684,7 +699,11 @@ def gateway_overview(project_root: Path) -> dict[str, Any]:
     for record in records:
         by_state[record["state"]] = by_state.get(record["state"], 0) + 1
     recent_failures = [
-        {"request-id": r["request-id"], "agent-profile-id": r["agent-profile-id"], "error": r.get("error")}
+        {
+            "request-id": r["request-id"],
+            "agent-profile-id": r["agent-profile-id"],
+            "error": r.get("error"),
+        }
         for r in sorted(
             (r for r in records if r["state"] == "failed"),
             key=lambda r: r["updated-at"],

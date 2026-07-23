@@ -4,6 +4,7 @@ References are opaque until the narrow call site that needs a value.  V1
 supports ambient environment variables only; callers must never persist or log
 the returned value.
 """
+
 from __future__ import annotations
 
 import os
@@ -14,8 +15,8 @@ from dataclasses import dataclass
 from audiagentic.foundation.contracts.errors import make_error_factory
 from audiagentic.foundation.registry_utils import Registry
 
-_secret_error = make_error_factory("VAL", "SEC", "secret")
-_secret_connection_error = make_error_factory("CON", "SEC", "secret")
+_secret_error = make_error_factory("VAL", "CRED", "providers")
+_secret_connection_error = make_error_factory("CON", "CRED", "providers")
 _ENV_NAME = re.compile(r"^[A-Z0-9_]+$")
 
 SecretResolver = Callable[[str], str]
@@ -79,7 +80,9 @@ def has_ambient_value(value: str | SecretRef) -> bool:
 def _resolve_environment(locator: str) -> str:
     value = os.environ.get(locator)
     if not value:
-        raise _secret_connection_error(1, "referenced environment variable is unset", env_name=locator)
+        raise _secret_connection_error(
+            1, "referenced environment variable is unset", env_name=locator
+        )
     return value
 
 

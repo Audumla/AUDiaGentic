@@ -1,4 +1,5 @@
 """Unit tests for agents_gateway_progress — operator progress projection (SH07 / RV741)."""
+
 from __future__ import annotations
 
 import datetime
@@ -21,14 +22,19 @@ from audiagentic.foundation.features.state import set_implementation_state
 
 
 def _make_profile(project_root: Path, profile_id: str, provider_id: str, **params) -> None:
-    create_profile(project_root, {
-        "profile_id": profile_id,
-        "provider_id": provider_id,
-        "model_id": "gpt-4o",
-        "is_default": True,
-        "params": params,
-    })
-    set_implementation_state(project_root, "providers", provider_id, ImplementationState(enabled=True))
+    create_profile(
+        project_root,
+        {
+            "profile_id": profile_id,
+            "provider_id": provider_id,
+            "model_id": "gpt-4o",
+            "is_default": True,
+            "params": params,
+        },
+    )
+    set_implementation_state(
+        project_root, "providers", provider_id, ImplementationState(enabled=True)
+    )
 
 
 def _result(data: dict) -> SimpleNamespace:
@@ -36,6 +42,7 @@ def _result(data: dict) -> SimpleNamespace:
 
 
 # ---------- progress projection tests ----------
+
 
 def test_running_with_model_event_gives_model_active(tmp_path: Path) -> None:
     record = store.build_record(agent_profile_id="default", prompt_body="hello")
@@ -49,7 +56,9 @@ def test_running_with_model_event_gives_model_active(tmp_path: Path) -> None:
 
     now = datetime.datetime(2026, 1, 1, 0, 0, 10, tzinfo=datetime.timezone.utc)
     projection = progress_mod.project_request_progress(
-        record, latest_session_event=session_event, now=now,
+        record,
+        latest_session_event=session_event,
+        now=now,
     )
 
     assert projection["phase"] == "model-active"
@@ -95,7 +104,9 @@ def test_stale_progress_with_session_event_past_threshold(tmp_path: Path) -> Non
 
     now = datetime.datetime(2026, 1, 1, 0, 10, 10, tzinfo=datetime.timezone.utc)
     projection = progress_mod.project_request_progress(
-        record, latest_session_event=session_event, now=now,
+        record,
+        latest_session_event=session_event,
+        now=now,
     )
 
     assert projection["phase"] == "model-active"
@@ -155,7 +166,9 @@ def test_tool_event_gives_tool_active(tmp_path: Path) -> None:
 
     now = datetime.datetime(2026, 1, 1, 0, 0, 5, tzinfo=datetime.timezone.utc)
     projection = progress_mod.project_request_progress(
-        record, latest_session_event=session_event, now=now,
+        record,
+        latest_session_event=session_event,
+        now=now,
     )
 
     assert projection["phase"] == "tool-active"
@@ -167,13 +180,16 @@ def test_turn_start_event_gives_turn_starting(tmp_path: Path) -> None:
     record["started-at"] = "2026-01-01T00:00:00Z"
 
     session_event = {
-        "kind": "unknown-kind", "event": "session.turn.started",
+        "kind": "unknown-kind",
+        "event": "session.turn.started",
         "timestamp": "2026-01-01T00:00:03Z",
     }
 
     now = datetime.datetime(2026, 1, 1, 0, 0, 5, tzinfo=datetime.timezone.utc)
     projection = progress_mod.project_request_progress(
-        record, latest_session_event=session_event, now=now,
+        record,
+        latest_session_event=session_event,
+        now=now,
     )
 
     assert projection["phase"] == "turn-starting"
@@ -206,13 +222,20 @@ def test_redaction_no_forbidden_values_leak(tmp_path: Path) -> None:
 
     now = datetime.datetime(2026, 1, 1, 0, 0, 10, tzinfo=datetime.timezone.utc)
     projection = progress_mod.project_request_progress(
-        record, latest_session_event=adversarial_event, now=now,
+        record,
+        latest_session_event=adversarial_event,
+        now=now,
     )
 
     dumped = json.dumps(projection)
 
-    for forbidden in ("secret-prompt-text", "secret-output-text", "secret-value",
-                      "ref-secret-abc", "another-secret"):
+    for forbidden in (
+        "secret-prompt-text",
+        "secret-output-text",
+        "secret-value",
+        "ref-secret-abc",
+        "another-secret",
+    ):
         assert forbidden not in dumped, f"forbidden value leaked: {forbidden}"
 
     # Only kind and timestamp from the session event should survive
@@ -232,7 +255,9 @@ def test_last_progress_source_request_transition(tmp_path: Path) -> None:
 
     now = datetime.datetime(2026, 1, 1, 0, 0, 20, tzinfo=datetime.timezone.utc)
     projection = progress_mod.project_request_progress(
-        record, latest_session_event=session_event, now=now,
+        record,
+        latest_session_event=session_event,
+        now=now,
     )
 
     assert projection["last-progress-source"] == "request-transition"
@@ -250,7 +275,9 @@ def test_last_progress_source_session_event(tmp_path: Path) -> None:
 
     now = datetime.datetime(2026, 1, 1, 0, 0, 20, tzinfo=datetime.timezone.utc)
     projection = progress_mod.project_request_progress(
-        record, latest_session_event=session_event, now=now,
+        record,
+        latest_session_event=session_event,
+        now=now,
     )
 
     assert projection["last-progress-source"] == "session-event"
@@ -269,19 +296,28 @@ def test_all_keys_present() -> None:
     projection = progress_mod.project_request_progress(record)
 
     expected_keys = {
-        "phase", "running-seconds", "last-progress-at", "last-progress-source",
-        "latest-transition", "latest-session-event", "stale-progress", "stale-reason",
+        "phase",
+        "running-seconds",
+        "last-progress-at",
+        "last-progress-source",
+        "latest-transition",
+        "latest-session-event",
+        "stale-progress",
+        "stale-reason",
     }
     assert set(projection.keys()) == expected_keys
 
 
 # ---------- API wiring tests ----------
 
+
 def test_request_runtime_status_includes_progress(tmp_path: Path, monkeypatch) -> None:
     _make_profile(tmp_path, "default", "local-openai")
 
     def fake_execute_provider(*, identity, execution_request, timeout_seconds):
-        return _result({"provider-id": "local-openai", "status": "ok", "model": "gpt-4o", "output": "done"})
+        return _result(
+            {"provider-id": "local-openai", "status": "ok", "model": "gpt-4o", "output": "done"}
+        )
 
     monkeypatch.setattr(
         "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
@@ -306,7 +342,9 @@ def test_wait_timeout_marker_on_non_terminal(tmp_path: Path, monkeypatch) -> Non
 
     def slow_execute_provider(*, identity, execution_request, timeout_seconds):
         hold.wait(timeout=5)
-        return _result({"provider-id": "local-openai", "status": "ok", "model": "gpt-4o", "output": "done"})
+        return _result(
+            {"provider-id": "local-openai", "status": "ok", "model": "gpt-4o", "output": "done"}
+        )
 
     monkeypatch.setattr(
         "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
@@ -327,7 +365,9 @@ def test_gateway_overview_includes_runtime_fingerprint(tmp_path: Path, monkeypat
     _make_profile(tmp_path, "default", "local-openai")
 
     def fake_execute_provider(*, identity, execution_request, timeout_seconds):
-        return _result({"provider-id": "local-openai", "status": "ok", "model": "gpt-4o", "output": "done"})
+        return _result(
+            {"provider-id": "local-openai", "status": "ok", "model": "gpt-4o", "output": "done"}
+        )
 
     monkeypatch.setattr(
         "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
@@ -340,40 +380,44 @@ def test_gateway_overview_includes_runtime_fingerprint(tmp_path: Path, monkeypat
 
     assert "runtime-fingerprint" in overview
     fingerprint = overview["runtime-fingerprint"]
-    assert "version" in fingerprint
-    assert "source-stamp" in fingerprint
-    assert isinstance(fingerprint["version"], str)
-    assert len(fingerprint["source-stamp"]) == 12
+    assert "runtime-version" in fingerprint
+    assert "process-instance-id" in fingerprint
+    assert "started-at" in fingerprint
+    assert isinstance(fingerprint["runtime-version"], str)
+    # process-instance-id is a UUID hex (32 chars)
+    assert len(fingerprint["process-instance-id"]) == 32
+    # started-at is an ISO timestamp
+    from datetime import datetime, timezone
+
+    datetime.fromisoformat(fingerprint["started-at"]).replace(tzinfo=timezone.utc)
 
 
-def test_git_source_stamp_reads_symbolic_head_without_subprocess(tmp_path: Path) -> None:
-    git_dir = tmp_path / ".git"
-    ref = git_dir / "refs" / "heads" / "main"
-    ref.parent.mkdir(parents=True)
-    (git_dir / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
-    ref.write_text("0123456789abcdef0123456789abcdef01234567\n", encoding="utf-8")
+def test_runtime_fingerprint_has_no_git_dependency() -> None:
+    """Process identity works in non-Git environments."""
+    fp = gateway._runtime_fingerprint()
+    assert "runtime-version" in fp
+    assert "process-instance-id" in fp
+    assert "started-at" in fp
+    # build-id is optional — may be absent for local installs
+    # No source-stamp field (Git dependency removed)
+    assert "source-stamp" not in fp
 
-    assert gateway._git_source_stamp(tmp_path) == "0123456789ab"
 
-
-def test_git_source_stamp_reads_packed_ref_without_subprocess(tmp_path: Path) -> None:
-    git_dir = tmp_path / ".git"
-    git_dir.mkdir()
-    (git_dir / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
-    (git_dir / "packed-refs").write_text(
-        "# pack-refs with: peeled fully-peeled sorted\n"
-        "abcdef0123456789abcdef0123456789abcdef01 refs/heads/main\n",
-        encoding="utf-8",
-    )
-
-    assert gateway._git_source_stamp(tmp_path) == "abcdef012345"
+def test_runtime_fingerprint_process_identity_is_stable() -> None:
+    """Process identity doesn't change between calls."""
+    fp1 = gateway._runtime_fingerprint()
+    fp2 = gateway._runtime_fingerprint()
+    assert fp1["process-instance-id"] == fp2["process-instance-id"]
+    assert fp1["started-at"] == fp2["started-at"]
 
 
 def test_terminal_wait_does_not_add_timeout_marker(tmp_path: Path, monkeypatch) -> None:
     _make_profile(tmp_path, "default", "local-openai")
 
     def fake_execute_provider(*, identity, execution_request, timeout_seconds):
-        return _result({"provider-id": "local-openai", "status": "ok", "model": "gpt-4o", "output": "done"})
+        return _result(
+            {"provider-id": "local-openai", "status": "ok", "model": "gpt-4o", "output": "done"}
+        )
 
     monkeypatch.setattr(
         "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
@@ -410,17 +454,38 @@ def test_progress_summary_includes_event_kind_counts(tmp_path: Path) -> None:
     """SH15: build_session_progress_summary produces event-kind-counts."""
     from audiagentic.components.agents import agents_gateway_sessions_store as session_store
 
-    _write_timeline(tmp_path, "ses_test", [
-        {"event": "session.turn.thought", "timestamp": "2026-01-01T00:00:01Z",
-         "attributes": {"kind": "thought", "sequence": 1, "request-id": "req_01"}},
-        {"event": "session.turn.assistant-message", "timestamp": "2026-01-01T00:00:02Z",
-         "attributes": {"kind": "assistant-message", "sequence": 2, "request-id": "req_01"}},
-        {"event": "session.turn.tool-call", "timestamp": "2026-01-01T00:00:03Z",
-         "attributes": {"kind": "tool-call", "sequence": 3, "request-id": "req_01",
-                        "tool-call-id": "tc1", "status": "in_progress"}},
-        {"event": "session.turn.result", "timestamp": "2026-01-01T00:00:04Z",
-         "attributes": {"kind": "result", "sequence": 4, "request-id": "req_01"}},
-    ])
+    _write_timeline(
+        tmp_path,
+        "ses_test",
+        [
+            {
+                "event": "session.turn.thought",
+                "timestamp": "2026-01-01T00:00:01Z",
+                "attributes": {"kind": "thought", "sequence": 1, "request-id": "req_01"},
+            },
+            {
+                "event": "session.turn.assistant-message",
+                "timestamp": "2026-01-01T00:00:02Z",
+                "attributes": {"kind": "assistant-message", "sequence": 2, "request-id": "req_01"},
+            },
+            {
+                "event": "session.turn.tool-call",
+                "timestamp": "2026-01-01T00:00:03Z",
+                "attributes": {
+                    "kind": "tool-call",
+                    "sequence": 3,
+                    "request-id": "req_01",
+                    "tool-call-id": "tc1",
+                    "status": "in_progress",
+                },
+            },
+            {
+                "event": "session.turn.result",
+                "timestamp": "2026-01-01T00:00:04Z",
+                "attributes": {"kind": "result", "sequence": 4, "request-id": "req_01"},
+            },
+        ],
+    )
 
     summary = session_store.build_session_progress_summary(tmp_path, "ses_test", "req_01")
     assert summary is not None
@@ -436,20 +501,48 @@ def test_progress_summary_tool_active_completed_failed_counts(tmp_path: Path) ->
     """SH15: tool status tracking produces active/completed/failed counts."""
     from audiagentic.components.agents import agents_gateway_sessions_store as session_store
 
-    _write_timeline(tmp_path, "ses_test", [
-        # Tool 1: in_progress (active)
-        {"event": "session.turn.tool-call", "timestamp": "2026-01-01T00:00:01Z",
-         "attributes": {"kind": "tool-call", "sequence": 1, "request-id": "req_01",
-                        "tool-call-id": "tc1", "status": "in_progress"}},
-        # Tool 2: completed
-        {"event": "session.turn.tool-call", "timestamp": "2026-01-01T00:00:02Z",
-         "attributes": {"kind": "tool-call", "sequence": 2, "request-id": "req_01",
-                        "tool-call-id": "tc2", "status": "completed"}},
-        # Tool 3: failed
-        {"event": "session.turn.tool-call", "timestamp": "2026-01-01T00:00:03Z",
-         "attributes": {"kind": "tool-call", "sequence": 3, "request-id": "req_01",
-                        "tool-call-id": "tc3", "status": "failed"}},
-    ])
+    _write_timeline(
+        tmp_path,
+        "ses_test",
+        [
+            # Tool 1: in_progress (active)
+            {
+                "event": "session.turn.tool-call",
+                "timestamp": "2026-01-01T00:00:01Z",
+                "attributes": {
+                    "kind": "tool-call",
+                    "sequence": 1,
+                    "request-id": "req_01",
+                    "tool-call-id": "tc1",
+                    "status": "in_progress",
+                },
+            },
+            # Tool 2: completed
+            {
+                "event": "session.turn.tool-call",
+                "timestamp": "2026-01-01T00:00:02Z",
+                "attributes": {
+                    "kind": "tool-call",
+                    "sequence": 2,
+                    "request-id": "req_01",
+                    "tool-call-id": "tc2",
+                    "status": "completed",
+                },
+            },
+            # Tool 3: failed
+            {
+                "event": "session.turn.tool-call",
+                "timestamp": "2026-01-01T00:00:03Z",
+                "attributes": {
+                    "kind": "tool-call",
+                    "sequence": 3,
+                    "request-id": "req_01",
+                    "tool-call-id": "tc3",
+                    "status": "failed",
+                },
+            },
+        ],
+    )
 
     summary = session_store.build_session_progress_summary(tmp_path, "ses_test", "req_01")
     assert summary is not None
@@ -462,12 +555,22 @@ def test_progress_summary_latest_sequence_and_timestamp(tmp_path: Path) -> None:
     """SH15: latest-sequence and latest-timestamp reflect the most recent event."""
     from audiagentic.components.agents import agents_gateway_sessions_store as session_store
 
-    _write_timeline(tmp_path, "ses_test", [
-        {"event": "session.turn.thought", "timestamp": "2026-01-01T00:00:01Z",
-         "attributes": {"kind": "thought", "sequence": 1, "request-id": "req_01"}},
-        {"event": "session.turn.result", "timestamp": "2026-01-01T00:00:05Z",
-         "attributes": {"kind": "result", "sequence": 5, "request-id": "req_01"}},
-    ])
+    _write_timeline(
+        tmp_path,
+        "ses_test",
+        [
+            {
+                "event": "session.turn.thought",
+                "timestamp": "2026-01-01T00:00:01Z",
+                "attributes": {"kind": "thought", "sequence": 1, "request-id": "req_01"},
+            },
+            {
+                "event": "session.turn.result",
+                "timestamp": "2026-01-01T00:00:05Z",
+                "attributes": {"kind": "result", "sequence": 5, "request-id": "req_01"},
+            },
+        ],
+    )
 
     summary = session_store.build_session_progress_summary(tmp_path, "ses_test", "req_01")
     assert summary is not None
@@ -479,13 +582,27 @@ def test_progress_summary_stop_reason_from_turn_finished(tmp_path: Path) -> None
     """SH15: stop-reason from turn.finished entry is captured."""
     from audiagentic.components.agents import agents_gateway_sessions_store as session_store
 
-    _write_timeline(tmp_path, "ses_test", [
-        {"event": "session.turn.assistant-message", "timestamp": "2026-01-01T00:00:01Z",
-         "attributes": {"kind": "assistant-message", "sequence": 1, "request-id": "req_01"}},
-        {"event": "session.turn.finished", "timestamp": "2026-01-01T00:00:05Z",
-         "attributes": {"kind": "finished", "sequence": 2, "request-id": "req_01",
-                        "stop-reason": "end_turn"}},
-    ])
+    _write_timeline(
+        tmp_path,
+        "ses_test",
+        [
+            {
+                "event": "session.turn.assistant-message",
+                "timestamp": "2026-01-01T00:00:01Z",
+                "attributes": {"kind": "assistant-message", "sequence": 1, "request-id": "req_01"},
+            },
+            {
+                "event": "session.turn.finished",
+                "timestamp": "2026-01-01T00:00:05Z",
+                "attributes": {
+                    "kind": "finished",
+                    "sequence": 2,
+                    "request-id": "req_01",
+                    "stop-reason": "end_turn",
+                },
+            },
+        ],
+    )
 
     summary = session_store.build_session_progress_summary(tmp_path, "ses_test", "req_01")
     assert summary is not None
@@ -496,14 +613,29 @@ def test_progress_summary_dropped_events_and_total_events(tmp_path: Path) -> Non
     """SH15: dropped-events and total-events from turn.finished are captured."""
     from audiagentic.components.agents import agents_gateway_sessions_store as session_store
 
-    _write_timeline(tmp_path, "ses_test", [
-        {"event": "session.turn.assistant-message", "timestamp": "2026-01-01T00:00:01Z",
-         "attributes": {"kind": "assistant-message", "sequence": 1, "request-id": "req_01"}},
-        {"event": "session.turn.finished", "timestamp": "2026-01-01T00:00:05Z",
-         "attributes": {"kind": "finished", "sequence": 2, "request-id": "req_01",
-                        "dropped-events": 3, "total-events": 47,
-                        "callback-disabled": False}},
-    ])
+    _write_timeline(
+        tmp_path,
+        "ses_test",
+        [
+            {
+                "event": "session.turn.assistant-message",
+                "timestamp": "2026-01-01T00:00:01Z",
+                "attributes": {"kind": "assistant-message", "sequence": 1, "request-id": "req_01"},
+            },
+            {
+                "event": "session.turn.finished",
+                "timestamp": "2026-01-01T00:00:05Z",
+                "attributes": {
+                    "kind": "finished",
+                    "sequence": 2,
+                    "request-id": "req_01",
+                    "dropped-events": 3,
+                    "total-events": 47,
+                    "callback-disabled": False,
+                },
+            },
+        ],
+    )
 
     summary = session_store.build_session_progress_summary(tmp_path, "ses_test", "req_01")
     assert summary is not None
@@ -516,11 +648,22 @@ def test_progress_summary_callback_disabled_true(tmp_path: Path) -> None:
     """SH15: callback-disabled=true when the transport disables callbacks."""
     from audiagentic.components.agents import agents_gateway_sessions_store as session_store
 
-    _write_timeline(tmp_path, "ses_test", [
-        {"event": "session.turn.finished", "timestamp": "2026-01-01T00:00:05Z",
-         "attributes": {"kind": "finished", "sequence": 1, "request-id": "req_01",
-                        "callback-disabled": True}},
-    ])
+    _write_timeline(
+        tmp_path,
+        "ses_test",
+        [
+            {
+                "event": "session.turn.finished",
+                "timestamp": "2026-01-01T00:00:05Z",
+                "attributes": {
+                    "kind": "finished",
+                    "sequence": 1,
+                    "request-id": "req_01",
+                    "callback-disabled": True,
+                },
+            },
+        ],
+    )
 
     summary = session_store.build_session_progress_summary(tmp_path, "ses_test", "req_01")
     assert summary is not None
@@ -531,14 +674,27 @@ def test_progress_summary_assistant_thought_chunk_count(tmp_path: Path) -> None:
     """SH15: assistant-thought-chunk-count reflects combined assistant+thought events."""
     from audiagentic.components.agents import agents_gateway_sessions_store as session_store
 
-    _write_timeline(tmp_path, "ses_test", [
-        {"event": "session.turn.thought", "timestamp": "2026-01-01T00:00:01Z",
-         "attributes": {"kind": "thought", "sequence": 1, "request-id": "req_01"}},
-        {"event": "session.turn.thought", "timestamp": "2026-01-01T00:00:02Z",
-         "attributes": {"kind": "thought", "sequence": 2, "request-id": "req_01"}},
-        {"event": "session.turn.assistant-message", "timestamp": "2026-01-01T00:00:03Z",
-         "attributes": {"kind": "assistant-message", "sequence": 3, "request-id": "req_01"}},
-    ])
+    _write_timeline(
+        tmp_path,
+        "ses_test",
+        [
+            {
+                "event": "session.turn.thought",
+                "timestamp": "2026-01-01T00:00:01Z",
+                "attributes": {"kind": "thought", "sequence": 1, "request-id": "req_01"},
+            },
+            {
+                "event": "session.turn.thought",
+                "timestamp": "2026-01-01T00:00:02Z",
+                "attributes": {"kind": "thought", "sequence": 2, "request-id": "req_01"},
+            },
+            {
+                "event": "session.turn.assistant-message",
+                "timestamp": "2026-01-01T00:00:03Z",
+                "attributes": {"kind": "assistant-message", "sequence": 3, "request-id": "req_01"},
+            },
+        ],
+    )
 
     summary = session_store.build_session_progress_summary(tmp_path, "ses_test", "req_01")
     assert summary is not None
@@ -600,8 +756,14 @@ def test_project_request_progress_without_summary_is_backward_compat() -> None:
     projection = progress_mod.project_request_progress(record)
 
     expected_keys = {
-        "phase", "running-seconds", "last-progress-at", "last-progress-source",
-        "latest-transition", "latest-session-event", "stale-progress", "stale-reason",
+        "phase",
+        "running-seconds",
+        "last-progress-at",
+        "last-progress-source",
+        "latest-transition",
+        "latest-session-event",
+        "stale-progress",
+        "stale-reason",
     }
     assert set(projection.keys()) == expected_keys
 
@@ -615,7 +777,9 @@ def test_wait_timeout_includes_progress_summary(tmp_path: Path, monkeypatch) -> 
 
     def slow_execute_provider(*, identity, execution_request, timeout_seconds):
         hold.wait(timeout=5)
-        return _result({"provider-id": "local-openai", "status": "ok", "model": "gpt-4o", "output": "done"})
+        return _result(
+            {"provider-id": "local-openai", "status": "ok", "model": "gpt-4o", "output": "done"}
+        )
 
     monkeypatch.setattr(
         "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
@@ -640,12 +804,22 @@ def test_progress_summary_request_id_filtering(tmp_path: Path) -> None:
     """SH15: build_session_progress_summary filters by request-id when provided."""
     from audiagentic.components.agents import agents_gateway_sessions_store as session_store
 
-    _write_timeline(tmp_path, "ses_test", [
-        {"event": "session.turn.thought", "timestamp": "2026-01-01T00:00:01Z",
-         "attributes": {"kind": "thought", "sequence": 1, "request-id": "req_A"}},
-        {"event": "session.turn.assistant-message", "timestamp": "2026-01-01T00:00:02Z",
-         "attributes": {"kind": "assistant-message", "sequence": 2, "request-id": "req_B"}},
-    ])
+    _write_timeline(
+        tmp_path,
+        "ses_test",
+        [
+            {
+                "event": "session.turn.thought",
+                "timestamp": "2026-01-01T00:00:01Z",
+                "attributes": {"kind": "thought", "sequence": 1, "request-id": "req_A"},
+            },
+            {
+                "event": "session.turn.assistant-message",
+                "timestamp": "2026-01-01T00:00:02Z",
+                "attributes": {"kind": "assistant-message", "sequence": 2, "request-id": "req_B"},
+            },
+        ],
+    )
 
     # Filter for req_A only
     summary_a = session_store.build_session_progress_summary(tmp_path, "ses_test", "req_A")
@@ -672,16 +846,36 @@ def test_progress_summary_tool_status_updates(tmp_path: Path) -> None:
     """SH15: tool status can transition from active to completed/failed."""
     from audiagentic.components.agents import agents_gateway_sessions_store as session_store
 
-    _write_timeline(tmp_path, "ses_test", [
-        # Tool starts in_progress
-        {"event": "session.turn.tool-call", "timestamp": "2026-01-01T00:00:01Z",
-         "attributes": {"kind": "tool-call", "sequence": 1, "request-id": "req_01",
-                        "tool-call-id": "tc1", "status": "in_progress"}},
-        # Same tool completes
-        {"event": "session.turn.tool-call", "timestamp": "2026-01-01T00:00:03Z",
-         "attributes": {"kind": "tool-call", "sequence": 3, "request-id": "req_01",
-                        "tool-call-id": "tc1", "status": "completed"}},
-    ])
+    _write_timeline(
+        tmp_path,
+        "ses_test",
+        [
+            # Tool starts in_progress
+            {
+                "event": "session.turn.tool-call",
+                "timestamp": "2026-01-01T00:00:01Z",
+                "attributes": {
+                    "kind": "tool-call",
+                    "sequence": 1,
+                    "request-id": "req_01",
+                    "tool-call-id": "tc1",
+                    "status": "in_progress",
+                },
+            },
+            # Same tool completes
+            {
+                "event": "session.turn.tool-call",
+                "timestamp": "2026-01-01T00:00:03Z",
+                "attributes": {
+                    "kind": "tool-call",
+                    "sequence": 3,
+                    "request-id": "req_01",
+                    "tool-call-id": "tc1",
+                    "status": "completed",
+                },
+            },
+        ],
+    )
 
     summary = session_store.build_session_progress_summary(tmp_path, "ses_test", "req_01")
     assert summary is not None
@@ -699,7 +893,9 @@ def test_request_runtime_status_includes_sh15_progress_summary(tmp_path: Path, m
 
     def slow_execute_provider(*, identity, execution_request, timeout_seconds):
         hold.wait(timeout=5)
-        return _result({"provider-id": "local-openai", "status": "ok", "model": "gpt-4o", "output": "done"})
+        return _result(
+            {"provider-id": "local-openai", "status": "ok", "model": "gpt-4o", "output": "done"}
+        )
 
     monkeypatch.setattr(
         "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
