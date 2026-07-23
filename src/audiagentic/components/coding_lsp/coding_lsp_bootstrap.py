@@ -246,10 +246,4 @@ def status_payload(project_root: Path | None = None) -> ComponentStatusPayload:
         },
     )
 
-
-def status_hook(project_root: Path | None = None) -> ComponentStatusPayload:
-    """Back-compat alias for the component status hook dotted path."""
-    return status_payload(project_root)
-
-
 register()
