@@ -53,10 +53,21 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
 
     from audiagentic.foundation.paths.home import global_harness_runtime
 
+    # AUDiaGentic runtime home — hosts the rig backend and materialized agent
+    # config. It no longer bundles a harness CLI; the harness is whichever
+    # supported one is installed on the system (config-driven order).
     harness_runtime = global_harness_runtime()
 
-    if not (harness_runtime / "cli" / "node_modules" / ".bin").exists():
-        print_error("Harness not installed. Run: audiagentic install")
+    from audiagentic.runtime.harness import get_harness_type
+    from audiagentic.runtime.harness.resolution import harness_cli_available
+
+    harness_type = get_harness_type(project_root)
+    if harness_cli_available(harness_type) is None:
+        print_error(
+            f"No harness CLI found on PATH for '{harness_type}'. Install a "
+            "supported harness (e.g. pi or opencode), or set harness.order / "
+            "harness.type in the harness/ag config."
+        )
         return 1
 
     # Check for updates if auto-update is enabled
@@ -64,7 +75,7 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
     try:
         if os.environ.get("AUDIAGENTIC_AUTO_UPDATE_ENABLED", "true").lower() == "true":
             from audiagentic.runtime.update.prompt import maybe_prompt_update
-            maybe_prompt_update(project_root)
+            maybe_prompt_update()
     except Exception:
         logger.warning("Auto-update check failed", exc_info=True)
 
@@ -86,12 +97,20 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
         logger.warning("Provider reconciliation failed", exc_info=True)
 
     _status("refreshing agent config...")
+    # Build the active MCP/agent config for the harness we're about to attach to.
+    # Fail loud: never launch against a stale config — a silent failure here is
+    # how the harness ends up serving outdated/missing MCP tools.
     try:
         from audiagentic.runtime.harness import refresh_materialized_agent_config
 
         refresh_materialized_agent_config(harness_runtime, project_root=project_root)
     except Exception:
-        logger.warning("Failed to refresh agent config", exc_info=True)
+        logger.error("Failed to refresh agent config", exc_info=True)
+        print_error(
+            "Failed to build the harness MCP/agent config. Refusing to launch "
+            "against a stale configuration — see the logged traceback above."
+        )
+        return 1
 
     _status("starting agent...")
     from audiagentic.runtime.harness import (
@@ -110,6 +129,13 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
 
     if runner_params:
         args = translate_agent_args(runner_params) + args
+
+    def _cleanup_launch_surface() -> None:
+        launch_root = getattr(ctx, "launch_runtime_root", None)
+        if launch_root is not None:
+            import shutil
+
+            shutil.rmtree(launch_root, ignore_errors=True)
 
     if ctx.manages_rig:
         # Client registration happened inside launch_rig_if_needed, under the
@@ -132,5 +158,9 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
             return run_agent(ctx, args, smoke=False)  # type: ignore[arg-type]
         finally:
             shutdown_rig_if_last(rig_port)
+            _cleanup_launch_surface()
     else:
-        return run_agent(ctx, args, smoke=False)  # type: ignore[arg-type]
+        try:
+            return run_agent(ctx, args, smoke=False)  # type: ignore[arg-type]
+        finally:
+            _cleanup_launch_surface()

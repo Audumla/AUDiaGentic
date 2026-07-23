@@ -2,15 +2,14 @@
 
 Usage
 -----
-  audiagentic install [--target PATH]              Install harness (once per machine / shared folder)
-  audiagentic uninstall [--target PATH]            Remove harness-owned runtime files
+  audiagentic bootstrap [--target PATH]            Initialize AUDiaGentic runtime and project scaffold
+  audiagentic cleanup [--target PATH]              Remove AUDiaGentic-generated runtime files
   audiagentic component list [--project PATH]      List all registered components and their status
   audiagentic component install ID [--project PATH]
   audiagentic component uninstall ID [--project PATH] [--remove-configs]
   audiagentic component enable ID [--project PATH]
   audiagentic component disable ID [--project PATH]
   audiagentic component status ID [--project PATH]
-  audiagentic release-bootstrap [--project PATH] [--release-id ID]
   audiagentic gateway status                       Query gateway service state (SH10)
   audiagentic gateway drain                        Begin graceful drain (SH10)
   audiagentic gateway resume                       Cancel draining; resume running (SH10)
@@ -27,6 +26,7 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
+from audiagentic.commands.bootstrap import cmd_bootstrap, cmd_cleanup, cmd_config_sync
 from audiagentic.commands.component import _cmd_component
 from audiagentic.commands.gateway import (
     cmd_gateway,
@@ -36,29 +36,18 @@ from audiagentic.commands.gateway import (
     cmd_gateway_status,
     cmd_gateway_stop,
 )
-from audiagentic.commands.install import cmd_install
-from audiagentic.commands.job_control import cmd_job_control
+from audiagentic.commands.internal import cmd_mcp
 from audiagentic.commands.launch import _cmd_launch
-from audiagentic.commands.mcp import cmd_mcp
-from audiagentic.commands.provider_prompt import _try_provider_prompt
-from audiagentic.commands.refresh import cmd_refresh
-from audiagentic.commands.release_bootstrap import cmd_release_bootstrap
-from audiagentic.commands.session_input import cmd_session_input
-from audiagentic.commands.uninstall import cmd_uninstall
 from audiagentic.commands.update import cmd_update
+from audiagentic.commands.workflow import (
+    cmd_job_control,
+    cmd_release_bootstrap,
+    cmd_session_input,
+)
 from audiagentic.foundation.cli_io import print_error
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.paths.home import global_harness_runtime
 
 logger = logging.getLogger(__name__)
-
-
-def _cmd_update_binaries(args: argparse.Namespace, project_root: Path) -> int:
-    del args, project_root
-    from audiagentic.runtime.rig.embedded.binaries import update_binaries
-    harness = global_harness_runtime()
-    update_binaries(runtime_dir=harness)
-    return 0
 
 
 # SH10 lifecycle command aliases — keyed by gateway sub-command name.
@@ -71,17 +60,16 @@ _GATEWAY_LIFECYCLE_HANDLERS: dict[str, Callable] = {
 }
 
 _COMMAND_HANDLERS: dict[str, Callable] = {
-    "install": cmd_install,
-    "uninstall": cmd_uninstall,
+    "bootstrap": cmd_bootstrap,
+    "cleanup": cmd_cleanup,
     "component": _cmd_component,
     "gateway": cmd_gateway,  # legacy: only 'serve' (argparse dispatch)
     "update": cmd_update,
-    "mcp": cmd_mcp,
+    "config": cmd_config_sync,
     "job-control": cmd_job_control,
     "session-input": cmd_session_input,
     "release-bootstrap": cmd_release_bootstrap,
-    "update-binaries": _cmd_update_binaries,
-    "refresh": cmd_refresh,
+    "mcp": cmd_mcp,
 }
 
 
@@ -124,20 +112,20 @@ def _main(argv: list[str] | None = None) -> int:
 
     subparsers = parser.add_subparsers(dest="command")
 
-    install_parser = subparsers.add_parser("install", help="Install harness globally")
-    install_parser.add_argument(
+    bootstrap_parser = subparsers.add_parser("bootstrap", help="Initialize AUDiaGentic runtime and project scaffold")
+    bootstrap_parser.add_argument(
         "--target",
         metavar="PATH",
         default=None,
-        help="Install location (default: ~/.audiagentic/harness, override with AUDIAGENTIC_HOME)",
+        help="Runtime location (default: ~/.audiagentic/harness, override with AUDIAGENTIC_HOME)",
     )
 
-    uninstall_parser = subparsers.add_parser("uninstall", help="Remove installed harness files")
-    uninstall_parser.add_argument(
+    cleanup_parser = subparsers.add_parser("cleanup", help="Remove AUDiaGentic-generated runtime files")
+    cleanup_parser.add_argument(
         "--target",
         metavar="PATH",
         default=None,
-        help="Install location (default: ~/.audiagentic/harness, override with AUDIAGENTIC_HOME)",
+        help="Runtime location (default: ~/.audiagentic/harness, override with AUDIAGENTIC_HOME)",
     )
 
     component_parser = subparsers.add_parser("component", help="Manage installed components")
@@ -191,15 +179,16 @@ def _main(argv: list[str] | None = None) -> int:
     session_input_parser.add_argument("--event-kind", default="user-input")
     session_input_parser.add_argument("--message", required=True)
 
-    rb_parser = subparsers.add_parser("release-bootstrap", help="Bootstrap release workflow for a project")
-    rb_parser.add_argument("--project-root", metavar="PATH", help="Project root directory")
-    rb_parser.add_argument("--release-id", default="rel_0001", metavar="ID")
+    release_parser = subparsers.add_parser("release-bootstrap", help="Bootstrap release workflow for a project")
+    release_parser.add_argument("--project-root", metavar="PATH", help="Project root directory")
+    release_parser.add_argument("--release-id", default="rel_0001", metavar="ID")
 
-    subparsers.add_parser("update-binaries", help="Update llama-server binaries to latest release")
+    config_parser = subparsers.add_parser("config", help="Repair or inspect generated configuration")
+    config_sub = config_parser.add_subparsers(dest="config_cmd", required=True)
+    config_sub.add_parser("sync", help="Rebuild generated config for the selected harness")
 
-    subparsers.add_parser("refresh", help="Regenerate provider MCP configs (.mcp.json, opencode, …) and agent config from current component state")
-
-    mcp_parser = subparsers.add_parser("mcp", help="Run a component MCP server module over stdio")
+    # Private stdio entrypoint retained for generated MCP configuration.
+    mcp_parser = subparsers.add_parser("mcp", help="Internal MCP stdio entrypoint")
     mcp_parser.add_argument("module", metavar="MODULE")
     mcp_parser.add_argument("module_args", nargs=argparse.REMAINDER)
 
@@ -261,10 +250,6 @@ def _main(argv: list[str] | None = None) -> int:
         mode=args.mode,
         verbose=args.stream,
     )
-
-    direct_provider_rc = _try_provider_prompt(args.prompt, project_root)
-    if direct_provider_rc is not None:
-        return direct_provider_rc
 
     return _cmd_launch(project_root, remaining, params)
 
