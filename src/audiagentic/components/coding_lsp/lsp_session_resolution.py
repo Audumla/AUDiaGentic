@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.coding_lsp.file_matching import file_matches_patterns
 from audiagentic.components.coding_lsp.lsp_constants import LANGUAGE_MARKERS
 from audiagentic.components.coding_lsp.lsp_lifecycle import LspSession, ServerConfig
 from audiagentic.components.coding_lsp.lsp_session_manager import SessionManager
@@ -54,20 +55,6 @@ def _get_session_or_none(
             exc_info=True,
         )
         return None
-
-
-def _file_matches_patterns(file_path: Path, patterns: list[str] | tuple[str, ...]) -> bool:
-    """Match by extension ('.py') or exact basename ('Makefile')."""
-    ext = file_path.suffix.lower()
-    name = file_path.name.lower()
-    for pattern in patterns:
-        normalized = pattern.lower()
-        if normalized.startswith("."):
-            if ext == normalized:
-                return True
-        elif name == normalized:
-            return True
-    return False
 
 
 def _refresh_path_after_install() -> None:
@@ -213,7 +200,7 @@ def _resolve_language_servers_for_file(
 
     for language, cfgs in servers_by_lang.items():
         for cfg in cfgs:
-            if _file_matches_patterns(file_path, cfg.file_extensions):
+            if file_matches_patterns(file_path, cfg.file_extensions):
                 # Auto-install missing binary for already-configured languages
                 binary = cfg.command[0] if cfg.command else None
                 if binary and not _find_binary_after_install(binary):
@@ -225,7 +212,7 @@ def _resolve_language_servers_for_file(
     if not matches:
         for lang_id, spec in _lr.all_languages().items():
             if (
-                _file_matches_patterns(file_path, spec.file_extensions)
+                file_matches_patterns(file_path, spec.file_extensions)
                 and lang_id not in servers_by_lang
             ):
                 state = get_feature_state(project_root, "coding-lsp", "language", lang_id)
@@ -262,7 +249,7 @@ def _resolve_language_servers_for_file(
 
                     servers_by_lang = discover_servers_multi(project_root)
                     for cfg in servers_by_lang.get(lang_id, []):
-                        if _file_matches_patterns(file_path, cfg.file_extensions):
+                        if file_matches_patterns(file_path, cfg.file_extensions):
                             matches.append((lang_id, cfg))
 
     return matches
