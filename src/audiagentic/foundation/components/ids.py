@@ -1,12 +1,9 @@
-"""Core component ID constants.
+"""Semantic IDs used by core lifecycle and core component entry points.
 
-Core components have no YAML descriptor, so this module is their canonical
-source. Every other component's ID lives in its YAML descriptor
-(config/components/*.yaml); Python code obtains those IDs either from the
-descriptor registry (:func:`get_optional_component_ids` / ``all_descriptors``)
-or — inside the owning component's own package only — from a module-level
-``_COMPONENT_ID`` self-ID constant. Cross-component references outside those
-places should be rare and carry a justifying comment.
+Configuration remains authoritative in ``config/components/project.yaml`` and
+``session.yaml``. These constants exist only where Python behavior must identify
+one of those components semantically; a conformance test keeps them aligned
+with the core descriptors. Registry enumeration belongs to ``registry.py``.
 """
 
 from __future__ import annotations
@@ -20,21 +17,3 @@ CORE_COMPONENT_IDS: frozenset[str] = frozenset({
     COMPONENT_PROJECT,
     COMPONENT_SESSION,
 })
-
-
-def get_optional_component_ids() -> frozenset[str]:
-    """Return optional component IDs derived from loaded descriptors.
-
-    Returns an empty frozenset if the descriptor registry has not yet been
-    populated (early bootstrap).
-    """
-    try:
-        from audiagentic.foundation.components.registry import all_descriptors
-
-        return frozenset(
-            cid
-            for cid, desc in all_descriptors().items()
-            if not desc.core
-        )
-    except ImportError:
-        return frozenset()

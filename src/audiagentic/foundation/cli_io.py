@@ -15,7 +15,7 @@ Usage
     print_message("Install complete.")
 
     # Error / warning (stderr)
-    print_error("Harness not installed. Run: audiagentic install")
+    print_error("AUDiaGentic is not bootstrapped. Run: audiagentic bootstrap")
 """
 from __future__ import annotations
 

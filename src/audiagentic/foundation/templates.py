@@ -6,7 +6,7 @@ a context dict and returns rendered text. It never imports agent-jobs, planning,
 events, or agents.
 
 This mechanism resolves dotted DATA paths inside prompt templates. It is NOT
-related to :func:`audiagentic.foundation.refs.resolve_ref`, which resolves
+related to :func:`audiagentic.foundation.config.refs.resolve_ref`, which resolves
 ``module:object`` config references to live Python objects — those are entirely
 unrelated mechanisms with different error codes and use cases.
 
