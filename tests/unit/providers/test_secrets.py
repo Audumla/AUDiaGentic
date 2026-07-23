@@ -27,7 +27,7 @@ def test_unset_environment_secret_reports_name_not_value(monkeypatch) -> None:
     with pytest.raises(AudiaGenticError) as raised:
         resolve_secret_ref("env:MISSING_TEST_SECRET")
 
-    assert raised.value.code == "CON-SEC-001"
+    assert raised.value.code == "CON-CRED-001"
     assert "MISSING_TEST_SECRET" in str(raised.value)
 
 
@@ -36,4 +36,4 @@ def test_invalid_or_unknown_secret_reference_is_rejected(value: str) -> None:
     with pytest.raises(AudiaGenticError) as raised:
         parse_secret_ref(value)
 
-    assert raised.value.code == "VAL-SEC-001"
+    assert raised.value.code == "VAL-CRED-001"

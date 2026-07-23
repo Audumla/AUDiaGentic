@@ -15,6 +15,7 @@ provider whose only working key channel is this seam must report "works in
 AG-launched sessions only", never plain enabled/auto. Ambient-environment
 verification by the provider secret-reference service defines enablement.
 """
+
 from __future__ import annotations
 
 import os
@@ -34,6 +35,7 @@ def _looks_like_ref(value: str) -> bool:
     must fail loudly rather than be injected verbatim as a literal."""
     scheme, separator, _ = value.partition(":")
     return bool(separator) and is_registered_scheme(scheme)
+
 
 # provider_id -> {env-name: secret-ref string ("env:NAME") or literal value}.
 # Values here are REFERENCES or non-secret literals — never resolved secrets.
@@ -86,7 +88,7 @@ def _resolve_contributions(provider_id: str) -> dict[str, str]:
     resolved: dict[str, str] = {}
     for name, ref in _contributions.get(provider_id, {}).items():
         if _looks_like_ref(ref):
-            # A malformed ref with a registered scheme raises VAL-SEC-001 here
+            # A malformed ref with a registered scheme raises VAL-CRED-001 here
             # instead of being injected verbatim.
             resolved[name] = resolve_secret_ref(parse_secret_ref(ref))
         else:
