@@ -57,11 +57,15 @@ versions for every executable involved in the launch:
 - ACP bridge, if used;
 - language/runtime packages and required extras.
 
-The recipe must install into the managed harness directory and expose the
-actual executable that the adapter will launch. Validate a clean installation
-in Docker, including the model-loading rig used by the project. Record install
-warnings separately from install failure; unrelated malformed user config must
-not silently make the managed install appear successful.
+The provider lifecycle owns the installation scope. It may install a harness
+CLI and required bridge packages globally when that is the harness's supported
+native layout, or into a managed runtime when the provider contract declares
+one. In either case, the probe and launch adapter must resolve the same concrete
+installation rather than silently falling back to an unrelated copy on PATH.
+Validate a clean installation through AUDiaGentic in Docker, including the
+model-loading rig used by the project. Record install warnings separately from
+install failure; unrelated malformed user config must not silently make the
+install appear successful.
 
 For Pi, the production ACP command is the separately installed `pi-acp`
 adapter. `pi --rpc` is Pi's native JSONL mode and is not ACP. The adapter must
@@ -185,8 +189,8 @@ Pi's current implementation should be checked against this list:
 
 - `src/audiagentic/components/providers/adapters/pi/acp.py` resolves managed
   `pi-acp` and forwards cwd, model, session directory, and request environment.
-- `src/audiagentic/runtime/harness/pi/request_runtime.py` creates the unique
-  request root, manifest, state directories, and cleanup/quarantine hooks.
+- `src/audiagentic/runtime/harness/context.py` creates the unique launch root;
+  gateway session dispatch owns request cleanup and quarantine policy.
 - `src/audiagentic/config/provisioning/harness/pi.yaml` pins Pi, MCP adapter,
   and ACP bridge versions.
 - `src/audiagentic/config/providers/pi.yaml` contains both the declared
@@ -194,10 +198,11 @@ Pi's current implementation should be checked against this list:
 - `docs/reference/PROVIDER_CAPABILITY_REFERENCE/harnesses/profiles/pi.md`
   remains aligned with tested ACP and isolation capabilities.
 
-The gateway smoke test currently demonstrates why the registration gate is
-necessary: Pi can resolve as the selected provider and still fail with
-`VAL-EXEC-002` if the descriptor has no execution adapter/block. Treat that as
-an integration defect, not as evidence that the ACP bridge itself is broken.
+Pi's descriptor now contains the required one-shot execution block and its live
+session path is provider-owned ACP composition. A future harness that omits its
+execution registration must fail at descriptor/execution resolution with
+`VAL-EXEC-002`; that is an integration defect, not evidence that its bridge is
+broken.
 
 ## Definition of done
 

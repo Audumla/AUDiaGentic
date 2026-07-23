@@ -45,13 +45,6 @@ tests/unit/runtime/Qwen3.5-0.8B-UD-Q5_K_XL.gguf
 !.agents/
 !.agents/skills/
 !.agents/skills/**
-!.claude/
-!.claude/rules/
-!.claude/rules/**
-!.claude/skills/
-!.claude/skills/**
-!.claude/settings.json
-!.claude/settings.local.json
 !.clinerules/
 !.clinerules/**
 !.gemini/

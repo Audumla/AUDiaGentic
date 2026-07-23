@@ -22,7 +22,7 @@ The planning component will automatically link the ledger event ID to those item
 Use the ag-planning MCP tools to manage plan items in docs/planning/.
 
 ## When to use
-- User asks to create a plan or work items for a task
+- User asks to create a plan or work items 
 - Tracking multi-step implementation across sessions
 - Reviewing or updating the state of outstanding items
 
@@ -46,13 +46,20 @@ Choose a prefix matching the plan name (CC → code-cleanup, LSP → lsp-mcp-enh
 - Do not mark a parent item completed just because reviews were handled.
 - If an active item is superseded, delete it or replace it with the canonical item.
 
-## Optional fields
-- priority: P0 (critical) / P1 / P2 / P3 / HIGH / MEDIUM (default P2)
-- complexity: simple / mid / complex (default simple)
+## Optional fields (fill out where applicable to provide complete planning context)
+- breadth: small / medium / large
+- skill: lite / medium / high
 - order: integer sort key (default 0)
-- validate_first: true if validation steps must precede implementation (default true)
-- created-by / created_by / creator_id: creator identity for the item
-- description, steps, files, validation, effort_risk, notes: body section content
+- description: Body section describing the work
+- steps: Implementation steps
+- detailed_solution: Detailed Solution & Technical Design (architecture, components, design)
+- code_samples: Code Samples & Guidance (including config samples and schemas)
+- files: Files to create/update
+- validation: How to validate the implementation
+  (include comprehensive tests where possible)
+- effort_risk: Complexity and risk assessment
+- standards: Applicable standards/rules
+- notes: Key design principles and additional context
 
 ## Agent profile doctrine
 

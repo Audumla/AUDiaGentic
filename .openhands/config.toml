@@ -73,6 +73,9 @@ args = [
     "audiagentic.components.coding_lsp.lsp_mcp",
 ]
 
+[mcp_servers.ag-lsp.env]
+AUDIAGENTIC_REPO_ROOT = "H:\\development\\projects\\AUDia\\AUDiaGentic"
+
 [mcp_servers.ag-agents-gateway]
 command = "C:\\Users\\mgs\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\python.exe"
 args = [
@@ -88,7 +91,3 @@ AUDIAGENTIC_REPO_ROOT = "H:\\development\\projects\\AUDia\\AUDiaGentic"
 [mcp_servers.hindsight]
 type = "http"
 url = "http://10.10.100.10:8888/mcp"
-
-[mcp_servers.hindsight.headers]
-Authorization = "Bearer NONE"
-X-Bank-Id = "audiagentic"
