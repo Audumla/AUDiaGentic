@@ -81,6 +81,11 @@ def test_contribution_file_from_descriptor(tmp_path: Path):
 
 def test_new_provider_needs_only_yaml(tmp_path: Path):
     """A provider defined purely by descriptor data gets working rendering."""
+    # Complete lazy canonical loading before adding the test-only descriptor;
+    # otherwise the first read correctly rebuilds both registries and removes
+    # values that were never part of provider discovery.
+    load_renderer_registry()
+    load_contribution_renderer_registry()
     descriptor = ProviderDescriptor(
         provider_id="fixture-prov",
         display_name="Fixture Provider",

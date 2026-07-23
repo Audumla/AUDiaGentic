@@ -20,7 +20,9 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
     ln -sf /root/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rust-analyzer /root/.local/bin/rust-analyzer
 
 # Source baked in (not bind-mounted — avoids Windows Docker Desktop deadlock)
-COPY . /app
+COPY pyproject.toml README.md ./
+COPY src ./src
+COPY tests ./tests
 
 # Install project + test deps
 RUN uv venv /venv && \

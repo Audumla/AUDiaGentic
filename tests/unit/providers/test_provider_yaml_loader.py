@@ -157,6 +157,15 @@ class TestProviderYamlLoader:
                 "execution_isolation_tier": "unknown",
             })
 
+    def test_rejects_invalid_mcp_launch_isolation_tier(self) -> None:
+        with pytest.raises(Exception, match="mcp_launch_isolation_tier"):
+            PROVIDER_SPEC.build({
+                "provider_id": "test",
+                "display_name": "Test",
+                "execution_isolation_tier": "no-isolation",
+                "mcp_launch_isolation_tier": "exclusive",
+            })
+
 
 class TestProvidersConfigDir:
     """Test provider config directory discovery."""

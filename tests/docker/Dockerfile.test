@@ -30,7 +30,6 @@ COPY tests ./tests
 COPY docs/examples ./docs/examples
 COPY .audiagentic/config ./.audiagentic/config
 COPY .audiagentic/skills ./.audiagentic/skills
-COPY .claude/skills ./.claude/skills
 COPY .gemini ./.gemini
 COPY .clinerules ./.clinerules
 COPY .github/workflows ./.github/workflows
@@ -42,9 +41,6 @@ COPY AGENTS.md CLAUDE.md GEMINI.md ./
 # build context. Tests that need the conventional location receive a clean
 # empty root instead.
 RUN mkdir -p .audiagentic/runtime
-
-RUN printf '#!/bin/sh\nexport DONT_PROMPT_WSL_INSTALL=1\nunset WSL_DISTRO_NAME WSL_INTEROP WSLENV\nexec /usr/bin/code --no-sandbox --user-data-dir /tmp/vscode-data "$@"\n' > /usr/local/bin/code \
-    && chmod +x /usr/local/bin/code
 
 # Use uv (available in base image) to avoid pip bytecache corruption in Docker layers.
 # Editable install keeps sources live for the test run; /venv/bin on PATH so

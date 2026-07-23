@@ -157,3 +157,19 @@ def test_skip_version_no_duplicates(tmp_path):
         data = json.loads(cache_file.read_text())
 
     assert data["skipped_versions"].count("1.2.3") == 1
+
+
+def test_failed_install_suppression_expires(tmp_path):
+    cache_file = tmp_path / "update-check.json"
+    cache_file.write_text(json.dumps({
+        "failed_installs": {
+            "9.9.9": (datetime.now(timezone.utc) - timedelta(hours=25)).isoformat(),
+        },
+    }))
+
+    with patch("audiagentic.runtime.update.checker._cache_path", return_value=cache_file):
+        with patch("audiagentic.runtime.update.checker.current_version", return_value="0.1.0"):
+            with patch("audiagentic.runtime.update.checker.fetch_latest_version", return_value="9.9.9"):
+                result = check_update(force=True)
+
+    assert result == {"latest": "9.9.9", "current": "0.1.0"}

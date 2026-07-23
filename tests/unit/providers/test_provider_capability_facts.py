@@ -62,6 +62,7 @@ def test_opencode_capability_facts_load_from_yaml() -> None:
     descriptor = load_provider_descriptor(get_providers_config_dir() / "opencode.yaml")
 
     assert tuple(fact.capability_id for fact in descriptor.capability_facts) == (
+        "mcp-launch-isolation",
         "cli-install",
         "host-extension",
         "mcp-config",
@@ -76,13 +77,15 @@ def test_opencode_capability_facts_load_from_yaml() -> None:
         "acp-live-session",
         "acp-session-resume",
         "acp-shared-live-session",
+        "hinv-opencode-acp",
+        "hinv-opencode-cli-session",
     )
-    catalog_fact = descriptor.capability_facts[5]
+    catalog_fact = descriptor.capability_facts[6]
     assert catalog_fact.subject == "fetch_catalog_fn"
     assert catalog_fact.evidence.evidence_tier == "execution"
     assert catalog_fact.evidence.review_state == "verified"
     assert catalog_fact.constraints == ("Provider command requires an installed OpenCode CLI.",)
-    assert descriptor.capability_facts[8].evidence.review_state == "pending-review"
+    assert descriptor.capability_facts[9].evidence.review_state == "pending-review"
 
 
 def test_capability_facts_default_empty() -> None:

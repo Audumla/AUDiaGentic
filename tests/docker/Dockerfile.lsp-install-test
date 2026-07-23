@@ -3,8 +3,16 @@ FROM audia-test-base:latest
 ENV AUDIAGENTIC_DOCKER_TESTS=1
 ENV AUDIAGENTIC_REAL_PROVIDER_CLI_TESTS=1
 ENV AUDIAGENTIC_REPO_ROOT=/app
+ENV HOME=/tmp/audiagentic-test-home
+ENV AUDIAGENTIC_HOME=/tmp/audiagentic-test-home/.audiagentic
+ENV PATH="/root/.cargo/bin:/usr/local/go/bin:${PATH}"
 
 WORKDIR /app
+
+# Compiler prerequisites only; AUDiaGentic installs the language servers.
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+    | sh -s -- -y --default-toolchain stable --profile minimal \
+    && curl -fsSL https://go.dev/dl/go1.23.4.linux-amd64.tar.gz | tar -C /usr/local -xzf -
 
 # Source is baked in (COPY), not bind-mounted: a -v $PWD:/app mount of the host
 # filesystem deadlocks on Windows Docker Desktop. .dockerignore curates the context.
@@ -17,5 +25,7 @@ WORKDIR /app
 # wheel resolution. uv's own installer does not invoke pip's C-extension path.
 #
 # The venv is created fresh each run inside the container (ephemeral).
-COPY . /app
+COPY pyproject.toml README.md ./
+COPY src ./src
+COPY tests ./tests
 CMD ["bash", "-c", "uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp]' pytest pytest-asyncio pytest-timeout pytest-xdist && /venv/bin/pytest tests/integration/coding_lsp/test_install_deps.py tests/integration/coding_lsp/test_auto_install_e2e.py -v --tb=short"]

@@ -320,16 +320,20 @@ genuinely need it.
 
 ### Base image
 
-**`audia-test-base`** is the single canonical toolchain image. All test images
-`FROM audia-test-base:latest` — never install toolchains from scratch.
+**`audia-test-base`** is the common infrastructure image, not a pre-provisioned
+developer workstation. It contains Python, Node, Git, compilation essentials,
+and `uv`. It deliberately does not contain provider CLIs, editors, language
+servers, Rust, Go, or pytest. Recipe images install only their test runner and
+true platform prerequisites; AUDiaGentic installs the product dependency being
+tested through its lifecycle API.
 
 | Tool               | Purpose                            |
 | ------------------ | ---------------------------------- |
 | `python3`, `pip`   | Package install and test execution |
 | `node`, `npm`      | JavaScript tooling                 |
-| `uv`               | Python tool installs (pyright etc) |
-| `cargo`            | Rust tooling (rust-analyzer)       |
-| `gh`               | GitHub CLI                         |
+| `uv`               | Per-recipe Python environments     |
+| `git`              | source/package installation        |
+| `ps` (`procps`)    | supervised process-tree cleanup    |
 
 ### Dockerfile requirements
 
@@ -352,13 +356,17 @@ genuinely need it.
 
 For tests that genuinely require Docker (system packages, real CLI lifecycle):
 
-1. Create `tests/docker/Dockerfile.<component>-<purpose>` extending `audia-test-base:latest`
-2. Create in-container test script as a standalone pytest file at
+1. Create `tests/docker/Dockerfile.<component>-<purpose>` extending `audia-test-base:latest` (or a purpose-built prerequisite image).
+2. Copy only `pyproject.toml`, `README.md`, `src`, the required tests, and any explicit fixture directory. `COPY . /app` is prohibited.
+3. Set disposable `HOME` and `AUDIAGENTIC_HOME` values for every recipe that installs or configures providers.
+4. Install test-runner dependencies in a recipe-local virtualenv. Do not bake provider CLIs or generated harness config into the common base.
+5. Invoke AUDiaGentic's provider/component lifecycle to install, configure, probe, exercise, and uninstall the dependency under test.
+6. Create in-container test script as a standalone pytest file at
    `tests/integration/<component>/test_<purpose>.py` — this is what the container CMD runs
-3. Create host-side pytest test at `tests/e2e/<component>/test_<purpose>_docker.py`
+7. Create host-side pytest test at `tests/e2e/<component>/test_<purpose>_docker.py`
    with `@pytest.mark.docker`, `@pytest.mark.slow`, `@pytest.mark.timeout(N)`,
    `@pytest.mark.mutates_host`
-4. Add `build-<component>` and `test-<component>-docker` Make targets
+8. Add `build-<component>` and `test-<component>-docker` Make targets
 
 **Container-side scripts** use pytest — not the `section`/`check` pattern.
 Pytest output is already structured; duplicating it with a custom format
@@ -385,7 +393,7 @@ The historical per-scenario image sprawl is collapsed only where safe (see
 
 | Image                              | Dockerfile                          | Purpose                                                    |
 | ---------------------------------- | ----------------------------------- | ---------------------------------------------------------- |
-| `audia-test-base`                  | `Dockerfile.test-base`              | Shared toolchain base for all suite/recipe images          |
+| `audia-test-base`                  | `Dockerfile.test-base`              | Minimal shared infrastructure; no provider/LSP/editor state |
 | `audiagentic-test`                 | `Dockerfile.test`                   | **Clean, non-mutating whole suite** (`run_suite.sh`)       |
 | `audia-packaging`                  | `Dockerfile.packaging`              | Clean-room wheel: install + server-smoke + release e2e     |
 | `audia-provider-cli-test`          | `Dockerfile.provider-cli-test`      | Provider CLI provisioning recipe (isolated)                |

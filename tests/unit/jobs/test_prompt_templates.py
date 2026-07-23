@@ -158,19 +158,19 @@ class TestPathSafetyIntegration:
     """Verify that ensure_contained handles edge cases correctly."""
 
     def test_empty_relative_path_is_root(self, tmp_path: Path) -> None:
-        from audiagentic.foundation.path_safety import ensure_contained
+        from audiagentic.foundation.paths.safety import ensure_contained
 
         resolved = ensure_contained(tmp_path, "")
         assert resolved == tmp_path.resolve()
 
     def test_single_dot_normalizes_to_root(self, tmp_path: Path) -> None:
-        from audiagentic.foundation.path_safety import ensure_contained
+        from audiagentic.foundation.paths.safety import ensure_contained
 
         resolved = ensure_contained(tmp_path, ".")
         assert resolved == tmp_path.resolve()
 
     def test_deep_relative_within_root(self, tmp_path: Path) -> None:
-        from audiagentic.foundation.path_safety import ensure_contained
+        from audiagentic.foundation.paths.safety import ensure_contained
 
         deep_dir = tmp_path / "a" / "b" / "c"
         deep_dir.mkdir(parents=True, exist_ok=True)
@@ -180,7 +180,7 @@ class TestPathSafetyIntegration:
         )
 
     def test_traversal_to_root_boundary(self, tmp_path: Path) -> None:
-        from audiagentic.foundation.path_safety import ensure_contained
+        from audiagentic.foundation.paths.safety import ensure_contained
 
         sub = tmp_path / "sub"
         sub.mkdir(parents=True, exist_ok=True)

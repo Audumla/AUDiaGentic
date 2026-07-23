@@ -6,7 +6,7 @@ from typing import Any
 from audiagentic.components.providers.services import mcp_projection
 from audiagentic.foundation.components.base import ComponentDescriptor, McpServerDeclaration
 from audiagentic.foundation.mcp.launch import mcp_interpreter
-from audiagentic.runtime.harness.mcp_collector import collect_mcp_servers
+from audiagentic.foundation.mcp.projection import collect_component_mcp_entries
 
 
 def test_provider_component_mcp_projection_uses_audiagentic_mcp(monkeypatch, tmp_path: Path) -> None:
@@ -119,10 +119,13 @@ def test_harness_mcp_collector_uses_audiagentic_mcp(monkeypatch, tmp_path: Path)
         ),
     )
 
-    monkeypatch.setattr("audiagentic.runtime.harness.mcp_collector.register_all_components", lambda: None)
-    monkeypatch.setattr("audiagentic.runtime.harness.mcp_collector.all_descriptors", lambda: {"sample": descriptor})
+    monkeypatch.setattr("audiagentic.foundation.mcp.projection.all_descriptors", lambda: {"sample": descriptor})
 
-    servers = collect_mcp_servers(tmp_path)
+    servers = collect_component_mcp_entries(
+        tmp_path,
+        propagation_target="audiagentic",
+        require_enabled=False,
+    )
 
     entry = servers["ag-sample"]
     assert entry.command == mcp_interpreter()

@@ -465,7 +465,7 @@ class TestWindowsCompatibility:
 
         _make_session_record(project_root, "ses_win_compat", "ref-win")
 
-        session_dir = session_store.gateway_session_dir(project_root, "ses_win_compat")
+        session_dir = session_store.gateway_session_path(project_root, "ses_win_compat").parent
         # Path objects normalize; on Windows they may use backslashes.
         path_str = str(session_dir)
         if os.name == "nt":
@@ -489,8 +489,16 @@ class TestWindowsCompatibility:
     def test_atomic_write_works_with_long_windows_paths(self, project_root: Path) -> None:
         """atomic_write_json works even with deep directory structures."""
         # Create a deeply nested path.
-        deep = project_root / ".audiagentic" / "runtime" / "agent-llm-gateway" / \
-               "sessions" / "a" * 20 / "record.json"
+        deep = (
+            project_root
+            / ".audiagentic"
+            / "runtime"
+            / "agent-llm-gateway"
+            / "sessions"
+            / ("a" * 20)
+            / "record.json"
+        )
+        deep.parent.mkdir(parents=True, exist_ok=True)
 
         _make_session_record(project_root, f"ses_deep_a{'_' * 15}", "ref-deep")
 

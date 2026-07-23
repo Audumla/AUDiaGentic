@@ -1,10 +1,10 @@
-"""Tests for foundation/refs.py"""
+"""Tests for the declarative configuration reference resolver."""
 from __future__ import annotations
 
 import pytest
 
+from audiagentic.foundation.config.refs import resolve_ref
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.refs import resolve_ref
 
 
 class TestResolveRef:

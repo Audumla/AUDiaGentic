@@ -32,7 +32,12 @@ class TestResolveTransportObservationLease:
         from audiagentic.components.providers.services.harness_status_observer_resolution import (
             resolve_transport_observation_lease,
         )
-        return resolve_transport_observation_lease
+
+        def _resolve(request, **kwargs):
+            kwargs.setdefault("platform", "linux-amd64")
+            return resolve_transport_observation_lease(request, **kwargs)
+
+        return _resolve
 
     @pytest.fixture()
     def valid_request(self) -> StatusObserverRequest:

@@ -47,7 +47,7 @@ def test_build_system_md_injections_uses_explicit_project_root(
 def test_materialize_agent_config_rebuilds_mcp_from_installed_components(
     tmp_path: Path,
 ) -> None:
-    """mcp.json is written to project_root/.audiagentic/mcp.json and contains only mgmt servers."""
+    """Native Pi config contains enabled functional servers, not bootstrap management."""
     project_root = tmp_path / "project"
     harness_root = tmp_path / "harness"
     project_root.mkdir()
@@ -65,16 +65,14 @@ def test_materialize_agent_config_rebuilds_mcp_from_installed_components(
     materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
     updated = json.loads(mcp_path.read_text(encoding="utf-8"))
 
-    assert "ag-lsp-mgmt" in updated["mcpServers"]
-    assert "ag-lsp" not in updated["mcpServers"], (
-        "ag-lsp is provider-only and must not appear in the harness mcp.json."
-    )
+    assert "ag-lsp" in updated["mcpServers"]
+    assert "ag-lsp-mgmt" not in updated["mcpServers"]
 
 
-def test_agents_gateway_is_provider_only_in_harness_mcp_config(
+def test_agents_functional_servers_are_in_native_harness_mcp_config(
     tmp_path: Path,
 ) -> None:
-    """ag-agents-gateway is operational/provider-facing, not a harness server."""
+    """Native harness config receives provider-facing agent resolution and gateway servers."""
     project_root = tmp_path / "project"
     harness_root = tmp_path / "harness"
     project_root.mkdir()
@@ -88,16 +86,14 @@ def test_agents_gateway_is_provider_only_in_harness_mcp_config(
     materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
     payload = json.loads(mcp_path.read_text(encoding="utf-8"))
 
-    assert "ag-agents-mgmt" in payload["mcpServers"]
-    assert "ag-agents-gateway" not in payload["mcpServers"], (
-        "ag-agents-gateway is provider-only and must not appear in the harness mcp.json."
-    )
+    assert {"ag-agents", "ag-agents-gateway"} <= set(payload["mcpServers"])
+    assert "ag-agents-mgmt" not in payload["mcpServers"]
 
 
-def test_providers_component_uses_optional_server_module_in_mcp_config(
+def test_management_only_provider_server_is_not_in_native_mcp_config(
     tmp_path: Path,
 ) -> None:
-    """ag-providers-mgmt (management server, propagate: audiagentic) appears in harness mcp.json."""
+    """Bootstrap management servers are not projected into native functional config."""
     project_root = tmp_path / "project"
     harness_root = tmp_path / "harness"
     project_root.mkdir()
@@ -111,18 +107,13 @@ def test_providers_component_uses_optional_server_module_in_mcp_config(
     materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
     payload = json.loads(mcp_path.read_text(encoding="utf-8"))
 
-    assert "ag-providers-mgmt" in payload["mcpServers"], (
-        f"ag-providers-mgmt missing from harness mcp.json. Present: {list(payload['mcpServers'])}"
-    )
+    assert "ag-providers-mgmt" not in payload["mcpServers"]
 
 
 def test_ledger_component_uses_optional_server_module_in_mcp_config(
     tmp_path: Path,
 ) -> None:
-    """ag-ledger-mgmt (management server, propagate: audiagentic) appears in harness mcp.json.
-
-    ag-ledger (operational server, propagate: providers) must NOT appear in the harness.
-    """
+    """The functional ledger server appears; its bootstrap management peer does not."""
     project_root = tmp_path / "project"
     harness_root = tmp_path / "harness"
     project_root.mkdir()
@@ -136,13 +127,8 @@ def test_ledger_component_uses_optional_server_module_in_mcp_config(
     materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
     payload = json.loads(mcp_path.read_text(encoding="utf-8"))
 
-    assert "ag-ledger-mgmt" in payload["mcpServers"], (
-        f"ag-ledger-mgmt missing from harness mcp.json. Present: {list(payload['mcpServers'])}"
-    )
-    assert "ag-ledger" not in payload["mcpServers"], (
-        "ag-ledger is an operational server (propagate: providers) and must not appear "
-        "in the harness mcp.json."
-    )
+    assert "ag-ledger" in payload["mcpServers"]
+    assert "ag-ledger-mgmt" not in payload["mcpServers"]
 
 
 def test_harness_mcp_config_uses_runtime_python_command(
@@ -162,7 +148,7 @@ def test_harness_mcp_config_uses_runtime_python_command(
     materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
     payload = json.loads(mcp_path.read_text(encoding="utf-8"))
 
-    command = payload["mcpServers"]["ag-ledger-mgmt"]["command"]
+    command = payload["mcpServers"]["ag-ledger"]["command"]
     assert command == str(sys.executable)
     assert command != "__AUDIAGENTIC_PYTHON__"
 
@@ -193,7 +179,6 @@ def test_component_install_refreshes_materialized_agent_config(
     project_root = tmp_path / "project"
     harness_root = tmp_path / "harness"
     project_root.mkdir()
-    (harness_root / "cli" / "node_modules" / ".bin").mkdir(parents=True)
 
     refresh_calls: list[tuple[Path, Path]] = []
     reload_calls: list[tuple[Path, str, str | None]] = []
@@ -201,6 +186,11 @@ def test_component_install_refreshes_materialized_agent_config(
     monkeypatch.setattr(
          "audiagentic.foundation.paths.home.global_harness_runtime",
         lambda: harness_root,
+    )
+    # Satisfy the refresh gate: a supported harness is installed on the system.
+    monkeypatch.setattr(
+        "audiagentic.runtime.harness.resolution.harness_cli_available",
+        lambda _harness_type: "/usr/bin/pi",
     )
     monkeypatch.setattr(
         "audiagentic.runtime.harness.pi.install.refresh_materialized_agent_config",

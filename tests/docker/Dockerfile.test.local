@@ -17,7 +17,6 @@ COPY tests ./tests
 COPY docs/examples ./docs/examples
 COPY .audiagentic/config ./.audiagentic/config
 COPY .audiagentic/skills ./.audiagentic/skills
-COPY .claude/skills ./.claude/skills
 COPY .clinerules ./.clinerules
 COPY .gemini ./.gemini
 COPY .github/workflows ./.github/workflows

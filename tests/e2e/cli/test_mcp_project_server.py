@@ -123,7 +123,15 @@ def _mcp_server(project_root: Path) -> Generator[subprocess.Popen, None, None]:
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join([str(_ROOT / "src"), env.get("PYTHONPATH", "")])
     proc = subprocess.Popen(
-        [sys.executable, "-m", "audiagentic.components.project.project_mcp", "--project-root", str(project_root)],
+        [
+            sys.executable,
+            "-m",
+            "audiagentic.launcher",
+            "--project",
+            str(project_root),
+            "mcp",
+            "audiagentic.components.project.project_mcp",
+        ],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         env=env,
     )

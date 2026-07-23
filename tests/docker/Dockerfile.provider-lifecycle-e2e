@@ -5,6 +5,8 @@ ENV AUDIAGENTIC_DOCKER_TESTS=1
 ENV AUDIAGENTIC_REAL_PROVIDER_CLI_TESTS=1
 ENV PYTHONPATH="/app/src"
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
+ENV HOME=/tmp/audiagentic-test-home
+ENV AUDIAGENTIC_HOME=/tmp/audiagentic-test-home/.audiagentic
 
 # Source is baked in (COPY), not bind-mounted: a -v $PWD:/app mount of the host
 # filesystem deadlocks on Windows Docker Desktop. .dockerignore curates the context.
@@ -13,5 +15,7 @@ ENV PIP_BREAK_SYSTEM_PACKAGES=1
 # Prompt-launch coverage in this image can additionally use provider-specific env vars
 # such as OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY / DASHSCOPE_API_KEY /
 # GH_TOKEN plus AUDIAGENTIC_TEST_<PROVIDER>_MODEL values; see tests/TESTING.md.
-COPY . /app
+COPY pyproject.toml README.md ./
+COPY src ./src
+COPY tests ./tests
 CMD ["bash", "-c", "export PATH=/root/.local/bin:$PATH && uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp]' pytest pytest-timeout pytest-xdist pytest-asyncio tomli-w && /venv/bin/pytest tests/integration/providers/test_provider_full_lifecycle.py tests/integration/providers/test_provider_hindsight_e2e.py tests/integration/providers/test_provider_prompt_launch_e2e.py -v --tb=short --timeout=300"]
