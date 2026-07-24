@@ -5,7 +5,7 @@ plan: plan-lsp-capability-expansion
 state: done
 validate-first: true
 priority: P1
-complexity: complex
+work: L
 ---
 
 # Multi-server-per-language foundation

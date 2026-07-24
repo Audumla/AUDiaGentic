@@ -148,7 +148,8 @@ def list_items(
                     "plan": fm.get("plan", ""),
                     "state": fm.get("state", "pending"),
                     "priority": fm.get("priority", ""),
-                    "complexity": fm.get("complexity", ""),
+                    "work": fm.get("work", ""),
+                    "skill": fm.get("skill", ""),
                     "created-by": fm.get("created-by", ""),
                     "title": parse_title(body) or "",
                     "path": str(path.relative_to(project_root)),
@@ -312,7 +313,7 @@ def update_item(project_root: Path, item_id: str, updates: dict[str, Any]) -> di
     """Update frontmatter fields and/or body sections of a plan item.
 
     Frontmatter keys: id, order, plan, state, validate-first, priority,
-    complexity, created-by.
+    work (S/M/L), skill (1/2/3, optional — can be set later), created-by.
     Section keys: title, description, steps, files, validation, effort_risk, notes.
     """
     path = item_store.require_item(project_root, item_id)

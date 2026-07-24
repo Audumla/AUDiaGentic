@@ -78,7 +78,7 @@ def _load_section_headings() -> tuple[dict[str, str], dict[str, str]]:
 
 ITEM_SECTION_HEADING, REVIEW_SECTIONS = _load_section_headings()
 HEADING_TO_FIELD: dict[str, str] = {v: k for k, v in ITEM_SECTION_HEADING.items()}
-FRONTMATTER_FIELDS = {"id", "order", "plan", "state", "breadth", "skill"}
+FRONTMATTER_FIELDS = {"id", "order", "plan", "state", "breadth", "work", "skill"}
 
 _ITEM_ID_RE = re.compile(r"^([A-Z]+)(\d+)$", re.IGNORECASE)
 

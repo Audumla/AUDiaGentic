@@ -115,14 +115,11 @@ def _build_settings_config(pi_cfg: dict, target: Path) -> dict:
     for key, dest, cast in [
         ("quiet_startup",      "quietStartup",         bool),
         ("collapse_changelog", "collapseChangelog",    bool),
-        ("hide_thinking_block","hideThinkingBlock",     bool),
         ("thinking",           "defaultThinkingLevel", str),
         ("editor_padding_x",   "editorPaddingX",       int),
     ]:
         if key in ui:
             settings[dest] = cast(ui[key])
-    if "hide_tool_use" in ui:
-        settings["audiagenticHideToolUse"] = bool(ui["hide_tool_use"])
     return settings
 
 

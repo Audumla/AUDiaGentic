@@ -3,8 +3,8 @@
 #
 # These checks deliberately run WITHOUT the dev toolchain image: they prove the
 # built wheel is self-contained (all YAML descriptors / configs / templates
-# bundled) and that `audiagentic install` + the MCP servers work from a clean
-# install. node is present because the agent install materializes node packages.
+# bundled) and that `audiagentic bootstrap` + the MCP servers work from a clean
+# install. node is present because the bootstrap materializes node packages.
 #
 # Build: docker build -f tests/docker/Dockerfile.packaging -t audia-packaging .
 # Run:   docker run --rm audia-packaging

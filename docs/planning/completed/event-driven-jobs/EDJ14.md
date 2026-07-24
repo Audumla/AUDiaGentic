@@ -5,7 +5,7 @@ plan: plan-event-driven-jobs
 state: completed
 validate-first: true
 priority: P2
-complexity: simple
+work: S
 created-by: claude
 ---
 

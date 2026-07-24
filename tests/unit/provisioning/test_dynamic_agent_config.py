@@ -6,15 +6,11 @@ import sys
 from pathlib import Path
 
 from audiagentic import launcher
-from audiagentic.components.session.session_visibility import set_cli_visibility
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
 from audiagentic.foundation.lifecycle.components import install_component
 from audiagentic.runtime.harness.pi.install import request_runtime_reload
-from audiagentic.runtime.harness.pi.install.config import (
-    _build_settings_config,
-    materialize_agent_config,
-)
+from audiagentic.runtime.harness.pi.install.config import materialize_agent_config
 from audiagentic.runtime.harness.system_prompt import (
     build_system_prompt_injections as build_system_md_injections,
 )
@@ -165,8 +161,7 @@ def test_component_mcp_metadata_loads_from_yaml() -> None:
     assert "project_status" in project_decl.tool_descriptions
 
     assert session_decl is not None
-    assert "CLI visibility controls" in session_decl.instructions
-    assert "set_cli_visibility" in session_decl.tool_descriptions
+    assert "status" in session_decl.tool_descriptions
 
     assert ledger_decl is not None
     assert ledger_decl.module == "audiagentic.components.ledger.ledger_mcp"
@@ -231,70 +226,3 @@ def test_request_runtime_reload_writes_marker(tmp_path: Path) -> None:
     assert payload["requested_at"].endswith("Z")
 
 
-def test_build_settings_config_includes_tool_visibility_flag(tmp_path: Path) -> None:
-    target = tmp_path / "harness"
-    target.mkdir()
-
-    settings = _build_settings_config(
-        {
-            "ui": {
-                "hide_thinking_block": True,
-                "hide_tool_use": False,
-            }
-        },
-        target,
-    )
-
-    assert settings["hideThinkingBlock"] is True
-    assert settings["audiagenticHideToolUse"] is False
-
-
-def test_set_cli_visibility_updates_project_config_and_requests_reload(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    project_root = tmp_path / "project"
-    project_root.mkdir()
-    cfg_path = project_root / ".audiagentic" / "config" / "harness" / "ag.yaml"
-    cfg_path.parent.mkdir(parents=True)
-    cfg_path.write_text("ui:\n  hide_thinking_block: false\n  hide_tool_use: false\n", encoding="utf-8")
-    harness_root = tmp_path / "harness"
-    harness_root.mkdir()
-
-    refresh_calls: list[tuple[Path, Path]] = []
-    reload_calls: list[tuple[Path, str]] = []
-
-    monkeypatch.setattr(
-         "audiagentic.foundation.paths.home.global_harness_runtime",
-        lambda: harness_root,
-    )
-    monkeypatch.setattr(
-        "audiagentic.runtime.harness.pi.install.refresh_materialized_agent_config",
-        lambda target, project_root=None: refresh_calls.append((target, project_root)),
-    )
-    monkeypatch.setattr(
-        "audiagentic.runtime.harness.pi.install.request_runtime_reload",
-        lambda project_root, *, reason, component_id=None, has_mcp_servers=True: reload_calls.append((project_root, reason)),
-    )
-    monkeypatch.setattr(
-        "audiagentic.components.session.session_visibility.effective_cli_visibility",
-        lambda project_root: {
-            "show_thinking_blocks": False,
-            "show_tool_blocks": True,
-        },
-    )
-
-    result = set_cli_visibility(
-        project_root=project_root,
-        show_thinking_blocks=False,
-        show_tool_blocks=True,
-        scope="project",
-    )
-
-    payload = cfg_path.read_text(encoding="utf-8")
-
-    assert result["ok"] is True
-    assert "hide_thinking_block: true" in payload
-    assert "hide_tool_use: false" in payload
-    assert refresh_calls == [(harness_root, project_root)]
-    assert reload_calls == [(project_root, "session-ui-visibility-updated")]

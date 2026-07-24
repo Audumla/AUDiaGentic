@@ -10,7 +10,6 @@ class TestRuntimeActionForReason:
     @pytest.mark.parametrize("reason", [
         "manual-refresh",
         "mcp-refresh-tool",
-        "session-ui-visibility-updated",
     ])
     def test_always_reload_required_reasons(self, reason: str) -> None:
         assert _runtime_action_for_reason(reason, has_mcp_servers=False) == "reload_required"

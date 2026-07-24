@@ -5,7 +5,7 @@ plan: plan-event-driven-jobs
 state: completed
 validate-first: true
 priority: P1
-complexity: mid
+work: M
 ---
 
 # Add dotted-path template rendering for job prompts

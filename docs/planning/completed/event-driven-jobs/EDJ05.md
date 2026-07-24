@@ -5,7 +5,7 @@ plan: plan-event-driven-jobs
 state: completed
 validate-first: true
 priority: P1
-complexity: complex
+work: L
 ---
 
 # Propagate gateway outcomes back to job state

@@ -24,7 +24,8 @@ from audiagentic.foundation.lifecycle.detector import (
     detect_installed_state,
     get_project_version_info,
 )
-from audiagentic.runtime.harness import refresh_harness_config_if_installed
+from audiagentic.runtime.harness import get_harness_type
+from audiagentic.runtime.harness.resolution import harness_cli_available
 
 
 def project_status(project_root: Path) -> dict[str, Any]:
@@ -41,7 +42,9 @@ def project_status(project_root: Path) -> dict[str, Any]:
         "install_state": state.state,
         "audiagentic_markers": state.audiagentic_markers,
         "components": component_status_index(project_root),
-        "version_info": get_project_version_info(project_root) if state.state == "installed" else None,
+        "version_info": get_project_version_info(project_root)
+        if state.state == "installed"
+        else None,
         "component_details": component_details,
     }
 
@@ -52,10 +55,12 @@ def list_components(project_root: Path) -> list[dict[str, Any]]:
 
 def install_component(project_root: Path, component_id: str) -> dict[str, Any]:
     result = _lifecycle_install_component(component_id, project_root)
-    return attach_harness_refresh(result, project_root, reason="component-installed", component_id=component_id)
+    return attach_harness_refresh(result, project_root)
 
 
-def uninstall_component(project_root: Path, component_id: str, *, remove_configs: bool = False) -> dict[str, Any]:
+def uninstall_component(
+    project_root: Path, component_id: str, *, remove_configs: bool = False
+) -> dict[str, Any]:
     descriptor = all_descriptors().get(component_id)
     if descriptor and descriptor.core:
         raise AudiaGenticError(
@@ -64,25 +69,29 @@ def uninstall_component(project_root: Path, component_id: str, *, remove_configs
             message="cannot uninstall core component",
             details={"component-id": component_id},
         )
-    result = _lifecycle_uninstall_component(component_id, project_root, remove_configs=remove_configs)
-    return attach_harness_refresh(result, project_root, reason="component-uninstalled", component_id=component_id)
+    result = _lifecycle_uninstall_component(
+        component_id, project_root, remove_configs=remove_configs
+    )
+    return attach_harness_refresh(result, project_root)
 
 
 def enable_component(project_root: Path, component_id: str) -> dict[str, Any]:
     result = _lifecycle_enable_component(component_id, project_root)
-    return attach_harness_refresh(result, project_root, reason="component-enabled", component_id=component_id)
+    return attach_harness_refresh(result, project_root)
 
 
 def disable_component(project_root: Path, component_id: str) -> dict[str, Any]:
     result = _lifecycle_disable_component(component_id, project_root)
-    return attach_harness_refresh(result, project_root, reason="component-disabled", component_id=component_id)
+    return attach_harness_refresh(result, project_root)
 
 
 def component_status_index(project_root: Path) -> dict[str, dict[str, Any]]:
     return {
         component_id: {
             "status": "installed" if is_installed(component_id, project_root) else "not-installed",
-            "enabled": is_enabled(component_id, project_root) if is_installed(component_id, project_root) else None,
+            "enabled": is_enabled(component_id, project_root)
+            if is_installed(component_id, project_root)
+            else False,
         }
         for component_id in all_descriptors()
     }
@@ -95,7 +104,7 @@ def component_row(descriptor, project_root: Path) -> dict[str, Any]:
         "display_name": descriptor.display_name,
         "description": descriptor.description,
         "status": "installed" if installed else "not-installed",
-        "enabled": is_enabled(descriptor.component_id, project_root) if installed else None,
+        "enabled": is_enabled(descriptor.component_id, project_root) if installed else False,
         "core": descriptor.core,
         "detection_marker": descriptor.detection_marker,
         "file_count": len(descriptor.files),
@@ -110,15 +119,16 @@ def component_row(descriptor, project_root: Path) -> dict[str, Any]:
 def attach_harness_refresh(
     result: dict[str, Any],
     project_root: Path,
-    *,
-    reason: str,
-    component_id: str,
 ) -> dict[str, Any]:
+    """Report harness availability without re-running the harness refresh.
+
+    The lifecycle event this follows (component-installed/enabled/disabled/
+    uninstalled) already triggered runtime.harness's own synchronous refresh
+    via its component-lifecycle subscription (runtime/harness/__init__.py) --
+    calling refresh_harness_config_if_installed here too would just repeat
+    that work a second time for every action.
+    """
     if not result.get("ok", True):
         return result
-    refreshed = refresh_harness_config_if_installed(
-        project_root,
-        reason=reason,
-        component_id=component_id,
-    )
-    return {**result, "harness_config_refreshed": refreshed}
+    harness_available = harness_cli_available(get_harness_type(project_root)) is not None
+    return {**result, "harness_available": harness_available}

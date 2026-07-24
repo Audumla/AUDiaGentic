@@ -4,6 +4,7 @@ Starts one subprocess per MCP server module per module and multiplexes all calls
 over that shared connection. Each test gets its own tmp_path so project state is
 isolated.
 """
+
 from __future__ import annotations
 
 import json
@@ -143,7 +144,9 @@ def _server_fixture(module: str, extra_args: list[str] | None = None):
             command.extend(extra_args)
         proc = subprocess.Popen(
             command,
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             env=env,
         )
         assert proc.stdin is not None
@@ -163,10 +166,16 @@ def _server_fixture(module: str, extra_args: list[str] | None = None):
 
 # ── Shared server fixtures (one per module) ──────────────────────────────────
 
-_session_server = _server_fixture("audiagentic.components.session.session_mcp", ["--readonly", "--smoke-only"])
+_session_server = _server_fixture(
+    "audiagentic.components.session.session_mcp", ["--readonly", "--smoke-only"]
+)
 _project_server = _server_fixture("audiagentic.components.project.project_mcp")
 _providers_server = _server_fixture("audiagentic.components.providers.providers_mcp")
-_release_server = _server_fixture("audiagentic.components.release.release_please.release_please_mcp")
+_release_server = _server_fixture(
+    "audiagentic.components.release.release_please.release_please_mcp"
+)
+_planning_server = _server_fixture("audiagentic.components.planning.planning_mcp")
+_ledger_server = _server_fixture("audiagentic.components.ledger.ledger_mcp")
 
 
 def _call(
@@ -178,8 +187,14 @@ def _call(
 ) -> dict | list:
     responses = _send_and_wait(
         proc,
-        [{"jsonrpc": "2.0", "id": msg_id, "method": "tools/call",
-          "params": {"name": tool, "arguments": args}}],
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "method": "tools/call",
+                "params": {"name": tool, "arguments": args},
+            }
+        ],
         {msg_id},
         time.time() + 5,
     )
@@ -203,12 +218,18 @@ def _tools_list(proc: subprocess.Popen, project_root: Path, msg_id: int = 2) -> 
 
 # ── session server tests ─────────────────────────────────────────────────────
 
+
 def test_session_server_exposes_expected_tools(tmp_path, _session_server):
     names = _tools_list(_session_server, tmp_path)
     assert {
-        "status", "config", "set_auto_update", "cli_visibility",
-        "set_cli_visibility", "update_rig",
+        "status",
+        "config",
+        "set_auto_update",
+        "diagnose_mcp_servers",
+        "update_rig",
     }.issubset(names)
+    assert "cli_visibility" not in names
+    assert "set_cli_visibility" not in names
 
 
 def test_session_server_status_returns_environment(tmp_path, project_root, _session_server):
@@ -222,9 +243,18 @@ def test_session_server_status_returns_environment(tmp_path, project_root, _sess
 def test_session_server_update_rig(tmp_path, _session_server):
     result = _send_and_wait(
         _session_server,
-        [{"jsonrpc": "2.0", "id": 2, "method": "tools/call",
-          "params": {"name": "update_rig", "arguments": {"scope": "local"},
-                     "_meta": {"progressToken": "test-2"}}}],
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {
+                    "name": "update_rig",
+                    "arguments": {"scope": "local"},
+                    "_meta": {"progressToken": "test-2"},
+                },
+            }
+        ],
         {2},
         time.time() + 60,
     )
@@ -232,7 +262,9 @@ def test_session_server_update_rig(tmp_path, _session_server):
     assert "error" not in resp, f"update_rig error: {resp['error']}"
     blocks = resp["result"]["content"]
     parsed = [json.loads(b["text"]) for b in blocks]
-    payload = parsed[0] if len(parsed) == 1 else parsed[0] if isinstance(parsed[0], dict) else parsed
+    payload = (
+        parsed[0] if len(parsed) == 1 else parsed[0] if isinstance(parsed[0], dict) else parsed
+    )
     assert isinstance(payload, dict)
     assert payload["ok"] is True
     assert "output" in payload
@@ -242,6 +274,7 @@ def test_session_server_detects_active_embedded_rig_profile(monkeypatch) -> None
     from audiagentic.components.session.session_embedded_rig import (
         active_embedded_rig_profile,
     )
+
     monkeypatch.setenv("AUDIAGENTIC_RIG_TYPE", "embedded")
     monkeypatch.setenv("AUDIAGENTIC_RIG_PROFILE", "qwen3.5-2b-q4_k_s")
     assert active_embedded_rig_profile() == "qwen3.5-2b-q4_k_s"
@@ -249,11 +282,16 @@ def test_session_server_detects_active_embedded_rig_profile(monkeypatch) -> None
 
 # ── project server tests ─────────────────────────────────────────────────────
 
+
 def test_project_server_exposes_expected_tools(tmp_path, _project_server):
     names = _tools_list(_project_server, tmp_path)
     assert {
-        "project_status", "list_components", "install_component",
-        "uninstall_component", "enable_component", "disable_component",
+        "project_status",
+        "list_components",
+        "install_component",
+        "uninstall_component",
+        "enable_component",
+        "disable_component",
     }.issubset(names)
 
 
@@ -268,12 +306,18 @@ def test_project_server_lists_optional_components_not_installed(tmp_path, _proje
 
 # ── providers server tests ───────────────────────────────────────────────────
 
+
 def test_providers_server_exposes_expected_tools(tmp_path, _providers_server):
     names = _tools_list(_providers_server, tmp_path)
     assert {
-        "list_providers", "get_provider_status",
-        "list_provider_descriptors", "reconcile_all_providers",
+        "list_providers",
+        "get_provider_status",
+        "list_provider_descriptors",
     }.issubset(names)
+    # MA22: universal reconcile is not a public/MCP surface — only explicit
+    # resource and typed-family operations are exposed.
+    assert "reconcile_provider" not in names
+    assert "reconcile_all_providers" not in names
 
 
 def test_providers_server_lists_known_providers(tmp_path, _providers_server):
@@ -286,12 +330,44 @@ def test_providers_server_lists_known_providers(tmp_path, _providers_server):
 
 # ── release-please server tests ──────────────────────────────────────────────
 
+
 def test_release_please_server_exposes_expected_tools(tmp_path, _release_server):
     names = _tools_list(_release_server, tmp_path)
     assert {"install_release_please", "update_release_please_workflow"}.issubset(names)
 
 
+# ── planning server tests (ag-planning) ──────────────────────────────────────
+
+
+def test_planning_server_exposes_expected_tools(tmp_path, _planning_server):
+    names = _tools_list(_planning_server, tmp_path)
+    assert {"plan_list_items", "plan_create_item", "plan_update_item"}.issubset(names)
+
+
+def test_planning_server_can_list_items(tmp_path, project_root, _planning_server):
+    result = _call(_planning_server, "plan_list_items", {}, project_root=project_root)
+    # Should return a list (possibly empty) — the key is no transport error
+    payload = result if isinstance(result, dict) else result[0]
+    assert "items" in payload or "total" in payload, f"Unexpected response structure: {payload}"
+
+
+# ── ledger server tests (ag-ledger) ──────────────────────────────────────────
+
+
+def test_ledger_server_exposes_expected_tools(tmp_path, _ledger_server):
+    names = _tools_list(_ledger_server, tmp_path)
+    assert {"get_current_summary", "record_change_event"}.issubset(names)
+
+
+def test_ledger_server_can_get_summary(tmp_path, project_root, _ledger_server):
+    result = _call(_ledger_server, "get_current_summary", {}, project_root=project_root)
+    # Should return a string (the markdown summary) — the key is no transport error
+    payload = result if isinstance(result, str) else result[0]
+    assert isinstance(payload, str), f"Expected string summary, got {type(payload)}"
+
+
 # ── direct unit-style test (no subprocess) ───────────────────────────────────
+
 
 def test_update_rig_works_directly(tmp_path: Path) -> None:
     """Test the update_binaries work function directly (avoids MCP subprocess timeout)."""
@@ -315,4 +391,8 @@ def test_update_rig_works_directly(tmp_path: Path) -> None:
     _sink(ComponentOutputEvent(message=out.getvalue().strip()))
 
     assert len(events) > 0
-    assert "llama-server" in events[-1].message or "Installed" in events[-1].message or "up to date" in events[-1].message
+    assert (
+        "llama-server" in events[-1].message
+        or "Installed" in events[-1].message
+        or "up to date" in events[-1].message
+    )

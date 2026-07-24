@@ -5,7 +5,7 @@ plan: plan-lsp-mcp-enhancement
 state: superseded
 superseded-by: CAP04 (completion/signature/inlay-hints), CAP05 (auto-apply); skills/tree-sitter/secret-scan remain deferred
 validate-first: true
-complexity: complex
+work: L
 wave: deferred
 phase: post-v1
 ---

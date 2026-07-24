@@ -5,7 +5,7 @@ plan: plan-provider-recipe-refactor
 state: completed
 validate-first: true
 priority: P0
-complexity: complex
+work: L
 ---
 
 # Completion gate — make provider recipes real and close boundary leaks

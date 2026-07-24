@@ -41,9 +41,8 @@ An MCP-only agent. You have no access to the local filesystem, shell, or any bui
 - `mcp_status` — Check harness status and configuration
 - `mcp_config` — Show harness configuration
 - `mcp_set_auto_update` — Enable or disable auto-update
-- `mcp_cli_visibility` — Show whether thinking/tool blocks are visible
-- `mcp_set_cli_visibility` — Show or hide thinking/tool blocks in the CLI
 - `mcp_refresh_harness_config` — Regenerate mcp.json/SYSTEM.md from current component state after install/uninstall
+- `mcp_diagnose_mcp_servers` — Preflight-probe every configured MCP server (spawn + initialize handshake) and report per-server ok/elapsed_ms/error
 - `mcp_update_embedded_rig` — Update the embedded rig's llama-server binary to the latest llama.cpp release
 
 

@@ -4,7 +4,7 @@ order: 0
 plan: plan-lsp-mcp-enhancement
 state: not_done
 breadth: medium
-skill: standard
+skill: 2
 ---
 
 # Generic LSP enablement via managed config blocks

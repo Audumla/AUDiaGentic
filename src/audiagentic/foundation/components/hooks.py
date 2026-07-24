@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import cache
@@ -32,12 +33,20 @@ class ComponentStatusPayload:
             raise _status_error("enabled must be bool", field="enabled")
         if not isinstance(self.configured, bool):
             raise _status_error("configured must be bool", field="configured")
-        if self.active_implementation is not None and not isinstance(self.active_implementation, str):
-            raise _status_error("active_implementation must be str or None", field="active_implementation")
+        if self.active_implementation is not None and not isinstance(
+            self.active_implementation, str
+        ):
+            raise _status_error(
+                "active_implementation must be str or None", field="active_implementation"
+            )
         if not isinstance(self.missing_required, list):
             raise _status_error("missing_required must be a list", field="missing_required")
         for item in self.missing_required:
-            if not isinstance(item, dict) or not isinstance(item.get("option"), str) or not isinstance(item.get("description"), str):
+            if (
+                not isinstance(item, dict)
+                or not isinstance(item.get("option"), str)
+                or not isinstance(item.get("description"), str)
+            ):
                 raise _status_error(
                     "missing_required entries must include string option and description",
                     field="missing_required",
@@ -99,28 +108,57 @@ def invoke_hook(
         return {"error": str(exc), "hook": hook_path}
 
 
+_STATUS_HOOK_TIMEOUT_MS = 2000  # per-hook timeout in milliseconds
+
+
 def get_component_status(descriptor: Any, project_root: Path) -> dict[str, Any] | None:
-    """Invoke a component's status_hook and return the serialized status payload."""
+    """Invoke a component's status_hook and return the serialized status payload.
+
+    Per-hook timing is logged at WARNING level when a hook exceeds
+    _STATUS_HOOK_TIMEOUT_MS (2 seconds). Status hooks must be local,
+    bounded, read-only — no subprocesses, network probes, locks, or large
+    filesystem scans.
+    """
     hook_path = getattr(descriptor, "status_hook", None)
     if not hook_path:
         return None
     fn = _resolve_hook(hook_path)
     if fn is None:
-        logger.warning("status_hook[%s]: could not resolve '%s'", descriptor.component_id, hook_path)
+        logger.warning(
+            "status_hook[%s]: could not resolve '%s'", descriptor.component_id, hook_path
+        )
         return None
+    start_ms = time.monotonic()
     try:
         result = fn(project_root)
     except AudiaGenticError:
-        logger.error("status_hook[%s] raised AudiaGenticError", descriptor.component_id, exc_info=True)
+        logger.error(
+            "status_hook[%s] raised AudiaGenticError", descriptor.component_id, exc_info=True
+        )
         raise
     except Exception as exc:  # noqa: BLE001
-        logger.error("status_hook[%s] '%s' raised: %s", descriptor.component_id, hook_path, exc, exc_info=True)
+        logger.error(
+            "status_hook[%s] '%s' raised: %s",
+            descriptor.component_id,
+            hook_path,
+            exc,
+            exc_info=True,
+        )
         raise AudiaGenticError(
             code="INT-COMP-002",
             kind="components",
             message="component status hook failed",
             details={"component_id": descriptor.component_id, "hook": hook_path},
         ) from exc
+    finally:
+        elapsed_ms = (time.monotonic() - start_ms) * 1000
+        if elapsed_ms > _STATUS_HOOK_TIMEOUT_MS:
+            logger.warning(
+                "status_hook[%s] took %.0fms (threshold: %dms) — consider making hook local, bounded, read-only",
+                descriptor.component_id,
+                elapsed_ms,
+                _STATUS_HOOK_TIMEOUT_MS,
+            )
     if result is None:
         return None
     if isinstance(result, ComponentStatusPayload):
@@ -157,4 +195,3 @@ def initialize_lifecycle_hook_dispatch() -> None:
         return
     get_bus().subscribe("lifecycle.component.*", _dispatch_component_lifecycle)
     _INITIALIZED = True
-

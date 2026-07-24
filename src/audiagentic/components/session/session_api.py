@@ -11,7 +11,7 @@ from typing import Any
 
 from audiagentic.runtime.harness import build_runtime_sync, refresh_harness_config_if_installed
 
-from . import session_embedded_rig, session_runtime_status, session_visibility
+from . import session_embedded_rig, session_runtime_status
 
 _UPDATE_SCOPE_REGISTRY: dict[str, Callable[..., Any]] = {
     "local": session_embedded_rig.update_embedded_rig,
@@ -54,27 +54,6 @@ def set_auto_update(enabled: bool) -> dict[str, Any]:
     return {"ok": True, "auto_update_enabled": enabled, "env": env_var}
 
 
-def cli_visibility(project_root: Path) -> dict[str, bool]:
-    """Return effective CLI visibility state."""
-    return session_visibility.effective_cli_visibility(project_root)
-
-
-def set_cli_visibility(
-    project_root: Path,
-    *,
-    show_thinking_blocks: bool | None,
-    show_tool_blocks: bool | None,
-    scope: str,
-) -> dict[str, Any]:
-    """Update CLI visibility config and request runtime reload."""
-    return session_visibility.set_cli_visibility(
-        project_root=project_root,
-        show_thinking_blocks=show_thinking_blocks,
-        show_tool_blocks=show_tool_blocks,
-        scope=scope,
-    )
-
-
 def refresh_harness_config(project_root: Path) -> dict[str, Any]:
     """Regenerate harness config and return runtime sync instructions."""
     refreshed = refresh_harness_config_if_installed(project_root, reason="mcp-refresh-tool")
@@ -83,6 +62,31 @@ def refresh_harness_config(project_root: Path) -> dict[str, Any]:
         "refreshed": refreshed,
         "sync": build_runtime_sync(reason="mcp-refresh-tool"),
     }
+
+
+def diagnose_mcp_servers(project_root: Path, *, timeout: float = 5.0) -> dict[str, Any]:
+    """Preflight-probe every configured MCP server for the active harness.
+
+    Spawns each configured server and completes the MCP ``initialize``
+    handshake directly (see foundation.mcp.diagnostics) -- this does not
+    instrument a live harness session (AUDiaGentic never holds that
+    connection), it answers whether each configured server would start right
+    now, with how long it took and why if it didn't.
+    """
+    from audiagentic.foundation.mcp.diagnostics import probe_mcp_server
+    from audiagentic.runtime.harness import mcp_config_path, read_mcp_config
+
+    entries = read_mcp_config(mcp_config_path(project_root))
+    results = []
+    for name, entry in sorted(entries.items()):
+        if entry.is_remote:
+            continue
+        command = [entry.command, *entry.args]
+        env = {**os.environ, **entry.env} if entry.env else None
+        results.append(
+            probe_mcp_server(name, command, cwd=project_root, env=env, timeout=timeout)
+        )
+    return {"results": results}
 
 
 async def update_rig(*, scope: str = "local") -> dict[str, Any]:

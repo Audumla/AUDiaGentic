@@ -5,7 +5,7 @@ plan: plan-lsp-capability-expansion
 state: done
 validate-first: true
 priority: P2
-complexity: mid
+work: M
 ---
 
 # Expand read-only capability tools

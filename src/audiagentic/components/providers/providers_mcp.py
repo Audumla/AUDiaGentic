@@ -123,20 +123,6 @@ def build_server() -> FastMCP:
 
     @mcp.tool()
     @log_tool_call
-    async def reconcile_provider(provider_id: str, fetch_catalog: bool = False) -> dict[str, Any]:
-        return await providers_api.reconcile_provider(
-            project_root_from_env(), provider_id, fetch_catalog=fetch_catalog
-        )
-
-    @mcp.tool()
-    @log_tool_call
-    async def reconcile_all_providers(fetch_catalogs: bool = False) -> dict[str, Any]:
-        return await providers_api.reconcile_all_providers(
-            project_root_from_env(), fetch_catalogs=fetch_catalogs
-        )
-
-    @mcp.tool()
-    @log_tool_call
     def model_source_list() -> dict[str, Any]:
         return providers_api.model_source_list(project_root_from_env())
 

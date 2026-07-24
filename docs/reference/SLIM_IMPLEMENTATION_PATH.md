@@ -373,25 +373,21 @@ provide family-specific operations in providers_api.
 
 ---
 
-### MA22: Remove Reconcile API — Blocked by all families
+### MA22: Remove Reconcile API — Complete (2026-07-24)
 **Plan item:** Remove universal provider reconcile API
-**Pattern:** Cleanup (blocked by MA25, MA26, MA27, MA28, MA29, MA30, MO02)
+**Pattern:** Cleanup (was blocked by MA25, MA26, MA27, MA28, MA29, MA30, MO02, SH07, MA17 — all now complete)
 
-**Current state:** `reconcile_provider` and `reconcile_all_providers` exist in providers_api.
+**Final state:** `reconcile_provider`/`reconcile_all_providers` removed from providers_api's
+public exports and the ag-providers-mgmt MCP tool surface. The one real internal
+caller (commands/launch.py's on-launch reconciliation) already called
+`services.lifecycle.reconcile_all_providers` directly — the retained private
+provider-owned composition path — so no caller migration was needed beyond
+that.
 
-**Slim slice (after all families):**
-1. Find all callers of `reconcile_provider` — enumerate them
-2. Replace each caller with composition of family-specific operations
-   (e.g., `manage_mcp_entries` + `manage_cli_lifecycle` + etc.)
-3. After ALL callers are migrated and tests pass, delete reconcile functions
-4. **Do NOT delete reconcile before every caller is verified migrated**
+**Verification:** tests/unit/providers/ (367 tests) and
+tests/unit/foundation/toolchains/test_architecture_boundaries.py green.
 
-**Risk:** High. `reconcile_provider` has multiple callers across the codebase.
-Deleting it prematurely breaks things.
-
-**Verification:** Run reconcile-related tests, then full test suite
-
-**Result:** MA22 completes. Enables MA09.
+**Result:** MA22 complete. Enables MA09.
 
 ---
 

@@ -58,36 +58,19 @@ def build_server() -> FastMCP:
 
     @mcp.tool()
     @log_tool_call
-    def cli_visibility() -> dict[str, Any]:
-        try:
-            return session_api.cli_visibility(project_root_from_env())
-        except Exception as exc:
-            return report_error("session", "cli_visibility", exc, logger)
-
-    @mcp.tool()
-    @log_tool_call
-    def set_cli_visibility(
-        show_thinking_blocks: bool | None = None,
-        show_tool_blocks: bool | None = None,
-        scope: str = "project",
-    ) -> dict[str, Any]:
-        try:
-            return session_api.set_cli_visibility(
-                project_root_from_env(),
-                show_thinking_blocks=show_thinking_blocks,
-                show_tool_blocks=show_tool_blocks,
-                scope=scope,
-            )
-        except Exception as exc:
-            return report_error("session", "set_cli_visibility", exc, logger)
-
-    @mcp.tool()
-    @log_tool_call
     def refresh_harness_config() -> dict[str, Any]:
         try:
             return session_api.refresh_harness_config(project_root_from_env())
         except Exception as exc:
             return report_error("session", "refresh_harness_config", exc, logger)
+
+    @mcp.tool()
+    @log_tool_call
+    def diagnose_mcp_servers(timeout: float = 5.0) -> dict[str, Any]:
+        try:
+            return session_api.diagnose_mcp_servers(project_root_from_env(), timeout=timeout)
+        except Exception as exc:
+            return report_error("session", "diagnose_mcp_servers", exc, logger)
 
     @mcp.tool()
     @log_tool_call

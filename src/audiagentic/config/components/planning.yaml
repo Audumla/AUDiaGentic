@@ -93,7 +93,7 @@ mcp-servers:
         before creating or updating plan items.
       plan_create_item: >
         Create a new plan item. Required: plan, title.
-        Optional but encouraged where applicable: breadth (small/medium/large indicates the blast radius of the change), skill (lite/medium/high indicates the required skill level of an agent to implement),
+        Optional but encouraged where applicable: work (S/M/L — volume of change), skill (1/2/3 — cognitive difficulty; optional, can be set later via plan_update_item),
         order, description, steps, detailed_solution (Detailed Solution & Technical Design),
         code_samples (Code Samples & Guidance including config samples and schemas),
         files, validation, effort_risk, standards, notes.

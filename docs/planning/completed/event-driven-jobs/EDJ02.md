@@ -5,7 +5,7 @@ plan: plan-event-driven-jobs
 state: completed
 validate-first: true
 priority: P1
-complexity: mid
+work: M
 ---
 
 # Subscribe agent-jobs to configured event triggers
