@@ -7,6 +7,7 @@ small read-only smoke subset when arguments are simple and deterministic.
 Empty/not-installed results count as pass; only raised exceptions are failures.
 Exit non-zero if any declared server errors.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -27,7 +28,6 @@ SMOKE_CALLS: dict[str, dict[str, dict[str, object]]] = {
     },
     "audiagentic.components.session.session_mcp": {
         "config": {},
-        "cli_visibility": {},
     },
     "audiagentic.components.ledger.ledger_mcp": {
         "get_current_summary": {},
@@ -86,8 +86,16 @@ async def main() -> int:
                     print(f"        - {c}: SKIP (not registered)")
                     continue
                 try:
-                    await mcp.call_tool(c, params)
-                    print(f"        - {c}: ok")
+                    result = await mcp.call_tool(c, params)
+                    # Semantic success: no raised exception AND not an error envelope.
+                    if getattr(result, "is_error", False):
+                        failures += 1
+                        text_parts = [
+                            getattr(b, "text", str(b)) for b in getattr(result, "content", [])
+                        ]
+                        print(f"        - {c}: FAIL (error envelope) {' '.join(text_parts)[:120]}")
+                    else:
+                        print(f"        - {c}: ok")
                 except Exception as e:  # noqa: BLE001
                     failures += 1
                     print(f"        - {c}: FAIL {type(e).__name__}: {str(e)[:120]}")

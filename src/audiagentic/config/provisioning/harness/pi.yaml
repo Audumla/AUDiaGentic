@@ -105,8 +105,6 @@ ui:
   custom_header_extension: null
   show_startup_info: false
   startup_banner: null
-  hide_thinking_block: true
-  hide_tool_use: true
   thinking: off
   editor_padding_x: 0
   theme_colors: {}

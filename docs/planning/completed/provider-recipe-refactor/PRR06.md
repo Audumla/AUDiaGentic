@@ -5,7 +5,7 @@ plan: plan-provider-recipe-refactor
 state: completed
 validate-first: true
 priority: P1
-complexity: complex
+work: L
 ---
 
 # PRR06: Align coding-lsp with provider recipe model

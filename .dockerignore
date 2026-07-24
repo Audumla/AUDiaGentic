@@ -63,3 +63,23 @@ tests/unit/runtime/Qwen3.5-0.8B-UD-Q5_K_XL.gguf
 **/__pycache__
 **/__pycache__/**
 **/*.pyc
+# Credentials and secrets — never build into Docker images
+**/.env
+**/.env.local
+**/.env.*.local
+**/secrets.yaml
+**/secrets.json
+**/*.key
+**/*.pem
+**/*.p12
+**/*.pfx
+
+# User sessions and runtime state
+.audiagentic/sessions
+.audiagentic/sessions/**
+.claude/sessions
+.claude/sessions/**
+.audiagentic/logs
+.audiagentic/logs/**
+.pi/sessions
+.pi/sessions/**

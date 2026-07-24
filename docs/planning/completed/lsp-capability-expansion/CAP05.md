@@ -5,7 +5,7 @@ plan: plan-lsp-capability-expansion
 state: done
 validate-first: true
 priority: P2
-complexity: complex
+work: L
 ---
 
 # Config-gated mutation tools

@@ -191,13 +191,16 @@ def refresh_harness_config_if_installed(
     harness_runtime = global_harness_runtime()
     if harness_cli_available(get_harness_type(project_root)) is None:
         return False
+    refreshed = True
     try:
         refresh_materialized_agent_config(harness_runtime, project_root=project_root)
     except AudiaGenticError:
         logger.warning("Failed to refresh agent config for %s", component_id, exc_info=True, extra={"component": component_id})
+        refreshed = False
     try:
         request_runtime_reload(project_root, reason=reason, component_id=component_id)
     except AudiaGenticError:
         logger.warning("Failed to request runtime reload for %s", component_id, exc_info=True, extra={"component": component_id})
-    return True
+        refreshed = False
+    return refreshed
 
