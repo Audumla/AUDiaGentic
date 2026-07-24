@@ -153,4 +153,8 @@ requesting a different profile later in the same process raises
 VAL-COMP-010. To switch profiles, stop the current session and restart
 with a different `--component-profile` value or updated environment
 variable.
+
+## Source control doctrine
+
+Do not invoke git or GitHub APIs directly — use the MCP tools.
 <!-- ag:managed:end -->

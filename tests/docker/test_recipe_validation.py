@@ -187,22 +187,43 @@ def test_provider_capability_outputs() -> None:
 
 # ── MCP propagation policy validation ────────────────────────────────
 
+# Canonical propagation inventory from component configs:
+#   audiagentic-only (10): ag-agents-mgmt, ag-ledger-mgmt, ag-lsp-mgmt,
+#     ag-memory-mgmt, ag-planning-mgmt, ag-project-mgmt, ag-providers-mgmt,
+#     ag-release-mgmt, ag-sc-mgmt, ag-session-mgmt
+#   providers-only (6): ag-agents, ag-agents-gateway, ag-ledger,
+#     ag-lsp, ag-planning, ag-release-please
+#   both targets (2): git, github
 
-def test_mcp_propagation_policies() -> None:
-    """Validate MCP server propagation policies: mgmt vs providers.
+_AUDIAGENTIC_ONLY = {
+    "ag-agents-mgmt", "ag-ledger-mgmt", "ag-lsp-mgmt",
+    "ag-memory-mgmt", "ag-planning-mgmt", "ag-project-mgmt",
+    "ag-providers-mgmt", "ag-release-mgmt", "ag-sc-mgmt", "ag-session-mgmt",
+}
 
-    Management MCPs (propagate: audiagentic) should NOT appear in harness mcp.json.
-    User MCPs (propagate: providers) SHOULD appear in harness mcp.json.
+_PROVIDERS_ONLY = {
+    "ag-agents", "ag-agents-gateway", "ag-ledger",
+    "ag-lsp", "ag-planning", "ag-release-please",
+}
+
+_BOTH_TARGETS = {"git", "github"}  # propagate: audiagentic,providers
+
+
+def test_mcp_propagation_audiagentic_excluded_from_providers() -> None:
+    """Management MCPs (propagate: audiagentic) must NOT appear in provider entries.
+
+    This is the core invariant: internal AUDiaGentic management tools should
+    never leak into the harness mcp.json that gets sent to provider CLIs
+    like Pi or OpenCode.
     """
     project_root = Path(os.environ.get("AUDIAGENTIC_REPO_ROOT", "/tmp/test-project"))
     project_root.mkdir(exist_ok=True)
 
+    from audiagentic.foundation.components.loader import register_all_components
+    register_all_components()
+
     from audiagentic.foundation.mcp.projection import collect_component_mcp_entries
 
-    # Known propagation policies
-    audiagentic_only = {"ag-planning-mgmt"}  # propagate: audiagentic
-
-    # Collect entries for providers (harness mcp.json)
     provider_entries = collect_component_mcp_entries(
         project_root,
         propagation_target="providers",
@@ -210,59 +231,79 @@ def test_mcp_propagation_policies() -> None:
     )
     entry_names = set(provider_entries.keys())
 
-    # Management MCPs should NOT be in provider entries
-    for name in audiagentic_only:
+    for name in _AUDIAGENTIC_ONLY:
         assert name not in entry_names, (
-            f"Management MCP '{name}' (propagate: audiagentic) should NOT "
-            f"appear in provider entries. Got: {sorted(entry_names)}"
+            f"Management MCP '{name}' (propagate: audiagentic) must NOT appear "
+            f"in provider entries. Got: {sorted(entry_names)}"
         )
 
-    # Note: entry count depends on which components are installed,
-    # so we only verify absence of management MCPs
 
+def test_mcp_propagation_both_targets_in_provider_entries() -> None:
+    """MCPs with dual propagation (audiagentic,providers) appear in BOTH projections.
 
-@pytest.mark.timeout(240)
-def test_bootstrap_no_mgmt_mcp_in_harness_config() -> None:
-    """Bootstrap must NOT project management MCPs into harness mcp.json.
-
-    Management MCPs (propagate: audiagentic) are internal to AUDiaGentic and
-    should never appear in the harness-level mcp.json that gets sent to
-    provider CLIs like Pi or OpenCode.
+    The source-control component declares git/github MCP servers that propagate
+    to both audiagentic and providers. We install the component to verify that
+    its MCP servers appear in both projections.
     """
-    import json
-
     project_root = Path(os.environ.get("AUDIAGENTIC_REPO_ROOT", "/tmp/test-project"))
     project_root.mkdir(exist_ok=True)
 
     from audiagentic.foundation.components.loader import register_all_components
     from audiagentic.foundation.lifecycle.components import install_component
 
-    # Install agent-planning component to exercise MCP projection
     register_all_components()
-    install_component("agent-planning", project_root)
+    # source-control component declares git/github with propagate: audiagentic,providers
+    install_component("source-control", project_root)
 
-    result = subprocess.run(
-        ["audiagentic", "bootstrap"],
-        capture_output=True,
-        text=True,
-        timeout=180,
-        env={**os.environ, "AUDIAGENTIC_REPO_ROOT": str(project_root)},
+    from audiagentic.foundation.mcp.projection import collect_component_mcp_entries
+
+    provider_entries = collect_component_mcp_entries(
+        project_root,
+        propagation_target="providers",
+        require_enabled=False,
     )
-    assert result.returncode == 0, f"Bootstrap failed: {result.stderr[:300]}"
-
-    # Check project-level mcp.json
-    mcp_path = project_root / ".audiagentic" / "mcp.json"
-    if not mcp_path.exists():
-        pytest.skip("Project mcp.json not created (component may not be enabled)")
-
-    installed_mcp = json.loads(mcp_path.read_text(encoding="utf-8"))
-    server_names = set(installed_mcp.get("mcpServers", {}).keys())
-
-    # Management MCPs must NOT appear
-    assert "ag-planning-mgmt" not in server_names, (
-        f"Management MCP 'ag-planning-mgmt' should NOT be in harness mcp.json. "
-        f"Got: {sorted(server_names)}"
+    audiagentic_entries = collect_component_mcp_entries(
+        project_root,
+        propagation_target="audiagentic",
+        require_enabled=False,
     )
+    provider_names = set(provider_entries.keys())
+    audiagentic_names = set(audiagentic_entries.keys())
+
+    # git requires uvx (available), github requires gh (not available)
+    # Verify git appears in BOTH projections as proof of dual propagation
+    assert "git" in provider_names, (
+        f"Dual-target MCP 'git' (propagate: audiagentic,providers) "
+        f"must appear in provider entries. Got: {sorted(provider_names)}"
+    )
+    assert "git" in audiagentic_names, (
+        f"Dual-target MCP 'git' (propagate: audiagentic,providers) "
+        f"must appear in audiagentic entries. Got: {sorted(audiagentic_names)}"
+    )
+
+
+def test_mcp_propagation_providers_only_not_in_audiagentic() -> None:
+    """Provider-only MCPs must NOT appear in audiagentic-only projection."""
+    project_root = Path(os.environ.get("AUDIAGENTIC_REPO_ROOT", "/tmp/test-project"))
+    project_root.mkdir(exist_ok=True)
+
+    from audiagentic.foundation.components.loader import register_all_components
+    register_all_components()
+
+    from audiagentic.foundation.mcp.projection import collect_component_mcp_entries
+
+    audiagentic_entries = collect_component_mcp_entries(
+        project_root,
+        propagation_target="audiagentic",
+        require_enabled=False,
+    )
+    entry_names = set(audiagentic_entries.keys())
+
+    for name in _PROVIDERS_ONLY:
+        assert name not in entry_names, (
+            f"Provider-only MCP '{name}' (propagate: providers) must NOT appear "
+            f"in audiagentic entries. Got: {sorted(entry_names)}"
+        )
 
 
 if __name__ == "__main__":

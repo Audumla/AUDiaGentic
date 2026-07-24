@@ -75,21 +75,19 @@ def _load_runner(provider_id: str) -> ProviderRunner | None:
     return runner
 
 
-# Each (mode, transport) launch pair -> the adapter submodule + entry function
-# that builds it. MODE is what we do (execute = run a turn and capture; a live
-# interactive session); TRANSPORT is how the launched process is connected
-# (native = pipe/tty; acp = Agent Client Protocol). The submodule/fn names are
-# the transport implementation identities (acp.py IS the ACP transport). The
-# recipe block of the same name is the declarative alternative to a hand-written
-# builder.
-_LAUNCH_BUILDERS: dict[tuple[str, str], tuple[str, str]] = {
-    ("execute", "native"): ("adapter", "run"),
-    ("interactive", "native"): ("interactive", "build_interactive_launch"),
-    ("interactive", "acp"): ("acp", "build_acp_launch"),
+# Each launch INTENT -> the adapter submodule + entry function that builds it.
+# The caller picks an intent; the provider's builder assembles its richest
+# transport/channel surface to fulfill it (the caller never names a transport).
+# The submodule/recipe-block of the same name holds the hand-written builder or
+# declarative recipe.
+_LAUNCH_BUILDERS: dict[str, tuple[str, str]] = {
+    "execute": ("adapter", "run"),
+    "interactive": ("interactive", "build_interactive_launch"),
+    "agent": ("acp", "build_acp_launch"),
 }
 
 
-def _declared_launches(provider_id: str) -> dict[str, tuple[str, ...]]:
+def _declared_launches(provider_id: str) -> dict[str, Any]:
     from audiagentic.components.providers.descriptors.registry import all_descriptors
 
     descriptor = all_descriptors().get(provider_id)
@@ -97,38 +95,37 @@ def _declared_launches(provider_id: str) -> dict[str, tuple[str, ...]]:
     return declared or {}
 
 
-def resolve_launch_builder(
-    provider_id: str, mode: str, transport: str = "native"
-) -> Callable[..., Any] | None:
-    """Resolve the builder for one provider ``(mode, transport)`` launch.
+def resolve_launch_builder(provider_id: str, intent: str) -> Callable[..., Any] | None:
+    """Resolve the builder for one provider launch *intent*.
 
-    Capability is the source of truth: the descriptor's declared ``launches``
-    (mode -> transport set) gates support. An undeclared pair is unsupported
-    (None, no probing); a declared pair with no builder/recipe fails closed. An
-    empty ``launches`` (undeclared, migration default) falls back to probing.
+    Callers pick an intent (execute | interactive | agent); the provider's
+    builder owns which transports/channels it assembles. Capability is the
+    source of truth: the descriptor's declared ``launches`` (intent -> channel
+    surface) gates support. An undeclared intent is unsupported (None, no
+    probing); a declared intent with no builder/recipe fails closed. An empty
+    ``launches`` (undeclared, migration default) falls back to probing.
 
-    Within a supported pair, precedence is: hand-written
+    Within a supported intent, precedence is: hand-written
     ``adapters/<id>/<submodule>`` builder (the escape hatch) wins; otherwise
     the declarative recipe block of the same name (execute via _load_runner).
     """
-    pair = (mode, transport)
-    if pair not in _LAUNCH_BUILDERS:
+    if intent not in _LAUNCH_BUILDERS:
         raise AudiaGenticError(
             code="VAL-EXEC-004",
             kind="providers",
-            message="unknown provider launch (mode, transport)",
-            details={"provider-id": provider_id, "mode": mode, "transport": transport},
+            message="unknown provider launch intent",
+            details={"provider-id": provider_id, "intent": intent},
         )
     declared = _declared_launches(provider_id)
-    if declared and transport not in declared.get(mode, ()):
-        return None  # explicitly not a supported (mode, transport) for this provider
+    if declared and intent not in declared:
+        return None  # explicitly not a supported launch intent for this provider
 
-    if mode == "execute":
+    if intent == "execute":
         # Execute's builder is a full runner (build spec + spawn + parse), and
         # _load_runner carries the missing-run-entrypoint guard.
         builder = _load_runner(provider_id)
     else:
-        submodule, fn_name = _LAUNCH_BUILDERS[pair]
+        submodule, fn_name = _LAUNCH_BUILDERS[intent]
         builder = _adapter_hook(provider_id, submodule, fn_name)
         if builder is None:
             from audiagentic.components.providers.adapters.recipe_launch import (
@@ -137,24 +134,24 @@ def resolve_launch_builder(
 
             builder = descriptor_launch_builder(provider_id, submodule)
 
-    if declared and transport in declared.get(mode, ()) and builder is None:
+    if declared and intent in declared and builder is None:
         raise AudiaGenticError(
             code="INT-EXEC-003",
             kind="providers",
-            message="provider declares this (mode, transport) but has no builder or recipe",
-            details={"provider-id": provider_id, "mode": mode, "transport": transport},
+            message="provider declares this launch intent but has no builder or recipe",
+            details={"provider-id": provider_id, "intent": intent},
         )
     return builder
 
 
 def load_acp_launch_builder(provider_id: str) -> Callable[..., Any] | None:
-    """Back-compat wrapper: the interactive-mode ACP transport builder."""
-    return resolve_launch_builder(provider_id, "interactive", "acp")
+    """Back-compat wrapper: the agent-intent launch builder (ACP today)."""
+    return resolve_launch_builder(provider_id, "agent")
 
 
 def load_interactive_launch_builder(provider_id: str) -> Callable[..., Any] | None:
-    """Back-compat wrapper: the interactive-mode native transport builder."""
-    return resolve_launch_builder(provider_id, "interactive", "native")
+    """Back-compat wrapper: the interactive-intent launch builder."""
+    return resolve_launch_builder(provider_id, "interactive")
 
 
 def load_mcp_surface_builder(provider_id: str) -> Callable[..., Any] | None:

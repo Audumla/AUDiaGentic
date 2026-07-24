@@ -5,6 +5,7 @@ for the package download while every AUDiaGentic-owned path, materializer,
 CLI dispatch and cleanup action runs unchanged.  It therefore works locally
 without network credentials and is also the Docker user-path gate.
 """
+
 from __future__ import annotations
 
 import json
@@ -44,7 +45,9 @@ def test_launch_fails_loud_when_config_refresh_fails(tmp_path: Path, monkeypatch
         "audiagentic.runtime.harness.build_global_context",
         lambda **_kw: launched.append(1) or SimpleNamespace(manages_rig=False),
     )
-    monkeypatch.setattr("audiagentic.runtime.harness.run_agent", lambda *_a, **_kw: launched.append(1) or 0)
+    monkeypatch.setattr(
+        "audiagentic.runtime.harness.run_agent", lambda *_a, **_kw: launched.append(1) or 0
+    )
 
     assert _main(["--project", str(project), "--prompt", "hello"]) == 1
     assert not launched, "harness must not start when the config rebuild fails"

@@ -216,16 +216,19 @@ class ProviderDescriptor:
     # adapter.py exists, adapters/base_runner.py builds the runner from this
     # block (mode: cli | stub | ok-stub | unsupported; see base_runner docstring
     # for the full schema). Custom adapter modules always win.
-    # Declared launch capability (HA04) as a two-axis map: launch MODE
-    # (execute = run one turn and capture a result | interactive = a live
-    # session) -> the set of TRANSPORTS the provider can serve for that mode
-    # (native = pipe for execute / tty for interactive; acp = the Agent Client
-    # Protocol, provider-gated). ACP is a transport, never a mode. A transport
-    # set accommodates a provider serving several at once (none do today).
-    # Source of truth for resolve_launch_builder: an undeclared (mode,
-    # transport) is unsupported; a declared one with no builder/recipe fails
-    # closed. Empty means undeclared -> dispatch probes (migration default).
-    launches: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    # Declared launch capability (HA04). Callers pick an INTENT; the harness
+    # adapter assembles its richest surface to fulfill it — the caller never
+    # selects transports/channels. Intents:
+    #   execute      run one turn, capture a result (gateway task)
+    #   interactive  a live session for a human at a terminal
+    #   agent        a live programmatic agent session
+    # The value is the harness's queryable channel surface for that intent, by
+    # role: ``interaction`` (how it's driven: native tty/stdin, acp, ...) and
+    # ``observability`` (how we introspect it: pipe = none, rpc, acp events,
+    # hooks, ...). The harness uses all it can; a caller may query this to
+    # request a constrained subset. resolve_launch_builder gates on the intent
+    # keys; an empty map means undeclared (dispatch probes, migration default).
+    launches: dict[str, dict[str, tuple[str, ...]]] = field(default_factory=dict)
     execution: dict[str, Any] | None = None
     # Declarative launch recipes for the ACP and interactive-TUI launch kinds
     # (HA04). When present and no hand-written adapters/<id>/{acp,interactive}.py

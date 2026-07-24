@@ -86,27 +86,43 @@ depend on ``components.providers`` via its approved public API, but
 ``components.providers`` (a platform component) must never depend back on
 ``runtime.harness`` — see ARCHITECTURE_STANDARDS.md §1's dependency table.
 
-Interactive CLI launch (HA03)
-------------------------------
-A harness's ``runner`` does NOT build its own CLI command/flags/env. Instead:
+Launch model — intents, not transports (HA04)
+---------------------------------------------
+A harness's ``runner`` does NOT build its own CLI command/flags/env, and it
+never selects a transport. The caller expresses an *intent*; the provider's
+builder assembles its richest surface to fulfil it.
 
-1. The harness's ``runner`` calls
-   ``providers_api.prepare_interactive_provider_launch(...)`` with the
-   already-resolved provider/model (from AUDiaGentic's embedded rig config)
-   and the launch-time MCP surface (if any). Returns a
-   ``ProviderLaunch(executable, args, environment)``.
-2. The matching provider adapter package
-   (``components/providers/adapters/<id>/interactive.py``) implements
-   ``build_interactive_launch(project_root, *, provider, model, agent_runtime,
-   mcp_surface, runner_params, smoke) -> ProviderLaunch`` — the ONLY place
-   that knows which binary, which flags, and which extra env vars that
-   specific CLI needs for an interactive human-facing session.
+Launch INTENTS (caller-facing):
+  execute      run one turn and capture a parsed result (the gateway task path)
+  interactive  a live session for a human at a terminal
+  agent        a live programmatic agent session
 
-This is distinct from the ACP launch hook (``adapters/<id>/acp.py``'s
-``build_acp_launch``): ACP launches the provider's headless RPC bridge for
-programmatic sessions; interactive launch runs the provider's own CLI for a
-human at a terminal. A harness's ``runner`` should contain no per-provider
-CLI-flag logic of its own — only the generic lifecycle (context, MCP-surface
-request, logging, startup info, process supervision) that applies regardless
-of which harness is configured.
+For each intent, the provider's adapter owns HOW it is fulfilled — which
+transports and channels it uses (native tty/pipe, ACP, RPC hooks, ...). The
+caller never names a transport: it says "launch an agent session," and pi's
+adapter decides to use ACP for interaction plus native RPC hooks for
+observability, because that is pi's richest surface. Transports/channels are a
+provider concern; ACP is a transport, never an intent.
+
+Dispatch: ``resolve_launch_builder(provider_id, intent)`` (services/execution)
+resolves the builder — a hand-written ``adapters/<id>/<submodule>`` builder
+(the escape hatch for genuinely custom spec construction) wins; otherwise the
+declarative recipe block of the same name builds a ``ProviderLaunch`` via
+``build_launch_spec`` (execute via the descriptor ``execution:`` runner). Every
+builder returns the one ``ProviderLaunch(executable, args, environment)`` shape,
+which the intent's spawn strategy consumes (execute -> pipe+parse; interactive
+-> supervised tty; agent -> the ACP transport).
+
+Capability: a provider descriptor declares ``launches`` = {intent: {interaction:
+[...], observability: [...]}} — a queryable, role-based channel surface
+(surfaced in ``describe_provider``). It gates support (undeclared intent =
+unsupported; declared-but-no-builder = fail closed) and lets callers introspect
+or request a constrained subset, while the default is the harness's fullest
+surface.
+
+A harness's ``runner`` contains no per-provider CLI-flag logic — only the
+generic lifecycle (context, MCP-surface request, logging, startup info, process
+supervision). AUDiaGentic does not customise the harness for interactive use
+(no injected extensions/UI); only the MCP surface's adapter is added at launch,
+solely to deliver AG's projected MCP servers.
 """
