@@ -9,7 +9,7 @@ rc=0
 
 # Snapshot immutable image areas before launcher/tests run. All expected runtime
 # writes belong below HOME or /tmp; changes elsewhere indicate boundary leakage.
-python3 - <<'PYEOF' > /tmp/audiagentic-packaging-before.json
+python3 - <<'PYEOF' >/tmp/audiagentic-packaging-before.json
 import hashlib
 import json
 from pathlib import Path
@@ -105,8 +105,8 @@ else
 	rc=1
 fi
 
-echo "::: check 4 — agent install materializes a working harness :::"
-if audiagentic install --target "$AUDIAGENTIC_HOME/harness" &&
+echo "::: check 4 — bootstrap materializes a working harness :::"
+if audiagentic bootstrap --target "$AUDIAGENTIC_HOME/harness" &&
 	test -f "$AUDIAGENTIC_HOME/harness/cli/node_modules/.bin/pi"; then
 	python3 - <<'PYEOF'
 import sys

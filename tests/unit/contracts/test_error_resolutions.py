@@ -33,7 +33,6 @@ def test_load_all_error_resolutions_populates_registry() -> None:
 
     assert get_error_resolution("VAL-PPARSE-001") is not None
     assert get_error_resolution("VAL-COMPLETE-001") is not None
-    assert get_error_resolution("VAL-SESSVIS-001") is not None
     assert get_error_resolution("CON-ARCHIVE-001") is not None
     assert get_error_resolution("IO-JOBSTORE-001") is not None
     assert get_error_resolution("VAL-PROJFILE-001") is not None

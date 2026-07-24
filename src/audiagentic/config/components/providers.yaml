@@ -27,8 +27,6 @@ mcp-servers:
       - manage_cli_lifecycle
       - operate_provider_surface
       - operate_provider_surfaces
-      - reconcile_provider
-      - reconcile_all_providers
       - model_source_list
       - list_model_inventory
       - refresh_model_source_catalog
@@ -55,8 +53,6 @@ mcp-servers:
       manage_cli_lifecycle: Apply, prune, plan, or inspect one provider CLI lifecycle through the typed provider family contract.
       operate_provider_surface: Apply, prune, plan, or inspect generated surface contributions for one provider and ownership scope.
       operate_provider_surfaces: Apply, prune, plan, or inspect generated surface contributions for one or all active providers.
-      reconcile_provider: Reconcile a single provider against host state and sync config or surfaces.
-      reconcile_all_providers: Reconcile all registered providers against host state.
       model_source_list: List declared model sources (local endpoints and remote accounts) from model-sources.yaml.
       list_model_inventory: Show AUDiaGentic model sources, vendor groups, their models, and compatible harness paths without network access.
       refresh_model_source_catalog: Explicitly refresh one configured vendor or endpoint source catalog.

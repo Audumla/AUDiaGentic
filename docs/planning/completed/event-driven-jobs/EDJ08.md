@@ -5,7 +5,7 @@ plan: plan-event-driven-jobs
 state: completed
 validate-first: true
 priority: P2
-complexity: mid
+work: M
 ---
 
 # Propagate job cancellation to the owning gateway request

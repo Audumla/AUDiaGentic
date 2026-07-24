@@ -5,7 +5,7 @@ plan: plan-provider-recipe-refactor
 state: completed
 validate-first: true
 priority: P1
-complexity: mid
+work: M
 ---
 
 # PRR07: Add regression tests for provider recipe model

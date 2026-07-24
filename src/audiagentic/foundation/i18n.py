@@ -23,6 +23,7 @@ Usage:
     >>> I18n.get_locale()
     "de"
 """
+
 from __future__ import annotations
 
 import logging
@@ -157,7 +158,9 @@ class _I18n:
                     self._catalogs[locale] = {}
                 locale_catalog = self._catalogs[locale]
                 # Nest under the component name for dot-notation lookup
-                if component not in locale_catalog or not isinstance(locale_catalog[component], dict):
+                if component not in locale_catalog or not isinstance(
+                    locale_catalog[component], dict
+                ):
                     locale_catalog[component] = data
                 else:
                     _deep_merge(locale_catalog[component], data)
@@ -254,6 +257,7 @@ def _get_instance() -> _I18n:
 
 # ── Public API (delegates to singleton) ──────────────────────────────
 
+
 class I18n:
     """I18n translation registry — use the class directly.
 
@@ -306,79 +310,6 @@ def initialize(config_dirs: list[Path] | None = None) -> None:
 def get_instance() -> _I18n:
     """Return the internal singleton instance for programmatic access."""
     return _get_instance()
-
-
-# ── Error helper ─────────────────────────────────────────────────────
-
-#: Maps error-code middle segment (e.g. "PLN" from "VAL-PLN-003") to component
-#: name for I18n key resolution. Add new entries as new components are created.
-_ERROR_CODE_PREFIX_MAP: dict[str, str] = {
-    # Foundation / cross-cutting
-    "COMP": "foundation",  # VAL-COMP-*
-    "AGW": "foundation",   # RES-AGW-*, VAL-AGW-* (agent gateway)
-    "AGP": "foundation",   # RES-AGP-*, VAL-AGP-* (agent profiles)
-    "FTR": "foundation",   # VAL-FTR-*
-
-    # Agents
-    "AGT": "agents",       # AGENT-* (agent errors)
-
-    # Agent jobs
-    "JOB": "agent_jobs",   # JOB-*
-
-    # Ledger
-    "LDR": "ledger",       # LDR-*
-
-    # Memory
-    "MEM": "memory",       # MEM-*
-
-    # Planning
-    "PLN": "planning",     # VAL-PLN-*
-
-    # Providers
-    "PROV": "providers",   # PROV-*
-    "SVC": "providers",    # SVC-* (service errors)
-
-    # Project
-    "PRJ": "project",      # PRJ-*
-
-    # Release
-    "REL": "release",      # REL-*
-
-    # Rig
-    "RIG": "rig",          # RIG-*
-
-    # Session
-    "SES": "session",      # SES-*
-
-    # Source control
-    "SRC": "source_control",  # SRC-*
-}
-
-
-def _t_err(code: str, **ctx: Any) -> str:
-    """Resolve a translated error message from an error code.
-
-    Looks up the I18n key ``<component>.errors.<code>`` where *component* is
-    determined by the middle segment of the error code (e.g. ``VAL-PLN-003``
-    maps to component ``planning``, yielding key ``planning.errors.VAL-PLN-003``).
-
-    If the key is not found, falls back to the error code itself — ensuring the
-    raise site never silently produces an empty message.
-
-    Usage:
-        >>> raise AudiaGenticError(code="VAL-PLN-003", message=_t_err("VAL-PLN-003"))
-        >>> raise AudiaGenticError(code="PROV-001", message=_t_err("PROV-001", provider_id="claude"))
-
-    Returns:
-        Translated message string, or the error code if no translation exists.
-    """
-    prefix = code.split("-")[1] if "-" in code else code[:3].upper()
-    component = _ERROR_CODE_PREFIX_MAP.get(prefix)
-    if component:
-        i18n_key = f"{component}.errors.{code}"
-        return I18n.t(i18n_key, **ctx)
-    # No component mapping — fall back to code itself
-    return code
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> None:

@@ -2,9 +2,10 @@
 id: <ID>
 order: <N>
 plan: plan-<plan-name>
-state: not_done
+state: pending
 breadth: <small|medium|large>
-skill: <lite|medium|high>
+work: <S|M|L>
+skill: <1|2|3 — optional, set later if unknown>
 ---
 
 # <Title>

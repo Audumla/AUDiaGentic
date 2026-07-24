@@ -5,7 +5,7 @@ plan: plan-event-driven-jobs
 state: completed
 validate-first: true
 priority: P2
-complexity: mid
+work: M
 ---
 
 # Standardize agent-jobs timelines and lifecycle events

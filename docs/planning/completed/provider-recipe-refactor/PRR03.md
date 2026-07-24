@@ -5,7 +5,7 @@ plan: plan-provider-recipe-refactor
 state: completed
 validate-first: true
 priority: P0
-complexity: mid
+work: M
 ---
 
 # Move MCP/config helpers out of foundation toolchains

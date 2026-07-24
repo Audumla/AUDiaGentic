@@ -5,7 +5,7 @@ plan: plan-lsp-capability-expansion
 state: done
 validate-first: true
 priority: P1
-complexity: mid
+work: M
 ---
 
 # Ruff as a second Python server

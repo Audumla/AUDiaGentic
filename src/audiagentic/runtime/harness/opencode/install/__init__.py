@@ -219,14 +219,17 @@ def refresh_harness_config_if_installed(
 ) -> bool:
     if shutil.which("opencode") is None:
         return False
+    refreshed = True
     try:
         from audiagentic.runtime.harness.config import load_harness_config
         harness_cfg = load_harness_config(project_root=project_root)
         materialize_agent_config(project_root, harness_cfg, project_root=project_root)
     except AudiaGenticError:
         logger.warning("Failed to refresh opencode harness config for %s", component_id, exc_info=True, extra={"component": component_id})
+        refreshed = False
     try:
         request_runtime_reload(project_root, reason=reason, component_id=component_id)
     except AudiaGenticError:
         logger.warning("Failed to request runtime reload for opencode %s", component_id, exc_info=True, extra={"component": component_id})
-    return True
+        refreshed = False
+    return refreshed

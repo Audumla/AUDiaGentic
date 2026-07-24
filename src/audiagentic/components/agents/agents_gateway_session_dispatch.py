@@ -29,9 +29,7 @@ def _build_default_surface_hint(provider_id: str) -> Any:
     Uses ``<provider-id>-acp`` as the surface id, matching the naming
     convention in provider descriptors (e.g. opencode-acp).
     """
-    from audiagentic.components.providers.contracts.session_surface import (
-        SurfaceHint,
-    )
+    from audiagentic.components.providers.providers_api import SurfaceHint
 
     return SurfaceHint(surface_id=f"{provider_id}-acp")
 

@@ -1289,25 +1289,6 @@ async def manage_cli_lifecycle(
     return CliLifecycleResult(ok=False, supported=False, state="failed")
 
 
-async def reconcile_provider(project_root: Path, provider_id: str, *, fetch_catalog: bool) -> dict[str, Any]:
-    from audiagentic.components.providers.services.lifecycle import (
-        reconcile_provider as _reconcile,
-    )
-
-    return await asyncio.to_thread(
-        _reconcile, provider_id, project_root=project_root, fetch_catalog=fetch_catalog
-    )
-
-
-async def reconcile_all_providers(project_root: Path, *, fetch_catalogs: bool) -> dict[str, Any]:
-    from audiagentic.components.providers.services.lifecycle import (
-        reconcile_all_providers as _reconcile_all,
-    )
-
-    return await asyncio.to_thread(
-        _reconcile_all, project_root=project_root, fetch_catalogs=fetch_catalogs
-    )
-
 # --- AS29 slice 5a: resolved session-surface through public boundary --------
 
 
@@ -1527,8 +1508,6 @@ __all__ = [
     "CliLifecycleRequest",
     "CliLifecycleResult",
     "manage_cli_lifecycle",
-    "reconcile_provider",
-    "reconcile_all_providers",
     # AS29 slice 5a — session-surface resolution through public boundary
     "ResolvedSessionSurface",
     "SurfaceHint",
