@@ -50,7 +50,3 @@ def load_pi_config(project_root: Path | None = None) -> dict:
         project_root=project_root,
         namespace="harness/pi",
     )
-
-
-def _audiagentic_pkg_dir(npm_dir: Path) -> Path:
-    return npm_dir / "node_modules" / "@earendil-works" / "pi-coding-agent"

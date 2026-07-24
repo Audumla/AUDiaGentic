@@ -109,10 +109,25 @@ def _map_kind(raw: str) -> str:
 
 
 @dataclass(frozen=True)
-class AcpLaunch:
+class ProviderLaunch:
+    """Normalized launch spec for any provider launch kind.
+
+    A plain value shape — the executable, its argv, and extra environment —
+    produced identically by one-shot execution, ACP, and interactive launch
+    builders (recipe-driven or hand-written), then handed to the spawn
+    strategy for that kind. Deliberately NOT a capability request (MA16): it
+    carries no requester identity, mode, or policy, only the three fields a
+    process launch needs.
+    """
     executable: str
     args: tuple[str, ...] = ()
     environment: Mapping[str, str] = field(default_factory=dict)
+
+
+# ``AcpLaunch`` is the historical name for this shape within the ACP subsystem
+# (transport, session tests, AS28 boundary inventory). ACP launches ARE provider
+# launches, so it stays as an alias rather than a second dataclass definition.
+AcpLaunch = ProviderLaunch
 
 
 @dataclass(frozen=True)

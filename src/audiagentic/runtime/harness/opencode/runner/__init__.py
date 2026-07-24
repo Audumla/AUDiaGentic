@@ -1,27 +1,30 @@
 """Opencode harness runner.
 
 Uses the same embedded rig as the pi harness — same model profiles, same
-endpoint resolution, same shutdown management. Differs only in the agent
-CLI invocation (opencode CLI vs pi TUI).
+endpoint resolution, same shutdown management. The actual CLI invocation
+(binary, flags, env) is provider-owned
+(components/providers/adapters/opencode/interactive.py, HA03) — this module
+only orchestrates the generic launch lifecycle: MCP surface prep, logging,
+startup info, and smoke verification.
 """
 from __future__ import annotations
 
 import logging
-import os
-import shutil
 import subprocess
 from pathlib import Path
 
 from audiagentic.foundation.cli_io import print_message
-from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.runtime.harness.config import env_flag as env_flag
-from audiagentic.runtime.harness.context import AgentContext, new_launch_runtime_root
+from audiagentic.runtime.harness.context import AgentContext
 from audiagentic.runtime.harness.run_common import (
     build_base_run_env,
     make_log_path,
     print_startup_info,
     run_supervised,
     write_run_started,
+)
+from audiagentic.runtime.harness.run_common import (
+    build_global_context as _build_global_context,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,127 +53,52 @@ def build_global_context(
     agent_runtime: Path,
     enable_mcp: bool,
 ) -> AgentContext:
-    from audiagentic.runtime.harness.config import (
-        load_harness_config,
-        require_harness_provider,
-        require_harness_rig_port,
-    )
-    from audiagentic.runtime.harness.rig import launch_rig_if_needed
-    from audiagentic.runtime.rig.embedded.config import load_rig_model
-    from audiagentic.runtime.rig.models import (
-        load_model_profile,
-        query_server_model,
-        query_server_version,
-    )
-
-    if shutil.which("opencode") is None:
-        raise make_error(
-            prefix="CFG",
-            component="OCINST",
-            number=2,
-            kind="opencode-harness",
-            message=(
-                "opencode CLI not found on PATH. "
-                "Install opencode, then run: audiagentic bootstrap"
-            ),
-        )
-
-    harness_cfg = load_harness_config(project_root=project_root)
-    requested_model = (
-        os.environ.get("AUDIAGENTIC_AG_MODEL")
-        or harness_cfg.get("rig", {}).get("model")
-    )
-    if not requested_model:
-        raise make_error(
-            prefix="CFG",
-            component="HCFG",
-            number=11,
-            kind="harness-config",
-            message="No model configured. Set AUDIAGENTIC_AG_MODEL or rig.model in ag.yaml.",
-            details={"field": "rig.model"},
-        )
-
-    profile_name, model_profile = load_model_profile(None, requested_model)
-    rig_port = require_harness_rig_port(harness_cfg)
-    _, model_id = load_rig_model()
-
-    endpoint, model, rig_pid, manages_rig = launch_rig_if_needed(
-        requested_model, profile_name, model_profile, rig_port=rig_port, model_id=model_id
-    )
-    if not manages_rig:
-        model = query_server_model(endpoint) or model
-
-    rig_bin_dir = agent_runtime / "rig" / "bin"
-    server_version = query_server_version(rig_bin_dir) if rig_bin_dir.exists() else None
-
-    provider = (
-        os.environ.get("AUDIAGENTIC_AG_PROVIDER")
-        or require_harness_provider(harness_cfg)
-    )
-    resolved_enable_mcp = enable_mcp or bool(harness_cfg.get("mcp", {}).get("enabled", False))
-
-    return AgentContext(
-        project_root=project_root,
-        agent_work=project_root,
-        agent_log_dir=project_root / ".audiagentic" / "logs" / "cli",
-        endpoint=endpoint,
-        model=model,
-        model_profile=model_profile,
-        profile_name=profile_name,
-        provider=provider,
-        rig_pid=rig_pid,
-        manages_rig=manages_rig,
-        enable_mcp=resolved_enable_mcp,
-        server_version=server_version,
-        harness_cfg=harness_cfg,
-        agent_runtime=agent_runtime,
-        launch_runtime_root=new_launch_runtime_root(agent_runtime),
+    return _build_global_context(
+        "opencode", project_root=project_root, agent_runtime=agent_runtime, enable_mcp=enable_mcp
     )
 
 
 def translate_agent_args(params) -> list[str]:
-    """Translate RunnerParams to opencode CLI flags."""
-    args: list[str] = []
-    if params.mode == "json":
-        args.extend(["--output-format", "json"])
-    if params.prompt is not None:
-        args.extend(["--message", params.prompt])
-    return args
+    """Translate RunnerParams to opencode CLI flags.
 
+    Delegates to the provider-owned translation
+    (components/providers/adapters/opencode/interactive.py) — runtime only
+    forwards the call (HA03).
+    """
+    from audiagentic.components.providers.adapters.opencode.interactive import translate_runner_args
 
-def _build_run_env(ctx: AgentContext) -> dict[str, str]:
-    env = build_base_run_env(ctx)
-    if ctx.enable_mcp:
-        env.update(dict(_prepare_mcp_surface(ctx).extra_env))
-    return env
+    return translate_runner_args(params)
 
 
 def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
+    from audiagentic.components.providers import providers_api
     from audiagentic.runtime.rig.http import require_models_endpoint
 
-    executable = shutil.which("opencode")
-    if executable is None:
-        raise make_error(
-            prefix="CFG",
-            component="OCINST",
-            number=3,
-            kind="opencode-harness",
-            message="opencode CLI not found on PATH",
-        )
-
-    env = _build_run_env(ctx)
+    mcp_surface = _prepare_mcp_surface(ctx) if ctx.enable_mcp else None
+    launch = providers_api.prepare_interactive_provider_launch(
+        ctx.project_root,
+        provider_id="opencode",
+        provider=ctx.provider,
+        model=ctx.model,
+        agent_runtime=ctx.agent_runtime,
+        mcp_surface=mcp_surface,
+        smoke=smoke,
+    )
+    env = {**build_base_run_env(ctx), **launch.environment}
     mode = "smoke" if smoke else "run"
     log_path = make_log_path(ctx, mode)
 
     if smoke:
         print_message(f"Checking local LLM endpoint: {ctx.endpoint}/models")
         require_models_endpoint(ctx.endpoint, timeout=15)
-        print_message(f"Checking opencode CLI: {executable}")
+        print_message(f"Checking opencode CLI: {launch.executable}")
         result = subprocess.run(
-            [executable, "--version"],
+            [launch.executable, "--version"],
             capture_output=True, text=True, check=False,
         )
         if result.returncode != 0:
+            from audiagentic.foundation.contracts.errors import make_error
+
             raise make_error(
                 prefix="EXT",
                 component="OCINST",
@@ -186,7 +114,7 @@ def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
 
     print_startup_info(ctx, log_path, title="AUDiaGentic (opencode)")
 
-    cmd = [executable] + agent_args
+    cmd = [launch.executable, *launch.args] + agent_args
 
     # Rig shutdown is owned exclusively by the refcounted client registry
     # (shutdown_rig_if_last in commands/launch.py). Killing rig_pid here would

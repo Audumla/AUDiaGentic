@@ -206,21 +206,24 @@ def env_flag(name: str, default: bool = False) -> bool:
 
 
 # --- MCP config dispatch ---
+#
+# Delegates straight to each harness's mcp_format module (the single
+# materializer per provider) rather than through an install-layer wrapper.
 
 def mcp_config_path(project_root: Path | None = None) -> Path:
-    return _forward("install", "mcp_config_path", project_root=project_root)
+    return _forward("mcp_format", "mcp_config_path", project_root=project_root)
 
 
 def read_mcp_config(path: Path) -> dict:
-    return _mod("install").read_mcp_config(path)
+    return _mod("mcp_format").read_mcp_json(path)
 
 
 def write_mcp_config(path: Path, entries: dict) -> None:
-    return _mod("install").write_mcp_config(path, entries)
+    return _mod("mcp_format").write_mcp_json(path, entries)
 
 
 def remove_mcp_config(path: Path, name: str) -> bool:
-    return _mod("install").remove_mcp_config(path, name)
+    return _mod("mcp_format").remove_mcp_json(path, name)
 
 
 # --- harness-specific helpers (pi-only until generalised) ---
