@@ -1,3 +1,9 @@
+"""HA04/MA35: qwen executes via its declarative execution: recipe.
+
+The hand-written adapters/qwen/adapter.py was deleted as a byte-for-byte
+duplicate of the qwen.yaml execution: block. This drives the generic recipe
+runner (make_runner_from_execution) that now serves qwen.
+"""
 from __future__ import annotations
 
 import sys
@@ -9,27 +15,29 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from audiagentic.components.providers.adapters.qwen import adapter as qwen
+import audiagentic.components.providers.adapters.base_runner as base_runner
+from audiagentic.components.providers.adapters.base_runner import make_runner_from_execution
+from audiagentic.components.providers.descriptors.registry import all_descriptors
+from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
+register_all_components()
 
-def test_qwen_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
+
+def _qwen_runner():
+    execution = all_descriptors()["qwen"].execution
+    assert execution is not None, "qwen must carry an execution: recipe"
+    return make_runner_from_execution("qwen", execution)
+
+
+def test_qwen_recipe_executes_cli(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(qwen, "require_executable", lambda _provider_id, _command: r"C:\\Tools\\qwen.exe")
+    monkeypatch.setattr(base_runner, "require_executable", lambda _pid, *_aliases: r"C:\Tools\qwen.exe")
 
-    def fake_run_streaming_command(
-        command,
-        *,
-        cwd=None,
-        input_text=None,
-        stdout_sinks=None,
-        stderr_sinks=None,
-    ):
+    def fake_run_streaming_command(command, *, cwd=None, input_text=None, stdout_sinks=None, stderr_sinks=None):
         captured["command"] = command
         captured["cwd"] = cwd
-        captured["stdout_sinks"] = stdout_sinks
-        captured["stderr_sinks"] = stderr_sinks
 
         class Completed:
             returncode = 0
@@ -38,49 +46,36 @@ def test_qwen_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
 
         return Completed()
 
-    monkeypatch.setattr(qwen, "run_streaming_command", fake_run_streaming_command)
+    monkeypatch.setattr(base_runner, "run_streaming_command", fake_run_streaming_command)
 
-    result = qwen.run(
+    result = _qwen_runner()(
         {
             "provider-id": "qwen",
             "packet-id": "pkt-job-003",
-            "project-id": "my-project",
             "workflow-profile": "standard",
-            "working-root": tmp_path,
+            "working-root": str(tmp_path),
         },
         {"default-model": "qwen-coder", "access-mode": "cli"},
     )
 
     assert result["provider-id"] == "qwen"
     assert result["status"] == "ok"
-    assert result["execution-mode"] == "cli"
-    assert result["model"] == "qwen-coder"
     assert result["output"] == "qwen completed"
-    assert captured["command"][0] == r"C:\\Tools\\qwen.exe"
-    # New format: qwen [-m model] prompt (positional argument)
-    assert "-m" in captured["command"]
-    assert "qwen-coder" in captured["command"]
-    # Prompt should be the last argument
-    assert captured["command"][-1].startswith(
-        "AUDiaGentic Qwen provider execution request."
-    )
-    assert captured["cwd"] == tmp_path
-    assert captured["stdout_sinks"]
-    assert captured["stderr_sinks"]
+    command = captured["command"]
+    assert command[0] == r"C:\Tools\qwen.exe"
+    # recipe args-template: [{approval-flags}, {model-flags}, {prompt}]
+    assert "-m" in command and "qwen-coder" in command
+    assert command[-1].startswith("AUDiaGentic Qwen provider execution request.")
 
 
-def test_qwen_adapter_requires_command(monkeypatch) -> None:
+def test_qwen_recipe_requires_cli(monkeypatch, tmp_path: Path) -> None:
+    def _raise(_pid, *_aliases):
+        raise AudiaGenticError(code="EXT-PROVCLI-001", kind="providers", message="missing")
+
+    monkeypatch.setattr(base_runner, "require_executable", _raise)
     try:
-        monkeypatch.setattr(
-            qwen,
-            "require_executable",
-            lambda _provider_id, _command: (_ for _ in ()).throw(
-                AudiaGenticError(code="EXT-QWEN-001", kind="providers", message="missing")
-            ),
-        )
-        qwen.run({"provider-id": "qwen"}, {"default-model": "qwen-coder"})
+        _qwen_runner()({"provider-id": "qwen"}, {"default-model": "qwen-coder"})
     except AudiaGenticError as exc:
-        assert exc.code == "EXT-QWEN-001"
-        assert exc.kind == "providers"
+        assert exc.code == "EXT-PROVCLI-001"
     else:
-        raise AssertionError("expected missing command error")
+        raise AssertionError("expected missing-CLI error")

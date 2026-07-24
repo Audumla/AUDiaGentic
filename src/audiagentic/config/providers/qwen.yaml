@@ -3,6 +3,12 @@
 
 provider_id: qwen
 execution_isolation_tier: full-isolation
+# Launch capability (HA04): CLI-only, so the execute intent over native pipe
+# (declarative execution: recipe below). No live interactive/agent launch.
+launches:
+  execute:
+    interaction: [native]
+    observability: [pipe]
 automation_capabilities:
   - family_id: cli-lifecycle
     supported_modes: [plan, apply, prune, status]

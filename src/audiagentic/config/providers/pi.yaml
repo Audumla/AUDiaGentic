@@ -4,13 +4,23 @@
 provider_id: pi
 execution_isolation_tier: full-isolation
 mcp_launch_isolation_tier: exact
-# Declared launch capability (HA04), mode -> transports:
-#   execute/native      -> adapter.py (stdin-piped one turn, captured)
-#   interactive/native  -> adapters/pi/interactive.py (human tty)
-#   interactive/acp     -> adapters/pi/acp.py (pi-acp bridge, agent-driven)
+# Declared launch capability (HA04): intent -> queryable channel surface the
+# harness assembles (by role). The caller picks the intent; pi's builder owns
+# the transports/channels.
+#   execute      run one turn, captured (adapter.py, stdin-piped)
+#   interactive  human tty (adapters/pi/interactive.py)
+#   agent        live agent session (adapters/pi/acp.py; pi also offers RPC
+#                hooks for observability)
 launches:
-  execute: [native]
-  interactive: [native, acp]
+  execute:
+    interaction: [native]
+    observability: [pipe]
+  interactive:
+    interaction: [native]
+    observability: [pipe]
+  agent:
+    interaction: [acp]
+    observability: [acp, rpc]
 automation_capabilities:
   - family_id: cli-lifecycle
     supported_modes: [plan, apply, prune, status]
