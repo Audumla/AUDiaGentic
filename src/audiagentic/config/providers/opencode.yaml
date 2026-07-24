@@ -4,13 +4,21 @@
 provider_id: opencode
 execution_isolation_tier: full-isolation
 mcp_launch_isolation_tier: exact
-# Declared launch capability (HA04), mode -> transports:
-#   execute/native      -> adapter.py (run one turn, captured)
-#   interactive/native  -> declarative interactive: recipe below
-#   interactive/acp     -> adapters/opencode/acp.py
+# Declared launch capability (HA04): intent -> queryable channel surface. The
+# caller picks the intent; opencode's builder owns the transports/channels.
+#   execute      run one turn, captured (adapter.py)
+#   interactive  human tty (declarative interactive: recipe below)
+#   agent        live agent session (adapters/opencode/acp.py)
 launches:
-  execute: [native]
-  interactive: [native, acp]
+  execute:
+    interaction: [native]
+    observability: [pipe]
+  interactive:
+    interaction: [native]
+    observability: [pipe]
+  agent:
+    interaction: [acp]
+    observability: [acp]
 
 # Declarative interactive-TUI launch (HA04). OpenCode needs no injected
 # extensions or custom config -- just the binary, the translated runner args,

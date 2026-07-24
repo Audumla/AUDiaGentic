@@ -938,6 +938,11 @@ def describe_provider(project_root: Path, provider_id: str) -> dict[str, Any]:
         "descriptor": summary_rows[0] if summary_rows else {},
         "status": get_provider_status(project_root, provider_id),
         "execution": describe_execution_support(provider_id),
+        # HA04: queryable launch capability (intent -> channel surface by role).
+        "launches": {
+            intent: {role: list(channels) for role, channels in surface.items()}
+            for intent, surface in (descriptor.launches or {}).items()
+        },
         "models": list_provider_models(project_root, provider_id),
         "models_config": (
             manage_model_projection(
