@@ -120,7 +120,9 @@ def test_harness_install_lifecycle(harness: str) -> None:
     assert result.returncode == 0, f"Bootstrap failed: {result.stderr[:300]}"
 
     # Verify rig assets installed (llama-server binary)
-    expected_server = os.path.join(harness_dir, "rig", "bin", "llama-server", "linux", "llama-server")
+    expected_server = os.path.join(
+        harness_dir, "rig", "bin", "llama-server", "linux", "llama-server"
+    )
     assert Path(expected_server).exists(), f"Expected rig server at {expected_server}"
 
     # Verify agent config materialized
@@ -181,6 +183,86 @@ def test_provider_capability_outputs() -> None:
             assert f"executable: {exe}" in content or f'executable: "{exe}"' in content, (
                 f"Provider {pid}: expected executable {exe} not found"
             )
+
+
+# ── MCP propagation policy validation ────────────────────────────────
+
+
+def test_mcp_propagation_policies() -> None:
+    """Validate MCP server propagation policies: mgmt vs providers.
+
+    Management MCPs (propagate: audiagentic) should NOT appear in harness mcp.json.
+    User MCPs (propagate: providers) SHOULD appear in harness mcp.json.
+    """
+    project_root = Path(os.environ.get("AUDIAGENTIC_REPO_ROOT", "/tmp/test-project"))
+    project_root.mkdir(exist_ok=True)
+
+    from audiagentic.foundation.mcp.projection import collect_component_mcp_entries
+
+    # Known propagation policies
+    audiagentic_only = {"ag-planning-mgmt"}  # propagate: audiagentic
+
+    # Collect entries for providers (harness mcp.json)
+    provider_entries = collect_component_mcp_entries(
+        project_root,
+        propagation_target="providers",
+        require_enabled=False,
+    )
+    entry_names = set(provider_entries.keys())
+
+    # Management MCPs should NOT be in provider entries
+    for name in audiagentic_only:
+        assert name not in entry_names, (
+            f"Management MCP '{name}' (propagate: audiagentic) should NOT "
+            f"appear in provider entries. Got: {sorted(entry_names)}"
+        )
+
+    # Note: entry count depends on which components are installed,
+    # so we only verify absence of management MCPs
+
+
+@pytest.mark.timeout(240)
+def test_bootstrap_no_mgmt_mcp_in_harness_config() -> None:
+    """Bootstrap must NOT project management MCPs into harness mcp.json.
+
+    Management MCPs (propagate: audiagentic) are internal to AUDiaGentic and
+    should never appear in the harness-level mcp.json that gets sent to
+    provider CLIs like Pi or OpenCode.
+    """
+    import json
+
+    project_root = Path(os.environ.get("AUDIAGENTIC_REPO_ROOT", "/tmp/test-project"))
+    project_root.mkdir(exist_ok=True)
+
+    from audiagentic.foundation.components.loader import register_all_components
+    from audiagentic.foundation.lifecycle.components import install_component
+
+    # Install agent-planning component to exercise MCP projection
+    register_all_components()
+    install_component("agent-planning", project_root)
+
+    result = subprocess.run(
+        ["audiagentic", "bootstrap"],
+        capture_output=True,
+        text=True,
+        timeout=180,
+        env={**os.environ, "AUDIAGENTIC_REPO_ROOT": str(project_root)},
+    )
+    assert result.returncode == 0, f"Bootstrap failed: {result.stderr[:300]}"
+
+    # Check project-level mcp.json
+    mcp_path = project_root / ".audiagentic" / "mcp.json"
+    if not mcp_path.exists():
+        pytest.skip("Project mcp.json not created (component may not be enabled)")
+
+    installed_mcp = json.loads(mcp_path.read_text(encoding="utf-8"))
+    server_names = set(installed_mcp.get("mcpServers", {}).keys())
+
+    # Management MCPs must NOT appear
+    assert "ag-planning-mgmt" not in server_names, (
+        f"Management MCP 'ag-planning-mgmt' should NOT be in harness mcp.json. "
+        f"Got: {sorted(server_names)}"
+    )
 
 
 if __name__ == "__main__":

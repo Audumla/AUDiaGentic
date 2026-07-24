@@ -28,38 +28,18 @@ agent:
 
 # --- Built-in tool access control ---
 #
-# allow:      Explicit allowlist of Pi built-in tools. null = Pi defaults.
-#             Available: read, bash, edit, write, grep, find, ls
-# no_builtin: Disable all Pi built-in tools. MCP and extension tools remain active.
-# no_all:     Disable every tool including extensions and MCP.
-#
-# Priority: no_all > no_builtin > allow
+# mode selects Pi's built-in tool exposure (a single choice, not overlapping
+# flags):
+#   none      Disable every tool (--no-tools).
+#   mcp-only  Disable Pi built-ins; MCP + explicit tools remain (--no-builtin-tools).
+#   full      Pi defaults (no flag).
 tools:
-  allow: null
-  no_builtin: true
-  no_all: false
-
-# --- Extension loading ---
-#
-# no_auto_discovery: Block Pi from auto-loading extensions from the home dir.
-# load:             Explicit extension paths to load.
-extensions:
-  no_auto_discovery: true
-  load: []
-
-# --- Sandbox ---
-#
-# enabled:     Load the sandbox extension.
-# config_path: Path to sandbox.json.
-sandbox:
-  enabled: false
-  config_path: null
+  mode: mcp-only
 
 # --- Lockdown ---
 #
-# Restricts the slash-command surface exposed to the user via Pi's own CLI
-# flags. No source patching -- if Pi doesn't expose a flag for something, it
-# isn't restricted here.
+# Restricts the slash-command surface via Pi's own CLI flags. No source
+# patching -- if Pi doesn't expose a flag for something, it isn't restricted.
 #
 # no_skills:           Disable skill-based /commands.
 # no_prompt_templates: Disable prompt-template /commands.
@@ -69,19 +49,14 @@ lockdown:
   no_prompt_templates: true
   no_context_files: true
 
-# Extra Pi CLI flags appended verbatim to every non-smoke invocation.
-extra_flags: []
-
-# --- UI customization ---
+# --- UI ---
 #
-# Written into Pi's settings.json on each install/refresh.
+# Written into Pi's stock settings.json on each install/refresh. AUDiaGentic
+# injects no extensions; these are Pi's own settings only.
 ui:
   theme: dark
   quiet_startup: true
   collapse_changelog: true
-  custom_header_extension: null
-  show_startup_info: false
-  startup_banner: null
   thinking: off
   editor_padding_x: 0
   theme_colors: {}
