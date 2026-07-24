@@ -5,6 +5,7 @@ from .acp import (
     AcpLaunch,
     AcpResult,
     AcpSessionTransport,
+    ProviderLaunch,
     run_acp_prompt,
 )
 from .agent_output import (
@@ -75,9 +76,10 @@ from .session_surface import (
 __all__ = [
     # ACP transport (AcpAgentSessionTransport is private to acp.py / provider adapters)
     "AcpEvent",
-    "AcpLaunch",
+    "AcpLaunch",  # alias of ProviderLaunch, kept for the ACP subsystem
     "AcpResult",
     "AcpSessionTransport",
+    "ProviderLaunch",
     "run_acp_prompt",
     # AS28 neutral agent-session contract
     "AgentSessionTransport",

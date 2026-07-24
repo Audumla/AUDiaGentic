@@ -179,7 +179,13 @@ class ProviderExecutionResult:
 
 @dataclass(frozen=True)
 class ProviderAcpLaunchResult:
-    """Provider-owned ACP launch declaration for agents session transport."""
+    """Provider-owned ACP launch declaration for agents session transport.
+
+    ``launch`` is a :class:`~audiagentic.foundation.transports.ProviderLaunch`
+    (aliased ``AcpLaunch`` in the ACP subsystem). Typed ``Any`` here to avoid a
+    contract->foundation import at this layer; the transport validates the
+    concrete type.
+    """
 
     provider_id: str
     model_id: str

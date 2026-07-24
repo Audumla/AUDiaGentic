@@ -240,6 +240,46 @@ def prepare_provider_acp_launch(
     )
 
 
+def prepare_interactive_provider_launch(
+    project_root: Path,
+    *,
+    provider_id: str,
+    provider: str,
+    model: str,
+    agent_runtime: Path,
+    mcp_surface=None,
+    runner_params=None,
+    smoke: bool = False,
+):
+    """Resolve one provider-owned interactive (TUI) launch.
+
+    Unlike ACP/one-shot execution, the caller (runtime harness bootstrap)
+    already resolved provider/model from AUDiaGentic's own embedded rig
+    config before calling this -- there is no model-selection step here.
+    """
+    from audiagentic.components.providers.services.execution import (
+        load_interactive_launch_builder,
+    )
+
+    builder = load_interactive_launch_builder(provider_id)
+    if builder is None:
+        raise AudiaGenticError(
+            code="UNS-PEXE-005",
+            kind="providers",
+            message="provider does not support interactive CLI launch",
+            details={"provider-id": provider_id},
+        )
+    return builder(
+        project_root,
+        provider=provider,
+        model=model,
+        agent_runtime=agent_runtime,
+        mcp_surface=mcp_surface,
+        runner_params=runner_params,
+        smoke=smoke,
+    )
+
+
 def prepare_provider_mcp_surface(
     project_root: Path,
     *,

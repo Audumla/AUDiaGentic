@@ -9,6 +9,7 @@ from audiagentic.foundation.cli_io import print_message
 from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.runtime.harness.context import AgentContext, require_smoke_timeout
 from audiagentic.runtime.harness.run_common import (
+    build_base_run_env,
     make_log_path,
     print_startup_info,
     run_supervised,
@@ -41,26 +42,43 @@ def direct_mcp_smoke(ctx: AgentContext, env: dict[str, str]) -> None:
         )
 
 
-def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
-    if not ctx.agent_bin or not ctx.agent_bin.exists():
-        raise make_error(
-            prefix="RES",
-            component="PIRUN",
-            number=2,
-            kind="pi-harness",
-            message="Pi harness not found. Install pi, then run: audiagentic bootstrap",
-            details={"path": str(ctx.agent_bin) if ctx.agent_bin else "not set"},
-        )
+def _prepare_mcp_surface(ctx: AgentContext):
+    """Compute WHAT AUDiaGentic servers belong in this launch (this module's
+    job) and ask the pi provider adapter HOW to deliver them (its job) —
+    routed through the sanctioned providers_api boundary, never an adapter
+    import directly (architecture §1)."""
+    from audiagentic.components.providers import providers_api
+    if ctx.prepared_mcp_surface is not None:
+        return ctx.prepared_mcp_surface
+    ctx.prepared_mcp_surface = providers_api.prepare_projected_provider_mcp_surface(
+        ctx.project_root,
+        provider_id="pi",
+        runtime_root=ctx.launch_runtime_root,
+        require_exact_isolation=True,
+    )
+    return ctx.prepared_mcp_surface
 
+
+def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
     if not smoke:
         print_message("\033[2J\033[H", flush=False)
 
     ctx.agent_work.mkdir(parents=True, exist_ok=True)
     (ctx.project_root / ".audiagentic" / "sessions").mkdir(parents=True, exist_ok=True)
 
-    from .command import _build_run_env, build_agent_command
+    from audiagentic.components.providers import providers_api
 
-    env = _build_run_env(ctx)
+    mcp_surface = _prepare_mcp_surface(ctx) if ctx.enable_mcp else None
+    launch = providers_api.prepare_interactive_provider_launch(
+        ctx.project_root,
+        provider_id="pi",
+        provider=ctx.provider,
+        model=ctx.model,
+        agent_runtime=ctx.agent_runtime,
+        mcp_surface=mcp_surface,
+        smoke=smoke,
+    )
+    env = {**build_base_run_env(ctx), **launch.environment}
 
     mode = "smoke" if smoke else "run"
     log_path = make_log_path(ctx, mode)
@@ -87,7 +105,7 @@ def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
             tools_line = "  Tools:    AudiaGentic defaults"
         print_startup_info(ctx, log_path, title="AUDiaGentic", extra_lines=[tools_line])
 
-    command = build_agent_command(ctx, smoke=smoke)
+    command = [launch.executable, *launch.args]
 
     if smoke:
         smoke_timeout = float(os.environ.get("AUDIAGENTIC_AG_SMOKE_TIMEOUT") or require_smoke_timeout(ctx.harness_cfg))

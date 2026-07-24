@@ -45,6 +45,138 @@ from audiagentic.components.providers.protocols.streaming.provider_streaming imp
     run_streaming_command,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.transports import ProviderLaunch
+
+
+def _config_path(config: dict[str, Any], dotted_key: str) -> Any:
+    """Resolve a dotted config key (``tools.mode``) or None if any hop misses."""
+    node: Any = config
+    for part in dotted_key.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return None
+        node = node[part]
+    return node
+
+
+def _resolve_arg_token(
+    token: Any,
+    spec_decl: dict[str, Any],
+    context: dict[str, Any],
+    config: dict[str, Any],
+) -> list[str]:
+    """Resolve one args entry to zero or more argv strings.
+
+    Vocabulary shared by every launch kind. String tokens cover the launch
+    context (prompt, model, mcp surface, runner args); dict tokens are
+    config-driven flag primitives (enum-flags, value-flag, repeat-value-flag,
+    boolean-flags). No conditionals beyond these declarative primitives.
+    """
+    model = context.get("model")
+
+    if isinstance(token, dict):
+        if "enum-flags" in token:
+            decl = token["enum-flags"]
+            value = _config_path(config, decl["key"])
+            cases = decl.get("cases") or {}
+            if value is None and "default" in decl:
+                value = decl["default"]
+            return list(cases.get(value, []))
+        if "value-flag" in token:
+            decl = token["value-flag"]
+            value = _config_path(config, decl["key"])
+            if value in (None, "", [], {}):
+                return []
+            if isinstance(value, (list, tuple)):
+                value = decl.get("join", ",").join(str(v) for v in value)
+            return [decl["flag"], str(value)]
+        if "repeat-value-flag" in token:
+            decl = token["repeat-value-flag"]
+            values = _config_path(config, decl["key"]) or []
+            out: list[str] = []
+            for item in values:
+                out.extend([decl["flag"], str(item)])
+            return out
+        if "boolean-flags" in token:
+            decl = token["boolean-flags"]
+            default = decl.get("default", False)
+            out = []
+            for key, flag in (decl.get("flags") or {}).items():
+                resolved = _config_path(config, key)
+                enabled = default if resolved is None else bool(resolved)
+                if enabled:
+                    out.append(flag)
+            return out
+        raise AudiaGenticError(
+            code="VAL-EXEC-003",
+            kind="providers",
+            message="unknown launch arg primitive",
+            details={"token": sorted(token.keys())},
+        )
+
+    # --- string tokens ---
+    if token == "{prompt}":
+        return [context["prompt"]] if context.get("prompt") is not None else []
+    if token == "{approval-flags}":
+        return list((spec_decl.get("approval-mode-flags") or {}).get(context.get("approval-mode", "auto"), []))
+    if token == "{model-flags}":
+        model_flag = spec_decl.get("model-flag")
+        return [model_flag, str(model)] if model and model_flag else []
+    if token == "{mcp-args}":
+        return list(context.get("mcp-args", ()))
+    if token == "{runner-args}":
+        return list(context.get("runner-args", ()))
+    if "{model}" in token:
+        return [token.format(model=model)] if model else []
+    return [token]
+
+
+def _resolve_environment(env_decl: Any, context: dict[str, Any]) -> dict[str, str]:
+    """Build the launch environment from a static env block + context.
+
+    Env values may reference ``{key}`` placeholders resolved from
+    ``context['env']`` (a flat str map). ``context['extra-env']`` (e.g. the
+    MCP surface's env) is merged on top.
+    """
+    environment: dict[str, str] = {}
+    env_context: dict[str, str] = context.get("env", {})
+    for name, value_template in (env_decl or {}).items():
+        environment[name] = str(value_template).format(**env_context)
+    environment.update(context.get("extra-env", {}))
+    return environment
+
+
+def build_launch_spec(
+    spec_decl: dict[str, Any],
+    *,
+    context: dict[str, Any] | None = None,
+    config: dict[str, Any] | None = None,
+) -> ProviderLaunch:
+    """Build a normalized :class:`ProviderLaunch` from a declarative recipe.
+
+    The one shared spec builder for every launch kind (one-shot execution,
+    ACP, interactive). ``spec_decl`` declares ``executable``/``aliases``, an
+    ``args`` (or legacy ``args-template``) list over the token vocabulary in
+    :func:`_resolve_arg_token`, and an optional ``environment`` block.
+    ``context`` carries per-launch resolved substitutions; ``config`` is the
+    provider CLI config consulted by config-driven flag primitives. Pure data
+    transformation — resolves the executable on PATH but never spawns.
+    """
+    context = context or {}
+    config = config or {}
+
+    exec_name = spec_decl.get("executable") or ""
+    aliases = tuple(spec_decl.get("aliases") or ((exec_name,) if exec_name else ()))
+    executable = require_executable(exec_name or (aliases[0] if aliases else ""), *aliases)
+
+    template = spec_decl.get("args-template") or spec_decl.get("args")
+    if template is None:
+        template = ["{approval-flags}", "{model-flags}", "{prompt}"]
+    args: list[str] = []
+    for token in template:
+        args.extend(_resolve_arg_token(token, spec_decl, context, config))
+
+    environment = _resolve_environment(spec_decl.get("environment"), context)
+    return ProviderLaunch(executable=executable, args=tuple(args), environment=environment)
 
 
 def resolve_execution_model(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> str | None:
@@ -125,35 +257,6 @@ def default_parse_completion(
         return extracted, ResultSource.STDOUT_JSON_BLOCK
 
     return None, ResultSource.STDOUT_TEXT
-
-
-def _build_command(
-    executable: str,
-    execution: dict[str, Any],
-    *,
-    prompt: str,
-    model: str | None,
-    approval_mode: str,
-) -> list[str]:
-    command = [executable]
-    template = execution.get("args-template") or ["{approval-flags}", "{model-flags}", "{prompt}"]
-    for token in template:
-        if token == "{approval-flags}":
-            command.extend(
-                (execution.get("approval-mode-flags") or {}).get(approval_mode, [])
-            )
-        elif token == "{model-flags}":
-            model_flag = execution.get("model-flag")
-            if model and model_flag:
-                command.extend([model_flag, str(model)])
-        elif token == "{prompt}":
-            command.append(prompt)
-        elif "{model}" in token:
-            if model:
-                command.append(token.format(model=model))
-        else:
-            command.append(token)
-    return command
 
 
 def finalize_run(
@@ -245,7 +348,6 @@ def make_cli_runner(
     )
 
     def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, Any]:
-        executable = require_executable(exec_name, *aliases)
         if build_prompt is not None:
             prompt = build_prompt(packet_ctx, provider_cfg)
         else:
@@ -259,13 +361,19 @@ def make_cli_runner(
         execution_policy = provider_cfg.get("execution-policy", {})
         approval_mode = execution_policy.get("permission-mode", "auto")
 
-        command = _build_command(
-            executable,
-            execution,
-            prompt=prompt,
-            model=default_model,
-            approval_mode=approval_mode,
+        # One-shot execution is a launch kind: build the same normalized
+        # ProviderLaunch every kind produces, then hand it to the pipe+parse
+        # spawn strategy. Env is empty here — one-shot inherits os.environ via
+        # launch_env_overlay rather than a spec-declared environment block.
+        spec = build_launch_spec(
+            {"executable": exec_name, "aliases": list(aliases), **execution},
+            context={
+                "prompt": prompt,
+                "model": default_model,
+                "approval-mode": approval_mode,
+            },
         )
+        command = [spec.executable, *spec.args]
 
         stream_controls = packet_ctx.get("stream-controls", {})
         stdout_sinks, stderr_sinks = build_extractor_stream_sinks(

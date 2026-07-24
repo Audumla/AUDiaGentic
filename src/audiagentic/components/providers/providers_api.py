@@ -78,6 +78,7 @@ from audiagentic.components.providers.contracts.session_surface import (
     ResolvedSessionSurface,
     SurfaceHint,
 )
+from audiagentic.foundation.transports import ProviderLaunch
 from audiagentic.foundation.transports.harness_status_observer import (
     StatusObserverLease,
     StatusObserverRequest,
@@ -248,6 +249,40 @@ def prepare_provider_acp_launch(
         request_runtime_root=request_runtime_root,
         mcp_entries=mcp_entries,
         require_isolated_mcp=require_isolated_mcp,
+    )
+
+
+def prepare_interactive_provider_launch(
+    project_root: Path,
+    *,
+    provider_id: str,
+    provider: str,
+    model: str,
+    agent_runtime: Path,
+    mcp_surface: McpLaunchSurfaceResult | None = None,
+    runner_params: object | None = None,
+    smoke: bool = False,
+) -> ProviderLaunch:
+    """Prepare a provider-owned interactive (TUI) CLI launch.
+
+    For a runtime harness bootstrapping a human-facing session -- distinct
+    from prepare_provider_acp_launch (headless RPC bridge for programmatic
+    sessions). provider/model are already resolved by the caller from
+    AUDiaGentic's own embedded rig config.
+    """
+    from audiagentic.components.providers.services.public_execution import (
+        prepare_interactive_provider_launch as _prepare,
+    )
+
+    return _prepare(
+        project_root,
+        provider_id=provider_id,
+        provider=provider,
+        model=model,
+        agent_runtime=agent_runtime,
+        mcp_surface=mcp_surface,
+        runner_params=runner_params,
+        smoke=smoke,
     )
 
 
@@ -639,13 +674,21 @@ def operate_provider_surfaces(
     renderers = load_contribution_renderer_registry()
     results: list[GeneratedSurfaceResult] = []
     for pid in sorted(renderers):
-        single = operate_provider_surfaces(
-            project_root,
-            provider_id=pid,
-            mode=mode,
-        )
-        if isinstance(single, GeneratedSurfaceResult):
-            results.append(single)
+        try:
+            single = operate_provider_surfaces(
+                project_root,
+                provider_id=pid,
+                mode=mode,
+            )
+            if isinstance(single, GeneratedSurfaceResult):
+                results.append(single)
+        except Exception:  # noqa: BLE001 — catch all provider errors (missing impl)
+            # Provider has no implementation for this family — skip gracefully
+            results.append(GeneratedSurfaceResult(
+                ok=False,
+                supported=False,
+                error_code="RES-PREC-001",
+            ))
     return results
 
 
@@ -1470,6 +1513,8 @@ __all__ = [
     "get_provider_runtime_config_state",
     "execute_provider_turn",
     "prepare_provider_acp_launch",
+    "prepare_interactive_provider_launch",
+    "ProviderLaunch",
     "prepare_provider_session_transport",
     "prepare_provider_execution_environment",
     "McpLaunchServerEntry",

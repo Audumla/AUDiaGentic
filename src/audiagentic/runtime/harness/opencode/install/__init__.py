@@ -158,6 +158,18 @@ def materialize_agent_config(
     if agents_md:
         (root / "AGENTS.md").write_text(agents_md, encoding="utf-8")
 
+    # Layer in any provider-owned surface contributions (components declaring
+    # content for opencode's AGENTS.md through the shared providers surfaces
+    # registry) as a managed block appended after the template above --
+    # apply_managed_blocks only touches its own previously-managed region, so
+    # this cannot clobber the template or user-authored content.
+    try:
+        from audiagentic.components.providers import providers_api
+
+        providers_api.operate_provider_surfaces(root, "opencode", mode="apply")
+    except AudiaGenticError:
+        logger.warning("Failed to apply opencode provider surface contributions", exc_info=True)
+
     provider_cfg = _build_opencode_provider_config(harness_cfg, model_profile)
     opencode_dir = root / ".opencode"
     opencode_dir.mkdir(parents=True, exist_ok=True)
@@ -189,26 +201,6 @@ def refresh_materialized_agent_config(target: Path, project_root: Path | None = 
     harness_cfg = load_harness_config(project_root=root)
     materialize_agent_config(target, harness_cfg, project_root=root)
     return 0
-
-
-def mcp_config_path(project_root: Path | None = None) -> Path:
-    from audiagentic.runtime.harness.opencode.mcp_format import opencode_mcp_path
-    return opencode_mcp_path(project_root)
-
-
-def read_mcp_config(path: Path) -> dict:
-    from audiagentic.foundation.mcp.json_format import read_mcp_json
-    return read_mcp_json(path)
-
-
-def write_mcp_config(path: Path, entries: dict) -> None:
-    from audiagentic.foundation.mcp.json_format import write_mcp_json
-    write_mcp_json(path, entries)
-
-
-def remove_mcp_config(path: Path, name: str) -> bool:
-    from audiagentic.foundation.mcp.json_format import remove_mcp_json
-    return remove_mcp_json(path, name)
 
 
 def refresh_harness_config_if_installed(

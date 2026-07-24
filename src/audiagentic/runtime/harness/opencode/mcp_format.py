@@ -23,6 +23,9 @@ def opencode_mcp_path(project_root: Path | None = None) -> Path:
     return (project_root / ".mcp.json").resolve()
 
 
+mcp_config_path = opencode_mcp_path
+
+
 def build_opencode_mcp_dict(
     entries: dict[str, McpServerEntry],
     *,
@@ -45,6 +48,7 @@ def build_opencode_mcp_dict(
 
 __all__ = [
     "build_opencode_mcp_dict",
+    "mcp_config_path",
     "opencode_mcp_path",
     "read_mcp_json",
     "remove_mcp_json",
