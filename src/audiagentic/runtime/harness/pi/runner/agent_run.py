@@ -94,16 +94,7 @@ def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
         print_message(f"Writing AudiaGentic smoke log: {log_path}")
     else:
         check_endpoint(ctx)
-        tools_cfg = ctx.harness_cfg.get("tools", {})
-        if tools_cfg.get("no_all"):
-            tools_line = "  Tools:    none (all disabled)"
-        elif tools_cfg.get("no_builtin"):
-            tools_line = "  Tools:    MCP/extensions only (built-ins disabled)"
-        elif tools_cfg.get("allow") is not None:
-            tools_line = f"  Tools:    {','.join(tools_cfg['allow'])}"
-        else:
-            tools_line = "  Tools:    AudiaGentic defaults"
-        print_startup_info(ctx, log_path, title="AUDiaGentic", extra_lines=[tools_line])
+        print_startup_info(ctx, log_path, title="AUDiaGentic")
 
     command = [launch.executable, *launch.args]
 

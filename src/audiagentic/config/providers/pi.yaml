@@ -4,6 +4,13 @@
 provider_id: pi
 execution_isolation_tier: full-isolation
 mcp_launch_isolation_tier: exact
+# Declared launch capability (HA04), mode -> transports:
+#   execute/native      -> adapter.py (stdin-piped one turn, captured)
+#   interactive/native  -> adapters/pi/interactive.py (human tty)
+#   interactive/acp     -> adapters/pi/acp.py (pi-acp bridge, agent-driven)
+launches:
+  execute: [native]
+  interactive: [native, acp]
 automation_capabilities:
   - family_id: cli-lifecycle
     supported_modes: [plan, apply, prune, status]
