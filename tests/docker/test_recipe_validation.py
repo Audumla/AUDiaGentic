@@ -70,91 +70,39 @@ _HARNESS_EXPECTATIONS: dict[str, dict] = {
 # ── Recipe test cases ────────────────────────────────────────────────
 
 
-def _recipe_test_cases():
-    """Build canonical recipe test matrix."""
-    cases = []
+@pytest.mark.parametrize("pid", _CLI_PROVIDERS)
+def test_provider_descriptor_valid(pid: str) -> None:
+    """Validate provider descriptor has proper cli_install definition.
 
-    # Positive: CLI lifecycle for each provider with install support
-    for pid in _CLI_PROVIDERS:
-        exp = _HARNESS_EXPECTATIONS.get(pid, {})
-        cli_exp = exp.get("cli", {})
-        cases.append(
-            {
-                "provider_id": pid,
-                "operation": "install",
-                "harness": None,  # auto-detect from provider config
-                "expected_executable": cli_exp.get("executable"),
-                "expected_package": cli_exp.get("package"),
-                "error_code": None,
-            }
-        )
-
-    # Negative: unsupported provider should fail with classified error
-    cases.append(
-        {
-            "provider_id": "does-not-exist",
-            "operation": "install",
-            "harness": None,
-            "expected_executable": None,
-            "error_code": "VAL-PROV-001",  # or whatever the actual code is
-        }
-    )
-
-    return cases
-
-
-@pytest.mark.parametrize(
-    "case", _recipe_test_cases(), ids=lambda c: f"{c['provider_id']}:{c['operation']}"
-)
-def test_recipe_execution(case: dict) -> None:
-    """Execute a recipe and validate its outputs."""
+    Provider CLIs are installed by the managed-config recipe system, not by
+    a public CLI command. This test validates that descriptors are well-formed.
+    """
     project_root = Path(os.environ.get("AUDIAGENTIC_REPO_ROOT", ""))
     if not project_root.exists():
         pytest.skip("AUDIAGENTIC_REPO_ROOT not set or invalid")
 
-    # Run the recipe through the public CLI
-    cmd = ["audiagentic", "provider", case["operation"], "--provider-id", case["provider_id"]]
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        timeout=120,
+    config_path = project_root / "src/audiagentic/config/providers" / f"{pid}.yaml"
+    assert config_path.exists(), f"Provider descriptor missing: {config_path}"
+
+    content = config_path.read_text(encoding="utf-8")
+    # Verify the provider declares cli_install or cli-probe
+    assert "cli_install:" in content or "cli_probe:" in content, (
+        f"Provider {pid} has no cli_install/cli_probe in descriptor"
     )
-
-    # Validate outcome
-    if case.get("error_code"):
-        # Expected failure: check error code is present
-        combined = f"{result.stdout}\n{result.stderr}"
-        assert case["error_code"] in combined, (
-            f"Expected error {case['error_code']} not found. "
-            f"stdout: {result.stdout[:200]}\nstderr: {result.stderr[:200]}"
-        )
-    else:
-        # Expected success: check exit code and artifacts
-        assert result.returncode == 0, (
-            f"Recipe failed for {case['provider_id']}: "
-            f"stdout: {result.stdout[:300]}\nstderr: {result.stderr[:300]}"
-        )
-
-        # Validate executable exists on PATH if expected
-        if case.get("expected_executable"):
-            which = subprocess.run(
-                ["which", case["expected_executable"]],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            assert which.returncode == 0, (
-                f"Expected executable {case['expected_executable']} not on PATH after install"
-            )
 
 
 # ── Harness lifecycle tests ──────────────────────────────────────────
 
 
 @pytest.mark.parametrize("harness", ["pi", "opencode"])
+@pytest.mark.timeout(240)
 def test_harness_install_lifecycle(harness: str) -> None:
-    """Full harness lifecycle: install → status → uninstall → verify clean."""
+    """Full harness lifecycle: install → status → uninstall → verify clean.
+
+    Bootstrap installs the rig backend (models, llama-server) and materializes
+    agent config. Provider CLIs are NOT installed by bootstrap — that's the
+    responsibility of the managed-config recipe system (npm install --global).
+    """
     project_root = Path(os.environ.get("AUDIAGENTIC_REPO_ROOT", ""))
     if not project_root.exists():
         pytest.skip("AUDIAGENTIC_REPO_ROOT not set or invalid")
@@ -162,7 +110,7 @@ def test_harness_install_lifecycle(harness: str) -> None:
     home = os.environ.get("HOME", "/tmp/recipe-test-home")
     harness_dir = os.path.join(home, ".audiagentic", "harness", harness)
 
-    # Install harness
+    # Install harness runtime (rig backend + agent config)
     result = subprocess.run(
         ["audiagentic", "bootstrap", "--target", harness_dir],
         capture_output=True,
@@ -171,11 +119,22 @@ def test_harness_install_lifecycle(harness: str) -> None:
     )
     assert result.returncode == 0, f"Bootstrap failed: {result.stderr[:300]}"
 
-    # Verify executable exists
-    expected_binary = os.path.join(harness_dir, "cli", "node_modules", ".bin", harness)
-    assert Path(expected_binary).exists(), f"Expected binary at {expected_binary}"
+    # Verify rig assets installed (llama-server binary)
+    expected_server = os.path.join(harness_dir, "rig", "bin", "llama-server", "linux", "llama-server")
+    assert Path(expected_server).exists(), f"Expected rig server at {expected_server}"
 
-    # Uninstall (cleanup_runtime)
+    # Verify agent config materialized
+    expected_models = os.path.join(harness_dir, "agent", "models.json")
+    assert Path(expected_models).exists(), f"Expected models.json at {expected_models}"
+
+    # Verify no provider CLI binary installed by bootstrap
+    cli_bin = os.path.join(harness_dir, "cli", "node_modules", ".bin", harness)
+    assert not Path(cli_bin).exists(), (
+        f"Bootstrap should NOT install provider CLI: {cli_bin} "
+        f"(provider CLIs are installed by managed-config, not bootstrap)"
+    )
+
+    # Uninstall (cleanup_runtime) — preserves rig/bin and models as user-owned areas
     result = subprocess.run(
         ["audiagentic", "cleanup", "--target", harness_dir],
         capture_output=True,
@@ -184,9 +143,14 @@ def test_harness_install_lifecycle(harness: str) -> None:
     )
     assert result.returncode == 0, f"Cleanup failed: {result.stderr[:300]}"
 
-    # Verify binary removed
-    assert not Path(expected_binary).exists(), (
-        f"Binary still exists after cleanup: {expected_binary}"
+    # Agent config removed by cleanup (generated content)
+    assert not Path(expected_models).exists(), (
+        f"models.json should be removed after cleanup: {expected_models}"
+    )
+
+    # Rig server preserved by cleanup (user-managed asset per design)
+    assert Path(expected_server).exists(), (
+        f"Rig server should survive cleanup (user-owned): {expected_server}"
     )
 
 

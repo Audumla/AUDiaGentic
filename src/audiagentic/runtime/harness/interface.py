@@ -85,4 +85,28 @@ This split exists because ``runtime.harness`` (runtime orchestration) may
 depend on ``components.providers`` via its approved public API, but
 ``components.providers`` (a platform component) must never depend back on
 ``runtime.harness`` — see ARCHITECTURE_STANDARDS.md §1's dependency table.
+
+Interactive CLI launch (HA03)
+------------------------------
+A harness's ``runner`` does NOT build its own CLI command/flags/env. Instead:
+
+1. The harness's ``runner`` calls
+   ``providers_api.prepare_interactive_provider_launch(...)`` with the
+   already-resolved provider/model (from AUDiaGentic's embedded rig config)
+   and the launch-time MCP surface (if any). Returns a
+   ``ProviderLaunch(executable, args, environment)``.
+2. The matching provider adapter package
+   (``components/providers/adapters/<id>/interactive.py``) implements
+   ``build_interactive_launch(project_root, *, provider, model, agent_runtime,
+   mcp_surface, runner_params, smoke) -> ProviderLaunch`` — the ONLY place
+   that knows which binary, which flags, and which extra env vars that
+   specific CLI needs for an interactive human-facing session.
+
+This is distinct from the ACP launch hook (``adapters/<id>/acp.py``'s
+``build_acp_launch``): ACP launches the provider's headless RPC bridge for
+programmatic sessions; interactive launch runs the provider's own CLI for a
+human at a terminal. A harness's ``runner`` should contain no per-provider
+CLI-flag logic of its own — only the generic lifecycle (context, MCP-surface
+request, logging, startup info, process supervision) that applies regardless
+of which harness is configured.
 """

@@ -154,26 +154,6 @@ def refresh_materialized_agent_config(target: Path, project_root: Path | None = 
     return 0
 
 
-def mcp_config_path(project_root: Path | None = None) -> Path:
-    from audiagentic.runtime.harness.pi.mcp_format import pi_mcp_path
-    return pi_mcp_path(project_root)
-
-
-def read_mcp_config(path: Path) -> dict:
-    from audiagentic.runtime.harness.pi.mcp_format import read_pi_mcp_json
-    return read_pi_mcp_json(path)
-
-
-def write_mcp_config(path: Path, entries: dict) -> None:
-    from audiagentic.runtime.harness.pi.mcp_format import write_pi_mcp_json
-    write_pi_mcp_json(path, entries)
-
-
-def remove_mcp_config(path: Path, name: str) -> bool:
-    from audiagentic.runtime.harness.pi.mcp_format import remove_pi_mcp_json
-    return remove_pi_mcp_json(path, name)
-
-
 def refresh_harness_config_if_installed(
     project_root: Path,
     *,
