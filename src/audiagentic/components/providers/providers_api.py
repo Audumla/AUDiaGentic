@@ -10,6 +10,7 @@ recipe kinds, registries, and their lifecycle methods are provider internals.
 Requesters express semantic intent through the relevant family operation; they
 never construct or dispatch a recipe.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -356,7 +357,11 @@ def get_pi_coding_agent_package_dir() -> Path | None:
 
 
 def manage_plugin_entry(
-    project_root: Path, provider_id: str, *, mode: PluginEntryMode, request: PluginEntryRequest,
+    project_root: Path,
+    provider_id: str,
+    *,
+    mode: PluginEntryMode,
+    request: PluginEntryRequest,
 ) -> PluginEntryResult:
     """Manage one generic provider plugin-config entry."""
     from audiagentic.components.providers.services.plugin_entries import (
@@ -601,9 +606,7 @@ def manage_self_provided_lsp_all(
                 )
             )
             continue
-        results.append(
-            manage_self_provided_lsp(project_root, pid, mode=mode, request=request)
-        )
+        results.append(manage_self_provided_lsp(project_root, pid, mode=mode, request=request))
     return results
 
 
@@ -684,16 +687,19 @@ def operate_provider_surfaces(
                 results.append(single)
         except Exception:  # noqa: BLE001 — catch all provider errors (missing impl)
             # Provider has no implementation for this family — skip gracefully
-            results.append(GeneratedSurfaceResult(
-                ok=False,
-                supported=False,
-                error_code="RES-PREC-001",
-            ))
+            results.append(
+                GeneratedSurfaceResult(
+                    ok=False,
+                    supported=False,
+                    error_code="RES-PREC-001",
+                )
+            )
     return results
 
 
 def list_providers(project_root: Path) -> dict[str, Any]:
     from audiagentic.components.providers.services.status import build_provider_status
+
     return build_provider_status(project_root, include_probes=False)
 
 
@@ -759,7 +765,11 @@ def list_provider_descriptors() -> list[dict[str, Any]]:
                 "notes": descriptor.permissions.notes,
             },
             "agent_files": [
-                {"rel_path": agent_file.rel_path, "managed": agent_file.managed, "description": agent_file.description}
+                {
+                    "rel_path": agent_file.rel_path,
+                    "managed": agent_file.managed,
+                    "description": agent_file.description,
+                }
                 for agent_file in descriptor.agent_files
             ],
         }
@@ -838,7 +848,9 @@ async def refresh_provider_catalog(project_root: Path, provider_id: str) -> dict
     from audiagentic.components.providers.services.catalog import fetch_provider_catalog
 
     try:
-        return await asyncio.to_thread(fetch_provider_catalog, provider_id, project_root=project_root)
+        return await asyncio.to_thread(
+            fetch_provider_catalog, provider_id, project_root=project_root
+        )
     except Exception as exc:  # noqa: BLE001
         return {"provider_id": provider_id, "ok": False, "error": str(exc)}
 
@@ -876,7 +888,11 @@ def _serialize_config_surface(kind: str, spec, project_root: Path) -> dict[str, 
         entry["path_scope"] = "home"
     except ValueError:
         entry["resolved_path"] = str(resolved)
-        entry["path_scope"] = "project" if not resolved.is_absolute() or str(resolved).startswith(str(project_root)) else "absolute"
+        entry["path_scope"] = (
+            "project"
+            if not resolved.is_absolute() or str(resolved).startswith(str(project_root))
+            else "absolute"
+        )
     return entry
 
 
@@ -915,9 +931,7 @@ def describe_provider(project_root: Path, provider_id: str) -> dict[str, Any]:
     if descriptor is None:
         return {"provider_id": provider_id, "ok": False, "reason": "unknown-provider"}
 
-    summary_rows = [
-        row for row in list_provider_descriptors() if row["provider_id"] == provider_id
-    ]
+    summary_rows = [row for row in list_provider_descriptors() if row["provider_id"] == provider_id]
     return {
         "provider_id": provider_id,
         "ok": True,
@@ -1001,7 +1015,10 @@ def _mutate_model_sources(
     issues = validate_model_sources(proposed)
     if issues:
         raise make_error(
-            prefix="VAL", component="MEP", number=1, kind="providers",
+            prefix="VAL",
+            component="MEP",
+            number=1,
+            kind="providers",
             message="model-sources.yaml failed schema validation",
             details={"issues": issues},
         )
@@ -1010,7 +1027,9 @@ def _mutate_model_sources(
     write_model_sources(project_root, proposed)
     for source_id in diff["added"] + diff["changed"] + diff["removed"]:
         record_model_config_timeline(
-            project_root, "model-sources", "model-config.planned",
+            project_root,
+            "model-sources",
+            "model-config.planned",
             attributes={"source-id": source_id},
         )
     return {"ok": True, "diff": diff, "written": True}
@@ -1075,21 +1094,26 @@ def list_model_inventory(project_root: Path) -> dict[str, Any]:
     document = load_model_sources(project_root)
     for source_id, source in sorted((document.get("sources") or {}).items()):
         if source.get("source-class") == "local-endpoint":
-            models = [{
-                "model_id": source.get("model-id"),
-                "display_name": source.get("display-name") or source.get("model-id"),
-            }]
+            models = [
+                {
+                    "model_id": source.get("model-id"),
+                    "display_name": source.get("display-name") or source.get("model-id"),
+                }
+            ]
             freshness = "declared"
             action_needed = None
         else:
             try:
                 catalog = get_source_catalog(project_root, source_id, source, refresh=False)
                 selected = apply_model_filter(catalog.models, source.get("model-filter"))
-                models = [{
-                    "model_id": model.get("model-id"),
-                    "display_name": model.get("display-name") or model.get("model-id"),
-                    "context_window": model.get("context-window"),
-                } for model in selected]
+                models = [
+                    {
+                        "model_id": model.get("model-id"),
+                        "display_name": model.get("display-name") or model.get("model-id"),
+                        "context_window": model.get("context-window"),
+                    }
+                    for model in selected
+                ]
                 freshness = catalog.freshness
                 action_needed = catalog.action_needed
             except Exception as exc:  # noqa: BLE001 - inventory reports source failure
@@ -1099,10 +1123,12 @@ def list_model_inventory(project_root: Path) -> dict[str, Any]:
 
         vendor_id = str(source.get("vendor-id") or "")
         if vendor_id:
-            vendor_sources.setdefault(vendor_id, []).append({
-                "source_id": source_id,
-                "enabled": source.get("enabled", True),
-            })
+            vendor_sources.setdefault(vendor_id, []).append(
+                {
+                    "source_id": source_id,
+                    "enabled": source.get("enabled", True),
+                }
+            )
             for model in models:
                 model_id = str(model.get("model_id") or "")
                 if model_id:
@@ -1143,29 +1169,34 @@ def list_model_inventory(project_root: Path) -> dict[str, Any]:
                     "enabled": bool(source.get("enabled", True)),
                     "action_needed": None,
                 }
-        sources.append({
-            "source_id": source_id,
-            "display_name": source.get("display-name") or source_id,
-            "vendor_id": vendor_id or None,
-            "source_class": source.get("source-class"),
-            "connector": source.get("connector"),
-            "enabled": source.get("enabled", True),
-            "catalog_freshness": freshness,
-            "action_needed": action_needed,
-            "models": models,
-            "harnesses": list(harnesses.values()),
-        })
+        sources.append(
+            {
+                "source_id": source_id,
+                "display_name": source.get("display-name") or source_id,
+                "vendor_id": vendor_id or None,
+                "source_class": source.get("source-class"),
+                "connector": source.get("connector"),
+                "enabled": source.get("enabled", True),
+                "catalog_freshness": freshness,
+                "action_needed": action_needed,
+                "models": models,
+                "harnesses": list(harnesses.values()),
+            }
+        )
 
-    vendors = [{
-        "vendor_id": vendor_id,
-        "harnesses": sorted(vendor_harnesses.get(vendor_id, set())),
-        "sources": vendor_sources.get(vendor_id, []),
-        "enabled": any(item["enabled"] for item in vendor_sources.get(vendor_id, [])),
-        "models": sorted(
-            vendor_models.get(vendor_id, {}).values(),
-            key=lambda item: item["model_id"],
-        ),
-    } for vendor_id in sorted(set(vendor_models) | set(vendor_sources))]
+    vendors = [
+        {
+            "vendor_id": vendor_id,
+            "harnesses": sorted(vendor_harnesses.get(vendor_id, set())),
+            "sources": vendor_sources.get(vendor_id, []),
+            "enabled": any(item["enabled"] for item in vendor_sources.get(vendor_id, [])),
+            "models": sorted(
+                vendor_models.get(vendor_id, {}).values(),
+                key=lambda item: item["model_id"],
+            ),
+        }
+        for vendor_id in sorted(set(vendor_models) | set(vendor_sources))
+    ]
     return {"ok": True, "sources": sources, "vendors": vendors}
 
 
@@ -1178,15 +1209,15 @@ def refresh_model_source_catalog(project_root: Path, source_id: str) -> dict[str
     source = (load_model_sources(project_root).get("sources") or {}).get(source_id)
     if source is None:
         raise AudiaGenticError(
-            code="VAL-MEP-005", kind="providers", message="unknown model source",
+            code="VAL-MEP-005",
+            kind="providers",
+            message="unknown model source",
             details={"source-id": source_id},
         )
     return get_source_catalog(project_root, source_id, source, refresh=True).to_dict()
 
 
-def model_vendor_set_enabled(
-    project_root: Path, vendor_id: str, enabled: bool
-) -> dict[str, Any]:
+def model_vendor_set_enabled(project_root: Path, vendor_id: str, enabled: bool) -> dict[str, Any]:
     """Enable or disable every configured source for one vendor group."""
     from audiagentic.foundation.contracts.errors import AudiaGenticError
 
@@ -1199,7 +1230,8 @@ def model_vendor_set_enabled(
                 matched.append(source_id)
         if not matched:
             raise AudiaGenticError(
-                code="VAL-MEP-006", kind="providers",
+                code="VAL-MEP-006",
+                kind="providers",
                 message="vendor has no configured model source",
                 details={"vendor-id": vendor_id},
             )
@@ -1221,13 +1253,21 @@ def apply_model_sources(project_root: Path) -> dict[str, Any]:
         if descriptor.automation_capability("model-projection") is None:
             continue
         if not is_provider_enabled(project_root, provider_id):
-            results.append({"provider_id": provider_id, "ok": True, "supported": True,
-                            "skipped": "provider-disabled"})
+            results.append(
+                {
+                    "provider_id": provider_id,
+                    "ok": True,
+                    "supported": True,
+                    "skipped": "provider-disabled",
+                }
+            )
             continue
         request = build_model_projection_request(project_root, provider_id, enabled=True)
-        results.append(manage_model_projection(
-            project_root, provider_id, mode="apply", request=request
-        ).to_mapping())
+        results.append(
+            manage_model_projection(
+                project_root, provider_id, mode="apply", request=request
+            ).to_mapping()
+        )
     return {"ok": all(result.get("ok", False) for result in results), "results": results}
 
 
@@ -1242,7 +1282,10 @@ def model_source_add(
         sources = document.setdefault("sources", {})
         if source_id in sources:
             raise make_error(
-                prefix="VAL", component="MEP", number=1, kind="providers",
+                prefix="VAL",
+                component="MEP",
+                number=1,
+                kind="providers",
                 message="model source already exists; use model_source_update",
                 details={"source-id": source_id},
             )
@@ -1258,7 +1301,10 @@ def _require_source(document: dict[str, Any], source_id: str) -> dict[str, Any]:
     sources = document.get("sources") or {}
     if source_id not in sources:
         raise make_error(
-            prefix="VAL", component="MEP", number=1, kind="providers",
+            prefix="VAL",
+            component="MEP",
+            number=1,
+            kind="providers",
             message="unknown model source id",
             details={"source-id": source_id},
         )
@@ -1492,6 +1538,7 @@ def _build_transport_lease(binding_id: str) -> StatusObserverLease:
     Returns:
         A StatusObserverLease with observe_transport wired to the normalizer.
     """
+
     def _observe(observation):
         return normalize_harness_status_observation(lease, observation)
 

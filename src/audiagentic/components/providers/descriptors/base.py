@@ -216,7 +216,25 @@ class ProviderDescriptor:
     # adapter.py exists, adapters/base_runner.py builds the runner from this
     # block (mode: cli | stub | ok-stub | unsupported; see base_runner docstring
     # for the full schema). Custom adapter modules always win.
+    # Declared launch capability (HA04) as a two-axis map: launch MODE
+    # (execute = run one turn and capture a result | interactive = a live
+    # session) -> the set of TRANSPORTS the provider can serve for that mode
+    # (native = pipe for execute / tty for interactive; acp = the Agent Client
+    # Protocol, provider-gated). ACP is a transport, never a mode. A transport
+    # set accommodates a provider serving several at once (none do today).
+    # Source of truth for resolve_launch_builder: an undeclared (mode,
+    # transport) is unsupported; a declared one with no builder/recipe fails
+    # closed. Empty means undeclared -> dispatch probes (migration default).
+    launches: dict[str, tuple[str, ...]] = field(default_factory=dict)
     execution: dict[str, Any] | None = None
+    # Declarative launch recipes for the ACP and interactive-TUI launch kinds
+    # (HA04). When present and no hand-written adapters/<id>/{acp,interactive}.py
+    # exists, recipe_launch builds a ProviderLaunch from this block via
+    # build_launch_spec. The block is both the recipe (executable/args/
+    # environment) and its own config (tools/lockdown/... for the flag
+    # primitives). Hand-written builders always win.
+    interactive: dict[str, Any] | None = None
+    acp: dict[str, Any] | None = None
     # Declarative surface rendering (AR03). When present, a standard renderer is
     # registered for this provider from the descriptor alone — no surface.py.
     # Keys: renderer ("flat-skill" renders per-skill files + the instruction

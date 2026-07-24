@@ -79,7 +79,14 @@ def test_bootstrap_refresh_launch_and_cleanup_materialize_owned_paths(
 
     mcp_path = project / ".audiagentic" / "mcp.json"
     installed_mcp = json.loads(mcp_path.read_text(encoding="utf-8"))
-    assert "ag-planning-mgmt" in installed_mcp["mcpServers"]
+    # ag-planning (propagate: providers) → projected to harness mcp.json
+    assert "ag-planning" in installed_mcp["mcpServers"], (
+        f"Expected ag-planning in project mcp.json. Got: {list(installed_mcp['mcpServers'].keys())}"
+    )
+    # ag-planning-mgmt (propagate: audiagentic) → NOT projected to harness
+    assert "ag-planning-mgmt" not in installed_mcp["mcpServers"], (
+        f"ag-planning-mgmt should NOT be in project mcp.json (propagate: audiagentic). Got: {list(installed_mcp['mcpServers'].keys())}"
+    )
 
     # Bootstrap is repeatable and preserves the harness's large/user-owned area.
     sentinel = runtime / "rig" / "bin" / "models" / "user-model.gguf"
@@ -106,7 +113,9 @@ def test_bootstrap_refresh_launch_and_cleanup_materialize_owned_paths(
     monkeypatch.setattr("audiagentic.runtime.harness.translate_agent_args", lambda _params: [])
     assert _main(["--project", str(project), "--prompt", "hello"]) == 0
     refreshed_mcp = json.loads(mcp_path.read_text(encoding="utf-8"))
-    assert "ag-planning-mgmt" in refreshed_mcp["mcpServers"]
+    # ag-planning survives launch-time refresh
+    assert "ag-planning" in refreshed_mcp["mcpServers"]
+    assert "ag-planning-mgmt" not in refreshed_mcp["mcpServers"]
 
     assert _main(["--project", str(project), "cleanup", "--target", str(runtime)]) == 0
     assert not (runtime / "cli").exists()

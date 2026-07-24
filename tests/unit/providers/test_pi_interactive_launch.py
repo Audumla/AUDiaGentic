@@ -1,4 +1,9 @@
-"""HA03 slice 2: Pi's provider-owned interactive (TUI) launch builder."""
+"""HA04: Pi's provider-owned interactive (TUI) launch builder.
+
+Stock Pi only -- AUDiaGentic injects no extensions (footer.ts/follow_up_actions
+were removed with the old custom launcher). Kept hand-written as the documented
+escape hatch; still returns a ProviderLaunch through the shared dispatch/spawn.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -53,13 +58,34 @@ def test_basic_launch_shape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
         tmp_path, provider="audiagentic", model="qwen3.5", agent_runtime=agent_runtime
     )
 
-    assert launch.executable == str(Path("/usr/bin/pi"))
+    assert launch.executable == "/usr/bin/pi"
     assert launch.args[:4] == ("--provider", "audiagentic", "--model", "qwen3.5")
-    assert "--no-extensions" in launch.args
-    assert "--extension" in launch.args
-    assert str(agent_runtime / "agent" / "extensions" / "footer.ts") in launch.args
+    assert "--no-extensions" in launch.args  # no MCP -> disable extension discovery
+    # No AG extension is injected -- stock Pi only.
+    assert "--extension" not in launch.args
     assert launch.environment["HOME"] == str(agent_runtime)
     assert launch.environment["PI_CODING_AGENT_DIR"] == str(agent_runtime / "agent")
+
+
+def test_tools_mode_maps_to_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch(monkeypatch, pi_cfg={"tools": {"mode": "mcp-only"}})
+    launch = build_interactive_launch(
+        tmp_path, provider="p", model="m", agent_runtime=tmp_path / "runtime"
+    )
+    assert "--no-builtin-tools" in launch.args
+
+    _patch(monkeypatch, pi_cfg={"tools": {"mode": "none"}})
+    launch = build_interactive_launch(
+        tmp_path, provider="p", model="m", agent_runtime=tmp_path / "runtime"
+    )
+    assert "--no-tools" in launch.args
+
+    _patch(monkeypatch, pi_cfg={"tools": {"mode": "full"}})
+    launch = build_interactive_launch(
+        tmp_path, provider="p", model="m", agent_runtime=tmp_path / "runtime"
+    )
+    assert "--no-tools" not in launch.args
+    assert "--no-builtin-tools" not in launch.args
 
 
 def test_mcp_surface_appended_and_no_extensions_flag_absent(

@@ -4,6 +4,29 @@
 provider_id: opencode
 execution_isolation_tier: full-isolation
 mcp_launch_isolation_tier: exact
+# Declared launch capability (HA04), mode -> transports:
+#   execute/native      -> adapter.py (run one turn, captured)
+#   interactive/native  -> declarative interactive: recipe below
+#   interactive/acp     -> adapters/opencode/acp.py
+launches:
+  execute: [native]
+  interactive: [native, acp]
+
+# Declarative interactive-TUI launch (HA04). OpenCode needs no injected
+# extensions or custom config -- just the binary, the translated runner args,
+# and the MCP surface's env (OPENCODE_CONFIG_CONTENT / XDG_CONFIG_HOME, merged
+# automatically). No hand-written builder.
+interactive:
+  executable: opencode
+  aliases: [opencode]
+  # No base args: the runner appends translated RunnerParams (via runner-flags)
+  # and any passthrough. MCP env (OPENCODE_CONFIG_CONTENT/XDG_CONFIG_HOME) is
+  # merged from the launch-time MCP surface automatically.
+  args: []
+  runner-flags:
+    prompt: --message
+    mode-cases:
+      json: [--output-format, json]
 automation_capabilities:
   - family_id: cli-lifecycle
     supported_modes: [plan, apply, prune, status]

@@ -105,13 +105,12 @@ def _build_settings_config(pi_cfg: dict, target: Path) -> dict:
         custom_theme_path.write_text(json.dumps(base, indent=2) + "\n", encoding="utf-8")
         theme_name = str(custom_theme_path)
 
-    settings: dict = {
-        "theme": theme_name,
-        "extensions": [
-            "extensions/footer.ts",
-            "extensions/follow_up_actions.ts",
-        ],
-    }
+    # No AUDiaGentic extensions are injected into Pi. AG does not customize the
+    # harness for interactive CLI use (the former footer.ts/follow_up_actions.ts
+    # UI extensions belonged to a removed custom launcher). Only the MCP adapter
+    # extension is added at launch time by the MCP surface, and only to deliver
+    # AG's projected MCP servers.
+    settings: dict = {"theme": theme_name}
     for key, dest, cast in [
         ("quiet_startup",      "quietStartup",         bool),
         ("collapse_changelog", "collapseChangelog",    bool),
@@ -170,10 +169,6 @@ def materialize_agent_config(
     append_src = _c._TEMPLATES_DIR / "APPEND_SYSTEM.md"
     if append_src.exists():
         shutil.copy2(append_src, agent_dir / "APPEND_SYSTEM.md")
-
-    ext_src = _c._TEMPLATES_DIR / "extensions"
-    if ext_src.exists():
-        shutil.copytree(ext_src, agent_dir / "extensions", dirs_exist_ok=True)
 
     model_name: str = harness_cfg.get("rig", {}).get("model")
     if not model_name:

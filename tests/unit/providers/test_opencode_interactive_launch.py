@@ -1,16 +1,26 @@
-"""HA03 slice 2: OpenCode's provider-owned interactive (TUI) launch builder."""
+"""HA04: OpenCode interactive launch is now a declarative recipe (no builder).
+
+Exercises the recipe path end to end: resolve_launch_builder finds the
+descriptor's interactive: block (not a hand-written module) and builds a
+ProviderLaunch via build_launch_spec; runner args translate from the recipe's
+runner-flags.
+"""
 from __future__ import annotations
 
+import types
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
-from audiagentic.components.providers.adapters.opencode.interactive import (
-    build_interactive_launch,
-    translate_runner_args,
+from audiagentic.components.providers.adapters.recipe_launch import (
+    translate_recipe_runner_args,
 )
+from audiagentic.components.providers.services.execution import resolve_launch_builder
+from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+register_all_components()
 
 
 @dataclass
@@ -20,67 +30,54 @@ class _RunnerParams:
     verbose: bool = False
 
 
-class _FakeSurface:
-    def __init__(self, env: dict[str, str] | None = None) -> None:
-        self.extra_args = ()
-        self.extra_env = env or {}
-
-
-def test_missing_opencode_cli_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("shutil.which", lambda name: None)
-
-    with pytest.raises(AudiaGenticError) as excinfo:
-        build_interactive_launch(
-            tmp_path, provider="audiagentic", model="qwen", agent_runtime=tmp_path / "runtime"
-        )
-
-    assert excinfo.value.code == "CFG-OCINST-003"
-
-
-def test_basic_launch_shape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/opencode" if name == "opencode" else None)
-
-    launch = build_interactive_launch(
-        tmp_path, provider="audiagentic", model="qwen3.5", agent_runtime=tmp_path / "runtime"
+@pytest.fixture(autouse=True)
+def _which(monkeypatch):
+    monkeypatch.setattr(
+        "audiagentic.components.providers.adapters.cli.shutil.which",
+        lambda name: f"/usr/bin/{name}",
     )
 
+
+def _build(**kw):
+    builder = resolve_launch_builder("opencode", "interactive")
+    assert builder is not None
+    assert builder.__module__ == "audiagentic.components.providers.adapters.recipe_launch"
+    defaults = dict(provider="audiagentic", model="m", agent_runtime=Path("/rt"))
+    defaults.update(kw)
+    return builder(Path("/proj"), **defaults)
+
+
+def test_resolved_via_recipe_not_hand_written() -> None:
+    # There is no adapters/opencode/interactive.py anymore.
+    builder = resolve_launch_builder("opencode", "interactive")
+    assert builder.__module__ == "audiagentic.components.providers.adapters.recipe_launch"
+
+
+def test_basic_launch_shape() -> None:
+    launch = _build()
     assert launch.executable == "/usr/bin/opencode"
     assert launch.args == ()
-    assert launch.environment == {}
+    assert dict(launch.environment) == {}
 
 
-def test_mcp_surface_env_merged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/opencode")
-    surface = _FakeSurface(env={"FOO": "bar"})
+def test_mcp_surface_env_merged() -> None:
+    surface = types.SimpleNamespace(extra_args=(), extra_env={"OPENCODE_CONFIG_CONTENT": "{}"})
+    launch = _build(mcp_surface=surface)
+    assert launch.environment["OPENCODE_CONFIG_CONTENT"] == "{}"
 
-    launch = build_interactive_launch(
-        tmp_path,
-        provider="audiagentic",
-        model="qwen3.5",
-        agent_runtime=tmp_path / "runtime",
-        mcp_surface=surface,
+
+def test_missing_cli_raises_uniform_error(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "audiagentic.components.providers.adapters.cli.shutil.which", lambda name: None
     )
-
-    assert launch.environment["FOO"] == "bar"
-
-
-def test_runner_params_translated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/opencode")
-
-    launch = build_interactive_launch(
-        tmp_path,
-        provider="audiagentic",
-        model="qwen3.5",
-        agent_runtime=tmp_path / "runtime",
-        runner_params=_RunnerParams(prompt="hello", mode="json"),
-    )
-
-    assert launch.args == ("--output-format", "json", "--message", "hello")
+    with pytest.raises(AudiaGenticError) as exc:
+        _build()
+    assert exc.value.code == "EXT-PROVCLI-001"
 
 
-def test_translate_runner_args() -> None:
-    assert translate_runner_args(_RunnerParams(prompt="hi", mode="json")) == [
+def test_runner_flags_translate_from_recipe() -> None:
+    assert translate_recipe_runner_args("opencode", _RunnerParams(prompt="hi", mode="json")) == [
         "--output-format", "json", "--message", "hi",
     ]
-    assert translate_runner_args(_RunnerParams(mode="text")) == []
-    assert translate_runner_args(None) == []
+    assert translate_recipe_runner_args("opencode", _RunnerParams(mode="text")) == []
+    assert translate_recipe_runner_args("opencode", None) == []

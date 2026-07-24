@@ -59,15 +59,16 @@ def build_global_context(
 
 
 def translate_agent_args(params) -> list[str]:
-    """Translate RunnerParams to opencode CLI flags.
+    """Translate RunnerParams to opencode CLI flags from its interactive recipe.
 
-    Delegates to the provider-owned translation
-    (components/providers/adapters/opencode/interactive.py) — runtime only
-    forwards the call (HA03).
+    OpenCode has no hand-written builder — its RunnerParams->flags mapping is
+    the declarative ``runner-flags`` block in the opencode descriptor (HA04).
     """
-    from audiagentic.components.providers.adapters.opencode.interactive import translate_runner_args
+    from audiagentic.components.providers.adapters.recipe_launch import (
+        translate_recipe_runner_args,
+    )
 
-    return translate_runner_args(params)
+    return translate_recipe_runner_args("opencode", params)
 
 
 def run_agent(ctx: AgentContext, agent_args: list[str], *, smoke: bool) -> int:
