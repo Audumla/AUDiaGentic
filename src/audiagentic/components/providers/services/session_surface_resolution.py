@@ -571,16 +571,14 @@ def resolve_session_surface(
 # ---------------------------------------------------------------------------
 
 def _resolve_target_platform(platform_hint: str | None) -> str:
-    """Return the target platform as a normalised triple.
+    """Return the target platform as a normalised name.
 
     If *platform_hint* is provided, it is used as-is (caller is responsible
-    for providing the correct triple format). Otherwise the runtime detector
-    produces the triple via :func:`_detect_platform_triple`.
+    for providing the correct format). Otherwise the current host's release
+    platform name is detected via :func:`~audiagentic.runtime.system.platform.release_platform_name`.
     """
     if platform_hint:
         return platform_hint
-    from audiagentic.components.providers.services.platform_target import (
-        detect_platform_triple,
-    )
+    from audiagentic.runtime.system.platform import release_platform_name
 
-    return detect_platform_triple()
+    return release_platform_name()

@@ -18,7 +18,7 @@ from audiagentic.components.providers.services.models import (
     sync_managed_provider_models,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.toolchains.managed_config import ManagedConfigSpec
+from audiagentic.foundation.toolchains.config.managed_config import ManagedConfigSpec
 
 # --- fake provider: flat JSON file of {name: payload} -----------------------
 

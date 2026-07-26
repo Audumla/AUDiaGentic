@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.foundation.toolchains.managed_config import ManagedFragmentRegistry
+from audiagentic.foundation.toolchains.config.managed_config import ManagedFragmentRegistry
 
 
 def mcp_ownership_registry(project_root: Path) -> ManagedFragmentRegistry:
