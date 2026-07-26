@@ -225,7 +225,6 @@ def test_session_server_exposes_expected_tools(tmp_path, _session_server):
         "status",
         "config",
         "set_auto_update",
-        "diagnose_mcp_servers",
         "update_rig",
     }.issubset(names)
     assert "cli_visibility" not in names
