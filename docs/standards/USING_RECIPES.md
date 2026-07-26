@@ -25,7 +25,8 @@ invent a foundation pattern for a single consumer.
 
 | You need to… | Use | Layer |
 |---|---|---|
-| Run declared install/uninstall steps behind a source gate | `DeclaredStepRecipe` + `InstallManifest` | foundation `recipe_patterns` |
+| Install/configure/uninstall a capability's **own** artifacts as declared data | **declarative YAML recipe** (`load_recipe_from_yaml` + `execute_recipe_mode`) | foundation `recipe_loader` / `recipe_execution` |
+| Run declared install/uninstall steps behind a source gate (programmatically) | `DeclaredStepRecipe` + `InstallManifest` | foundation `recipe_patterns` |
 | Report "no automation, a human does X" | `NoAutomationRecipe` | foundation `recipe_patterns` |
 | Add/remove an MCP server entry in a **provider** config | `sync_managed_provider_mcp_subset` | providers/services/mcp |
 | Add/remove a managed **instruction/rules block** in a provider file | `apply_provider_surfaces` / `SurfaceBlock` | providers/surfaces |
@@ -57,8 +58,57 @@ from audiagentic.foundation.toolchains.recipe_contract import (
 
 ## 4. Install via declared steps
 
-The canonical "install code" path. Steps are provision-step dicts
-(shell/config-set/write-file/managed-block) run with compensating rollback.
+Steps are the unit of work: **declare them as data, never hand-roll the I/O.**
+The step vocabulary (foundation `steps`, selected by `type`):
+
+| type | does | reverts by |
+|---|---|---|
+| `shell` | run a command (with `platform` overrides, `compensate-command`) | compensate command |
+| `download` | fetch remote files to a dir (`base-url` + `files` + `dest-dir`, `optional-files`) | removing what it created |
+| `config-set` / `config-remove` | set / remove a nested key in a JSON/TOML/YAML file the capability **owns** (`ConfigPatcher`) | restoring prior value |
+| `write-file` | write a wholly-owned file | restoring prior content |
+| `managed-block` | apply a managed region in a shared text file | removing the block |
+| `managed-mcp` / `managed-hooks` / `managed-plugin` *(providers layer)* | reconcile owned MCP / hook / plugin entries **through the managed family** (ownership-scoped; never raw-writes the provider file) | prune the owned entries |
+| `callable` / `sequence` / `conditional` / `select` / `confirm` | control flow + escape hatch | per-step |
+
+Step types are **registry-driven**: each type co-locates its builder and its
+JSON-schema fragment (`register_step_type(name, builder, schema=…)`). Foundation
+registers the neutral builtins; the providers layer registers the `managed-*`
+shielded seams (§6) from `components/providers/services/recipe_steps.py`. Any
+component that needs a specialized step registers its own builder + fragment the
+same way — there is no hard-coded step-type list in the recipe schema.
+
+**Config-first mandate:** if an install is *fetch files + write config*, express it
+as a **declarative YAML recipe** — data, no Python per provider. This is the
+preferred path; reach for a Python `DeclaredStepRecipe` only when a source-gate or
+programmatic composition genuinely needs it.
+
+```yaml
+# config/components/<component>/recipes/<name>.yaml
+recipe-id: mycap-codex
+recipe-version: "1.0.0"
+parameters:
+  - {name: URL, required: true}
+  - {name: TOKEN, default: "", sensitive: true}
+lifecycle:
+  install-steps:
+    - {type: download, id: fetch, base-url: "https://…", dest-dir: ~/.mycap, files: [a.py]}
+  configure-steps:
+    - {type: config-set, id: url, path: ~/.mycap/config.json, key-path: [apiUrl], value: "{URL}"}
+  uninstall-steps:
+    - {type: config-remove, id: url, path: ~/.mycap/config.json, key-path: [apiUrl]}
+```
+
+```python
+from audiagentic.foundation.toolchains.recipe_execution import execute_recipe_mode
+# mode is apply | prune | status | plan; {KEY} params filtered to the recipe's declared set
+result = execute_recipe_mode(recipe_path, {"URL": url, "TOKEN": token}, "apply")
+```
+
+Validated by `config/recipes/declarative-recipe.schema.json`. Adding a new
+provider integration is a YAML drop-in, not new code.
+
+**Programmatic form** — same steps behind a source gate, when Python is warranted:
 
 ```python
 from audiagentic.foundation.toolchains.recipe_patterns import (
@@ -97,10 +147,28 @@ delegate = NoAutomationRecipe(
 
 `provision()` is a **successful skip** (nothing to do), not a failure.
 
-## 6. Provider config operations — use the provider machinery
+## 6. Provider config operations — the managed-vs-raw boundary
 
-Do **not** write a recipe that reads/writes provider config files itself. These
-are ownership-tracked and reload-aware already.
+A recipe **may** orchestrate a whole provider integration and materialize it
+through **any** provider capability that can express the feature (MCP entry,
+hooks, plugin entry, surfaces, language-server projection, …). That is what
+recipes are *for*. The boundary is not "recipe vs. family" — it is
+**managed vs. raw**:
+
+- A recipe **calls the provider's managed/shielded layer** to mutate anything
+  inside a **provider-owned file** (the harness's own MCP/hooks/settings config).
+  That layer is ownership-scoped, format-aware, reload-aware, and multi-caller
+  safe. A recipe **never raw-writes** a provider-managed path — no `config-set`,
+  `write-file`, or `managed-block` step pointed at a file a provider owns.
+- A recipe **may write directly** only to files the capability **wholly owns**
+  (not provider-managed) — e.g. Hindsight's `~/.hindsight/*`.
+- If materializing a feature needs a managed capability the provider does **not**
+  expose, **add that capability** (a new automation family / shielded
+  reader-writer-remover on the provider descriptor) or review feasibility — do
+  **not** work around the gap by raw-writing the provider's file. Raw content in
+  a managed file is the defect; the fix is a managed seam, not a bypass.
+
+Existing managed seams a recipe composes:
 
 **MCP server entry** — the recipe body calls the sync; it does not own the write:
 
@@ -149,46 +217,46 @@ class MyCapRecipe(ProviderCapabilityRecipe):
     # to_result() overlay is inherited; keep primitives returning RecipeResult
 ```
 
-## 8. Config-driven assembly (Hindsight-local)
+## 8. Worked example — Hindsight (config + generic seams, zero per-provider code)
 
-When several recipe *kinds* differ only in configuration binding + provenance
-stamping — not logic — declare them as data instead of one class each. Hindsight
-does this for its guidance and hooks kinds via `RecipeSpec`
-(`components/memory/hindsight/recipe_spec.py`): a `pattern`
-(`no_automation` | `declared_step`), a list of `ParamBinding`s (row field or
-literal → the pattern's constructor param), and per-method `StatusOverride`s.
-`assemble_hindsight_recipe(row, backend, spec)` validates the spec (raising a
-canonical `VAL-RSPEC-*` `AudiaGenticError`) and binds it to the foundation
-pattern, inheriting the SL11 `to_result` provenance overlay.
+Hindsight is the reference for the config-first mandate. It splits every
+integration into two owners and holds **no** hand-rolled per-provider writer:
 
-```python
-_GUIDANCE_SPEC = RecipeSpec(
-    pattern="no_automation",
-    params=[ParamBinding("action_needed", row_field="notes")],
-    status_overrides=[StatusOverride("probe", "absent", "no automated integration available")],
-)
-recipe = assemble_hindsight_recipe(row, backend, _GUIDANCE_SPEC)
-```
+- **Provider-owned config** (the MCP entry, Codex hook entries, plugin entry) is
+  delegated to the generic provider families via `providers_api`
+  (`manage_mcp_entries` / `manage_hook_entries` / `manage_plugin_entry`). Memory
+  never formats another harness's config.
+- **Hindsight-owned artifacts** (`~/.hindsight/*`: the Codex hook scripts +
+  `codex.json`, the Pi host block in `config.json`) are **declarative YAML
+  recipes** under `config/components/memory/recipes/`, run through
+  `execute_recipe_mode`. `provision.py` holds only a data catalogue
+  (`_ARTIFACT_RECIPES = {provider_id: recipe.yaml}`) and a provider-agnostic
+  parameter builder — resolution picks the first supported family in fixed order,
+  runs the family call, then runs the optional artifact recipe.
 
-Scope rules — this is **not** a global default:
+Adding a provider is: (1) declare its automation family in the provider
+descriptor; (2) if it needs Hindsight-owned side files, drop a YAML recipe in the
+catalogue. No `if provider_id == …` branches, no new Python.
 
-- **It replaces classes, it does not sit on top of them.** Migrate a kind to a
-  spec only by *deleting* its class. A spec layer added above the classes is
-  duplication (the SL15 first attempt, reverted as SL16).
-- **Only genuinely config-shaped kinds qualify.** A kind that is more than ~30%
-  custom logic (`_McpConfigAdapter`, the plugin recipes) stays a small class.
-- **Add machinery only with its consumer.** The assembler carries no hook
-  dispatch or path-policy validation because no migrated spec needs them; add
-  those with the first pattern that does, never ahead of it.
-- **It stays under `components/memory/hindsight/`.** Promoting to a shared
-  `providers/services` assembler is a separate future item, gated on a real
-  second capability adopting it — never on a synthetic/test consumer.
+Doctrine that got it here:
+
+- **Declared, not hand-coded.** A recipe never reads/writes provider config
+  itself (§6) and never re-implements a JSON merge — `config-set`/`config-remove`
+  over `ConfigPatcher` do it with rollback and foreign-key preservation.
+- **Config over code.** Per-provider facts (URLs, bank ids, host-block shape,
+  script lists) live in YAML + descriptors, never in branches.
+- **Generic over bespoke.** New primitives (`download`, `config-remove`) are
+  added to foundation `steps` as domain-neutral vocabulary — usable by any
+  recipe — not as Hindsight-specific helpers (ARCHITECTURE_STANDARDS §1).
 
 ## 9. Anti-patterns (do not repeat)
 
-- **Reimplementing provider config management in a recipe.** MCP entries → the
-  MCP sync; instruction blocks → surfaces. A recipe that reads/writes those
-  files itself is duplicate machinery (see SL13).
+- **Raw-writing a provider-managed file from a recipe.** A recipe orchestrating
+  a provider integration is fine and encouraged (§6); the defect is a step that
+  writes *unmanaged* content straight into a file a provider owns, bypassing the
+  ownership-tracked seam. MCP entries → the MCP sync; instruction blocks →
+  surfaces; hooks → the hooks family. If no managed seam exists for what you need,
+  add one — do not raw-write (see SL13).
 - **A foundation pattern with one consumer.** `ManagedEntryRecipe` was extracted
   for one caller and duplicated the provider MCP machinery — it is being retired
   (SL13). Prefer the existing home over a new abstraction.
@@ -198,15 +266,25 @@ Scope rules — this is **not** a global default:
 - **Per-method provenance stamping.** Return `RecipeResult`; let the boundary
   stamp (SL11).
 - **Hand-rolled subprocess/config writes.** Use `run_steps`/`ConfigPatcher`/
-  `reconcile_fragments`, never raw `subprocess`/file writes in a recipe.
+  `reconcile_fragments`, never raw `subprocess`/file writes in a recipe — and for
+  provider-owned files, go through the managed seam, not `ConfigPatcher` directly
+  (§6).
 
 ## 10. Reference
 
+- Declarative YAML recipe: loader `foundation/toolchains/recipe_loader.py`,
+  materializer `recipe_materializer.py`, runner `recipe_execution.py`
+  (`execute_recipe_mode`); schema `config/recipes/declarative-recipe.schema.json`
+- Step vocabulary + factory: `foundation/steps/` (`factory.py` registry,
+  `structured.py` config/write/download steps, `shell.py`)
 - Contract + orchestration: `foundation/toolchains/recipe_contract.py`
 - Reusable patterns: `foundation/toolchains/recipe_patterns.py`
 - Ownership reconciler: `foundation/toolchains/fragments.py`
+- Config mutation primitive: `foundation/toolchains/config/config_patcher.py`
 - Provider MCP machinery: `components/providers/services/mcp.py`
 - Provider surfaces: `components/providers/surfaces/`
-- Worked example (wiring, not to copy verbatim): `components/memory/hindsight/`
+- Worked example (config-first, zero per-provider code):
+  `components/memory/hindsight/provision.py` +
+  `config/components/memory/recipes/`
 - Doctrine: `ARCHITECTURE_STANDARDS.md` §1 (layer boundaries), §10 (no
   speculative abstractions / duplicate paths).
