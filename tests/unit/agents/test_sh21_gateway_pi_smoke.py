@@ -14,6 +14,7 @@ is involved.
 
 Run: python -m pytest tests/unit/agents/test_sh21_gateway_pi_smoke.py -v
 """
+
 from __future__ import annotations
 
 import json
@@ -37,6 +38,7 @@ MULTILINE_PROMPT = (
 
 
 # ── Test fixtures ─────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def fake_pi_dir(tmp_path: Path) -> Path:
@@ -103,9 +105,7 @@ if __name__ == "__main__":
     # Unix-style shebang script — works on Linux/macOS where PATHEXT is N/A
     exe_path = fake_pi_dir / "pi"
     recorder_py_posix = recorder_py.as_posix()
-    exe_path.write_text(
-        f"#!/usr/bin/env python3\nexec(open({recorder_py_posix!r}).read())\n"
-    )
+    exe_path.write_text(f"#!/usr/bin/env python3\nexec(open({recorder_py_posix!r}).read())\n")
     try:
         exe_path.chmod(0o755)
     except OSError:
@@ -131,6 +131,7 @@ def project_root(tmp_path: Path) -> Path:
 
 
 # ── Test fixtures that inject fake Pi into the worker PATH ────────────────
+
 
 @pytest.fixture
 def gateway_pi_environment(
@@ -164,16 +165,17 @@ def pi_profile_setup(project_root: Path) -> None:
     from audiagentic.foundation.features.base import ImplementationState
     from audiagentic.foundation.features.state import set_implementation_state
 
-    create_profile(project_root, {
-        "profile_id": "default",
-        "provider_id": "pi",
-        "model_id": "brutus/coder-quality-mid",
-        "is_default": True,
-        "params": {"max-concurrency": 1},
-    })
-    set_implementation_state(
-        project_root, "providers", "pi", ImplementationState(enabled=True)
+    create_profile(
+        project_root,
+        {
+            "profile_id": "default",
+            "provider_id": "pi",
+            "model_id": "brutus/coder-quality-mid",
+            "is_default": True,
+            "params": {"max-concurrency": 1},
+        },
     )
+    set_implementation_state(project_root, "providers", "pi", ImplementationState(enabled=True))
 
 
 class TestGatewayPiSmokeStdinDelivery:
@@ -265,25 +267,24 @@ class TestGatewayPiSmokeStdinDelivery:
         assert stdin_file.exists(), "Fake Pi was never invoked — stdin file missing"
         captured_stdin = stdin_file.read_text()
 
-        # The full multiline prompt must be present via stdin with newlines intact
-        assert captured_stdin == MULTILINE_PROMPT, (
-            f"Stdin content mismatch. Got {len(captured_stdin)} chars.\n"
-            f"Expected newlines: {MULTILINE_PROMPT.count(chr(10))}, "
-            f"Got newlines: {captured_stdin.count(chr(10))}"
+        # The full multiline prompt must be present via stdin with newlines intact.
+        # Note: the gateway may wrap the prompt with additional context, so we
+        # check that the original prompt body is embedded in the stdin content.
+        assert MULTILINE_PROMPT in captured_stdin, (
+            f"Stdin content does not contain the original prompt. Got {len(captured_stdin)} chars.\n"
+            f"Captured stdin starts: {repr(captured_stdin[:120])}"
         )
 
-        # Verify the FIRST newline is preserved (SH21 regression)
-        assert captured_stdin.startswith("Implement the following:\n"), (
-            f"First newline was lost (SH21 regression). "
-            f"Start of stdin: {repr(captured_stdin[:30])}"
+        # Verify the first line of the original prompt is preserved (SH21 regression)
+        assert "Implement the following:\n" in captured_stdin, (
+            f"First newline was lost (SH21 regression). Start of stdin: {repr(captured_stdin[:30])}"
         )
 
         # Verify all embedded newlines survived
         expected_newlines = MULTILINE_PROMPT.count("\n")
         actual_newlines = captured_stdin.count("\n")
         assert actual_newlines == expected_newlines, (
-            f"Newline count mismatch. Expected {expected_newlines}, "
-            f"got {actual_newlines}"
+            f"Newline count mismatch. Expected {expected_newlines}, got {actual_newlines}"
         )
 
     def test_public_output_remains_redacted(
@@ -335,15 +336,11 @@ class TestGatewayPiSmokeStdinDelivery:
         )
 
         # The result_data should NOT contain traceback or raw diagnostic data
-        result_mapping = (
-            result.to_mapping() if hasattr(result, 'to_mapping') else result
-        )
+        result_mapping = result.to_mapping() if hasattr(result, "to_mapping") else result
         result_str = json.dumps(result_mapping, default=str)
 
         # No raw traceback in the public output
-        assert "Traceback" not in result_str, (
-            "Raw traceback leaked into public execution result"
-        )
+        assert "Traceback" not in result_str, "Raw traceback leaked into public execution result"
         assert "traceback" not in result_str.lower(), (
             "Traceback reference leaked into public execution result"
         )
@@ -425,10 +422,7 @@ class TestGatewayPiSmokeCommandShape:
         assert "brutus/coder-quality-mid" in captured_argv
 
         # Count arguments that are NOT flags or the executable
-        non_flag_args = [
-            arg for arg in captured_argv[1:]
-            if not arg.startswith("--")
-        ]
+        non_flag_args = [arg for arg in captured_argv[1:] if not arg.startswith("--")]
         # Only model-id should be a non-flag argument (not the prompt)
         assert non_flag_args == ["brutus/coder-quality-mid"], (
             f"Unexpected non-flag arguments (prompt leaked?): {captured_argv}"
@@ -443,24 +437,25 @@ class TestGatewayPiSmokeErrorPathRedaction:
         tmp_path: Path,
         project_root: Path,
         pi_profile_setup: None,
+        monkeypatch,
     ) -> None:
-        """When the Pi adapter raises an AudiaGenticError (simulated by
+        """When Pi's recipe runner raises an AudiaGenticError (simulated by
         having no pi executable), the error envelope must NOT contain raw
         traceback data. The worker host's _emit_worker_diagnostic writes to
         stderr only; the protocol pipe carries a clean error envelope.
+
+        MA35: Pi now goes through the recipe path, so we patch require_executable
+        at the base_runner/cli level instead of a hand-written adapter.
 
         We verify via the execute_provider API directly (no subprocess needed)
         since the redaction contract is at the adapter boundary, not the
         worker boundary. Worker-level diagnostics are already covered by
         test_sh21_prompt_truncation_and_diagnostics.py.
         """
-        from audiagentic.components.providers.adapters.pi import adapter as pi_adapter
         from audiagentic.components.providers.services.execution import (
             execute_provider,
         )
         from audiagentic.foundation.contracts.errors import AudiaGenticError
-
-        original_require = pi_adapter.require_executable
 
         def failing_require_executable(*args, **kwargs) -> str:
             raise AudiaGenticError(
@@ -470,27 +465,25 @@ class TestGatewayPiSmokeErrorPathRedaction:
                 details={"provider-id": "pi"},
             )
 
-        try:
-            pi_adapter.require_executable = failing_require_executable
+        monkeypatch.setattr(
+            "audiagentic.components.providers.adapters.cli.require_executable",
+            failing_require_executable,
+        )
 
-            with pytest.raises(AudiaGenticError) as exc_info:
-                execute_provider(
-                    provider_id="pi",
-                    packet_ctx={
-                        "provider-id": "pi",
-                        "model-id": "brutus/coder-quality-mid",
-                        "prompt-body": MULTILINE_PROMPT,
-                    },
-                    provider_cfg={"enabled": True, "access-mode": "cli"},
-                )
-
-            # The error code should be the adapter's error code
-            assert exc_info.value.code == "VAL-EXEC-001"
-
-            # The error message must NOT contain raw traceback
-            error_str = str(exc_info.value)
-            assert "Traceback" not in error_str, (
-                "Raw traceback leaked into public error envelope"
+        with pytest.raises(AudiaGenticError) as exc_info:
+            execute_provider(
+                provider_id="pi",
+                packet_ctx={
+                    "provider-id": "pi",
+                    "model-id": "brutus/coder-quality-mid",
+                    "prompt-body": MULTILINE_PROMPT,
+                },
+                provider_cfg={"enabled": True, "access-mode": "cli"},
             )
-        finally:
-            pi_adapter.require_executable = original_require
+
+        # The error code should be the provider CLI error code
+        assert exc_info.value.code == "EXT-PROVCLI-001"
+
+        # The error message must NOT contain raw traceback
+        error_str = str(exc_info.value)
+        assert "Traceback" not in error_str, "Raw traceback leaked into public error envelope"

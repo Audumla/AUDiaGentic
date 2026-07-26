@@ -4,6 +4,7 @@ Tests that the gateway full-isolation worker path preserves multiline prompts
 intact through the JSON protocol, and that unexpected worker exceptions yield
 bounded redacted diagnostics on stderr without contaminating the protocol pipe.
 """
+
 from __future__ import annotations
 
 import os
@@ -36,14 +37,11 @@ MULTILINE_PROMPT_BODY = (
 
 SINGLE_NEWLINE_PROMPT = "First line\nSecond line"
 
-CODE_FENCE_ONLY = (
-    "```json\n"
-    '{"key": "value"}\n'
-    "```"
-)
+CODE_FENCE_ONLY = '```json\n{"key": "value"}\n```'
 
 
 # ── Protocol-level round-trip tests (no subprocess) ──────────────────────
+
 
 class TestPromptProtocolRoundTrip:
     """Verify JSON protocol preserves embedded newlines in prompt-body."""
@@ -188,17 +186,13 @@ class TestPromptProtocolRoundTrip:
         assert packet_data["prompt-body"] == "Simple one-line prompt"
 
 
-
-
-
 # ── Integration tests: full-isolation worker path with real subprocess ───
+
 
 class TestPromptTransportThroughWorker:
     """End-to-end tests through the full-isolation worker subprocess."""
 
-    def test_multiline_prompt_survives_worker_protocol_roundtrip(
-        self, tmp_path: Path
-    ) -> None:
+    def test_multiline_prompt_survives_worker_protocol_roundtrip(self, tmp_path: Path) -> None:
         """Multiline prompt with newlines and code fences survives intact
         through encode → readline → decode in the full-isolation worker.
 
@@ -240,8 +234,7 @@ class TestPromptTransportThroughWorker:
 
         # The line should be complete (no truncation)
         assert len(line) == len(frame), (
-            f"Frame was truncated by readline. "
-            f"Expected {len(frame)} chars, got {len(line)}"
+            f"Frame was truncated by readline. Expected {len(frame)} chars, got {len(line)}"
         )
 
         # Decode and verify prompt body is preserved
@@ -249,9 +242,7 @@ class TestPromptTransportThroughWorker:
         packet_data: dict = decoded.execution_request["packet-data"]  # type: ignore[index]
         assert packet_data["prompt-body"] == MULTILINE_PROMPT_BODY
 
-    def test_single_line_prompt_unchanged_through_protocol(
-        self, tmp_path: Path
-    ) -> None:
+    def test_single_line_prompt_unchanged_through_protocol(self, tmp_path: Path) -> None:
         """Single-line prompt behavior is identical through the worker."""
         identity = WorkerExecutionIdentity(
             worker_id="worker-singleline",
@@ -443,9 +434,7 @@ class TestWorkerExceptionDiagnostics:
 class TestWorkerHostDiagnosticEmission:
     """Unit tests for _emit_worker_diagnostic behavior."""
 
-    def test_diagnostic_contains_exception_class_and_message(
-        self, tmp_path: Path
-    ) -> None:
+    def test_diagnostic_contains_exception_class_and_message(self, tmp_path: Path) -> None:
         from audiagentic.components.agents.agents_gateway_worker_host import (
             _emit_worker_diagnostic,
         )
@@ -478,10 +467,12 @@ class TestWorkerHostDiagnosticEmission:
 
         # Use a moderate depth that generates enough traceback without hitting
         # Python's default recursion limit (usually 1000).
+        exc: RuntimeError | None = None
         try:
             deep_func(300)
         except RuntimeError as e:
             exc = e
+        assert exc is not None
         with open(tmp_path / "stderr.log", "w") as f:
             old_stderr = sys.stderr
             try:
@@ -522,6 +513,7 @@ class TestWorkerHostDiagnosticEmission:
 
 # ── SH21 fix: stdin transport — prompt via pipe, not CLI argument ────────
 
+
 class TestPiStdinTransport:
     """SH21 fix verification: Pi adapter delivers prompt via stdin to preserve
     newlines that would be lost in --print CLI argument processing.
@@ -548,9 +540,11 @@ class TestPiStdinTransport:
         # Use a simple Python one-liner that reads stdin and echoes it back
         # (simulates what Pi's readPipedStdin does)
         result = subprocess.run(
-            [sys.executable, "-c", (
-                "import sys; data = sys.stdin.read(); sys.stdout.write(repr(data))"
-            )],
+            [
+                sys.executable,
+                "-c",
+                ("import sys; data = sys.stdin.read(); sys.stdout.write(repr(data))"),
+            ],
             input=multiline_prompt,
             capture_output=True,
             text=True,
@@ -578,9 +572,11 @@ class TestPiStdinTransport:
         expected_count = 1  # exactly one \n
 
         result = subprocess.run(
-            [sys.executable, "-c", (
-                "import sys; data = sys.stdin.read(); sys.stdout.write(str(data.count(chr(10))))"
-            )],
+            [
+                sys.executable,
+                "-c",
+                ("import sys; data = sys.stdin.read(); sys.stdout.write(str(data.count(chr(10))))"),
+            ],
             input=prompt,
             capture_output=True,
             text=True,
@@ -589,30 +585,55 @@ class TestPiStdinTransport:
         assert result.returncode == 0
         actual_count = int(result.stdout.strip())
         assert actual_count == expected_count, (
-            f"First newline was stripped. Expected {expected_count} newline(s), "
-            f"got {actual_count}"
+            f"First newline was stripped. Expected {expected_count} newline(s), got {actual_count}"
         )
 
-    def test_pi_adapter_builds_command_without_prompt_arg(self) -> None:
-        """The Pi adapter's _build_command must NOT include the prompt as a
-        CLI argument — it goes via stdin instead.
+    def test_pi_recipe_builds_command_without_prompt_arg(self, monkeypatch) -> None:
+        """Pi's recipe-driven runner must NOT include the prompt as a CLI
+        argument — it goes via stdin (MA35 stdin-fallback, SH21 fix).
         """
-        from audiagentic.components.providers.adapters.pi.adapter import (
-            _build_command,
+        monkeypatch.setattr(
+            "audiagentic.components.providers.adapters.base_runner.require_executable",
+            lambda *a, **k: "pi",
         )
 
-        command = _build_command("pi", model="brutus/coder-quality-mid")
+        from audiagentic.components.providers.adapters.base_runner import (
+            build_launch_spec,
+        )
+        from audiagentic.components.providers.descriptors.registry import (
+            all_descriptors,
+        )
+
+        # Build the same command the recipe path produces — prompt is in
+        # context but {prompt} is absent from pi.yaml's args-template, so
+        # it should NOT appear in the resolved args.
+        descriptor = all_descriptors()["pi"]
+        execution = getattr(descriptor, "execution", None)
+        assert execution is not None
+
+        spec = build_launch_spec(
+            {"executable": "pi", "aliases": ["pi"], **execution},
+            context={
+                "prompt": "Test prompt with newline\nLine two",
+                "model": "brutus/coder-quality-mid",
+                "approval-mode": "auto",
+            },
+        )
+        command = [spec.executable, *spec.args]
+
         # Command should be: ["pi", "--print", "--model", "model-id"]
-        assert command[0] == "pi"
         assert "--print" in command
         assert "--model" in command
         assert "brutus/coder-quality-mid" in command
 
         # CRITICAL: the prompt must NOT appear as a CLI argument
-        prompt_args = [a for a in command if "Prompt body" in a or "First line" in a]
-        assert len(prompt_args) == 0, (
-            f"Prompt leaked into CLI args (SH21 regression): {command}"
-        )
+        for arg in command:
+            assert "Test prompt with newline" not in arg, (
+                f"Prompt leaked into CLI args (SH21 regression): {command}"
+            )
+            assert "Line two" not in arg, (
+                f"Prompt leaked into CLI args (SH21 regression): {command}"
+            )
 
     def test_run_streaming_command_preserves_stdin_newlines(self, tmp_path: Path) -> None:
         """run_streaming_command with input_text preserves newlines when piping
@@ -632,10 +653,11 @@ class TestPiStdinTransport:
         stderr_sink = InMemorySink()
 
         result = run_streaming_command(
-            [sys.executable, "-c", (
-                "import sys; data = sys.stdin.read(); "
-                "sys.stdout.write(str(data.count(chr(10))))"
-            )],
+            [
+                sys.executable,
+                "-c",
+                ("import sys; data = sys.stdin.read(); sys.stdout.write(str(data.count(chr(10))))"),
+            ],
             cwd=tmp_path,
             input_text=multiline_input,
             stdout_sinks=[stdout_sink],
@@ -650,15 +672,52 @@ class TestPiStdinTransport:
             f"Stderr: {stderr_sink.text}"
         )
 
-    def test_pi_adapter_input_text_contains_full_multiline_prompt(self) -> None:
-        """The Pi adapter's run() passes the full prompt-body (including newlines)
-        as input_text to run_streaming_command, not as a CLI argument.
+    def test_pi_recipe_omits_prompt_from_argv(self, monkeypatch) -> None:
+        """Pi's recipe path omits {prompt} from args-template (MA35), so
+        the prompt goes via stdin — verify the resolved command has no
+        prompt content in its argv.
         """
-        from audiagentic.components.providers.adapters.pi.adapter import _build_command
+        monkeypatch.setattr(
+            "audiagentic.components.providers.adapters.base_runner.require_executable",
+            lambda *a, **k: "pi",
+        )
 
-        # Verify that _build_command doesn't embed the prompt — it goes via stdin
-        command = _build_command("pi", model="test-model")
-        # No prompt content in command args
+        from audiagentic.components.providers.adapters.base_runner import (
+            build_launch_spec,
+        )
+        from audiagentic.components.providers.descriptors.registry import (
+            all_descriptors,
+        )
+
+        descriptor = all_descriptors()["pi"]
+        execution = getattr(descriptor, "execution", None)
+        assert execution is not None
+
+        # {prompt} is absent from pi.yaml's args-template — it goes via stdin.
+        # Verify: the resolved template does NOT contain {prompt}.
+        template = (
+            execution.get("args-template")
+            or execution.get("args")
+            or [
+                "{approval-flags}",
+                "{model-flags}",
+                "{prompt}",
+            ]
+        )
+        assert "{prompt}" not in template, (
+            "Pi args-template should omit {prompt} (MA35 stdin-fallback)"
+        )
+
+        # Build the command with prompt context — it should NOT appear in args
+        spec = build_launch_spec(
+            {"executable": "pi", "aliases": ["pi"], **execution},
+            context={
+                "prompt": "Prompt body\nFirst line",
+                "model": "test-model",
+                "approval-mode": "auto",
+            },
+        )
+        command = [spec.executable, *spec.args]
         for arg in command:
             assert "Prompt body" not in arg, f"Prompt leaked into CLI: {arg}"
             assert "First line" not in arg, f"Prompt leaked into CLI: {arg}"
@@ -705,6 +764,7 @@ class TestPiStdinTransport:
 
 
 # ── SH21 RV769: deterministic worker failure with known sensitive string ──
+
 
 class TestWorkerHostFailureRedaction:
     """Deterministic regression: worker host fails with a known sensitive string.
@@ -808,10 +868,12 @@ class TestWorkerHostFailureRedaction:
                 raise RuntimeError("deep crash")
             deep_func(n - 1)
 
+        exc: RuntimeError | None = None
         try:
             deep_func(300)
         except RuntimeError as e:
             exc = e
+        assert exc is not None
 
         stderr_buf = io.StringIO()
         old_stderr = sys.stderr

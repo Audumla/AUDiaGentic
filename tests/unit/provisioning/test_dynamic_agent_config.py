@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -9,11 +8,21 @@ from audiagentic import launcher
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
 from audiagentic.foundation.lifecycle.components import install_component
-from audiagentic.runtime.harness.pi.install import request_runtime_reload
-from audiagentic.runtime.harness.pi.install.config import materialize_agent_config
+from audiagentic.foundation.mcp import McpServerEntry
+from audiagentic.foundation.mcp.json_format import _resolve_command
+from audiagentic.foundation.mcp.projection import collect_component_mcp_entries
 from audiagentic.runtime.harness.system_prompt import (
     build_system_prompt_injections as build_system_md_injections,
 )
+
+
+def _collect(project_root: Path) -> dict[str, McpServerEntry]:
+    """Same harness-agnostic source both the launch-time
+    MCP surface build from -- entries carry unresolved python placeholders until
+    a consumer resolves them (see _resolve_command)."""
+    return collect_component_mcp_entries(
+        project_root, propagation_target="providers", require_enabled=True
+    )
 
 
 def test_build_system_md_injections_uses_explicit_project_root(
@@ -40,113 +49,85 @@ def test_build_system_md_injections_uses_explicit_project_root(
     assert "not installed" in injections["Available components"]
 
 
-def test_materialize_agent_config_rebuilds_mcp_from_installed_components(
+def test_collect_mcp_entries_rebuilds_from_installed_components(
     tmp_path: Path,
 ) -> None:
-    """Native Pi config contains enabled functional servers, not bootstrap management."""
+    """The harness-agnostic entry source contains enabled functional servers, not bootstrap management."""
     project_root = tmp_path / "project"
-    harness_root = tmp_path / "harness"
     project_root.mkdir()
-    harness_root.mkdir()
 
     register_all_components()
-    harness_cfg = {"rig": {"model": "qwen3.5-0.8b", "port": 42001, "provider": "audiagentic"}}
-    mcp_path = project_root / ".audiagentic" / "mcp.json"
 
-    materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
-    initial = json.loads(mcp_path.read_text(encoding="utf-8"))
-    assert "ag-lsp-mgmt" not in initial["mcpServers"]
+    initial = _collect(project_root)
+    assert "ag-lsp-mgmt" not in initial
 
     install_component("coding-lsp", project_root)
-    materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
-    updated = json.loads(mcp_path.read_text(encoding="utf-8"))
+    updated = _collect(project_root)
 
-    assert "ag-lsp" in updated["mcpServers"]
-    assert "ag-lsp-mgmt" not in updated["mcpServers"]
+    assert "ag-lsp" in updated
+    assert "ag-lsp-mgmt" not in updated
 
 
-def test_agents_functional_servers_are_in_native_harness_mcp_config(
+def test_agents_functional_servers_are_in_collected_mcp_entries(
     tmp_path: Path,
 ) -> None:
-    """Native harness config receives provider-facing agent resolution and gateway servers."""
+    """Provider-facing agent resolution and gateway servers are collected."""
     project_root = tmp_path / "project"
-    harness_root = tmp_path / "harness"
     project_root.mkdir()
-    harness_root.mkdir()
 
     register_all_components()
-    harness_cfg = {"rig": {"model": "qwen3.5-0.8b", "port": 42001, "provider": "audiagentic"}}
-    mcp_path = project_root / ".audiagentic" / "mcp.json"
-
     install_component("agents", project_root)
-    materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
-    payload = json.loads(mcp_path.read_text(encoding="utf-8"))
+    entries = _collect(project_root)
 
-    assert {"ag-agents", "ag-agents-gateway"} <= set(payload["mcpServers"])
-    assert "ag-agents-mgmt" not in payload["mcpServers"]
+    assert {"ag-agents", "ag-agents-gateway"} <= set(entries)
+    assert "ag-agents-mgmt" not in entries
 
 
-def test_management_only_provider_server_is_not_in_native_mcp_config(
+def test_management_only_provider_server_is_not_in_collected_mcp_entries(
     tmp_path: Path,
 ) -> None:
-    """Bootstrap management servers are not projected into native functional config."""
+    """Bootstrap management servers are not projected into the functional entry set."""
     project_root = tmp_path / "project"
-    harness_root = tmp_path / "harness"
     project_root.mkdir()
-    harness_root.mkdir()
 
     register_all_components()
-    harness_cfg = {"rig": {"model": "qwen3.5-0.8b", "port": 42001, "provider": "audiagentic"}}
-    mcp_path = project_root / ".audiagentic" / "mcp.json"
-
     install_component("providers", project_root)
-    materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
-    payload = json.loads(mcp_path.read_text(encoding="utf-8"))
+    entries = _collect(project_root)
 
-    assert "ag-providers-mgmt" not in payload["mcpServers"]
+    assert "ag-providers-mgmt" not in entries
 
 
-def test_ledger_component_uses_optional_server_module_in_mcp_config(
+def test_ledger_component_uses_optional_server_module_in_collected_mcp_entries(
     tmp_path: Path,
 ) -> None:
     """The functional ledger server appears; its bootstrap management peer does not."""
     project_root = tmp_path / "project"
-    harness_root = tmp_path / "harness"
     project_root.mkdir()
-    harness_root.mkdir()
 
     register_all_components()
-    harness_cfg = {"rig": {"model": "qwen3.5-0.8b", "port": 42001, "provider": "audiagentic"}}
-    mcp_path = project_root / ".audiagentic" / "mcp.json"
-
     install_component("agent-ledger", project_root)
-    materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
-    payload = json.loads(mcp_path.read_text(encoding="utf-8"))
+    entries = _collect(project_root)
 
-    assert "ag-ledger" in payload["mcpServers"]
-    assert "ag-ledger-mgmt" not in payload["mcpServers"]
+    assert "ag-ledger" in entries
+    assert "ag-ledger-mgmt" not in entries
 
 
-def test_harness_mcp_config_uses_runtime_python_command(
+def test_collected_mcp_entry_command_resolves_to_runtime_python(
     tmp_path: Path,
 ) -> None:
-    """Pi adapter reads mcp.json directly; AUDiaGentic placeholders cannot be used there."""
+    """Consumers (launch-time MCP surface) resolve the
+    portability placeholder via _resolve_command before spawning -- entries
+    themselves still carry it unresolved."""
     project_root = tmp_path / "project"
-    harness_root = tmp_path / "harness"
     project_root.mkdir()
-    harness_root.mkdir()
 
     register_all_components()
-    harness_cfg = {"rig": {"model": "qwen3.5-0.8b", "port": 42001, "provider": "audiagentic"}}
-    mcp_path = project_root / ".audiagentic" / "mcp.json"
-
     install_component("agent-ledger", project_root)
-    materialize_agent_config(harness_root, harness_cfg, project_root=project_root)
-    payload = json.loads(mcp_path.read_text(encoding="utf-8"))
+    entries = _collect(project_root)
 
-    command = payload["mcpServers"]["ag-ledger"]["command"]
-    assert command == str(sys.executable)
-    assert command != "__AUDIAGENTIC_PYTHON__"
+    resolved = _resolve_command(entries["ag-ledger"].command)
+    assert resolved == str(sys.executable)
+    assert resolved != "__AUDIAGENTIC_PYTHON__"
 
 
 def test_component_mcp_metadata_loads_from_yaml() -> None:
@@ -171,15 +152,16 @@ def test_component_install_refreshes_materialized_agent_config(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    """Component install refreshes materialized config; no reload marker
+    is written (HA05 — request_runtime_reload deleted)."""
     project_root = tmp_path / "project"
     harness_root = tmp_path / "harness"
     project_root.mkdir()
 
-    refresh_calls: list[tuple[Path, Path]] = []
-    reload_calls: list[tuple[Path, str, str | None]] = []
+    refresh_calls: list[tuple[Path, Path | None]] = []
 
     monkeypatch.setattr(
-         "audiagentic.foundation.paths.home.global_harness_runtime",
+        "audiagentic.foundation.paths.home.global_harness_runtime",
         lambda: harness_root,
     )
     # Satisfy the refresh gate: a supported harness is installed on the system.
@@ -191,12 +173,6 @@ def test_component_install_refreshes_materialized_agent_config(
         "audiagentic.runtime.harness.pi.install.refresh_materialized_agent_config",
         lambda target, project_root=None: refresh_calls.append((target, project_root)),
     )
-    monkeypatch.setattr(
-        "audiagentic.runtime.harness.pi.install.request_runtime_reload",
-        lambda project_root, *, reason, component_id=None, has_mcp_servers=True: reload_calls.append(
-            (project_root, reason, component_id)
-        ),
-    )
 
     args = argparse.Namespace(component_cmd="install", component_id="coding-lsp")
 
@@ -204,25 +180,4 @@ def test_component_install_refreshes_materialized_agent_config(
 
     assert rc == 0
     assert refresh_calls
-    assert all(call == (harness_root, project_root) for call in refresh_calls)
-    assert reload_calls
-    assert all(call == (project_root, "component-installed", "coding-lsp") for call in reload_calls)
-
-
-def test_request_runtime_reload_writes_marker(tmp_path: Path) -> None:
-    project_root = tmp_path / "project"
-    project_root.mkdir()
-
-    marker = request_runtime_reload(
-        project_root,
-        reason="component-enabled",
-        component_id="coding-lsp",
-    )
-
-    assert marker == project_root / ".audiagentic" / "runtime" / "harness" / "reload-request.json"
-    payload = json.loads(marker.read_text(encoding="utf-8"))
-    assert payload["reason"] == "component-enabled"
-    assert payload["component_id"] == "coding-lsp"
-    assert payload["requested_at"].endswith("Z")
-
-
+    assert all(call[0] == harness_root and call[1] == project_root for call in refresh_calls)
