@@ -8,13 +8,14 @@ kinds:
     workflows:
       standard:
         initial: pending
-        values: [pending, completed]
+        values: [pending, in_progress, completed]
         transitions:
-          pending: [completed]
-          completed: [pending]
+          pending: [in_progress, completed]
+          in_progress: [pending, completed]
+          completed: [pending, in_progress]
         state-sets:
           terminal: [completed]
-          active: [pending]
+          active: [pending, in_progress]
   review:
     default-workflow: standard
     workflows:

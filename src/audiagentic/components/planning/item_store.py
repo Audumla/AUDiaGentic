@@ -33,10 +33,12 @@ __all__ = [
     "ITEM_SECTION_HEADING",
     "HEADING_TO_FIELD",
     "FRONTMATTER_FIELDS",
+    "METADATA_KEYS",
     "REVIEW_SECTIONS",
     "VALID_STATES",
     "ACTIVE_STATES",
     "COMPLETED_STATES",
+    "append_change_log",
     "build_item_body",
     "check_transition",
     "cleanup_empty_plan_dirs",
@@ -46,6 +48,7 @@ __all__ = [
     "find_item",
     "next_item_id",
     "next_review_id",
+    "parse_change_log",
     "parse_frontmatter",
     "parse_item_sections",
     "parse_title",
@@ -58,9 +61,9 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-VALID_STATES = {"pending", "completed"}
+VALID_STATES = {"pending", "in_progress", "completed"}
 # 'not_done' is accepted as a legacy alias for 'pending'
-ACTIVE_STATES = {"pending", "not_done"}
+ACTIVE_STATES = {"pending", "in_progress", "not_done"}
 COMPLETED_STATES = {"completed"}
 
 _WORKFLOWS_PATH = Path(__file__).with_name("workflows.yaml")
@@ -68,19 +71,41 @@ _WORKFLOWS_PATH = Path(__file__).with_name("workflows.yaml")
 _PLANNING_YAML = Path(__file__).resolve().parents[2] / "config" / "components" / "planning.yaml"
 
 
-def _load_section_headings() -> tuple[dict[str, str], dict[str, str]]:
-    """Load section heading maps from the planning component YAML config."""
+def _load_config() -> None:
+    """Load all config-driven constants from the planning component YAML."""
     cfg = load_yaml_file(_PLANNING_YAML)
-    item_headings = {k: v for k, v in cfg.get("item-section-headings", {}).items()}
-    review_sections = {k: v for k, v in cfg.get("review-sections", {}).items()}
-    return item_headings, review_sections
+
+    # Section heading maps (field_name → markdown heading)
+    global ITEM_SECTION_HEADING, REVIEW_SECTIONS  # noqa: PLW0603
+    ITEM_SECTION_HEADING = {k: v for k, v in cfg.get("item-section-headings", {}).items()}
+    REVIEW_SECTIONS = {k: v for k, v in cfg.get("review-sections", {}).items()}
+
+    # Derived reverse map (heading → field_name)
+    global HEADING_TO_FIELD  # noqa: PLW0603
+    HEADING_TO_FIELD = {v: k for k, v in ITEM_SECTION_HEADING.items()}
+
+    # Frontmatter fields — metadata that lives in the YAML block, not body sections.
+    global FRONTMATTER_FIELDS  # noqa: PLW0603
+    FRONTMATTER_FIELDS = set(cfg.get("frontmatter-fields", []))
+
+    # Metadata keys consumed during creation/update — never rendered as body sections.
+    global METADATA_KEYS  # noqa: PLW0603
+    METADATA_KEYS = set(cfg.get("metadata-keys", []))
 
 
-ITEM_SECTION_HEADING, REVIEW_SECTIONS = _load_section_headings()
-HEADING_TO_FIELD: dict[str, str] = {v: k for k, v in ITEM_SECTION_HEADING.items()}
-FRONTMATTER_FIELDS = {"id", "order", "plan", "state", "breadth", "work", "skill"}
+# --- Config-driven constants (loaded from planning.yaml) ---
+ITEM_SECTION_HEADING: dict[str, str] = {}
+REVIEW_SECTIONS: dict[str, str] = {}
+HEADING_TO_FIELD: dict[str, str] = {}
+FRONTMATTER_FIELDS: set[str] = set()
+METADATA_KEYS: set[str] = set()
 
+_load_config()  # populate the above at import time
+
+# --- Regex patterns ---
 _ITEM_ID_RE = re.compile(r"^([A-Z]+)(\d+)$", re.IGNORECASE)
+_CHANGE_LOG_HEADING = "## Change Log"
+_CHANGE_ENTRY_RE = re.compile(r"^- (\S+) \(([^)]+)\): (.*)$")
 
 
 def check_transition(kind: str, old: str, new: str) -> None:
@@ -327,6 +352,57 @@ def _remove_empty_descendants(dir_path: Path) -> None:
             logger.debug("removed empty child dir", extra={"dir": str(child)})
         except OSError:
             continue
+
+
+def append_change_log(
+    body: str,
+    timestamp: str,
+    actor: str,
+    description: str,
+) -> str:
+    """Append a change-log entry to *body*.
+
+    If the body already contains a ``## Change Log`` section, the new entry is
+    appended as the last bullet.  Otherwise the section is created after all
+    other sections.
+    """
+    entry = f"- {timestamp} ({actor}): {description}"
+    if _CHANGE_LOG_HEADING in body:
+        # Insert before the final newline of the Change Log section (which is the
+        # end of the file for well-formed items).
+        idx = body.rfind(_CHANGE_LOG_HEADING)
+        section_text = body[idx:]
+        # Append as a new line at the end of the section
+        if not section_text.endswith("\n"):
+            section_text += "\n"
+        return body[:idx] + section_text + entry + "\n"
+    else:
+        # Create the section after all existing content
+        return body.rstrip() + f"\n\n{_CHANGE_LOG_HEADING}\n\n{entry}\n"
+
+
+def parse_change_log(body: str) -> list[dict[str, str]]:
+    """Parse the ``## Change Log`` section from *body* into a list of entries.
+
+    Each entry is a dict with keys ``timestamp``, ``actor``, and ``description``.
+    Returns an empty list when no change log exists.
+    """
+    if _CHANGE_LOG_HEADING not in body:
+        return []
+    idx = body.index(_CHANGE_LOG_HEADING)
+    section_text = body[idx:]
+    entries: list[dict[str, str]] = []
+    for line in section_text.splitlines():
+        m = _CHANGE_ENTRY_RE.match(line.strip())
+        if m:
+            entries.append(
+                {
+                    "timestamp": m.group(1),
+                    "actor": m.group(2),
+                    "description": m.group(3),
+                }
+            )
+    return entries
 
 
 def cleanup_empty_plan_dirs(project_root: Path, slug: str, state_dirs: list[Path]) -> None:

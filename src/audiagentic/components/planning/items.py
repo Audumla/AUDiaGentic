@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import fnmatch
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -54,32 +55,46 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
             message=f"plan item already exists: {item_id!r}",
         )
 
+    now = datetime.now(timezone.utc).isoformat()
     fm: dict[str, Any] = {
         "id": item_id,
         "order": item.get("order", 0),
         "plan": item_store.plan_frontmatter_value(plan),
         "state": "pending",
+        "created-at": now,
         "breadth": item.get("breadth", ""),
         "skill": item.get("skill", ""),
+        "created-by": created_by,
     }
+
+    # Populate frontmatter fields that are explicitly requested by the caller
+    for field in item_store.FRONTMATTER_FIELDS:
+        if field in fm:  # skip already-set fields (id, plan, state, etc.)
+            continue
+        if field in item:
+            fm[field] = item[field]
+
     sections = {k: item.get(k, "") for k in item_store.ITEM_SECTION_HEADING}
-    # Include any custom section keys not consumed as frontmatter/metadata
-    _consumed = item_store.FRONTMATTER_FIELDS | {
-        "id",
-        "order",
-        "plan",
-        "state",
-        "breadth",
-        "skill",
-        "created-by",
-        "created_by",
-        "creator_id",
-        "title",
-    }
+    # Include any custom section keys not consumed as frontmatter/metadata.
+    _consumed = (
+        item_store.FRONTMATTER_FIELDS
+        | {
+            "id",
+            "order",
+            "plan",
+            "state",
+            "breadth",
+            "skill",
+        }
+        | item_store.METADATA_KEYS
+    )
     for k, v in item.items():
         if k not in _consumed and k not in item_store.ITEM_SECTION_HEADING:
             sections[k] = v
     body = item_store.build_item_body(title, sections)
+
+    # Append creation change log entry
+    body = item_store.append_change_log(body, now, "created-by", f"Created by {created_by}")
 
     slug = item_store.plan_slug(plan)
     target = planning_paths.plans_active_dir(project_root) / slug / f"{item_id}.md"
@@ -91,7 +106,8 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
         "title": title,
         "plan": slug,
         "state": "pending",
-        "created-by": fm.get("created-by", ""),
+        "created-by": created_by,
+        "created-at": now,
         "path": str(target.relative_to(project_root)),
     }
     events.publish_planning_event(
@@ -147,10 +163,10 @@ def list_items(
                     "id": item_id,
                     "plan": fm.get("plan", ""),
                     "state": fm.get("state", "pending"),
-                    "priority": fm.get("priority", ""),
                     "work": fm.get("work", ""),
                     "skill": fm.get("skill", ""),
                     "created-by": fm.get("created-by", ""),
+                    "created-at": fm.get("created-at", ""),
                     "title": parse_title(body) or "",
                     "path": str(path.relative_to(project_root)),
                 }
@@ -236,7 +252,9 @@ def list_items_grouped(
 
     result = []
     for plan_key, plan_items in sorted(groups.items()):
-        active_count = sum(1 for i in plan_items if i["state"] in ("pending", "not_done"))
+        active_count = sum(
+            1 for i in plan_items if i["state"] in item_store.ACTIVE_STATES | {"not_done"}
+        )
         completed_count = sum(1 for i in plan_items if i["state"] == "completed")
         result.append(
             {
@@ -251,13 +269,25 @@ def list_items_grouped(
     return result
 
 
-def get_item(project_root: Path, item_id: str) -> dict[str, Any]:
-    """Read a plan item by ID, returning frontmatter + parsed body sections."""
+def get_item(
+    project_root: Path,
+    item_id: str,
+    include_history: bool = False,
+) -> dict[str, Any]:
+    """Read a plan item by ID, returning frontmatter + parsed body sections.
+
+    When *include_history* is True the ``change_log`` key is populated with a
+    list of {timestamp, actor, description} dicts.  By default the history is
+    omitted to keep the response compact — callers that need it must opt in.
+    """
     path = item_store.require_item(project_root, item_id)
     fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
     item_store.ensure_not_review(fm, item_id, "VAL-PLN-018")
     sections = item_store.parse_item_sections(body)
-    return {**fm, **sections, "path": str(path.relative_to(project_root))}
+    result = {**fm, **sections, "path": str(path.relative_to(project_root))}
+    if include_history:
+        result["change_log"] = item_store.parse_change_log(body)
+    return result
 
 
 def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any]:
@@ -267,11 +297,23 @@ def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any
     fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
     item_store.ensure_not_review(fm, item_id, "VAL-PLN-019")
 
-    # Normalise the stored state to the canonical name and validate the move
-    canonical_state = "pending" if new_state in item_store.ACTIVE_STATES else "completed"
+    # Normalise legacy aliases to their canonical names.
+    if new_state in item_store.ACTIVE_STATES:
+        canonical_state = "pending" if new_state == "not_done" else new_state
+    else:
+        canonical_state = "completed"
     old_state = fm.get("state", "pending")
     item_store.check_transition("item", old_state, canonical_state)
     fm["state"] = canonical_state
+
+    # Append change log entry for the state transition
+    now = datetime.now(timezone.utc).isoformat()
+    body = item_store.append_change_log(
+        body,
+        now,
+        "state-transition",
+        f"State: {old_state} → {canonical_state}",
+    )
 
     target = target_dir / path.parent.name / path.name
     if target != path:
@@ -321,6 +363,10 @@ def update_item(project_root: Path, item_id: str, updates: dict[str, Any]) -> di
     item_store.ensure_not_review(fm, item_id, "VAL-PLN-020")
     sections = item_store.parse_item_sections(body)
 
+    # Snapshot old values before mutating — needed for change-log diffing.
+    old_fm = dict(fm)
+    old_sections = dict(sections)
+
     for key, value in updates.items():
         frontmatter_key = "created-by" if key in ("created_by", "creator_id") else key
         if frontmatter_key in item_store.FRONTMATTER_FIELDS:
@@ -328,11 +374,38 @@ def update_item(project_root: Path, item_id: str, updates: dict[str, Any]) -> di
         elif key in item_store.ITEM_SECTION_HEADING or key == "title" or key in sections:
             sections[key] = value
 
+    # Determine which fields actually changed for the change log.
+    changed_keys: list[str] = []
+    for key, value in updates.items():
+        frontmatter_key = "created-by" if key in ("created_by", "creator_id") else key
+        if frontmatter_key in item_store.FRONTMATTER_FIELDS:
+            old_value = old_fm.get(frontmatter_key)
+            if old_value != value:
+                changed_keys.append(f"{frontmatter_key}={value!r}")
+        elif key in item_store.ITEM_SECTION_HEADING or key == "title":
+            old_value = old_sections.get(key, "")
+            if old_value != value:
+                changed_keys.append(f"section:{key}")
+
     title = sections.pop("title", None)
     if title is None:
         title = parse_title(body) or item_id
 
     new_body = item_store.build_item_body(title, sections)
+
+    # Append change log entry
+    now = datetime.now(timezone.utc).isoformat()
+    if changed_keys:
+        change_desc = "Updated: " + ", ".join(changed_keys)
+    else:
+        change_desc = "Updated (no visible changes)"
+    new_body = item_store.append_change_log(
+        new_body,
+        now,
+        "updated-by",
+        change_desc,
+    )
+
     path.write_text(item_store.render_item(fm, new_body), encoding="utf-8")
 
     result = {"ok": True, "id": item_id, "path": str(path.relative_to(project_root))}

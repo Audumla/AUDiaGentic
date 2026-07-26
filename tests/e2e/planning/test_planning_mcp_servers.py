@@ -405,10 +405,11 @@ class TestPlanningHarnessMcpCollection:
 
     def test_pi_mcp_dict_includes_mgmt_server_only_when_installed(self, tmp_path: Path) -> None:
         """Full pi mcp.json build: collect -> build_pi_mcp_dict -> only mgmt server present."""
+        from audiagentic.runtime.harness.pi.mcp_format import build_pi_mcp_dict
+
         from audiagentic.foundation.components.loader import register_all_components
         from audiagentic.foundation.lifecycle.components import install_component
         from audiagentic.foundation.mcp.projection import collect_component_mcp_entries
-        from audiagentic.runtime.harness.pi.mcp_format import build_pi_mcp_dict
 
         register_all_components()
         install_component("agent-planning", tmp_path)

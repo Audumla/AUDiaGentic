@@ -1,4 +1,5 @@
 """Planning MCP server — tools for managing plan items in docs/planning/."""
+
 from __future__ import annotations
 
 from audiagentic.components.planning import planning_api
@@ -52,8 +53,17 @@ def plan_list_items(
 
 @mcp.tool()
 @log_tool_call
-def plan_get_item(item_id: str) -> dict:
-    return planning_api.get_item(project_root_from_env(), item_id)
+def plan_get_item(
+    item_id: str,
+    include_history: bool = False,
+) -> dict:
+    """Read a plan item by ID, returning frontmatter and all body sections.
+
+    Set include_history=True to also get the change-log entries as a list of
+    {timestamp, actor, description} dicts under the 'change_log' key.  Default
+    is False — callers that need audit history must opt in.
+    """
+    return planning_api.get_item(project_root_from_env(), item_id, include_history)
 
 
 @mcp.tool()
@@ -83,6 +93,7 @@ def plan_list_standards() -> list:
 # ---------------------------------------------------------------------------
 # Review tools
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool()
 @log_tool_call
@@ -144,6 +155,7 @@ def plan_delete_review(review_id: str) -> dict:
 
 def main() -> None:
     from audiagentic.foundation.logging import bootstrap
+
     bootstrap("planning")
     mcp.run()
 
