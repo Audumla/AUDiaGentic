@@ -9,7 +9,8 @@ mcp-servers:
   - name: ag-session-mgmt
     module: audiagentic.components.session.session_mcp
     args: ["--readonly", "--smoke-only"]
-    direct-tools: [status, config, set_auto_update, refresh_harness_config, diagnose_mcp_servers, update_rig]
+    direct-tools:
+      [status, config, set_auto_update, refresh_harness_config, update_rig]
     description: Harness status and configuration
     propagate: audiagentic
     instructions: >
@@ -20,7 +21,6 @@ mcp-servers:
       config: Show current AUDiaGentic harness configuration including ag.yaml settings and generated agent model config.
       set_auto_update: Enable or disable auto-update checks at launch.
       refresh_harness_config: Regenerate mcp.json and SYSTEM.md from current component state, then request in-session reload.
-      diagnose_mcp_servers: Preflight-probe every configured MCP server (spawn + initialize handshake) and report per-server ok/elapsed_ms/error without touching a live harness session.
       update_rig: Update llama.cpp rig binaries. Use scope='local' to update the active local/project-preferred rig and restart if needed, or scope='global' to update the shared global harness rig binaries.
 
 contributions:
@@ -32,9 +32,11 @@ contributions:
       - instruction
     content:
       body: |
-        Component profiles select an alternative set of component configurations for a
-        single process invocation. They override the base component definitions with
-        per-profile customizations (enabled/disabled components, overridden mcp-servers,
+        Component profiles select an alternative set of component configurations
+        for a single process invocation. They override the base component
+        definitions with
+        per-profile customizations (enabled/disabled components,
+        overridden mcp-servers,
         adjusted parameters).
 
         ## What component profiles are
@@ -51,22 +53,23 @@ contributions:
 
         Three unrelated mechanisms use the word "profile" in this codebase:
 
-        - **Component profiles** — select alternative component configurations for the
-          harness. Controlled by `--component-profile` /
+        - **Component profiles** — select alternative component configurations
+          for the harness. Controlled by `--component-profile` /
           `AUDIAGENTIC_COMPONENT_PROFILE`. Stored in
           `<project-root>/.audiagentic/<profile-name>/components/`.
 
         - **Agent profiles** — bind a provider to a specific model with optional
-          execution parameters. Used at job-launch time to resolve which model to
-          invoke. Stored in `.audiagentic/config/agent-profiles.yaml`. Referenced via
+          execution parameters. Used at job-launch time to resolve which model
+          invoke. Stored in `.audiagentic/config/agent-profiles.yaml`.
+        Referenced via
           `agent-profile-id` in job requests.
 
-        - **Workflow profiles** — define lite/standard/strict stage pipelines for
+        - **Workflow profiles** — define lite/standard/strict stage pipelines
           task execution. Controlled by `workflow-profile` in job or plan
           configuration. Not the same as component profiles or agent profiles.
 
         Additionally, rig model profiles (controlled by
-        `AUDIAGENTIC_RIG_MODEL_PROFILE` and related env vars) configure llama.cpp
+        `AUDIAGENTIC_RIG_MODEL_PROFILE` and related env vars) configure
         inference parameters and are orthogonal to all three of the above.
 
         ## Usage
