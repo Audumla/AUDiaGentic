@@ -12,8 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.io import atomic_write_text
-from audiagentic.foundation.toolchains.artifact_registry import ArtifactRegistry
-from audiagentic.foundation.toolchains.managed_block import (
+from audiagentic.foundation.toolchains.config.artifact_registry import ArtifactRegistry
+from audiagentic.foundation.toolchains.config.managed_block import (
     apply_managed_block,
     remove_managed_block,
 )
@@ -169,7 +169,7 @@ def _install_or_append_hook_block(
         return True
 
     # Check for any existing managed block pattern
-    from audiagentic.foundation.toolchains.managed_block import (
+    from audiagentic.foundation.toolchains.config.managed_block import (
         _block_pattern as _detect_block_pattern,
     )
 

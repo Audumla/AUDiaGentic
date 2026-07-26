@@ -12,7 +12,6 @@ import logging
 from typing import Any
 
 from audiagentic.components.coding_lsp.lsp_constants import (
-    COMPLETION_KIND_LABELS,
     FILE_BASENAME_TO_LANGUAGE,
 )
 from audiagentic.components.coding_lsp.lsp_edit_ops import (  # noqa: F401  (facade re-exports)
@@ -171,58 +170,6 @@ def call_hierarchy(
     return normalized
 
 
-def inlay_hints(
-    file: str, range_start: str, range_end: str,
-) -> list[dict[str, Any]]:
-    session, uri = _open_file_session(file, "textDocument/inlayHint")
-    if isinstance(session, dict):
-        return [session]
-    sl, sc = parse_position(range_start)
-    el, ec = parse_position(range_end)
-    lsp_range = {"start": {"line": sl, "character": sc}, "end": {"line": el, "character": ec}}
-    raw = session.inlay_hints(uri, lsp_range)
-    return raw
-
-
-def signature_help(file: str, position: str) -> dict[str, Any] | None:
-    session, uri = _open_file_session(file, "textDocument/signatureHelp")
-    if isinstance(session, dict):
-        return session
-    line, character = parse_position(position)
-    raw = session.signature_help(uri, line, character)
-    if not raw:
-        return None
-    sigs = raw.get("signatures", [])
-    active = raw.get("activeSignature", 0)
-    normalized_sigs: list[dict[str, Any]] = []
-    for sig in sigs:
-        params = []
-        for p in sig.get("parameters", []):
-            label = p.get("label", "")
-            if isinstance(label, list) and len(label) == 2:
-                offset_range = label
-                label = f"<offset:{offset_range}>"
-            doc = p.get("documentation")
-            if isinstance(doc, dict):
-                doc_val = doc.get("value", "")
-            else:
-                doc_val = str(doc or "")
-            params.append({
-                "label": str(label),
-                "documentation": doc_val,
-            })
-        normalized_sigs.append({
-            "label": sig.get("label", ""),
-            "documentation": sig.get("documentation", ""),
-            "parameters": params,
-        })
-    return {
-        "signatures": normalized_sigs,
-        "activeSignature": active,
-        "activeParameter": raw.get("activeParameter"),
-    }
-
-
 def type_hierarchy(
     file: str, position: str, direction: str = "supertypes",
 ) -> list[dict[str, Any]]:
@@ -244,35 +191,6 @@ def type_hierarchy(
             "file": uri_to_repo_relative(loc.get("uri", ""), project_root),
             "uri": loc.get("uri", ""),
             "range": loc.get("range", {}),
-        })
-    return normalized
-
-
-def completion(
-    file: str, position: str, trigger_character: str | None = None,
-) -> list[dict[str, Any]]:
-    session, uri = _open_file_session(file, "textDocument/completion")
-    if isinstance(session, dict):
-        return [session]
-    line, character = parse_position(position)
-    raw = session.completion(uri, line, character, trigger_character=trigger_character)
-    normalized: list[dict[str, Any]] = []
-    kind_map = COMPLETION_KIND_LABELS
-    for item in raw:
-        if not isinstance(item, dict):
-            continue
-        doc = item.get("documentation")
-        if isinstance(doc, dict):
-            doc_val = doc.get("value", "")
-        else:
-            doc_val = str(doc or "")
-        normalized.append({
-            "label": item.get("label", ""),
-            "kind": kind_map.get(item.get("kind", 0), f"unknown({item.get('kind', '?')})"),
-            "detail": item.get("detail", ""),
-            "documentation": doc_val,
-            "sortText": item.get("sortText", ""),
-            "preselect": item.get("preselect", False),
         })
     return normalized
 
