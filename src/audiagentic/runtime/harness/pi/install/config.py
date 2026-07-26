@@ -12,47 +12,6 @@ from audiagentic.runtime.rig.embedded.config import load_rig_model, resolve_prof
 from . import constants as _c
 
 
-def _require_harness_provider(harness_cfg: dict) -> str:
-    return require_harness_provider(harness_cfg)
-
-
-def _require_harness_rig_port(harness_cfg: dict) -> int:
-    return require_harness_rig_port(harness_cfg)
-
-
-def _build_models_config(harness_cfg: dict, model_name: str, model_profile: dict) -> dict:
-    agent = model_profile.get("agent", {}) if isinstance(model_profile, dict) else {}
-    compat: dict = agent.get("compat", {
-        "supportsDeveloperRole": False,
-        "supportsReasoningEffort": False,
-    })
-    rig_port = _require_harness_rig_port(harness_cfg)
-    endpoint = f"http://127.0.0.1:{rig_port}/v1"
-    api_key = _c.DEFAULT_API_KEY
-    context_size = int(agent.get("context_size", 262144))
-    return {
-        "providers": {
-            _require_harness_provider(harness_cfg): {
-                "baseUrl": endpoint,
-                "api": "openai-completions",
-                "apiKey": api_key,
-                "compat": compat,
-                "models": [
-                    {
-                        "id": model_name,
-                        "name": "AUDiaGentic local planner",
-                        "reasoning": bool(agent.get("reasoning", False)),
-                        "input": ["text"],
-                        "contextWindow": context_size,
-                        "maxTokens": int(agent.get("max_tokens", 4096)),
-                        "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
-                    }
-                ],
-            }
-        }
-    }
-
-
 def _resolve_project_root(project_root: Path | None = None) -> Path:
     if project_root is not None:
         return project_root
@@ -64,62 +23,6 @@ def _resolve_project_root(project_root: Path | None = None) -> Path:
         return Path(env_project_root)
 
     return Path.cwd()
-
-
-def _build_mcp_config(harness_cfg: dict, *, project_root: Path | None = None) -> dict:
-    """Build pi mcp.json from installed components via the pi harness adaptor."""
-    from audiagentic.foundation.mcp.projection import collect_component_mcp_entries
-    from audiagentic.runtime.harness.pi.mcp_format import build_pi_mcp_dict
-
-    enabled = harness_cfg.get("mcp", {}).get("enabled", True)
-    if not enabled:
-        return build_pi_mcp_dict({}, enabled=False)
-
-    entries = collect_component_mcp_entries(
-        _resolve_project_root(project_root),
-        propagation_target="providers",
-        require_enabled=True,
-    )
-    return build_pi_mcp_dict(entries)
-
-
-def _build_settings_config(pi_cfg: dict, target: Path) -> dict:
-    ui = pi_cfg.get("ui", {})
-    theme_name: str = ui.get("theme", "dark")
-    theme_colors = ui.get("theme_colors") or {}
-
-    if theme_colors:
-        from audiagentic.components.providers import providers_api
-
-        pkg = providers_api.get_pi_coding_agent_package_dir()
-        base_theme_dir = (
-            pkg / "dist" / "modes" / "interactive" / "theme" if pkg is not None
-            else target / "dist" / "modes" / "interactive" / "theme"  # absent -> guarded below
-        )
-        base_path = base_theme_dir / f"{theme_name}.json"
-        base = json.loads(base_path.read_text(encoding="utf-8")) if base_path.exists() else {"vars": {}, "colors": {}, "export": {}}
-        base.setdefault("colors", {}).update(theme_colors)
-        themes_dir = target / "agent" / "themes"
-        themes_dir.mkdir(parents=True, exist_ok=True)
-        custom_theme_path = themes_dir / "audiagentic.json"
-        custom_theme_path.write_text(json.dumps(base, indent=2) + "\n", encoding="utf-8")
-        theme_name = str(custom_theme_path)
-
-    # No AUDiaGentic extensions are injected into Pi. AG does not customize the
-    # harness for interactive CLI use (the former footer.ts/follow_up_actions.ts
-    # UI extensions belonged to a removed custom launcher). Only the MCP adapter
-    # extension is added at launch time by the MCP surface, and only to deliver
-    # AG's projected MCP servers.
-    settings: dict = {"theme": theme_name}
-    for key, dest, cast in [
-        ("quiet_startup",      "quietStartup",         bool),
-        ("collapse_changelog", "collapseChangelog",    bool),
-        ("thinking",           "defaultThinkingLevel", str),
-        ("editor_padding_x",   "editorPaddingX",       int),
-    ]:
-        if key in ui:
-            settings[dest] = cast(ui[key])
-    return settings
 
 
 def _build_system_md(target: Path, *, project_root: Path | None = None) -> None:
@@ -173,6 +76,7 @@ def materialize_agent_config(
     model_name: str = harness_cfg.get("rig", {}).get("model")
     if not model_name:
         from audiagentic.foundation.contracts.errors import make_error
+
         raise make_error(
             prefix="CFG",
             component="HCFG",
@@ -191,20 +95,42 @@ def materialize_agent_config(
         else:
             model_profile = resolve_profile_definition(model_name, _RIG_CONFIG)
 
-    (agent_dir / "models.json").write_text(
-        json.dumps(_build_models_config(harness_cfg, model_id, model_profile), indent=2) + "\n",
-        encoding="utf-8",
+    from audiagentic.components.providers.adapters.pi.local_rig_config import (
+        build_models_config,
+        build_settings_config,
     )
-    from audiagentic.runtime.harness.pi.mcp_format import pi_mcp_path
-    mcp_path = pi_mcp_path(_resolve_project_root(project_root))
-    mcp_path.parent.mkdir(parents=True, exist_ok=True)
-    mcp_path.write_text(
-        json.dumps(_build_mcp_config(harness_cfg, project_root=project_root), indent=2) + "\n",
+
+    models_config = build_models_config(
+        provider_id=require_harness_provider(harness_cfg),
+        rig_port=require_harness_rig_port(harness_cfg),
+        api_key=_c.DEFAULT_API_KEY,
+        model_id=model_id,
+        model_profile=model_profile,
+    )
+    (agent_dir / "models.json").write_text(
+        json.dumps(models_config, indent=2) + "\n",
         encoding="utf-8",
     )
     (agent_dir / "settings.json").write_text(
-        json.dumps(_build_settings_config(pi_cfg, target), indent=2) + "\n",
+        json.dumps(build_settings_config(pi_cfg.get("ui", {}), target=target), indent=2) + "\n",
         encoding="utf-8",
     )
+
+    # Layer in component-declared contributions as a managed block
+    # (components declaring content for AGENTS.md through the shared
+    # provider surfaces registry — same mechanism used by every other
+    # provider adapter)
+    root = _resolve_project_root(project_root)
+    try:
+        from audiagentic.components.providers import providers_api
+
+        providers_api.operate_provider_surfaces(root, "pi", mode="apply")
+    except Exception:  # noqa: BLE001 — contribution rendering is non-fatal
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "Failed to apply pi provider surface contributions",
+            exc_info=True,
+        )
 
     print_message(f"Materialized agent config in {agent_dir}")

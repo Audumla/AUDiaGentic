@@ -1,24 +1,18 @@
 from __future__ import annotations
 
-import logging
 import os
 import shutil
 import urllib.request
 from pathlib import Path
 
 from audiagentic.foundation.cli_io import print_message
-from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.runtime.harness.reload import (
     build_runtime_sync as _build_sync,
-)
-from audiagentic.runtime.harness.reload import (
-    write_reload_marker,
 )
 
 from . import constants as _c
 from .config import materialize_agent_config
 
-logger = logging.getLogger(__name__)
 _TARGET = "pi-runtime"
 
 
@@ -107,8 +101,8 @@ def request_runtime_reload(
     reason: str,
     component_id: str | None = None,
     has_mcp_servers: bool = True,
-) -> Path:
-    return write_reload_marker(project_root, reason=reason, component_id=component_id, target=_TARGET, has_mcp_servers=has_mcp_servers)
+) -> dict[str, object]:
+    return _build_sync(reason=reason, component_id=component_id, target=_TARGET, has_mcp_servers=has_mcp_servers)
 
 
 def install_to(target: Path, project_root: Path | None = None) -> int:
@@ -160,27 +154,22 @@ def refresh_harness_config_if_installed(
     reason: str,
     component_id: str | None = None,
 ) -> bool:
-    """Regenerate mcp.json and request runtime reload if harness is installed.
+    """Regenerate materialized agent config and request runtime reload if harness is installed.
 
     Returns True if harness was present and config was refreshed.
     """
     from audiagentic.foundation.paths.home import global_harness_runtime
     from audiagentic.runtime.harness import get_harness_type
+    from audiagentic.runtime.harness.lifecycle import (
+        refresh_harness_config_if_installed as _shared_refresh,
+    )
     from audiagentic.runtime.harness.resolution import harness_cli_available
 
     harness_runtime = global_harness_runtime()
-    if harness_cli_available(get_harness_type(project_root)) is None:
-        return False
-    refreshed = True
-    try:
-        refresh_materialized_agent_config(harness_runtime, project_root=project_root)
-    except AudiaGenticError:
-        logger.warning("Failed to refresh agent config for %s", component_id, exc_info=True, extra={"component": component_id})
-        refreshed = False
-    try:
-        request_runtime_reload(project_root, reason=reason, component_id=component_id)
-    except AudiaGenticError:
-        logger.warning("Failed to request runtime reload for %s", component_id, exc_info=True, extra={"component": component_id})
-        refreshed = False
-    return refreshed
+    return _shared_refresh(
+        cli_installed=harness_cli_available(get_harness_type(project_root)) is not None,
+        component_id=component_id,
+        refresh=lambda: refresh_materialized_agent_config(harness_runtime, project_root=project_root),
+        request_reload=lambda: request_runtime_reload(project_root, reason=reason, component_id=component_id),
+    )
 
