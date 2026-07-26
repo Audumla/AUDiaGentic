@@ -6,16 +6,13 @@ desired state). No matrix, no factory dispatch, no recipe registry.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 import audiagentic.components.providers  # noqa: F401 — register provider descriptors
-from audiagentic.components.memory.hindsight.codex_pi_desired import (
-    CodexHindsightDesired,
-    HookCommand,
-)
 from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
 from audiagentic.components.memory.hindsight.mcp_recipe import (
     build_hindsight_entry,
@@ -83,31 +80,18 @@ class TestFamilyPreferenceOrder:
 # Desired state — typed, no Any payloads
 # ---------------------------------------------------------------------------
 
-class TestCodexDesiredState:
-    """Step 4: Backend builders produce frozen desired state."""
+class TestCodexHookEntries:
+    """Codex hook entries point at the recipe-fetched scripts, one per event."""
 
-    def test_codex_desired_has_hook_commands(self):
-        from audiagentic.components.memory.hindsight.provision import _build_codex_desired
+    def test_build_codex_hook_entries(self):
+        from audiagentic.components.memory.hindsight.provision import _build_codex_hook_entries
 
-        desired = _build_codex_desired(_BACKEND)
-        assert isinstance(desired, CodexHindsightDesired)
-        assert len(desired.hook_commands) == 3
-        events = {hc.event for hc in desired.hook_commands}
-        assert events == {"SessionStart", "UserPromptSubmit", "Stop"}
-
-    def test_codex_desired_round_trip(self):
-        cmds = (
-            HookCommand(event="SessionStart", command="python s.py", timeout=5),
-            HookCommand(event="Stop", command="python r.py", timeout=30),
-        )
-        desired = CodexHindsightDesired(
-            base_url="http://localhost:8888",
-            bank_id="codex",
-            hook_commands=cmds,
-        )
-        mapped = desired.to_mapping()
-        restored = CodexHindsightDesired.from_mapping(mapped)
-        assert desired == restored
+        entries = _build_codex_hook_entries()
+        assert {e.event for e in entries} == {"SessionStart", "UserPromptSubmit", "Stop"}
+        assert {e.managed_id for e in entries} == {
+            "hindsight/sessionstart", "hindsight/userpromptsubmit", "hindsight/stop",
+        }
+        assert all("scripts" in e.command for e in entries)
 
 
 # ---------------------------------------------------------------------------
@@ -248,3 +232,64 @@ class TestArchitectureNoLegacy:
         assert provider_imports == [
             "from audiagentic.components.providers.providers_api import ("
         ]
+
+
+# ---------------------------------------------------------------------------
+# Pi config integration — Hindsight-owned ~/.hindsight/config.json
+# ---------------------------------------------------------------------------
+
+
+class TestPiArtifactRecipe:
+    """The Pi host block is provisioned by the declarative artifact recipe."""
+
+    def test_pi_resolves_to_managed_mcp(self):
+        assert _resolve_family("pi") == "managed-mcp"
+
+    def test_recipe_writes_full_host_block(self, tmp_path, monkeypatch):
+        from audiagentic.components.memory.hindsight import provision
+
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
+        monkeypatch.setenv("HOME", str(tmp_path))
+        result = provision._run_artifact_recipe(
+            "pi",
+            HindsightBackendConfig(base_url="http://hs:1/", bank_id="audiagentic"),
+            "apply",
+        )
+        assert result is not None and result.success
+
+        config = json.loads((tmp_path / ".hindsight" / "config.json").read_text(encoding="utf-8"))
+        assert config["baseUrl"] == "http://hs:1/"
+        assert config["bankId"] == "audiagentic"
+        assert config["bankStrategy"] == "manual"
+        assert config["host"] == {
+            "enabled": True,
+            "recall_mode": "hybrid",
+            "auto_recall_tags": ["{project}"],
+            "auto_recall_tags_match": "any_strict",
+            "observation_scopes": [["{project}"]],
+        }
+
+    def test_recipe_prune_removes_managed_keys_preserves_foreign(self, tmp_path, monkeypatch):
+        from audiagentic.components.memory.hindsight import provision
+
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
+        monkeypatch.setenv("HOME", str(tmp_path))
+        cfg = tmp_path / ".hindsight" / "config.json"
+        cfg.parent.mkdir(parents=True)
+        cfg.write_text(json.dumps({
+            "baseUrl": "http://hs:1/", "bankId": "audiagentic",
+            "bankStrategy": "manual", "host": {"enabled": True}, "foreign": "keep",
+        }), encoding="utf-8")
+
+        result = provision._run_artifact_recipe(
+            "pi", HindsightBackendConfig(base_url="http://hs:1/"), "prune",
+        )
+        assert result is not None and result.success
+        assert json.loads(cfg.read_text(encoding="utf-8")) == {"foreign": "keep"}
+
+    def test_provider_without_recipe_returns_none(self):
+        from audiagentic.components.memory.hindsight import provision
+
+        assert provision._run_artifact_recipe(
+            "gemini", HindsightBackendConfig(base_url="http://hs:1/"), "apply",
+        ) is None
