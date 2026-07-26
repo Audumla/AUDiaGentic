@@ -40,6 +40,7 @@ caught automatically instead of silently passing.
 
 Run via: docker run --rm audiagentic-provider-config-matrix-e2e
 """
+
 from __future__ import annotations
 
 import json
@@ -74,7 +75,7 @@ from audiagentic.components.providers.services.mcp import (
 from audiagentic.components.providers.services.plugin_entries import manage_plugin_entry
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.lifecycle.components import install_component
-from audiagentic.foundation.toolchains.managed_config import resolve_managed_config_path
+from audiagentic.foundation.toolchains.config.managed_config import resolve_managed_config_path
 
 pytestmark = [
     pytest.mark.mutates_host,
@@ -154,7 +155,7 @@ def _isolated_home(tmp_path: Path, monkeypatch, name: str = "home") -> Path:
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("USERPROFILE", str(home))
     monkeypatch.setenv("HOMEDRIVE", str(home.drive) or "C:")
-    monkeypatch.setenv("HOMEPATH", str(home)[len(home.drive):] if home.drive else str(home))
+    monkeypatch.setenv("HOMEPATH", str(home)[len(home.drive) :] if home.drive else str(home))
     return home
 
 
@@ -330,9 +331,13 @@ class TestMcpConfigAcrossAllHarnesses:
         _isolated_home(tmp_path, monkeypatch)
         project_root = _project(tmp_path)
 
-        add_provider_mcp_server(provider_id, "ma34-foreign-fixture", "echo", project_root, args=("foreign",))
+        add_provider_mcp_server(
+            provider_id, "ma34-foreign-fixture", "echo", project_root, args=("foreign",)
+        )
         for _ in range(3):
-            add_provider_mcp_server(provider_id, "ma34-managed", "echo", project_root, args=("managed",))
+            add_provider_mcp_server(
+                provider_id, "ma34-managed", "echo", project_root, args=("managed",)
+            )
             remove_provider_mcp_server(provider_id, "ma34-managed", project_root)
 
         names = {s["name"] for s in list_provider_mcp_servers(provider_id, project_root)["servers"]}
@@ -357,7 +362,9 @@ class TestMcpConfigAcrossAllHarnesses:
         assert second["removed"] is False, f"{provider_id}: second removal must be a no-op"
 
     @pytest.mark.parametrize("provider_id", _mcp_provider_ids())
-    def test_duplicate_add_upserts_not_duplicates(self, provider_id: str, tmp_path: Path, monkeypatch) -> None:
+    def test_duplicate_add_upserts_not_duplicates(
+        self, provider_id: str, tmp_path: Path, monkeypatch
+    ) -> None:
         harness.maybe_skip_provider(provider_id)
         _isolated_home(tmp_path, monkeypatch)
         project_root = _project(tmp_path)
@@ -366,10 +373,13 @@ class TestMcpConfigAcrossAllHarnesses:
         add_provider_mcp_server(provider_id, "ma34-dup", "echo", project_root, args=("v2",))
 
         matches = [
-            s for s in list_provider_mcp_servers(provider_id, project_root)["servers"]
+            s
+            for s in list_provider_mcp_servers(provider_id, project_root)["servers"]
             if s["name"] == "ma34-dup"
         ]
-        assert len(matches) == 1, f"{provider_id}: expected one upserted entry, found {len(matches)}"
+        assert len(matches) == 1, (
+            f"{provider_id}: expected one upserted entry, found {len(matches)}"
+        )
         assert matches[0]["args"] == ["v2"], f"{provider_id}: second add did not upsert args"
 
 
@@ -480,9 +490,7 @@ class TestCorruptedConfigMustNotBeSilentlyDiscarded:
 
 
 class TestForeignContentPreserved:
-    def test_foreign_plugin_entries_survive_repeated_managed_cycles(
-        self, tmp_path: Path
-    ) -> None:
+    def test_foreign_plugin_entries_survive_repeated_managed_cycles(self, tmp_path: Path) -> None:
         project_root = _project(tmp_path)
         config_path = project_root / ".opencode" / "opencode.json"
         config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -525,7 +533,9 @@ class TestForeignContentPreserved:
         request = ManagedHooksRequest(
             ownership_scope="ma34-foreign-hook-test",
             entries=(
-                ManagedHooksEntry(managed_id="ma34-hook", event="SessionStart", command="echo managed"),
+                ManagedHooksEntry(
+                    managed_id="ma34-hook", event="SessionStart", command="echo managed"
+                ),
             ),
         )
         manage_hook_entries(project_root, "codex", mode="apply", request=request)
@@ -557,7 +567,9 @@ class TestPurgeIdempotencyAndCompleteness:
         config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text(json.dumps({"plugin": []}), encoding="utf-8")
 
-        request = PluginEntryRequest(entry_id="@ma34/idempotent", ownership_scope="ma34-idempotent-test")
+        request = PluginEntryRequest(
+            entry_id="@ma34/idempotent", ownership_scope="ma34-idempotent-test"
+        )
         manage_plugin_entry(project_root, "opencode", mode="apply", request=request)
 
         first_prune = manage_plugin_entry(project_root, "opencode", mode="prune", request=request)
@@ -567,9 +579,7 @@ class TestPurgeIdempotencyAndCompleteness:
         assert second_prune.ok, "second prune must succeed cleanly, not error"
         assert not second_prune.changed, "second prune must be a no-op, not re-mutate"
 
-    def test_mcp_purge_across_multiple_entries_leaves_zero_residue(
-        self, tmp_path: Path
-    ) -> None:
+    def test_mcp_purge_across_multiple_entries_leaves_zero_residue(self, tmp_path: Path) -> None:
         project_root = _project(tmp_path)
         desc = get_descriptor("codex")
         assert desc is not None and desc.mcp_config is not None
@@ -602,9 +612,7 @@ class TestPurgeIdempotencyAndCompleteness:
 
 
 class TestDuplicateAndMissingEntryHandling:
-    def test_applying_identical_plugin_entry_twice_does_not_duplicate(
-        self, tmp_path: Path
-    ) -> None:
+    def test_applying_identical_plugin_entry_twice_does_not_duplicate(self, tmp_path: Path) -> None:
         project_root = _project(tmp_path)
         config_path = project_root / ".opencode" / "opencode.json"
         config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -616,7 +624,8 @@ class TestDuplicateAndMissingEntryHandling:
 
         raw = json.loads(config_path.read_text(encoding="utf-8"))
         matches = [
-            entry for entry in raw["plugin"]
+            entry
+            for entry in raw["plugin"]
             if (entry[0] if isinstance(entry, list) else entry) == "@ma34/dup"
         ]
         assert len(matches) == 1, f"expected exactly one entry, found {len(matches)}"
