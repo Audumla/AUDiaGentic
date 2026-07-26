@@ -5,6 +5,7 @@ Exact test matrix per frozen contract in PROVIDER_CAPABILITY_REFERENCE/execution
 
 Mock official SDK boundary, not provider internals.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -59,6 +60,10 @@ def _build_mock(tmp_path, monkeypatch, **overrides):
     acp_mod.PROTOCOL_VERSION = 1
     acp_mod.spawn_agent_process = spawn
     acp_mod.text_block = lambda text: {"type": "text", "text": text}
+    # Provide RequestPermissionResponse for runtime lazy imports
+    acp_mod.RequestPermissionResponse = SimpleNamespace(
+        model_validate=lambda r: r,
+    )
 
     interfaces_mod = types.ModuleType("acp.interfaces")
     interfaces_mod.Client = object
@@ -70,19 +75,25 @@ def _build_mock(tmp_path, monkeypatch, **overrides):
 
 # ── kind mapping ─────────────────────────────────────────────────
 
+
 def test_map_kind_agent_message():
     assert _map_kind("agent_message_chunk") == "assistant-message"
+
 
 def test_map_kind_thought():
     assert _map_kind("thought") == "thought"
 
+
 def test_map_kind_tool_call():
     assert _map_kind("tool_call") == "tool-call"
+
 
 def test_map_kind_unknown_returns_raw():
     assert _map_kind("unknown_kind") == "unknown_kind"
 
+
 # ── ordering and event variants ──────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_ordered_updates(tmp_path, monkeypatch):
@@ -99,6 +110,7 @@ async def test_ordered_updates(tmp_path, monkeypatch):
     assert terminal.kind == "result"
     assert result.terminal_event is terminal
 
+
 @pytest.mark.asyncio
 async def test_kind_mapping_in_events(tmp_path, monkeypatch):
     """Event kinds use canonical vocabulary."""
@@ -114,7 +126,9 @@ async def test_kind_mapping_in_events(tmp_path, monkeypatch):
         return SimpleNamespace(stop_reason="end_turn")
 
     conn, ctx, captured = _build_mock(
-        tmp_path, monkeypatch, prompt_side_effect=prompt_handler,
+        tmp_path,
+        monkeypatch,
+        prompt_side_effect=prompt_handler,
     )
     result = await run_acp_prompt(
         AcpLaunch("agent"),
@@ -129,22 +143,29 @@ async def test_kind_mapping_in_events(tmp_path, monkeypatch):
     cb_kinds = [e.kind for e in seen]
     assert "assistant-message" in cb_kinds
 
+
 # ── default permission denial ───────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_default_permission_denial(tmp_path, monkeypatch):
     """Permissions are denied by default."""
+
     async def prompt_handler(session_id, prompt):
         client = captured["client"]
         if client is not None:
             outcome = await client.request_permission(
-                session_id, {"id": "t1"}, [{"optionId": "yes"}],
+                session_id,
+                {"id": "t1"},
+                [{"optionId": "yes"}],
             )
             assert outcome == {"outcome": {"outcome": "cancelled"}}
         return SimpleNamespace(stop_reason="end_turn")
 
     conn, ctx, captured = _build_mock(
-        tmp_path, monkeypatch, prompt_side_effect=prompt_handler,
+        tmp_path,
+        monkeypatch,
+        prompt_side_effect=prompt_handler,
     )
     result = await run_acp_prompt(
         AcpLaunch("agent"),
@@ -154,7 +175,9 @@ async def test_default_permission_denial(tmp_path, monkeypatch):
     perm_events = [e for e in result.events if e.kind == "permission-request"]
     assert len(perm_events) >= 1, "Expected permission-request event"
 
+
 # ── explicit policy callback ─────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_explicit_policy_grant(tmp_path, monkeypatch):
@@ -165,13 +188,17 @@ async def test_explicit_policy_grant(tmp_path, monkeypatch):
         client = captured["client"]
         if client is not None:
             outcome = await client.request_permission(
-                session_id, {"id": "t1"}, [{"optionId": "yes"}],
+                session_id,
+                {"id": "t1"},
+                [{"optionId": "yes"}],
             )
             granted_outcomes.append(outcome)
         return SimpleNamespace(stop_reason="end_turn")
 
     conn, ctx, captured = _build_mock(
-        tmp_path, monkeypatch, prompt_side_effect=prompt_handler,
+        tmp_path,
+        monkeypatch,
+        prompt_side_effect=prompt_handler,
     )
     grant_result = {"outcome": {"outcome": "granted"}}
 
@@ -186,7 +213,9 @@ async def test_explicit_policy_grant(tmp_path, monkeypatch):
     )
     assert granted_outcomes == [grant_result]
 
+
 # ── malformed update ────────────────────────────────────────────
+
 
 class _BadStr:
     """Object whose str() always raises — triggers malformed update path."""
@@ -201,6 +230,7 @@ class _BadStr:
 @pytest.mark.asyncio
 async def test_malformed_update_normalized(tmp_path, monkeypatch):
     """Malformed updates produce error-kind event with EXT-ACP-002."""
+
     async def prompt_handler(session_id, prompt):
         client = captured["client"]
         if client is not None:
@@ -211,7 +241,9 @@ async def test_malformed_update_normalized(tmp_path, monkeypatch):
         return SimpleNamespace(stop_reason="end_turn")
 
     conn, ctx, captured = _build_mock(
-        tmp_path, monkeypatch, prompt_side_effect=prompt_handler,
+        tmp_path,
+        monkeypatch,
+        prompt_side_effect=prompt_handler,
     )
     result = await run_acp_prompt(
         AcpLaunch("agent"),
@@ -228,7 +260,9 @@ async def test_malformed_update_normalized(tmp_path, monkeypatch):
     assert result.terminal_event is not None
     assert result.terminal_event.kind == "result"
 
+
 # ── child exit ───────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_unexpected_child_exit(tmp_path, monkeypatch):
@@ -251,6 +285,10 @@ async def test_unexpected_child_exit(tmp_path, monkeypatch):
     acp_mod.PROTOCOL_VERSION = 1
     acp_mod.spawn_agent_process = spawn
     acp_mod.text_block = lambda text: {"type": "text", "text": text}
+    # Provide RequestPermissionResponse for runtime lazy imports
+    acp_mod.RequestPermissionResponse = SimpleNamespace(
+        model_validate=lambda r: r,
+    )
 
     interfaces_mod = types.ModuleType("acp.interfaces")
     interfaces_mod.Client = object
@@ -264,7 +302,9 @@ async def test_unexpected_child_exit(tmp_path, monkeypatch):
             prompt="hello",
         )
 
+
 # ── callback error isolation ────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_callback_failure_disables(tmp_path, monkeypatch):
@@ -282,7 +322,9 @@ async def test_callback_failure_disables(tmp_path, monkeypatch):
         return SimpleNamespace(stop_reason="end_turn")
 
     conn, ctx, captured = _build_mock(
-        tmp_path, monkeypatch, prompt_side_effect=prompt_handler,
+        tmp_path,
+        monkeypatch,
+        prompt_side_effect=prompt_handler,
     )
 
     async def failing_callback(event):
@@ -301,7 +343,9 @@ async def test_callback_failure_disables(tmp_path, monkeypatch):
     status_events = [e for e in result.events if e.kind == "status"]
     assert len(status_events) >= 1
 
+
 # ── cancel during prompt (protocol-level) ───────────────────────
+
 
 @pytest.mark.asyncio
 async def test_cancel_during_prompt(tmp_path, monkeypatch):
@@ -314,8 +358,11 @@ async def test_cancel_during_prompt(tmp_path, monkeypatch):
         return SimpleNamespace(stop_reason="end_turn")
 
     conn, ctx, captured = _build_mock(
-        tmp_path, monkeypatch, prompt_side_effect=slow_prompt,
+        tmp_path,
+        monkeypatch,
+        prompt_side_effect=slow_prompt,
     )
+
     # Add protocol-level cancel method to the mock connection
     async def mock_cancel(session_id):
         cancel_called["count"] += 1
@@ -344,6 +391,7 @@ async def test_cancel_during_prompt(tmp_path, monkeypatch):
     # Protocol-level cancel was attempted
     assert cancel_called["count"] >= 1
 
+
 # ── cancel before prompt ────────────────────────────────────────
 
 
@@ -351,7 +399,8 @@ async def test_cancel_during_prompt(tmp_path, monkeypatch):
 async def test_cancel_before_prompt(tmp_path, monkeypatch):
     """Cancel signal already set before prompt yields empty run with terminal."""
     conn, ctx, captured = _build_mock(
-        tmp_path, monkeypatch,
+        tmp_path,
+        monkeypatch,
         prompt_side_effect=lambda sid, p: (_ for _ in ()).throw(Exception("should not reach")),
     )
 
@@ -372,11 +421,14 @@ async def test_cancel_before_prompt(tmp_path, monkeypatch):
     assert terminal.terminal is True
     conn.prompt.assert_not_called()
 
+
 # ── bounded event count ─────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_bounded_event_count(tmp_path, monkeypatch):
     """Beyond MAX_EVENTS, non-terminal events are dropped."""
+
     async def prompt_handler(session_id, prompt):
         client = captured["client"]
         if client is not None:
@@ -388,7 +440,9 @@ async def test_bounded_event_count(tmp_path, monkeypatch):
         return SimpleNamespace(stop_reason="end_turn")
 
     conn, ctx, captured = _build_mock(
-        tmp_path, monkeypatch, prompt_side_effect=prompt_handler,
+        tmp_path,
+        monkeypatch,
+        prompt_side_effect=prompt_handler,
     )
     result = await run_acp_prompt(
         AcpLaunch("agent"),
@@ -401,7 +455,9 @@ async def test_bounded_event_count(tmp_path, monkeypatch):
     assert result.dropped_events > 0
     assert result.total_events > MAX_EVENTS
 
+
 # ── bounded total bytes ─────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_bounded_total_bytes(tmp_path, monkeypatch):
@@ -419,7 +475,9 @@ async def test_bounded_total_bytes(tmp_path, monkeypatch):
         return SimpleNamespace(stop_reason="end_turn")
 
     conn, ctx, captured = _build_mock(
-        tmp_path, monkeypatch, prompt_side_effect=prompt_handler,
+        tmp_path,
+        monkeypatch,
+        prompt_side_effect=prompt_handler,
     )
     result = await run_acp_prompt(
         AcpLaunch("agent"),
@@ -432,7 +490,9 @@ async def test_bounded_total_bytes(tmp_path, monkeypatch):
     assert result.terminal_event is not None
     assert result.terminal_event.kind == "result"
 
+
 # ── secret canary absent from normalized errors ─────────────────
+
 
 @pytest.mark.asyncio
 async def test_secret_canary_absent_from_errors(tmp_path, monkeypatch):
@@ -450,7 +510,9 @@ async def test_secret_canary_absent_from_errors(tmp_path, monkeypatch):
         return SimpleNamespace(stop_reason="end_turn")
 
     conn, ctx, captured = _build_mock(
-        tmp_path, monkeypatch, prompt_side_effect=prompt_handler,
+        tmp_path,
+        monkeypatch,
+        prompt_side_effect=prompt_handler,
     )
     result = await run_acp_prompt(
         AcpLaunch("agent"),
@@ -460,28 +522,30 @@ async def test_secret_canary_absent_from_errors(tmp_path, monkeypatch):
 
     for event in result.events:
         if event.text is not None:
-            assert SECRET not in event.text, (
-                f"Secret leaked in event {event.sequence} text"
-            )
+            assert SECRET not in event.text, f"Secret leaked in event {event.sequence} text"
         if event.error is not None:
             for v in event.error.values():
-                assert SECRET not in str(v), (
-                    f"Secret leaked in event {event.sequence} error"
-                )
+                assert SECRET not in str(v), f"Secret leaked in event {event.sequence} error"
+
 
 # ── SDK missing canonical error ─────────────────────────────────
+
 
 def test_missing_sdk_canonical_error(monkeypatch, tmp_path):
     """Missing SDK raises CFG-ACP-001."""
     monkeypatch.setitem(sys.modules, "acp", None)
     with pytest.raises(AudiaGenticError, match=ERR_SDK_MISSING):
-        asyncio.run(run_acp_prompt(
-            AcpLaunch("agent"),
-            cwd=tmp_path,
-            prompt="hello",
-        ))
+        asyncio.run(
+            run_acp_prompt(
+                AcpLaunch("agent"),
+                cwd=tmp_path,
+                prompt="hello",
+            )
+        )
+
 
 # ── result structure invariants ─────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_result_structure(tmp_path, monkeypatch):
@@ -501,7 +565,9 @@ async def test_result_structure(tmp_path, monkeypatch):
     assert result.terminal_event.terminal is True
     assert result.callback_disabled is False
 
+
 # ── foundation import guard ─────────────────────────────────────
+
 
 def test_acp_no_component_imports():
     """foundation/transports/acp.py must not import component or provider modules."""
@@ -511,8 +577,8 @@ def test_acp_no_component_imports():
         __import__(
             "audiagentic.foundation.transports.acp",
             fromlist=[""],
-        )
-        .__file__ or ""
+        ).__file__
+        or ""
     )
 
     with open(acp_path, encoding="utf-8") as f:
