@@ -14,6 +14,7 @@ implementation-scoped state.
 - `memory.yaml` — Component descriptor (config/components/)
 - `memory_api.py` — Business logic: implementation selection, config, status
 - `memory_mcp.py` — MCP server exposing management tools
+- `hindsight/INSTALL_MAP.md` — Current provider-to-Hindsight installation routes
 
 ### State
 
