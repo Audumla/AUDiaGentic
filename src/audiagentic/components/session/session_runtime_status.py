@@ -1,110 +1,106 @@
-"""Runtime status helpers for the core session component."""
+"""Runtime status helpers for the core session component.
+
+RU02: session component never queries rig internals directly —
+runtime resolves ProviderSessionInfo and passes it in as input.
+The session functions just display what the provider gives them.
+"""
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from typing import Any
 
+from audiagentic.components.providers.contracts.session_status import (
+    ProviderSessionInfo,
+)
 from audiagentic.foundation.config import load_layered_config
 from audiagentic.foundation.contracts.errors import make_error
 
 logger = logging.getLogger(__name__)
 
 
-def versions() -> dict[str, Any]:
-    from audiagentic.foundation.paths.home import global_harness_runtime
-    from audiagentic.runtime.harness import query_rig_server_version, version_info
-
-    version_payload = version_info()
+def versions(ctx: ProviderSessionInfo) -> dict[str, Any]:
+    """Return version info from provider session info."""
     payload: dict[str, Any] = {
-        "audiagentic": version_payload["agent"],
-        "mcp_adapter": version_payload["mcp_adapter"],
+        "audiagentic": ctx.agent_version or "unknown",
+        "mcp_adapter": ctx.mcp_adapter_version or "unknown",
     }
-
-    harness = global_harness_runtime()
-    if harness and (harness / "rig" / "bin").exists():
-        server_ver = query_rig_server_version(harness / "rig" / "bin")
-        if server_ver:
-            payload["llama_server"] = server_ver
+    if ctx.server_version:
+        payload["llama_server"] = ctx.server_version
     return payload
 
 
-def model_info() -> dict[str, Any]:
-    from audiagentic.foundation.paths.home import global_harness_runtime
-    from audiagentic.runtime.harness import (
-        default_config_path,
-        load_active_profile,
-        query_rig_server_version,
-    )
-
-    requested = os.environ.get("AUDIAGENTIC_AG_MODEL")
-    if not requested:
-        cfg = load_layered_config(
-            pkg_default_path=default_config_path(),
-            project_root=None,
-            namespace="harness/ag",
-        )
-        requested = cfg.get("model")
-
-    if not isinstance(requested, str) or not requested.strip():
+def model_info(ctx: ProviderSessionInfo) -> dict[str, Any]:
+    """Return model info from provider session info."""
+    configured = ctx.configured_model
+    if not configured or not configured.strip():
         raise make_error(
-            prefix="CFG", component="session", number=1,
+            prefix="CFG",
+            component="session",
+            number=1,
             kind="session",
             message="missing configured model in harness config",
             details={},
         )
-
-    profile_name, profile = load_active_profile(None, requested)
     info: dict[str, Any] = {
-        "configured_model": requested,
-        "profile_name": profile_name,
-        "model_file": profile.get("model_file"),
+        "configured_model": configured,
+        "profile_name": ctx.model_profile_name,
+        "model_file": ctx.model_file,
     }
-
-    harness = global_harness_runtime()
-    if harness and (harness / "rig" / "bin").exists():
-        server_ver = query_rig_server_version(harness / "rig" / "bin")
-        if server_ver:
-            info["server_version"] = server_ver
-
+    if ctx.server_version:
+        info["server_version"] = ctx.server_version
     return info
 
 
-def harness_config() -> dict[str, Any]:
-    from audiagentic.foundation.paths.home import global_harness_runtime
-    from audiagentic.runtime.harness import default_config_path
+def harness_config(ctx: ProviderSessionInfo) -> dict[str, Any]:
+    """Return harness config from provider session info."""
+    from pathlib import Path
 
-    harness = global_harness_runtime()
-    cfg_path = default_config_path()
+    from audiagentic.foundation.paths.home import global_harness_runtime
+
+    cfg_path = ctx.config_path
+    if not cfg_path:
+        raise make_error(
+            prefix="RES",
+            component="session",
+            number=4,
+            kind="session",
+            message="no harness config path available",
+            details={},
+        )
     harness_cfg = load_layered_config(
-        pkg_default_path=cfg_path,
+        pkg_default_path=Path(cfg_path),
         project_root=None,
         namespace="harness/ag",
     )
     payload: dict[str, Any] = {
         "config": harness_cfg,
-        "config_path": str(cfg_path),
+        "config_path": cfg_path,
     }
 
-    if harness:
-        models_path = harness / "agent" / "models.json"
-        if not models_path.exists():
+    # Models JSON is pre-resolved by runtime in the context
+    if ctx.models_data is not None:
+        payload["models"] = ctx.models_data
+    else:
+        # Check if harness exists but models.json is missing
+        harness = global_harness_runtime()
+        if harness:
+            models_path = harness / "agent" / "models.json"
             raise make_error(
-                prefix="RES", component="session", number=1,
+                prefix="RES",
+                component="session",
+                number=1,
                 kind="session",
                 message="missing materialized models config",
                 details={"path": str(models_path)},
             )
-        payload["models_path"] = str(models_path)
-        payload["models"] = json.loads(models_path.read_text(encoding="utf-8"))
-
     return payload
 
 
-def endpoint_info() -> dict[str, Any]:
-    base_url = os.environ.get("AUDIAGENTIC_AG_BASE_URL")
+def endpoint_info(ctx: ProviderSessionInfo) -> dict[str, Any]:
+    """Return endpoint info from provider session info."""
+    base_url = ctx.base_url or os.environ.get("AUDIAGENTIC_AG_BASE_URL")
     if not base_url:
         return {"base_url": None, "endpoint_reachable": False}
 
