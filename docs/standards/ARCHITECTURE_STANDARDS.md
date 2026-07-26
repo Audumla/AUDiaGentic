@@ -57,8 +57,8 @@ shared lower-layer seams, not general component-to-component exceptions.
 
 ## 3. Ownership and Abstraction
 
-- Put a capability in foundation only when it is domain-neutral and has more
-  than one independent consumer. Shared component-domain logic stays with its
+- Put a capability in foundation only when it is domain-neutral and capabable
+- of being reused in other modules. Shared component-domain logic stays with its
   component.
 - Types are unified only when they share ownership, lifecycle, validation, and
   semantics; field overlap alone is insufficient.
