@@ -12,7 +12,7 @@ from audiagentic.components.providers.contracts.managed_hooks import (
     ManagedHooksRequest,
 )
 from audiagentic.components.providers.services import managed_hooks_family as family
-from audiagentic.foundation.toolchains.managed_config import ManagedConfigSpec
+from audiagentic.foundation.toolchains.config.managed_config import ManagedConfigSpec
 
 
 def _capability(**overrides: object) -> SimpleNamespace:

@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from .session_surface_declarations import SessionSurfaceDeclaration
 
 from audiagentic.foundation.steps import CallableStep, SequenceStep, ShellStep
-from audiagentic.foundation.toolchains.managed_config import ManagedConfigSpec
+from audiagentic.foundation.toolchains.config.managed_config import ManagedConfigSpec
 
 from ..contracts.mcp_launch_surface import McpLaunchIsolationTier
 from .automation_capabilities import ProviderAutomationCapability

@@ -37,3 +37,18 @@ def test_invalid_or_unknown_secret_reference_is_rejected(value: str) -> None:
         parse_secret_ref(value)
 
     assert raised.value.code == "VAL-CRED-001"
+
+
+def test_fake_secret_ref_fixture_sets_env_and_returns_ref(fake_secret_ref) -> None:
+    ref = fake_secret_ref("OPENAI_API_KEY")
+
+    assert ref == "env:OPENAI_API_KEY"
+    assert has_ambient_value(ref) is True
+    assert resolve_secret_ref(ref) == "test-fake-key-00000000"
+
+
+def test_fake_secret_ref_fixture_custom_value(fake_secret_ref) -> None:
+    ref = fake_secret_ref("MY_CUSTOM_KEY", fake_value="custom-secret-123")
+
+    assert ref == "env:MY_CUSTOM_KEY"
+    assert resolve_secret_ref(ref) == "custom-secret-123"

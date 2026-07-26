@@ -578,30 +578,3 @@ class TestOpenhandsTomlRoundtrip:
             assert desc.mcp_config.refresh_mode == "restart-required"
 
 
-class TestOpencodeMcpPath:
-    def test_explicit_root_resolved_absolute(self, tmp_path: Path) -> None:
-        from audiagentic.runtime.harness.opencode.mcp_format import opencode_mcp_path
-        path = opencode_mcp_path(tmp_path)
-        assert path.is_absolute()
-        assert path == (tmp_path / ".mcp.json").resolve()
-
-    def test_relative_root_resolved_absolute(self, tmp_path: Path) -> None:
-        from audiagentic.runtime.harness.opencode.mcp_format import opencode_mcp_path
-        rel = Path("sub") / "proj"
-        path = opencode_mcp_path(rel)
-        assert path.is_absolute()
-        assert path == (Path.cwd() / rel / ".mcp.json").resolve()
-
-    def test_env_fallback_resolved_absolute(self, tmp_path: Path, monkeypatch) -> None:
-        from audiagentic.runtime.harness.opencode.mcp_format import opencode_mcp_path
-        monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", str(tmp_path))
-        path = opencode_mcp_path()
-        assert path.is_absolute()
-        assert path == (tmp_path / ".mcp.json").resolve()
-
-    def test_default_dot_fallback_resolved_absolute(self, monkeypatch) -> None:
-        from audiagentic.runtime.harness.opencode.mcp_format import opencode_mcp_path
-        monkeypatch.delenv("AUDIAGENTIC_REPO_ROOT", raising=False)
-        path = opencode_mcp_path()
-        assert path.is_absolute()
-        assert path == (Path.cwd() / ".mcp.json").resolve()

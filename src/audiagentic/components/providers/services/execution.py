@@ -75,13 +75,12 @@ def _load_runner(provider_id: str) -> ProviderRunner | None:
     return runner
 
 
-# Each launch INTENT -> the adapter submodule + entry function that builds it.
-# The caller picks an intent; the provider's builder assembles its richest
-# transport/channel surface to fulfill it (the caller never names a transport).
-# The submodule/recipe-block of the same name holds the hand-written builder or
-# declarative recipe.
+# Launch profiles whose builder submodule/recipe key differs from the
+# caller-facing profile name -- "agent" is built via the "acp" submodule/recipe
+# block, since ACP is the transport this provider happens to use, not the
+# name callers ask for. Predates the adapters/<id>/<name>.py convention below.
+# New launch profiles need no entry here.
 _LAUNCH_BUILDERS: dict[str, tuple[str, str]] = {
-    "execute": ("adapter", "run"),
     "interactive": ("interactive", "build_interactive_launch"),
     "agent": ("acp", "build_acp_launch"),
 }
@@ -95,37 +94,38 @@ def _declared_launches(provider_id: str) -> dict[str, Any]:
     return declared or {}
 
 
-def resolve_launch_builder(provider_id: str, intent: str) -> Callable[..., Any] | None:
-    """Resolve the builder for one provider launch *intent*.
+def resolve_launch_builder(provider_id: str, name: str) -> Callable[..., Any] | None:
+    """Resolve the builder for one provider launch profile, by name.
 
-    Callers pick an intent (execute | interactive | agent); the provider's
-    builder owns which transports/channels it assembles. Capability is the
-    source of truth: the descriptor's declared ``launches`` (intent -> channel
-    surface) gates support. An undeclared intent is unsupported (None, no
-    probing); a declared intent with no builder/recipe fails closed. An empty
-    ``launches`` (undeclared, migration default) falls back to probing.
+    Launch profiles are open-ended, not a closed enum -- there is no
+    "unknown profile" error. Capability (the descriptor's declared
+    ``launches``) is the source of truth for what's actually supported: an
+    undeclared name is unsupported (None, no probing); a declared name with
+    no builder/recipe fails closed. An empty ``launches`` (undeclared,
+    migration default) falls back to probing.
 
-    Within a supported intent, precedence is: hand-written
-    ``adapters/<id>/<submodule>`` builder (the escape hatch) wins; otherwise
-    the declarative recipe block of the same name (execute via _load_runner).
+    "execute" resolves through ``_load_runner`` -- a full runner (build spec
+    + spawn + parse), not just a spec-builder like the others. It has its own
+    dedicated caller (``execute_provider``) that never selects it by name;
+    it's reachable here mainly for introspection/consistency.
+
+    Every other profile: a hand-written ``adapters/<id>/<submodule>`` builder
+    (the escape hatch) wins; otherwise the declarative recipe block of the
+    same key. "interactive"/"agent" use the legacy submodule/key mapping
+    above (predating this convention); any other name is tried directly as
+    both the submodule name and entry point (``adapters/<id>/<name>.py::build_launch``)
+    -- add a new launch profile by dropping in that file, no registry edit.
     """
-    if intent not in _LAUNCH_BUILDERS:
-        raise AudiaGenticError(
-            code="VAL-EXEC-004",
-            kind="providers",
-            message="unknown provider launch intent",
-            details={"provider-id": provider_id, "intent": intent},
-        )
     declared = _declared_launches(provider_id)
-    if declared and intent not in declared:
-        return None  # explicitly not a supported launch intent for this provider
+    if declared and name not in declared:
+        return None  # explicitly not a supported launch profile for this provider
 
-    if intent == "execute":
+    if name == "execute":
         # Execute's builder is a full runner (build spec + spawn + parse), and
         # _load_runner carries the missing-run-entrypoint guard.
         builder = _load_runner(provider_id)
     else:
-        submodule, fn_name = _LAUNCH_BUILDERS[intent]
+        submodule, fn_name = _LAUNCH_BUILDERS.get(name, (name, "build_launch"))
         builder = _adapter_hook(provider_id, submodule, fn_name)
         if builder is None:
             from audiagentic.components.providers.adapters.recipe_launch import (
@@ -134,12 +134,12 @@ def resolve_launch_builder(provider_id: str, intent: str) -> Callable[..., Any] 
 
             builder = descriptor_launch_builder(provider_id, submodule)
 
-    if declared and intent in declared and builder is None:
+    if declared and name in declared and builder is None:
         raise AudiaGenticError(
             code="INT-EXEC-003",
             kind="providers",
-            message="provider declares this launch intent but has no builder or recipe",
-            details={"provider-id": provider_id, "intent": intent},
+            message="provider declares this launch profile but has no builder or recipe",
+            details={"provider-id": provider_id, "launch": name},
         )
     return builder
 

@@ -24,7 +24,7 @@ from audiagentic.components.providers.services.provider_catalog import (
     catalog_model_ids,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error_factory
-from audiagentic.foundation.toolchains.managed_config import (
+from audiagentic.foundation.toolchains.config.managed_config import (
     ManagedFragmentRegistry,
     resolve_managed_config_path,
     sync_managed_config,

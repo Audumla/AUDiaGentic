@@ -10,7 +10,7 @@ from audiagentic.components.providers.contracts.managed_hooks import (
 )
 from audiagentic.components.providers.descriptors.registry import get_descriptor
 from audiagentic.components.providers.services.recipe_definitions import FamilyPin
-from audiagentic.foundation.toolchains.managed_config import (
+from audiagentic.foundation.toolchains.config.managed_config import (
     ManagedFragmentRegistry,
     resolve_managed_config_path,
     sync_managed_config,

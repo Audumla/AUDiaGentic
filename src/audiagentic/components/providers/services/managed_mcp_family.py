@@ -16,7 +16,7 @@ from audiagentic.components.providers.services.mcp import (
     sync_managed_provider_mcp_scope,
 )
 from audiagentic.foundation.mcp import McpServerEntry
-from audiagentic.foundation.toolchains.managed_config import REMOTE_CAPABILITY
+from audiagentic.foundation.toolchains.config.managed_config import REMOTE_CAPABILITY
 
 _SUPPORTED_MODES = frozenset({"apply", "prune", "status"})
 

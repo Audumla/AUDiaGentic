@@ -15,7 +15,11 @@ services/execution.py prefers an adapter module and falls back here.
   error-code: canonical error code (cli failure / unsupported)
   args-template: list of tokens after the executable; "{prompt}",
       "{approval-flags}" and "{model-flags}" expand, other tokens pass
-      through with "{model}" formatting applied  (cli)
+      through with "{model}" formatting applied  (cli); if the resolved
+      template omits {prompt}, the built prompt is piped via
+      run_streaming_command's input_text instead — the prompt always reaches
+      the process one way or the other; there is no separate delivery flag
+      to set
   model-flag: flag emitted before the model for "{model-flags}"  (cli)
   approval-mode-flags: map of execution-policy permission-mode → flag list
   message: stub / unsupported message text
@@ -365,10 +369,22 @@ def make_cli_runner(
         # ProviderLaunch every kind produces, then hand it to the pipe+parse
         # spawn strategy. Env is empty here — one-shot inherits os.environ via
         # launch_env_overlay rather than a spec-declared environment block.
+        #
+        # Stdin-fallback rule (MA35): if {prompt} is absent from the raw
+        # args-template, the prompt reaches the process via stdin instead of
+        # argv — no separate delivery flag needed. Compute the template once
+        # here so both the context and input_text decisions are consistent.
+        template = execution.get("args-template") or execution.get("args") or [
+            "{approval-flags}",
+            "{model-flags}",
+            "{prompt}",
+        ]
+        prompt_in_argv = "{prompt}" in template
+
         spec = build_launch_spec(
             {"executable": exec_name, "aliases": list(aliases), **execution},
             context={
-                "prompt": prompt,
+                "prompt": prompt if prompt_in_argv else None,
                 "model": default_model,
                 "approval-mode": approval_mode,
             },
@@ -385,6 +401,7 @@ def make_cli_runner(
         completed = run_streaming_command(
             command,
             cwd=cwd,
+            input_text=None if prompt_in_argv else prompt,
             stdout_sinks=stdout_sinks,
             stderr_sinks=stderr_sinks,
         )
