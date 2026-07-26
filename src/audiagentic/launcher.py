@@ -86,13 +86,15 @@ def _main(argv: list[str] | None = None) -> int:
         help="Project root directory (default: current working directory)",
     )
     parser.add_argument(
-        "--prompt", "-p",
+        "--prompt",
+        "-p",
         metavar="TEXT",
         default=None,
         help="Run a single prompt, print the result, then exit",
     )
     parser.add_argument(
-        "--stream", "-s",
+        "--stream",
+        "-s",
         action="store_true",
         default=False,
         help="Show verbose startup output",
@@ -112,7 +114,9 @@ def _main(argv: list[str] | None = None) -> int:
 
     subparsers = parser.add_subparsers(dest="command")
 
-    bootstrap_parser = subparsers.add_parser("bootstrap", help="Initialize AUDiaGentic runtime and project scaffold")
+    bootstrap_parser = subparsers.add_parser(
+        "bootstrap", help="Initialize AUDiaGentic runtime and project scaffold"
+    )
     bootstrap_parser.add_argument(
         "--target",
         metavar="PATH",
@@ -120,7 +124,9 @@ def _main(argv: list[str] | None = None) -> int:
         help="Runtime location (default: ~/.audiagentic/harness, override with AUDIAGENTIC_HOME)",
     )
 
-    cleanup_parser = subparsers.add_parser("cleanup", help="Remove AUDiaGentic-generated runtime files")
+    cleanup_parser = subparsers.add_parser(
+        "cleanup", help="Remove AUDiaGentic-generated runtime files"
+    )
     cleanup_parser.add_argument(
         "--target",
         metavar="PATH",
@@ -155,9 +161,15 @@ def _main(argv: list[str] | None = None) -> int:
     gateway_sub.add_parser("drain", help="Begin graceful drain")
     gateway_sub.add_parser("resume", help="Cancel draining; resume running")
     gw_stop = gateway_sub.add_parser("stop", help="Request operator stop")
-    gw_stop.add_argument("--force", action="store_true", default=False, help="Force stop even if busy")
-    gw_recover = gateway_sub.add_parser("recover", help="Recover dead/unprovable owner (record-only)")
-    gw_recover.add_argument("--confirm", action="store_true", default=False, help="Confirm mutation of durable record")
+    gw_stop.add_argument(
+        "--force", action="store_true", default=False, help="Force stop even if busy"
+    )
+    gw_recover = gateway_sub.add_parser(
+        "recover", help="Recover dead/unprovable owner (record-only)"
+    )
+    gw_recover.add_argument(
+        "--confirm", action="store_true", default=False, help="Confirm mutation of durable record"
+    )
     gw_recover.add_argument("--reason", metavar="TEXT", default=None, help="Reason for recovery")
 
     subparsers.add_parser("update", help="Check for a new audiagentic version and update")
@@ -179,11 +191,15 @@ def _main(argv: list[str] | None = None) -> int:
     session_input_parser.add_argument("--event-kind", default="user-input")
     session_input_parser.add_argument("--message", required=True)
 
-    release_parser = subparsers.add_parser("release-bootstrap", help="Bootstrap release workflow for a project")
+    release_parser = subparsers.add_parser(
+        "release-bootstrap", help="Bootstrap release workflow for a project"
+    )
     release_parser.add_argument("--project-root", metavar="PATH", help="Project root directory")
     release_parser.add_argument("--release-id", default="rel_0001", metavar="ID")
 
-    config_parser = subparsers.add_parser("config", help="Repair or inspect generated configuration")
+    config_parser = subparsers.add_parser(
+        "config", help="Repair or inspect generated configuration"
+    )
     config_sub = config_parser.add_subparsers(dest="config_cmd", required=True)
     config_sub.add_parser("sync", help="Rebuild generated config for the selected harness")
 
@@ -218,20 +234,56 @@ def _main(argv: list[str] | None = None) -> int:
     import atexit
 
     from audiagentic.foundation.logging import bootstrap as _log_bootstrap
+
     _log_bootstrap("harness", project_root=project_root)
     from audiagentic.foundation.interaction import CliBackend, set_backend
 
     set_backend(CliBackend())
 
-    logger.info("audiagentic started", extra={"project_root": str(project_root), "command": args.command})
+    logger.info(
+        "audiagentic started", extra={"project_root": str(project_root), "command": args.command}
+    )
 
     def _log_exit() -> None:
         handlers = list(logging.getLogger().handlers) + list(logger.handlers)
         if any(getattr(getattr(handler, "stream", None), "closed", False) for handler in handlers):
             return
-        logger.info("audiagentic exit", extra={"project_root": str(project_root), "command": args.command})
+        logger.info(
+            "audiagentic exit", extra={"project_root": str(project_root), "command": args.command}
+        )
 
     atexit.register(_log_exit)
+
+    # RU02: wire harness-status capability before any product component resolves it.
+    # Product components depend on foundation/capabilities, not runtime.harness.
+    from audiagentic.foundation.capabilities import register_harness_status
+
+    def _harness_status_functions() -> dict[str, Callable]:
+        from audiagentic.runtime.harness import (
+            build_runtime_sync,
+            default_config_path,
+            get_harness_type,
+            load_active_profile,
+            query_rig_server_version,
+            refresh_harness_config_if_installed,
+            resolve_session_info,
+            version_info,
+        )
+        from audiagentic.runtime.harness.resolution import harness_cli_available
+
+        return {
+            "get_harness_type": get_harness_type,
+            "harness_cli_available": harness_cli_available,
+            "build_runtime_sync": build_runtime_sync,
+            "refresh_harness_config_if_installed": refresh_harness_config_if_installed,
+            "query_rig_server_version": query_rig_server_version,
+            "version_info": version_info,
+            "default_config_path": default_config_path,
+            "load_active_profile": load_active_profile,
+            "resolve_session_info": resolve_session_info,
+        }
+
+    register_harness_status(_harness_status_functions())
 
     # Dispatch to command handler via registry
     # SH10: gateway lifecycle sub-commands dispatch through a separate
@@ -240,11 +292,13 @@ def _main(argv: list[str] | None = None) -> int:
         return _GATEWAY_LIFECYCLE_HANDLERS[args.gateway_cmd](args, project_root)
 
     # Dispatch to command handler via registry
-    handler = _COMMAND_HANDLERS.get(args.command)
+    command_name = args.command or ""
+    handler = _COMMAND_HANDLERS.get(command_name)
     if handler:
         return handler(args, project_root)
 
     from audiagentic.runtime.harness import RunnerParams
+
     params = RunnerParams(
         prompt=args.prompt,
         mode=args.mode,
