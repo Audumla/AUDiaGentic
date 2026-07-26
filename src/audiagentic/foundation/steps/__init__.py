@@ -13,20 +13,29 @@ from .factory import (
     lenient_substitute,
     register_step_type,
     registered_types,
+    step_schema,
     strict_substitute,
 )
 from .protocol import CompensableStep, Step
 from .results import SequenceResult, StepResult
 from .sequence import SequenceStep
 from .shell import PlatformOverrides, ShellStep
-from .structured import ConfigSetStep, ManagedBlockStep, WriteFileStep
+from .structured import (
+    ConfigRemoveStep,
+    ConfigSetStep,
+    DownloadStep,
+    ManagedBlockStep,
+    WriteFileStep,
+)
 
 __all__ = [
     "CallableStep",
     "CompensableStep",
     "ConditionalStep",
+    "ConfigRemoveStep",
     "ConfigSetStep",
     "ConfirmStep",
+    "DownloadStep",
     "ManagedBlockStep",
     "PlatformOverrides",
     "SelectStep",
@@ -44,5 +53,6 @@ __all__ = [
     "lenient_substitute",
     "register_step_type",
     "registered_types",
+    "step_schema",
     "strict_substitute",
 ]
