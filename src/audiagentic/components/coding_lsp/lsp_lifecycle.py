@@ -199,20 +199,11 @@ class LspSession:
     def call_hierarchy_outgoing(self, uri: str, line: int, character: int, timeout: float = 15.0) -> list[dict[str, Any]]:
         return self._protocol_ops.call_hierarchy_outgoing(uri, line, character, timeout)
 
-    def inlay_hints(self, uri: str, range: dict[str, Any], timeout: float = 15.0) -> list[dict[str, Any]]:
-        return self._protocol_ops.inlay_hints(uri, range, timeout)
-
-    def signature_help(self, uri: str, line: int, character: int, trigger_character: str | None = None, timeout: float = 15.0) -> dict[str, Any] | None:
-        return self._protocol_ops.signature_help(uri, line, character, trigger_character, timeout)
-
     def type_hierarchy_supertypes(self, uri: str, line: int, character: int, timeout: float = 15.0) -> list[dict[str, Any]]:
         return self._protocol_ops.type_hierarchy_supertypes(uri, line, character, timeout)
 
     def type_hierarchy_subtypes(self, uri: str, line: int, character: int, timeout: float = 15.0) -> list[dict[str, Any]]:
         return self._protocol_ops.type_hierarchy_subtypes(uri, line, character, timeout)
-
-    def completion(self, uri: str, line: int, character: int, trigger_character: str | None = None, timeout: float = 15.0) -> list[dict[str, Any]]:
-        return self._protocol_ops.completion(uri, line, character, trigger_character, timeout)
 
     def symbol_context(self, uri: str, line: int, character: int, timeout: float = 15.0) -> dict[str, Any]:
         return self._protocol_ops.symbol_context(uri, line, character, timeout)

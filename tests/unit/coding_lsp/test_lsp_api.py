@@ -407,48 +407,6 @@ def test_file_diagnostics_falls_back_to_push_when_no_pull(tmp_path: Path, monkey
 
 # ── CAP04: Read-only tools ──────────────────────────────────────────────────
 
-def test_inlay_hints_returns_hints(tmp_path: Path, monkeypatch) -> None:
-    (tmp_path / ".audiagentic").mkdir()
-    py_file = tmp_path / "test.py"
-    py_file.write_text("x = 1\n", encoding="utf-8")
-
-    server = ServerConfig(command=["pyright-langserver"], file_extensions=[".py"], server_id="pyright")
-    monkeypatch.setattr(lsp_session_resolution, "discover_servers_multi", lambda pr: {"python": [server]})
-
-    mock_session = MagicMock()
-    mock_session.has_capability.return_value = True
-    mock_session.inlay_hints.return_value = [{"label": "int", "position": {"line": 0, "character": 0}}]
-    mock_session.sync_document = MagicMock()
-    monkeypatch.setattr(lsp_api._session_manager, "get_or_create", lambda pr, lang, cfg: mock_session)
-
-    result = lsp_api.inlay_hints(str(py_file), "1:1", "1:10")
-    assert len(result) == 1
-    assert result[0]["label"] == "int"
-
-
-def test_signature_help_returns_signatures(tmp_path: Path, monkeypatch) -> None:
-    (tmp_path / ".audiagentic").mkdir()
-    py_file = tmp_path / "test.py"
-    py_file.write_text("print()\n", encoding="utf-8")
-
-    server = ServerConfig(command=["pyright-langserver"], file_extensions=[".py"], server_id="pyright")
-    monkeypatch.setattr(lsp_session_resolution, "discover_servers_multi", lambda pr: {"python": [server]})
-
-    mock_session = MagicMock()
-    mock_session.has_capability.return_value = True
-    mock_session.signature_help.return_value = {
-        "signatures": [{"label": "print(*args)", "parameters": [{"label": "*args"}]}],
-        "activeSignature": 0,
-    }
-    mock_session.sync_document = MagicMock()
-    monkeypatch.setattr(lsp_api._session_manager, "get_or_create", lambda pr, lang, cfg: mock_session)
-
-    result = lsp_api.signature_help(str(py_file), "1:7")
-    assert result is not None
-    assert len(result["signatures"]) == 1
-    assert result["signatures"][0]["label"] == "print(*args)"
-
-
 def test_type_hierarchy_returns_supertypes(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / ".audiagentic").mkdir()
     py_file = tmp_path / "test.py"
@@ -468,27 +426,6 @@ def test_type_hierarchy_returns_supertypes(tmp_path: Path, monkeypatch) -> None:
     result = lsp_api.type_hierarchy(str(py_file), "1:8")
     assert len(result) == 1
     assert result[0]["name"] == "object"
-
-
-def test_completion_returns_items(tmp_path: Path, monkeypatch) -> None:
-    (tmp_path / ".audiagentic").mkdir()
-    py_file = tmp_path / "test.py"
-    py_file.write_text("import os\nos.\n", encoding="utf-8")
-
-    server = ServerConfig(command=["pyright-langserver"], file_extensions=[".py"], server_id="pyright")
-    monkeypatch.setattr(lsp_session_resolution, "discover_servers_multi", lambda pr: {"python": [server]})
-
-    mock_session = MagicMock()
-    mock_session.has_capability.return_value = True
-    mock_session.completion.return_value = [
-        {"label": "path", "kind": 5, "detail": "module", "documentation": "os.path module"},
-    ]
-    mock_session.sync_document = MagicMock()
-    monkeypatch.setattr(lsp_api._session_manager, "get_or_create", lambda pr, lang, cfg: mock_session)
-
-    result = lsp_api.completion(str(py_file), "2:4", trigger_character=".")
-    assert len(result) == 1
-    assert result[0]["label"] == "path"
 
 
 # ── CAP05: Mutation gating ──────────────────────────────────────────────────

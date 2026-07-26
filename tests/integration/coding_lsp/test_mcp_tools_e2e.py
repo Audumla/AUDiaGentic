@@ -874,38 +874,6 @@ def test_lsp_rename_preview_returns_edit(e2e_project: Path, language: str) -> No
     assert "error" not in result, f"rename_preview error for {language}: {result}"
 
 
-# ── lsp_inlay_hints ───────────────────────────────────────────────────────
-
-@pytest.mark.parametrize("language", ["python", "typescript"], indirect=["language"])
-def test_lsp_inlay_hints_returns_hints(e2e_project: Path, language: str) -> None:
-    """lsp_inlay_hints should return inlay hints for a range."""
-    sample = e2e_project / LANG_CONFIGS[language]["file"]
-    result = lsp_api.inlay_hints(str(sample), "1:1", "10:1")
-    assert isinstance(result, list)
-    errors = [r for r in result if isinstance(r, dict) and r.get("error")]
-    assert not errors, f"inlay_hints errors for {language}: {errors}"
-
-
-# ── lsp_signature_help ────────────────────────────────────────────────────
-
-@pytest.mark.parametrize("language", ["python", "typescript"], indirect=["language"])
-def test_lsp_signature_help_returns_signatures(e2e_project: Path, language: str) -> None:
-    """lsp_signature_help should return function signatures at cursor."""
-    sample = e2e_project / LANG_CONFIGS[language]["file"]
-    content = sample.read_text(encoding="utf-8")
-    lines = content.split("\n")
-
-    target_line = None
-    for i, line in enumerate(lines, 1):
-        if "(" in line and ")" in line and not line.strip().startswith("def ") and not line.strip().startswith("function "):
-            target_line = i
-            break
-
-    if target_line:
-        result = lsp_api.signature_help(str(sample), f"{target_line}:5")
-        assert result is None or isinstance(result, dict)
-
-
 # ── lsp_type_hierarchy ────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("language", ["typescript"], indirect=["language"])
@@ -926,18 +894,6 @@ def test_lsp_type_hierarchy_supertypes(e2e_project: Path, language: str) -> None
         assert isinstance(result, list)
         errors = [r for r in result if isinstance(r, dict) and r.get("error")]
         assert not errors, f"type_hierarchy errors for {language}: {errors}"
-
-
-# ── lsp_completion ────────────────────────────────────────────────────────
-
-@pytest.mark.parametrize("language", ["python", "typescript"], indirect=["language"])
-def test_lsp_completion_returns_items(e2e_project: Path, language: str) -> None:
-    """lsp_completion should return completion items at a position."""
-    sample = e2e_project / LANG_CONFIGS[language]["file"]
-    result = lsp_api.completion(str(sample), "1:1")
-    assert isinstance(result, list)
-    errors = [r for r in result if isinstance(r, dict) and r.get("error")]
-    assert not errors, f"completion errors for {language}: {errors}"
 
 
 # ── Diagnostics: detect deliberate errors ─────────────────────────────────
