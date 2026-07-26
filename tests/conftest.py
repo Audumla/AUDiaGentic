@@ -4,6 +4,20 @@ import os
 import sys
 from pathlib import Path
 
+# Load environment-specific secrets from .audiagentic/secrets/<env>.env.
+# AUDIAGENTIC_ENV defaults to "test"; set to "prod" for production env file.
+# The .audiagentic/ directory is git-ignored — keys never leave the machine.
+try:
+    from dotenv import load_dotenv
+
+    _AG_ROOT = Path(__file__).resolve().parents[1]
+    _ag_env = os.environ.get("AUDIAGENTIC_ENV", "test")
+    _secrets_file = _AG_ROOT / ".audiagentic" / "secrets" / f"{_ag_env}.env"
+    if _secrets_file.is_file():
+        load_dotenv(str(_secrets_file), override=False)
+except ImportError:
+    pass  # python-dotenv not installed — env vars must be set externally
+
 import pytest
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -114,6 +128,29 @@ def _reset_test_registries():
         pass
 
     _reset_registration_cache()
+
+
+@pytest.fixture
+def fake_secret_ref(monkeypatch: pytest.MonkeyPatch):
+    """Set a fake env var and return its ``env:NAME`` ref string.
+
+    Usage::
+
+        def test_provider_needs_key(fake_secret_ref):
+            ref = fake_secret_ref("OPENAI_API_KEY")
+            # ref == "env:OPENAI_API_KEY" and $OPENAI_API_KEY is set
+            assert has_ambient_value(ref) is True
+
+        def test_custom_value(fake_secret_ref):
+            ref = fake_secret_ref("MY_KEY", fake_value="custom-secret")
+            assert resolve_secret_ref(ref) == "custom-secret"
+    """
+
+    def _factory(var_name: str, fake_value: str = "test-fake-key-00000000") -> str:
+        monkeypatch.setenv(var_name, fake_value)
+        return f"env:{var_name}"
+
+    return _factory
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:

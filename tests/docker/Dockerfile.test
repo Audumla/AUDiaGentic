@@ -28,6 +28,7 @@ COPY .gitignore ./
 COPY src ./src
 COPY tests ./tests
 COPY docs/examples ./docs/examples
+COPY docs/reference ./docs/reference
 COPY .audiagentic/config ./.audiagentic/config
 COPY .audiagentic/skills ./.audiagentic/skills
 COPY .gemini ./.gemini
@@ -48,7 +49,7 @@ RUN mkdir -p .audiagentic/runtime
 ENV PATH="/venv/bin:$PATH"
 RUN uv venv /venv && \
     uv pip install --python /venv/bin/python -q --no-compile \
-        -e '.[mcp,acp]' pytest pytest-asyncio pytest-timeout pytest-xdist psutil
+        -e '.[mcp,acp]' pytest pytest-asyncio pytest-timeout pytest-xdist psutil agent-client-protocol==0.11.0
 
 # Whole non-mutating suite, parallel.
 CMD ["bash", "tests/docker/run_suite.sh"]
