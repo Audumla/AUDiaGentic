@@ -12,6 +12,7 @@
 
 # --- Agent / tool working directories ---
 /.audiagentic/
+/.pi-subagents/
 /.claude/
 /.clinerules/
 /.codex/
