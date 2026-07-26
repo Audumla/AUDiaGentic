@@ -66,14 +66,6 @@ def build_server() -> FastMCP:
 
     @mcp.tool()
     @log_tool_call
-    def diagnose_mcp_servers(timeout: float = 5.0) -> dict[str, Any]:
-        try:
-            return session_api.diagnose_mcp_servers(project_root_from_env(), timeout=timeout)
-        except Exception as exc:
-            return report_error("session", "diagnose_mcp_servers", exc, logger)
-
-    @mcp.tool()
-    @log_tool_call
     async def update_rig(scope: str = "local") -> dict[str, Any]:
         try:
             return await session_api.update_rig(scope=scope)
@@ -85,8 +77,12 @@ def build_server() -> FastMCP:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--readonly", action="store_true", help="Read-only mode (no-op, server is always read-only)")
-    parser.add_argument("--smoke-only", action="store_true", help="Smoke mode for fast MCP health checks")
+    parser.add_argument(
+        "--readonly", action="store_true", help="Read-only mode (no-op, server is always read-only)"
+    )
+    parser.add_argument(
+        "--smoke-only", action="store_true", help="Smoke mode for fast MCP health checks"
+    )
     args = parser.parse_args()
     if args.smoke_only:
         os.environ["AUDIAGENTIC_MCP_SMOKE_ONLY"] = "1"
@@ -97,4 +93,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
