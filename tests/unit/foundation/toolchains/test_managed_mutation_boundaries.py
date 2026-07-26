@@ -1,4 +1,5 @@
 """MA01 managed-mutation inventory and architecture guardrails."""
+
 from __future__ import annotations
 
 import ast
@@ -45,8 +46,7 @@ _CATEGORIES = {
 
 def _in_scope(relative: str) -> bool:
     return any(
-        relative == scope or relative.startswith(scope.rstrip("/") + "/")
-        for scope in _SCOPES
+        relative == scope or relative.startswith(scope.rstrip("/") + "/") for scope in _SCOPES
     )
 
 
@@ -59,11 +59,7 @@ def _call_name(node: ast.Call) -> str | None:
 
 
 def _parent_map(tree: ast.AST) -> dict[ast.AST, ast.AST]:
-    return {
-        child: parent
-        for parent in ast.walk(tree)
-        for child in ast.iter_child_nodes(parent)
-    }
+    return {child: parent for parent in ast.walk(tree) for child in ast.iter_child_nodes(parent)}
 
 
 def _enclosing_symbol(node: ast.AST, parents: dict[ast.AST, ast.AST]) -> str:
@@ -184,7 +180,7 @@ def test_direct_managed_spec_calls_are_core_or_recorded_violation() -> None:
     # of silently weakening the guard.
     allowed_core = {
         "src/audiagentic/components/providers/services/mcp.py",
-        "src/audiagentic/foundation/toolchains/managed_config.py",
+        "src/audiagentic/foundation/toolchains/config/managed_config.py",
     }
     found: dict[str, set[str]] = {}
     for path in sorted(SRC_ROOT.rglob("*.py")):
@@ -209,12 +205,12 @@ def test_no_second_managed_registry_implementation() -> None:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and (
-                node.name.startswith("load_managed_") and node.name.endswith("_registry")
-                or node.name.startswith("save_managed_") and node.name.endswith("_registry")
+                node.name.startswith("load_managed_")
+                and node.name.endswith("_registry")
+                or node.name.startswith("save_managed_")
+                and node.name.endswith("_registry")
             ):
-                definitions.append(
-                    f"{path.relative_to(WORKSPACE_ROOT).as_posix()}:{node.name}"
-                )
+                definitions.append(f"{path.relative_to(WORKSPACE_ROOT).as_posix()}:{node.name}")
     assert definitions == [
         "src/audiagentic/components/providers/services/managed_mcp_registry.py:load_managed_mcp_registry",
         "src/audiagentic/components/providers/services/managed_mcp_registry.py:save_managed_mcp_registry",

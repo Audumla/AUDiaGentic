@@ -3,11 +3,12 @@
 Engine tests use a dict-backed fake store and in-memory registry — no
 provider or MCP imports, proving the foundation layer is domain-opaque.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.foundation.toolchains.fragments import (
+from audiagentic.foundation.toolchains.config.fragments import (
     FragmentStore,
     reconcile_fragments,
 )
@@ -39,8 +40,12 @@ class _Fake:
 
     def reconcile(self, scope: str, desired: dict, *, managed_ids: set[str] | None = None):
         return reconcile_fragments(
-            self.store(), _PATH, scope, desired,
-            registry_load=self.load, registry_save=self.save,
+            self.store(),
+            _PATH,
+            scope,
+            desired,
+            registry_load=self.load,
+            registry_save=self.save,
             managed_ids=managed_ids,
         )
 
@@ -122,7 +127,7 @@ def test_scopes_are_isolated() -> None:
 
 def test_engine_module_has_no_component_imports() -> None:
     """SL10 hard constraint: no MCP/provider binding in the generic layer."""
-    import audiagentic.foundation.toolchains.fragments as fragments
+    import audiagentic.foundation.toolchains.config.fragments as fragments
 
     source = Path(fragments.__file__).read_text(encoding="utf-8")
     assert "audiagentic.components" not in source
