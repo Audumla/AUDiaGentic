@@ -8,17 +8,26 @@ in ag.yaml (default: ``pi``). Adding a new harness means:
      that expose the same interface as ``pi/install`` and ``pi/runner``.
   2. Set ``harness.type: <type>`` in ag.yaml or a project-local override.
 """
+
 from __future__ import annotations
 
 import importlib
+import json
 import logging
+import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 
+from audiagentic.components.providers.contracts.session_status import (
+    ProviderSessionInfo,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
-from audiagentic.foundation.event import subscribe_component_lifecycle
+from audiagentic.foundation.event import (
+    LifecycleEventPayload,
+    subscribe_component_lifecycle,
+)
 from audiagentic.foundation.interaction import push_status
 
 logger = logging.getLogger(__name__)
@@ -30,8 +39,9 @@ class RunnerParams:
 
     Each harness's translate_agent_args converts these to CLI flags.
     """
+
     prompt: str | None = None
-    mode: str | None = None   # "text" | "json"
+    mode: str | None = None  # "text" | "json"
     verbose: bool = False
 
 
@@ -51,7 +61,9 @@ def _harness_error(code_number: int, message: str, **details: object) -> AudiaGe
 
 def _forward(module_key: str, fn_name: str, *args, **kwargs):
     """Forward a call to the active harness module."""
-    project_root = kwargs.get("project_root") or (args[0] if args and hasattr(args[0], "resolve") else None)
+    project_root = kwargs.get("project_root") or (
+        args[0] if args and hasattr(args[0], "resolve") else None
+    )
     mod = _mod(module_key, project_root)
     return getattr(mod, fn_name)(*args, **kwargs)
 
@@ -59,6 +71,7 @@ def _forward(module_key: str, fn_name: str, *args, **kwargs):
 def default_config_path() -> Path:
     """Package-default harness config path (config/provisioning/harness/ag.yaml)."""
     from .paths import _HARNESS_CONFIG
+
     return _HARNESS_CONFIG
 
 
@@ -75,6 +88,7 @@ def get_harness_type(project_root: Path | None = None) -> str:
        harness; the not-installed condition surfaces at launch time.
     """
     from audiagentic.foundation.config import load_layered_config
+
     cfg = load_layered_config(
         pkg_default_path=default_config_path(),
         project_root=project_root,
@@ -90,11 +104,11 @@ def get_harness_type(project_root: Path | None = None) -> str:
     if not order:
         raise _harness_error(
             3,
-            "no harness configured: set harness.type or harness.order in the "
-            "harness/ag config.",
+            "no harness configured: set harness.type or harness.order in the harness/ag config.",
         )
 
     from .resolution import resolve_launch_harness
+
     resolved = resolve_launch_harness(order)
     return resolved.harness_type if resolved is not None else order[0]
 
@@ -123,6 +137,7 @@ def _mod(subpath: str, project_root: Path | None = None):
 
 
 # --- install / lifecycle ---
+
 
 def install_to(target: Path, project_root: Path | None = None) -> int:
     return _forward("install", "install_to", target, project_root=project_root)
@@ -164,13 +179,19 @@ def refresh_harness_config_if_installed(
     reason: str,
     component_id: str | None = None,
 ) -> bool:
-    return _forward("install", "refresh_harness_config_if_installed", project_root, reason=reason, component_id=component_id)
+    return _forward(
+        "install",
+        "refresh_harness_config_if_installed",
+        project_root,
+        reason=reason,
+        component_id=component_id,
+    )
 
 
-def refresh_materialized_agent_config(
-    target: Path, project_root: Path | None = None
-) -> int:
-    return _forward("install", "refresh_materialized_agent_config", target, project_root=project_root)
+def refresh_materialized_agent_config(target: Path, project_root: Path | None = None) -> int:
+    return _forward(
+        "install", "refresh_materialized_agent_config", target, project_root=project_root
+    )
 
 
 def request_runtime_reload(
@@ -180,15 +201,27 @@ def request_runtime_reload(
     component_id: str | None = None,
     has_mcp_servers: bool = True,
 ) -> Path:
-    return _forward("install", "request_runtime_reload", project_root, reason=reason, component_id=component_id, has_mcp_servers=has_mcp_servers)
+    return _forward(
+        "install",
+        "request_runtime_reload",
+        project_root,
+        reason=reason,
+        component_id=component_id,
+        has_mcp_servers=has_mcp_servers,
+    )
 
 
 # --- runner interface ---
 
-def build_global_context(
-    *, project_root: Path, agent_runtime: Path, enable_mcp: bool
-):
-    return _forward("runner", "build_global_context", project_root=project_root, agent_runtime=agent_runtime, enable_mcp=enable_mcp)
+
+def build_global_context(*, project_root: Path, agent_runtime: Path, enable_mcp: bool):
+    return _forward(
+        "runner",
+        "build_global_context",
+        project_root=project_root,
+        agent_runtime=agent_runtime,
+        enable_mcp=enable_mcp,
+    )
 
 
 def run_agent(ctx, params: list[str] | RunnerParams, **kw):
@@ -205,31 +238,67 @@ def env_flag(name: str, default: bool = False) -> bool:
     return _mod("runner").env_flag(name, default)
 
 
-# --- MCP config dispatch ---
-#
-# Delegates straight to each harness's mcp_format module (the single
-# materializer per provider) rather than through an install-layer wrapper.
-
-def mcp_config_path(project_root: Path | None = None) -> Path:
-    return _forward("mcp_format", "mcp_config_path", project_root=project_root)
-
-
-def read_mcp_config(path: Path) -> dict:
-    return _mod("mcp_format").read_mcp_json(path)
-
-
-def write_mcp_config(path: Path, entries: dict) -> None:
-    return _mod("mcp_format").write_mcp_json(path, entries)
-
-
-def remove_mcp_config(path: Path, name: str) -> bool:
-    return _mod("mcp_format").remove_mcp_json(path, name)
-
-
 # --- harness-specific helpers (pi-only until generalised) ---
+
+
+def resolve_session_info(project_root: Path | None = None) -> ProviderSessionInfo:
+    """Resolve provider session status for the active harness.
+
+    Each harness resolves its own session info through its interface.
+    Session component consumes this — it never touches rig internals.
+    """
+    from audiagentic.foundation.config import load_layered_config
+    from audiagentic.foundation.paths.home import global_harness_runtime
+    from audiagentic.runtime.rig.models import query_server_version
+
+    info = ProviderSessionInfo()
+
+    # Version info (always available)
+    version_payload = version_info(project_root)
+    info = ProviderSessionInfo(
+        agent_version=version_payload.get("agent"),
+        mcp_adapter_version=version_payload.get("mcp_adapter"),
+        config_path=str(default_config_path()),
+    )
+
+    # Local rig: server version + models.json (if harness exists)
+    harness = global_harness_runtime()
+    if harness and (harness / "rig" / "bin").exists():
+        server_ver = query_server_version(harness / "rig" / "bin")
+        info = ProviderSessionInfo(**info.__dict__, server_version=server_ver)
+        models_path = harness / "agent" / "models.json"
+        if models_path.exists():
+            try:
+                models_json = json.loads(models_path.read_text(encoding="utf-8"))
+                info = ProviderSessionInfo(**info.__dict__, models_data=models_json)
+            except (OSError, json.JSONDecodeError):
+                pass  # degraded: no models JSON
+
+    # Endpoint from env (remote rig / OpenAI-compatible connection)
+    base_url = os.environ.get("AUDIAGENTIC_AG_BASE_URL")
+    info = ProviderSessionInfo(**info.__dict__, base_url=base_url)
+
+    # Model config from harness config (shared across providers)
+    requested = os.environ.get("AUDIAGENTIC_AG_MODEL")
+    if not requested:
+        cfg = load_layered_config(
+            pkg_default_path=default_config_path(),
+            project_root=None,
+            namespace="harness/ag",
+        )
+        requested = cfg.get("model")
+
+    info = ProviderSessionInfo(
+        **info.__dict__,
+        configured_model=requested if isinstance(requested, str) else None,
+    )
+
+    return info
+
 
 def query_rig_server_version(bin_dir: Path, timeout: float = 10.0) -> str | None:
     from audiagentic.runtime.rig.models import query_server_version
+
     return query_server_version(bin_dir, timeout=timeout)
 
 
@@ -240,12 +309,14 @@ def load_active_profile(
     rig_config: Path | None = None,
 ) -> tuple[str, dict[str, object]]:
     from audiagentic.runtime.rig.models import load_model_profile
+
     return load_model_profile(requested, model, rig_config=rig_config)
 
 
 def load_pi_config(project_root: Path | None = None) -> dict:
     """Load Pi-specific harness config (pi.yaml). Only used by Pi-aware callers."""
     from .pi.install.constants import load_pi_config as _load
+
     return _load(project_root=project_root)
 
 
@@ -277,7 +348,7 @@ def _harness_has_mcp_servers(component_id: str | None) -> bool:
 
 def _harness_lifecycle_handler(
     project_root: Path,
-    payload: dict,
+    payload: LifecycleEventPayload,
     metadata: dict,
     *,
     reason: str,
@@ -292,7 +363,9 @@ def _harness_lifecycle_handler(
         component_id=component_id,
     )
 
-    action = _runtime_action_for_reason(reason, has_mcp_servers=_harness_has_mcp_servers(component_id))
+    action = _runtime_action_for_reason(
+        reason, has_mcp_servers=_harness_has_mcp_servers(component_id)
+    )
 
     if action != "reload_required":
         verb, gerund = _REASON_TO_ACTION.get(reason, (reason, reason))

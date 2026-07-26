@@ -16,9 +16,6 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
 from audiagentic.runtime.harness.reload import (
     build_runtime_sync as _build_sync,
 )
-from audiagentic.runtime.harness.reload import (
-    write_reload_marker,
-)
 
 from . import constants as _c
 
@@ -42,8 +39,8 @@ def request_runtime_reload(
     reason: str,
     component_id: str | None = None,
     has_mcp_servers: bool = True,
-) -> Path:
-    return write_reload_marker(project_root, reason=reason, component_id=component_id, target=_TARGET, has_mcp_servers=has_mcp_servers)
+) -> dict[str, object]:
+    return _build_sync(reason=reason, component_id=component_id, target=_TARGET, has_mcp_servers=has_mcp_servers)
 
 
 def _resolve_project_root(project_root: Path | None = None) -> Path:
@@ -52,21 +49,6 @@ def _resolve_project_root(project_root: Path | None = None) -> Path:
         return project_root
     env = os.environ.get("AUDIAGENTIC_REPO_ROOT")
     return Path(env) if env else Path.cwd()
-
-
-def _build_mcp_config(harness_cfg: dict, *, project_root: Path) -> dict:
-    from audiagentic.foundation.mcp.projection import collect_component_mcp_entries
-    from audiagentic.runtime.harness.opencode.mcp_format import build_opencode_mcp_dict
-
-    enabled = harness_cfg.get("mcp", {}).get("enabled", True)
-    if not enabled:
-        return build_opencode_mcp_dict({}, enabled=False)
-    entries = collect_component_mcp_entries(
-        project_root,
-        propagation_target="providers",
-        require_enabled=True,
-    )
-    return build_opencode_mcp_dict(entries)
 
 
 def _build_agents_md(project_root: Path) -> str:
@@ -81,38 +63,6 @@ def _build_agents_md(project_root: Path) -> str:
     if injections:
         content = apply_system_prompt_injections(content, injections)
     return content
-
-
-def _build_opencode_provider_config(harness_cfg: dict, model_profile: dict) -> dict:
-    """Build opencode provider config block for the local rig."""
-    from audiagentic.runtime.harness.config import (
-        require_harness_provider,
-        require_harness_rig_port,
-    )
-
-    rig_port = require_harness_rig_port(harness_cfg)
-    provider_id = require_harness_provider(harness_cfg)
-    agent = model_profile.get("agent", {}) if isinstance(model_profile, dict) else {}
-    context_size = int(agent.get("context_size", 131072))
-    model_name: str = harness_cfg.get("rig", {}).get("model", "audiagentic-rig")
-
-    return {
-        "providers": {
-            provider_id: {
-                "name": provider_id,
-                "api": "openai",
-                "baseURL": f"http://127.0.0.1:{rig_port}/v1",
-                "apiKey": _c.DEFAULT_API_KEY,
-                "models": {
-                    model_name: {
-                        "contextWindow": context_size,
-                        "maxTokens": int(agent.get("max_tokens", 4096)),
-                        "cost": {"input": 0, "output": 0},
-                    }
-                },
-            }
-        }
-    }
 
 
 def materialize_agent_config(
@@ -170,7 +120,21 @@ def materialize_agent_config(
     except AudiaGenticError:
         logger.warning("Failed to apply opencode provider surface contributions", exc_info=True)
 
-    provider_cfg = _build_opencode_provider_config(harness_cfg, model_profile)
+    from audiagentic.components.providers.adapters.opencode.local_rig_config import (
+        build_provider_config,
+    )
+    from audiagentic.runtime.harness.config import (
+        require_harness_provider,
+        require_harness_rig_port,
+    )
+
+    provider_cfg = build_provider_config(
+        provider_id=require_harness_provider(harness_cfg),
+        rig_port=require_harness_rig_port(harness_cfg),
+        api_key=_c.DEFAULT_API_KEY,
+        model_name=harness_cfg.get("rig", {}).get("model", "audiagentic-rig"),
+        model_profile=model_profile,
+    )
     opencode_dir = root / ".opencode"
     opencode_dir.mkdir(parents=True, exist_ok=True)
     (opencode_dir / "config.json").write_text(
@@ -209,19 +173,13 @@ def refresh_harness_config_if_installed(
     reason: str,
     component_id: str | None = None,
 ) -> bool:
-    if shutil.which("opencode") is None:
-        return False
-    refreshed = True
-    try:
-        from audiagentic.runtime.harness.config import load_harness_config
-        harness_cfg = load_harness_config(project_root=project_root)
-        materialize_agent_config(project_root, harness_cfg, project_root=project_root)
-    except AudiaGenticError:
-        logger.warning("Failed to refresh opencode harness config for %s", component_id, exc_info=True, extra={"component": component_id})
-        refreshed = False
-    try:
-        request_runtime_reload(project_root, reason=reason, component_id=component_id)
-    except AudiaGenticError:
-        logger.warning("Failed to request runtime reload for opencode %s", component_id, exc_info=True, extra={"component": component_id})
-        refreshed = False
-    return refreshed
+    from audiagentic.runtime.harness.lifecycle import (
+        refresh_harness_config_if_installed as _shared_refresh,
+    )
+
+    return _shared_refresh(
+        cli_installed=shutil.which("opencode") is not None,
+        component_id=component_id,
+        refresh=lambda: refresh_materialized_agent_config(project_root, project_root=project_root),
+        request_reload=lambda: request_runtime_reload(project_root, reason=reason, component_id=component_id),
+    )
