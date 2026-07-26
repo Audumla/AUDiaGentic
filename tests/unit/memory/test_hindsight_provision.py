@@ -5,7 +5,7 @@ orchestration over providers_api with no matrix, factory, or recipe registry.
 """
 from __future__ import annotations
 
-from pathlib import Path
+import json
 
 import audiagentic.components.providers  # noqa: F401 — register provider descriptors
 from audiagentic.components.memory.hindsight import provision as prov
@@ -145,59 +145,70 @@ def test_memory_set_config_returns_refresh_hint(tmp_path):
     assert "providers" not in result
 
 
-def test_hook_apply_redacts_download_failure(monkeypatch, tmp_path):
-    """Raw remote failure text must not cross the public result boundary."""
-    monkeypatch.setattr(
-        prov,
-        "_download_codex_scripts",
-        lambda: (_ for _ in ()).throw(RuntimeError("token=super-secret-value")),
-    )
+def _isolate_home(monkeypatch, tmp_path):
+    """Redirect the OS home (expanduser) to tmp_path and stub the script fetch."""
+    import audiagentic.foundation.steps.structured as structured
 
-    result = prov._apply_hooks(
-        "codex",
-        tmp_path,
-        HindsightBackendConfig(base_url="http://hs:1/", api_key="k"),
-    )
-
-    assert result.ok is False
-    assert result.action_needed == "token=[REDACTED]"
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(structured, "_fetch_text", lambda url, timeout: f"# {url}\n")
 
 
-def test_codex_scripts_download_to_hook_command_paths_atomically(monkeypatch, tmp_path):
-    class Response:
-        def __init__(self, body: bytes) -> None:
-            self._body = body
+class TestArtifactRecipeReconcile:
+    """End-to-end reconcile through the declarative artifact recipes.
 
-        def __enter__(self):
-            return self
+    Regression coverage for the Pi host-block population gap (found live as
+    ``host: {}``) and the Codex script fetch + codex.json write — now provisioned
+    by the recipe engine, not hand-rolled writers.
+    """
 
-        def __exit__(self, *_args) -> None:
-            return None
+    def test_reconcile_populates_pi_host_block(self, tmp_path, monkeypatch):
+        _isolate_home(monkeypatch, tmp_path)
+        _patch_backend(monkeypatch, HindsightBackendConfig(base_url="http://hs:1/", bank_id="audiagentic"))
 
-        def read(self) -> bytes:
-            return self._body
+        out = prov.reconcile_hindsight(tmp_path, ["pi"])
+        assert out["providers"]["pi"]["success"] is True
 
-    requested: list[str] = []
+        config = json.loads((tmp_path / ".hindsight" / "config.json").read_text(encoding="utf-8"))
+        assert config["baseUrl"] == "http://hs:1/"
+        assert config["bankStrategy"] == "manual"
+        assert config["host"] == {
+            "enabled": True,
+            "recall_mode": "hybrid",
+            "auto_recall_tags": ["{project}"],
+            "auto_recall_tags_match": "any_strict",
+            "observation_scopes": [["{project}"]],
+        }
 
-    def fake_urlopen(url: str, *, timeout: int):
-        assert timeout == 30
-        requested.append(url)
-        return Response(f"# fetched from {url}\n".encode())
+    def test_reconcile_fetches_codex_scripts_and_writes_config(self, tmp_path, monkeypatch):
+        _isolate_home(monkeypatch, tmp_path)
+        _patch_backend(monkeypatch, HindsightBackendConfig(base_url="http://hs:1/", bank_id="codex", api_key="k"))
 
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(prov.urllib.request, "urlopen", fake_urlopen)
-    existing_settings = tmp_path / ".hindsight" / "codex" / "settings.json"
-    existing_settings.parent.mkdir(parents=True)
-    existing_settings.write_text('{"foreign": true}\n', encoding="utf-8")
+        out = prov.reconcile_hindsight(tmp_path, ["codex"])
+        assert out["providers"]["codex"]["success"] is True
 
-    prov._download_codex_scripts()
+        scripts = sorted(p.name for p in (tmp_path / ".hindsight" / "codex" / "scripts").rglob("*.py"))
+        assert "session_start.py" in scripts and "recall.py" in scripts and len(scripts) == 11
 
-    for rel in prov._SCRIPT_FILES:
-        destination = tmp_path / ".hindsight" / "codex" / rel
-        assert destination.read_text(encoding="utf-8").endswith(f"/{rel}\n")
-    assert not (tmp_path / ".hindsight" / "codex" / "session_start.py").exists()
-    assert existing_settings.read_text(encoding="utf-8") == '{"foreign": true}\n'
-    assert all(not url.endswith("/settings.json") for url in requested)
+        codex_cfg = json.loads((tmp_path / ".hindsight" / "codex.json").read_text(encoding="utf-8"))
+        assert codex_cfg["hindsightApiUrl"] == "http://hs:1/"
+        assert codex_cfg["bankId"] == "codex"
+        assert codex_cfg["hindsightApiToken"] == "k"
+
+    def test_reconcile_download_failure_surfaces_as_failed(self, tmp_path, monkeypatch):
+        import audiagentic.foundation.steps.structured as structured
+
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        def boom(url, timeout):
+            raise RuntimeError("network down")
+
+        monkeypatch.setattr(structured, "_fetch_text", boom)
+        _patch_backend(monkeypatch, HindsightBackendConfig(base_url="http://hs:1/", bank_id="codex"))
+
+        out = prov.reconcile_hindsight(tmp_path, ["codex"])
+        assert out["providers"]["codex"]["success"] is False
 
 
 class TestMemoryObserverPath:

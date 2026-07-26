@@ -2,19 +2,17 @@
 
 Memory orchestrates by querying each provider's automation capabilities and selecting
 the first supported family in fixed order (managed-hooks > managed-mcp > plugin-entry).
-No matrix, no factory dispatch, no recipe registry. Calls only providers_api family
-functions and writes Hindsight-owned artifacts directly.
+The provider-owned side (hook/mcp/plugin *entries*) is delegated to providers_api family
+functions. The Hindsight-owned side (~/.hindsight artifacts: codex scripts + config,
+pi host block) is expressed as declarative recipes in ``recipes/`` and run through the
+generic recipe engine — no hand-rolled per-provider writers, no provider-id branches.
 """
 from __future__ import annotations
 
-import urllib.request
+import sys
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.memory.hindsight.codex_pi_desired import (
-    CodexHindsightDesired,
-    HookCommand,
-)
 from audiagentic.components.memory.hindsight.export import (
     HindsightBackendConfig,
     build_hindsight_backend,
@@ -38,25 +36,21 @@ from audiagentic.components.providers.providers_api import (
     manage_mcp_entries,
     manage_plugin_entry,
 )
-from audiagentic.foundation.io import atomic_write_text
-from audiagentic.foundation.logging.redaction import redact_text
+from audiagentic.foundation.toolchains.recipe_contract import RecipeResult
+from audiagentic.foundation.toolchains.recipe_execution import execute_recipe_mode
+from audiagentic.foundation.toolchains.recipe_loader import load_recipe_from_yaml
 
 _HINDSIGHT_OWNERSHIP = "hindsight"
-_RAW_BASE = "https://raw.githubusercontent.com/vectorize-io/hindsight/main/hindsight-integrations/codex"
 
-_SCRIPT_FILES = (
-    "scripts/session_start.py",
-    "scripts/recall.py",
-    "scripts/retain.py",
-    "scripts/lib/__init__.py",
-    "scripts/lib/bank.py",
-    "scripts/lib/client.py",
-    "scripts/lib/config.py",
-    "scripts/lib/content.py",
-    "scripts/lib/daemon.py",
-    "scripts/lib/llm.py",
-    "scripts/lib/state.py",
-)
+# Provider -> Hindsight-owned artifact recipe. Providers absent from this table
+# have no Hindsight-owned side files; their integration is entirely the provider
+# managed family (mcp/plugin). Adding a new integration is a YAML drop-in here,
+# never new Python.
+_RECIPE_DIR = Path(__file__).resolve().parents[3] / "config" / "components" / "memory" / "recipes"
+_ARTIFACT_RECIPES = {
+    "codex": "hindsight-codex.yaml",
+    "pi": "hindsight-pi.yaml",
+}
 
 _HOOK_EVENTS = (
     ("session_start.py", "SessionStart", 5),
@@ -68,6 +62,44 @@ _HOOK_EVENTS = (
 def _quote_command_part(value: Path | str) -> str:
     text = str(value)
     return '"' + text.replace('"', '\\"') + '"'
+
+
+# ---------------------------------------------------------------------------
+# Hindsight-owned artifact recipes — declarative, run through the generic engine
+# ---------------------------------------------------------------------------
+
+def _artifact_recipe_path(provider_id: str) -> Path | None:
+    """Return the Hindsight-owned artifact recipe for a provider, or None."""
+    name = _ARTIFACT_RECIPES.get(provider_id)
+    return _RECIPE_DIR / name if name else None
+
+
+def _recipe_params(backend: HindsightBackendConfig) -> dict[str, str]:
+    """Build provider-agnostic recipe parameters from backend config.
+
+    Recipe-level defaults supply per-provider bank ids and the literal
+    ``{project}`` template, so no provider-id branch is needed here.
+    """
+    params = {"URL": backend.base_url, "TOKEN": backend.api_key or ""}
+    if backend.bank_id:
+        params["BANK_ID"] = backend.bank_id
+    return params
+
+
+def _run_artifact_recipe(
+    provider_id: str, backend: HindsightBackendConfig, mode: str,
+) -> RecipeResult | None:
+    """Run a provider's Hindsight-owned artifact recipe in *mode*, or None if absent.
+
+    Params are filtered to the recipe's declared parameters so each recipe
+    receives only what it uses (the strict materializer rejects unknown keys).
+    """
+    path = _artifact_recipe_path(provider_id)
+    if path is None:
+        return None
+    declared = {p.name for p in load_recipe_from_yaml(path).parameters}
+    params = {k: v for k, v in _recipe_params(backend).items() if k in declared}
+    return execute_recipe_mode(path, params, mode)
 
 
 # ---------------------------------------------------------------------------
@@ -112,104 +144,34 @@ def _resolve_family(
 # Codex managed-hooks integration — Hindsight-owned artifacts
 # ---------------------------------------------------------------------------
 
-def _build_codex_desired(backend: HindsightBackendConfig) -> CodexHindsightDesired:
-    """Build CodexHindsightDesired from backend config."""
-    import sys
+def _build_codex_hook_entries() -> tuple[ManagedHooksEntry, ...]:
+    """Build the Codex hook entries pointing at the recipe-fetched scripts.
+
+    The scripts themselves and codex.json are provisioned by the artifact recipe;
+    these entries only register the per-event commands in Codex's own config.
+    """
     interpreter_path = Path(sys.executable)
     script_dir = Path.home() / ".hindsight" / "codex" / "scripts"
-    hook_commands = tuple(
-        HookCommand(
+    return tuple(
+        ManagedHooksEntry(
+            managed_id=f"hindsight/{event.lower()}",
             event=event,
             command=f"{_quote_command_part(interpreter_path)} {_quote_command_part(script_dir / script_name)}",
             timeout=timeout,
         )
         for script_name, event, timeout in _HOOK_EVENTS
     )
-    return CodexHindsightDesired(
-        base_url=backend.base_url,
-        bank_id=backend.bank_id or "codex",
-        api_key=backend.api_key,
-        interpreter_path=interpreter_path,
-        script_dir=script_dir,
-        hook_commands=hook_commands,
-    )
-
-
-def _build_codex_managed_entries(desired: CodexHindsightDesired) -> tuple[ManagedHooksEntry, ...]:
-    """Convert HookCommand entries to ManagedHooksEntry for providers_api."""
-    return tuple(
-        ManagedHooksEntry(
-            managed_id=f"hindsight/{hc.event.lower()}",
-            event=hc.event,
-            command=hc.command,
-            timeout=hc.timeout,
-        )
-        for hc in desired.hook_commands
-    )
-
-
-def _write_codex_user_config(desired: CodexHindsightDesired) -> None:
-    """Write ~/.hindsight/codex.json (Hindsight-owned artifact)."""
-    import json
-
-    from audiagentic.foundation.steps import WriteFileStep
-
-    config: dict[str, Any] = {
-        "hindsightApiUrl": desired.base_url,
-        "bankId": desired.bank_id,
-    }
-    if desired.api_key:
-        config["hindsightApiToken"] = desired.api_key
-
-    step = WriteFileStep(
-        id="codex-user-config-write",
-        path=str(Path.home() / ".hindsight" / "codex.json"),
-        content=json.dumps(config, indent=2) + "\n",
-        create_parents=True,
-        recipe_id="hindsight-codex",
-    )
-    step.run({})
-
-
-def _download_codex_scripts() -> None:
-    """Download Codex hook scripts to ~/.hindsight/codex/scripts/ (Hindsight-owned)."""
-    for rel in _SCRIPT_FILES:
-        dest = Path.home() / ".hindsight" / "codex" / rel
-        with urllib.request.urlopen(f"{_RAW_BASE}/{rel}", timeout=30) as response:  # noqa: S310
-            atomic_write_text(dest, response.read().decode("utf-8"))
-
-    settings = Path.home() / ".hindsight" / "codex" / "settings.json"
-    if not settings.exists():
-        with urllib.request.urlopen(f"{_RAW_BASE}/settings.json", timeout=30) as response:  # noqa: S310
-            atomic_write_text(settings, response.read().decode("utf-8"))
 
 
 # ---------------------------------------------------------------------------
-# Family-specific apply/prune/status — typed, no Any result
+# Family-specific apply/prune/status — provider-owned entries only.
+# Hindsight-owned side artifacts (codex scripts + config, pi host block) are
+# provisioned by the declarative artifact recipe, not here.
 # ---------------------------------------------------------------------------
 
-def _apply_hooks(provider_id: str, project_root: Path, backend: HindsightBackendConfig) -> ManagedHooksResult:
-    """Apply managed-hooks integration for a provider."""
-    desired = _build_codex_desired(backend)
-    managed_entries = _build_codex_managed_entries(desired)
-
-    try:
-        _download_codex_scripts()
-    except Exception as exc:
-        return ManagedHooksResult(
-            ok=False,
-            error_code="CON-PHKS-002",
-            action_needed=redact_text(str(exc)),
-        )
-
-    try:
-        _write_codex_user_config(desired)
-    except Exception as exc:
-        return ManagedHooksResult(
-            ok=False,
-            error_code="CON-PHKS-002",
-            action_needed=redact_text(str(exc)),
-        )
+def _apply_hooks(provider_id: str, project_root: Path) -> ManagedHooksResult:
+    """Register the provider-owned Codex hook entries (scripts/config are recipe-owned)."""
+    managed_entries = _build_codex_hook_entries()
 
     return manage_hook_entries(
         project_root,
@@ -249,7 +211,7 @@ def _status_hooks(provider_id: str, project_root: Path) -> ManagedHooksResult:
 
 
 def _apply_mcp(provider_id: str, project_root: Path, backend: HindsightBackendConfig) -> ManagedMcpResult:
-    """Apply managed-mcp integration for a provider."""
+    """Register the provider-owned MCP entry (any host-side config is recipe-owned)."""
     return manage_mcp_entries(
         project_root,
         provider_id,
@@ -262,7 +224,7 @@ def _apply_mcp(provider_id: str, project_root: Path, backend: HindsightBackendCo
 
 
 def _prune_mcp(provider_id: str, project_root: Path, backend: HindsightBackendConfig) -> ManagedMcpResult:
-    """Prune managed-mcp integration for a provider."""
+    """Prune the provider-owned MCP entry (any host-side config is recipe-owned)."""
     return manage_mcp_entries(
         project_root,
         provider_id,
@@ -314,18 +276,47 @@ def _prune_plugin(provider_id: str, project_root: Path) -> PluginEntryResult:
 
 
 # ---------------------------------------------------------------------------
-# Result mapping — family results to common summary shape (no universal type)
+# Per-provider dispatch — provider-owned family + Hindsight-owned artifact recipe
 # ---------------------------------------------------------------------------
 
-def _map_result_to_summary(result: Any, operation: str) -> dict[str, Any]:
-    """Map a family-specific result to the common summary entry.
+def _apply_family(family_id: str | None, pid: str, root: Path, backend: HindsightBackendConfig) -> Any:
+    if family_id == "managed-hooks":
+        return _apply_hooks(pid, root)
+    if family_id == "managed-mcp":
+        return _apply_mcp(pid, root, backend)
+    if family_id == "plugin-entry":
+        return _apply_plugin(pid, root, backend)
+    return None
 
-    Each family result has ok, action_needed, error_code. We map these locally
-    without creating a universal result type.
+
+def _prune_family(family_id: str | None, pid: str, root: Path, backend: HindsightBackendConfig) -> Any:
+    if family_id == "managed-hooks":
+        return _prune_hooks(pid, root)
+    if family_id == "managed-mcp":
+        return _prune_mcp(pid, root, backend)
+    if family_id == "plugin-entry":
+        return _prune_plugin(pid, root)
+    return None
+
+
+def _combine_summary(
+    fam_result: Any,
+    art_result: RecipeResult | None,
+    operation: str,
+    absent_role: str,
+) -> dict[str, Any]:
+    """Fold the provider-family result and the artifact-recipe result into one entry.
+
+    Either side may be absent (a provider with no supported family, or no
+    Hindsight-owned artifacts). When both are absent the provider had nothing to
+    do and reports ``absent_role``.
     """
-    ok = getattr(result, "ok", False)
-    error_code = getattr(result, "error_code", None)
-    action_needed = getattr(result, "action_needed", None)
+    if fam_result is None and art_result is None:
+        return {"success": True, "state": "ABSENT", "role": absent_role}
+
+    fam_ok = fam_result is None or bool(getattr(fam_result, "ok", False))
+    art_ok = art_result is None or art_result.success
+    ok = fam_ok and art_ok
 
     if operation == "install" and ok:
         state = "VERIFIED"
@@ -334,13 +325,13 @@ def _map_result_to_summary(result: Any, operation: str) -> dict[str, Any]:
     else:
         state = "FAILED"
 
-    entry: dict[str, Any] = {
-        "success": ok,
-        "state": state,
-        "role": operation,
-    }
+    entry: dict[str, Any] = {"success": ok, "state": state, "role": operation}
     if not ok:
-        entry["error"] = error_code or action_needed or "unknown failure"
+        fam_err = None
+        if fam_result is not None and not fam_ok:
+            fam_err = getattr(fam_result, "error_code", None) or getattr(fam_result, "action_needed", None)
+        art_err = art_result.status if (art_result is not None and not art_ok) else None
+        entry["error"] = fam_err or art_err or "unknown failure"
     return entry
 
 
@@ -394,17 +385,9 @@ def reconcile_hindsight(
         placeholder = HindsightBackendConfig(base_url="http://removed.invalid")
         for pid in all_ids:
             family_id = _resolve_family(pid, capability_map)
-            if family_id == "managed-hooks":
-                result = _prune_hooks(pid, root)
-            elif family_id == "managed-mcp":
-                result = _prune_mcp(pid, root, placeholder)
-            else:
-                result = None
-
-            if result is not None:
-                providers[pid] = _map_result_to_summary(result, "uninstall")
-            else:
-                providers[pid] = {"success": True, "state": "ABSENT", "role": "uninstalled"}
+            fam_result = _prune_family(family_id, pid, root, placeholder)
+            art_result = _run_artifact_recipe(pid, placeholder, "prune")
+            providers[pid] = _combine_summary(fam_result, art_result, "uninstall", "uninstalled")
     else:
         action = "applied"
         enabled_set = set(ids)
@@ -412,38 +395,17 @@ def reconcile_hindsight(
         # Apply to enabled providers.
         for pid in ids:
             family_id = _resolve_family(pid, capability_map)
-            if family_id == "managed-hooks":
-                result = _apply_hooks(pid, root, backend)
-            elif family_id == "managed-mcp":
-                result = _apply_mcp(pid, root, backend)
-            elif family_id == "plugin-entry":
-                result = _apply_plugin(pid, root, backend)
-            else:
-                # No supported family — guidance only.
-                providers[pid] = {
-                    "success": True,
-                    "state": "ABSENT",
-                    "role": "guidance-only",
-                }
-                continue
-
-            providers[pid] = _map_result_to_summary(result, "install")
+            fam_result = _apply_family(family_id, pid, root, backend)
+            art_result = _run_artifact_recipe(pid, backend, "apply")
+            providers[pid] = _combine_summary(fam_result, art_result, "install", "guidance-only")
 
         # Prune stale providers (no longer enabled).
         stale = [pid for pid in all_ids if pid not in enabled_set]
         for pid in stale:
             family_id = _resolve_family(pid, capability_map)
-            if family_id == "managed-hooks":
-                result = _prune_hooks(pid, root)
-            elif family_id == "managed-mcp":
-                result = _prune_mcp(pid, root, backend)
-            else:
-                result = None
-
-            if result is not None:
-                providers[pid] = _map_result_to_summary(result, "prune")
-            else:
-                providers[pid] = {"success": True, "state": "ABSENT", "role": "pruned-stale"}
+            fam_result = _prune_family(family_id, pid, root, backend)
+            art_result = _run_artifact_recipe(pid, backend, "prune")
+            providers[pid] = _combine_summary(fam_result, art_result, "prune", "pruned-stale")
 
     return {
         "action": action,
