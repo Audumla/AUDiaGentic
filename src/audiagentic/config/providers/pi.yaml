@@ -42,8 +42,15 @@ automation_capabilities:
     payload_contract: provider-self-provided-lsp-payload/v1
     result_contract: provider-self-provided-lsp-result/v1
     ownership_scope_required: false
+  - family_id: generated-surfaces
+    supported_modes: [plan, apply, prune, status]
+    payload_contract: provider-generated-surface-payload/v1
+    result_contract: provider-generated-surface-result/v1
+    ownership_scope_required: true
 display_name: "Pi Coding Agent"
-description: "Lightweight local coding agent TUI by Earendil Works. Supports MCP tool use via the pi-mcp-adapter extension."
+description: >-
+  Lightweight local coding agent TUI by Earendil Works.
+  Supports MCP tool use via the pi-mcp-adapter extension.
 url: "https://www.earendilworks.com/pi"
 access_mode: "none"
 
@@ -68,7 +75,9 @@ host_capabilities: []
 capability_facts:
   - capability_id: mcp-launch-isolation
     subject: mcp_launch_isolation_tier
-    mechanism: "request-owned config via pi-mcp-adapter with exclusive discovery"
+    mechanism: >-
+      request-owned config via pi-mcp-adapter
+      with exclusive discovery
     constraints:
       - "requires a compatible installed pi-mcp-adapter"
     limitations: []
@@ -105,7 +114,9 @@ capability_facts:
       review_state: verified
   - capability_id: lsp-self-support
     subject: on_lsp_enabled
-    mechanism: "_pi_ensure_lens hook — callable hook on LSP enable that installs LSP support"
+    mechanism: >-
+      _pi_ensure_lens hook — callable hook on LSP enable
+      that installs LSP support
     constraints: []
     limitations: []
     support_assessment: verified
@@ -129,7 +140,10 @@ capability_facts:
       review_state: verified
   - capability_id: vendor-key-injection
     subject: "external:vendor-key-injection"
-    mechanism: "native env var key injection (OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY, etc.)"
+    mechanism: >-
+      native env var key injection
+      (OPENAI_API_KEY, ANTHROPIC_API_KEY,
+      GEMINI_API_KEY, OPENROUTER_API_KEY, etc.)
     constraints:
       - "env vars effective at launch time"
       - "custom endpoints require models.json write"
@@ -144,7 +158,9 @@ capability_facts:
       review_state: verified
   - capability_id: model-config-surface
     subject: "external:model-config-surface"
-    mechanism: "~/.pi/agent/models.json with providers/models[]/baseUrl/apiKey/compat shape"
+    mechanism: >-
+      ~/.pi/agent/models.json with
+      providers/models[]/baseUrl/apiKey/compat shape
     constraints:
       - "home-scoped, not project-local"
     limitations:
@@ -162,7 +178,9 @@ permissions:
   can_execute_shell: true
   can_browse_web: false
   can_read_env: true
-  notes: "TUI coding agent; MCP tool use available when pi-mcp-adapter is installed"
+  notes: >-
+    TUI coding agent;
+    MCP tool use available when pi-mcp-adapter is installed
 
 agent_files:
   - rel_path: ".pi"
@@ -203,7 +221,10 @@ execution:
   prompt-title: Pi
   error-code: EXT-PI-001
   extractor-name: pi-plaintext
-  args-template: ["--print", "{model-flags}", "{prompt}"]
+  args-template: ["--print", "{model-flags}"]
+  # {prompt} omitted — goes via stdin (run_streaming_command input_text=)
+  # to preserve embedded newlines; Pi's --print drops the first newline
+  # when the prompt arrives as a CLI argument (SH21).
   model-flag: "--model"
   approval-mode-flags:
     yolo: []

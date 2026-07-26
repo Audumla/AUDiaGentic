@@ -139,7 +139,6 @@ _MACOS_CODENAMES: dict[int, str] = {
     10: "Catalina",
 }
 
-
 @dataclass(frozen=True)
 class PlatformInfo:
     """Structured platform information.
@@ -342,6 +341,27 @@ def get_platform_info() -> PlatformInfo:
     )
 
 
+# Release binaries for external providers (opencode, pi, ...) are published
+# under GitHub release asset names like "windows-amd64", "darwin-arm64" —
+# distinct from platform_key()'s internal 'win'/'darwin'/'linux' vocabulary.
+_RELEASE_OS_NAMES: dict[str, str] = {"win": "windows", "darwin": "darwin", "linux": "linux"}
+_RELEASE_ARCH_NAMES: dict[str, str] = {"x86_64": "amd64", "aarch64": "arm64", "x86": "386"}
+
+
+def release_platform_name() -> str:
+    """Return the current host as a provider release-asset platform name.
+
+    Matches the ``os-arch`` naming external providers publish their release
+    binaries under (e.g. ``"windows-amd64"``, ``"darwin-arm64"``) — used to
+    select the correct download asset and to match ``platform_evidence``
+    entries in provider descriptors. Derived from :func:`get_platform_info`.
+    """
+    info = get_platform_info()
+    raw_arch = info.machine.lower()
+    arch = _RELEASE_ARCH_NAMES.get(raw_arch, raw_arch)
+    return f"{_RELEASE_OS_NAMES[info.key]}-{arch}"
+
+
 # ---------------------------------------------------------------------------
 # Public symbols
 # ---------------------------------------------------------------------------
@@ -353,5 +373,6 @@ __all__ = [
     "MacOsVersionInfo",
     "PlatformInfo",
     "platform_key",
+    "release_platform_name",
     "WindowsEditionInfo",
 ]
