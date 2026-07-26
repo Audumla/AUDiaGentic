@@ -8,7 +8,7 @@ from audiagentic.components.providers.descriptors.automation_capabilities import
     ProviderAutomationCapability,
 )
 from audiagentic.components.providers.descriptors.base import ProviderDescriptor
-from audiagentic.foundation.toolchains.managed_config import ManagedConfigSpec
+from audiagentic.foundation.toolchains.config.managed_config import ManagedConfigSpec
 
 
 def _managed_mcp_capability() -> ProviderAutomationCapability:

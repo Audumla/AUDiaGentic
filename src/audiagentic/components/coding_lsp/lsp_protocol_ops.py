@@ -191,46 +191,6 @@ class LspProtocolOps:
                 all_calls.extend(outgoing)
         return all_calls
 
-    def inlay_hints(
-        self, uri: str, range: dict[str, Any], timeout: float = 15.0,
-    ) -> list[dict[str, Any]]:
-        """Get inlay hints for a range."""
-        if not self._session.has_capability("textDocument/inlayHint"):
-            return []
-        result = self._bridge.send_request(
-            "textDocument/inlayHint",
-            {
-                "textDocument": {"uri": uri},
-                "range": range,
-            },
-            timeout=timeout,
-        )
-        return _ensure_list(result)
-
-    def signature_help(
-        self, uri: str, line: int, character: int,
-        trigger_character: str | None = None,
-        timeout: float = 15.0,
-    ) -> dict[str, Any] | None:
-        """Get signature help at position."""
-        if not self._session.has_capability("textDocument/signatureHelp"):
-            return None
-        params: dict[str, Any] = {
-            "textDocument": {"uri": uri},
-            "position": self._encode_position(line, character),
-        }
-        if trigger_character:
-            params["context"] = {
-                "triggerCharacter": trigger_character,
-                "isRetrigger": False,
-            }
-        result = self._bridge.send_request(
-            "textDocument/signatureHelp",
-            params,
-            timeout=timeout,
-        )
-        return result
-
     def type_hierarchy_supertypes(
         self, uri: str, line: int, character: int, timeout: float = 15.0,
     ) -> list[dict[str, Any]]:
@@ -284,36 +244,6 @@ class LspProtocolOps:
             if isinstance(subs, list):
                 all_types.extend(subs)
         return all_types
-
-    def completion(
-        self, uri: str, line: int, character: int,
-        trigger_character: str | None = None,
-        timeout: float = 15.0,
-    ) -> list[dict[str, Any]]:
-        """Get completion items at position."""
-        if not self._session.has_capability("textDocument/completion"):
-            return []
-        params: dict[str, Any] = {
-            "textDocument": {"uri": uri},
-            "position": self._encode_position(line, character),
-        }
-        if trigger_character:
-            params["context"] = {
-                "triggerCharacter": trigger_character,
-                "triggerKind": 1,
-            }
-        result = self._bridge.send_request(
-            "textDocument/completion",
-            params,
-            timeout=timeout,
-        )
-        if result is None:
-            return []
-        if isinstance(result, list):
-            return result
-        if isinstance(result, dict) and "items" in result:
-            return result.get("items", [])
-        return [result]
 
     def code_actions(
         self, uri: str, range: dict[str, Any] | None, only: list[str] | None = None,
