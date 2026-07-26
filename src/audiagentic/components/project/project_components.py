@@ -24,8 +24,6 @@ from audiagentic.foundation.lifecycle.detector import (
     detect_installed_state,
     get_project_version_info,
 )
-from audiagentic.runtime.harness import get_harness_type
-from audiagentic.runtime.harness.resolution import harness_cli_available
 
 
 def project_status(project_root: Path) -> dict[str, Any]:
@@ -130,5 +128,9 @@ def attach_harness_refresh(
     """
     if not result.get("ok", True):
         return result
-    harness_available = harness_cli_available(get_harness_type(project_root)) is not None
+    from audiagentic.foundation.capabilities import get_harness_status
+
+    hs = get_harness_status()
+    harness_type = hs["get_harness_type"](project_root)
+    harness_available = hs["harness_cli_available"](harness_type) is not None
     return {**result, "harness_available": harness_available}

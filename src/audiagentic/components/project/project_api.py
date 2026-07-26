@@ -8,7 +8,6 @@ from typing import Any
 from audiagentic.foundation.components.registry import is_enabled, is_installed
 from audiagentic.foundation.features.registry import all_features, all_implementations
 from audiagentic.foundation.features.resolver import resolve_feature, resolve_implementation
-from audiagentic.runtime.harness import build_runtime_sync
 
 from . import project_components, project_files
 
@@ -28,9 +27,13 @@ def install_component(project_root: Path, component_id: str) -> dict[str, Any]:
     return project_components.install_component(project_root, component_id)
 
 
-def uninstall_component(project_root: Path, component_id: str, *, remove_configs: bool = False) -> dict[str, Any]:
+def uninstall_component(
+    project_root: Path, component_id: str, *, remove_configs: bool = False
+) -> dict[str, Any]:
     """Uninstall a non-core component and refresh generated harness config."""
-    return project_components.uninstall_component(project_root, component_id, remove_configs=remove_configs)
+    return project_components.uninstall_component(
+        project_root, component_id, remove_configs=remove_configs
+    )
 
 
 def enable_component(project_root: Path, component_id: str) -> dict[str, Any]:
@@ -50,6 +53,9 @@ def read_project_file(project_root: Path, relative_path: str) -> dict[str, Any]:
 
 def runtime_sync_contract() -> dict[str, Any]:
     """Describe the runtime-sync contract expected by Pi runtime clients."""
+    from audiagentic.foundation.capabilities import get_harness_status
+
+    hs = get_harness_status()
     return {
         "target": "pi-runtime",
         "actions": {
@@ -57,7 +63,9 @@ def runtime_sync_contract() -> dict[str, Any]:
             "reload_required": "Reload Pi runtime after request completes.",
             "restart_required": "Prompt for full Pi session restart.",
         },
-        "example": build_runtime_sync(reason="component-installed", component_id="providers")  # cross-component example payload,
+        "example": hs["build_runtime_sync"](
+            reason="component-installed", component_id="providers"
+        ),  # cross-component example payload,
     }
 
 
@@ -83,15 +91,17 @@ def get_option_provenance(
             continue
         resolved = resolve_feature(project_root, descriptor)
         if resolved.option_provenance:
-            results["features"].append({
-                "parent": descriptor.parent,
-                "kind": descriptor.kind,
-                "feature_id": descriptor.feature_id,
-                "provenance": {
-                    k: {"value": v.value, "source": v.source}
-                    for k, v in resolved.option_provenance.items()
-                },
-            })
+            results["features"].append(
+                {
+                    "parent": descriptor.parent,
+                    "kind": descriptor.kind,
+                    "feature_id": descriptor.feature_id,
+                    "provenance": {
+                        k: {"value": v.value, "source": v.source}
+                        for k, v in resolved.option_provenance.items()
+                    },
+                }
+            )
 
     for key, descriptor in all_implementations().items():
         if component_id and descriptor.parent != component_id:
@@ -102,13 +112,15 @@ def get_option_provenance(
             continue
         resolved = resolve_implementation(project_root, descriptor)
         if resolved.option_provenance:
-            results["implementations"].append({
-                "parent": descriptor.parent,
-                "implementation_id": descriptor.implementation_id,
-                "provenance": {
-                    k: {"value": v.value, "source": v.source}
-                    for k, v in resolved.option_provenance.items()
-                },
-            })
+            results["implementations"].append(
+                {
+                    "parent": descriptor.parent,
+                    "implementation_id": descriptor.implementation_id,
+                    "provenance": {
+                        k: {"value": v.value, "source": v.source}
+                        for k, v in resolved.option_provenance.items()
+                    },
+                }
+            )
 
     return results

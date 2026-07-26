@@ -18,12 +18,12 @@ from audiagentic.foundation.components.dependencies import (
 from audiagentic.foundation.components.hooks import ComponentStatusPayload
 from audiagentic.foundation.components.loader import component_yaml_path
 from audiagentic.foundation.io import atomic_write_text, load_yaml_file
-from audiagentic.foundation.toolchains.artifact_registry import ArtifactRegistry
-from audiagentic.foundation.toolchains.detect import tool_available
-from audiagentic.foundation.toolchains.managed_block import (
+from audiagentic.foundation.toolchains.config.artifact_registry import ArtifactRegistry
+from audiagentic.foundation.toolchains.config.managed_block import (
     apply_managed_block,
     remove_managed_block,
 )
+from audiagentic.foundation.toolchains.detect import tool_available
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +172,7 @@ def install_post_commit_hook(
     existing = hook_path.read_text(encoding="utf-8")
 
     # Check for existing managed block via apply_managed_block detection logic
-    from audiagentic.foundation.toolchains.managed_block import (
+    from audiagentic.foundation.toolchains.config.managed_block import (
         _block_pattern as _detect_block_pattern,
     )
     pattern = _detect_block_pattern(_HOOK_BLOCK_ID, "#")
