@@ -26,6 +26,31 @@ review-sections:
   findings: "Findings"
   conclusion: "Conclusion"
 
+# Fields that belong in YAML frontmatter (not body sections).
+# Add new metadata fields here so they go into the frontmatter block instead
+# of becoming spurious "## FieldName" section headings.
+frontmatter-fields:
+  - id
+  - order
+  - plan
+  - state
+  - breadth
+  - work
+  - skill
+  - priority
+  - complexity
+  - created-by
+  - created-at
+
+# Metadata keys consumed during creation/update — never rendered as body sections.
+# These include identity aliases and structural metadata that agents may pass
+# but which are not section content (they go to frontmatter or internal logic).
+metadata-keys:
+  - created-by
+  - created_by
+  - creator_id
+  - title
+
 mcp-servers:
   - name: ag-planning-mgmt
     module: audiagentic.components.planning.planning_manage_mcp
@@ -93,12 +118,13 @@ mcp-servers:
         before creating or updating plan items.
       plan_create_item: >
         Create a new plan item. Required: plan, title.
-        Optional but encouraged where applicable: work (S/M/L — volume of change), skill (1/2/3 — cognitive difficulty; optional, can be set later via plan_update_item),
+        Optional where applicable: work (S/M/L — volume of change),
+        skill (1/2/3 — cognitive difficulty; set later via plan_update_item if unknown),
         order, description, steps, detailed_solution (Detailed Solution & Technical Design),
         code_samples (Code Samples & Guidance including config samples and schemas),
         files, validation, effort_risk, standards, notes.
         ID is auto-generated — do not supply it.
-        Returns {id, title, plan, path} for the created item.
+        Returns {id, title, plan, path}.
       plan_list_groups: >
         List plan items grouped by plan. Returns plan groups with item counts
         (total, active, completed) and their items. state: 'active'/'pending' or 'completed' (omit for all).
@@ -106,21 +132,22 @@ mcp-servers:
       plan_list_items: >
         List plan items. state: 'active'/'pending' or 'completed' (omit for all).
         plan: directory name like 'code-cleanup' (omit for all plans).
-      plan_get_item: Read a plan item by ID, returning frontmatter and all body sections.
+      plan_get_item: >
+        Read a plan item by ID, returning frontmatter and all body sections.
+        Pass include_history=True to also get change-log entries under 'change_log'.
       plan_set_state: >
-        Transition item state. Use after every implementation or planning cleanup.
-        'pending' keeps an unfinished item in active/; 'completed' moves it to
-        completed/ only when required work and validation are actually done.
-        Do not mark an item completed merely because its reviews were incorporated;
-        keep it pending if implementation remains. Delete stale/superseded items
-        with plan_delete_item instead of leaving inactive work pending. Also accepts
-        'not_done' as a legacy alias for 'pending'.
+        Transition item state. Valid states: pending, in_progress, completed.
+        'in_progress' signals active implementation; 'completed' moves the item
+        to completed/ only when work and validation are done. Do not mark an
+        item completed merely because reviews were incorporated — keep it
+        pending or in_progress if implementation remains. Delete stale/
+        superseded items with plan_delete_item instead of leaving them pending.
+        Also accepts 'not_done' as a legacy alias for 'pending'.
       plan_update_item: >
-        Update frontmatter fields (breadth, skill, order, etc.) or body sections
+        Update frontmatter fields (breadth, skill, order, work) or body sections
         (description, steps, detailed_solution [Detailed Solution & Technical Design],
-        code_samples [Code Samples & Guidance including config samples and schemas],
-        files, validation, effort_risk, standards, notes) of an existing item.
-        Fill out all sections where applicable to provide complete planning context.
+        code_samples [Code Samples & Guidance], files, validation,
+        effort_risk, standards, notes) of an existing item.
       plan_delete_item: Permanently delete a plan item by ID.
       plan_create_review: >
         Create a new review linked to a plan item. Required: review-of (parent item ID), title.

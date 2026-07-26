@@ -3,6 +3,7 @@
 planning_paths falls back to _DEFAULT_PATHS when the features registry is not
 populated, so these tests need no mocking of the paths layer.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -33,6 +34,7 @@ def _completed_dir(root):
 # ---------------------------------------------------------------------------
 # create_item
 # ---------------------------------------------------------------------------
+
 
 def test_create_item_writes_file_in_active_dir(tmp_path):
     result = planning_api.create_item(tmp_path, _make_item())
@@ -78,7 +80,14 @@ def test_create_item_body_contains_standard_sections(tmp_path):
     planning_api.create_item(tmp_path, _make_item())
     path = _active_dir(tmp_path) / "test-plan" / "TST01.md"
     text = path.read_text(encoding="utf-8")
-    for heading in ("## Description", "## Steps", "## Files", "## Validation", "## Effort & Risk", "## Notes"):
+    for heading in (
+        "## Description",
+        "## Steps",
+        "## Files",
+        "## Validation",
+        "## Effort & Risk",
+        "## Notes",
+    ):
         assert heading in text, f"missing section {heading!r}"
 
 
@@ -129,7 +138,11 @@ def test_create_item_records_creator_identity(tmp_path):
 
 def test_create_item_event_includes_creator_identity(tmp_path, monkeypatch):
     published = []
-    monkeypatch.setattr(planning_events, "publish_planning_event", lambda *args, **kwargs: published.append((args, kwargs)))
+    monkeypatch.setattr(
+        planning_events,
+        "publish_planning_event",
+        lambda *args, **kwargs: published.append((args, kwargs)),
+    )
 
     planning_api.create_item(tmp_path, _make_item(**{"created-by": "codex"}))
 
@@ -149,7 +162,11 @@ def test_update_item_accepts_creator_identity_alias(tmp_path):
 
 def test_update_item_event_includes_creator_identity(tmp_path, monkeypatch):
     published = []
-    monkeypatch.setattr(planning_events, "publish_planning_event", lambda *args, **kwargs: published.append((args, kwargs)))
+    monkeypatch.setattr(
+        planning_events,
+        "publish_planning_event",
+        lambda *args, **kwargs: published.append((args, kwargs)),
+    )
     planning_api.create_item(tmp_path, _make_item(created_by="codex"))
     published.clear()
 
@@ -164,6 +181,7 @@ def test_update_item_event_includes_creator_identity(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 # list_items
 # ---------------------------------------------------------------------------
+
 
 def test_list_items_empty_returns_empty(tmp_path):
     assert planning_api.list_items(tmp_path) == []
@@ -311,6 +329,7 @@ def test_list_items_page_no_overflow_when_prefix_has_no_matches_at_all(tmp_path)
 # get_item
 # ---------------------------------------------------------------------------
 
+
 def test_get_item_returns_frontmatter_and_sections(tmp_path):
     planning_api.create_item(tmp_path, _make_item(description="Do the thing."))
     item = planning_api.get_item(tmp_path, "TST01")
@@ -330,6 +349,7 @@ def test_get_item_not_found_raises(tmp_path):
 # ---------------------------------------------------------------------------
 # set_state
 # ---------------------------------------------------------------------------
+
 
 def test_set_state_pending_to_completed_moves_file(tmp_path):
     planning_api.create_item(tmp_path, _make_item())
@@ -371,7 +391,7 @@ def test_set_state_not_done_alias_moves_to_active(tmp_path):
 def test_set_state_invalid_state_raises(tmp_path):
     planning_api.create_item(tmp_path, _make_item())
     with pytest.raises(AudiaGenticError) as exc_info:
-        planning_api.set_state(tmp_path, "TST01", "in_progress")
+        planning_api.set_state(tmp_path, "TST01", "bogus")
     assert exc_info.value.code == "VAL-PLN-006"
 
 
@@ -384,6 +404,7 @@ def test_set_state_not_found_raises(tmp_path):
 # ---------------------------------------------------------------------------
 # update_item
 # ---------------------------------------------------------------------------
+
 
 def test_update_item_updates_frontmatter_field(tmp_path):
     planning_api.create_item(tmp_path, _make_item())
@@ -428,6 +449,7 @@ def test_update_item_not_found_raises(tmp_path):
 # ---------------------------------------------------------------------------
 # delete_item
 # ---------------------------------------------------------------------------
+
 
 def test_delete_item_removes_file(tmp_path):
     planning_api.create_item(tmp_path, _make_item())
@@ -521,6 +543,7 @@ def test_next_item_id_fallback_collision_raises(tmp_path):
 # generically, same as any future implementation-backed planning backend would.
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def registered_test_implementation():
     from audiagentic.foundation.features.base import ImplementationDescriptor, OptionSchema
@@ -528,16 +551,22 @@ def registered_test_implementation():
     from audiagentic.foundation.features.registry import register
 
     clear_features()
-    register(ImplementationDescriptor(
-        parent="agent-planning",
-        implementation_id="test-tracker",
-        display_name="Test Tracker",
-        options_schema={
-            "api-token": OptionSchema(option_type="string", required=True, description="API token"),
-            "timeout-seconds": OptionSchema(option_type="integer", default=30, description="Request timeout"),
-        },
-        raw={},
-    ))
+    register(
+        ImplementationDescriptor(
+            parent="agent-planning",
+            implementation_id="test-tracker",
+            display_name="Test Tracker",
+            options_schema={
+                "api-token": OptionSchema(
+                    option_type="string", required=True, description="API token"
+                ),
+                "timeout-seconds": OptionSchema(
+                    option_type="integer", default=30, description="Request timeout"
+                ),
+            },
+            raw={},
+        )
+    )
     yield "test-tracker"
     clear_features()
 
@@ -586,6 +615,7 @@ def test_planning_set_config_unknown_implementation_raises(tmp_path):
 # Reviews
 # ---------------------------------------------------------------------------
 
+
 def test_create_review_writes_file(tmp_path):
     planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
     result = planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Review 1"})
@@ -612,7 +642,11 @@ def test_create_review_records_reviewer_identity_alias(tmp_path):
 
 def test_create_review_event_includes_reviewer_identity(tmp_path, monkeypatch):
     published = []
-    monkeypatch.setattr(planning_events, "publish_planning_event", lambda *args, **kwargs: published.append((args, kwargs)))
+    monkeypatch.setattr(
+        planning_events,
+        "publish_planning_event",
+        lambda *args, **kwargs: published.append((args, kwargs)),
+    )
     planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
     published.clear()
 
@@ -638,9 +672,15 @@ def test_update_review_accepts_reviewer_identity_alias(tmp_path):
 
 def test_update_review_event_includes_reviewer_identity(tmp_path, monkeypatch):
     published = []
-    monkeypatch.setattr(planning_events, "publish_planning_event", lambda *args, **kwargs: published.append((args, kwargs)))
+    monkeypatch.setattr(
+        planning_events,
+        "publish_planning_event",
+        lambda *args, **kwargs: published.append((args, kwargs)),
+    )
     planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
-    planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Review 1", "reviewer_id": "codex"})
+    planning_api.create_review(
+        tmp_path, {"review-of": "ITM01", "title": "Review 1", "reviewer_id": "codex"}
+    )
     published.clear()
 
     planning_api.update_review(tmp_path, "RV01", {"reviewed_by": "claude"})
@@ -664,9 +704,16 @@ def test_update_review_event_includes_reviewer_identity(tmp_path, monkeypatch):
 # an item section) with no error at all — real, silent data loss.
 # ---------------------------------------------------------------------------
 
+
 def _make_review(tmp_path, item_id="ITM01", review_id="RV01", **overrides):
     planning_api.create_item(tmp_path, {"id": item_id, "plan": "test-plan", "title": "Item 1"})
-    review = {"id": review_id, "review-of": item_id, "title": "A review", "findings": "the original findings", **overrides}
+    review = {
+        "id": review_id,
+        "review-of": item_id,
+        "title": "A review",
+        "findings": "the original findings",
+        **overrides,
+    }
     return planning_api.create_review(tmp_path, review)
 
 
@@ -765,13 +812,16 @@ def test_create_review_requires_title(tmp_path):
 
 def test_get_review_returns_sections(tmp_path):
     planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
-    planning_api.create_review(tmp_path, {
-        "review-of": "ITM01",
-        "title": "Review 1",
-        "notes": "Some notes",
-        "findings": "Key findings here",
-        "conclusion": "Approved",
-    })
+    planning_api.create_review(
+        tmp_path,
+        {
+            "review-of": "ITM01",
+            "title": "Review 1",
+            "notes": "Some notes",
+            "findings": "Key findings here",
+            "conclusion": "Approved",
+        },
+    )
     review = planning_api.get_review(tmp_path, "RV01")
     assert review["id"] == "RV01"
     assert review["review-of"] == "ITM01"
@@ -849,10 +899,14 @@ def test_set_review_state_moves_to_completed(tmp_path):
 def test_update_review_changes_sections(tmp_path):
     planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
     planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Review 1"})
-    planning_api.update_review(tmp_path, "RV01", {
-        "notes": "Updated notes",
-        "findings": "Updated findings",
-    })
+    planning_api.update_review(
+        tmp_path,
+        "RV01",
+        {
+            "notes": "Updated notes",
+            "findings": "Updated findings",
+        },
+    )
     review = planning_api.get_review(tmp_path, "RV01")
     assert review["notes"] == "Updated notes"
     assert review["findings"] == "Updated findings"
@@ -891,6 +945,7 @@ def test_review_id_is_globally_unique_across_plans(tmp_path):
 # ---------------------------------------------------------------------------
 # Empty plan directory cleanup
 # ---------------------------------------------------------------------------
+
 
 def test_set_state_to_completed_cleans_up_empty_active_plan_dir(tmp_path):
     planning_api.create_item(tmp_path, _make_item())
