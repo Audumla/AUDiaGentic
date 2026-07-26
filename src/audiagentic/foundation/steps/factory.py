@@ -20,7 +20,13 @@ from .callable import CallableStep
 from .control import ConditionalStep, ConfirmStep, SelectStep
 from .sequence import SequenceStep
 from .shell import PlatformOverrides, ShellStep
-from .structured import ConfigSetStep, ManagedBlockStep, WriteFileStep
+from .structured import (
+    ConfigRemoveStep,
+    ConfigSetStep,
+    DownloadStep,
+    ManagedBlockStep,
+    WriteFileStep,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +42,21 @@ class StepFactory(Protocol):
     def build(self, data: dict[str, Any]) -> Any: ...
 
     def registered_types(self) -> list[str]: ...
+
+
+# Per-type JSON-schema fragments, co-located with each step's builder. The recipe
+# loader validates a step against the fragment its `type` registers — so there is
+# no central hard-coded list of step types anywhere. Foundation registers its
+# builtins here; other layers (e.g. providers) register their own via
+# register_step_type(..., schema=...), keeping this module domain-neutral.
+_step_schemas: dict[str, dict[str, Any]] = {}
+
+# Reusable envelope for a nested step inside a composite (sequence/select/
+# conditional). The loader recurses into those to validate each child against its
+# own registered fragment, so here we only assert the common shape.
+_NESTED_STEP = {"type": "object", "required": ["type", "id"], "properties": {
+    "type": {"type": "string", "minLength": 1}, "id": {"type": "string", "minLength": 1},
+}}
 
 
 class _Registry:
@@ -137,6 +158,74 @@ def _drop_empty_flags(command: list[str]) -> list[str]:
 # Builtin registration
 # ---------------------------------------------------------------------------
 
+# Schema fragment per builtin step type, co-located with the builders above.
+# `id` and `type` are common to every step; each fragment adds its own fields.
+_KEY_PATH = {"oneOf": [
+    {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1},
+    {"type": "string", "minLength": 1},
+]}
+_ID = {"type": "string", "minLength": 1}
+_BUILTIN_STEP_SCHEMAS: dict[str, dict[str, Any]] = {
+    "shell": {"type": "object", "additionalProperties": False,
+        "required": ["type", "id", "command"], "properties": {
+            "type": {"const": "shell"}, "id": _ID,
+            "command": {"oneOf": [{"type": "string", "minLength": 1},
+                {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1}]},
+            "timeout": {"type": "integer", "minimum": 1, "maximum": 600},
+            "dry-run": {"type": "boolean"}, "cwd": {"type": "string", "minLength": 1},
+            "env": {"type": "object", "additionalProperties": {"type": "string"}},
+            "platform": {"type": "object"},
+            "compensate-command": {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1},
+            "shell": {"type": "boolean"}}},
+    "callable": {"type": "object", "additionalProperties": False,
+        "required": ["type", "id", "fn"], "properties": {
+            "type": {"const": "callable"}, "id": _ID, "fn": {"type": "string", "minLength": 1},
+            "dry-run": {"type": "boolean"}}},
+    "sequence": {"type": "object", "additionalProperties": False,
+        "required": ["type", "id", "steps"], "properties": {
+            "type": {"const": "sequence"}, "id": _ID,
+            "steps": {"type": "array", "items": _NESTED_STEP, "minItems": 1},
+            "fail-fast": {"type": "boolean"}, "compensate-on-failure": {"type": "boolean"}}},
+    "confirm": {"type": "object", "additionalProperties": False,
+        "required": ["type", "id", "prompt"], "properties": {
+            "type": {"const": "confirm"}, "id": _ID, "prompt": {"type": "string", "minLength": 1},
+            "default": {"type": "string"}}},
+    "select": {"type": "object", "additionalProperties": False,
+        "required": ["type", "id", "select", "variants"], "properties": {
+            "type": {"const": "select"}, "id": _ID, "select": {"type": "string", "minLength": 1},
+            "variants": {"type": "object", "additionalProperties": _NESTED_STEP},
+            "fallback": {"type": "string", "minLength": 1}}},
+    "conditional": {"type": "object", "additionalProperties": False,
+        "required": ["type", "id", "condition-key", "when-true"], "properties": {
+            "type": {"const": "conditional"}, "id": _ID, "condition-key": {"type": "string", "minLength": 1},
+            "when-true": _NESTED_STEP, "when-false": _NESTED_STEP}},
+    "config-set": {"type": "object", "additionalProperties": False,
+        "required": ["type", "id", "path", "key-path", "value"], "properties": {
+            "type": {"const": "config-set"}, "id": _ID, "path": {"type": "string", "minLength": 1},
+            "key-path": _KEY_PATH, "value": True}},
+    "config-remove": {"type": "object", "additionalProperties": False,
+        "required": ["type", "id", "path", "key-path"], "properties": {
+            "type": {"const": "config-remove"}, "id": _ID, "path": {"type": "string", "minLength": 1},
+            "key-path": _KEY_PATH}},
+    "write-file": {"type": "object", "additionalProperties": False,
+        "required": ["type", "id", "path"], "properties": {
+            "type": {"const": "write-file"}, "id": _ID, "path": {"type": "string", "minLength": 1},
+            "content": {"type": "string"}, "create-parents": {"type": "boolean"}}},
+    "download": {"type": "object", "additionalProperties": False,
+        "required": ["type", "id", "base-url", "dest-dir", "files"], "properties": {
+            "type": {"const": "download"}, "id": _ID, "base-url": {"type": "string", "minLength": 1},
+            "dest-dir": {"type": "string", "minLength": 1},
+            "files": {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1},
+            "optional-files": {"type": "array", "items": {"type": "string", "minLength": 1}},
+            "timeout": {"type": "integer", "minimum": 1, "maximum": 600}}},
+    "managed-block": {"type": "object", "additionalProperties": False,
+        "required": ["type", "id", "path", "block-id"], "properties": {
+            "type": {"const": "managed-block"}, "id": _ID, "path": {"type": "string", "minLength": 1},
+            "block-id": {"type": "string", "minLength": 1}, "content": {"type": "string"},
+            "comment-prefix": {"type": "string"}}},
+}
+
+
 def _register_builtins() -> None:
     """Register built-in step types idempotently."""
     _REGISTRY.register("shell", _build_shell)
@@ -146,7 +235,9 @@ def _register_builtins() -> None:
     _REGISTRY.register("select", _build_select)
     _REGISTRY.register("conditional", _build_conditional)
     _REGISTRY.register("config-set", _build_config_set)
+    _REGISTRY.register("config-remove", _build_config_remove)
     _REGISTRY.register("write-file", _build_write_file)
+    _REGISTRY.register("download", _build_download)
     _REGISTRY.register("managed-block", _build_managed_block)
 
 
@@ -293,6 +384,59 @@ def _build_config_set(data: dict[str, Any], params: dict[str, str] | None = None
     )
 
 
+def _build_config_remove(data: dict[str, Any], params: dict[str, str] | None = None) -> ConfigRemoveStep:
+    kp = data.get("key_path")
+    if isinstance(kp, str):
+        key_path = tuple(kp.split("."))
+    elif kp is not None:
+        key_path = tuple(kp)
+    else:
+        raise _step_error(1, "config-remove step missing 'key_path'")
+
+    path = data["path"]
+    if params is not None:
+        path = strict_substitute(path, params, f"step.{data.get('id', 'config-remove')}.path")
+        key_path = tuple(
+            strict_substitute(seg, params, f"step.{data.get('id', 'config-remove')}.key_path")
+            for seg in key_path
+        )
+
+    return ConfigRemoveStep(
+        id=data.get("id", "config-remove"),
+        path=path,
+        key_path=key_path,
+        registry=data.get("registry"),
+        recipe_id=data.get("recipe_id"),
+    )
+
+
+def _build_download(data: dict[str, Any], params: dict[str, str] | None = None) -> DownloadStep:
+    base_url = data["base_url"]
+    dest_dir = data["dest_dir"]
+    files = list(data.get("files", []))
+    optional_files = list(data.get("optional_files", []))
+
+    if params is not None:
+        base_url = strict_substitute(base_url, params, f"step.{data.get('id', 'download')}.base_url")
+        dest_dir = strict_substitute(dest_dir, params, f"step.{data.get('id', 'download')}.dest_dir")
+        files = [strict_substitute(f, params, f"step.{data.get('id', 'download')}.files") for f in files]
+        optional_files = [
+            strict_substitute(f, params, f"step.{data.get('id', 'download')}.optional_files")
+            for f in optional_files
+        ]
+
+    return DownloadStep(
+        id=data.get("id", "download"),
+        base_url=base_url,
+        files=tuple(files),
+        dest_dir=dest_dir,
+        optional_files=tuple(optional_files),
+        timeout=data.get("timeout", 30),
+        registry=data.get("registry"),
+        recipe_id=data.get("recipe_id"),
+    )
+
+
 def _build_write_file(data: dict[str, Any], params: dict[str, str] | None = None) -> WriteFileStep:
     content = data.get("content", "")
     if params is not None and content:
@@ -333,28 +477,53 @@ for _t, _b in {
     "select": _build_select,
     "conditional": _build_conditional,
     "config-set": _build_config_set,
+    "config-remove": _build_config_remove,
     "write-file": _build_write_file,
+    "download": _build_download,
     "managed-block": _build_managed_block,
 }.items():
     _builders[_t] = _b
+
+_step_schemas.update(_BUILTIN_STEP_SCHEMAS)
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
-def register_step_type(type_name: str, constructor: Callable[[dict[str, Any]], Any]) -> None:
-    """Register a step type for the factory. Raises on duplicate."""
+def register_step_type(
+    type_name: str,
+    constructor: Callable[[dict[str, Any]], Any],
+    *,
+    schema: dict[str, Any] | None = None,
+    accepts_params: bool = False,
+) -> None:
+    """Register a step type for the factory. Raises on duplicate.
+
+    ``schema`` is the JSON-schema fragment for this step's fields, used by the
+    recipe loader to validate the step (no central hard-coded type list). Set
+    ``accepts_params=True`` when the builder takes a ``params`` mapping for
+    build-time ``{KEY}`` substitution.
+    """
     if type_name in _builders:
         raise _step_error(1, f"duplicate step type {type_name!r}")
     _builders[type_name] = constructor
     _REGISTRY.register(type_name, constructor)
+    if schema is not None:
+        _step_schemas[type_name] = schema
+    if accepts_params:
+        _params_accepting_types.add(type_name)
 
 
-_PARAMS_ACCEPTING_TYPES = frozenset({
+def step_schema(type_name: str) -> dict[str, Any] | None:
+    """Return the registered JSON-schema fragment for a step type, or None."""
+    return _step_schemas.get(type_name)
+
+
+_params_accepting_types: set[str] = {
     "shell", "sequence", "select", "conditional",
-    "config-set", "write-file", "managed-block",
-})
+    "config-set", "config-remove", "write-file", "download", "managed-block",
+}
 
 
 def build_step(data: dict[str, Any], params: dict[str, str] | None = None) -> Any:
@@ -378,7 +547,7 @@ def build_step(data: dict[str, Any], params: dict[str, str] | None = None) -> An
         registered = sorted(_builders.keys())
         raise _step_error(1, f"unknown step type {step_type!r}; registered: {registered}")
 
-    if params is not None and step_type in _PARAMS_ACCEPTING_TYPES:
+    if params is not None and step_type in _params_accepting_types:
         return builder(data, params)  # type: ignore[call-arg]
     return builder(data)
 
