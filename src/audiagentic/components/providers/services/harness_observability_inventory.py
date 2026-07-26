@@ -481,11 +481,9 @@ def is_eligible_transport_observation_publisher(
         platform_evidence includes the target platform (or is empty).
     """
     if platform is None:
-        from audiagentic.components.providers.services.platform_target import (
-            detect_platform_triple,
-        )
+        from audiagentic.runtime.system.platform import release_platform_name
 
-        platform = detect_platform_triple()
+        platform = release_platform_name()
 
     fact = get_harness_surface_capability_fact(provider_id, surface_id)
     if fact is None:

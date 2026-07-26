@@ -145,3 +145,90 @@ def test_default_template_is_legacy_one_shot() -> None:
     assert _args(decl, context={"prompt": "p", "model": "m", "approval-mode": "yolo"}) == [
         "--yolo", "-m", "m", "p",
     ]
+
+
+# --- MA35 stdin-fallback rule (provider-agnostic) ---
+
+@pytest.fixture(autouse=True)
+def _fake_run_streaming_command(monkeypatch):
+    """Mock run_streaming_command for make_cli_runner tests."""
+    captured = []
+
+    def _capture(command, *, input_text=None, **kwargs):
+        captured.append({"command": list(command), "input_text": input_text})
+
+        class _Result:
+            returncode = 0
+            stdout = "ok"
+            stderr = ""
+        return _Result()
+
+    monkeypatch.setattr(
+        "audiagentic.components.providers.adapters.base_runner.run_streaming_command",
+        _capture,
+    )
+    return captured
+
+
+def test_prompt_in_template_goes_to_argv(_fake_run_streaming_command):
+    """A template listing {prompt} puts the prompt in argv, input_text=None."""
+    from audiagentic.components.providers.adapters.base_runner import (
+        make_runner_from_execution,
+    )
+
+    execution = {
+        "mode": "cli",
+        "executable": "x",
+        "aliases": ["x"],
+        "args-template": ["--print", "{model-flags}", "{prompt}"],
+        "model-flag": "--model",
+    }
+    runner = make_runner_from_execution("fake", execution)
+
+    runner(
+        {"provider-id": "fake", "model-id": "m1", "prompt-body": "Hello\nWorld"},
+        {},
+    )
+
+    assert len(_fake_run_streaming_command) == 1
+    call = _fake_run_streaming_command[0]
+    # Prompt is in argv
+    assert any("Hello" in arg for arg in call["command"])
+    # input_text is None when prompt goes via argv
+    assert call["input_text"] is None
+
+
+def test_prompt_absent_from_template_goes_to_stdin(_fake_run_streaming_command):
+    """A template omitting {prompt} pipes the prompt via stdin (MA35).
+
+    The prompt reaches the process through input_text, not argv — no separate
+    delivery flag needed.
+    """
+    from audiagentic.components.providers.adapters.base_runner import (
+        make_runner_from_execution,
+    )
+
+    execution = {
+        "mode": "cli",
+        "executable": "x",
+        "aliases": ["x"],
+        "args-template": ["--print", "{model-flags}"],  # {prompt} absent
+        "model-flag": "--model",
+    }
+    runner = make_runner_from_execution("fake", execution)
+
+    runner(
+        {"provider-id": "fake", "model-id": "m1", "prompt-body": "Hello\nWorld"},
+        {},
+    )
+
+    assert len(_fake_run_streaming_command) == 1
+    call = _fake_run_streaming_command[0]
+    # Prompt is NOT in argv
+    for arg in call["command"]:
+        assert "Hello" not in arg, f"Prompt leaked into argv: {call['command']}"
+        assert "World" not in arg, f"Prompt leaked into argv: {call['command']}"
+    # Prompt IS in input_text (stdin pipe)
+    assert call["input_text"] is not None
+    assert "Hello" in call["input_text"]
+    assert "World" in call["input_text"]

@@ -16,7 +16,7 @@ from typing import Any
 from audiagentic.foundation.config.refs import resolve_ref
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.paths.names import get_package_providers_config_dir
-from audiagentic.foundation.toolchains.managed_config import (
+from audiagentic.foundation.toolchains.config.managed_config import (
     REMOTE_CAPABILITY,
     ManagedConfigSpec,
 )

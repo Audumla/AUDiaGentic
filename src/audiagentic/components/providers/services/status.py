@@ -43,7 +43,7 @@ def _model_config_status(provider_id: str, descriptor, project_root: Path) -> di
         "managed-ids": [],
     }
     if spec is not None:
-        from audiagentic.foundation.toolchains.managed_config import (
+        from audiagentic.foundation.toolchains.config.managed_config import (
             resolve_managed_config_path,
         )
 

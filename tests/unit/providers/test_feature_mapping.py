@@ -12,7 +12,7 @@ from audiagentic.components.providers.descriptors.feature_mapping import (
 )
 from audiagentic.foundation.features import registry as feature_registry
 from audiagentic.foundation.features.base import FEATURE_SCOPE_IMPLEMENTATION
-from audiagentic.foundation.toolchains.managed_config import ManagedConfigSpec
+from audiagentic.foundation.toolchains.config.managed_config import ManagedConfigSpec
 
 
 def _provider(provider_id: str = "x", **kwargs) -> ProviderDescriptor:

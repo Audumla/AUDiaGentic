@@ -14,7 +14,7 @@ from audiagentic.components.providers.contracts.plugin_entry import (
     PluginEntryRequest,
     PluginEntryResult,
 )
-from audiagentic.foundation.toolchains.managed_config import (
+from audiagentic.foundation.toolchains.config.managed_config import (
     ManagedFragmentRegistry,
     resolve_managed_config_path,
     sync_managed_config,

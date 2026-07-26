@@ -10,8 +10,8 @@ from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.mcp import McpServerEntry
-from audiagentic.foundation.toolchains.config_patcher import ConfigPatcher
-from audiagentic.foundation.toolchains.managed_config import (
+from audiagentic.foundation.toolchains.config.config_patcher import ConfigPatcher
+from audiagentic.foundation.toolchains.config.managed_config import (
     ManagedConfigSpec,
     reload_managed_config,
     resolve_managed_config_path,

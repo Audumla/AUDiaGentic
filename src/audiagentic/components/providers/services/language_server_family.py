@@ -10,7 +10,7 @@ from audiagentic.components.providers.contracts.language_server_projection impor
     LanguageServerProjectionResult,
 )
 from audiagentic.components.providers.descriptors.registry import get_descriptor
-from audiagentic.foundation.toolchains.managed_config import (
+from audiagentic.foundation.toolchains.config.managed_config import (
     apply_managed_config_remove,
     apply_managed_config_write,
     resolve_managed_config_path,

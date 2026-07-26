@@ -864,7 +864,7 @@ def _serialize_config_surface(kind: str, spec, project_root: Path) -> dict[str, 
     or secret refs (MO11 step 3). Home prefixes redact to ``~``."""
     if spec is None:
         return {"kind": kind, "configured": False}
-    from audiagentic.foundation.toolchains.managed_config import (
+    from audiagentic.foundation.toolchains.config.managed_config import (
         resolve_managed_config_path,
     )
 

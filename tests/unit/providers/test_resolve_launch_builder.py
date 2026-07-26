@@ -1,9 +1,10 @@
-"""HA04: intent-based launch dispatch.
+"""HA04: open-ended, name-based launch dispatch.
 
-The caller picks an INTENT (execute | interactive | agent); the provider's
-builder owns which transports/channels it assembles. The descriptor's declared
-``launches`` (intent -> channel surface by role) is the source of truth for
-whether an intent is supported.
+The caller picks a launch profile *by name* (not a closed enum); the
+provider's builder owns which transports/channels it assembles. The
+descriptor's declared ``launches`` (name -> channel surface by role) is the
+source of truth for whether a profile is supported -- an unrecognized name is
+simply unsupported, never an error.
 """
 from __future__ import annotations
 
@@ -38,10 +39,9 @@ def test_execute_resolves_a_runner() -> None:
     assert resolve_launch_builder("qwen", "execute") is not None
 
 
-def test_unknown_intent_raises() -> None:
-    with pytest.raises(AudiaGenticError) as exc:
-        resolve_launch_builder("pi", "telepathy")
-    assert exc.value.code == "VAL-EXEC-004"
+def test_unrecognized_profile_name_is_unsupported_not_an_error() -> None:
+    # "telepathy" isn't in pi's declared launches -- unsupported, no exception.
+    assert resolve_launch_builder("pi", "telepathy") is None
 
 
 def test_undeclared_intent_is_unsupported(monkeypatch) -> None:
@@ -73,6 +73,24 @@ def test_undeclared_launches_falls_back_to_probing(monkeypatch) -> None:
 
     monkeypatch.setattr(exec_mod, "_declared_launches", lambda pid: {})
     assert resolve_launch_builder("pi", "interactive") is not None
+
+
+def test_new_profile_name_uses_convention_no_registry_edit_needed(monkeypatch) -> None:
+    """A launch profile with no _LAUNCH_BUILDERS entry is looked up by
+    convention -- adapters/<id>/<name>.py::build_launch -- no dict edit."""
+    from audiagentic.components.providers.services import execution as exec_mod
+
+    monkeypatch.setattr(exec_mod, "_declared_launches", lambda pid: {"benchmark": {}})
+    calls: list[tuple[str, str, str]] = []
+
+    def _fake_hook(pid, sub, fn):
+        calls.append((pid, sub, fn))
+        return lambda: "builder"
+
+    monkeypatch.setattr(exec_mod, "_adapter_hook", _fake_hook)
+    builder = resolve_launch_builder("pi", "benchmark")
+    assert builder is not None
+    assert calls == [("pi", "benchmark", "build_launch")]
 
 
 def test_pi_opencode_declare_the_three_intents_with_channel_surfaces() -> None:

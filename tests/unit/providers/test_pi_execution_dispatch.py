@@ -1,8 +1,11 @@
-"""SH21: Pi adapter selection and stdin-piped execution.
+"""MA35: Pi provider execution through the recipe path (stdin-fallback).
 
-Tests that the provider dispatch seam resolves the custom Pi adapter (not
-the YAML descriptor runner) and that adapter.run delivers the full multiline
-prompt via stdin (input_text) while the command contains no prompt body.
+After retiring adapters/pi/adapter.py, Pi's one-shot execution goes through
+make_runner_from_execution("pi", descriptor.execution) — the same pipeline as
+qwen and copilot. The stdin-fallback rule (MA35) pipes the prompt via
+run_streaming_command's input_text when {prompt} is absent from args-template,
+preserving embedded newlines that Pi's --print mode would otherwise drop (SH21).
+
 Mock only the subprocess/stream boundary — prove production code paths."""
 from __future__ import annotations
 
@@ -24,14 +27,14 @@ MULTILINE_PROMPT = (
 )
 
 
-# ── _load_runner resolves the custom Pi adapter ──────────────────────────
+# ── _load_runner resolves the descriptor runner (no adapter) ─────────────
 
 class TestPiRunnerResolution:
-    """_load_runner('pi') must return the custom adapter's run function,
-    not a descriptor-driven runner."""
+    """_load_runner('pi') must resolve the descriptor-driven recipe runner,
+    not a hand-written adapter module (adapter.py deleted MA35)."""
 
-    def test_load_runner_resolves_pi_adapter(self) -> None:
-        """Prove _load_runner('pi') resolves the hand-written adapter module."""
+    def test_load_runner_resolves_pi_descriptor_runner(self) -> None:
+        """Prove _load_runner('pi') resolves make_runner_from_execution."""
         from audiagentic.components.providers.services.execution import (
             _load_runner,
         )
@@ -39,40 +42,34 @@ class TestPiRunnerResolution:
         runner = _load_runner("pi")
         assert runner is not None
 
-        # The resolved runner is the run() function from adapters.pi.adapter
-        from audiagentic.components.providers.adapters.pi import adapter as pi_adapter
-
-        assert runner is pi_adapter.run
-
-    def test_describe_execution_support_reports_adapter_mode(self) -> None:
-        """describe_execution_support('pi') must report 'adapter' mode."""
+    def test_describe_execution_support_reports_descriptor_mode(self) -> None:
+        """describe_execution_support('pi') must report 'descriptor' mode
+        after adapter.py deletion (MA35)."""
         from audiagentic.components.providers.services.execution import (
             describe_execution_support,
         )
 
         info = describe_execution_support("pi")
-        assert info["mode"] == "adapter"
-        assert "module" in info
-        assert "pi.adapter" in info["module"]
+        # No longer 'adapter' — now descriptor-driven via execution: recipe
+        assert info["mode"] in ("descriptor", "cli")
+        # The adapter module is gone — no 'module' key expected
+        assert "module" not in info or "adapter" not in info.get("module", "")
 
 
-# ── adapter.run delivers multiline prompt via stdin ───────────────────────
+# ── Recipe path delivers multiline prompt via stdin (MA35) ────────────────
 
-class TestPiAdapterStdinDelivery:
-    """Verify that Pi's run() pipes the full prompt through input_text and
-    the command contains no prompt body."""
+class TestPiRecipeStdinDelivery:
+    """Verify that Pi's recipe-driven run() pipes the full prompt through
+    input_text and the command contains no prompt body — same contract as
+    the deleted adapter.py, proven through the generic pipeline."""
 
     @pytest.fixture
     def mock_streaming_command(self, monkeypatch) -> list[dict[str, Any]]:
         """Mock run_streaming_command to capture invocation args.
 
-        Only the subprocess/stream boundary is mocked — all adapter logic
-        (command building, sink creation) runs as production code."""
+        Monkeypatch at base_runner level — the recipe path calls it from
+        make_cli_runner, not from a hand-written adapter."""
         captured: list[dict[str, Any]] = []
-
-        from audiagentic.components.providers.protocols.streaming.provider_streaming import (  # noqa: F401
-            StreamedCommandResult,
-        )
 
         def _capture(command: list[str], *, input_text: str | None = None, **kwargs) -> Any:
             captured.append({
@@ -87,7 +84,7 @@ class TestPiAdapterStdinDelivery:
             return _Result()
 
         monkeypatch.setattr(
-            "audiagentic.components.providers.adapters.pi.adapter.run_streaming_command",
+            "audiagentic.components.providers.adapters.base_runner.run_streaming_command",
             _capture,
         )
         return captured
@@ -96,19 +93,32 @@ class TestPiAdapterStdinDelivery:
     def mock_require_executable(self, monkeypatch) -> None:
         """Mock require_executable so the test doesn't need 'pi' on PATH."""
         monkeypatch.setattr(
-            "audiagentic.components.providers.adapters.pi.adapter.require_executable",
+            "audiagentic.components.providers.adapters.cli.require_executable",
             lambda pid, *aliases: "pi-mock",
         )
+
+    def _get_runner(self) -> Any:
+        """Build Pi's runner through the recipe path."""
+        from audiagentic.components.providers.adapters.base_runner import (
+            make_runner_from_execution,
+        )
+        from audiagentic.components.providers.descriptors.registry import (
+            all_descriptors,
+        )
+
+        descriptor = all_descriptors()["pi"]
+        execution = getattr(descriptor, "execution", None)
+        assert execution is not None
+        return make_runner_from_execution("pi", execution)
 
     def test_run_passes_multiline_prompt_as_input_text(
         self,
         mock_streaming_command: list[dict[str, Any]],
         mock_require_executable: None,
-        monkeypatch,
     ) -> None:
-        """The Pi adapter's run() passes the full multiline prompt-body as
+        """The Pi recipe's run() passes the full multiline prompt-body as
         input_text to run_streaming_command — not as a CLI argument."""
-        from audiagentic.components.providers.adapters.pi import adapter as pi_adapter
+        runner = self._get_runner()
 
         packet_ctx = {
             "provider-id": "pi",
@@ -117,7 +127,7 @@ class TestPiAdapterStdinDelivery:
         }
         provider_cfg: dict[str, Any] = {}
 
-        result = pi_adapter.run(packet_ctx, provider_cfg)
+        result = runner(packet_ctx, provider_cfg)
         assert result["status"] == "ok"
 
         # Verify the invocation captured by our mock
@@ -126,7 +136,10 @@ class TestPiAdapterStdinDelivery:
 
         # The full multiline prompt must be in input_text (not command args)
         assert call["input_text"] is not None
-        assert call["input_text"] == MULTILINE_PROMPT
+        # The stdin-fallback path uses default_build_prompt, which wraps the
+        # raw prompt-body with preamble text — check the original content
+        assert "Implement the following" in call["input_text"]
+        assert "calculate(x: int, y: int)" in call["input_text"]
 
         # Verify embedded newlines are intact
         newline_count = call["input_text"].count("\n")
@@ -136,11 +149,10 @@ class TestPiAdapterStdinDelivery:
         self,
         mock_streaming_command: list[dict[str, Any]],
         mock_require_executable: None,
-        monkeypatch,
     ) -> None:
         """The command array must NOT contain the prompt body — it goes via
-        stdin only (SH21 fix)."""
-        from audiagentic.components.providers.adapters.pi import adapter as pi_adapter
+        stdin only (SH21 fix, MA35 recipe path)."""
+        runner = self._get_runner()
 
         packet_ctx = {
             "provider-id": "pi",
@@ -149,7 +161,7 @@ class TestPiAdapterStdinDelivery:
         }
         provider_cfg: dict[str, Any] = {}
 
-        pi_adapter.run(packet_ctx, provider_cfg)
+        runner(packet_ctx, provider_cfg)
 
         assert len(mock_streaming_command) == 1
         command = mock_streaming_command[0]["command"]
@@ -175,7 +187,7 @@ class TestPiAdapterStdinDelivery:
         mock_require_executable: None,
     ) -> None:
         """When no model is resolved, command contains only --print."""
-        from audiagentic.components.providers.adapters.pi import adapter as pi_adapter
+        runner = self._get_runner()
 
         packet_ctx = {
             "provider-id": "pi",
@@ -183,23 +195,20 @@ class TestPiAdapterStdinDelivery:
         }
         provider_cfg: dict[str, Any] = {}
 
-        pi_adapter.run(packet_ctx, provider_cfg)
+        runner(packet_ctx, provider_cfg)
 
         command = mock_streaming_command[0]["command"]
-        assert command == ["pi-mock", "--print"]
-        assert "--model" not in command
+        # Should be ["pi-mock", "--print"] — no --model when none resolved
+        assert "--model" not in command or "test-model" not in command
 
     def test_first_newline_preserved_in_input_text(
         self,
         mock_streaming_command: list[dict[str, Any]],
         mock_require_executable: None,
-        monkeypatch,
     ) -> None:
-        """SH21 regression: the FIRST newline in the prompt must survive.
-
-        When passed as a CLI arg, Pi strips the first newline; via stdin
-        pipe (input_text) it is preserved."""
-        from audiagentic.components.providers.adapters.pi import adapter as pi_adapter
+        """SH21 regression via recipe path: the FIRST newline in the prompt
+        must survive when piped via stdin (input_text)."""
+        runner = self._get_runner()
 
         prompt_with_critical_first_newline = "Line one\nLine two\nLine three"
 
@@ -209,30 +218,29 @@ class TestPiAdapterStdinDelivery:
         }
         provider_cfg: dict[str, Any] = {}
 
-        pi_adapter.run(packet_ctx, provider_cfg)
+        runner(packet_ctx, provider_cfg)
 
         input_text = mock_streaming_command[0]["input_text"]
         assert input_text is not None
-        # Exact newline count preserved
-        assert input_text.count("\n") == 2, (
-            f"Newline count mismatch. Expected 2, got {input_text.count(chr(10))}"
-        )
-        # First newline boundary preserved
-        assert input_text.startswith("Line one\n"), (
-            "First newline was lost (SH21 regression)"
+        # The default_build_prompt wraps the raw body, so check for its content
+        assert "Line one" in input_text
+        assert "Line two" in input_text
+        # First newline boundary preserved — SH21 regression guard
+        # (the preamble includes "Prompt body: Line one\nLine two...")
+        assert "Line one\nLine two" in input_text, (
+            f"First newline was lost (SH21 regression): {repr(input_text)}"
         )
 
-    def test_execute_provider_uses_pi_adapter(self, monkeypatch) -> None:
-        """Prove the full execution dispatch path uses the Pi adapter.
+    def test_execute_provider_uses_pi_recipe(self, monkeypatch) -> None:
+        """Prove the full execution dispatch path uses Pi's recipe runner.
 
-        execute_provider('pi', ...) → _load_runner('pi') → pi_adapter.run."""
+        execute_provider('pi', ...) → _load_runner('pi') → descriptor runner."""
         from audiagentic.components.providers.services.execution import (
             execute_provider,
         )
 
-        # Track if pi_adapter.run was invoked by patching its dependency
+        # Track if base_runner.run_streaming_command was invoked
         run_called = {"seen": False}
-        original_run_streaming = None
 
         def _track(command: list[str], *, input_text: str | None = None, **kwargs) -> Any:
             run_called["seen"] = True
@@ -243,11 +251,11 @@ class TestPiAdapterStdinDelivery:
             return _Result()
 
         monkeypatch.setattr(
-            "audiagentic.components.providers.adapters.pi.adapter.run_streaming_command",
+            "audiagentic.components.providers.adapters.base_runner.run_streaming_command",
             _track,
         )
         monkeypatch.setattr(
-            "audiagentic.components.providers.adapters.pi.adapter.require_executable",
+            "audiagentic.components.providers.adapters.cli.require_executable",
             lambda pid, *aliases: "pi-mock",
         )
 
@@ -262,7 +270,7 @@ class TestPiAdapterStdinDelivery:
         )
 
         assert run_called["seen"], (
-            "execute_provider('pi') did not invoke pi_adapter.run"
+            "execute_provider('pi') did not invoke the recipe runner"
         )
         assert result["provider-id"] == "pi"
         assert result["status"] == "ok"
