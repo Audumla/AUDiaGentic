@@ -9,7 +9,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from audiagentic.runtime.harness import build_runtime_sync, refresh_harness_config_if_installed
+from audiagentic.components.providers.contracts.session_status import (
+    ProviderSessionInfo,
+)
 
 from . import session_embedded_rig, session_runtime_status
 
@@ -19,19 +21,31 @@ _UPDATE_SCOPE_REGISTRY: dict[str, Callable[..., Any]] = {
 }
 
 
+def _resolve_session_info(project_root: Path) -> ProviderSessionInfo:
+    """Resolve provider session info from runtime capability.
+
+    RU02: runtime resolves, session consumes — no rig queries in product components.
+    """
+    from audiagentic.foundation.capabilities import get_harness_status
+
+    hs = get_harness_status()
+    return hs["resolve_session_info"](project_root)
+
+
 def status(project_root: Path) -> dict[str, Any]:
     """Return current harness/session status."""
+    ctx = _resolve_session_info(project_root)
     try:
-        model = session_runtime_status.model_info()
+        model = session_runtime_status.model_info(ctx)
     except Exception as exc:  # noqa: BLE001 - status should remain inspectable.
         model = {
             "configured": False,
             "error": str(exc),
         }
     return {
-        "versions": session_runtime_status.versions(),
+        "versions": session_runtime_status.versions(ctx),
         "model": model,
-        "endpoint": session_runtime_status.endpoint_info(),
+        "endpoint": session_runtime_status.endpoint_info(ctx),
         "auto_update": _auto_update_status(),
         "environment": {
             "repo_root": str(project_root),
@@ -44,7 +58,10 @@ def status(project_root: Path) -> dict[str, Any]:
 
 def config() -> dict[str, Any]:
     """Return current harness config and materialized model metadata."""
-    return session_runtime_status.harness_config()
+    from pathlib import Path
+
+    ctx = _resolve_session_info(Path.cwd())
+    return session_runtime_status.harness_config(ctx)
 
 
 def set_auto_update(enabled: bool) -> dict[str, Any]:
@@ -56,37 +73,15 @@ def set_auto_update(enabled: bool) -> dict[str, Any]:
 
 def refresh_harness_config(project_root: Path) -> dict[str, Any]:
     """Regenerate harness config and return runtime sync instructions."""
-    refreshed = refresh_harness_config_if_installed(project_root, reason="mcp-refresh-tool")
+    from audiagentic.foundation.capabilities import get_harness_status
+
+    hs = get_harness_status()
+    refreshed = hs["refresh_harness_config_if_installed"](project_root, reason="mcp-refresh-tool")
     return {
         "ok": refreshed,
         "refreshed": refreshed,
-        "sync": build_runtime_sync(reason="mcp-refresh-tool"),
+        "sync": hs["build_runtime_sync"](reason="mcp-refresh-tool"),
     }
-
-
-def diagnose_mcp_servers(project_root: Path, *, timeout: float = 5.0) -> dict[str, Any]:
-    """Preflight-probe every configured MCP server for the active harness.
-
-    Spawns each configured server and completes the MCP ``initialize``
-    handshake directly (see foundation.mcp.diagnostics) -- this does not
-    instrument a live harness session (AUDiaGentic never holds that
-    connection), it answers whether each configured server would start right
-    now, with how long it took and why if it didn't.
-    """
-    from audiagentic.foundation.mcp.diagnostics import probe_mcp_server
-    from audiagentic.runtime.harness import mcp_config_path, read_mcp_config
-
-    entries = read_mcp_config(mcp_config_path(project_root))
-    results = []
-    for name, entry in sorted(entries.items()):
-        if entry.is_remote:
-            continue
-        command = [entry.command, *entry.args]
-        env = {**os.environ, **entry.env} if entry.env else None
-        results.append(
-            probe_mcp_server(name, command, cwd=project_root, env=env, timeout=timeout)
-        )
-    return {"results": results}
 
 
 async def update_rig(*, scope: str = "local") -> dict[str, Any]:
