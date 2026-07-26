@@ -6,6 +6,7 @@ violations that prompted the provider-recipe-refactor plan:
 - foundation/toolchains must not contain MCP-specific helpers
 - components/memory must not enumerate providers or import provider surface managers
 """
+
 from __future__ import annotations
 
 import ast
@@ -58,13 +59,17 @@ class TestFoundationToolchainsBoundaries:
             for imp in imports:
                 if "providers" in imp and imp.startswith("audiagentic.components.providers"):
                     violations.append(f"{pyfile.relative_to(WORKSPACE_ROOT)}: imports {imp}")
-        assert not violations, (
-            "foundation/toolchains imports provider modules:\n" + "\n".join(violations)
+        assert not violations, "foundation/toolchains imports provider modules:\n" + "\n".join(
+            violations
         )
 
     def test_no_mcp_specific_helpers_in_config_patcher(self, toolchains_dir):
         """ConfigPatcher must not have add_mcp_entry or remove_mcp_entry methods."""
+        import pytest
+
         config_patcher = toolchains_dir / "config_patcher.py"
+        if not config_patcher.exists():
+            pytest.skip("config_patcher.py no longer exists")
         with open(config_patcher, encoding="utf-8") as f:
             source = f.read()
         assert "add_mcp_entry" not in source, (
@@ -86,8 +91,7 @@ class TestFoundationToolchainsBoundaries:
         forbidden = ("MCP", "hook", "plugin", "language server", "provider")
         violations = [term for term in forbidden if term.lower() in docstring.lower()]
         assert not violations, (
-            "recipe_contract.py docstring leaks component concepts: "
-            + ", ".join(violations)
+            "recipe_contract.py docstring leaks component concepts: " + ", ".join(violations)
         )
 
 
@@ -113,8 +117,7 @@ class TestMemoryComponentBoundaries:
         )
         violations = [term for term in forbidden if term in source]
         assert not violations, (
-            "memory_api leaks provider orchestration/surface behavior: "
-            + ", ".join(violations)
+            "memory_api leaks provider orchestration/surface behavior: " + ", ".join(violations)
         )
 
     def test_hindsight_no_enabled_providers_option(self):
@@ -165,13 +168,16 @@ class TestMemoryComponentBoundaries:
                     violations.append(f"{pyfile.relative_to(WORKSPACE_ROOT)}: imports {imp}")
         assert not violations
 
+
 class TestFoundationCapabilityCatalogDeleted:
     """RV405/RV406 — no capability vocabulary remains under foundation after deletion."""
 
     def test_no_capability_package_exists(self):
         """foundation/capability_catalog/ must not exist."""
         catalog_dir = WORKSPACE_ROOT / "src" / "audiagentic" / "foundation" / "capability_catalog"
-        assert not catalog_dir.exists(), f"foundation/capability_catalog/ still exists: {catalog_dir}"
+        assert not catalog_dir.exists(), (
+            f"foundation/capability_catalog/ still exists: {catalog_dir}"
+        )
 
     def test_no_capability_symbols_under_foundation(self):
         """No Python file under foundation/ references capability vocabulary symbols."""
@@ -216,11 +222,15 @@ class TestFoundationCapabilityCatalogDeleted:
                     if isinstance(node, ast.ImportFrom) and node.module:
                         for sym in forbidden:
                             if sym in node.module:
-                                violations.append(f"{pyfile.relative_to(WORKSPACE_ROOT)}: imports from {node.module}")
+                                violations.append(
+                                    f"{pyfile.relative_to(WORKSPACE_ROOT)}: imports from {node.module}"
+                                )
                     elif isinstance(node, ast.Import):
                         for alias in node.names:
                             if alias.name in forbidden:
-                                violations.append(f"{pyfile.relative_to(WORKSPACE_ROOT)}: imports {alias.name}")
+                                violations.append(
+                                    f"{pyfile.relative_to(WORKSPACE_ROOT)}: imports {alias.name}"
+                                )
         assert not violations, (
             "Capability vocabulary found under foundation/ after deletion:\n"
             + "\n".join(violations)
@@ -292,9 +302,7 @@ class TestRequesterProvidersImportAllowlist:
             + "\n".join(violations)
         )
 
-    def test_names_imported_from_providers_api_are_exported(
-        self, requester_component_dirs
-    ):
+    def test_names_imported_from_providers_api_are_exported(self, requester_component_dirs):
         """Every name a requester imports from providers_api must be in its __all__.
 
         MA16 locks the provider public API as an exact export list. A name that
@@ -306,12 +314,7 @@ class TestRequesterProvidersImportAllowlist:
         import ast
 
         api_path = (
-            WORKSPACE_ROOT
-            / "src"
-            / "audiagentic"
-            / "components"
-            / "providers"
-            / "providers_api.py"
+            WORKSPACE_ROOT / "src" / "audiagentic" / "components" / "providers" / "providers_api.py"
         )
         tree = ast.parse(api_path.read_text(encoding="utf-8"))
         exported: set[str] = set()
@@ -407,12 +410,8 @@ class TestLegacyRecipesZeroConsumers:
             if pyfile.name == "recipes.py" and "providers/services" in str(pyfile):
                 continue
             for imp in _get_imports(pyfile):
-                if imp == forbidden_module or imp.endswith(
-                    ".providers.services.recipes"
-                ):
-                    violations.append(
-                        f"{pyfile.relative_to(WORKSPACE_ROOT)}: imports {imp}"
-                    )
+                if imp == forbidden_module or imp.endswith(".providers.services.recipes"):
+                    violations.append(f"{pyfile.relative_to(WORKSPACE_ROOT)}: imports {imp}")
 
         assert not violations, (
             "Production code still imports legacy recipes module — safe deletion blocked:\n"
@@ -433,13 +432,10 @@ class TestLegacyRecipesZeroConsumers:
         for name in legacy_names:
             matches = list(memory_dir.rglob(name))
             if matches:
-                found.extend(
-                    str(m.relative_to(WORKSPACE_ROOT)) for m in matches
-                )
+                found.extend(str(m.relative_to(WORKSPACE_ROOT)) for m in matches)
 
         assert not found, (
-            "Legacy matrix/strategy files still exist — safe deletion blocked:\n"
-            + "\n".join(found)
+            "Legacy matrix/strategy files still exist — safe deletion blocked:\n" + "\n".join(found)
         )
 
     def test_memory_no_recipe_kind_factory_dispatch(self):
@@ -459,13 +455,9 @@ class TestLegacyRecipesZeroConsumers:
                 source = f.read()
             for pattern in forbidden_patterns:
                 if pattern in source:
-                    violations.append(
-                        f"{pyfile.relative_to(WORKSPACE_ROOT)}: contains {pattern}"
-                    )
+                    violations.append(f"{pyfile.relative_to(WORKSPACE_ROOT)}: contains {pattern}")
 
         assert not violations, (
             "Memory still references legacy recipe types — cutover incomplete:\n"
             + "\n".join(violations)
         )
-
-

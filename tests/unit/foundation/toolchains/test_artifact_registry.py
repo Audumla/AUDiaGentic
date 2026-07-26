@@ -5,10 +5,10 @@ import json
 import pytest
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.toolchains.artifact_registry import ArtifactRegistry
-from audiagentic.foundation.toolchains.config_patcher import ConfigPatcher
-from audiagentic.foundation.toolchains.config_reader import load_config
-from audiagentic.foundation.toolchains.managed_block import apply_managed_block
+from audiagentic.foundation.toolchains.config.artifact_registry import ArtifactRegistry
+from audiagentic.foundation.toolchains.config.config_patcher import ConfigPatcher
+from audiagentic.foundation.toolchains.config.config_reader import load_config
+from audiagentic.foundation.toolchains.config.managed_block import apply_managed_block
 
 
 def test_corrupt_registry_fails_closed(tmp_path):

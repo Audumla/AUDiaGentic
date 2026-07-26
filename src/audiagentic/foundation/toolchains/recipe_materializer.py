@@ -188,6 +188,9 @@ _KEBAB_TO_SNAKE = {
     "compensate-on-failure": "compensate_on_failure",
     "create-parents": "create_parents",
     "comment-prefix": "comment_prefix",
+    "base-url": "base_url",
+    "dest-dir": "dest_dir",
+    "optional-files": "optional_files",
 }
 
 

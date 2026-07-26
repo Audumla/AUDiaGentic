@@ -4,9 +4,21 @@ from audiagentic.foundation.steps import (
     WriteFileStep,
 )
 
-from .artifact_registry import ArtifactRegistry, PruneReport
-from .config_patcher import ConfigPatcher, OwnedChange
-from .config_reader import UNSET, dump_config, load_config, read_config_value
+from .config.artifact_registry import ArtifactRegistry, PruneReport  # noqa: F401
+from .config.config_patcher import ConfigPatcher, OwnedChange  # noqa: F401
+from .config.config_reader import UNSET, dump_config, load_config, read_config_value  # noqa: F401
+from .config.fragments import FragmentStore, ReconcileResult, reconcile_fragments  # noqa: F401
+from .config.managed_block import (  # noqa: F401
+    BlockChange,
+    apply_managed_block,
+    block_artifact_id,
+    remove_managed_block,
+)
+from .config.managed_config import (  # noqa: F401
+    ManagedConfigSpec,
+    ManagedFragmentRegistry,
+    resolve_managed_config_path,
+)
 from .detect import (  # noqa: F401
     detect_pkg_manager,
     platform_allowed,
@@ -14,16 +26,8 @@ from .detect import (  # noqa: F401
     tool_available,
     uv_available,
 )
-from .fragments import FragmentStore, ReconcileResult, reconcile_fragments
-from .loader import build_step, has_action, raw_step
-from .managed_block import (
-    BlockChange,
-    apply_managed_block,
-    block_artifact_id,
-    remove_managed_block,
-)
-from .managed_config import ManagedConfigSpec, ManagedFragmentRegistry, resolve_managed_config_path
-from .probes import (
+from .loader import build_step, has_action, raw_step  # noqa: F401
+from .probes import (  # noqa: F401
     CommandProbe,
     CompositeHealthCheck,
     ConfigKeyCheck,
@@ -33,7 +37,7 @@ from .probes import (
     check_with_retry,
     safe_command_parts,
 )
-from .recipe_contract import (
+from .recipe_contract import (  # noqa: F401
     CleanupHook,
     ProvisioningRecipe,
     RecipeResult,

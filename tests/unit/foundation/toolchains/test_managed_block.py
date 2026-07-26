@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from audiagentic.foundation.toolchains.managed_block import (
+from audiagentic.foundation.toolchains.config.managed_block import (
     apply_managed_block,
     remove_managed_block,
 )

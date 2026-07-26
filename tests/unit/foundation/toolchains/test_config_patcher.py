@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from audiagentic.foundation.toolchains.config_patcher import ConfigPatcher
-from audiagentic.foundation.toolchains.config_reader import UNSET, load_config
+from audiagentic.foundation.toolchains.config.config_patcher import ConfigPatcher
+from audiagentic.foundation.toolchains.config.config_reader import UNSET, load_config
 
 
 def test_set_key_creates_deep_path_in_empty_file(tmp_path):

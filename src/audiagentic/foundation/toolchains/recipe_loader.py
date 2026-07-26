@@ -179,6 +179,51 @@ class DeclarativeRecipeTemplate:
 # Loader
 # ---------------------------------------------------------------------------
 
+def _nested_step_defs(step: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return child step dicts inside a composite step (sequence/select/conditional)."""
+    children: list[dict[str, Any]] = []
+    steps = step.get("steps")
+    if isinstance(steps, list):
+        children.extend(s for s in steps if isinstance(s, dict))
+    variants = step.get("variants")
+    if isinstance(variants, dict):
+        children.extend(v for v in variants.values() if isinstance(v, dict))
+    for key in ("when-true", "when-false"):
+        child = step.get(key)
+        if isinstance(child, dict):
+            children.append(child)
+    return children
+
+
+def _validate_step_defs(step_defs: Any, label: str, errors: list[str]) -> None:
+    """Validate each step against the JSON-schema fragment its ``type`` registers.
+
+    Foundation builtins and component-registered step types both resolve through
+    ``step_schema``; there is no hard-coded type list in the recipe schema.
+    """
+    from jsonschema import Draft202012Validator
+
+    from audiagentic.foundation.steps.factory import step_schema
+
+    if not isinstance(step_defs, list):
+        return
+    for i, step in enumerate(step_defs):
+        if not isinstance(step, dict):
+            errors.append(f"{label}[{i}]: step must be a mapping")
+            continue
+        step_type = step.get("type")
+        if not step_type or not isinstance(step_type, str):
+            errors.append(f"{label}[{i}]: step missing string 'type'")
+            continue
+        fragment = step_schema(step_type)
+        if fragment is None:
+            errors.append(f"{label}[{i}]: unknown step type {step_type!r} (no registered schema)")
+            continue
+        for e in Draft202012Validator(fragment).iter_errors(step):
+            errors.append(f"{label}[{i}] ({step_type}): {e.message}")
+        _validate_step_defs(_nested_step_defs(step), f"{label}[{i}].children", errors)
+
+
 def load_recipe_from_yaml(path: str | Path) -> DeclarativeRecipeTemplate:
     """Read YAML, validate schema, return one frozen template.
 
@@ -197,10 +242,15 @@ def load_recipe_from_yaml(path: str | Path) -> DeclarativeRecipeTemplate:
 
     schema = _load_schema()
     validator = Draft202012Validator(schema)
-    errors = list(validator.iter_errors(raw))
+    errors = [e.message for e in validator.iter_errors(raw)]
+    # Per-step validation against each type's registered fragment (no central
+    # hard-coded step-type list). Foundation registers builtins; other layers
+    # register their own step types + fragments via register_step_type.
+    lifecycle_raw = raw.get("lifecycle", {})
+    for phase in ("install-steps", "configure-steps", "uninstall-steps", "dry-run-steps"):
+        _validate_step_defs(lifecycle_raw.get(phase, []), phase, errors)
     if errors:
-        msgs = [e.message for e in errors]
-        raise _recipe_err(1, "schema validation failed", messages=msgs, path=str(p))
+        raise _recipe_err(1, "schema validation failed", messages=errors, path=str(p))
 
     # Build parameters
     params: tuple[RecipeParameter, ...] = tuple()
@@ -214,9 +264,7 @@ def load_recipe_from_yaml(path: str | Path) -> DeclarativeRecipeTemplate:
             ),
         )
 
-    # Build lifecycle
-    lifecycle_raw = raw.get("lifecycle", {})
-
+    # Build lifecycle (lifecycle_raw already resolved above for step validation)
     def _build_steps(step_defs: list[dict[str, Any]]) -> tuple[ValidatedStepTemplate, ...]:
         return tuple(_make_step(s) for s in step_defs)
 

@@ -21,20 +21,43 @@ _exec_err = make_error_factory("VAL", "EXEC", "recipe-execution")
 logger = logging.getLogger(__name__)
 
 
+_SUPPORTED_MODES = ("apply", "prune", "status", "plan")
+
+
 def execute_recipe(
     template_path: str | Path,
     params: dict[str, str],
     context: dict[str, Any] | None = None,
 ) -> RecipeResult:
-    """Load a recipe YAML, materialize with *params*, then provision.
+    """Load a recipe YAML, materialize with *params*, then provision (apply mode).
 
-    Lifecycle order: probe -> install -> configure -> verify.
-    If the pre-install probe reports VERIFIED, returns early.
-    On any failure the first error is returned and remaining steps are skipped.
+    Thin wrapper over :func:`execute_recipe_mode` preserved for existing callers.
     """
+    return execute_recipe_mode(template_path, params, "apply", context)
+
+
+def execute_recipe_mode(
+    template_path: str | Path,
+    params: dict[str, str],
+    mode: str,
+    context: dict[str, Any] | None = None,
+) -> RecipeResult:
+    """Load + materialize a recipe YAML and run one semantic mode.
+
+    ``apply`` runs probe -> install -> configure -> verify (early-returns when the
+    pre-install probe already reports VERIFIED). ``prune`` runs the declared
+    uninstall steps. ``status`` runs the verify (or install) probe read-only.
+    ``plan`` describes what apply would do without executing. A YAML file plus a
+    parameter dict is sufficient for the whole lifecycle — no Python per recipe.
+    """
+    if mode not in _SUPPORTED_MODES:
+        return RecipeResult.fail(
+            f"unsupported recipe mode: {mode!r}",
+            details={"supported": list(_SUPPORTED_MODES)},
+        )
+
     ctx = dict(context) if context else {}
 
-    # Load and materialize
     try:
         template = load_recipe_from_yaml(template_path)
     except Exception as e:  # noqa: BLE001
@@ -51,6 +74,16 @@ def execute_recipe(
             details={"path": str(template_path)},
         )
 
+    if mode == "prune":
+        return _prune(mat, ctx)
+    if mode == "status":
+        return _status(mat, ctx)
+    if mode == "plan":
+        return _plan(mat)
+    return _apply(mat, ctx)
+
+
+def _apply(mat: Any, ctx: dict[str, Any]) -> RecipeResult:
     # Pre-install probe — skip if already verified
     if mat.probe is not None:
         probe_result = mat.probe.check(ctx)
@@ -61,7 +94,6 @@ def execute_recipe(
                 details={"probe": probe_result.detail},
             )
 
-    # Install
     if mat.install_steps:
         result = run_steps(
             mat.install_steps,
@@ -73,7 +105,6 @@ def execute_recipe(
         if not result.success:
             return result
 
-    # Configure
     if mat.configure_steps:
         result = run_steps(
             mat.configure_steps,
@@ -85,7 +116,6 @@ def execute_recipe(
         if not result.success:
             return result
 
-    # Verify
     if mat.verify is not None:
         verify_result = check_with_retry(mat.verify, context=ctx)
         if not verify_result.passed:
@@ -99,4 +129,38 @@ def execute_recipe(
         RecipeState.VERIFIED,
         status="recipe provisioned successfully",
         details={"recipe_id": mat.recipe_id, "version": mat.recipe_version},
+    )
+
+
+def _prune(mat: Any, ctx: dict[str, Any]) -> RecipeResult:
+    if not mat.uninstall_steps:
+        return RecipeResult.ok(RecipeState.ABSENT, status="nothing to prune")
+    result = run_steps(
+        mat.uninstall_steps,
+        ctx,
+        ok_state=RecipeState.ABSENT,
+        ok_status="uninstall steps succeeded",
+        fail_prefix="uninstall sequence failed",
+    )
+    return result
+
+
+def _status(mat: Any, ctx: dict[str, Any]) -> RecipeResult:
+    probe = mat.verify or mat.probe
+    if probe is None:
+        return RecipeResult.ok(RecipeState.ABSENT, status="no status probe available")
+    probe_result = check_with_retry(probe, context=ctx)
+    return RecipeResult.ok(
+        RecipeState.VERIFIED if probe_result.passed else RecipeState.ABSENT,
+        status=probe_result.detail,
+    )
+
+
+def _plan(mat: Any) -> RecipeResult:
+    install = len(mat.install_steps)
+    configure = len(mat.configure_steps)
+    return RecipeResult.ok(
+        RecipeState.ABSENT,
+        status=f"would run {install} install + {configure} configure step(s)",
+        details={"recipe_id": mat.recipe_id, "install": install, "configure": configure},
     )

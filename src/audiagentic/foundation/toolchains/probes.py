@@ -5,6 +5,7 @@ configured?" — a command probe, a file-exists check, a config-key check, and a
 AND/OR composite. Each returns a structured :class:`ProbeResult` with a
 pass/fail flag and a human-readable diagnostic, never a bare bool.
 """
+
 from __future__ import annotations
 
 import re
@@ -19,7 +20,7 @@ from typing import Any, Protocol
 from audiagentic.foundation.contracts.errors import make_error, make_error_factory
 from audiagentic.foundation.logging.redaction import redact_text
 
-from .config_reader import UNSET, read_config_value
+from .config.config_reader import UNSET, read_config_value
 
 _probe_error: Any = make_error_factory("VAL", "DEP", "component-dependencies")
 
@@ -58,9 +59,7 @@ def safe_command_parts(command: str) -> list[str]:
             component="CMD",
             number=1,
             kind="validation",
-            message=(
-                f"shell compound command requires structured shell-step support: {command!r}"
-            ),
+            message=(f"shell compound command requires structured shell-step support: {command!r}"),
         )
     import shlex
 
@@ -96,9 +95,7 @@ class CommandProbe:
             return ProbeResult(False, str(exc))
 
         if self.expect_exit is not None and proc.returncode != self.expect_exit:
-            return ProbeResult(
-                False, f"exit {proc.returncode} (expected {self.expect_exit})"
-            )
+            return ProbeResult(False, f"exit {proc.returncode} (expected {self.expect_exit})")
         output = (proc.stdout or "") + (proc.stderr or "")
         if self.output_pattern is not None and not re.search(self.output_pattern, output):
             return ProbeResult(False, f"output did not match {self.output_pattern!r}")
@@ -146,9 +143,7 @@ class ConfigKeyCheck:
         if value is UNSET:
             return ProbeResult(False, f"key absent: {dotted}")
         if self.expected_value is not UNSET and value != self.expected_value:
-            return ProbeResult(
-                False, f"{dotted}={value!r} (expected {self.expected_value!r})"
-            )
+            return ProbeResult(False, f"{dotted}={value!r} (expected {self.expected_value!r})")
         return ProbeResult(True, f"key present: {dotted}")
 
 
@@ -168,7 +163,10 @@ class CompositeHealthCheck:
     def check(self, context: dict[str, Any] | None = None) -> ProbeResult:
         if self.mode not in {"and", "or", "atleast"}:
             raise make_error(
-                prefix="VAL", component="PROBE", number=1, kind="toolchains",
+                prefix="VAL",
+                component="PROBE",
+                number=1,
+                kind="toolchains",
                 message=f"mode must be 'and', 'or', or 'atleast', got {self.mode!r}",
                 details={"mode": self.mode},
             )
@@ -184,16 +182,12 @@ class CompositeHealthCheck:
             if self.mode == "or" and result.passed:
                 return ProbeResult(True, f"passed: {result.detail}", tuple(results))
             if self.mode == "atleast" and passed >= self.threshold:
-                return ProbeResult(
-                    True, f"{passed}/{self.threshold} checks passed", tuple(results)
-                )
+                return ProbeResult(True, f"{passed}/{self.threshold} checks passed", tuple(results))
         if self.mode == "and":
             return ProbeResult(True, "all checks passed", tuple(results))
         if self.mode == "or":
             return ProbeResult(False, "no check passed", tuple(results))
-        return ProbeResult(
-            False, f"only {passed}/{self.threshold} checks passed", tuple(results)
-        )
+        return ProbeResult(False, f"only {passed}/{self.threshold} checks passed", tuple(results))
 
 
 @dataclass(frozen=True)
@@ -212,7 +206,7 @@ class _PredicateProbe:
 
 
 def _spec_payload(spec: str, prefix: str) -> str:
-    payload = spec[len(prefix):].strip()
+    payload = spec[len(prefix) :].strip()
     if not payload:
         raise _probe_error(1, f"empty probe payload: {spec!r}", probe=spec)
     return payload
@@ -262,13 +256,9 @@ def probe_from_spec(spec: str) -> Probe:
         try:
             predicate = resolve_ref(ref)
         except Exception as exc:  # noqa: BLE001
-            raise _probe_error(
-                1, f"unresolvable custom probe ref: {ref!r}", probe=spec
-            ) from exc
+            raise _probe_error(1, f"unresolvable custom probe ref: {ref!r}", probe=spec) from exc
         if not callable(predicate):
-            raise _probe_error(
-                1, f"custom probe ref is not callable: {ref!r}", probe=spec
-            )
+            raise _probe_error(1, f"custom probe ref is not callable: {ref!r}", probe=spec)
         return _PredicateProbe(predicate, ref)
 
     raise _probe_error(1, f"unknown probe syntax: {spec!r}", probe=spec)

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.toolchains.managed_config import (
+from audiagentic.foundation.toolchains.config.managed_config import (
     ManagedConfigSpec,
     ManagedFragmentRegistry,
     resolve_managed_config_path,
