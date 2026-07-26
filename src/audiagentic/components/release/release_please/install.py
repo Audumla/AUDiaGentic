@@ -8,7 +8,7 @@ from typing import Any
 from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.foundation.io import atomic_write_text
 from audiagentic.foundation.lifecycle.components import DEFAULT_VERSION
-from audiagentic.foundation.toolchains.artifact_registry import ArtifactRegistry
+from audiagentic.foundation.toolchains.config.artifact_registry import ArtifactRegistry
 
 from . import utils
 
