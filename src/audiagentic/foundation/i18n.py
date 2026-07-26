@@ -312,6 +312,39 @@ def get_instance() -> _I18n:
     return _get_instance()
 
 
+# Mapping from error-code prefix to locale domain name.
+# E.g. VAL-PLN-* → planning.errors.VAL-PLN-*
+_ERROR_PREFIX_TO_DOMAIN: dict[str, str] = {
+    "VAL-PLN": "planning",
+}
+
+
+def _t_err(code: str, **ctx: Any) -> str:
+    """Translate an error code to a human-readable message.
+
+    Looks up ``{domain}.errors.{code}`` in the locale catalog. Falls back
+    to ``{domain}.errors.{code}`` if not found, or to the raw code when
+    no prefix mapping exists.
+    """
+    # Try progressively shorter prefixes (e.g., VAL-PLN before VAL)
+    parts = code.split("-")
+    domain: str | None = None
+    for i in range(len(parts), 0, -1):
+        candidate_prefix = "-".join(parts[:i])
+        if candidate_prefix in _ERROR_PREFIX_TO_DOMAIN:
+            domain = _ERROR_PREFIX_TO_DOMAIN[candidate_prefix]
+            break
+    if domain is None:
+        return code
+    key = f"{domain}.errors.{code}"
+    instance = _get_instance()
+    result = instance._lookup(key)
+    if result is not None:
+        return _safe_interpolate(result, {**ctx})
+    # Fallback: return the structured key itself
+    return key
+
+
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> None:
     """Deep-merge *override* into *base* in-place."""
     for k, v in override.items():

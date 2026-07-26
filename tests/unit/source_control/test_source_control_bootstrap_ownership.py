@@ -13,7 +13,7 @@ import pytest
 
 from audiagentic.components.release.release_please.install import install
 from audiagentic.components.source_control import source_control_bootstrap as bootstrap
-from audiagentic.foundation.toolchains.artifact_registry import ArtifactRegistry
+from audiagentic.foundation.toolchains.config.artifact_registry import ArtifactRegistry
 
 # --- Feature A: Release install ownership ---------------------------------
 

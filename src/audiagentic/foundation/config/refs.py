@@ -46,7 +46,7 @@ def resolve_ref(ref: str) -> Any:
             message=f"Invalid ref format (expected 'module:object'): {ref!r}",
         )
 
-    parts = ref.split(":")
+    parts = [p.strip() for p in ref.split(":")]
     module_path = parts[0]
     attr_path = parts[1:]
 
