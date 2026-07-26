@@ -1,0 +1,60 @@
+# Hindsight-owned host block for the Pi harness (~/.hindsight/config.json).
+#
+# Pi reads recall behaviour from this file; the MCP server *entry* itself is
+# owned separately by the provider managed-mcp family. `{project}` is a literal
+# template Pi expands per session — it is preserved verbatim (the PROJECT
+# parameter defaults to the literal, so strict substitution passes it through).
+recipe-id: hindsight-pi
+recipe-version: "1.0.0"
+description: Write the Hindsight-owned Pi host block into ~/.hindsight/config.json.
+parameters:
+  - name: URL
+    required: true
+  - name: BANK_ID
+    default: audiagentic
+  - name: PROJECT
+    default: "{project}"
+lifecycle:
+  install-steps:
+    - type: config-set
+      id: set-base-url
+      path: ~/.hindsight/config.json
+      key-path: [baseUrl]
+      value: "{URL}"
+    - type: config-set
+      id: set-bank-id
+      path: ~/.hindsight/config.json
+      key-path: [bankId]
+      value: "{BANK_ID}"
+    - type: config-set
+      id: set-bank-strategy
+      path: ~/.hindsight/config.json
+      key-path: [bankStrategy]
+      value: manual
+    - type: config-set
+      id: set-host-block
+      path: ~/.hindsight/config.json
+      key-path: [host]
+      value:
+        enabled: true
+        recall_mode: hybrid
+        auto_recall_tags: ["{PROJECT}"]
+        auto_recall_tags_match: any_strict
+        observation_scopes: [["{PROJECT}"]]
+  uninstall-steps:
+    - type: config-remove
+      id: unset-host-block
+      path: ~/.hindsight/config.json
+      key-path: [host]
+    - type: config-remove
+      id: unset-base-url
+      path: ~/.hindsight/config.json
+      key-path: [baseUrl]
+    - type: config-remove
+      id: unset-bank-id
+      path: ~/.hindsight/config.json
+      key-path: [bankId]
+    - type: config-remove
+      id: unset-bank-strategy
+      path: ~/.hindsight/config.json
+      key-path: [bankStrategy]
