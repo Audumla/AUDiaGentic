@@ -15,8 +15,7 @@ Categories: `shared-config`, `adapter-serializer`, `generated-surface`,
 `component-managed`, `runtime-asset`, `third-party-repair`.
 
 | path:symbol | mutations | category | primitive | action | rationale |
-|---|---|---|---|---|---|
-| src/audiagentic/components/memory/hindsight/provision.py:_download_codex_scripts | atomic_write_text | component-managed | atomic foundation writer | keep | Hindsight-owned UTF-8 hook assets preserve their upstream relative paths and settings remains user-preserving when already present. |
+| --- | --- | --- | --- | --- | --- |
 | src/audiagentic/components/providers/adapters/codex/adapter.py:run | unlink | runtime-asset | bounded adapter cleanup | keep | Temporary result file created and removed in same call. |
 | src/audiagentic/components/providers/adapters/codex/hooks_format.py:_enable_codex_hooks | atomic_write_text | adapter-serializer | surgical shared-config upsert | keep | Current Codex `features.hooks` is a single-key shared-config mutation; the adapter migrates the deprecated `features.codex_hooks` key and prune never disables hooks. |
 | src/audiagentic/components/providers/adapters/codex/hooks_format.py:_save_hooks | atomic_write_text | adapter-serializer | atomic foundation writer | keep | Codex hooks JSON serializer preserves foreign hooks through managed-config reconciliation. |
@@ -59,11 +58,9 @@ Categories: `shared-config`, `adapter-serializer`, `generated-surface`,
 | src/audiagentic/runtime/harness/opencode/install/__init__.py:materialize_agent_config | write_text | shared-config | managed config + surface manager | MA03 | Runtime duplicates MCP/model/surface ownership. |
 | src/audiagentic/runtime/harness/pi/install/__init__.py:_seed_test_model | copyfile | runtime-asset | harness asset installer | keep | Harness-owned test/model asset. |
 | src/audiagentic/runtime/harness/pi/install/__init__.py:cleanup_runtime | rmtree | runtime-asset | harness asset installer | keep | Removes harness-owned runtime directories during explicit lifecycle cleanup. |
-| src/audiagentic/runtime/harness/pi/install/config.py:_build_settings_config | write_text | runtime-asset | harness asset materializer | keep | Writes harness-owned settings staging file. |
 | src/audiagentic/runtime/harness/pi/install/config.py:_build_system_md | write_text | runtime-asset | harness asset materializer | MA03 | Verify provider surface ownership; consolidate if project-facing. |
-| src/audiagentic/runtime/harness/pi/install/config.py:materialize_agent_config | copytree,unlink,write_text | shared-config | managed config + surface manager | MA03 | Split runtime assets from provider/project config. |
-| src/audiagentic/runtime/harness/pi/mcp_format.py:remove_pi_mcp_json | atomic_write_json | adapter-serializer | registered provider serializer | MA03 | Duplicate runtime serializer/lifecycle wrapper. |
-| src/audiagentic/runtime/harness/pi/mcp_format.py:write_pi_mcp_json | atomic_write_json | adapter-serializer | registered provider serializer | MA03 | Duplicate runtime serializer/lifecycle wrapper. |
+| src/audiagentic/runtime/harness/pi/install/config.py:materialize_agent_config | unlink,write_text | shared-config | managed config + surface manager | MA03 | Split runtime assets from provider/project config (copytree removed when extensions copy deleted). |
+| src/audiagentic/components/providers/adapters/pi/local_rig_config.py:build_settings_config | write_text | runtime-asset | harness asset materializer | keep | Builds and writes Pi settings.json with theme customization (moved from config.py). |
 | src/audiagentic/components/providers/adapters/pi/model_config.py:write_pi_models | atomic_write_json | adapter-serializer | atomic foundation writer | keep | Compliant Pi model config serializer using atomic_write_json. |
 | src/audiagentic/components/providers/adapters/pi/model_config.py:remove_pi_model | atomic_write_json | adapter-serializer | atomic foundation writer | keep | Compliant Pi model removal via conditional atomic_write_json. |
 
@@ -77,7 +74,7 @@ corruption raises the canonical ownership error rather than erasing state.
 
 Closed (MO06): `lsp_projection.py` no longer calls `spec.writer`/`spec.remover`
 directly — routed through `apply_managed_config_write`/`apply_managed_config_remove`
-in `foundation/toolchains/managed_config.py`. `providers/descriptors/base.py` no
+in `foundation/toolchains/config/managed_config.py`. `providers/descriptors/base.py` no
 longer imports `coding_lsp.LanguageServerEntry` — `ManagedConfigSpec`'s
 reader/writer/remover are `Any`-typed (domain-opaque). Managed-fragment
 registry loading (`ManagedFragmentRegistry`) now raises `CON-MCFG-001` on a
