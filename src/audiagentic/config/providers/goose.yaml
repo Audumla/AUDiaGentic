@@ -63,7 +63,9 @@ capability_facts:
       review_state: verified
   - capability_id: mcp-config
     subject: mcp_config
-    mechanism: "reader/writer/remover over .goose/config.yaml (YAML format, stdio-only)"
+    mechanism: >-
+      reader/writer/remover over ~/.config/goose/config.yaml
+      (YAML, streamable_http)
     constraints: []
     limitations: []
     support_assessment: verified
@@ -126,8 +128,8 @@ agent_files:
     description: "Shared project instructions"
 
 mcp_config:
-  remote: false  # config format is stdio-only; url-form entries are not expressible
-  config_path: ".goose/config.yaml"
+  remote: true   # streamable_http extension support
+  config_path: "~/.config/goose/config.yaml"
   reader: "audiagentic.components.providers.adapters.goose.mcp_format:read_goose_yaml"
   writer: "audiagentic.components.providers.adapters.goose.mcp_format:write_goose_yaml"
   remover: "audiagentic.components.providers.adapters.goose.mcp_format:remove_goose_yaml"

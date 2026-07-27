@@ -66,7 +66,7 @@ capability_facts:
       review_state: verified
   - capability_id: mcp-config
     subject: mcp_config
-    mechanism: "reader/writer/remover over .mcp.json"
+    mechanism: "reader/writer/remover over .roo/mcp.json"
     constraints: []
     limitations: []
     support_assessment: verified
@@ -117,7 +117,7 @@ agent_files:
     description: "Roo ignore file"
 
 mcp_config:
-  config_path: ".mcp.json"
+  config_path: ".roo/mcp.json"
   reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
   writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
   remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
