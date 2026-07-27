@@ -36,8 +36,8 @@ __all__ = [
     "METADATA_KEYS",
     "REVIEW_SECTIONS",
     "VALID_STATES",
-    "ACTIVE_STATES",
-    "COMPLETED_STATES",
+    "active_states",
+    "terminal_states",
     "append_change_log",
     "build_item_body",
     "check_transition",
@@ -52,8 +52,7 @@ __all__ = [
     "parse_frontmatter",
     "parse_item_sections",
     "parse_title",
-    "plan_frontmatter_value",
-    "plan_slug",
+
     "render_item",
     "require_item",
     "state_dir",
@@ -61,14 +60,21 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-VALID_STATES = {"pending", "in_progress", "completed"}
-# 'not_done' is accepted as a legacy alias for 'pending'
-ACTIVE_STATES = {"pending", "in_progress", "not_done"}
-COMPLETED_STATES = {"completed"}
+VALID_STATES: set[str] = set()  # populated from workflows.yaml at import time
 
 _WORKFLOWS_PATH = Path(__file__).with_name("workflows.yaml")
 
 _PLANNING_YAML = Path(__file__).resolve().parents[2] / "config" / "components" / "planning.yaml"
+
+
+def _load_valid_states() -> None:
+    """Populate VALID_STATES from workflows.yaml item values."""
+    global VALID_STATES  # noqa: PLW0603
+    workflow = load_workflow(_WORKFLOWS_PATH, "item")
+    VALID_STATES = set(workflow.get("values", []))
+
+
+_load_valid_states()
 
 
 def _load_config() -> None:
@@ -108,6 +114,22 @@ _CHANGE_LOG_HEADING = "## Change Log"
 _CHANGE_ENTRY_RE = re.compile(r"^- (\S+) \(([^)]+)\): (.*)$")
 
 
+def _get_state_set(kind: str, set_name: str) -> set[str]:
+    """Return the state-sets value for a kind from workflows.yaml."""
+    workflow = load_workflow(_WORKFLOWS_PATH, kind)
+    return set(workflow.get("state-sets", {}).get(set_name, []))
+
+
+def active_states(kind: str = "item") -> set[str]:
+    """Return active (non-terminal) states for a kind from workflows.yaml."""
+    return _get_state_set(kind, "active")
+
+
+def terminal_states(kind: str = "item") -> set[str]:
+    """Return terminal states for a kind from workflows.yaml."""
+    return _get_state_set(kind, "terminal")
+
+
 def check_transition(kind: str, old: str, new: str) -> None:
     """Validate an ``old -> new`` state transition for a planning kind.
 
@@ -132,9 +154,9 @@ def check_transition(kind: str, old: str, new: str) -> None:
 
 
 def state_dir(project_root: Path, state: str) -> Path:
-    if state in ACTIVE_STATES:
+    if state in active_states("item"):
         return planning_paths.plans_active_dir(project_root)
-    if state in COMPLETED_STATES:
+    if state in terminal_states("item"):
         return planning_paths.plans_completed_dir(project_root)
     raise AudiaGenticError(
         code="VAL-PLN-006",
@@ -157,14 +179,7 @@ def render_item(fm: dict[str, Any], body: str) -> str:
     return render_frontmatter(fm, body)
 
 
-def plan_slug(plan: str) -> str:
-    """Strip the 'plan-' prefix to get the directory name."""
-    return plan.removeprefix("plan-")
 
-
-def plan_frontmatter_value(plan: str) -> str:
-    """Ensure the frontmatter value carries the 'plan-' prefix."""
-    return plan if plan.startswith("plan-") else f"plan-{plan}"
 
 
 def dir_item_prefix(directory: Path) -> str | None:
@@ -196,7 +211,7 @@ def next_item_id(project_root: Path, plan: str) -> str:
     a guessed prefix, which is then checked for collisions against every other
     plan's prefix so a fresh guess can never silently alias an existing plan.
     """
-    slug = plan_slug(plan)
+    slug = plan
     active_dir = planning_paths.plans_active_dir(project_root) / slug
     completed_dir = planning_paths.plans_completed_dir(project_root) / slug
 

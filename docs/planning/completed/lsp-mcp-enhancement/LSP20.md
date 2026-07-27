@@ -1,7 +1,7 @@
 ---
 id: LSP20
 order: 20
-plan: plan-lsp-mcp-enhancement
+plan: lsp-mcp-enhancement
 state: superseded
 superseded-by: plan-lsp-capability-expansion
 validate-first: true

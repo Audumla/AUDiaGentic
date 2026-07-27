@@ -49,17 +49,20 @@ New reviews may be created for either pending or completed items. A newly
 created review always starts in `active/` with review state `created`; moving
 the review itself to `closed` archives it under `completed/`.
 
-Each item has YAML frontmatter (`id`, `order`, `plan`, `state`, `priority`, `complexity`)
+Each item has YAML frontmatter (`id`, `order`, `plan`, `state`, `priority`, `work`)
 and standard markdown sections: Description, Steps, Files, Validation, Effort & Risk, Notes.
 
 ## States
 
 | State | Folder | Meaning |
 |---|---|---|
-| `pending` | `active/` | Work not yet done |
+| `pending` | `active/` | Work not yet started |
+| `in_progress` | `active/` | Active implementation |
 | `completed` | `completed/` | Work finished |
+| `superseded` | `completed/` | Replaced by another item |
+| `deprecated` | `completed/` | Outdated but retained for reference |
 
-`not_done` is accepted as a read alias for `pending` (legacy items).
+States and transitions are defined in `workflows.yaml`; the Python code reads them at runtime.
 
 ## Review lifecycle
 

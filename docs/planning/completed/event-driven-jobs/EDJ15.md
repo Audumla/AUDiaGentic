@@ -1,7 +1,7 @@
 ---
 id: EDJ15
 order: 90
-plan: plan-event-driven-jobs
+plan: event-driven-jobs
 state: completed
 validate-first: true
 priority: P2

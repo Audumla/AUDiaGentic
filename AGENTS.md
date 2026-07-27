@@ -43,7 +43,7 @@ Use the ag-planning MCP tools to manage plan items in docs/planning/.
 2. Revise content with plan_update_item as work progresses; for a findings-driven correction (not routine progress), record a plan_create_review first, then close it once incorporated
 3. After review triage, close handled reviews with plan_set_review_state(review_id, 'closed')
 4. Mark done with plan_set_state(item_id, 'completed') only when implementation and validation are done
-5. Keep unfinished work pending; remove stale/superseded/cancelled items with plan_delete_item
+5. Keep unfinished work pending or in terminal discard states (superseded, deprecated); remove stale items with plan_delete_item
 
 ## Item ID convention
 Combine a short uppercase plan prefix with a sequence number: CC07, LSP01, ML01.
@@ -56,11 +56,11 @@ Choose a prefix matching the plan name (CC → code-cleanup, LSP → lsp-mcp-enh
 ## State discipline
 - Do not leave incorporated reviews in created/considered; close them.
 - Do not mark a parent item completed just because reviews were handled.
-- If an active item is superseded, delete it or replace it with the canonical item.
+- If an active item is superseded, transition to 'superseded' or 'deprecated' rather than deleting (preserves history and linked reviews).
 
 ## Optional fields (fill out where applicable to provide complete planning context)
-- breadth: small / medium / large
-- skill: lite / medium / high
+- work: S / M / L — blast radius of the change
+- skill: basic / intermediate / advanced — cognitive difficulty
 - order: integer sort key (default 0)
 - description: Body section describing the work
 - steps: Implementation steps
@@ -101,9 +101,11 @@ Use Hindsight memory when prior project context may help.
 
 ## Component profile doctrine
 
-Component profiles select an alternative set of component configurations for a
-single process invocation. They override the base component definitions with
-per-profile customizations (enabled/disabled components, overridden mcp-servers,
+Component profiles select an alternative set of component configurations
+for a single process invocation. They override the base component
+definitions with
+per-profile customizations (enabled/disabled components,
+overridden mcp-servers,
 adjusted parameters).
 
 ## What component profiles are
@@ -120,22 +122,23 @@ id with a base descriptor wins (last-wins overlay).
 
 Three unrelated mechanisms use the word "profile" in this codebase:
 
-- **Component profiles** — select alternative component configurations for the
-  harness. Controlled by `--component-profile` /
+- **Component profiles** — select alternative component configurations
+  for the harness. Controlled by `--component-profile` /
   `AUDIAGENTIC_COMPONENT_PROFILE`. Stored in
   `<project-root>/.audiagentic/<profile-name>/components/`.
 
 - **Agent profiles** — bind a provider to a specific model with optional
-  execution parameters. Used at job-launch time to resolve which model to
-  invoke. Stored in `.audiagentic/config/agent-profiles.yaml`. Referenced via
+  execution parameters. Used at job-launch time to resolve which model
+  invoke. Stored in `.audiagentic/config/agent-profiles.yaml`.
+Referenced via
   `agent-profile-id` in job requests.
 
-- **Workflow profiles** — define lite/standard/strict stage pipelines for
+- **Workflow profiles** — define lite/standard/strict stage pipelines
   task execution. Controlled by `workflow-profile` in job or plan
   configuration. Not the same as component profiles or agent profiles.
 
 Additionally, rig model profiles (controlled by
-`AUDIAGENTIC_RIG_MODEL_PROFILE` and related env vars) configure llama.cpp
+`AUDIAGENTIC_RIG_MODEL_PROFILE` and related env vars) configure
 inference parameters and are orthogonal to all three of the above.
 
 ## Usage

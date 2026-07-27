@@ -1,7 +1,7 @@
 ---
 id: EDJ06
 order: 20
-plan: plan-event-driven-jobs
+plan: event-driven-jobs
 state: completed
 validate-first: true
 priority: P1

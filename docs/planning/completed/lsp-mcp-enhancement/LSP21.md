@@ -1,7 +1,7 @@
 ---
 id: LSP21
 order: 21
-plan: plan-lsp-mcp-enhancement
+plan: lsp-mcp-enhancement
 state: superseded
 superseded-by: plan-lsp-capability-expansion (CAP01–07); caller fixes in CAP01 step 6; W7.5 deferred
 validate-first: true

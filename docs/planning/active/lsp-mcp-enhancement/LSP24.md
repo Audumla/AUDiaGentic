@@ -1,8 +1,8 @@
 ---
 id: LSP24
 order: 0
-plan: plan-lsp-mcp-enhancement
-state: not_done
+plan: lsp-mcp-enhancement
+state: pending
 breadth: medium
 skill: 2
 ---

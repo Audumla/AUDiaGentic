@@ -1,11 +1,10 @@
 ---
 id: <ID>
 order: <N>
-plan: plan-<plan-name>
+plan: <plan-name>
 state: pending
-breadth: <small|medium|large>
-work: <S|M|L>
-skill: <1|2|3 — optional, set later if unknown>
+work: <S|M|L — blast radius of the change>
+skill: <basic|intermediate|advanced — optional, set later if unknown>
 ---
 
 # <Title>

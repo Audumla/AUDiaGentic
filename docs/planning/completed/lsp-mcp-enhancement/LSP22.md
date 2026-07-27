@@ -1,7 +1,7 @@
 ---
 id: LSP22
 order: 22
-plan: plan-lsp-mcp-enhancement
+plan: lsp-mcp-enhancement
 state: superseded
 superseded-by: CAP04 (completion/signature/inlay-hints), CAP05 (auto-apply); skills/tree-sitter/secret-scan remain deferred
 validate-first: true
