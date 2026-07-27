@@ -107,6 +107,129 @@ def archive_for_release(project_root: Path, release_id: str) -> dict[str, Any]:
         }
 
 
+def _union_find_cluster(keys: list[frozenset[str]]) -> list[list[int]]:
+    """Cluster indices by transitive key overlap (union-find).
+
+    Returns groups of indices whose keys share at least one element,
+    merged transitively.  e.g. [0:{A}, 1:{B}, 2:{A,B}] → [[0,1,2]].
+    """
+    parent: list[int] = list(range(len(keys)))  # noqa: C416
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]  # path compression
+            i = parent[i]
+        return i
+
+    def union(i: int, j: int) -> None:
+        root_i, root_j = find(i), find(j)
+        if root_i != root_j:
+            parent[root_i] = root_j
+
+    for i in range(len(keys)):
+        for j in range(i + 1, len(keys)):
+            if keys[i] & keys[j]:  # non-empty intersection
+                union(i, j)
+
+    groups: dict[int, list[int]] = {}
+    for i in range(len(keys)):
+        groups.setdefault(find(i), []).append(i)
+    return [sorted(indices) for indices in groups.values()]
+
+
+def _compact_event(entry: dict[str, Any]) -> dict[str, Any]:
+    """Return a compact view of one ledger event."""
+    return {
+        "event-id": entry.get("event-id", ""),
+        "change-class": entry.get("change-class", ""),
+        "user-summary-candidate": entry.get("user-summary-candidate", ""),
+        "plan-item-ids": entry.get("plan-item-ids") or [],
+        "files": entry.get("files") or [],
+    }
+
+
+def get_pending_events(
+    project_root: Path,
+    group_by: str = "plan-items",
+) -> dict[str, Any]:
+    """Return pending (unreleased) events grouped for commit decisions.
+
+    group_by:
+      - "plan-items" (default): cluster by shared plan-item-ids via union-find.
+      - "files": cluster by file overlap via union-find.
+      - "flat": no grouping, raw list.
+    """
+    entries = load_ndjson(current_ledger_path(project_root))
+    pending = [e for e in entries if e.get("status") == "unreleased"]
+
+    if not pending:
+        return {"groups": [], "ungrouped": []} if group_by != "flat" else {"events": []}
+
+    # Flat mode — no clustering
+    if group_by == "flat":
+        return {"events": [_compact_event(e) for e in pending]}
+
+    # Build cluster keys per event
+    if group_by == "plan-items":
+        keys = [frozenset(e.get("plan-item-ids") or []) for e in pending]
+    else:  # files
+        keys = [frozenset(e.get("files") or []) for e in pending]
+
+    cluster_indices = _union_find_cluster(keys)
+
+    groups: list[dict[str, Any]] = []
+    ungrouped: list[dict[str, Any]] = []
+
+    for indices in cluster_indices:
+        group_events = [pending[i] for i in indices]
+        if len(indices) == 1:
+            # Single event — ungrouped (no overlap with anything else)
+            compact = _compact_event(group_events[0])
+            ungrouped.append({
+                "event-id": compact["event-id"],
+                "change-class": compact["change-class"],
+                "files": compact["files"],
+                "user-summary-candidate": compact["user-summary-candidate"],
+            })
+        else:
+            all_files: set[str] = set()
+            for e in group_events:
+                all_files.update(e.get("files") or [])
+            groups.append({
+                "event-count": len(group_events),
+                "files": sorted(all_files),
+                "summaries": [
+                    {
+                        "event-id": e.get("event-id", ""),
+                        "change-class": e.get("change-class", ""),
+                        "user-summary-candidate": e.get("user-summary-candidate", ""),
+                        "plan-item-ids": e.get("plan-item-ids") or [],
+                    }
+                    for e in group_events
+                ],
+            })
+
+    return {"groups": groups, "ungrouped": ungrouped}
+
+
+def get_fragment(event_id: str, project_root: Path) -> dict[str, Any]:
+    """Retrieve a single change event by event-id.
+
+    Looks in the current ledger NDJSON.  Returns the full event dict or
+    raises AudiaGenticError (CON-LEDGER-001) if not found.
+    """
+    entries = load_ndjson(current_ledger_path(project_root))
+    for entry in entries:
+        if entry.get("event-id") == event_id:
+            return entry
+    raise AudiaGenticError(
+        code="CON-LEDGER-001",
+        kind="release",
+        message=f"no event found with id '{event_id}'",
+        details={"event-id": event_id},
+    )
+
+
 def get_status(project_root: Path) -> dict[str, Any]:
     """Return ledger installation state and current fragment/sync status."""
     marker = ledger_component_marker(project_root)
