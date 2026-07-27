@@ -2,11 +2,9 @@
 
 All callers outside the harness package should import from here, not from
 harness.<type>.* directly. The active harness is selected by ``harness.type``
-in ag.yaml (default: ``pi``). Adding a new harness means:
-
-  1. Create ``runtime/harness/<type>/`` with ``install`` and ``runner`` submodules
-     that expose the same interface as ``pi/install`` and ``pi/runner``.
-  2. Set ``harness.type: <type>`` in ag.yaml or a project-local override.
+in ag.yaml (default: ``pi``). Config materialization routes through
+providers_api.materialize_provider_config — the provider adapter owns its own
+config shapes and delivery mechanism (HA11).
 """
 
 from __future__ import annotations
@@ -16,7 +14,7 @@ import json
 import logging
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
@@ -179,19 +177,60 @@ def refresh_harness_config_if_installed(
     reason: str,
     component_id: str | None = None,
 ) -> bool:
-    return _forward(
-        "install",
-        "refresh_harness_config_if_installed",
-        project_root,
-        reason=reason,
-        component_id=component_id,
+    """Refresh harness config if a supported CLI is installed on the system.
+
+    Routes through providers_api.materialize_provider_config (HA11).
+    """
+    from audiagentic.foundation.config import load_layered_config
+    from audiagentic.runtime.harness.resolution import harness_cli_available
+
+    harness_type = get_harness_type(project_root)
+    if not harness_cli_available(harness_type):
+        return False
+
+    harness_cfg = load_layered_config(
+        pkg_default_path=default_config_path(),
+        project_root=project_root,
+        namespace="harness/ag",
     )
+
+    from audiagentic.components.providers import providers_api
+    from audiagentic.foundation.paths.home import global_harness_runtime
+
+    agent_runtime = global_harness_runtime()
+    providers_api.materialize_provider_config(
+        project_root,
+        provider_id=harness_type,
+        harness_cfg=harness_cfg,
+        agent_runtime=agent_runtime if harness_type == "pi" else None,
+    )
+    return True
 
 
 def refresh_materialized_agent_config(target: Path, project_root: Path | None = None) -> int:
-    return _forward(
-        "install", "refresh_materialized_agent_config", target, project_root=project_root
+    """Refresh materialized config for the active harness.
+
+    Routes through providers_api.materialize_provider_config — the provider
+    adapter owns its own config shapes and delivery mechanism (HA11).
+    """
+    from audiagentic.components.providers import providers_api
+    from audiagentic.foundation.config import load_layered_config
+
+    root = project_root or Path.cwd()
+    harness_type = get_harness_type(root)
+    harness_cfg = load_layered_config(
+        pkg_default_path=default_config_path(),
+        project_root=root,
+        namespace="harness/ag",
     )
+
+    providers_api.materialize_provider_config(
+        root,
+        provider_id=harness_type,
+        harness_cfg=harness_cfg,
+        agent_runtime=target if harness_type == "pi" else None,
+    )
+    return 0
 
 
 def request_runtime_reload(
