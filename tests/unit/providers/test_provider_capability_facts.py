@@ -62,7 +62,7 @@ def test_opencode_capability_facts_load_from_yaml() -> None:
     descriptor = load_provider_descriptor(get_providers_config_dir() / "opencode.yaml")
 
     assert tuple(fact.capability_id for fact in descriptor.capability_facts) == (
-        "mcp-launch-isolation",
+        "launch-isolation",
         "cli-install",
         "host-extension",
         "mcp-config",
@@ -77,8 +77,8 @@ def test_opencode_capability_facts_load_from_yaml() -> None:
         "acp-live-session",
         "acp-session-resume",
         "acp-shared-live-session",
-        "hinv-opencode-acp",
-        "hinv-opencode-cli-session",
+        "obs-opencode-acp",
+        "obs-opencode-cli-session",
     )
     catalog_fact = descriptor.capability_facts[6]
     assert catalog_fact.subject == "fetch_catalog_fn"
@@ -191,9 +191,7 @@ def test_json_serializer_is_deterministic_and_lossless() -> None:
 
 
 def test_markdown_serializer_is_deterministic_and_complete() -> None:
-    descriptors = {
-        "fixture": ProviderDescriptor("fixture", "Fixture", capability_facts=(_fact(),))
-    }
+    descriptors = {"fixture": ProviderDescriptor("fixture", "Fixture", capability_facts=(_fact(),))}
 
     first = render_capability_facts_markdown(descriptors)
 
@@ -239,7 +237,13 @@ def test_ma19_fact_shape_cannot_hold_ma20_fields() -> None:
     family_id, supported_modes, payload_contract, or result_contract.
     """
     fact_fields = {f.name for f in fields(ProviderCapabilityFact)}
-    ma20_fields = {"family_id", "supported_modes", "payload_contract", "result_contract", "ownership_scope_required"}
+    ma20_fields = {
+        "family_id",
+        "supported_modes",
+        "payload_contract",
+        "result_contract",
+        "ownership_scope_required",
+    }
 
     assert ma20_fields.isdisjoint(fact_fields), (
         f"ProviderCapabilityFact must not contain MA20 fields: {ma20_fields & fact_fields}"
