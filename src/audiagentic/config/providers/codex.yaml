@@ -123,8 +123,8 @@ capability_facts:
       tool_version: repository
       fact_anchor: "config/providers/codex.yaml#permissions"
       review_state: verified
-  - capability_id: model-config-surface
-    subject: "external:model-config-surface"
+  - capability_id: model-local-state
+    subject: "external:model-local-state"
     mechanism: "~/.codex/config.toml with [model_providers.<id>] blocks (name, base_url, env_key, wire_api)"
     constraints:
       - "user-global primary authority; project-local .codex/config.toml also present"

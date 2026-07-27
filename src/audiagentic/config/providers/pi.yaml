@@ -73,7 +73,7 @@ cli_install:
 host_capabilities: []
 
 capability_facts:
-  - capability_id: mcp-launch-isolation
+  - capability_id: launch-isolation
     subject: mcp_launch_isolation_tier
     mechanism: >-
       request-owned config via pi-mcp-adapter
@@ -138,8 +138,8 @@ capability_facts:
       tool_version: repository
       fact_anchor: "config/providers/pi.yaml#permissions"
       review_state: verified
-  - capability_id: vendor-key-injection
-    subject: "external:vendor-key-injection"
+  - capability_id: model-credentials
+    subject: "external:model-credentials"
     mechanism: >-
       native env var key injection
       (OPENAI_API_KEY, ANTHROPIC_API_KEY,
@@ -156,8 +156,8 @@ capability_facts:
       tool_version: "0.79.8"
       fact_anchor: "docs/reference/model-source-evidence/pi.md#pi-evidence"
       review_state: verified
-  - capability_id: model-config-surface
-    subject: "external:model-config-surface"
+  - capability_id: model-local-state
+    subject: "external:model-local-state"
     mechanism: >-
       ~/.pi/agent/models.json with
       providers/models[]/baseUrl/apiKey/compat shape

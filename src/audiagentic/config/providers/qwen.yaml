@@ -136,8 +136,8 @@ capability_facts:
       tool_version: repository
       fact_anchor: "config/providers/qwen.yaml#permissions"
       review_state: verified
-  - capability_id: vendor-key-injection
-    subject: "external:vendor-key-injection"
+  - capability_id: model-credentials
+    subject: "external:model-credentials"
     mechanism: "--auth-type with env vars: OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY"
     constraints:
       - "only one auth-type active at a time"
@@ -150,8 +150,8 @@ capability_facts:
       tool_version: "0.13.1"
       fact_anchor: "docs/reference/model-source-evidence/qwen.md#qwen-evidence"
       review_state: verified
-  - capability_id: model-config-surface
-    subject: "external:model-config-surface"
+  - capability_id: model-local-state
+    subject: "external:model-local-state"
     mechanism: "~/.qwen/settings.json with security.auth.selectedType and model.name"
     constraints:
       - "user-global, home-scoped"

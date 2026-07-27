@@ -99,8 +99,8 @@ capability_facts:
       tool_version: repository
       fact_anchor: "config/providers/openhands.yaml#permissions"
       review_state: verified
-  - capability_id: vendor-key-injection
-    subject: "external:vendor-key-injection"
+  - capability_id: model-credentials
+    subject: "external:model-credentials"
     mechanism: "LLM_API_KEY, LLM_BASE_URL, LLM_MODEL env vars with --override-with-envs"
     constraints:
       - "single model at a time per session"
@@ -113,8 +113,8 @@ capability_facts:
       tool_version: "1.16.0"
       fact_anchor: "docs/reference/model-source-evidence/openhands.md#openhands-evidence"
       review_state: verified
-  - capability_id: model-config-surface
-    subject: "external:model-config-surface"
+  - capability_id: model-local-state
+    subject: "external:model-local-state"
     mechanism: ".openhands/config.toml with [llm] section (model, api_key, base_url)"
     constraints:
       - "project-local"
