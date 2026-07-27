@@ -49,8 +49,12 @@ _HINDSIGHT_OWNERSHIP = "hindsight"
 # never new Python.
 _RECIPE_DIR = Path(__file__).resolve().parents[3] / "config" / "components" / "memory" / "recipes"
 _ARTIFACT_RECIPES = {
+    "aider": "hindsight-aider.yaml",
     "codex": "hindsight-codex.yaml",
+    "copilot": "hindsight-copilot.yaml",
+    "openhands": "hindsight-openhands.yaml",
     "pi": "hindsight-pi.yaml",
+    "roo": "hindsight-roo.yaml",
 }
 
 

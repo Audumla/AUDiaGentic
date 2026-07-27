@@ -78,7 +78,9 @@ capability_facts:
       review_state: verified
   - capability_id: mcp-config
     subject: mcp_config
-    mechanism: "reader/writer/remover over .mcp.json"
+    mechanism: >-
+      reader/writer/remover over ~/.qwen/settings.json (user) or
+      .qwen/settings.json (project)
     constraints: []
     limitations: []
     support_assessment: verified
@@ -182,12 +184,12 @@ instruction_file: "QWEN.md"
 agent_files: []
 
 mcp_config:
-  config_path: ".mcp.json"
+  config_path: "~/.qwen/settings.json"
   reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
   writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
   remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
   format: "mcp-json"
-  refresh_mode: "file-watch"
+  refresh_mode: "restart-required"
 
 language_servers_config:
   config_path: ".lsp.json"
