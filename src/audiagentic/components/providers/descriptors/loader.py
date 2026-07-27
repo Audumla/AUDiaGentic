@@ -33,6 +33,7 @@ from audiagentic.foundation.workflow.invocation.from_spec import build_step_from
 from .automation_capabilities import ProviderAutomationCapability, validate_automation_capabilities
 from .base import (
     AgentFile,
+    Capability,
     CapabilityEvidence,
     CliInstallRecipe,
     HostCapability,
@@ -95,6 +96,87 @@ def _build_host_capabilities(data: list[dict[str, Any]]) -> tuple[HostCapability
         )
         for item in data
     )
+
+
+def _build_managed_config_spec(data: dict[str, Any]) -> ManagedConfigSpec:
+    """Generic ManagedConfigSpec projector for managed-reconcile kinds.
+
+    Serves every managed-config-spec kind (mcp, models, plugins, hooks,
+    language-servers). The ``remote`` modifier is opt-in (mcp only).
+    """
+    return ManagedConfigSpec(
+        config_path=data["config_path"],
+        reader=resolve_ref(data["reader"]),
+        writer=resolve_ref(data["writer"]),
+        remover=resolve_ref(data["remover"]),
+        format=data.get("format", ""),
+        refresh_mode=data.get("refresh_mode", "none"),
+        reload_fn=resolve_ref(data["reload_fn"]) if "reload_fn" in data else None,
+        capabilities=frozenset({REMOTE_CAPABILITY}) if data.get("remote") else frozenset(),
+    )
+
+
+def _project_mechanism(mechanism_schema: str, raw: Any) -> Any:
+    """Shape a capability's declared mechanism into its typed form per the
+    catalogue's mechanism_schema. Primitive/unknown schemas keep the raw value.
+    """
+    if raw is None:
+        return None
+    if mechanism_schema == "managed-config-spec":
+        return _build_managed_config_spec(raw)
+    if mechanism_schema == "cli-install-recipe":
+        return _build_cli_install(raw)
+    if mechanism_schema == "permissions-struct":
+        return _build_permissions(raw)
+    if mechanism_schema == "host-capability":
+        return HostCapability(**raw)
+    if mechanism_schema == "agent-file":
+        return AgentFile(
+            rel_path=raw["rel_path"],
+            managed=raw.get("managed", True),
+            description=raw.get("description", ""),
+        )
+    if mechanism_schema == "callable-ref":
+        return resolve_ref(raw) if isinstance(raw, str) else raw
+    # boolean-set, tier-enum, surfaces-struct, acp-caps-list, lsp-automation-spec, none
+    return raw
+
+
+def _build_capabilities(data: dict[str, Any]) -> tuple[Capability, ...]:
+    """Build the unified capability map (PC02): kind -> {mechanism, modes?}.
+
+    ``capabilities:`` is a mapping of catalogue kind to an entry (or a list of
+    entries for list-cardinality kinds). Kinds are validated against the
+    catalogue (VAL-PCAP-009); the mechanism is kept as declared.
+    """
+    if not isinstance(data, dict):
+        raise AudiaGenticError(
+            code="VAL-PCAP-009",
+            kind="providers",
+            message="capabilities must be a mapping of kind -> entry",
+        )
+    from .capability_catalogue import validate_capability_id
+
+    out: list[Capability] = []
+    for kind, entry in data.items():
+        kind_obj = validate_capability_id(kind)
+        if kind_obj is None:
+            raise AudiaGenticError(
+                code="VAL-PCAP-009",
+                kind="providers",
+                message=f"unknown capability kind '{kind}'",
+                details={"kind": kind},
+            )
+        for item in (entry if isinstance(entry, list) else [entry]):
+            item = item or {}
+            out.append(
+                Capability(
+                    kind=kind,
+                    mechanism=_project_mechanism(kind_obj.mechanism_schema, item.get("mechanism")),
+                    modes=tuple(item.get("modes", ())),
+                )
+            )
+    return tuple(out)
 
 
 def _build_capability_facts(
@@ -588,8 +670,66 @@ def _build_session_surfaces(
     return tuple(declarations)
 
 
+# Flat descriptor field -> (catalogue kind id, cardinality). A data table, not a
+# branch ladder: derives the unified capabilities view from the legacy flat
+# fields so consumers can read descriptor.capabilities before providers migrate
+# to a `capabilities:` block (PC02 transitional bridge). Mechanism values are the
+# already-typed flat field objects.
+_FLAT_CAPABILITY_MAP: tuple[tuple[str, str, str], ...] = (
+    ("cli_install", "cli-install", "single"),
+    ("mcp_config", "mcp-config", "single"),
+    ("hooks_config", "hook-config", "single"),
+    ("model_config", "model-config", "single"),
+    ("plugin_config", "plugin-config", "single"),
+    ("language_servers_config", "lsp-config", "single"),
+    ("fetch_catalog_fn", "model-catalog-refresh", "single"),
+    ("on_lsp_enabled", "lsp-self-support", "single"),
+    ("skill_surface_path", "surface-skill", "single"),
+    ("instruction_file", "surface-instruction", "single"),
+    ("surfaces", "surface-render", "single"),
+    ("host_capabilities", "host-extension", "list"),
+    ("agent_files", "file-agent", "list"),
+)
+
+
+# Flat YAML keys whose parsed values are consumed into `capabilities` and NOT
+# stored as descriptor fields (they no longer exist on ProviderDescriptor).
+_FLAT_DESCRIPTOR_KEYS: frozenset[str] = frozenset(
+    {attr for attr, _kind, _card in _FLAT_CAPABILITY_MAP}
+    | {"permissions", "supported_connectors", "capability_facts", "automation_capabilities"}
+)
+
+
+def _capabilities_from_values(values: dict[str, Any]) -> tuple[Capability, ...]:
+    """Project parsed flat block values into the unified capabilities list.
+
+    Transitional: providers still declare flat YAML blocks; this consumes their
+    parsed (typed) values into `capabilities` so the descriptor exposes one shape
+    and the flat fields can be dropped. Deleted once providers author
+    `capabilities:` directly.
+    """
+    out: list[Capability] = [
+        Capability(kind="perm-declaration", mechanism=values.get("permissions") or ProviderPermissions())
+    ]
+    for attr, kind, card in _FLAT_CAPABILITY_MAP:
+        value = values.get(attr)
+        if not value:
+            continue
+        if card == "list":
+            out.extend(Capability(kind=kind, mechanism=item) for item in value)
+        else:
+            out.append(Capability(kind=kind, mechanism=value))
+    if values.get("supported_connectors"):
+        out.append(Capability(kind="model-connectors", mechanism=values["supported_connectors"]))
+    return tuple(out)
+
+
 def _construct_provider_descriptor(**values: Any) -> ProviderDescriptor:
-    descriptor = ProviderDescriptor(**values)
+    authored = values.pop("capabilities", None)
+    capabilities = tuple(authored) if authored else _capabilities_from_values(values)
+    for key in _FLAT_DESCRIPTOR_KEYS:
+        values.pop(key, None)
+    descriptor = ProviderDescriptor(capabilities=capabilities, **values)
     if descriptor.execution_isolation_tier not in {
         "full-isolation",
         "partial-isolation",
@@ -636,6 +776,7 @@ PROVIDER_SPEC.add("cli_probe", yaml_key="cli_probe", kind="data", default=None)
 PROVIDER_SPEC.add("cli_install", yaml_key="cli_install", kind="nested", builder=_build_cli_install, default=None)
 PROVIDER_SPEC.add("host_capabilities", yaml_key="host_capabilities", kind="nested", builder=_build_host_capabilities, default=tuple())
 PROVIDER_SPEC.add("capability_facts", yaml_key="capability_facts", kind="nested", builder=_build_capability_facts, default=tuple())
+PROVIDER_SPEC.add("capabilities", yaml_key="capabilities", kind="nested", builder=_build_capabilities, default=tuple())
 PROVIDER_SPEC.add("execution_isolation_tier", yaml_key="execution_isolation_tier", kind="data", required=True)
 PROVIDER_SPEC.add("mcp_launch_isolation_tier", yaml_key="mcp_launch_isolation_tier", kind="data", default="unsupported")
 PROVIDER_SPEC.add("automation_capabilities", yaml_key="automation_capabilities", kind="nested", builder=_build_automation_capabilities, default=tuple())

@@ -138,11 +138,6 @@ class ProviderDescriptor:
     url: str = ""
     prompt_aliases: tuple[str, ...] = field(default_factory=tuple)
     cli_probe: list[str] | None = None
-    cli_install: CliInstallRecipe | None = None
-    host_capabilities: tuple[HostCapability, ...] = field(default_factory=tuple)
-    # Provider-owned knowledge/evidence. These records describe declared or
-    # externally documented capabilities; they never register or execute them.
-    capability_facts: tuple[ProviderCapabilityFact, ...] = field(default_factory=tuple)
     # The provider-level execution configuration isolation fact.  It is not an
     # automation-family property: gateway admission and worker materialization
     # need one provider-wide declaration, independently of supported families.
@@ -150,12 +145,6 @@ class ProviderDescriptor:
     # Provider-wide MCP launch capability.  This is an inherent harness fact,
     # not mutable feature state and not a per-launch configuration choice.
     mcp_launch_isolation_tier: McpLaunchIsolationTier = "unsupported"
-    # Explicitly declared automation families. These declarations are only
-    # capability metadata; explicit provider+family code registration is still
-    # required before an operation can execute.
-    automation_capabilities: tuple[ProviderAutomationCapability, ...] = field(
-        default_factory=tuple
-    )
     # ── Unified capability map (PC02) ────────────────────────────────────
     # Replaces the four separate descriptor blocks:
     #   automation_capabilities, capability_facts, host_capabilities,
@@ -164,45 +153,11 @@ class ProviderDescriptor:
     # When reading legacy shape, derived from flat fields in loader.
     capabilities: tuple[Capability, ...] = field(default_factory=tuple)
 
-    permissions: ProviderPermissions = field(default_factory=ProviderPermissions)
-    agent_files: tuple[AgentFile, ...] = field(default_factory=tuple)
     # access-mode written to providers.yaml when this provider is first enabled.
     # "cli"  — invoked as a subprocess CLI tool
     # "env"  — accessed via environment / API key (no local binary)
     # "none" — passthrough bridge, no direct provider access
     access_mode: str = "cli"
-    # Path template for skill surface files, e.g. ".claude/skills/{tag}/SKILL.md".
-    # None means this provider has no skill file concept (contributions go to AGENTS.md etc.).
-    skill_surface_path: str | None = None
-    # Relative path of the provider's managed instruction file in the project root,
-    # e.g. "CLAUDE.md". None means no instruction file is rendered for this provider.
-    instruction_file: str | None = None
-    # Optional: fetch live model list. Receives provider config dict; returns list
-    # of model dicts conforming to provider-model-catalog schema (model-id, display-name,
-    # status, supports-structured-output, context-window). None = not supported.
-    fetch_catalog_fn: Callable[[dict[str, Any]], list[dict[str, Any]]] | None = None
-    # MCP server config spec — None means this provider has no manageable MCP config.
-    # kind="mcp"; capabilities may include managed_config.REMOTE_CAPABILITY when the
-    # format can express url-form (remote) entries — consulted by requesters
-    # before projecting a remote entry.
-    mcp_config: ManagedConfigSpec | None = None
-    # Generic named plugin-entry config capability (MA20). Requesters supply an
-    # entry identity/options; this descriptor owns native format/path mechanics.
-    # Uses ManagedConfigSpec so sync_managed_config can reconcile entries and
-    # preserve foreign plugins — same engine as mcp_config.
-    plugin_config: ManagedConfigSpec | None = None
-    # Language server config spec — None means this provider doesn't accept LSP config sync.
-    # kind="language-servers"; refresh_mode stays at the "none" default (no reload concept).
-    language_servers_config: ManagedConfigSpec | None = None
-    # Native hooks config spec — None means this provider has no manageable hooks.
-    # Uses ManagedConfigSpec so sync_managed_config can reconcile hook entries and
-    # preserve foreign hooks — same engine as mcp_config (MA26).
-    hooks_config: ManagedConfigSpec | None = None
-    # Model-endpoint config spec — None means AUDiaGentic cannot write managed
-    # model entries into this provider's config (kind="model-endpoints"). The
-    # reader/writer/remover trio is adapter-owned, same contract as mcp_config.
-    # Declared per provider YAML only after MO09 verification (MO03/MO13/MO14).
-    model_config: ManagedConfigSpec | None = None
     # Adapter-owned entry renderer: converts one provider-NEUTRAL
     # MaterializedModelEntry into (visible_name, native_payload) — the payload
     # model_config.writer accepts. Declared as a YAML dotted ref and resolved
@@ -217,20 +172,11 @@ class ProviderDescriptor:
     # never guessed. Config-over-code (arch-standards §2): provider YAML is the
     # sole declaration surface, never a provider-id branch in service code.
     #
-    # supported_connectors: connectors this provider's config format can render
-    # via custom-entries projection (e.g. ("openai-compatible", "ollama")).
-    supported_connectors: tuple[str, ...] = field(default_factory=tuple)
     # vendor_key_injection: (vendor-id) -> {"mechanism": "env"|"config", "key": <env-var-name-or-config-path>}
     # for the native-key-injection projection path (RV332/RV337 standalone-first
     # ranking: config-mechanism entries prefer the tool's own env-indirection
     # syntax over resolved literals where the tool supports it).
     vendor_key_injection: dict[str, dict[str, str]] = field(default_factory=dict)
-    # Optional hook fired when the coding-lsp component is enabled. Lets a provider
-    # provision its own LSP support (e.g. pi installs the pi-lens extension, which
-    # auto-discovers language servers from PATH). When set, the provider is treated
-    # as self-providing LSP and is excluded from the generic ag-lsp MCP projection.
-    # Receives project_root; returns a result dict.
-    on_lsp_enabled: Callable[[Path | None], dict[str, Any]] | None = None
     # Optional non-mutating companion to on_lsp_enabled. Reports whether the
     # provider's self-provided LSP support is already present, without
     # provisioning it. The self-provided-lsp family uses this for status mode so
@@ -269,14 +215,6 @@ class ProviderDescriptor:
     # primitives). Hand-written builders always win.
     interactive: dict[str, Any] | None = None
     acp: dict[str, Any] | None = None
-    # Declarative surface rendering (AR03). When present, a standard renderer is
-    # registered for this provider from the descriptor alone — no surface.py.
-    # Keys: renderer ("flat-skill" renders per-skill files + the instruction
-    # file; "none" renders no skill surfaces), contribution-file (single-file
-    # contribution target, e.g. "GEMINI.md" or "AGENTS.md"),
-    # launch-example-template (default "@{tag}-{provider_id}").
-    # Adapters with custom rendering keep a surface.py, which wins over this.
-    surfaces: dict[str, Any] | None = None
     # Whether this provider is deprecated (superseded by another tool or EOL).
     # Drives structured behavior: filtering from active listings, warnings on
     # dispatch, migration prompts. Distinct from annotations — do not store
@@ -299,6 +237,124 @@ class ProviderDescriptor:
     def get_capability(self, kind_id: str) -> Capability | None:
         """Return the capability entry for a given catalogue kind id."""
         return next((c for c in self.capabilities if c.kind == kind_id), None)
+
+    # ── Flat accessors: project the unified capabilities into the historical
+    #    attribute names so consumers read one value without knowing the map. ──
+
+    def _mechanism(self, kind_id: str) -> Any:
+        cap = self.get_capability(kind_id)
+        return cap.mechanism if cap else None
+
+    def _mechanisms(self, kind_id: str) -> tuple[Any, ...]:
+        return tuple(c.mechanism for c in self.capabilities if c.kind == kind_id)
+
+    @property
+    def cli_install(self) -> CliInstallRecipe | None:
+        return self._mechanism("cli-install")
+
+    @property
+    def mcp_config(self) -> ManagedConfigSpec | None:
+        return self._mechanism("mcp-config")
+
+    @property
+    def model_config(self) -> ManagedConfigSpec | None:
+        return self._mechanism("model-config")
+
+    @property
+    def plugin_config(self) -> ManagedConfigSpec | None:
+        return self._mechanism("plugin-config")
+
+    @property
+    def hooks_config(self) -> ManagedConfigSpec | None:
+        return self._mechanism("hook-config")
+
+    @property
+    def language_servers_config(self) -> ManagedConfigSpec | None:
+        return self._mechanism("lsp-config")
+
+    @property
+    def fetch_catalog_fn(self) -> Callable[[dict[str, Any]], list[dict[str, Any]]] | None:
+        return self._mechanism("model-catalog-refresh")
+
+    @property
+    def on_lsp_enabled(self) -> Callable[[Path | None], dict[str, Any]] | None:
+        return self._mechanism("lsp-self-support")
+
+    @property
+    def skill_surface_path(self) -> str | None:
+        return self._mechanism("surface-skill")
+
+    @property
+    def instruction_file(self) -> str | None:
+        return self._mechanism("surface-instruction")
+
+    @property
+    def surfaces(self) -> dict[str, Any] | None:
+        return self._mechanism("surface-render")
+
+    @property
+    def permissions(self) -> ProviderPermissions:
+        return self._mechanism("perm-declaration") or ProviderPermissions()
+
+    @property
+    def host_capabilities(self) -> tuple[HostCapability, ...]:
+        return self._mechanisms("host-extension")
+
+    @property
+    def agent_files(self) -> tuple[AgentFile, ...]:
+        return self._mechanisms("file-agent")
+
+    @property
+    def supported_connectors(self) -> tuple[str, ...]:
+        return self._mechanism("model-connectors") or ()
+
+    @property
+    def capability_facts(self) -> tuple[ProviderCapabilityFact, ...]:
+        return ()
+
+    @property
+    def automation_capabilities(self) -> tuple[ProviderAutomationCapability, ...]:
+        """Synthesize automation declarations from the provisioned capabilities."""
+        from .capability_catalogue import get_catalogue
+
+        cat = get_catalogue()
+        out: list[ProviderAutomationCapability] = []
+        seen: set[str] = set()
+        for cap in self.capabilities:
+            kind = cat.kinds_by_id.get(cap.kind)
+            if kind is None or kind.authority != "provisioned" or not kind.family_id:
+                continue
+            if kind.family_id in seen:
+                continue
+            fam = cat.families.get(kind.family_id)
+            if fam is None:
+                continue
+            seen.add(kind.family_id)
+            out.append(
+                ProviderAutomationCapability(
+                    family_id=kind.family_id,
+                    supported_modes=cap.modes or fam.supported_modes,
+                    payload_contract=fam.payload_contract,
+                    result_contract=fam.result_contract,
+                    ownership_scope_required=fam.ownership_scope_required,
+                )
+            )
+        # generated-surfaces is universal: every provider renders surfaces
+        # (via a surfaces: block, skill/instruction paths, or a custom surface.py
+        # adapter), so the renderer family registers for all providers.
+        if "generated-surfaces" not in seen:
+            fam = cat.families.get("generated-surfaces")
+            if fam is not None:
+                out.append(
+                    ProviderAutomationCapability(
+                        family_id="generated-surfaces",
+                        supported_modes=fam.supported_modes,
+                        payload_contract=fam.payload_contract,
+                        result_contract=fam.result_contract,
+                        ownership_scope_required=fam.ownership_scope_required,
+                    )
+                )
+        return tuple(out)
 
     def automation_capability(
         self, family_id: str
