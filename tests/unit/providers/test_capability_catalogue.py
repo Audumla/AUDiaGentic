@@ -4,11 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from audiagentic.components.providers.descriptors.base import (
-    CapabilityEvidence,
-    ProviderCapabilityFact,
-    ProviderDescriptor,
-)
 from audiagentic.components.providers.descriptors.capability_catalogue import (
     CONCEPTUAL_MECHANISMS,
     MECHANISM_SCHEMA_MAP,
@@ -108,44 +103,11 @@ def test_legacy_kinds_pass_catalogue_validation():
 
 
 def test_val_pcap_009_off_taxonomy_rejected():
-    """An off-taxonomy capability_id is rejected by VAL-PCAP-009."""
-    fact = ProviderCapabilityFact(
-        capability_id="vendor-key-injection",  # old off-taxonomy id
-        subject="provider_id",  # non-external subject that resolves (every desc has provider_id)
-        evidence=CapabilityEvidence(
-            evidence_tier="documentation",
-            review_state="pending-review",
-        ),
-    )
-    desc = ProviderDescriptor(
-        provider_id="test",
-        display_name="Test",
-        capability_facts=(fact,),
-    )
+    """An off-taxonomy capability kind is rejected by VAL-PCAP-009."""
+    from audiagentic.components.providers.descriptors.loader import _build_capabilities
+
     with pytest.raises(AudiaGenticError, match="VAL-PCAP-009"):
-        validate_provider_capability_facts(desc)
-
-
-def test_val_pcap_009_external_subject_bypasses():
-    """External subjects (external: prefix) bypass the catalogue."""
-    fact = ProviderCapabilityFact(
-        capability_id="any-id-here",  # not in catalogue
-        subject="external:some-provider",
-        mechanism="provider CLI",
-        evidence=CapabilityEvidence(
-            evidence_tier="documentation",
-            tool_version="1.0.0",
-            fact_anchor="some-anchor",
-            review_state="pending-review",
-        ),
-    )
-    desc = ProviderDescriptor(
-        provider_id="test",
-        display_name="Test",
-        capability_facts=(fact,),
-    )
-    # Should NOT raise VAL-PCAP-009 (external bypass)
-    validate_provider_capability_facts(desc)
+        _build_capabilities({"vendor-key-injection": {"mechanism": {}}})
 
 
 def test_validate_capability_id_returns_kind_for_known():
@@ -153,7 +115,9 @@ def test_validate_capability_id_returns_kind_for_known():
     kind = validate_capability_id("cli-install")
     assert kind is not None
     assert kind.id == "cli-install"
-    assert kind.authority == "automation"
+    # Tier renamed automation -> provisioned (PC01); legacy YAML label is
+    # normalized at load, so the loaded kind reports the final tier name.
+    assert kind.authority == "provisioned"
 
 
 def test_validate_capability_id_returns_none_for_unknown():

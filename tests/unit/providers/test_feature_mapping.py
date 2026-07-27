@@ -16,7 +16,15 @@ from audiagentic.foundation.toolchains.config.managed_config import ManagedConfi
 
 
 def _provider(provider_id: str = "x", **kwargs) -> ProviderDescriptor:
-    return ProviderDescriptor(provider_id=provider_id, display_name=provider_id, **kwargs)
+    from audiagentic.components.providers.descriptors.loader import (
+        _capabilities_from_values,
+    )
+
+    return ProviderDescriptor(
+        provider_id=provider_id,
+        display_name=provider_id,
+        capabilities=_capabilities_from_values(kwargs),
+    )
 
 
 def _fake_mcp_spec() -> ManagedConfigSpec:
