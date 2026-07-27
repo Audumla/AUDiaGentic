@@ -89,7 +89,7 @@ host_capabilities:
     display_name: "OpenCode"
 
 capability_facts:
-  - capability_id: mcp-launch-isolation
+  - capability_id: launch-isolation
     subject: mcp_launch_isolation_tier
     mechanism: "isolated XDG config plus per-process OPENCODE_CONFIG_CONTENT"
     constraints: []
@@ -272,7 +272,7 @@ capability_facts:
       review_state: pending-review
   # --- AS27 harness observability capability facts -----------------------
   # Inventory and conformance for agent-loop status observation.
-  - capability_id: hinv-opencode-acp
+  - capability_id: obs-opencode-acp
     subject: "external:harness-observability/opencode-acp"
     mechanism: "AS27 inventory: Recipe A transport-observation; validated O1 publisher on linux-amd64 only (local probe proven); opencode acp stdio supports windows/macOS/linux as vendor product platforms but local observability validation requires exact per-platform probe"
     constraints: []
@@ -285,7 +285,7 @@ capability_facts:
       tool_version: repository
       fact_anchor: "src/audiagentic/components/providers/services/harness_observability_inventory.py#opencode-opencode-acp"
       review_state: verified
-  - capability_id: hinv-opencode-cli-session
+  - capability_id: obs-opencode-cli-session
     subject: "external:harness-observability/opencode-cli-session"
     mechanism: "AS27 inventory: Recipe A/C candidate; blocked pending synchronous completion / idle/status probe; never parse prose"
     constraints:

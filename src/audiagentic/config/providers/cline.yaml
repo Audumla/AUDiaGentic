@@ -100,8 +100,8 @@ capability_facts:
       tool_version: repository
       fact_anchor: "config/providers/cline.yaml#permissions"
       review_state: verified
-  - capability_id: vendor-key-injection
-    subject: "external:vendor-key-injection"
+  - capability_id: model-credentials
+    subject: "external:model-credentials"
     mechanism: "cline auth --provider <id> --apikey <key> for openai-compatible, anthropic, gemini"
     constraints:
       - "single active model per session"
@@ -114,8 +114,8 @@ capability_facts:
       tool_version: "3.0.3"
       fact_anchor: "docs/reference/model-source-evidence/cline.md#cline-evidence"
       review_state: verified
-  - capability_id: model-config-surface
-    subject: "external:model-config-surface"
+  - capability_id: model-local-state
+    subject: "external:model-local-state"
     mechanism: "~/.cline/ directory with per-provider auth state, cron, data, kanban, worktrees"
     constraints:
       - "user-global, home-scoped"

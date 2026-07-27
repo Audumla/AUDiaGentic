@@ -1,0 +1,211 @@
+# Provider capability kind catalogue — authoritative index.
+# Every capability_fact.capability_id must resolve here (VAL-PCAP-009).
+# Automation kinds must reference a valid family in _families.yaml.
+# Mechanism schemas must resolve via MECHANISM_SCHEMA_MAP (VAL-PCAP-013).
+# Namespace is closed — no new kinds outside this file.
+
+kinds:
+  # ── Automation (family_id present, reconciles against _families.yaml) ──
+
+  cli-install:
+    domain: cli
+    authority: automation
+    family_id: cli-lifecycle
+    cardinality: single
+    mechanism_schema: cli-install-recipe
+
+  mcp-config:
+    domain: mcp
+    authority: automation
+    family_id: managed-mcp
+    cardinality: single
+    mechanism_schema: managed-config-spec
+
+  model-config:
+    domain: model
+    authority: automation
+    family_id: model-projection
+    cardinality: single
+    mechanism_schema: managed-config-spec
+
+  surface-render:
+    domain: surface
+    authority: automation
+    family_id: generated-surfaces
+    cardinality: single
+    mechanism_schema: surfaces-struct
+
+  lsp-automation:
+    domain: lsp
+    authority: automation
+    family_id: language-server
+    cardinality: single
+    mechanism_schema: lsp-automation-spec
+
+  model-catalog-refresh:
+    domain: model
+    authority: automation
+    family_id: model-projection
+    cardinality: single
+    mechanism_schema: callable-ref
+
+  # ── Operational (no FamilyPin) ──
+
+  lsp-mcp-receive:
+    domain: lsp
+    authority: operational
+    cardinality: single
+    mechanism_schema: boolean-set
+
+  host-extension:
+    domain: ext
+    authority: operational
+    cardinality: list
+    mechanism_schema: host-capability
+
+  perm-declaration:
+    domain: perm
+    authority: operational
+    cardinality: single
+    mechanism_schema: permissions-struct
+
+  file-agent:
+    domain: file
+    authority: operational
+    cardinality: list
+    mechanism_schema: agent-file
+
+  surface-skill:
+    domain: surface
+    authority: operational
+    cardinality: single
+    mechanism_schema: callable-ref
+
+  surface-instruction:
+    domain: surface
+    authority: operational
+    cardinality: single
+    mechanism_schema: boolean-set
+
+  launch-isolation:
+    domain: exec
+    authority: operational
+    cardinality: single
+    mechanism_schema: tier-enum
+
+  execution-isolation:
+    domain: exec
+    authority: operational
+    cardinality: single
+    mechanism_schema: tier-enum
+
+  exec-adapter:
+    domain: exec
+    authority: operational
+    cardinality: single
+    mechanism_schema: tier-enum
+
+  plugin-config:
+    domain: plugin
+    authority: automation
+    family_id: plugin-entry
+    cardinality: single
+    mechanism_schema: managed-config-spec
+
+  model-connectors:
+    domain: model
+    authority: operational
+    cardinality: single
+    mechanism_schema: boolean-set
+
+  depr-status:
+    domain: depr
+    authority: operational
+    cardinality: single
+    mechanism_schema: none
+
+  # ── Evidence-only (no FamilyPin, no mechanism) ──
+
+  acp-support:
+    domain: acp
+    authority: evidence-only
+    mechanism_schema: acp-caps-list
+
+  model-local-state:
+    domain: model
+    authority: evidence-only
+    mechanism_schema: none
+
+  model-credentials:
+    domain: model
+    authority: evidence-only
+    mechanism_schema: none
+
+  model-config-projection:
+    domain: model
+    authority: evidence-only
+    mechanism_schema: none
+
+  # ── Harness observability (evidence-only, obs-* pattern) ──
+
+  obs-opencode-acp:
+    domain: obs
+    authority: evidence-only
+    mechanism_schema: none
+
+  obs-opencode-cli-session:
+    domain: obs
+    authority: evidence-only
+    mechanism_schema: none
+
+  # ── Legacy kinds (kept for PC01 validation, consolidated in PC03) ──
+  # These are superseded by canonical kinds listed under canonical_kind.
+  # They pass VAL-PCAP-009 but signal future migration.
+
+  surfaces:
+    domain: surface
+    authority: automation
+    family_id: generated-surfaces
+    cardinality: single
+    mechanism_schema: surfaces-struct
+    canonical_kind: surface-render
+
+  lsp-config:
+    domain: lsp
+    authority: automation
+    family_id: language-server-projection
+    cardinality: single
+    mechanism_schema: lsp-automation-spec
+    canonical_kind: lsp-automation
+
+  lsp-self-support:
+    domain: lsp
+    authority: automation
+    family_id: self-provided-lsp
+    cardinality: single
+    mechanism_schema: lsp-automation-spec
+    canonical_kind: lsp-automation
+
+  acp-stdio-transport:
+    domain: acp
+    authority: evidence-only
+    mechanism_schema: none
+    canonical_kind: acp-support
+
+  acp-live-session:
+    domain: acp
+    authority: evidence-only
+    mechanism_schema: none
+    canonical_kind: acp-support
+
+  acp-shared-live-session:
+    domain: acp
+    authority: evidence-only
+    mechanism_schema: none
+    canonical_kind: acp-support
+
+  acp-session-resume:
+    domain: acp
+    authority: evidence-only
+    mechanism_schema: none
+    canonical_kind: acp-support
