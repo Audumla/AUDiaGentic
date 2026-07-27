@@ -54,19 +54,7 @@ def test_create_item_frontmatter_state_is_pending(tmp_path):
     assert "state: pending" in text
 
 
-def test_create_item_frontmatter_has_plan_prefix(tmp_path):
-    planning_api.create_item(tmp_path, _make_item(plan="test-plan"))
-    path = _active_dir(tmp_path) / "test-plan" / "TST01.md"
-    text = path.read_text(encoding="utf-8")
-    assert "plan: plan-test-plan" in text
 
-
-def test_create_item_plan_prefix_not_doubled(tmp_path):
-    planning_api.create_item(tmp_path, _make_item(plan="plan-test-plan"))
-    path = _active_dir(tmp_path) / "test-plan" / "TST01.md"
-    text = path.read_text(encoding="utf-8")
-    assert "plan: plan-test-plan" in text
-    assert "plan-plan-" not in text
 
 
 def test_create_item_body_contains_title_heading(tmp_path):
@@ -119,11 +107,11 @@ def test_create_item_duplicate_raises(tmp_path):
 
 
 def test_create_item_optional_fields_in_frontmatter(tmp_path):
-    planning_api.create_item(tmp_path, _make_item(priority="P0", complexity="complex", order=3))
+    planning_api.create_item(tmp_path, _make_item(priority="P0", work="M", order=3))
     path = _active_dir(tmp_path) / "test-plan" / "TST01.md"
     text = path.read_text(encoding="utf-8")
     assert "priority: P0" in text
-    assert "complexity: complex" in text
+    assert "work: M" in text
     assert "order: 3" in text
 
 
@@ -379,10 +367,28 @@ def test_set_state_completed_to_pending_moves_back(tmp_path):
     assert not (_completed_dir(tmp_path) / "test-plan" / "TST01.md").exists()
 
 
-def test_set_state_not_done_alias_moves_to_active(tmp_path):
+def test_set_state_superseded_moves_to_completed_folder(tmp_path):
     planning_api.create_item(tmp_path, _make_item())
-    planning_api.set_state(tmp_path, "TST01", "completed")
-    result = planning_api.set_state(tmp_path, "TST01", "not_done")
+    result = planning_api.set_state(tmp_path, "TST01", "superseded")
+
+    assert result["state"] == "superseded"
+    assert not (_active_dir(tmp_path) / "test-plan" / "TST01.md").exists()
+    assert (_completed_dir(tmp_path) / "test-plan" / "TST01.md").exists()
+
+
+def test_set_state_deprecated_moves_to_completed_folder(tmp_path):
+    planning_api.create_item(tmp_path, _make_item())
+    result = planning_api.set_state(tmp_path, "TST01", "deprecated")
+
+    assert result["state"] == "deprecated"
+    assert not (_active_dir(tmp_path) / "test-plan" / "TST01.md").exists()
+    assert (_completed_dir(tmp_path) / "test-plan" / "TST01.md").exists()
+
+
+def test_set_state_superseded_can_reopen(tmp_path):
+    planning_api.create_item(tmp_path, _make_item())
+    planning_api.set_state(tmp_path, "TST01", "superseded")
+    result = planning_api.set_state(tmp_path, "TST01", "pending")
 
     assert result["state"] == "pending"
     assert (_active_dir(tmp_path) / "test-plan" / "TST01.md").exists()
@@ -433,11 +439,11 @@ def test_update_item_updates_title(tmp_path):
 
 def test_update_item_preserves_unchanged_fields(tmp_path):
     planning_api.create_item(tmp_path, _make_item(priority="P1"))
-    planning_api.update_item(tmp_path, "TST01", {"complexity": "complex"})
+    planning_api.update_item(tmp_path, "TST01", {"work": "L"})
 
     item = planning_api.get_item(tmp_path, "TST01")
     assert item["priority"] == "P1"
-    assert item["complexity"] == "complex"
+    assert item["work"] == "L"
 
 
 def test_update_item_not_found_raises(tmp_path):
@@ -485,11 +491,11 @@ def test_list_items_grouped_returns_groups(tmp_path):
     planning_api.create_item(tmp_path, {"plan": "other-plan", "title": "Other 1"})
     result = planning_api.list_items_grouped(tmp_path)
     groups = {g["plan"]: g for g in result}
-    assert "plan-test-plan" in groups
-    assert "plan-other-plan" in groups
-    assert groups["plan-test-plan"]["item_count"] == 2
-    assert groups["plan-test-plan"]["active_count"] == 2
-    assert groups["plan-other-plan"]["item_count"] == 1
+    assert "test-plan" in groups
+    assert "other-plan" in groups
+    assert groups["test-plan"]["item_count"] == 2
+    assert groups["test-plan"]["active_count"] == 2
+    assert groups["other-plan"]["item_count"] == 1
 
 
 def test_list_items_grouped_with_state_filter(tmp_path):
@@ -498,9 +504,39 @@ def test_list_items_grouped_with_state_filter(tmp_path):
     planning_api.set_state(tmp_path, "TE02", "completed")
     result = planning_api.list_items_grouped(tmp_path, state="completed")
     assert len(result) == 1
-    assert result[0]["plan"] == "plan-test-plan"
+    assert result[0]["plan"] == "test-plan"
     assert result[0]["completed_count"] == 1
     assert result[0]["active_count"] == 0
+
+
+def test_list_items_superseded_filter_returns_only_superseded(tmp_path):
+    planning_api.create_item(tmp_path, _make_item(id="B01"))
+    planning_api.create_item(tmp_path, _make_item(id="B02"))
+    planning_api.set_state(tmp_path, "B01", "superseded")
+
+    items = planning_api.list_items(tmp_path, state="superseded")
+    assert len(items) == 1
+    assert items[0]["id"] == "B01"
+
+
+def test_list_items_deprecated_filter_returns_only_deprecated(tmp_path):
+    planning_api.create_item(tmp_path, _make_item(id="B01"))
+    planning_api.create_item(tmp_path, _make_item(id="B02"))
+    planning_api.set_state(tmp_path, "B01", "deprecated")
+
+    items = planning_api.list_items(tmp_path, state="deprecated")
+    assert len(items) == 1
+    assert items[0]["id"] == "B01"
+
+
+def test_list_items_grouped_counts_superseded_as_terminal(tmp_path):
+    planning_api.create_item(tmp_path, {"plan": "test-plan", "title": "Active"})
+    planning_api.create_item(tmp_path, {"plan": "test-plan", "title": "Superseded"})
+    planning_api.set_state(tmp_path, "TE02", "superseded")
+    result = planning_api.list_items_grouped(tmp_path)
+    assert len(result) == 1
+    assert result[0]["active_count"] == 1
+    assert result[0]["completed_count"] == 1  # superseded counts as terminal
 
 
 def test_next_item_id_sequential(tmp_path):
