@@ -28,7 +28,16 @@ toolchains:
     uninstall: [scoop, uninstall, "{package}"]
 
   winget:
-    install: [winget, install, --id, "{package}", -e, --accept-source-agreements, --accept-package-agreements]
+    install:
+      [
+        winget,
+        install,
+        --id,
+        "{package}",
+        -e,
+        --accept-source-agreements,
+        --accept-package-agreements,
+      ]
     uninstall: [winget, uninstall, --id, "{package}", -e]
 
   gh_extension:
@@ -55,6 +64,10 @@ toolchains:
     privilege: true
     install: [pacman, -S, --noconfirm, "{package}"]
     remove: [pacman, -R, --noconfirm, "{package}"]
+
+  pip:
+    install: [pip, install, "{package}"]
+    uninstall: [pip, uninstall, -y, "{package}"]
 
   go:
     install: [go, install, "{package}"]
