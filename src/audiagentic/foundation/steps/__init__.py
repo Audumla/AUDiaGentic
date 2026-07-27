@@ -23,6 +23,7 @@ from .shell import PlatformOverrides, ShellStep
 from .structured import (
     ConfigRemoveStep,
     ConfigSetStep,
+    DeletePathStep,
     DownloadStep,
     ManagedBlockStep,
     WriteFileStep,
@@ -35,6 +36,7 @@ __all__ = [
     "ConfigRemoveStep",
     "ConfigSetStep",
     "ConfirmStep",
+    "DeletePathStep",
     "DownloadStep",
     "ManagedBlockStep",
     "PlatformOverrides",

@@ -12,10 +12,11 @@ prunes what ``run`` applied. This module is also the template for any component
 that needs its own specialized step — register a builder + schema fragment via
 ``register_step_type`` from the owning layer.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from audiagentic.foundation.steps.factory import register_step_type, strict_substitute
 from audiagentic.foundation.steps.results import StepResult
@@ -66,6 +67,8 @@ class _ManagedProviderStep:
             self._applied = True
         ok = bool(getattr(result, "ok", False))
         # Stash family result for lifecycle reporting (DE03).
+        # Uses a list so multiple managed-* steps in one recipe all contribute;
+        # the last entry is the primary managed result for _lifecycle_hint.
         bucket = context.setdefault("managed_results", [])
         if hasattr(result, "to_mapping"):
             bucket.append(result.to_mapping())
@@ -90,15 +93,22 @@ class _ManagedProviderStep:
 # ---------------------------------------------------------------------------
 
 _MANAGED_MCP_SCHEMA: dict[str, Any] = {
-    "type": "object", "additionalProperties": False,
+    "type": "object",
+    "additionalProperties": False,
     "required": ["type", "id", "provider", "managed-id", "ownership-scope", "name"],
     "properties": {
-        "type": {"const": "managed-mcp"}, "id": _ID, "provider": _ID,
-        "managed-id": _ID, "ownership-scope": _ID, "name": _ID,
+        "type": {"const": "managed-mcp"},
+        "id": _ID,
+        "provider": _ID,
+        "managed-id": _ID,
+        "ownership-scope": _ID,
+        "name": _ID,
         "mode": {"enum": ["apply", "prune", "status"]},
-        "url": _ID, "transport": {"enum": ["http", "sse"]},
+        "url": _ID,
+        "transport": {"enum": ["http", "sse"]},
         "headers": {"type": "object", "additionalProperties": {"type": "string"}},
-        "command": _ID, "args": {"type": "array", "items": {"type": "string"}},
+        "command": _ID,
+        "args": {"type": "array", "items": {"type": "string"}},
         "env": {"type": "object", "additionalProperties": {"type": "string"}},
     },
 }
@@ -113,13 +123,16 @@ class ManagedMcpStep(_ManagedProviderStep):
     def _reconcile(self, project_root, mode):
         from audiagentic.components.providers.contracts.managed_mcp import (
             ManagedMcpEntry,
+            ManagedMcpMode,
             ManagedMcpRequest,
         )
         from audiagentic.components.providers.providers_api import manage_mcp_entries
 
         entries = () if mode == "prune" else (ManagedMcpEntry.from_mapping(self.entry),)
         return manage_mcp_entries(
-            project_root, self.provider_id, mode=mode,
+            project_root,
+            self.provider_id,
+            mode=cast(ManagedMcpMode, mode),
             request=ManagedMcpRequest(ownership_scope=self.ownership_scope, entries=entries),
         )
 
@@ -134,16 +147,25 @@ def _build_managed_mcp(data, params=None):
         entry["url"] = sub(data["url"])
         entry["transport"] = data.get("transport", "http")
         if data.get("headers"):
-            entry["headers"] = sub(data["headers"])
+            hdrs = {k: sub(v) for k, v in data["headers"].items()}
+            hdrs = {k: v for k, v in hdrs.items() if v}  # drop empty values
+            if hdrs:
+                entry["headers"] = hdrs
     elif data.get("command"):
         entry["command"] = sub(data["command"])
         if data.get("args"):
             entry["args"] = sub(data["args"])
         if data.get("env"):
-            entry["env"] = sub(data["env"])
+            env = {k: sub(v) for k, v in data["env"].items()}
+            env = {k: v for k, v in env.items() if v}  # drop empty values
+            if env:
+                entry["env"] = env
     return ManagedMcpStep(
-        id=data.get("id", "managed-mcp"), provider_id=sub(data["provider"]),
-        ownership_scope=sub(data["ownership-scope"]), entry=entry, mode=data.get("mode", "apply"),
+        id=data.get("id", "managed-mcp"),
+        provider_id=sub(data["provider"]),
+        ownership_scope=sub(data["ownership-scope"]),
+        entry=entry,
+        mode=data.get("mode", "apply"),
     )
 
 
@@ -152,17 +174,30 @@ def _build_managed_mcp(data, params=None):
 # ---------------------------------------------------------------------------
 
 _MANAGED_HOOKS_SCHEMA: dict[str, Any] = {
-    "type": "object", "additionalProperties": False,
+    "type": "object",
+    "additionalProperties": False,
     "required": ["type", "id", "provider", "ownership-scope", "entries"],
     "properties": {
-        "type": {"const": "managed-hooks"}, "id": _ID, "provider": _ID, "ownership-scope": _ID,
+        "type": {"const": "managed-hooks"},
+        "id": _ID,
+        "provider": _ID,
+        "ownership-scope": _ID,
         "mode": {"enum": ["apply", "prune", "status"]},
-        "entries": {"type": "array", "minItems": 1, "items": {
-            "type": "object", "additionalProperties": False,
-            "required": ["managed-id", "event", "command"],
-            "properties": {"managed-id": _ID, "event": _ID, "command": _ID,
-                           "timeout": {"type": "integer", "minimum": 1}},
-        }},
+        "entries": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["managed-id", "event", "command"],
+                "properties": {
+                    "managed-id": _ID,
+                    "event": _ID,
+                    "command": _ID,
+                    "timeout": {"type": "integer", "minimum": 1},
+                },
+            },
+        },
     },
 }
 
@@ -176,30 +211,47 @@ class ManagedHooksStep(_ManagedProviderStep):
     def _reconcile(self, project_root, mode):
         from audiagentic.components.providers.contracts.managed_hooks import (
             ManagedHooksEntry,
+            ManagedHooksMode,
             ManagedHooksRequest,
         )
         from audiagentic.components.providers.providers_api import manage_hook_entries
 
-        entries = () if mode == "prune" else tuple(ManagedHooksEntry.from_mapping(e) for e in self.entries)
+        entries = (
+            ()
+            if mode == "prune"
+            else tuple(ManagedHooksEntry.from_mapping(e) for e in self.entries)
+        )
         return manage_hook_entries(
-            project_root, self.provider_id, mode=mode,
+            project_root,
+            self.provider_id,
+            mode=cast(ManagedHooksMode, mode),
             request=ManagedHooksRequest(ownership_scope=self.ownership_scope, entries=entries),
         )
 
     def _summary(self):
-        return {"provider": self.provider_id, "hook_ids": [e.get("managed_id") for e in self.entries]}
+        return {
+            "provider": self.provider_id,
+            "hook_ids": [e.get("managed_id") for e in self.entries],
+        }
 
 
 def _build_managed_hooks(data, params=None):
     sub = _substituter(data.get("id", "managed-hooks"), params)
     entries = [
-        {"managed_id": e["managed-id"], "event": sub(e["event"]), "command": sub(e["command"]),
-         **({"timeout": e["timeout"]} if e.get("timeout") is not None else {})}
+        {
+            "managed_id": e["managed-id"],
+            "event": sub(e["event"]),
+            "command": sub(e["command"]),
+            **({"timeout": e["timeout"]} if e.get("timeout") is not None else {}),
+        }
         for e in data["entries"]
     ]
     return ManagedHooksStep(
-        id=data.get("id", "managed-hooks"), provider_id=sub(data["provider"]),
-        ownership_scope=sub(data["ownership-scope"]), entries=entries, mode=data.get("mode", "apply"),
+        id=data.get("id", "managed-hooks"),
+        provider_id=sub(data["provider"]),
+        ownership_scope=sub(data["ownership-scope"]),
+        entries=entries,
+        mode=data.get("mode", "apply"),
     )
 
 
@@ -208,11 +260,15 @@ def _build_managed_hooks(data, params=None):
 # ---------------------------------------------------------------------------
 
 _MANAGED_PLUGIN_SCHEMA: dict[str, Any] = {
-    "type": "object", "additionalProperties": False,
+    "type": "object",
+    "additionalProperties": False,
     "required": ["type", "id", "provider", "entry-id", "ownership-scope"],
     "properties": {
-        "type": {"const": "managed-plugin"}, "id": _ID, "provider": _ID,
-        "entry-id": _ID, "ownership-scope": _ID,
+        "type": {"const": "managed-plugin"},
+        "id": _ID,
+        "provider": _ID,
+        "entry-id": _ID,
+        "ownership-scope": _ID,
         "mode": {"enum": ["apply", "prune", "status"]},
         "options": {"type": "object", "additionalProperties": {"type": "string"}},
     },
@@ -227,13 +283,19 @@ class ManagedPluginStep(_ManagedProviderStep):
         self.options = options
 
     def _reconcile(self, project_root, mode):
-        from audiagentic.components.providers.contracts.plugin_entry import PluginEntryRequest
+        from audiagentic.components.providers.contracts.plugin_entry import (
+            PluginEntryMode,
+            PluginEntryRequest,
+        )
         from audiagentic.components.providers.providers_api import manage_plugin_entry
 
         return manage_plugin_entry(
-            project_root, self.provider_id, mode=mode,
+            project_root,
+            self.provider_id,
+            mode=cast(PluginEntryMode, mode),
             request=PluginEntryRequest(
-                entry_id=self.entry_id, ownership_scope=self.ownership_scope,
+                entry_id=self.entry_id,
+                ownership_scope=self.ownership_scope,
                 options=tuple(sorted(self.options.items())),
             ),
         )
@@ -245,8 +307,10 @@ class ManagedPluginStep(_ManagedProviderStep):
 def _build_managed_plugin(data, params=None):
     sub = _substituter(data.get("id", "managed-plugin"), params)
     return ManagedPluginStep(
-        id=data.get("id", "managed-plugin"), provider_id=sub(data["provider"]),
-        entry_id=sub(data["entry-id"]), ownership_scope=sub(data["ownership-scope"]),
+        id=data.get("id", "managed-plugin"),
+        provider_id=sub(data["provider"]),
+        entry_id=sub(data["entry-id"]),
+        ownership_scope=sub(data["ownership-scope"]),
         options={str(k): str(sub(v)) for k, v in dict(data.get("options", {})).items()},
         mode=data.get("mode", "apply"),
     )

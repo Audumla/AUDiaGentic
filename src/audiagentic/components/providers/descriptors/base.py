@@ -15,6 +15,29 @@ from ..contracts.mcp_launch_surface import McpLaunchIsolationTier
 from .automation_capabilities import ProviderAutomationCapability
 
 IsolationTier = Literal["full-isolation", "partial-isolation", "no-isolation"]
+CapabilityAuthority = Literal["automation", "operational", "evidence-only"]
+
+# ── Unified capability record ────────────────────────────────────────────
+# Replaces the four separate descriptor blocks (automation_capabilities,
+# capability_facts, host_capabilities/permissions + config-spec fields) with
+# one catalogue-driven map: kind → mechanism [+ modes + evidence].
+
+
+@dataclass(frozen=True)
+class Capability:
+    """One provider capability entry in the unified map.
+
+    ``kind`` is a catalogue key (from _capabilities.yaml). Authority,
+    family, cardinality, and mechanism_schema come from the catalogue —
+    the YAML only declares the kind name, mechanism data, optional modes,
+    and optional evidence. The loader validates the kind against the
+    catalogue and shapes the mechanism value accordingly.
+    """
+
+    kind: str  # catalogue key, e.g. 'mcp-config', 'host-extension'
+    mechanism: Any  # shaped by catalogue's mechanism_schema for this kind
+    modes: tuple[str, ...] = ()  # automation only; must match family's supported_modes
+    evidence: CapabilityEvidence | None = None
 
 
 @dataclass(frozen=True)
@@ -133,6 +156,14 @@ class ProviderDescriptor:
     automation_capabilities: tuple[ProviderAutomationCapability, ...] = field(
         default_factory=tuple
     )
+    # ── Unified capability map (PC02) ────────────────────────────────────
+    # Replaces the four separate descriptor blocks:
+    #   automation_capabilities, capability_facts, host_capabilities,
+    #   permissions, + config-spec fields (mcp_config, model_config, ...)
+    # Populated from the new ``capabilities:`` YAML block.
+    # When reading legacy shape, derived from flat fields in loader.
+    capabilities: tuple[Capability, ...] = field(default_factory=tuple)
+
     permissions: ProviderPermissions = field(default_factory=ProviderPermissions)
     agent_files: tuple[AgentFile, ...] = field(default_factory=tuple)
     # access-mode written to providers.yaml when this provider is first enabled.
@@ -263,26 +294,24 @@ class ProviderDescriptor:
     # backward compatibility.
     session_surfaces: tuple[SessionSurfaceDeclaration, ...] = field(default_factory=tuple)
 
-    def host_extensions(self, host_id: str) -> tuple[HostCapability, ...]:
-        """Capabilities declared for one editor host."""
-        return tuple(
-            capability
-            for capability in self.host_capabilities
-            if capability.host == host_id
-        )
+    # ── Capability lookup (PC02 unified accessors) ───────────────────────
+
+    def get_capability(self, kind_id: str) -> Capability | None:
+        """Return the capability entry for a given catalogue kind id."""
+        return next((c for c in self.capabilities if c.kind == kind_id), None)
 
     def automation_capability(
         self, family_id: str
     ) -> ProviderAutomationCapability | None:
         """Return one explicitly declared automation family, if supported."""
         return next(
-            (
-                capability
-                for capability in self.automation_capabilities
-                if capability.family_id == family_id
-            ),
+            (c for c in self.automation_capabilities if c.family_id == family_id),
             None,
         )
+
+    def host_extensions(self, host_id: str) -> tuple[HostCapability, ...]:
+        """Capabilities declared for one editor host."""
+        return tuple(c for c in self.host_capabilities if c.host == host_id)
 
     @property
     def install_mode(self) -> str:

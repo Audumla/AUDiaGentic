@@ -1,4 +1,5 @@
 """Typed, declarative provider automation capability declarations."""
+
 from __future__ import annotations
 
 import json
@@ -11,7 +12,28 @@ from jsonschema import Draft202012Validator
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 AUTOMATION_MODES = frozenset({"plan", "apply", "prune", "status"})
+
+
+def _validate_family_in_catalogue(capability: ProviderAutomationCapability) -> None:
+    """VAL-PCAP-011: family must exist in _families.yaml with matching contracts."""
+    from .capability_catalogue import validate_family_declaration
+
+    try:
+        validate_family_declaration(
+            capability.family_id,
+            payload_contract=capability.payload_contract,
+            result_contract=capability.result_contract,
+            supported_modes=capability.supported_modes,
+        )
+    except Exception as exc:  # CatalogueError → VAL-PCAP-011
+        raise _error(
+            str(exc),
+            family_id=capability.family_id,
+        ) from None
+
+
 _CONTRACT_DIR = Path(__file__).resolve().parents[1] / "contracts"
+
 
 @dataclass(frozen=True)
 class ProviderAutomationCapability:
@@ -69,6 +91,9 @@ def validate_automation_capabilities(
             capability.result_contract,
         ):
             _validate_contract_ref(contract_ref, capability.family_id)
+
+        # VAL-PCAP-011: family_id must exist in _families.yaml
+        _validate_family_in_catalogue(capability)
 
 
 def _validate_contract_ref(contract_ref: str, family_id: str) -> None:

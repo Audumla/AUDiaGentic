@@ -1,4 +1,8 @@
-"""Descriptor-backed managed-hooks automation family."""
+"""Descriptor-backed managed-hooks automation family.
+
+Family declaration is in _families.yaml (config-based, PC01).
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -9,20 +13,22 @@ from audiagentic.components.providers.contracts.managed_hooks import (
     ManagedHooksResult,
 )
 from audiagentic.components.providers.descriptors.registry import get_descriptor
-from audiagentic.components.providers.services.recipe_definitions import FamilyPin
 from audiagentic.foundation.toolchains.config.managed_config import (
     ManagedFragmentRegistry,
     resolve_managed_config_path,
     sync_managed_config,
 )
 
-PIN = FamilyPin(
-    family_id="managed-hooks",
-    payload_contract="provider-managed-hooks-payload/v1",
-    result_contract="provider-managed-hooks-result/v1",
-    supported_modes=("apply", "prune", "status"),
-    ownership_scope_required=True,
-)
+FAMILY_ID = "managed-hooks"
+
+
+def _family_declaration():
+    """Resolve the managed-hooks family declaration from config."""
+    from audiagentic.components.providers.descriptors.capability_catalogue import (
+        get_catalogue,
+    )
+
+    return get_catalogue().families[FAMILY_ID]
 
 
 def _hooks_ownership_registry(project_root: Path) -> ManagedFragmentRegistry:
@@ -51,19 +57,17 @@ def manage_hook_entries(
         return ManagedHooksResult(
             ok=False, supported=False, provider_id=provider_id, error_code="RES-PHKS-001"
         )
+    family = _family_declaration()
     if (
-        capability.payload_contract != PIN.payload_contract
-        or capability.result_contract != PIN.result_contract
-        or tuple(capability.supported_modes) != PIN.supported_modes
-        or capability.ownership_scope_required != PIN.ownership_scope_required
+        capability.payload_contract != family.payload_contract
+        or capability.result_contract != family.result_contract
+        or tuple(capability.supported_modes) != family.supported_modes
     ):
         return ManagedHooksResult(
             ok=False, supported=True, provider_id=provider_id, error_code="VAL-PHKS-001"
         )
-    if mode not in PIN.supported_modes:
-        return ManagedHooksResult(
-            ok=False, provider_id=provider_id, error_code="CON-PREC-002"
-        )
+    if mode not in family.supported_modes:
+        return ManagedHooksResult(ok=False, provider_id=provider_id, error_code="CON-PREC-002")
 
     spec = descriptor.hooks_config
     config_path = resolve_managed_config_path(spec, project_root)
@@ -74,9 +78,7 @@ def manage_hook_entries(
         try:
             spec.reader(config_path)
         except Exception:
-            return ManagedHooksResult(
-                ok=False, provider_id=provider_id, error_code="CON-PHKS-001"
-            )
+            return ManagedHooksResult(ok=False, provider_id=provider_id, error_code="CON-PHKS-001")
         owned_registry = registry.load().get(scope_key, {})
         managed_ids = tuple(sorted(owned_registry))
         return ManagedHooksResult(
@@ -110,10 +112,15 @@ def manage_hook_entries(
         changed=changed,
         managed_ids=tuple(sorted(after)),
         removed_ids=tuple(sorted(set(before) - set(after))),
-        collision_ids=tuple(sorted({
-            str(row.get("managed_id") or row.get("managed-id") or "")
-            for row in (result.collisions or [])
-        } - {""})),
+        collision_ids=tuple(
+            sorted(
+                {
+                    str(row.get("managed_id") or row.get("managed-id") or "")
+                    for row in (result.collisions or [])
+                }
+                - {""}
+            )
+        ),
     )
 
 

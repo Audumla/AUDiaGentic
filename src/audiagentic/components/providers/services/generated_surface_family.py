@@ -1,4 +1,7 @@
-"""MA21 generated-surface recipe family — handler, registration, and public API adapter."""
+"""MA21 generated-surface recipe family — handler and public API adapter.
+
+Family declaration is in _families.yaml (config-based, PC01).
+"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -15,13 +18,34 @@ from audiagentic.components.providers.services.recipe_definitions import (
 
 FAMILY_ID = "generated-surfaces"
 
-PIN = FamilyPin(
-    family_id=FAMILY_ID,
-    payload_contract="provider-generated-surface-payload/v1",
-    result_contract="provider-generated-surface-result/v1",
-    supported_modes=("plan", "apply", "prune", "status"),
-    ownership_scope_required=True,
-)
+# Compatibility: PIN resolved from _families.yaml at access time.
+class _LazyPin:
+    """Lazy-loaded FamilyPin proxy — resolves from config on first attribute access."""
+
+    def __init__(self, family_id: str):
+        self._family_id = family_id
+        self._pin: FamilyPin | None = None
+
+    def _resolve(self) -> FamilyPin:
+        if self._pin is None:
+            from audiagentic.components.providers.descriptors.capability_catalogue import (
+                get_catalogue,
+            )
+
+            family = get_catalogue().families[self._family_id]
+            self._pin = FamilyPin(
+                family_id=self._family_id,
+                payload_contract=family.payload_contract,
+                result_contract=family.result_contract,
+                supported_modes=family.supported_modes,
+                ownership_scope_required=family.ownership_scope_required,
+            )
+        return self._pin
+
+    def __getattr__(self, name: str):
+        return getattr(self._resolve(), name)
+
+PIN = _LazyPin(FAMILY_ID)
 
 
 def make_generated_surface_handler(project_root: Path) -> RecipeHandler:
@@ -81,6 +105,5 @@ def make_generated_surface_handler(project_root: Path) -> RecipeHandler:
 
 __all__ = [
     "FAMILY_ID",
-    "PIN",
     "make_generated_surface_handler",
 ]
