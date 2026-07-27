@@ -65,6 +65,10 @@ class _ManagedProviderStep:
         if self.mode == "apply":
             self._applied = True
         ok = bool(getattr(result, "ok", False))
+        # Stash family result for lifecycle reporting (DE03).
+        bucket = context.setdefault("managed_results", [])
+        if hasattr(result, "to_mapping"):
+            bucket.append(result.to_mapping())
         return StepResult(
             status="ok" if ok else "failed",
             outputs={**self._summary(), "mode": self.mode},
