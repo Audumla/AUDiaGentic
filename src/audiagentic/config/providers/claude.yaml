@@ -9,6 +9,11 @@ automation_capabilities:
     payload_contract: provider-cli-lifecycle-payload/v1
     result_contract: provider-cli-lifecycle-result/v1
     ownership_scope_required: false
+  - family_id: plugin-entry
+    supported_modes: [apply, prune, status]
+    payload_contract: provider-plugin-entry-payload/v1
+    result_contract: provider-plugin-entry-result/v1
+    ownership_scope_required: true
   - family_id: managed-mcp
     supported_modes: [apply, prune, status]
     payload_contract: provider-managed-mcp-payload/v1
