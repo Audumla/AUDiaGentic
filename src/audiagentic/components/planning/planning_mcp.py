@@ -27,25 +27,41 @@ def plan_list_groups(state: str | None = None, plan: str | None = None) -> list:
 @mcp.tool()
 @log_tool_call
 def plan_list_items(
-    state: str | None = None,
     plan: str | None = None,
     id_prefix: str | None = None,
-    limit: int = 50,
+    state: str | None = None,
+    limit: int = 20,
     offset: int = 0,
 ) -> dict:
     """List plan items, bounded and paginated.
 
-    state defaults to 'active' (open work only) — pass state='completed' or
-    state='all' to see closed items. plan accepts glob wildcards (e.g.
-    'code-*'). id_prefix filters by item-ID prefix (e.g. 'CC'). Returns
-    {items, total, returned, offset, limit, has_more}; page through results
-    with offset when has_more is true.
+    At least one of ``plan`` or ``id_prefix`` is required — unbounded scans
+    are not allowed.  ``plan`` accepts a single plan name (e.g. 'code-cleanup')
+    or a glob wildcard (e.g. 'code-*').  ``id_prefix`` filters by item-ID
+    prefix (e.g. 'CC' matches CC01, CC20).  ``state`` defaults to 'active'
+    (open work only) — pass state='completed' or state='all' to see closed
+    items.
+
+    Returns {items, total, returned, offset, limit, has_more}; page through
+    results with offset when has_more is true.  Default limit is 20.
 
     When id_prefix is provided and no items match the current state filter,
     matching items from other states are returned as overflow_items with a
     note explaining why — so you know the item exists but is in a different
     state (e.g. completed instead of active).
     """
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    if plan is None and id_prefix is None:
+        raise AudiaGenticError(
+            code="VAL-PLN-026",
+            kind="validation",
+            message=(
+                "plan_list_items requires at least one of 'plan' or 'id_prefix'."
+                " Use plan='code-cleanup' to filter by plan, or id_prefix='CC'"
+                " to filter by ID prefix."
+            ),
+        )
     return planning_api.list_items_page(
         project_root_from_env(), state, plan, id_prefix, limit, offset
     )

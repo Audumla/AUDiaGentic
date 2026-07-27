@@ -1,0 +1,57 @@
+# Hindsight integration for Aider via the `hindsight-aider` wrapper.
+#
+# Aider has no MCP client or lifecycle hooks; the wrapper uses Aider's
+# read-only context-file support before a session and its chat-history file
+# after the session. This recipe installs the package via pip and writes
+# ~/.hindsight/aider.json configuration.
+recipe-id: hindsight-aider
+recipe-version: "1.0.0"
+description: >-
+  Install hindsight-aider wrapper and write Hindsight-owned aider.json config.
+parameters:
+  - name: URL
+    required: true
+  - name: BANK_ID
+    default: aider
+  - name: TOKEN
+    default: ""
+    sensitive: true
+lifecycle:
+  install-steps:
+    - type: shell
+      id: pip-install-hindsight-aider
+      command: [pip, install, hindsight-aider]
+      timeout: 60
+  configure-steps:
+    - type: config-set
+      id: set-api-url
+      path: ~/.hindsight/aider.json
+      key-path: [hindsightApiUrl]
+      value: "{URL}"
+    - type: config-set
+      id: set-bank-id
+      path: ~/.hindsight/aider.json
+      key-path: [bankId]
+      value: "{BANK_ID}"
+    - type: config-set
+      id: set-api-token
+      path: ~/.hindsight/aider.json
+      key-path: [hindsightApiToken]
+      value: "{TOKEN}"
+  uninstall-steps:
+    - type: shell
+      id: pip-uninstall-hindsight-aider
+      command: [pip, uninstall, -y, hindsight-aider]
+      timeout: 30
+    - type: config-remove
+      id: unset-api-url
+      path: ~/.hindsight/aider.json
+      key-path: [hindsightApiUrl]
+    - type: config-remove
+      id: unset-bank-id
+      path: ~/.hindsight/aider.json
+      key-path: [bankId]
+    - type: config-remove
+      id: unset-api-token
+      path: ~/.hindsight/aider.json
+      key-path: [hindsightApiToken]
