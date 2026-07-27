@@ -1,0 +1,45 @@
+# Generic managed-mcp recipe for providers using stdio transport.
+#
+# Used by _resolve_recipe when the provider's mcp surface does NOT carry
+# 'remote' in capabilities (e.g. goose). The command is launched locally;
+# no URL or headers — only env vars for configuration.
+recipe-id: hindsight-managed-mcp-stdio
+recipe-version: "1.0.0"
+description: >-
+  Managed MCP server entry (stdio transport) for a
+  Hindsight-integrated provider.
+parameters:
+  - name: PROVIDER
+    required: true
+  - name: OWNERSHIP_SCOPE
+    required: true
+  - name: BASE_URL
+    required: true
+  - name: BANK_ID
+    default: ""
+lifecycle:
+  install-steps:
+    - type: managed-mcp
+      id: entry
+      provider: "{PROVIDER}"
+      managed-id: ag-hindsight
+      ownership-scope: "{OWNERSHIP_SCOPE}"
+      name: hindsight
+      command: hindsight-mcp
+      args:
+        - --base-url
+        - "{BASE_URL}"
+      env:
+        HINDSIGHT_BANK_ID: "{BANK_ID}"
+  uninstall-steps:
+    - type: managed-mcp
+      id: prune-entry
+      provider: "{PROVIDER}"
+      managed-id: ag-hindsight
+      ownership-scope: "{OWNERSHIP_SCOPE}"
+      name: hindsight
+      command: hindsight-mcp
+      args:
+        - --base-url
+        - "{BASE_URL}"
+      mode: prune
