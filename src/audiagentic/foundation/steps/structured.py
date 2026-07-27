@@ -363,6 +363,78 @@ class DownloadStep:
         )
 
 
+class DeletePathStep:
+    """Delete a capability-owned file or directory; best-effort self-revert.
+
+    A single file is restored on compensate from captured bytes (binary-safe).
+    A recursive directory delete is NOT restorable — use only for caches the
+    capability wholly owns (e.g. ~/.hindsight/codex/scripts).
+    """
+
+    def __init__(
+        self,
+        id: str,
+        path: str,
+        *,
+        recursive: bool = False,
+        registry: Any | None = None,
+        recipe_id: str | None = None,
+    ) -> None:
+        import shutil
+
+        self.id = id
+        self.path = path
+        self.recursive = recursive
+        self.registry = registry
+        self.recipe_id = recipe_id
+        self._shutil = shutil
+        self._prior_bytes: bytes | None = None
+        self._removed = False
+
+    def run(self, context: dict[str, Any]) -> StepResult:
+        target = Path(self.path).expanduser()
+        if not target.exists():
+            return StepResult(
+                status="ok",
+                outputs={"path": self.path, "existed": False},
+            )
+        if target.is_dir():
+            if not self.recursive:
+                return StepResult(
+                    status="failed",
+                    reason=f"{target} is a directory; set recursive: true",
+                )
+            self._shutil.rmtree(target)
+            self._prior_bytes = None
+        else:
+            self._prior_bytes = target.read_bytes()
+            target.unlink()
+        self._removed = True
+        return StepResult(
+            status="ok",
+            outputs={"path": self.path, "existed": True},
+        )
+
+    def compensate(self, context: dict[str, Any]) -> StepResult:
+        if not self._removed:
+            return StepResult(status="skipped", reason="run never removed anything")
+        if self._prior_bytes is not None:
+            target = Path(self.path).expanduser()
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(self._prior_bytes)
+            return StepResult(
+                status="ok",
+                outputs={"path": self.path, "restored": True},
+            )
+        return StepResult(status="skipped", reason="recursive delete is not restorable")
+
+    def plan(self, context: dict[str, Any]) -> StepResult:
+        return StepResult(
+            status="planned",
+            outputs={"path": self.path, "recursive": self.recursive},
+        )
+
+
 def _substitute_value(value: Any, context: dict[str, Any]) -> Any:
     """Recursively substitute {KEY} placeholders in strings using context values."""
     if isinstance(value, str):
