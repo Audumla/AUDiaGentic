@@ -129,12 +129,52 @@ def test_get_after_update_reflects_changes(tmp_path):
     assert item["notes"] == "Important change."
 
 
-def test_legacy_not_done_alias_resolves_to_pending(tmp_path):
-    """not_done is accepted and stores canonical 'pending' in frontmatter."""
-    planning_api.create_item(tmp_path, {"id": "ND01", "plan": "legacy", "title": "Legacy"})
-    planning_api.set_state(tmp_path, "ND01", "completed")
-    result = planning_api.set_state(tmp_path, "ND01", "not_done")
+def test_superseded_state_lifecycle(tmp_path):
+    """Item can be superseded (moved to completed/) and later reopened."""
+    planning_api.create_item(tmp_path, {"id": "SU01", "plan": "superseded-test", "title": "Superseded item"})
 
-    assert result["state"] == "pending"
-    item = planning_api.get_item(tmp_path, "ND01")
+    # Transition to superseded — moves to completed/
+    result = planning_api.set_state(tmp_path, "SU01", "superseded")
+    assert result["state"] == "superseded"
+    assert not (_active(tmp_path) / "superseded-test" / "SU01.md").exists()
+    assert (_completed(tmp_path) / "superseded-test" / "SU01.md").exists()
+
+    # Can reopen from superseded
+    planning_api.set_state(tmp_path, "SU01", "pending")
+    item = planning_api.get_item(tmp_path, "SU01")
     assert item["state"] == "pending"
+    assert (_active(tmp_path) / "superseded-test" / "SU01.md").exists()
+
+
+def test_deprecated_state_lifecycle(tmp_path):
+    """Item can be deprecated (moved to completed/) and later reopened."""
+    planning_api.create_item(tmp_path, {"id": "DP01", "plan": "deprecated-test", "title": "Deprecated item"})
+
+    # Transition to deprecated — moves to completed/
+    result = planning_api.set_state(tmp_path, "DP01", "deprecated")
+    assert result["state"] == "deprecated"
+    assert not (_active(tmp_path) / "deprecated-test" / "DP01.md").exists()
+    assert (_completed(tmp_path) / "deprecated-test" / "DP01.md").exists()
+
+    # Can reopen from deprecated
+    planning_api.set_state(tmp_path, "DP01", "in_progress")
+    item = planning_api.get_item(tmp_path, "DP01")
+    assert item["state"] == "in_progress"
+    assert (_active(tmp_path) / "deprecated-test" / "DP01.md").exists()
+
+
+def test_state_counts_use_config_driven_sets(tmp_path):
+    """list_items_grouped counts terminal states (completed, superseded, deprecated) correctly."""
+    planning_api.create_item(tmp_path, {"id": "SC01", "plan": "state-counts", "title": "Active"})
+    planning_api.create_item(tmp_path, {"id": "SC02", "plan": "state-counts", "title": "Done"})
+    planning_api.create_item(tmp_path, {"id": "SC03", "plan": "state-counts", "title": "Superseded"})
+    planning_api.create_item(tmp_path, {"id": "SC04", "plan": "state-counts", "title": "Deprecated"})
+
+    planning_api.set_state(tmp_path, "SC02", "completed")
+    planning_api.set_state(tmp_path, "SC03", "superseded")
+    planning_api.set_state(tmp_path, "SC04", "deprecated")
+
+    result = planning_api.list_items_grouped(tmp_path)
+    assert len(result) == 1
+    assert result[0]["active_count"] == 1
+    assert result[0]["completed_count"] == 3  # all terminal states count
