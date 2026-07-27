@@ -1,0 +1,27 @@
+# Generic managed-plugin recipe for providers with plugin-entry capability.
+#
+# Register a single plugin entry (ag-hindsight) under the namespaced
+# ownership scope memory/hindsight/{server_name}.
+recipe-id: hindsight-plugin
+recipe-version: "1.0.0"
+description: >-
+  Managed plugin entry for a Hindsight-integrated provider.
+parameters:
+  - name: PROVIDER
+    required: true
+  - name: OWNERSHIP_SCOPE
+    required: true
+lifecycle:
+  install-steps:
+    - type: managed-plugin
+      id: plugin
+      provider: "{PROVIDER}"
+      entry-id: ag-hindsight
+      ownership-scope: "{OWNERSHIP_SCOPE}"
+  uninstall-steps:
+    - type: managed-plugin
+      id: prune-plugin
+      provider: "{PROVIDER}"
+      entry-id: ag-hindsight
+      ownership-scope: "{OWNERSHIP_SCOPE}"
+      mode: prune
