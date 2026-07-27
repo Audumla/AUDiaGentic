@@ -54,18 +54,25 @@ def _render(entry: MaterializedModelEntry) -> tuple[str, dict]:
 
 
 def _fake_descriptor(**overrides) -> ProviderDescriptor:
+    from audiagentic.components.providers.descriptors.base import Capability
+
     fields = dict(
         provider_id="fakemodels",
         display_name="Fake Models Provider",
-        model_config=ManagedConfigSpec(
-            config_path=".fake/models.json",
-            reader=_read_json,
-            writer=_write_json,
-            remover=_remove_json,
-            format="fake-json",
-            refresh_mode="file-watch",
+        capabilities=(
+            Capability(
+                kind="model-config",
+                mechanism=ManagedConfigSpec(
+                    config_path=".fake/models.json",
+                    reader=_read_json,
+                    writer=_write_json,
+                    remover=_remove_json,
+                    format="fake-json",
+                    refresh_mode="file-watch",
+                ),
+            ),
+            Capability(kind="model-connectors", mechanism=("openai-compatible",)),
         ),
-        supported_connectors=("openai-compatible",),
         model_entry_renderer=_render,
     )
     fields.update(overrides)

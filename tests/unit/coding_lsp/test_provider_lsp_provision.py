@@ -32,6 +32,24 @@ def _mcp_spec() -> ManagedConfigSpec:
     )
 
 
+def _desc(provider_id: str, display_name: str, **flat) -> ProviderDescriptor:
+    """Build a descriptor from legacy flat kwargs by routing them into the
+    unified capabilities map (the flat fields were removed; automation is
+    synthesized from the capabilities)."""
+    from audiagentic.components.providers.descriptors.loader import (
+        _capabilities_from_values,
+    )
+
+    kept = {k: flat.pop(k) for k in ("lsp_support_probe", "receive_lsp_mcp") if k in flat}
+    flat.pop("automation_capabilities", None)
+    return ProviderDescriptor(
+        provider_id=provider_id,
+        display_name=display_name,
+        capabilities=_capabilities_from_values(flat),
+        **kept,
+    )
+
+
 def test_pi_descriptor_declares_lsp_hook() -> None:
     from audiagentic.components.providers.descriptors.registry import all_descriptors
 
@@ -102,14 +120,14 @@ def test_install_pi_lens_runs_install_command(tmp_path: Path, monkeypatch) -> No
 def test_managed_mcp_all_skips_no_capability(tmp_path: Path, monkeypatch) -> None:
     # Providers without managed-mcp capability return supported=False;
     # providers with mcp_config but no managed-mcp declaration are skipped.
-    self_lsp = ProviderDescriptor(
+    self_lsp = _desc(
         provider_id="selflsp",
         display_name="Self LSP",
         mcp_config=_mcp_spec(),
         on_lsp_enabled=lambda root: {"ok": True},
         receive_lsp_mcp=False,
     )
-    with_cap = ProviderDescriptor(
+    with_cap = _desc(
         provider_id="withcap",
         display_name="With Capability",
         mcp_config=_mcp_spec(),
@@ -165,7 +183,7 @@ def test_provision_fans_out_to_hooks(tmp_path: Path, monkeypatch) -> None:
         ProviderAutomationCapability,
     )
 
-    with_hook = ProviderDescriptor(
+    with_hook = _desc(
         provider_id="hooked",
         display_name="Hooked",
         on_lsp_enabled=lambda root: calls.append("hooked") or {"ok": True},
@@ -177,7 +195,7 @@ def test_provision_fans_out_to_hooks(tmp_path: Path, monkeypatch) -> None:
             ownership_scope_required=False,
         ),),
     )
-    without = ProviderDescriptor(provider_id="nohook", display_name="No hook")
+    without = _desc(provider_id="nohook", display_name="No hook")
 
     from audiagentic.components.coding_lsp.language_servers_sync import (
         provision_provider_lsp_support,
@@ -226,7 +244,7 @@ def test_self_provided_lsp_status_does_not_run_the_install_hook(tmp_path, monkey
     installed: list[str] = []
     probed: list[str] = []
 
-    descriptor = ProviderDescriptor(
+    descriptor = _desc(
         provider_id="hooked",
         display_name="Hooked",
         on_lsp_enabled=lambda root: installed.append("ran") or {"ok": True},
@@ -243,7 +261,7 @@ def test_self_provided_lsp_status_does_not_run_the_install_hook(tmp_path, monkey
 
 
 def test_self_provided_lsp_status_reports_needs_action_when_absent(tmp_path, monkeypatch):
-    descriptor = ProviderDescriptor(
+    descriptor = _desc(
         provider_id="hooked",
         display_name="Hooked",
         on_lsp_enabled=lambda root: {"ok": True},
@@ -259,7 +277,7 @@ def test_self_provided_lsp_status_reports_needs_action_when_absent(tmp_path, mon
 
 def test_self_provided_lsp_status_is_evidence_only_without_a_probe(tmp_path, monkeypatch):
     installed: list[str] = []
-    descriptor = ProviderDescriptor(
+    descriptor = _desc(
         provider_id="hooked",
         display_name="Hooked",
         on_lsp_enabled=lambda root: installed.append("ran") or {"ok": True},
@@ -275,7 +293,7 @@ def test_self_provided_lsp_status_is_evidence_only_without_a_probe(tmp_path, mon
 
 def test_self_provided_lsp_apply_runs_the_install_hook(tmp_path, monkeypatch):
     installed: list[str] = []
-    descriptor = ProviderDescriptor(
+    descriptor = _desc(
         provider_id="hooked",
         display_name="Hooked",
         on_lsp_enabled=lambda root: installed.append("ran") or {"ok": True},
@@ -293,7 +311,7 @@ def test_self_provided_lsp_surfaces_redacted_hook_failure_detail(tmp_path, monke
     def _boom(root):
         raise RuntimeError("token=sk-secret-value install failed")
 
-    descriptor = ProviderDescriptor(
+    descriptor = _desc(
         provider_id="hooked",
         display_name="Hooked",
         on_lsp_enabled=_boom,
