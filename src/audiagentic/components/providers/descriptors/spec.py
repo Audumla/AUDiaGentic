@@ -79,10 +79,19 @@ def _load_yaml_file(path: Path) -> dict[str, Any]:
 
 
 def iter_descriptor_files(directory: Path) -> list[Path]:
-    """Return sorted list of YAML files in a descriptor directory."""
+    """Return sorted list of YAML files in a descriptor directory.
+
+    Excludes metadata files (names starting with '_') — these are catalogue
+    and family configuration, not provider descriptors (PC01).
+    """
     if not directory.is_dir():
         return []
-    return sorted(directory.glob("*.yaml")) + sorted(directory.glob("*.yml"))
+
+    def _is_descriptor(p: Path) -> bool:
+        return not p.name.startswith("_")
+
+    files = sorted(directory.glob("*.yaml")) + sorted(directory.glob("*.yml"))
+    return [f for f in files if _is_descriptor(f)]
 
 
 @dataclass

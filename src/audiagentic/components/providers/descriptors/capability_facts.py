@@ -19,6 +19,21 @@ _NON_SUBJECT_FIELDS = frozenset({"annotations", "capability_facts"})
 _DESCRIPTOR_FIELDS = frozenset(field.name for field in fields(ProviderDescriptor))
 
 
+def _is_catalogue_member(capability_id: str, *, subject: str = "") -> bool:
+    """Check if capability_id is a registered catalogue kind.
+
+    External subjects (external: prefix) are evidence-only and bypass the
+    catalogue — they are validated by their authority being evidence-only.
+    """
+    # External facts bypass catalogue — they're evidence-only by definition
+    if subject.startswith("external:"):
+        return True
+
+    from .capability_catalogue import validate_capability_id
+
+    return validate_capability_id(capability_id) is not None
+
+
 def _validation_error(number: int, message: str, **details: Any) -> AudiaGenticError:
     return AudiaGenticError(
         code=f"VAL-PCAP-{number:03d}",
@@ -103,6 +118,17 @@ def validate_provider_capability_facts(descriptor: ProviderDescriptor) -> None:
                 },
             )
 
+        # VAL-PCAP-009: capability_id must resolve to a catalogue kind
+        if not _is_catalogue_member(capability_id, subject=fact.subject):
+            raise _validation_error(
+                9,
+                "capability_id is not a registered catalogue kind",
+                **{
+                    "provider-id": descriptor.provider_id,
+                    "capability-id": capability_id,
+                },
+            )
+
 
 def validate_capability_fact_catalog(
     descriptors: Mapping[str, ProviderDescriptor],
@@ -163,12 +189,15 @@ def render_capability_facts_json(
     descriptors: Mapping[str, ProviderDescriptor],
 ) -> str:
     """Render the lossless machine view as stable JSON."""
-    return json.dumps(
-        capability_facts_payload(descriptors),
-        indent=2,
-        sort_keys=True,
-        ensure_ascii=False,
-    ) + "\n"
+    return (
+        json.dumps(
+            capability_facts_payload(descriptors),
+            indent=2,
+            sort_keys=True,
+            ensure_ascii=False,
+        )
+        + "\n"
+    )
 
 
 def _markdown_cell(value: Any) -> str:

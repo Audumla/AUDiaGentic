@@ -7,6 +7,7 @@ boundary, not as a hidden cross-component lookup in this package.
 Built-in types register directly and idempotently — no importlib module-name
 string table (Architecture Standards §1.1).
 """
+
 from __future__ import annotations
 
 import logging
@@ -23,6 +24,7 @@ from .shell import PlatformOverrides, ShellStep
 from .structured import (
     ConfigRemoveStep,
     ConfigSetStep,
+    DeletePathStep,
     DownloadStep,
     ManagedBlockStep,
     WriteFileStep,
@@ -54,9 +56,14 @@ _step_schemas: dict[str, dict[str, Any]] = {}
 # Reusable envelope for a nested step inside a composite (sequence/select/
 # conditional). The loader recurses into those to validate each child against its
 # own registered fragment, so here we only assert the common shape.
-_NESTED_STEP = {"type": "object", "required": ["type", "id"], "properties": {
-    "type": {"type": "string", "minLength": 1}, "id": {"type": "string", "minLength": 1},
-}}
+_NESTED_STEP = {
+    "type": "object",
+    "required": ["type", "id"],
+    "properties": {
+        "type": {"type": "string", "minLength": 1},
+        "id": {"type": "string", "minLength": 1},
+    },
+}
 
 
 class _Registry:
@@ -84,6 +91,7 @@ _REGISTRY = _Registry()
 # Substitution utilities (strict build-time and lenient run-time)
 # ---------------------------------------------------------------------------
 
+
 def strict_substitute(value: Any, params: dict[str, str], path: str = "") -> Any:
     """Recursively substitute ``{KEY}`` placeholders with strict validation.
 
@@ -99,7 +107,7 @@ def strict_substitute(value: Any, params: dict[str, str], path: str = "") -> Any
     Returns:
         Value with all known placeholders replaced; non-string types unchanged.
     """
-    _PATTERN = _re.compile(r'\{(\w+)\}')
+    _PATTERN = _re.compile(r"\{(\w+)\}")
 
     if isinstance(value, str):
         matches = _PATTERN.findall(value)
@@ -122,10 +130,7 @@ def strict_substitute(value: Any, params: dict[str, str], path: str = "") -> Any
     if isinstance(value, list):
         return [strict_substitute(item, params, f"{path}[{i}]") for i, item in enumerate(value)]
     if isinstance(value, dict):
-        return {
-            k: strict_substitute(v, params, f"{path}.{k}")
-            for k, v in value.items()
-        }
+        return {k: strict_substitute(v, params, f"{path}.{k}") for k, v in value.items()}
     return value
 
 
@@ -160,69 +165,171 @@ def _drop_empty_flags(command: list[str]) -> list[str]:
 
 # Schema fragment per builtin step type, co-located with the builders above.
 # `id` and `type` are common to every step; each fragment adds its own fields.
-_KEY_PATH = {"oneOf": [
-    {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1},
-    {"type": "string", "minLength": 1},
-]}
+_KEY_PATH = {
+    "oneOf": [
+        {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1},
+        {"type": "string", "minLength": 1},
+    ]
+}
 _ID = {"type": "string", "minLength": 1}
 _BUILTIN_STEP_SCHEMAS: dict[str, dict[str, Any]] = {
-    "shell": {"type": "object", "additionalProperties": False,
-        "required": ["type", "id", "command"], "properties": {
-            "type": {"const": "shell"}, "id": _ID,
-            "command": {"oneOf": [{"type": "string", "minLength": 1},
-                {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1}]},
+    "shell": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["type", "id", "command"],
+        "properties": {
+            "type": {"const": "shell"},
+            "id": _ID,
+            "command": {
+                "oneOf": [
+                    {"type": "string", "minLength": 1},
+                    {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1},
+                ]
+            },
             "timeout": {"type": "integer", "minimum": 1, "maximum": 600},
-            "dry-run": {"type": "boolean"}, "cwd": {"type": "string", "minLength": 1},
+            "dry-run": {"type": "boolean"},
+            "cwd": {"type": "string", "minLength": 1},
             "env": {"type": "object", "additionalProperties": {"type": "string"}},
             "platform": {"type": "object"},
-            "compensate-command": {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1},
-            "shell": {"type": "boolean"}}},
-    "callable": {"type": "object", "additionalProperties": False,
-        "required": ["type", "id", "fn"], "properties": {
-            "type": {"const": "callable"}, "id": _ID, "fn": {"type": "string", "minLength": 1},
-            "dry-run": {"type": "boolean"}}},
-    "sequence": {"type": "object", "additionalProperties": False,
-        "required": ["type", "id", "steps"], "properties": {
-            "type": {"const": "sequence"}, "id": _ID,
+            "compensate-command": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1},
+                "minItems": 1,
+            },
+            "shell": {"type": "boolean"},
+        },
+    },
+    "callable": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["type", "id", "fn"],
+        "properties": {
+            "type": {"const": "callable"},
+            "id": _ID,
+            "fn": {"type": "string", "minLength": 1},
+            "dry-run": {"type": "boolean"},
+        },
+    },
+    "sequence": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["type", "id", "steps"],
+        "properties": {
+            "type": {"const": "sequence"},
+            "id": _ID,
             "steps": {"type": "array", "items": _NESTED_STEP, "minItems": 1},
-            "fail-fast": {"type": "boolean"}, "compensate-on-failure": {"type": "boolean"}}},
-    "confirm": {"type": "object", "additionalProperties": False,
-        "required": ["type", "id", "prompt"], "properties": {
-            "type": {"const": "confirm"}, "id": _ID, "prompt": {"type": "string", "minLength": 1},
-            "default": {"type": "string"}}},
-    "select": {"type": "object", "additionalProperties": False,
-        "required": ["type", "id", "select", "variants"], "properties": {
-            "type": {"const": "select"}, "id": _ID, "select": {"type": "string", "minLength": 1},
+            "fail-fast": {"type": "boolean"},
+            "compensate-on-failure": {"type": "boolean"},
+        },
+    },
+    "confirm": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["type", "id", "prompt"],
+        "properties": {
+            "type": {"const": "confirm"},
+            "id": _ID,
+            "prompt": {"type": "string", "minLength": 1},
+            "default": {"type": "string"},
+        },
+    },
+    "select": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["type", "id", "select", "variants"],
+        "properties": {
+            "type": {"const": "select"},
+            "id": _ID,
+            "select": {"type": "string", "minLength": 1},
             "variants": {"type": "object", "additionalProperties": _NESTED_STEP},
-            "fallback": {"type": "string", "minLength": 1}}},
-    "conditional": {"type": "object", "additionalProperties": False,
-        "required": ["type", "id", "condition-key", "when-true"], "properties": {
-            "type": {"const": "conditional"}, "id": _ID, "condition-key": {"type": "string", "minLength": 1},
-            "when-true": _NESTED_STEP, "when-false": _NESTED_STEP}},
-    "config-set": {"type": "object", "additionalProperties": False,
-        "required": ["type", "id", "path", "key-path", "value"], "properties": {
-            "type": {"const": "config-set"}, "id": _ID, "path": {"type": "string", "minLength": 1},
-            "key-path": _KEY_PATH, "value": True}},
-    "config-remove": {"type": "object", "additionalProperties": False,
-        "required": ["type", "id", "path", "key-path"], "properties": {
-            "type": {"const": "config-remove"}, "id": _ID, "path": {"type": "string", "minLength": 1},
-            "key-path": _KEY_PATH}},
-    "write-file": {"type": "object", "additionalProperties": False,
-        "required": ["type", "id", "path"], "properties": {
-            "type": {"const": "write-file"}, "id": _ID, "path": {"type": "string", "minLength": 1},
-            "content": {"type": "string"}, "create-parents": {"type": "boolean"}}},
-    "download": {"type": "object", "additionalProperties": False,
-        "required": ["type", "id", "base-url", "dest-dir", "files"], "properties": {
-            "type": {"const": "download"}, "id": _ID, "base-url": {"type": "string", "minLength": 1},
+            "fallback": {"type": "string", "minLength": 1},
+        },
+    },
+    "conditional": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["type", "id", "condition-key", "when-true"],
+        "properties": {
+            "type": {"const": "conditional"},
+            "id": _ID,
+            "condition-key": {"type": "string", "minLength": 1},
+            "when-true": _NESTED_STEP,
+            "when-false": _NESTED_STEP,
+        },
+    },
+    "config-set": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["type", "id", "path", "key-path", "value"],
+        "properties": {
+            "type": {"const": "config-set"},
+            "id": _ID,
+            "path": {"type": "string", "minLength": 1},
+            "key-path": _KEY_PATH,
+            "value": True,
+        },
+    },
+    "config-remove": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["type", "id", "path", "key-path"],
+        "properties": {
+            "type": {"const": "config-remove"},
+            "id": _ID,
+            "path": {"type": "string", "minLength": 1},
+            "key-path": _KEY_PATH,
+        },
+    },
+    "write-file": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["type", "id", "path"],
+        "properties": {
+            "type": {"const": "write-file"},
+            "id": _ID,
+            "path": {"type": "string", "minLength": 1},
+            "content": {"type": "string"},
+            "create-parents": {"type": "boolean"},
+        },
+    },
+    "download": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["type", "id", "base-url", "dest-dir", "files"],
+        "properties": {
+            "type": {"const": "download"},
+            "id": _ID,
+            "base-url": {"type": "string", "minLength": 1},
             "dest-dir": {"type": "string", "minLength": 1},
             "files": {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1},
             "optional-files": {"type": "array", "items": {"type": "string", "minLength": 1}},
-            "timeout": {"type": "integer", "minimum": 1, "maximum": 600}}},
-    "managed-block": {"type": "object", "additionalProperties": False,
-        "required": ["type", "id", "path", "block-id"], "properties": {
-            "type": {"const": "managed-block"}, "id": _ID, "path": {"type": "string", "minLength": 1},
-            "block-id": {"type": "string", "minLength": 1}, "content": {"type": "string"},
-            "comment-prefix": {"type": "string"}}},
+            "timeout": {"type": "integer", "minimum": 1, "maximum": 600},
+        },
+    },
+    "managed-block": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["type", "id", "path", "block-id"],
+        "properties": {
+            "type": {"const": "managed-block"},
+            "id": _ID,
+            "path": {"type": "string", "minLength": 1},
+            "block-id": {"type": "string", "minLength": 1},
+            "content": {"type": "string"},
+            "comment-prefix": {"type": "string"},
+        },
+    },
+    "delete-path": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["type", "id", "path"],
+        "properties": {
+            "type": {"const": "delete-path"},
+            "id": _ID,
+            "path": {"type": "string", "minLength": 1},
+            "recursive": {"type": "boolean"},
+        },
+    },
 }
 
 
@@ -239,18 +346,24 @@ def _register_builtins() -> None:
     _REGISTRY.register("write-file", _build_write_file)
     _REGISTRY.register("download", _build_download)
     _REGISTRY.register("managed-block", _build_managed_block)
+    _REGISTRY.register("delete-path", _build_delete_path)
 
 
 # ---------------------------------------------------------------------------
 # Step builders (called by factory or batch builder)
 # ---------------------------------------------------------------------------
 
+
 def _build_shell(data: dict[str, Any], params: dict[str, str] | None = None) -> ShellStep:
     command = data["command"]
 
     # String commands are only valid in shell mode; wrap as single-element tuple.
     if isinstance(command, str):
-        cmd_str = strict_substitute(command, params, f"step.{data.get('id', 'shell')}.command") if params is not None else command
+        cmd_str = (
+            strict_substitute(command, params, f"step.{data.get('id', 'shell')}.command")
+            if params is not None
+            else command
+        )
         return ShellStep(
             id=data.get("id", "shell"),
             command=(cmd_str,),
@@ -277,7 +390,9 @@ def _build_shell(data: dict[str, Any], params: dict[str, str] | None = None) -> 
     if "compensate_command" in data:
         comp = list(data["compensate_command"])
         if params is not None:
-            comp = strict_substitute(comp, params, f"step.{data.get('id', 'shell')}.compensate_command")
+            comp = strict_substitute(
+                comp, params, f"step.{data.get('id', 'shell')}.compensate_command"
+            )
             comp = _drop_empty_flags(comp)
         compensate_command = tuple(comp)
 
@@ -352,7 +467,9 @@ def _build_select(data: dict[str, Any], params: dict[str, str] | None = None) ->
     )
 
 
-def _build_conditional(data: dict[str, Any], params: dict[str, str] | None = None) -> ConditionalStep:
+def _build_conditional(
+    data: dict[str, Any], params: dict[str, str] | None = None
+) -> ConditionalStep:
     return ConditionalStep(
         id=data.get("id", "conditional"),
         condition_key=data["condition_key"],
@@ -384,7 +501,9 @@ def _build_config_set(data: dict[str, Any], params: dict[str, str] | None = None
     )
 
 
-def _build_config_remove(data: dict[str, Any], params: dict[str, str] | None = None) -> ConfigRemoveStep:
+def _build_config_remove(
+    data: dict[str, Any], params: dict[str, str] | None = None
+) -> ConfigRemoveStep:
     kp = data.get("key_path")
     if isinstance(kp, str):
         key_path = tuple(kp.split("."))
@@ -417,9 +536,15 @@ def _build_download(data: dict[str, Any], params: dict[str, str] | None = None) 
     optional_files = list(data.get("optional_files", []))
 
     if params is not None:
-        base_url = strict_substitute(base_url, params, f"step.{data.get('id', 'download')}.base_url")
-        dest_dir = strict_substitute(dest_dir, params, f"step.{data.get('id', 'download')}.dest_dir")
-        files = [strict_substitute(f, params, f"step.{data.get('id', 'download')}.files") for f in files]
+        base_url = strict_substitute(
+            base_url, params, f"step.{data.get('id', 'download')}.base_url"
+        )
+        dest_dir = strict_substitute(
+            dest_dir, params, f"step.{data.get('id', 'download')}.dest_dir"
+        )
+        files = [
+            strict_substitute(f, params, f"step.{data.get('id', 'download')}.files") for f in files
+        ]
         optional_files = [
             strict_substitute(f, params, f"step.{data.get('id', 'download')}.optional_files")
             for f in optional_files
@@ -432,6 +557,24 @@ def _build_download(data: dict[str, Any], params: dict[str, str] | None = None) 
         dest_dir=dest_dir,
         optional_files=tuple(optional_files),
         timeout=data.get("timeout", 30),
+        registry=data.get("registry"),
+        recipe_id=data.get("recipe_id"),
+    )
+
+
+def _build_delete_path(
+    data: dict[str, Any], params: dict[str, str] | None = None
+) -> DeletePathStep:
+    from audiagentic.foundation.steps.structured import DeletePathStep
+
+    path = data["path"]
+    if params is not None:
+        path = strict_substitute(path, params, f"step.{data.get('id', 'delete-path')}.path")
+
+    return DeletePathStep(
+        id=data.get("id", "delete-path"),
+        path=path,
+        recursive=bool(data.get("recursive", False)),
         registry=data.get("registry"),
         recipe_id=data.get("recipe_id"),
     )
@@ -452,10 +595,14 @@ def _build_write_file(data: dict[str, Any], params: dict[str, str] | None = None
     )
 
 
-def _build_managed_block(data: dict[str, Any], params: dict[str, str] | None = None) -> ManagedBlockStep:
+def _build_managed_block(
+    data: dict[str, Any], params: dict[str, str] | None = None
+) -> ManagedBlockStep:
     content = data.get("content", "")
     if params is not None and content:
-        content = strict_substitute(content, params, f"step.{data.get('id', 'managed-block')}.content")
+        content = strict_substitute(
+            content, params, f"step.{data.get('id', 'managed-block')}.content"
+        )
 
     return ManagedBlockStep(
         id=data.get("id", "managed-block"),
@@ -481,6 +628,7 @@ for _t, _b in {
     "write-file": _build_write_file,
     "download": _build_download,
     "managed-block": _build_managed_block,
+    "delete-path": _build_delete_path,
 }.items():
     _builders[_t] = _b
 
@@ -490,6 +638,7 @@ _step_schemas.update(_BUILTIN_STEP_SCHEMAS)
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def register_step_type(
     type_name: str,
@@ -521,8 +670,16 @@ def step_schema(type_name: str) -> dict[str, Any] | None:
 
 
 _params_accepting_types: set[str] = {
-    "shell", "sequence", "select", "conditional",
-    "config-set", "config-remove", "write-file", "download", "managed-block",
+    "shell",
+    "sequence",
+    "select",
+    "conditional",
+    "config-set",
+    "config-remove",
+    "write-file",
+    "download",
+    "managed-block",
+    "delete-path",
 }
 
 
