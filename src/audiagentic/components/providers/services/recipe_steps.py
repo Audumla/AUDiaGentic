@@ -317,6 +317,53 @@ def _build_managed_plugin(data, params=None):
 
 
 # ---------------------------------------------------------------------------
+# generated-surfaces
+# ---------------------------------------------------------------------------
+
+_GENERATED_SURFACES_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["type", "id", "provider", "ownership-scope"],
+    "properties": {
+        "type": {"const": "generated-surfaces"},
+        "id": _ID,
+        "provider": _ID,
+        "ownership-scope": _ID,
+        "mode": {"enum": ["apply", "prune", "status"]},
+    },
+}
+
+
+class ManagedSurfacesStep(_ManagedProviderStep):
+    """Reconcile generated surface contributions (rules, instructions)."""
+
+    def _reconcile(self, project_root, mode):
+        from audiagentic.components.providers.surfaces.manager import (
+            apply_provider_surfaces,
+            plan_provider_surfaces,
+            prune_provider_surfaces,
+        )
+
+        if mode == "status":
+            return plan_provider_surfaces(project_root, provider_id=self.provider_id)
+        if mode == "prune":
+            return prune_provider_surfaces(project_root, provider_id=self.provider_id)
+        return apply_provider_surfaces(project_root, provider_id=self.provider_id)
+
+    def _summary(self):
+        return {"provider": self.provider_id}
+
+
+def _build_generated_surfaces(data, params=None):
+    sub = _substituter(data.get("id", "generated-surfaces"), params)
+    return ManagedSurfacesStep(
+        id=data.get("id", "generated-surfaces"),
+        provider_id=sub(data["provider"]),
+        mode=data.get("mode", "apply"),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
 
@@ -324,6 +371,8 @@ _PROVIDER_STEPS = (
     ("managed-mcp", _build_managed_mcp, _MANAGED_MCP_SCHEMA),
     ("managed-hooks", _build_managed_hooks, _MANAGED_HOOKS_SCHEMA),
     ("managed-plugin", _build_managed_plugin, _MANAGED_PLUGIN_SCHEMA),
+    ("generated-surfaces", _build_generated_surfaces,
+     _GENERATED_SURFACES_SCHEMA),
 )
 
 
@@ -344,5 +393,6 @@ __all__ = [
     "ManagedMcpStep",
     "ManagedHooksStep",
     "ManagedPluginStep",
+    "ManagedSurfacesStep",
     "register_provider_steps",
 ]

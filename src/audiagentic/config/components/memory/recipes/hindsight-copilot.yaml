@@ -1,7 +1,7 @@
 # Hindsight integration for GitHub Copilot.
 #
 # Installs MCP server in .vscode/mcp.json and adds
-# a memory-use rule to .github/copilot-instructions.md.
+# a memory-use rule via generated-surfaces.
 recipe-id: hindsight-copilot
 recipe-version: "1.0.0"
 description: >-
@@ -14,13 +14,22 @@ parameters:
   - name: MCP_URL
     required: true
   - name: AUTH
-    required: true
+    default: ""
+  - name: BANK_ID
+    default: ""
 lifecycle:
   install-steps:
     - type: managed-mcp
       id: mcp
       provider: "{PROVIDER}"
+      managed-id: ag-hindsight
       ownership-scope: "{OWNERSHIP_SCOPE}"
+      name: hindsight
+      url: "{MCP_URL}"
+      transport: http
+      headers:
+        Authorization: "{AUTH}"
+        X-Bank-Id: "{BANK_ID}"
   configure-steps:
     - type: generated-surfaces
       id: surfaces
@@ -36,5 +45,9 @@ lifecycle:
     - type: managed-mcp
       id: prune-mcp
       provider: "{PROVIDER}"
+      managed-id: ag-hindsight
       ownership-scope: "{OWNERSHIP_SCOPE}"
+      name: hindsight
+      url: "{MCP_URL}"
+      transport: http
       mode: prune
