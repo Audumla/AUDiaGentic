@@ -171,6 +171,50 @@ def parse_item_sections(body: str) -> dict[str, str]:
     return parse_sections(body, HEADING_TO_FIELD)
 
 
+def _serialize_section_value(value: Any) -> str:
+    """Convert a section value to a markdown string.
+
+    Strings pass through unchanged.  Dicts are rendered as nested bullet lists;
+    lists become top-level bullet points.  Everything else falls back to ``str()``.
+    """
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        lines: list[str] = []
+        for k, v in value.items():
+            label = k.replace("_", " ").replace("-", " ").title()
+            if isinstance(v, dict):
+                indent_text = _serialize_section_value(v).replace("\n", "\n    ")
+                lines.append(f"- **{label}**\n    {indent_text}")
+            elif isinstance(v, list):
+                sub = "\n".join(_bullet_items(v))
+                indent_sub = sub.replace("\n", "\n    ")
+                lines.append(f"- **{label}**\n    {indent_sub}")
+            else:
+                lines.append(f"- **{label}**: {v}")
+        return "\n".join(lines)
+    if isinstance(value, list):
+        return "\n".join(_bullet_items(value))
+    return str(value) if value is not None else ""
+
+
+def _bullet_items(items: list[Any]) -> list[str]:
+    """Render a list of items as markdown bullet points."""
+    lines: list[str] = []
+    for item in items:
+        if isinstance(item, dict):
+            rendered = _serialize_section_value(item)
+            indent = rendered.replace("\n", "\n    ")
+            lines.append(f"- {indent}")
+        elif isinstance(item, list):
+            nested = _bullet_items(item)
+            indent = "\n".join(nested).replace("\n", "\n    ")
+            lines.append(f"- {indent}")
+        else:
+            lines.append(f"- {item}")
+    return lines
+
+
 def build_item_body(title: str, sections: dict[str, str]) -> str:
     return build_sectioned_body(title, sections, ITEM_SECTION_HEADING)
 

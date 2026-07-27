@@ -74,7 +74,7 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
         if field in item:
             fm[field] = item[field]
 
-    sections = {k: item.get(k, "") for k in item_store.ITEM_SECTION_HEADING}
+    raw_sections = {k: item.get(k, "") for k in item_store.ITEM_SECTION_HEADING}
     # Include any custom section keys not consumed as frontmatter/metadata.
     _consumed = (
         item_store.FRONTMATTER_FIELDS
@@ -90,7 +90,12 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
     )
     for k, v in item.items():
         if k not in _consumed and k not in item_store.ITEM_SECTION_HEADING:
-            sections[k] = v
+            raw_sections[k] = v
+    # Serialize non-string values (dicts, lists) into markdown.
+    sections = {
+        k: item_store._serialize_section_value(v)
+        for k, v in raw_sections.items()
+    }
     body = item_store.build_item_body(title, sections)
 
     # Append creation change log entry
@@ -379,7 +384,12 @@ def update_item(project_root: Path, item_id: str, updates: dict[str, Any]) -> di
         if frontmatter_key in item_store.FRONTMATTER_FIELDS:
             fm[frontmatter_key] = value
         elif key in item_store.ITEM_SECTION_HEADING or key == "title" or key in sections:
-            sections[key] = value
+            # Serialize non-string values (dicts, lists) into markdown.
+            sections[key] = (
+                value
+                if isinstance(value, str)
+                else item_store._serialize_section_value(value)
+            )
 
     # Determine which fields actually changed for the change log.
     changed_keys: list[str] = []

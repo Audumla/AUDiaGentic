@@ -71,8 +71,12 @@ def _artifact_recipe_path(provider_id: str) -> Path | None:
 
 
 def _hindsight_families() -> list[str]:
-    """Return the fixed Hindsight family preference order."""
-    return ["managed-hooks", "managed-mcp", "plugin-entry"]
+    """Return the Hindsight family preference order.
+
+    managed-hooks beats all (Cline, Codex).
+    plugin-entry beats managed-mcp (Claude, OpenCode — full integration wins over raw MCP).
+    """
+    return ["managed-hooks", "plugin-entry", "managed-mcp"]
 
 
 def _provider_capability_map() -> dict[str, frozenset[str]]:
