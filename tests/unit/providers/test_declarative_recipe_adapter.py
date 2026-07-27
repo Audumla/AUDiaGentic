@@ -385,13 +385,13 @@ def test_declarative_adapter_works_in_family_registrar_shape() -> None:
         )
 
     registrar = FamilyRegistrar(
-        pin=pin,
+        family_id=pin.family_id,
         eligible=lambda desc: True,
         make_handler=make_declarative_for_test,
     )
 
     # Prove the registrar shape is correct
-    assert registrar.pin == pin
+    assert registrar.family_id == pin.family_id
     assert callable(registrar.eligible)
     assert callable(registrar.make_handler)
 
@@ -426,7 +426,7 @@ def test_declarative_adapter_registers_with_provider_automation_registry() -> No
         )
 
     registrar = FamilyRegistrar(
-        pin=pin,
+        family_id=pin.family_id,
         eligible=lambda desc: True,
         make_handler=make_declarative_for_reg,
     )

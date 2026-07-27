@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from audiagentic.components.providers.adapters import _register_standard_surfaces
-from audiagentic.components.providers.descriptors.base import ProviderDescriptor
+from audiagentic.components.providers.descriptors.base import Capability, ProviderDescriptor
 from audiagentic.components.providers.surfaces.base import (
     SkillDefinition,
     SurfaceContribution,
@@ -89,8 +89,13 @@ def test_new_provider_needs_only_yaml(tmp_path: Path):
     descriptor = ProviderDescriptor(
         provider_id="fixture-prov",
         display_name="Fixture Provider",
-        instruction_file="FIXTURE.md",
-        surfaces={"renderer": "flat-skill", "contribution-file": "FIXTURE.md"},
+        capabilities=(
+            Capability(
+                kind="surface-render",
+                mechanism={"renderer": "flat-skill", "contribution-file": "FIXTURE.md"},
+            ),
+            Capability(kind="surface-instruction", mechanism="FIXTURE.md"),
+        ),
     )
     _register_standard_surfaces(descriptor)
 
@@ -117,7 +122,7 @@ def test_custom_surface_module_wins_over_descriptor_block(tmp_path: Path):
     descriptor = ProviderDescriptor(
         provider_id="sentinel-prov",
         display_name="Sentinel",
-        surfaces={"renderer": "flat-skill"},
+        capabilities=(Capability(kind="surface-render", mechanism={"renderer": "flat-skill"}),),
     )
     _register_standard_surfaces(descriptor)
     assert load_renderer_registry()["sentinel-prov"] is sentinel
