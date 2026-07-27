@@ -86,7 +86,12 @@ def create_review(project_root: Path, review: dict[str, Any]) -> dict[str, Any]:
         "reviewed-by": review.get("reviewed-by") or review.get("reviewed_by") or review.get("reviewer_id") or "",
         "reviewed-at": review.get("reviewed-at", ""),
     }
-    sections = {k: review.get(k, "") for k in item_store.REVIEW_SECTIONS}
+    raw_sections = {k: review.get(k, "") for k in item_store.REVIEW_SECTIONS}
+    # Serialize non-string values (dicts, lists) into markdown.
+    sections = {
+        k: item_store._serialize_section_value(v)
+        for k, v in raw_sections.items()
+    }
     body = build_sectioned_body(title, sections, item_store.REVIEW_SECTIONS)
 
     target = (
@@ -316,7 +321,12 @@ def update_review(project_root: Path, review_id: str, updates: dict[str, Any]) -
         if frontmatter_key in ("reviewed-by", "reviewed-at", "review-of", "review_of", "id", "plan", "state"):
             fm[frontmatter_key] = value
         elif key in item_store.REVIEW_SECTIONS:
-            sections[key] = value
+            # Serialize non-string values (dicts, lists) into markdown.
+            sections[key] = (
+                value
+                if isinstance(value, str)
+                else item_store._serialize_section_value(value)
+            )
 
     if "title" in updates:
         title = updates["title"]
