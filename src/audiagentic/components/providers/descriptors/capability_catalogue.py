@@ -29,7 +29,7 @@ class CapabilityKind:
 
     id: str
     domain: str
-    authority: Literal["automation", "operational", "evidence-only"]
+    authority: Literal["provisioned", "operational", "evidence-only"]
     family_id: str | None = None
     cardinality: Literal["single", "list"] = "single"
     mechanism_schema: str = "none"
@@ -107,6 +107,7 @@ def _get_config_dir() -> Path:
     """Return the config/providers directory containing _capabilities.yaml."""
     # Resolve from the audiagentic package root (src/audiagentic/)
     import audiagentic.components.providers as pkg
+
     return Path(pkg.__file__).resolve().parent.parent.parent / "config" / "providers"
 
 
@@ -125,15 +126,35 @@ def load_catalogue() -> CapabilityCatalogue:
     capabilities_path = config_dir / "_capabilities.yaml"
     families_path = config_dir / "_families.yaml"
 
-    # Load families
+    # Load the capability catalogue (kinds + optional merged families: section).
     try:
-        with open(families_path) as f:
-            families_data = yaml.safe_load(f)
+        with open(capabilities_path) as f:
+            data = yaml.safe_load(f)
     except FileNotFoundError:
-        raise CatalogueError(f"_families.yaml not found at {families_path}") from None
+        raise CatalogueError(f"_capabilities.yaml not found at {capabilities_path}") from None
+
+    if not isinstance(data, dict) or "kinds" not in data:
+        raise CatalogueError("_capabilities.yaml must have a 'kinds' mapping")
+
+    # Families ("pins"): prefer a merged `families:` section in _capabilities.yaml;
+    # fall back to the standalone _families.yaml during the PC01 migration (which
+    # merges the two files into one).
+    families_data = data.get("families")
+    if families_data is None:
+        try:
+            with open(families_path) as f:
+                families_data = yaml.safe_load(f)
+        except FileNotFoundError:
+            raise CatalogueError(
+                "no families: section in _capabilities.yaml and "
+                f"_families.yaml not found at {families_path}"
+            ) from None
 
     if not isinstance(families_data, dict):
-        raise CatalogueError("_families.yaml must be a YAML mapping")
+        raise CatalogueError(
+            "families must be a mapping (a families: section in _capabilities.yaml "
+            "or the _families.yaml file)"
+        )
 
     families: dict[str, FamilyDeclaration] = {}
     for fid, fdata in families_data.items():
@@ -145,16 +166,6 @@ def load_catalogue() -> CapabilityCatalogue:
             ownership_scope_required=bool(fdata.get("ownership_scope_required", False)),
         )
 
-    # Load kinds
-    try:
-        with open(capabilities_path) as f:
-            data = yaml.safe_load(f)
-    except FileNotFoundError:
-        raise CatalogueError(f"_capabilities.yaml not found at {capabilities_path}") from None
-
-    if not isinstance(data, dict) or "kinds" not in data:
-        raise CatalogueError("_capabilities.yaml must have a 'kinds' mapping")
-
     kinds_by_id: dict[str, CapabilityKind] = {}
     for kid, kdata in data["kinds"].items():
         if kid in kinds_by_id:
@@ -163,14 +174,14 @@ def load_catalogue() -> CapabilityCatalogue:
         authority = kdata["authority"]
         family_id = kdata.get("family_id")
 
-        # VAL-PCAP-011: automation kinds must have family_id in _families.yaml
-        if authority == "automation":
+        # VAL-PCAP-011: provisioned kinds must reference a known family.
+        if authority == "provisioned":
             if not family_id:
-                raise CatalogueError(f"VAL-PCAP-011: automation kind '{kid}' missing family_id")
+                raise CatalogueError(f"VAL-PCAP-011: provisioned kind '{kid}' missing family_id")
             if family_id not in families:
                 raise CatalogueError(
-                    f"VAL-PCAP-011: automation kind '{kid}' references "
-                    f"unknown family '{family_id}' — must exist in _families.yaml"
+                    f"VAL-PCAP-011: provisioned kind '{kid}' references "
+                    f"unknown family '{family_id}' — must exist in the families set"
                 )
 
         # VAL-PCAP-013: mechanism_schema must resolve or be conceptual

@@ -11,6 +11,7 @@ managed-mcp:
   payload_contract: provider-managed-mcp-payload/v1
   result_contract: provider-managed-mcp-result/v1
   supported_modes: [apply, prune, status]
+  ownership_scope_required: true
 
 model-projection:
   payload_contract: provider-model-projection-payload/v1
@@ -32,6 +33,7 @@ managed-hooks:
   payload_contract: provider-managed-hooks-payload/v1
   result_contract: provider-managed-hooks-result/v1
   supported_modes: [apply, prune, status]
+  ownership_scope_required: true
 
 language-server-projection:
   payload_contract: provider-language-server-projection-payload/v1
@@ -42,6 +44,7 @@ plugin-entry:
   payload_contract: provider-plugin-entry-payload/v1
   result_contract: provider-plugin-entry-result/v1
   supported_modes: [apply, prune, status]
+  ownership_scope_required: true
 
 self-provided-lsp:
   payload_contract: provider-self-provided-lsp-payload/v1
