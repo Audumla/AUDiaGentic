@@ -1,7 +1,7 @@
 ---
 id: LSP18
 order: 18
-plan: plan-lsp-mcp-enhancement
+plan: lsp-mcp-enhancement
 state: done
 wave: W5.4
 phase: Phase 1

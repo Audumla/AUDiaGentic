@@ -1,7 +1,7 @@
 ---
 id: LSP23
 order: 0
-plan: plan-lsp-mcp-enhancement
+plan: lsp-mcp-enhancement
 state: pending
 created-by: agent
 ---

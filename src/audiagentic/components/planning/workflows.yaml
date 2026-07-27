@@ -8,13 +8,15 @@ kinds:
     workflows:
       standard:
         initial: pending
-        values: [pending, in_progress, completed]
+        values: [pending, in_progress, completed, superseded, deprecated]
         transitions:
-          pending: [in_progress, completed]
-          in_progress: [pending, completed]
-          completed: [pending, in_progress]
+          pending: [in_progress, completed, superseded, deprecated]
+          in_progress: [pending, completed, superseded, deprecated]
+          completed: [pending, in_progress, superseded, deprecated]
+          superseded: [pending, in_progress]
+          deprecated: [pending, in_progress]
         state-sets:
-          terminal: [completed]
+          terminal: [completed, superseded, deprecated]
           active: [pending, in_progress]
   review:
     default-workflow: standard
