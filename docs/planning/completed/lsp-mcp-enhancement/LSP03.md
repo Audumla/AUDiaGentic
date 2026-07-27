@@ -1,7 +1,7 @@
 ---
 id: LSP03
 order: 3
-plan: plan-lsp-mcp-enhancement
+plan: lsp-mcp-enhancement
 state: done
 wave: W1.1
 phase: Phase 0

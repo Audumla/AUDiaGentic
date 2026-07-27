@@ -1,7 +1,7 @@
 ---
 id: PRR08
 order: 8
-plan: plan-provider-recipe-refactor
+plan: provider-recipe-refactor
 state: completed
 validate-first: true
 priority: P0

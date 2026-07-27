@@ -81,7 +81,7 @@ def create_review(project_root: Path, review: dict[str, Any]) -> dict[str, Any]:
     fm: dict[str, Any] = {
         "id": review_id,
         "review-of": parent_path.stem,
-        "plan": parent_fm.get("plan", item_store.plan_frontmatter_value(slug)),
+        "plan": parent_fm.get("plan", slug),
         "state": "created",
         "reviewed-by": review.get("reviewed-by") or review.get("reviewed_by") or review.get("reviewer_id") or "",
         "reviewed-at": review.get("reviewed-at", ""),
@@ -143,7 +143,7 @@ def list_reviews(
             planning_paths.plans_completed_dir(project_root),
         ]
 
-    slug = item_store.plan_slug(plan) if plan else None
+    slug = plan if plan else None
     prefix = id_prefix.upper() if id_prefix else None
     results: list[dict[str, Any]] = []
 
@@ -351,7 +351,7 @@ def delete_review(project_root: Path, review_id: str) -> dict[str, Any]:
     payload = {
         "id": review_id,
         "review-of": fm.get("review-of", ""),
-        "plan": fm.get("plan", item_store.plan_frontmatter_value(slug)),
+        "plan": slug,
         "state": fm.get("state", "created"),
         "reviewed-by": fm.get("reviewed-by", ""),
         "path": str(path.relative_to(project_root)),

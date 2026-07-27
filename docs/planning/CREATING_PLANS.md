@@ -29,9 +29,9 @@ The `id` is auto-generated — **do not supply it**.
 plan_create_item:
   plan: code-cleanup
   title: Refactor error handling to use AudiaGenticError
-  priority: P1
-  complexity: mid
-  description: ...
+   priority: P1
+   work: M
+   description: ...
   steps: ...
 ```
 
@@ -73,10 +73,10 @@ to verify against.
 3. Close handled reviews with `plan_set_review_state(review_id, 'closed')`
 4. Mark done with `plan_set_state(item_id, 'completed')` only when the Definition of Done
    in section 5 is satisfied — every step done, every validation criterion executed, suite green
-5. Remove stale, superseded, or cancelled items with `plan_delete_item`
+5. Transition superseded or outdated items to `superseded` or `deprecated` with `plan_set_state`; remove stale items with `plan_delete_item`
 
 Do not mark a parent item completed just because its reviews were incorporated.
-Keep unfinished work pending. Do not leave handled reviews in `created` or `considered`.
+Keep unfinished work pending or in a terminal discard state. Do not leave handled reviews in `created` or `considered`.
 
 ---
 

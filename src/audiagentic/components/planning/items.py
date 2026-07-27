@@ -59,7 +59,7 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
     fm: dict[str, Any] = {
         "id": item_id,
         "order": item.get("order", 0),
-        "plan": item_store.plan_frontmatter_value(plan),
+        "plan": plan,
         "state": "pending",
         "created-at": now,
         "breadth": item.get("breadth", ""),
@@ -96,7 +96,7 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
     # Append creation change log entry
     body = item_store.append_change_log(body, now, "created-by", f"Created by {created_by}")
 
-    slug = item_store.plan_slug(plan)
+    slug = plan
     target = planning_paths.plans_active_dir(project_root) / slug / f"{item_id}.md"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(item_store.render_item(fm, body), encoding="utf-8")
@@ -128,15 +128,15 @@ def list_items(
 ) -> list[dict[str, Any]]:
     """List plan items, optionally filtered by state, plan name, or ID prefix.
 
-    state: 'active'/'pending'/'not_done' → active folder; 'completed' → completed folder; None → all.
+    state: 'active'/'pending'/'in_progress' → active folder; 'completed'/'superseded'/'deprecated' → completed folder; None → all.
     plan: directory name like 'code-cleanup' (omit for all plans). Supports
         glob wildcards (e.g. 'code-*') via fnmatch; a literal name matches
         only that plan, same as before.
     id_prefix: case-insensitive item-ID prefix (e.g. 'CC' matches CC01, CC20, ...).
     """
-    if state in ("active", "pending", "not_done"):
+    if state == "active" or state in item_store.active_states("item"):
         search_dirs = [planning_paths.plans_active_dir(project_root)]
-    elif state == "completed":
+    elif state in item_store.terminal_states("item"):
         search_dirs = [planning_paths.plans_completed_dir(project_root)]
     else:
         search_dirs = [
@@ -144,7 +144,7 @@ def list_items(
             planning_paths.plans_completed_dir(project_root),
         ]
 
-    slug = item_store.plan_slug(plan) if plan else None
+    slug = plan if plan else None
     prefix = id_prefix.upper() if id_prefix else None
     results: list[dict[str, Any]] = []
 
@@ -253,9 +253,11 @@ def list_items_grouped(
     result = []
     for plan_key, plan_items in sorted(groups.items()):
         active_count = sum(
-            1 for i in plan_items if i["state"] in item_store.ACTIVE_STATES | {"not_done"}
+            1 for i in plan_items if i["state"] in item_store.active_states("item")
         )
-        completed_count = sum(1 for i in plan_items if i["state"] == "completed")
+        completed_count = sum(
+            1 for i in plan_items if i["state"] in item_store.terminal_states("item")
+        )
         result.append(
             {
                 "plan": plan_key,
@@ -297,11 +299,15 @@ def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any
     fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
     item_store.ensure_not_review(fm, item_id, "VAL-PLN-019")
 
-    # Normalise legacy aliases to their canonical names.
-    if new_state in item_store.ACTIVE_STATES:
-        canonical_state = "pending" if new_state == "not_done" else new_state
-    else:
-        canonical_state = "completed"
+    # Validate the state is known.
+    if new_state not in item_store.VALID_STATES:
+        raise AudiaGenticError(
+            code="VAL-PLN-006",
+            kind="validation",
+            message=f"invalid item state: {new_state!r}",
+            details={"valid": sorted(item_store.VALID_STATES)},
+        )
+    canonical_state = new_state
     old_state = fm.get("state", "pending")
     item_store.check_transition("item", old_state, canonical_state)
     fm["state"] = canonical_state
@@ -325,7 +331,8 @@ def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any
 
     # Clean up empty plan dirs in the source state (item was moved away)
     source_dir = item_store.state_dir(
-        project_root, "completed" if new_state in item_store.ACTIVE_STATES else "pending"
+        project_root,
+        "completed" if canonical_state in item_store.active_states("item") else "pending",
     )
     item_store.cleanup_empty_plan_dirs(project_root, path.parent.name, [source_dir])
 
