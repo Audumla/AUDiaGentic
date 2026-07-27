@@ -287,6 +287,40 @@ def prepare_interactive_provider_launch(
     )
 
 
+def materialize_provider_config(
+    project_root: Path,
+    provider_id: str,
+    harness_cfg: dict,
+    *,
+    agent_runtime: Path | None = None,
+) -> None:
+    """Materialize a provider's own config files through the public boundary.
+
+    Writes provider-specific config (e.g. models.json, settings.json for Pi;
+    .opencode/config.json and AGENTS.md for OpenCode) and applies provider
+    surface contributions. The provider adapter owns its own config shapes,
+    templates, and delivery mechanism — this call routes through the adapter.
+
+    Args:
+        project_root: Project root for component discovery and surface apply.
+        provider_id: Canonical provider identifier ("pi", "opencode").
+        harness_cfg: Harness config dict (rig.model, rig.port, rig.provider).
+        agent_runtime: Target directory for agent files (harness runtime root).
+            Used by Pi which writes to a global harness runtime; ignored by
+            OpenCode which writes project-local files.
+    """
+    from audiagentic.components.providers.services.public_materialize import (
+        materialize_provider_config as _materialize,
+    )
+
+    _materialize(
+        project_root,
+        provider_id=provider_id,
+        harness_cfg=harness_cfg,
+        agent_runtime=agent_runtime,
+    )
+
+
 def prepare_provider_mcp_surface(
     project_root: Path,
     *,
