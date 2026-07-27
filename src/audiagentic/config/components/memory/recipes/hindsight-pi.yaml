@@ -6,7 +6,8 @@
 # parameter defaults to the literal, so strict substitution passes it through).
 recipe-id: hindsight-pi
 recipe-version: "1.0.0"
-description: Write the Hindsight-owned Pi host block into ~/.hindsight/config.json.
+description: >-
+  Register MCP entry and write Hindsight-owned Pi host block.
 parameters:
   - name: URL
     required: true
@@ -14,8 +15,25 @@ parameters:
     default: audiagentic
   - name: PROJECT
     default: "{project}"
+  - name: OWNERSHIP_SCOPE
+    required: true
+  - name: MCP_URL
+    required: true
+  - name: AUTH
+    default: ""
 lifecycle:
   install-steps:
+    - type: managed-mcp
+      id: entry
+      provider: pi
+      managed-id: ag-hindsight
+      ownership-scope: "{OWNERSHIP_SCOPE}"
+      name: hindsight
+      url: "{MCP_URL}"
+      transport: http
+      headers:
+        Authorization: "{AUTH}"
+        X-Bank-Id: "{BANK_ID}"
     - type: config-set
       id: set-base-url
       path: ~/.hindsight/config.json
@@ -42,6 +60,15 @@ lifecycle:
         auto_recall_tags_match: any_strict
         observation_scopes: [["{PROJECT}"]]
   uninstall-steps:
+    - type: managed-mcp
+      id: prune-entry
+      provider: pi
+      managed-id: ag-hindsight
+      ownership-scope: "{OWNERSHIP_SCOPE}"
+      name: hindsight
+      url: "{MCP_URL}"
+      transport: http
+      mode: prune
     - type: config-remove
       id: unset-host-block
       path: ~/.hindsight/config.json

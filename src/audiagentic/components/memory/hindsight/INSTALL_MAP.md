@@ -44,6 +44,18 @@ Managed MCP entries use stable managed ID `ag-hindsight`. Ownership is recorded 
 the managed-MCP ownership registry under the provider plus Hindsight caller scope.
 Repeated installation updates the owned entry rather than duplicating it.
 
+### Lifecycle behavior implementation status (DE03)
+
+| Behavior | Implemented | How | Notes |
+| --- | --- | --- | --- |
+| Report restart-required after changes | ✅ Yes | `_lifecycle_hint` reads `changed` + `auto_refreshed` from managed result; fallback to descriptor `refresh_mode` via `_mcp_refresh_mode` | Applied in reconcile (all providers) and status report (managed-mcp only). File-watch providers (antigravity, claude, qwen, opencode) get NO restart hint. |
+| Rely on file-watch reload | ✅ Yes | File-watch providers have `auto_refreshed=True` in managed result; `_lifecycle_hint` skips restart hint when `changed=True` but auto-refreshed | No explicit "file-watch" message — absence of restart hint signals reload is automatic. |
+| Report collisions | ✅ Yes | `_lifecycle_hint` checks `collision_ids` in managed result; `_map_mcp_status` surfaces them in status report | Collisions surfaced even on ok (not dropped as before DE03). |
+| Surface deprecation/migration guidance | ✅ Yes (boolean only) | `_lifecycle_hint` reads `desc.deprecated` via `get_descriptor`; applied in both reconcile and status | No structured block — only boolean flag exists. No replacement_provider/message surfaced; user must check annotations. |
+
+> **Not yet implemented:** Docker env-changing validation (DE03 step 6),
+> per-provider structured deprecation with replacement provider messaging.
+
 ## Runtime installation references
 
 ### H1 — managed hooks
@@ -111,7 +123,7 @@ no-op because AUDiaGentic owns nothing for that provider.
 ## Current provider map
 
 | Provider | Descriptor | State | Advertised relevant families | Selected route | Provider destination/install reference | Hindsight materialization lifecycle — install / manage / uninstall | Upstream Hindsight reference |
-|---|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- | --- |
 | Aider (`aider`) | `config/providers/aider.yaml` | Active | none | **G1** | No managed destination | **Install:** do not mutate Aider; return guidance-only and point to manual/direct integration guidance. **Manage:** no owned state; report not registered. **Uninstall:** no-op because AUDiaGentic created nothing. | [Aider integration](https://hindsight.vectorize.io/sdks/integrations/aider) existed in the retired matrix, but its wrapper installer is not invoked by this route. |
 | Antigravity (`antigravity`) | `config/providers/antigravity.yaml` | Active; Gemini replacement | `managed-mcp` | **M1** | `~/.gemini/antigravity/mcp_config.json`; MCP JSON; file-watch | **Install:** write or replace owned `ag-hindsight` MCP entry through the descriptor JSON writer. **Manage:** read and compare the entry on reconcile, update URL/headers/command when backend settings change, preserve other servers, and rely on file-watch reload. **Uninstall:** remove only the registry-owned `ag-hindsight` entry with the descriptor remover and clear its ownership record. | No Antigravity-specific direct installer is recorded; support is generic managed MCP. |
 | Claude (`claude`) | `config/providers/claude.yaml` | Active | `managed-mcp` | **M1** | `~/.claude/mcp.json`; MCP JSON; file-watch | **Install:** write or replace owned `ag-hindsight` in Claude's MCP JSON. **Manage:** reconcile the full desired entry, repair missing/stale values, preserve user MCP servers, and rely on Claude's file watcher. **Uninstall:** remove only the Hindsight-owned entry and registry mapping; do not remove Claude or its other MCP configuration. | [Claude Code integration](https://hindsight.vectorize.io/sdks/integrations/claude-code); the upstream plugin is not this route. |
