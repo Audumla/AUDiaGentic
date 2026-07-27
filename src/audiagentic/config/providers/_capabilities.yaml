@@ -9,43 +9,49 @@ kinds:
 
   cli-install:
     domain: cli
-    authority: automation
+    authority: provisioned
     family_id: cli-lifecycle
     cardinality: single
     mechanism_schema: cli-install-recipe
 
   mcp-config:
     domain: mcp
-    authority: automation
+    authority: provisioned
     family_id: managed-mcp
+    cardinality: single
+    mechanism_schema: managed-config-spec
+
+  hook-config:
+    domain: hook
+    authority: provisioned
+    family_id: managed-hooks
     cardinality: single
     mechanism_schema: managed-config-spec
 
   model-config:
     domain: model
-    authority: automation
+    authority: provisioned
     family_id: model-projection
     cardinality: single
     mechanism_schema: managed-config-spec
 
   surface-render:
     domain: surface
-    authority: automation
+    authority: provisioned
     family_id: generated-surfaces
     cardinality: single
     mechanism_schema: surfaces-struct
 
   lsp-automation:
     domain: lsp
-    authority: automation
+    authority: provisioned
     family_id: language-server
     cardinality: single
     mechanism_schema: lsp-automation-spec
 
   model-catalog-refresh:
     domain: model
-    authority: automation
-    family_id: model-projection
+    authority: operational
     cardinality: single
     mechanism_schema: callable-ref
 
@@ -77,13 +83,15 @@ kinds:
 
   surface-skill:
     domain: surface
-    authority: operational
+    authority: provisioned
+    family_id: generated-surfaces
     cardinality: single
     mechanism_schema: callable-ref
 
   surface-instruction:
     domain: surface
-    authority: operational
+    authority: provisioned
+    family_id: generated-surfaces
     cardinality: single
     mechanism_schema: boolean-set
 
@@ -107,7 +115,7 @@ kinds:
 
   plugin-config:
     domain: plugin
-    authority: automation
+    authority: provisioned
     family_id: plugin-entry
     cardinality: single
     mechanism_schema: managed-config-spec
@@ -164,7 +172,7 @@ kinds:
 
   surfaces:
     domain: surface
-    authority: automation
+    authority: provisioned
     family_id: generated-surfaces
     cardinality: single
     mechanism_schema: surfaces-struct
@@ -172,7 +180,7 @@ kinds:
 
   lsp-config:
     domain: lsp
-    authority: automation
+    authority: provisioned
     family_id: language-server-projection
     cardinality: single
     mechanism_schema: lsp-automation-spec
@@ -180,7 +188,7 @@ kinds:
 
   lsp-self-support:
     domain: lsp
-    authority: automation
+    authority: provisioned
     family_id: self-provided-lsp
     cardinality: single
     mechanism_schema: lsp-automation-spec
