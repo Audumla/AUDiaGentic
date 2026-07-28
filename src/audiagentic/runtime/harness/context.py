@@ -33,9 +33,9 @@ class AgentContext:
     model_profile: dict[str, object]
     profile_name: str
     provider: str
-    rig_pid: int | None
-    manages_rig: bool
+    embedded_rig: bool
     enable_mcp: bool
+    rig_attachment: object | None = None
     server_version: str | None = None
     harness_cfg: dict = field(default_factory=dict)
     agent_runtime: Path | None = None

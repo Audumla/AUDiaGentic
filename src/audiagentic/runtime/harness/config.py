@@ -9,7 +9,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from audiagentic.foundation.config.harness import require_harness_rig_port
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+
+__all__ = ["require_harness_rig_port"]
 
 
 def _harness_config_error(code_number: int, message: str, **details: object) -> AudiaGenticError:

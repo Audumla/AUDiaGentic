@@ -68,11 +68,11 @@ def build_global_context(
     profile_name, model_profile = load_model_profile(None, requested_model)
     rig_port = require_harness_rig_port(harness_cfg)
     _, model_id = load_rig_model()
-    endpoint, model, rig_pid, manages_rig = launch_rig_if_needed(
+    rig_connection = launch_rig_if_needed(
         requested_model, profile_name, model_profile, rig_port=rig_port, model_id=model_id
     )
-    if not manages_rig:
-        model = query_server_model(endpoint) or model
+    if not rig_connection.embedded:
+        model = query_server_model(rig_connection.endpoint) or rig_connection.model
 
     rig_bin_dir = agent_runtime / "rig" / "bin"
     server_version = query_server_version(rig_bin_dir)
@@ -84,14 +84,14 @@ def build_global_context(
         agent_runtime=agent_runtime,
         agent_work=project_root,
         agent_log_dir=project_root / ".audiagentic" / "logs" / "cli",
-        endpoint=endpoint,
-        model=model,
+        endpoint=rig_connection.endpoint,
+        model=rig_connection.model if rig_connection.embedded else model,
         model_profile=model_profile,
         profile_name=profile_name,
         provider=provider,
-        rig_pid=rig_pid,
-        manages_rig=manages_rig,
+        embedded_rig=rig_connection.embedded,
         enable_mcp=resolved_enable_mcp,
+        rig_attachment=rig_connection.attachment,
         server_version=server_version,
         harness_cfg=harness_cfg,
         launch_runtime_root=new_launch_runtime_root(agent_runtime),
@@ -105,7 +105,7 @@ def build_base_run_env(ctx: AgentContext) -> dict[str, str]:
     env["AUDIAGENTIC_REPO_ROOT"] = str(ctx.project_root)
     env["AUDIAGENTIC_AG_BASE_URL"] = ctx.endpoint
     env["AUDIAGENTIC_AG_MODEL"] = ctx.model
-    env["AUDIAGENTIC_RIG_TYPE"] = "embedded" if ctx.manages_rig else "external"
+    env["AUDIAGENTIC_RIG_TYPE"] = "embedded" if ctx.embedded_rig else "external"
     env["AUDIAGENTIC_RIG_PROFILE"] = ctx.profile_name
     env["OPENAI_API_BASE"] = ctx.endpoint
     env["OPENAI_BASE_URL"] = ctx.endpoint

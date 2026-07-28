@@ -141,16 +141,14 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
 
             shutil.rmtree(launch_root, ignore_errors=True)
 
-    if ctx.manages_rig:
-        # Client registration happened inside launch_rig_if_needed, under the
-        # rig start lock — registering here (outside the lock) left a window
-        # where a departing last client killed the rig we just attached to.
-        from audiagentic.runtime.rig.registry import shutdown_rig_if_last
+    if ctx.embedded_rig:
+        from audiagentic.runtime.rig.service import release_embedded_rig
 
-        rig_port = int(str(ctx.endpoint).rsplit(":", 1)[-1].split("/", 1)[0])
+        attachment = ctx.rig_attachment
 
         def _sigterm_handler(sig: int, frame: object) -> None:
-            shutdown_rig_if_last(rig_port)
+            if attachment is not None:
+                release_embedded_rig(attachment)
             sys.exit(0)
 
         try:
@@ -161,7 +159,8 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
         try:
             return run_agent(ctx, args, smoke=False)  # type: ignore[arg-type]
         finally:
-            shutdown_rig_if_last(rig_port)
+            if attachment is not None:
+                release_embedded_rig(attachment)
             _cleanup_launch_surface()
     else:
         try:
