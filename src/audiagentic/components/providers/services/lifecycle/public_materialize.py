@@ -24,7 +24,7 @@ def _upsert_ag_rig_source(project_root: Path, harness_cfg: dict) -> None:
         load_model_sources,
         write_model_sources,
     )
-    from audiagentic.runtime.harness.config import (
+    from audiagentic.foundation.config.harness import (
         require_harness_rig_port,
     )
 
