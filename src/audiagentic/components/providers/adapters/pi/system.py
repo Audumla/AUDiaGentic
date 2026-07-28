@@ -9,7 +9,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from audiagentic.components.providers.services.system_probe import (
+from audiagentic.components.providers.services.host.system_probe import (
     resolve_system_package_root,
 )
 

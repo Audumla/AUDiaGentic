@@ -1,4 +1,5 @@
 """Pi model config managed-config adapter."""
+
 from __future__ import annotations
 
 import json
@@ -34,11 +35,14 @@ def write_pi_models(
     current_data = {}
     if config_path.is_file():
         current_data = json.loads(config_path.read_text(encoding="utf-8"))
-    existing_models = {m.get("managed_id") or m.get("model_id", ""): m for m in current_data.get("models", [])}
+    existing_models = {
+        m.get("managed_id") or m.get("model_id", ""): m for m in current_data.get("models", [])
+    }
     models_list = list(existing_models.values())
     seen_ids = set(existing_models.keys())
-    for mid, (name, payload) in desired.items():
-        entry = dict(payload)
+    for name, payload in desired.items():
+        entry = dict(payload) if isinstance(payload, dict) else payload
+        mid = entry.get("managed_id") or name
         entry["managed_id"] = mid
         if mid in existing_models:
             idx = models_list.index(existing_models[mid])
@@ -57,7 +61,8 @@ def remove_pi_model(config_path: Path, managed_id: str) -> bool:
     data = json.loads(config_path.read_text(encoding="utf-8"))
     original_len = len(data.get("models", []))
     data["models"] = [
-        m for m in data.get("models", [])
+        m
+        for m in data.get("models", [])
         if (m.get("managed_id") or m.get("model_id", "")) != managed_id
     ]
     removed = len(data["models"]) < original_len

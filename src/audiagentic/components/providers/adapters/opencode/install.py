@@ -34,7 +34,7 @@ def _build_agents_md(project_root: Path) -> str:
     return content
 
 
-def materialize_provider_config(
+def materialize_provider_specific(
     project_root: Path,
     harness_cfg: dict,
 ) -> None:

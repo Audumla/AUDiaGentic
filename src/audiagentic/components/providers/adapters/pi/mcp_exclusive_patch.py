@@ -137,9 +137,7 @@ def _version_supported(version: str) -> bool:
         caret_match = re.match(r"^\^(\d+)\.(\d+)\.(\d+)$", spec)
         if caret_match is None:
             continue
-        floor_major, floor_minor, floor_patch = (
-            int(part) for part in caret_match.groups()
-        )
+        floor_major, floor_minor, floor_patch = (int(part) for part in caret_match.groups())
         if major != floor_major:
             continue
         if (minor, patch) >= (floor_minor, floor_patch):

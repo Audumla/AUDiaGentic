@@ -51,7 +51,7 @@ def prepare_mcp_surface(request: McpLaunchSurfaceRequest) -> McpLaunchSurfaceRes
     from audiagentic.components.providers.adapters.pi.system import (
         resolve_system_pi_mcp_adapter,
     )
-    from audiagentic.components.providers.services.system_probe import (
+    from audiagentic.components.providers.services.host.system_probe import (
         resolve_system_package_root,
     )
 
