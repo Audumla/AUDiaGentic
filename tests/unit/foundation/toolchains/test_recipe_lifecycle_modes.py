@@ -202,10 +202,32 @@ def test_mode_adapter_maps_each_public_mode_to_its_lifecycle():
             return super().dry_run(context)
 
     recipe = _Spy(InstallManifest(), {})
-    for mode in ("plan", "apply", "prune", "status"):
+    for mode in ("plan", "apply", "prune", "status", "upgrade"):
         run_recipe_mode(recipe, mode, {})
 
     assert seen == ["dry_run", "provision", "uninstall", "verify"]
+
+
+def test_upgrade_is_explicit_and_not_applicable_by_default():
+    recipe = DeclaredStepRecipe(InstallManifest(), {})
+
+    result = run_recipe_mode(recipe, "upgrade", {})
+
+    assert result.success is True
+    assert result.state is RecipeState.NOT_APPLICABLE
+
+
+def test_declared_step_recipe_runs_only_explicit_upgrade_steps(tmp_path):
+    target = tmp_path / "upgraded.txt"
+    recipe = DeclaredStepRecipe(
+        InstallManifest(upgrade_steps=(_write("upgrade", target, "done"),)), {}
+    )
+
+    result = run_recipe_mode(recipe, "upgrade", {})
+
+    assert result.success is True
+    assert result.state is RecipeState.UPGRADED
+    assert target.read_text(encoding="utf-8") == "done"
 
 
 def test_mode_adapter_rejects_an_unsupported_mode():

@@ -87,6 +87,12 @@
             "$ref": "#/definitions/StepDefinition"
           }
         },
+        "upgrade-steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StepDefinition"
+          }
+        },
         "dry-run-steps": {
           "type": "array",
           "items": {

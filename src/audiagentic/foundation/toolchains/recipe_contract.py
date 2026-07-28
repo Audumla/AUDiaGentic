@@ -32,6 +32,10 @@ class RecipeState(str, Enum):
     INSTALLING = "installing"
     CONFIGURING = "configuring"
     VERIFIED = "verified"
+    UPGRADE_AVAILABLE = "upgrade-available"
+    UPGRADING = "upgrading"
+    UPGRADED = "upgraded"
+    NOT_APPLICABLE = "not-applicable"
     ERROR = "error"
 
 
@@ -181,6 +185,22 @@ class ProvisioningRecipe(ABC):
     @abstractmethod
     def prune(self, context: dict[str, Any]) -> RecipeResult:
         """Remove managed configuration/artifacts, leaving user content intact."""
+
+    def upgrade(self, context: dict[str, Any]) -> RecipeResult:
+        """Reconcile an owned present dependency to its declared target.
+
+        Upgrade is deliberately explicit: recipes must never perform it as part
+        of a normal probe, status query, or launch path.  The conservative
+        default keeps existing configuration-only and externally-owned recipes
+        compatible while making their non-applicability visible to callers.
+        Recipes that own versioned artifacts override this method and return
+        ``UPGRADED`` or ``VERIFIED`` (already current), with provenance in
+        ``details``.
+        """
+        return RecipeResult.ok(
+            RecipeState.NOT_APPLICABLE,
+            status="upgrade is not applicable to this recipe",
+        )
 
     def dry_run(self, context: dict[str, Any]) -> RecipeResult:
         """Describe what :meth:`provision` would do, without doing any of it.

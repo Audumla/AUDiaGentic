@@ -6,14 +6,14 @@ from pathlib import Path
 
 from audiagentic import launcher
 from audiagentic.foundation.components.loader import register_all_components
+from audiagentic.foundation.components.prompt_injections import (
+    build_system_prompt_injections as build_system_md_injections,
+)
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
 from audiagentic.foundation.lifecycle.components import install_component
 from audiagentic.foundation.mcp import McpServerEntry
 from audiagentic.foundation.mcp.json_format import _resolve_command
 from audiagentic.foundation.mcp.projection import collect_component_mcp_entries
-from audiagentic.runtime.harness.system_prompt import (
-    build_system_prompt_injections as build_system_md_injections,
-)
 
 
 def _collect(project_root: Path) -> dict[str, McpServerEntry]:

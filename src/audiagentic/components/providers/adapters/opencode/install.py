@@ -24,7 +24,7 @@ def materialize_model_config_path(project_root: Path, agent_runtime: Path | None
 
 def _build_agents_md(project_root: Path) -> str:
     """Build AGENTS.md from the bundled template + component injections."""
-    from audiagentic.runtime.harness.system_prompt import (
+    from audiagentic.foundation.components.prompt_injections import (
         apply_system_prompt_injections,
         build_system_prompt_injections,
     )

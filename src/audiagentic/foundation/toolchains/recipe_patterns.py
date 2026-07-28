@@ -94,6 +94,7 @@ class InstallManifest:
 
     install_steps: tuple[dict[str, Any], ...] = ()
     uninstall_steps: tuple[dict[str, Any], ...] = ()
+    upgrade_steps: tuple[dict[str, Any], ...] = ()
     status_command: str = ""
     verified: bool = True
     source_label: str = ""
@@ -230,6 +231,35 @@ class DeclaredStepRecipe(ProvisioningRecipe):
             fail_prefix="uninstaller failed",
         )
 
+    def upgrade(self, context: dict[str, Any]) -> RecipeResult:
+        """Run declared upgrade steps only when this recipe owns them."""
+        if not self._m.upgrade_steps:
+            return super().upgrade(context)
+        if not self._m.verified:
+            return RecipeResult.fail(
+                f"{self._subject} source {self._m.source_label}; refusing to execute",
+                action_needed=self._m.gate_action,
+            )
+        steps = build_steps_from_defs(
+            list(self._m.upgrade_steps), self._params, recipe_id=self._m.recipe_id
+        )
+        result = run_steps(
+            steps,
+            context,
+            ok_state=RecipeState.UPGRADING,
+            ok_status=f"{self._subject} upgrade steps succeeded",
+            fail_prefix=f"{self._subject} upgrade failed",
+        )
+        if not result.success:
+            return result
+        verified = self.verify(context)
+        if not verified.success:
+            return RecipeResult.fail(
+                f"{self._subject} upgrade verification failed: {verified.error or verified.status}",
+                details=verified.details,
+            )
+        return RecipeResult.ok(RecipeState.UPGRADED, status=f"{self._subject} upgraded")
+
     def prune(self, context: dict[str, Any]) -> RecipeResult:
         return RecipeResult.ok(RecipeState.ABSENT, status="nothing to prune")
 
@@ -249,6 +279,7 @@ _MODE_TO_LIFECYCLE = {
     "plan": "dry_run",
     "prune": "uninstall",
     "status": "verify",
+    "upgrade": "upgrade",
 }
 
 
@@ -260,7 +291,8 @@ def run_recipe_mode(
     """Map one public semantic mode onto the private recipe lifecycle.
 
     ``plan`` -> dry_run, ``apply`` -> the provision sequence, ``prune`` ->
-    uninstall, ``status`` -> verify. Returns the INTERNAL semantic
+    uninstall, ``status`` -> verify, and ``upgrade`` -> explicit owned-artifact
+    reconciliation. Returns the INTERNAL semantic
     :class:`RecipeResult`; owning families map it to their own typed result and
     never expose this shape. ``plan`` and ``status`` are queries: they route to
     lifecycle methods that must not mutate.

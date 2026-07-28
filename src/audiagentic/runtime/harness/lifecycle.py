@@ -4,8 +4,7 @@ Only the "refresh materialized config, then request a runtime reload" sequence
 (and its error handling) is shared here. Each harness still owns its own
 CLI-availability check and its own refresh/reload calls -- passed in as
 callables so they resolve dynamically against the calling module's own
-functions (keeping them independently monkeypatchable in tests, e.g.
-``runtime.harness.pi.install.request_runtime_reload``).
+functions (keeping them independently monkeypatchable in tests).
 """
 from __future__ import annotations
 
