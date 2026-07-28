@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from audiagentic.components.providers import providers_api
-from audiagentic.components.providers.services.execution import describe_execution_support
+from audiagentic.components.providers.services.execution.execution import describe_execution_support
 
 
 def test_describe_execution_support_modes() -> None:
@@ -40,13 +40,13 @@ def test_describe_provider_full_composition(tmp_path: Path) -> None:
     assert "ok" in result["models"]
     # config surfaces serialize with the pinned shape
     surfaces = {surface["kind"]: surface for surface in result["config_surfaces"]}
-    assert set(surfaces) == {"mcp", "language-servers", "model-endpoints"}
+    assert set(surfaces) == {"mcp", "language-servers", "models"}
     mcp_surface = surfaces["mcp"]
     assert mcp_surface["configured"] is True
     assert mcp_surface["resolved_path"].endswith("opencode.json")
     assert mcp_surface["path_scope"] in {"project", "home", "absolute"}
-    # model-endpoints now declared for opencode (model_config in descriptor)
-    assert surfaces["model-endpoints"]["configured"] is True
+    # models store now declared for opencode (model_config in descriptor)
+    assert surfaces["models"]["configured"] is True
     # managed registries report names/counts only
     registries = {block["registry"]: block for block in result["managed"]}
     assert set(registries) == {"managed-mcp-servers", "managed-model-endpoints"}

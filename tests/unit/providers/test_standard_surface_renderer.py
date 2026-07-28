@@ -91,7 +91,7 @@ def test_new_provider_needs_only_yaml(tmp_path: Path):
         display_name="Fixture Provider",
         capabilities=(
             Capability(
-                kind="surface-render",
+                kind="surfaces",
                 mechanism={"renderer": "flat-skill", "contribution-file": "FIXTURE.md"},
             ),
             Capability(kind="surface-instruction", mechanism="FIXTURE.md"),
@@ -122,7 +122,7 @@ def test_custom_surface_module_wins_over_descriptor_block(tmp_path: Path):
     descriptor = ProviderDescriptor(
         provider_id="sentinel-prov",
         display_name="Sentinel",
-        capabilities=(Capability(kind="surface-render", mechanism={"renderer": "flat-skill"}),),
+        capabilities=(Capability(kind="surfaces", mechanism={"renderer": "flat-skill"}),),
     )
     _register_standard_surfaces(descriptor)
     assert load_renderer_registry()["sentinel-prov"] is sentinel

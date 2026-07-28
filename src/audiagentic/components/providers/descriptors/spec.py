@@ -17,6 +17,7 @@ Error codes:
     VAL-DESC-001 — declarative configuration reference resolution failure
     VAL-DESC-002 — step build failure (from workflow.invocation.from_spec)
     VAL-DESC-003 — required field missing from YAML
+    VAL-DESC-004 — unknown top-level key not registered on the spec
 """
 from __future__ import annotations
 
@@ -131,6 +132,16 @@ class DescriptorSpec:
         Raises:
             AudiaGenticError: VAL-DESC-003 for missing required fields.
         """
+        known_keys = {spec.yaml_key for spec in self.fields.values()}
+        unknown_keys = sorted(set(data) - known_keys)
+        if unknown_keys:
+            raise AudiaGenticError(
+                code="VAL-DESC-004",
+                kind="descriptor",
+                message=f"Unknown descriptor key(s): {', '.join(unknown_keys)}",
+                details={"keys": unknown_keys},
+            )
+
         resolved = {}
 
         for field_name, spec in self.fields.items():

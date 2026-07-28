@@ -14,6 +14,7 @@ from audiagentic.components.providers.descriptors.base import (
     AgentFile,
     CliInstallRecipe,
     HostCapability,
+    ModelsSpec,
     ProviderPermissions,
 )
 from audiagentic.foundation.toolchains.config.managed_config import (
@@ -73,6 +74,7 @@ MECHANISM_SCHEMA_MAP: dict[str, type] = {
     "managed-config-spec": ManagedConfigSpec,
     "permissions-struct": ProviderPermissions,
     "agent-file": AgentFile,
+    "model-spec": ModelsSpec,
 }
 
 # Mechanism schemas that are conceptual patterns (no real Python type).

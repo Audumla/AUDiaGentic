@@ -147,7 +147,7 @@ class TestProviderYamlLoader:
         assert resolved["access_mode"] == "cli"
         assert resolved["receive_lsp_mcp"] is True
         assert resolved["cli_probe"] is None
-        assert resolved["cli_install"] is None
+        assert resolved["capabilities"] == ()
 
     def test_provider_spec_requires_valid_execution_isolation_tier(self) -> None:
         with pytest.raises(Exception, match="execution_isolation_tier"):
@@ -222,12 +222,12 @@ class TestLoadProvidersFromDirectory:
         assert providers["claude"].supported_connectors == ()
 
     def test_vendor_key_injection_defaults_empty_mapping(self) -> None:
-        """MO01: values start empty and are populated only from MO09-verified evidence."""
+        """MO01: values start empty and are populated only from MO09-verified evidence.
+
+        Values are secrets.py scheme:locator reference strings, resolved only
+        at the narrow consuming boundary — never a resolved secret.
+        """
         providers = load_providers_from_directory(get_providers_config_dir())
         assert providers["claude"].vendor_key_injection == {}
-        assert providers["pi"].vendor_key_injection["anthropic"] == {
-            "mechanism": "env", "key": "ANTHROPIC_API_KEY"
-        }
-        assert providers["qwen"].vendor_key_injection["google"] == {
-            "mechanism": "env", "key": "GEMINI_API_KEY"
-        }
+        assert providers["pi"].vendor_key_injection["anthropic"] == "env:ANTHROPIC_API_KEY"
+        assert providers["qwen"].vendor_key_injection["google"] == "env:GEMINI_API_KEY"

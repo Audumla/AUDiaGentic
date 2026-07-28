@@ -10,12 +10,6 @@ provider_id: local-openai
 # made the gateway's full-isolation-only dispatch gate (UNS-AGW-076) reject
 # every real local-openai request outright. See docs/planning SH19.
 execution_isolation_tier: full-isolation
-automation_capabilities:
-  - family_id: generated-surfaces
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-generated-surface-payload/v1
-    result_contract: provider-generated-surface-result/v1
-    ownership_scope_required: true
 display_name: "Local OpenAI Bridge"
 description: "Generic OpenAI-compatible REST endpoint. Points to any locally hosted model server (llama.cpp, Ollama, vLLM, etc.). Requires api-base-url and model-id in config."
 url: "https://platform.openai.com/docs/api-reference"
@@ -25,65 +19,21 @@ access_mode: none
 
 cli_probe: null
 
-host_capabilities: []
-
-capability_facts:
-  - capability_id: model-catalog-refresh
-    subject: fetch_catalog_fn
-    mechanism: "_fetch_catalog callable returning model list"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/local_openai.yaml#fetch_catalog_fn"
-      review_state: verified
-  - capability_id: model-connectors
-    subject: supported_connectors
-    mechanism: "tuple of connector ids: openai-compatible"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/local_openai.yaml#supported_connectors"
-      review_state: verified
-  - capability_id: perm-declaration
-    subject: permissions
-    mechanism: "ProviderPermissions boolean flags"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/local_openai.yaml#permissions"
-      review_state: verified
-
-permissions:
-  can_write_files: false
-  can_execute_shell: false
-  can_browse_web: false
-  can_read_env: false
-  notes: "OpenAI-compatible REST endpoint; chat completions only. No MCP, LSP, skill surfaces, file writing, or shell execution."
-
-agent_files: []
-
-skill_surface_path: null
-instruction_file: null
-mcp_config: null
-language_servers_config: null
 receive_lsp_mcp: false
 
-fetch_catalog_fn: "audiagentic.components.providers.adapters.local_openai.catalog:_fetch_catalog"
+capabilities:
+  models:
+    mechanism:
+      refresh: "audiagentic.components.providers.adapters.local_openai.catalog:_fetch_catalog"
+      # MO01: repo fact, not speculation — this adapter's only wire shape is
+      # the OpenAI-compatible /v1 REST surface (see adapters/local_openai/
+      # catalog.py, adapter.py).
+      connectors: [openai-compatible]
 
-# MO01: repo fact, not speculation — this adapter's only wire shape is the
-# OpenAI-compatible /v1 REST surface (see adapters/local_openai/catalog.py,
-# adapter.py).
-supported_connectors:
-  - openai-compatible
+  permissions:
+    mechanism:
+      can_write_files: false
+      can_execute_shell: false
+      can_browse_web: false
+      can_read_env: false
+      notes: "OpenAI-compatible REST endpoint; chat completions only. No MCP, LSP, skill surfaces, file writing, or shell execution."

@@ -21,32 +21,6 @@ launches:
   agent:
     interaction: [acp]
     observability: [acp, rpc]
-automation_capabilities:
-  - family_id: cli-lifecycle
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-cli-lifecycle-payload/v1
-    result_contract: provider-cli-lifecycle-result/v1
-    ownership_scope_required: false
-  - family_id: managed-mcp
-    supported_modes: [apply, prune, status]
-    payload_contract: provider-managed-mcp-payload/v1
-    result_contract: provider-managed-mcp-result/v1
-    ownership_scope_required: true
-  - family_id: model-projection
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-model-projection-payload/v1
-    result_contract: provider-model-projection-result/v1
-    ownership_scope_required: false
-  - family_id: self-provided-lsp
-    supported_modes: [apply, status]
-    payload_contract: provider-self-provided-lsp-payload/v1
-    result_contract: provider-self-provided-lsp-result/v1
-    ownership_scope_required: false
-  - family_id: generated-surfaces
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-generated-surface-payload/v1
-    result_contract: provider-generated-surface-result/v1
-    ownership_scope_required: true
 display_name: "Pi Coding Agent"
 description: >-
   Lightweight local coding agent TUI by Earendil Works.
@@ -56,161 +30,90 @@ access_mode: "none"
 
 cli_probe: null
 
-cli_install:
-  package_manager: "pi-harness"
-  package_name: "audiagentic-pi-harness"
-  executable: "pi"
-  install:
-    type: callable
-    id: install
-    fn: "audiagentic.components.providers.adapters.pi.hooks:_pi_install"
-  uninstall:
-    type: callable
-    id: uninstall
-    fn: "audiagentic.components.providers.adapters.pi.hooks:_pi_uninstall"
-  probe_fn: "audiagentic.components.providers.adapters.pi.hooks:_pi_probe"
-
-host_capabilities: []
-
-capability_facts:
-  - capability_id: launch-isolation
-    subject: mcp_launch_isolation_tier
-    mechanism: >-
-      request-owned config via pi-mcp-adapter
-      with exclusive discovery
-    constraints:
-      - "requires a compatible installed pi-mcp-adapter"
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: execution
-      tool_version: repository
-      fact_anchor: "tests/unit/providers/test_mcp_launch_isolation.py"
-      review_state: verified
-  - capability_id: cli-install
-    subject: cli_install
-    mechanism: "pi-harness with callable probe_fn, install, uninstall"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/pi.yaml#cli_install"
-      review_state: verified
-  - capability_id: mcp-config
-    subject: mcp_config
-    mechanism: "reader/writer/remover over .mcp.json"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/pi.yaml#mcp_config"
-      review_state: verified
-  - capability_id: lsp-self-support
-    subject: on_lsp_enabled
-    mechanism: >-
-      _pi_ensure_lens hook — callable hook on LSP enable
-      that installs LSP support
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/pi.yaml#on_lsp_enabled"
-      review_state: verified
-  - capability_id: perm-declaration
-    subject: permissions
-    mechanism: "ProviderPermissions boolean flags"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/pi.yaml#permissions"
-      review_state: verified
-  - capability_id: model-credentials
-    subject: "external:model-credentials"
-    mechanism: >-
-      native env var key injection
-      (OPENAI_API_KEY, ANTHROPIC_API_KEY,
-      GEMINI_API_KEY, OPENROUTER_API_KEY, etc.)
-    constraints:
-      - "env vars effective at launch time"
-      - "custom endpoints require models.json write"
-    limitations:
-      - "user-home write requires consent if global scope"
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: execution
-      tool_version: "0.79.8"
-      fact_anchor: "docs/reference/model-source-evidence/pi.md#pi-evidence"
-      review_state: verified
-  - capability_id: model-local-state
-    subject: "external:model-local-state"
-    mechanism: >-
-      ~/.pi/agent/models.json with
-      providers/models[]/baseUrl/apiKey/compat shape
-    constraints:
-      - "home-scoped, not project-local"
-    limitations:
-      - "for custom/local endpoints only, not required for native vendors"
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: execution
-      tool_version: "0.79.8"
-      fact_anchor: "docs/reference/model-source-evidence/pi.md#pi-evidence"
-      review_state: verified
-
-permissions:
-  can_write_files: true
-  can_execute_shell: true
-  can_browse_web: false
-  can_read_env: true
-  notes: >-
-    TUI coding agent;
-    MCP tool use available when pi-mcp-adapter is installed
-
-agent_files:
-  - rel_path: ".pi"
-    managed: false
-    description: "Pi agent runtime directory"
-
-mcp_config:
-  config_path: ".mcp.json"
-  reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
-  writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
-  remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
-  format: "mcp-json"
-  refresh_mode: "restart-required"
-
-on_lsp_enabled: "audiagentic.components.providers.adapters.pi.hooks:_pi_ensure_lens"
 lsp_support_probe: "audiagentic.components.providers.adapters.pi.hooks:_pi_lens_present"
 
-model_config:
-  config_path: "~/.pi/agent/models.json"
-  reader: "audiagentic.components.providers.adapters.pi.model_config:read_pi_models"
-  writer: "audiagentic.components.providers.adapters.pi.model_config:write_pi_models"
-  remover: "audiagentic.components.providers.adapters.pi.model_config:remove_pi_model"
-  format: "pi-models-json"
-  refresh_mode: "none"
+capabilities:
+  cli-install:
+    mechanism:
+      package_manager: "pi-harness"
+      package_name: "audiagentic-pi-harness"
+      executable: "pi"
+      install:
+        type: callable
+        id: install
+        fn: "audiagentic.components.providers.adapters.pi.hooks:_pi_install"
+      uninstall:
+        type: callable
+        id: uninstall
+        fn: "audiagentic.components.providers.adapters.pi.hooks:_pi_uninstall"
+      probe_fn: "audiagentic.components.providers.adapters.pi.hooks:_pi_probe"
 
-model_entry_renderer: "audiagentic.components.providers.adapters.pi.model_entry:render_pi_model_entry"
-supported_connectors:
-  - openai-compatible
-  - openai
-  - anthropic
+  mcp:
+    mechanism:
+      config_path: ".mcp.json"
+      reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
+      writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
+      remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
+      format: "mcp-json"
+      refresh_mode: "restart-required"
+
+  models:
+    mechanism:
+      store:
+        config_path: "~/.pi/agent/models.json"
+        reader: "audiagentic.components.providers.adapters.pi.model_config:read_pi_models"
+        writer: "audiagentic.components.providers.adapters.pi.model_config:write_pi_models"
+        remover: "audiagentic.components.providers.adapters.pi.model_config:remove_pi_model"
+        format: "pi-models-json"
+        refresh_mode: "none"
+      entry_renderer: "audiagentic.components.providers.adapters.pi.model_entry:render_pi_model_entry"
+      connectors: [openai-compatible, openai, anthropic]
+      credentials:
+        openai: "env:OPENAI_API_KEY"
+        anthropic: "env:ANTHROPIC_API_KEY"
+        google: "env:GEMINI_API_KEY"
+        openrouter: "env:OPENROUTER_API_KEY"
+    evidence:
+      note: >-
+        native env var key injection; env vars effective at launch time;
+        custom endpoints require models.json write; user-home write requires
+        consent if global scope (tool_version 0.79.8)
+      source: "docs/reference/model-source-evidence/pi.md#pi-evidence"
+
+  lsp-self-support:
+    mechanism: "audiagentic.components.providers.adapters.pi.hooks:_pi_ensure_lens"
+
+  permissions:
+    mechanism:
+      can_write_files: true
+      can_execute_shell: true
+      can_browse_web: false
+      can_read_env: true
+      notes: >-
+        TUI coding agent;
+        MCP tool use available when pi-mcp-adapter is installed
+
+  agent-files:
+    mechanism:
+      rel_path: ".pi"
+      managed: false
+      description: "Pi agent runtime directory"
+
+  launch-isolation:
+    evidence:
+      note: >-
+        request-owned config via pi-mcp-adapter with exclusive discovery;
+        requires a compatible installed pi-mcp-adapter (verified, tool_version
+        repository)
+      source: "tests/unit/providers/test_mcp_launch_isolation.py"
+
+  model-local-state:
+    evidence:
+      note: >-
+        ~/.pi/agent/models.json with providers/models[]/baseUrl/apiKey/compat
+        shape; home-scoped, not project-local; for custom/local endpoints
+        only, not required for native vendors (tool_version 0.79.8)
+      source: "docs/reference/model-source-evidence/pi.md#pi-evidence"
 
 # One-shot gateway execution uses the shared YAML-driven CLI runner. Live
 # sessions use the provider ACP builder in adapters/pi/acp.py instead.
@@ -229,9 +132,3 @@ execution:
   approval-mode-flags:
     yolo: []
     auto-edit: []
-
-vendor_key_injection:
-  openai: {mechanism: env, key: OPENAI_API_KEY}
-  anthropic: {mechanism: env, key: ANTHROPIC_API_KEY}
-  google: {mechanism: env, key: GEMINI_API_KEY}
-  openrouter: {mechanism: env, key: OPENROUTER_API_KEY}

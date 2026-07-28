@@ -9,23 +9,6 @@ launches:
   execute:
     interaction: [native]
     observability: [pipe]
-automation_capabilities:
-
-  - family_id: cli-lifecycle
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-cli-lifecycle-payload/v1
-    result_contract: provider-cli-lifecycle-result/v1
-    ownership_scope_required: false
-  - family_id: managed-mcp
-    supported_modes: [apply, prune, status]
-    payload_contract: provider-managed-mcp-payload/v1
-    result_contract: provider-managed-mcp-result/v1
-    ownership_scope_required: true
-  - family_id: generated-surfaces
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-generated-surface-payload/v1
-    result_contract: provider-generated-surface-result/v1
-    ownership_scope_required: true
 display_name: "GitHub Copilot"
 description: "GitHub's AI coding assistant. Inline completions, chat, and multi-file edits across VS Code and JetBrains."
 url: "https://github.com/features/copilot"
@@ -36,122 +19,58 @@ cli_probe:
   - copilot
   - "--version"
 
-cli_install:
-  toolchain: npm
-  package: "@github/copilot"
-  executable: copilot
-  probe_fn: "audiagentic.components.providers.adapters.copilot.hooks:_copilot_probe"
+capabilities:
+  cli-install:
+    mechanism:
+      toolchain: npm
+      package: "@github/copilot"
+      executable: copilot
+      probe_fn: "audiagentic.components.providers.adapters.copilot.hooks:_copilot_probe"
 
-host_capabilities:
-  - host: vscode
-    capability_id: "GitHub.copilot"
-    display_name: "GitHub Copilot"
-  - host: vscode
-    capability_id: "GitHub.copilot-chat"
-    display_name: "GitHub Copilot Chat"
+  host-extensions:
+    - mechanism:
+        host: vscode
+        capability_id: "GitHub.copilot"
+        display_name: "GitHub Copilot"
+    - mechanism:
+        host: vscode
+        capability_id: "GitHub.copilot-chat"
+        display_name: "GitHub Copilot Chat"
 
-capability_facts:
-  - capability_id: cli-install
-    subject: cli_install
-    mechanism: "npm install: @github/copilot with shell probe copilot --version"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/copilot.yaml#cli_install"
-      review_state: verified
-  - capability_id: host-extension
-    subject: host_capabilities
-    mechanism: "vscode extensions GitHub.copilot and GitHub.copilot-chat"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/copilot.yaml#host_capabilities"
-      review_state: verified
-  - capability_id: mcp-config
-    subject: mcp_config
-    mechanism: "reader/writer/remover over .vscode/mcp.json"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/copilot.yaml#mcp_config"
-      review_state: verified
-  - capability_id: surfaces
-    subject: surfaces
-    mechanism: "flat-skill renderer with COPILOT.md instruction file"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/copilot.yaml#surfaces"
-      review_state: verified
-  - capability_id: exec-adapter
-    subject: execution
-    mechanism: "mode: cli with copilot executable"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/copilot.yaml#execution"
-      review_state: verified
-  - capability_id: perm-declaration
-    subject: permissions
-    mechanism: "ProviderPermissions boolean flags"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/copilot.yaml#permissions"
-      review_state: verified
+  mcp:
+    mechanism:
+      config_path: ".vscode/mcp.json"
+      reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
+      writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
+      remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
+      format: "mcp-json"
+      refresh_mode: "restart-required"
 
-permissions:
-  can_write_files: false
-  can_execute_shell: false
-  can_browse_web: false
-  can_read_env: false
-  notes: "Completion and chat only; no autonomous tool use in standard mode"
+  surfaces:
+    mechanism:
+      renderer: flat-skill
+      contribution-file: "COPILOT.md"
 
-instruction_file: "COPILOT.md"
+  surface-instruction:
+    mechanism: "COPILOT.md"
 
-agent_files:
-  - rel_path: "COPILOT.md"
-    managed: true
-    description: "Copilot project instructions"
-  - rel_path: ".github/copilot-instructions.md"
-    managed: false
-    description: "GitHub Copilot repo instructions"
+  permissions:
+    mechanism:
+      can_write_files: false
+      can_execute_shell: false
+      can_browse_web: false
+      can_read_env: false
+      notes: "Completion and chat only; no autonomous tool use in standard mode"
 
-mcp_config:
-  config_path: ".vscode/mcp.json"
-  reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
-  writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
-  remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
-  format: "mcp-json"
-  refresh_mode: "restart-required"
-
-surfaces:
-  renderer: flat-skill
-  contribution-file: "COPILOT.md"
+  agent-files:
+    - mechanism:
+        rel_path: "COPILOT.md"
+        managed: true
+        description: "Copilot project instructions"
+    - mechanism:
+        rel_path: ".github/copilot-instructions.md"
+        managed: false
+        description: "GitHub Copilot repo instructions"
 
 execution:
   mode: cli
