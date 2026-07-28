@@ -39,7 +39,7 @@ local; do not generalize until a second consumer exists (rule of three).
 
 ## 3. The lifecycle contract
 
-Implement the six primitives; `provision()`/`teardown()` orchestrate them for
+Implement the lifecycle primitives; `provision()`/`teardown()` orchestrate them for
 free (probe→install→configure→verify; prune→uninstall→verify-absent). Return a
 plain `RecipeResult`; primitives never construct provider result types.
 
@@ -101,7 +101,9 @@ lifecycle:
 
 ```python
 from audiagentic.foundation.toolchains.recipe_execution import execute_recipe_mode
-# mode is apply | prune | status | plan; {KEY} params filtered to the recipe's declared set
+# mode is apply | prune | status | plan | upgrade-status | upgrade.
+# `upgrade-status` is local/read-only; `upgrade` is explicit mutation.
+# {KEY} params are filtered to the recipe's declared set.
 result = execute_recipe_mode(recipe_path, {"URL": url, "TOKEN": token}, "apply")
 ```
 

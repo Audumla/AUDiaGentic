@@ -22,4 +22,4 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 COPY tests ./tests
 
-CMD ["bash", "-c", "uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp,test]' && /venv/bin/pytest tests/integration/agents/test_gateway_pi_smoke.py -q --tb=short --timeout=900"]
+CMD ["bash", "-c", "python -m pip install -q --no-cache-dir --break-system-packages uv && uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp,test]' && /venv/bin/pytest tests/integration/agents/test_gateway_pi_smoke.py -q --tb=short --timeout=900"]

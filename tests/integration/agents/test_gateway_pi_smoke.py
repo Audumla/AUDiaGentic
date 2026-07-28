@@ -93,8 +93,12 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
     )
     from audiagentic.components.providers.services.lifecycle.lifecycle import install_provider_cli
     from audiagentic.foundation.paths.home import global_harness_runtime
-    from audiagentic.foundation.system.process import kill_process_tree
-    from audiagentic.runtime.rig.embedded.launch import start_embedded_rig
+    from audiagentic.runtime.harness import refresh_materialized_agent_config
+    from audiagentic.runtime.harness.provisioning import provision_embedded_rig
+    from audiagentic.runtime.rig.service import (
+        release_embedded_rig,
+        start_or_attach_embedded_rig,
+    )
 
     monkeypatch.setenv("AUDIAGENTIC_REPO_ROOT", str(tmp_path))
     monkeypatch.setenv("AUDIAGENTIC_GATEWAY_MODE", "in-process")
@@ -121,6 +125,8 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
     assert_install_result_ok("pi", install_result)
 
     harness_runtime = global_harness_runtime()
+    provision_embedded_rig(harness_runtime, tmp_path)
+    refresh_materialized_agent_config(harness_runtime, project_root=tmp_path)
     # Provider lifecycle installs the harness in the system npm prefix.  The
     # runtime intentionally no longer carries a second embedded CLI copy.
     assert shutil.which("pi") is not None, "system Pi executable not resolvable after real install"
@@ -147,10 +153,13 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
     rig_bin_dir = harness_runtime / "rig" / "bin"
     assert rig_bin_dir.is_dir(), f"Embedded rig bin dir missing after real install: {rig_bin_dir}"
 
-    # Real llama-server subprocess serving the real local model — this is
-    # the genuine backend the "pi" CLI binary will talk to when the gateway
-    # dispatches the request below, not a fake OpenAI-compatible stand-in.
-    launch = start_embedded_rig(model_profile=_MODEL_PROFILE, port=rig_port, health_timeout=180.0)
+    # The managed-service path is the only shared-rig launch authority. This
+    # loads the real GGUF and exposes it through /v1/models for the Pi job.
+    launch = start_or_attach_embedded_rig(
+        profile_name=_MODEL_PROFILE,
+        rig_port=rig_port,
+        model_id=_PI_MODEL_REF,
+    )
     try:
         reset_gateway_client()
         client = get_gateway_client()
@@ -161,6 +170,11 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
                 prompt_body=_PROMPT,
                 timeout_seconds=180,
             )
+            result = client.wait_llm_request(
+                tmp_path,
+                result["request-id"],
+                timeout_seconds=180,
+            )
         finally:
             reset_gateway_client()
 
@@ -168,4 +182,4 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
         assert result["provider-id"] == "pi"
         assert (result.get("output") or "").strip(), f"pi produced no output: {result}"
     finally:
-        kill_process_tree(launch.pid)
+        release_embedded_rig(launch)
