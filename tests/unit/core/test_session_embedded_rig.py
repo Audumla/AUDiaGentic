@@ -4,6 +4,7 @@ from pathlib import Path
 
 from audiagentic.components.session.session_embedded_rig import (
     _update_global_embedded_rig_impl,
+    embedded_rig_upgrade_status,
 )
 
 
@@ -20,16 +21,16 @@ def test_update_global_embedded_rig_impl_reports_project_override(
     calls: list[Path] = []
     events: list[str] = []
 
-    def _fake_update(*, runtime_dir=None, target_bin_dir=None):
+    def _fake_recipe(target_bin_dir):
         calls.append(target_bin_dir)
-        print("Installed global llama-server")
+        return type("Recipe", (), {"upgrade": lambda self, _ctx: type("Result", (), {"success": True})()})()
 
     def _sink(event) -> None:
         events.append(event.message)
 
     monkeypatch.setattr(
-        "audiagentic.runtime.rig.embedded.binaries.update_binaries",
-        _fake_update,
+        "audiagentic.runtime.rig.embedded.recipe.llama_cpp_recipe",
+        _fake_recipe,
     )
     monkeypatch.setattr(
         "audiagentic.runtime.rig.embedded.launch.runtime_bin_dir",
@@ -54,8 +55,8 @@ def test_update_global_embedded_rig_impl_reports_global_active(
     global_bin_dir.mkdir(parents=True)
 
     monkeypatch.setattr(
-        "audiagentic.runtime.rig.embedded.binaries.update_binaries",
-        lambda *, runtime_dir=None, target_bin_dir=None: print("Installed global llama-server"),
+        "audiagentic.runtime.rig.embedded.recipe.llama_cpp_recipe",
+        lambda _target: type("Recipe", (), {"upgrade": lambda self, _ctx: type("Result", (), {"success": True})()})(),
     )
     monkeypatch.setattr(
         "audiagentic.runtime.rig.embedded.launch.runtime_bin_dir",
@@ -67,3 +68,31 @@ def test_update_global_embedded_rig_impl_reports_global_active(
     assert result["ok"] is True
     assert result["global_active"] is True
     assert result["project_local_overrides_global"] is False
+
+
+def test_embedded_rig_upgrade_status_is_read_only_and_explicit(tmp_path: Path, monkeypatch) -> None:
+    target = tmp_path / "rig" / "bin"
+    calls: list[Path] = []
+
+    class Recipe:
+        def upgrade_status(self, _context):
+            return type("Result", (), {
+                "success": True,
+                "state": type("State", (), {"value": "upgrade-available"})(),
+                "status": "pinned release differs",
+                "details": {"declared-version": "b9204"},
+            })()
+
+    monkeypatch.setattr(
+        "audiagentic.runtime.rig.embedded.recipe.llama_cpp_recipe",
+        lambda target_bin_dir: calls.append(target_bin_dir) or Recipe(),
+    )
+    monkeypatch.setattr(
+        "audiagentic.runtime.rig.embedded.launch.runtime_bin_dir", lambda: target
+    )
+
+    result = embedded_rig_upgrade_status(scope="local")
+
+    assert result["ok"] is True
+    assert result["state"] == "upgrade-available"
+    assert calls == [target]
