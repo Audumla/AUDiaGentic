@@ -1,4 +1,5 @@
 """Provider reconciliation — bring providers.yaml in sync with host state."""
+
 from __future__ import annotations
 
 import logging
@@ -20,9 +21,10 @@ def _sync_provider_mcp(project_root: Path, on_progress: ComponentOutputSink | No
     enabled component and projects its managed MCP entries to all MCP-capable
     providers (active or not).
     """
-    from audiagentic.components.providers.services.lifecycle import _emit
+    from .lifecycle.lifecycle import _emit
+
     try:
-        from audiagentic.components.providers.services.mcp_sync import sync_all_provider_mcp_servers
+        from .mcp.mcp_sync import sync_all_provider_mcp_servers
 
         sync_all_provider_mcp_servers(project_root)
         _emit(on_progress, "MCP server configs synced")
@@ -45,23 +47,20 @@ def _reconcile_model_projection(
     the same seam. Providers without a declared implementation are a clean
     skip.
     """
-    from audiagentic.components.providers.services.lifecycle import _emit
+    from .lifecycle.lifecycle import _emit
+
     try:
         from audiagentic.components.providers.descriptors.registry import get_descriptor
         from audiagentic.components.providers.providers_api import manage_model_projection
-        from audiagentic.components.providers.services.models import (
+
+        from .catalog.models import (
             build_model_projection_request,
         )
 
         descriptor = get_descriptor(provider_id)
-        if (
-            descriptor is None
-            or descriptor.automation_capability("model-projection") is None
-        ):
+        if descriptor is None or descriptor.automation_capability("model-projection") is None:
             return
-        request = build_model_projection_request(
-            project_root, provider_id, enabled=enabled
-        )
+        request = build_model_projection_request(project_root, provider_id, enabled=enabled)
         result = manage_model_projection(
             project_root,
             provider_id,
@@ -71,14 +70,24 @@ def _reconcile_model_projection(
         if result.updated or result.removed:
             _emit(on_progress, f"Model config synced for {provider_id}")
     except Exception:  # noqa: BLE001
-        logger.warning("Model config sync failed for %s", provider_id, exc_info=True, extra={"provider": provider_id})
-        _emit(on_progress, f"Model config sync failed for {provider_id} (non-fatal)", level="warning")
+        logger.warning(
+            "Model config sync failed for %s",
+            provider_id,
+            exc_info=True,
+            extra={"provider": provider_id},
+        )
+        _emit(
+            on_progress, f"Model config sync failed for {provider_id} (non-fatal)", level="warning"
+        )
 
 
-def _sync_host_extensions(project_root: Path, on_progress: ComponentOutputSink | None = None) -> None:
+def _sync_host_extensions(
+    project_root: Path, on_progress: ComponentOutputSink | None = None
+) -> None:
     """Sync each detected host's extensions manifest from provider host capabilities."""
-    from audiagentic.components.providers.services.host_adapter import all_host_adapters
-    from audiagentic.components.providers.services.lifecycle import _emit
+    from .host.host_adapter import all_host_adapters
+    from .lifecycle.lifecycle import _emit
+
     try:
         for host_id, adapter in all_host_adapters().items():
             if not adapter.detect_workspace(project_root):
@@ -94,6 +103,7 @@ def _sync_host_extensions(project_root: Path, on_progress: ComponentOutputSink |
             from audiagentic.components.providers.surfaces.extensions_json import (
                 write_extensions_json,
             )
+
             write_extensions_json(project_root, tuple(all_extensions), host_id=host_id)
             _emit(on_progress, f"{adapter.display_name or host_id} extensions manifest synced")
     except Exception:  # noqa: BLE001
@@ -118,17 +128,17 @@ def reconcile_provider(
     fetch_catalog: if True, also fetches the model catalog when enabling a provider.
     Defaults to False — use refresh_provider_catalog / refresh_all_catalogs for that.
     """
-    from audiagentic.components.providers.services.lifecycle import (
+    from .config.provider_config import (
+        is_provider_enabled,
+        set_provider_enabled,
+    )
+    from .lifecycle.lifecycle import (
         _descriptor as _get_descriptor,
     )
-    from audiagentic.components.providers.services.lifecycle import (
+    from .lifecycle.lifecycle import (
         _emit,
         _seed_provider_config,
         probe_provider_cli,
-    )
-    from audiagentic.components.providers.services.provider_config import (
-        is_provider_enabled,
-        set_provider_enabled,
     )
 
     _emit(on_progress, f"Probing {provider_id}...")
@@ -147,45 +157,66 @@ def reconcile_provider(
         _emit(on_progress, f"Enabling {provider_id} and applying surfaces")
         _seed_provider_config(project_root, provider_id, descriptor, enabled=True)
         from ..providers_api import operate_provider_surface
-        from .lifecycle import _build_surface_request
+        from .lifecycle.lifecycle import _build_surface_request
 
         surface_result = operate_provider_surface(
-            project_root, provider_id, mode="apply",
+            project_root,
+            provider_id,
+            mode="apply",
             request=_build_surface_request(project_root, provider_id),
         )
         surfaces_result = surface_result.to_mapping()
         _sync_provider_mcp(project_root, on_progress)
-        _reconcile_model_projection(provider_id, project_root, enabled=True, on_progress=on_progress)
+        _reconcile_model_projection(
+            provider_id, project_root, enabled=True, on_progress=on_progress
+        )
         _sync_host_extensions(project_root, on_progress)
         action_taken = "enabled"
         if fetch_catalog and descriptor.fetch_catalog_fn is not None:
             try:
                 _emit(on_progress, f"Fetching model catalog for {provider_id}")
-                from audiagentic.components.providers.services.catalog import (
+                from .catalog.catalog import (
                     fetch_provider_catalog,
                 )
+
                 fetch_provider_catalog(provider_id, project_root=project_root)
             except Exception:  # noqa: BLE001
-                _emit(on_progress, f"Catalog fetch failed for {provider_id} (non-fatal)", level="warning")
+                _emit(
+                    on_progress,
+                    f"Catalog fetch failed for {provider_id} (non-fatal)",
+                    level="warning",
+                )
         elif descriptor.fetch_catalog_fn is not None:
-            _emit(on_progress, f"Skipping catalog fetch for {provider_id} — use refresh_provider_catalog to update")
+            _emit(
+                on_progress,
+                f"Skipping catalog fetch for {provider_id} — use refresh_provider_catalog to update",
+            )
     elif not cli_available and currently_enabled:
         _emit(on_progress, f"Disabling {provider_id} — CLI not found")
         set_provider_enabled(project_root, provider_id, enabled=False)
         from ..providers_api import operate_provider_surface
-        from .lifecycle import _build_surface_request
+        from .lifecycle.lifecycle import _build_surface_request
 
         surface_result = operate_provider_surface(
-            project_root, provider_id, mode="prune",
+            project_root,
+            provider_id,
+            mode="prune",
             request=_build_surface_request(project_root, provider_id),
         )
         surfaces_result = surface_result.to_mapping()
-        _reconcile_model_projection(provider_id, project_root, enabled=False, on_progress=on_progress)
+        _reconcile_model_projection(
+            provider_id, project_root, enabled=False, on_progress=on_progress
+        )
         action_taken = "disabled"
     else:
-        _emit(on_progress, f"{provider_id} already in sync ({('enabled' if currently_enabled else 'disabled')})")
+        _emit(
+            on_progress,
+            f"{provider_id} already in sync ({('enabled' if currently_enabled else 'disabled')})",
+        )
         _sync_provider_mcp(project_root, on_progress)
-        _reconcile_model_projection(provider_id, project_root, enabled=currently_enabled, on_progress=on_progress)
+        _reconcile_model_projection(
+            provider_id, project_root, enabled=currently_enabled, on_progress=on_progress
+        )
         _sync_host_extensions(project_root, on_progress)
         action_taken = "ok"
 
@@ -223,21 +254,26 @@ def reconcile_all_providers(
     """
     descriptors = all_descriptors()
     eligible = [
-        (pid, desc) for pid, desc in sorted(descriptors.items())
+        (pid, desc)
+        for pid, desc in sorted(descriptors.items())
         if not (desc.cli_install and desc.cli_install.package_manager == "vscode")
     ]
     total = float(len(eligible))
     results = []
     for i, (provider_id, _) in enumerate(eligible):
-        result = reconcile_provider(provider_id, project_root=project_root, fetch_catalog=fetch_catalogs)
+        result = reconcile_provider(
+            provider_id, project_root=project_root, fetch_catalog=fetch_catalogs
+        )
         results.append(result)
         if on_progress is not None:
-            on_progress(ComponentOutputEvent(
-                message=f"[{provider_id}] reconciled: {result.get('status', 'ok')} ({i + 1}/{int(total)})",
-                progress=float(i + 1),
-                total=total,
-                data={"provider_id": provider_id, "status": result.get("status", "ok")},
-            ))
+            on_progress(
+                ComponentOutputEvent(
+                    message=f"[{provider_id}] reconciled: {result.get('status', 'ok')} ({i + 1}/{int(total)})",
+                    progress=float(i + 1),
+                    total=total,
+                    data={"provider_id": provider_id, "status": result.get("status", "ok")},
+                )
+            )
         if on_provider is not None:
             on_provider(provider_id, result.get("status", "ok"))
     return {
@@ -255,6 +291,7 @@ def reconcile_all(*, project_root: Path) -> None:
     provider probe failures.
     """
     from audiagentic.foundation.components.registry import is_installed
+
     # Guard: component may have been uninstalled before background thread runs.
     if not is_installed("providers", project_root):
         return
