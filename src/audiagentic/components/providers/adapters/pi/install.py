@@ -35,25 +35,15 @@ def _resolve_project_root(project_root: Path | None = None) -> Path:
 
 
 def _build_system_md(target: Path, *, project_root: Path | None = None) -> None:
-    """Build SYSTEM.md with dynamic tool list from installed components."""
-    from audiagentic.foundation.components.prompt_injections import (
-        apply_system_prompt_injections,
-        build_system_prompt_injections,
-    )
+    """Copy Pi's provider-owned provisioning template without regeneration."""
+    del project_root
 
     # Read the base SYSTEM.md template — bundled with this adapter.
     template_path = _TEMPLATES_DIR / "SYSTEM.md"
     if not template_path.exists():
         return
 
-    content = template_path.read_text(encoding="utf-8")
-
-    # Get injections from installed components.
-    injections = build_system_prompt_injections(_resolve_project_root(project_root))
-    if injections:
-        content = apply_system_prompt_injections(content, injections)
-
-    (target / "SYSTEM.md").write_text(content, encoding="utf-8")
+    (target / "SYSTEM.md").write_text(template_path.read_text(encoding="utf-8"), encoding="utf-8")
 
 
 def _build_settings_config(ui_cfg: dict, *, target: Path) -> dict:
