@@ -146,7 +146,6 @@ class TestProviderYamlLoader:
         resolved = PROVIDER_SPEC.load(data)
         assert resolved["access_mode"] == "cli"
         assert resolved["receive_lsp_mcp"] is True
-        assert resolved["cli_probe"] is None
         assert resolved["capabilities"] == ()
 
     def test_provider_spec_requires_valid_execution_isolation_tier(self) -> None:

@@ -77,26 +77,21 @@ def test_mechanism_schema_map_types_are_callable():
         assert isinstance(typ, type), f"MECHANISM_SCHEMA_MAP['{name}'] = {typ!r} is not a type"
 
 
-# ── Legacy kind tests ─────────────────────────────────────────────────────
+# ── canonical_kind invariant ──────────────────────────────────────────────
+# No kind currently declares canonical_kind (PC07 step 4: the two prior
+# users, lsp-automation and acp-support, were either deleted as dead weight
+# or replaced outright rather than left as an aspirational migration
+# target). The field stays on CapabilityKind for a future real case; this
+# test just guards that if one ever appears, it resolves.
 
 
-def test_legacy_kinds_have_canonical_kind():
-    """Legacy kinds declare canonical_kind pointing to a real kind."""
+def test_canonical_kind_resolves_when_declared():
     cat = get_catalogue()
     for kind in cat.kinds_by_id.values():
         if kind.canonical_kind is not None:
             assert kind.canonical_kind in cat.kinds_by_id, (
                 f"{kind.id} points to unknown canonical_kind '{kind.canonical_kind}'"
             )
-
-
-def test_legacy_kinds_pass_catalogue_validation():
-    """Legacy kinds are valid catalogue members and pass VAL-PCAP-009."""
-    legacy_ids = {"lsp-config", "lsp-self-support"}
-    for lid in legacy_ids:
-        kind = validate_capability_id(lid)
-        assert kind is not None, f"legacy kind '{lid}' should be a catalogue member"
-        assert kind.canonical_kind is not None, f"legacy kind '{lid}' should have canonical_kind"
 
 
 # ── VAL-PCAP-009: off-taxonomy capability_id ──────────────────────────────
