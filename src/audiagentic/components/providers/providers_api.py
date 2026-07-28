@@ -90,7 +90,7 @@ from audiagentic.foundation.transports.session_surface import PreparedSessionTra
 
 def get_provider_execution_isolation_tier(provider_id: str) -> ProviderIsolationTier:
     """Return the provider-wide execution isolation fact."""
-    from audiagentic.components.providers.services.public_execution import (
+    from audiagentic.components.providers.services.execution.public_execution import (
         get_provider_execution_isolation_tier as _get_tier,
     )
 
@@ -102,7 +102,7 @@ def get_provider_runtime_config_state(
     provider_id: str,
 ) -> dict[str, Any]:
     """Return provider-scoped runtime configuration state for fingerprinting."""
-    from audiagentic.components.providers.services.public_execution import (
+    from audiagentic.components.providers.services.execution.public_execution import (
         get_provider_runtime_config_state as _get_state,
     )
 
@@ -111,7 +111,7 @@ def get_provider_runtime_config_state(
 
 def execute_provider_turn(request: ProviderExecutionRequest) -> ProviderExecutionResult:
     """Execute one provider turn through the sanctioned public boundary."""
-    from audiagentic.components.providers.services.public_execution import (
+    from audiagentic.components.providers.services.execution.public_execution import (
         execute_provider_turn as _execute,
     )
 
@@ -122,7 +122,7 @@ def prepare_provider_execution_environment(
     request: ProviderExecutionRequest,
 ) -> dict[str, str]:
     """Return transient provider-owned variables for an isolated worker."""
-    from audiagentic.components.providers.services.public_execution import (
+    from audiagentic.components.providers.services.execution.public_execution import (
         prepare_provider_execution_environment as _prepare,
     )
 
@@ -131,7 +131,7 @@ def prepare_provider_execution_environment(
 
 def list_canonical_provider_ids() -> tuple[str, ...]:
     """Return provider ids accepted by provider-backed prompt launches."""
-    from audiagentic.components.providers.services.public_prompt_operations import (
+    from audiagentic.components.providers.services.execution.public_prompt_operations import (
         list_canonical_provider_ids as _list,
     )
 
@@ -140,7 +140,7 @@ def list_canonical_provider_ids() -> tuple[str, ...]:
 
 def get_prompt_syntax_defaults() -> dict[str, Any]:
     """Return provider-owned defaults for shared prompt syntax parsing."""
-    from audiagentic.components.providers.services.public_prompt_operations import (
+    from audiagentic.components.providers.services.execution.public_prompt_operations import (
         get_prompt_syntax_defaults as _get,
     )
 
@@ -152,7 +152,7 @@ def load_prompt_syntax(
     profile_name: str | None = None,
 ) -> dict[str, Any]:
     """Load the provider-owned prompt syntax document and project overlay."""
-    from audiagentic.components.providers.services.prompt_syntax import (
+    from audiagentic.components.providers.services.execution.prompt_syntax import (
         load_prompt_syntax as _load,
     )
 
@@ -164,7 +164,7 @@ def get_provider_prompt_settings_profile(
     provider_id: str,
 ) -> str | None:
     """Return one provider's optional prompt-syntax settings profile."""
-    from audiagentic.components.providers.services.public_prompt_operations import (
+    from audiagentic.components.providers.services.execution.public_prompt_operations import (
         get_provider_prompt_settings_profile as _get,
     )
 
@@ -173,7 +173,7 @@ def get_provider_prompt_settings_profile(
 
 def is_provider_enabled_for_launch(project_root: Path, provider_id: str) -> bool:
     """Return whether a provider is enabled for prompt launch resolution."""
-    from audiagentic.components.providers.services.public_prompt_operations import (
+    from audiagentic.components.providers.services.execution.public_prompt_operations import (
         is_provider_enabled_for_launch as _is_enabled,
     )
 
@@ -188,7 +188,7 @@ def resolve_launch_model(
     model_alias: str | None,
 ) -> dict[str, Any]:
     """Resolve one launch model through provider-owned runtime configuration."""
-    from audiagentic.components.providers.services.public_prompt_operations import (
+    from audiagentic.components.providers.services.execution.public_prompt_operations import (
         resolve_launch_model as _resolve,
     )
 
@@ -206,7 +206,7 @@ def load_packaged_prompt_template(
     template_name: str | None,
 ) -> tuple[str, Path | None] | None:
     """Resolve a packaged provider-owned prompt template."""
-    from audiagentic.components.providers.services.public_prompt_operations import (
+    from audiagentic.components.providers.services.execution.public_prompt_operations import (
         load_packaged_prompt_template as _load,
     )
 
@@ -220,7 +220,7 @@ def execute_provider_review_turn(
     packet_data: dict[str, Any],
 ) -> dict[str, Any] | None:
     """Run a review-specific provider turn through the public boundary."""
-    from audiagentic.components.providers.services.public_prompt_operations import (
+    from audiagentic.components.providers.services.execution.public_prompt_operations import (
         execute_provider_review_turn as _execute,
     )
 
@@ -238,7 +238,7 @@ def prepare_provider_acp_launch(
     require_isolated_mcp: bool = False,
 ) -> ProviderAcpLaunchResult:
     """Prepare a provider-owned ACP launch for an agents-owned live session."""
-    from audiagentic.components.providers.services.public_execution import (
+    from audiagentic.components.providers.services.execution.public_execution import (
         prepare_provider_acp_launch as _prepare,
     )
 
@@ -271,7 +271,7 @@ def prepare_interactive_provider_launch(
     sessions). provider/model are already resolved by the caller from
     AUDiaGentic's own embedded rig config.
     """
-    from audiagentic.components.providers.services.public_execution import (
+    from audiagentic.components.providers.services.execution.public_execution import (
         prepare_interactive_provider_launch as _prepare,
     )
 
@@ -309,7 +309,7 @@ def materialize_provider_config(
             Used by Pi which writes to a global harness runtime; ignored by
             OpenCode which writes project-local files.
     """
-    from audiagentic.components.providers.services.public_materialize import (
+    from audiagentic.components.providers.services.lifecycle.public_materialize import (
         materialize_provider_config as _materialize,
     )
 
@@ -337,7 +337,7 @@ def prepare_provider_mcp_surface(
     flags, an env var, a generated file) without exposing that mechanism.
     Soft-fails to ``supported=False`` when the provider has none.
     """
-    from audiagentic.components.providers.services.public_execution import (
+    from audiagentic.components.providers.services.execution.public_execution import (
         prepare_provider_mcp_surface as _prepare,
     )
 
@@ -354,7 +354,7 @@ def collect_management_mcp_launch_entries(
     project_root: Path,
 ) -> tuple[McpLaunchServerEntry, ...]:
     """Return the management projection as provider launch entries."""
-    from audiagentic.components.providers.services.public_execution import (
+    from audiagentic.components.providers.services.execution.public_execution import (
         collect_management_mcp_launch_entries as _collect,
     )
 
@@ -369,7 +369,7 @@ def prepare_projected_provider_mcp_surface(
     require_exact_isolation: bool = False,
 ) -> McpLaunchSurfaceResult:
     """Collect and materialize the standard projection for a provider launch."""
-    from audiagentic.components.providers.services.public_execution import (
+    from audiagentic.components.providers.services.execution.public_execution import (
         prepare_projected_provider_mcp_surface as _prepare,
     )
 
@@ -383,7 +383,7 @@ def prepare_projected_provider_mcp_surface(
 
 def get_pi_coding_agent_package_dir() -> Path | None:
     """Return the system-installed pi-coding-agent package dir, or None."""
-    from audiagentic.components.providers.services.public_execution import (
+    from audiagentic.components.providers.services.execution.public_execution import (
         get_pi_coding_agent_package_dir as _get,
     )
 
@@ -398,7 +398,7 @@ def manage_plugin_entry(
     request: PluginEntryRequest,
 ) -> PluginEntryResult:
     """Manage one generic provider plugin-config entry."""
-    from audiagentic.components.providers.services.plugin_entries import (
+    from audiagentic.components.providers.services.capabilities.plugin_entries import (
         manage_plugin_entry as _manage,
     )
 
@@ -413,7 +413,7 @@ def manage_mcp_entries(
     request: ManagedMcpRequest,
 ) -> ManagedMcpResult:
     """Manage caller-owned MCP entries through provider automation."""
-    from audiagentic.components.providers.services.managed_mcp_family import (
+    from audiagentic.components.providers.services.capabilities.managed_mcp_family import (
         manage_mcp_entries as _manage,
     )
 
@@ -437,7 +437,7 @@ def adopt_legacy_mcp_ownership(
     may have written entries under the bare provider_id scope. The migration is
     idempotent — it only moves entries whose managed_id is in the caller's set.
     """
-    from audiagentic.components.providers.services.managed_mcp_family import (
+    from audiagentic.components.providers.services.capabilities.managed_mcp_family import (
         adopt_legacy_mcp_ownership as _adopt,
     )
 
@@ -456,7 +456,7 @@ def manage_hook_entries(
     request: ManagedHooksRequest,
 ) -> ManagedHooksResult:
     """Manage caller-owned hook entries through provider automation."""
-    from audiagentic.components.providers.services.managed_hooks_family import (
+    from audiagentic.components.providers.services.capabilities.managed_hooks_family import (
         manage_hook_entries as _manage,
     )
 
@@ -503,7 +503,7 @@ def manage_language_servers(
     request: LanguageServerProjectionRequest,
 ) -> LanguageServerProjectionResult:
     """Manage caller-owned language server entries through provider automation."""
-    from audiagentic.components.providers.services.language_server_family import (
+    from audiagentic.components.providers.services.capabilities.language_server_family import (
         manage_language_servers as _manage,
     )
 
@@ -550,7 +550,7 @@ def manage_model_projection(
     request: ModelProjectionRequest,
 ) -> ModelProjectionResult:
     """Manage caller-owned model entries through provider automation."""
-    from audiagentic.components.providers.services.automation_registry import (
+    from audiagentic.components.providers.services.capabilities.automation_registry import (
         build_automation_registry,
     )
 
@@ -578,7 +578,7 @@ def manage_self_provided_lsp(
     request: SelfProvidedLspRequest,
 ) -> SelfProvidedLspResult:
     """Manage self-provided LSP support through provider automation."""
-    from audiagentic.components.providers.services.automation_registry import (
+    from audiagentic.components.providers.services.capabilities.automation_registry import (
         build_automation_registry,
     )
 
@@ -612,7 +612,7 @@ def manage_self_provided_lsp_all(
     not enabled come back ``ok=False`` with ``action_needed``.
     """
     from audiagentic.components.providers.descriptors.registry import all_descriptors
-    from audiagentic.components.providers.services.feature_resolution import (
+    from audiagentic.components.providers.services.config.feature_resolution import (
         enabled_provider_ids,
     )
 
@@ -652,7 +652,7 @@ def operate_provider_surface(
     request: GeneratedSurfaceRequest,
 ) -> GeneratedSurfaceResult:
     """Operate on generated provider surfaces through the recipe family."""
-    from audiagentic.components.providers.services.automation_registry import (
+    from audiagentic.components.providers.services.capabilities.automation_registry import (
         build_automation_registry,
     )
 
@@ -732,13 +732,13 @@ def operate_provider_surfaces(
 
 
 def list_providers(project_root: Path) -> dict[str, Any]:
-    from audiagentic.components.providers.services.status import build_provider_status
+    from audiagentic.components.providers.services.lifecycle.status import build_provider_status
 
     return build_provider_status(project_root, include_probes=False)
 
 
 def get_provider_status(project_root: Path, provider_id: str) -> dict[str, Any]:
-    from audiagentic.components.providers.services.status import build_provider_status
+    from audiagentic.components.providers.services.lifecycle.status import build_provider_status
     from audiagentic.foundation.contracts.errors import AudiaGenticError
 
     try:
@@ -818,7 +818,7 @@ def list_provider_models(project_root: Path, provider_id: str) -> dict[str, Any]
     fresh remote catalog is required.
     """
     from audiagentic.components.providers.descriptors.registry import all_descriptors
-    from audiagentic.components.providers.services.provider_catalog import (
+    from audiagentic.components.providers.services.config.provider_catalog import (
         catalog_is_stale,
         read_model_catalog,
     )
@@ -879,7 +879,7 @@ def list_provider_models(project_root: Path, provider_id: str) -> dict[str, Any]
 
 
 async def refresh_provider_catalog(project_root: Path, provider_id: str) -> dict[str, Any]:
-    from audiagentic.components.providers.services.catalog import fetch_provider_catalog
+    from audiagentic.components.providers.services.catalog.catalog import fetch_provider_catalog
 
     try:
         return await asyncio.to_thread(
@@ -951,14 +951,14 @@ def describe_provider(project_root: Path, provider_id: str) -> dict[str, Any]:
     (agents owns profiles — ``related_tools`` points there instead).
     """
     from audiagentic.components.providers.descriptors.registry import get_descriptor
-    from audiagentic.components.providers.services.execution import (
+    from audiagentic.components.providers.services.catalog.models import (
+        model_ownership_registry,
+    )
+    from audiagentic.components.providers.services.execution.execution import (
         describe_execution_support,
     )
-    from audiagentic.components.providers.services.managed_mcp_registry import (
+    from audiagentic.components.providers.services.mcp.managed_mcp_registry import (
         mcp_ownership_registry,
-    )
-    from audiagentic.components.providers.services.models import (
-        model_ownership_registry,
     )
 
     descriptor = get_descriptor(provider_id)
@@ -997,7 +997,7 @@ def describe_provider(project_root: Path, provider_id: str) -> dict[str, Any]:
             _serialize_config_surface(
                 "language-servers", descriptor.language_servers_config, project_root
             ),
-            _serialize_config_surface("model-endpoints", descriptor.model_config, project_root),
+            _serialize_config_surface("models", descriptor.model_config, project_root),
         ],
         "managed": [
             _managed_registry_summary(
@@ -1008,10 +1008,9 @@ def describe_provider(project_root: Path, provider_id: str) -> dict[str, Any]:
             ),
         ],
         "supported_connectors": list(descriptor.supported_connectors),
-        "vendor_key_injection": {
-            vendor: {"mechanism": spec.get("mechanism"), "key": spec.get("key")}
-            for vendor, spec in descriptor.vendor_key_injection.items()
-        },
+        # secrets.py scheme:locator reference strings (e.g. "env:OPENAI_API_KEY"),
+        # never a resolved value.
+        "vendor_key_injection": dict(descriptor.vendor_key_injection),
         "related_tools": ["agent_list_profiles"],
     }
 
@@ -1041,12 +1040,14 @@ def _mutate_model_sources(
     project_root: Path,
     mutate,
 ) -> dict[str, Any]:
-    from audiagentic.components.providers.services.model_source_config import (
+    from audiagentic.components.providers.services.catalog.models import (
+        record_model_config_timeline,
+    )
+    from audiagentic.components.providers.services.config.model_source_config import (
         load_model_sources,
         validate_model_sources,
         write_model_sources,
     )
-    from audiagentic.components.providers.services.models import record_model_config_timeline
     from audiagentic.foundation.contracts.errors import make_error
 
     current = load_model_sources(project_root)
@@ -1081,7 +1082,7 @@ def json_roundtrip(value: dict[str, Any]) -> dict[str, Any]:
 
 
 def model_source_list(project_root: Path) -> dict[str, Any]:
-    from audiagentic.components.providers.services.model_source_config import (
+    from audiagentic.components.providers.services.config.model_source_config import (
         load_model_sources,
     )
 
@@ -1105,10 +1106,12 @@ def model_source_list(project_root: Path) -> dict[str, Any]:
 def list_model_inventory(project_root: Path) -> dict[str, Any]:
     """Show configured sources, vendor groups, models, and harness paths."""
     from audiagentic.components.providers.descriptors.registry import all_descriptors
-    from audiagentic.components.providers.services.model_source_config import load_model_sources
-    from audiagentic.components.providers.services.source_catalog import (
+    from audiagentic.components.providers.services.catalog.source_catalog import (
         apply_model_filter,
         get_source_catalog,
+    )
+    from audiagentic.components.providers.services.config.model_source_config import (
+        load_model_sources,
     )
 
     descriptors = all_descriptors()
@@ -1175,18 +1178,19 @@ def list_model_inventory(project_root: Path) -> dict[str, Any]:
         harnesses: dict[tuple[str, str], dict[str, Any]] = {}
         for provider_id, descriptor in sorted(descriptors.items()):
             if vendor_id and vendor_id in descriptor.vendor_key_injection:
-                from audiagentic.components.providers.services.secrets import has_ambient_value
+                from audiagentic.components.providers.services.secrets import (
+                    has_ambient_value,
+                    parse_secret_ref,
+                )
 
-                spec = descriptor.vendor_key_injection[vendor_id]
-                key_name = spec.get("key", "")
-                expected_ref = f"env:{key_name}" if key_name else ""
-                available = bool(expected_ref and has_ambient_value(expected_ref))
+                ref = descriptor.vendor_key_injection[vendor_id]
+                available = bool(ref and has_ambient_value(ref))
                 harnesses[(provider_id, "native-vendor")] = {
                     "provider_id": provider_id,
                     "mode": "native-vendor",
                     "available": available,
                     "enabled": bool(source.get("enabled", True) and available),
-                    "action_needed": None if available else f"set {key_name}",
+                    "action_needed": None if available else f"set {parse_secret_ref(ref).locator}",
                 }
             if (
                 descriptor.automation_capability("model-projection") is not None
@@ -1241,8 +1245,10 @@ def list_model_inventory(project_root: Path) -> dict[str, Any]:
 
 def refresh_model_source_catalog(project_root: Path, source_id: str) -> dict[str, Any]:
     """Explicitly refresh one configured source catalog."""
-    from audiagentic.components.providers.services.model_source_config import load_model_sources
-    from audiagentic.components.providers.services.source_catalog import get_source_catalog
+    from audiagentic.components.providers.services.catalog.source_catalog import get_source_catalog
+    from audiagentic.components.providers.services.config.model_source_config import (
+        load_model_sources,
+    )
     from audiagentic.foundation.contracts.errors import AudiaGenticError
 
     source = (load_model_sources(project_root).get("sources") or {}).get(source_id)
@@ -1284,8 +1290,10 @@ def model_vendor_set_enabled(project_root: Path, vendor_id: str, enabled: bool) 
 def apply_model_sources(project_root: Path) -> dict[str, Any]:
     """Apply desired sources to every enabled registered model harness."""
     from audiagentic.components.providers.descriptors.registry import all_descriptors
-    from audiagentic.components.providers.services.models import build_model_projection_request
-    from audiagentic.components.providers.services.provider_config import is_provider_enabled
+    from audiagentic.components.providers.services.catalog.models import (
+        build_model_projection_request,
+    )
+    from audiagentic.components.providers.services.config.provider_config import is_provider_enabled
 
     results: list[dict[str, Any]] = []
     for provider_id, descriptor in sorted(all_descriptors().items()):
@@ -1389,7 +1397,7 @@ def model_source_set_enabled(
 
 
 async def refresh_all_catalogs(project_root: Path) -> dict[str, Any]:
-    from audiagentic.components.providers.services.catalog import (
+    from audiagentic.components.providers.services.catalog.catalog import (
         refresh_all_catalogs as _refresh,
     )
 
@@ -1399,7 +1407,7 @@ async def refresh_all_catalogs(project_root: Path) -> dict[str, Any]:
 async def manage_cli_lifecycle(
     project_root: Path, provider_id: str, *, mode: CliLifecycleMode
 ) -> CliLifecycleResult:
-    from audiagentic.components.providers.services.automation_registry import (
+    from audiagentic.components.providers.services.capabilities.automation_registry import (
         build_automation_registry,
     )
 
@@ -1440,7 +1448,7 @@ def resolve_session_surface(
     Returns:
         A frozen :class:`ResolvedSessionSurface` instance.
     """
-    from audiagentic.components.providers.services.session_surface_resolution import (
+    from audiagentic.components.providers.services.session.session_surface_resolution import (
         resolve_session_surface as _resolve,
     )
 
@@ -1479,7 +1487,7 @@ def prepare_provider_session_transport(
 
     Does not expose descriptor/adapter/protocol/native values.
     """
-    from audiagentic.components.providers.services.public_execution import (
+    from audiagentic.components.providers.services.execution.public_execution import (
         prepare_provider_session_transport as _prepare,
     )
 
@@ -1526,7 +1534,7 @@ def open_harness_status_observer(
         A tuple of (StatusObserverResult, StatusObserverLease | None).
         On success: (ok=True result, lease). On failure: (ok=False result, None).
     """
-    from audiagentic.components.providers.services.harness_status_observer_resolution import (
+    from audiagentic.components.providers.services.session.harness_status_observer_resolution import (
         resolve_transport_observation_lease,
     )
 
