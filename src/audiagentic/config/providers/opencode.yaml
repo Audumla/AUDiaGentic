@@ -16,6 +16,9 @@ capabilities:
       toolchain: npm
       package: opencode-ai
       executable: opencode
+      # Package-manager-owned CLI: explicit update only.  Ordinary status
+      # remains local and never asks npm/GitHub for mutable "latest" facts.
+      upgrade: true
       probe: [opencode, "--version"]
       probe_fn: "audiagentic.components.providers.adapters.opencode.catalog:_opencode_probe"
 

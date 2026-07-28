@@ -23,6 +23,7 @@ PROVIDER_COMMANDS = [
     ("gemini",    "install",   ["npm", "install",   "-g", "@google/gemini-cli"]),
     ("gemini",    "uninstall", ["npm", "uninstall",  "-g", "@google/gemini-cli"]),
     ("opencode",  "install",   ["npm", "install",   "-g", "opencode-ai"]),
+    ("opencode",  "upgrade",   ["npm", "update",    "-g", "opencode-ai"]),
     ("opencode",  "uninstall", ["npm", "uninstall",  "-g", "opencode-ai"]),
     ("qwen",      "install",   ["npm", "install",   "-g", "@qwen-code/qwen-code"]),
     ("qwen",      "uninstall", ["npm", "uninstall",  "-g", "@qwen-code/qwen-code"]),

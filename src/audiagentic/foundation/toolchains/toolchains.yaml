@@ -1,6 +1,7 @@
 toolchains:
   npm:
     install: [npm, install, -g, "{package}"]
+    upgrade: [npm, update, -g, "{package}"]
     uninstall: [npm, uninstall, -g, "{package}"]
 
   uv:

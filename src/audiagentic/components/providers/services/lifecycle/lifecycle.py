@@ -259,6 +259,36 @@ def uninstall_provider_cli(
     return result
 
 
+def upgrade_provider_cli(
+    provider_id: str,
+    *,
+    dry_run: bool = False,
+    timeout: int = 300,
+    project_root: Path | None = None,
+    on_progress: ComponentOutputSink | None = None,
+) -> dict[str, Any]:
+    """Explicitly delegate an opted-in provider CLI upgrade to its toolchain."""
+    descriptor = _descriptor(provider_id)
+    recipe = descriptor.cli_install
+    if recipe is None or recipe.upgrade is None:
+        return _result(provider_id=provider_id, action="upgrade", status="skipped", recipe=recipe,
+                       reason="provider CLI has no declared upgrade recipe")
+    probe = probe_provider_cli(descriptor)
+    if probe is not None and not probe.get("available"):
+        return _result(provider_id=provider_id, action="upgrade", status="skipped", recipe=recipe,
+                       probe=probe, reason="provider CLI is absent; install is required")
+    _emit(on_progress, f"Upgrading {provider_id}...", provider_id=provider_id, action="upgrade")
+    workflow_result, probe, status, workflow_events = workflow_provider_cli_run(
+        provider_id, action="upgrade", descriptor=descriptor, dry_run=dry_run, timeout=timeout,
+        project_root=project_root, on_progress=on_progress, probe_fn=_probe_provider_cli_after_install,
+    )
+    result = _result(provider_id=provider_id, action="upgrade", status=status, recipe=recipe,
+                     invocation=_invocation_result_from_workflow(workflow_result, step_id="upgrade"), probe=probe)
+    result["workflow-events"] = workflow_events
+    _emit(on_progress, f"{provider_id}: {status}", provider_id=provider_id, action="upgrade", status=status)
+    return result
+
+
 def _seed_provider_config(
     project_root: Path,
     provider_id: str,

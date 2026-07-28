@@ -94,11 +94,12 @@ class ProviderCliWorkflowContext:
 # Shared state machine for all CLI providers
 _PROVIDER_CLI_STATES = {
     "initial": "missing",
-    "values": ["missing", "installing", "installed", "failed", "uninstalling", "uninstalled", "skipped"],
+    "values": ["missing", "installing", "installed", "upgrading", "failed", "uninstalling", "uninstalled", "skipped"],
     "transitions": {
         "missing": ["installing", "skipped"],
         "installing": ["installed", "failed"],
-        "installed": ["uninstalling", "failed"],
+        "installed": ["upgrading", "uninstalling", "failed"],
+        "upgrading": ["installed", "failed"],
         "failed": ["installing", "skipped"],
         "uninstalling": ["uninstalled", "failed"],
         "uninstalled": ["installing"],
@@ -138,11 +139,12 @@ def _build_step(
     if recipe is None:
         return None
 
-    # CLOSED: install/uninstall are the complete verb set of this CLI command
     if action == "install":
         install_recipe = recipe.install
     elif action == "uninstall":
         install_recipe = recipe.uninstall
+    elif action == "upgrade":
+        install_recipe = recipe.upgrade
     else:
         return None
 
@@ -247,6 +249,14 @@ def _action_config(action: str) -> dict[str, Any]:
             "initial_state": "installed",
             "legacy_success_status": "uninstalled",
             "probe_available": False,
+        }
+    if action == "upgrade":
+        return {
+            "start_state": "upgrading",
+            "success_state": "installed",
+            "initial_state": "installed",
+            "legacy_success_status": "upgraded",
+            "probe_available": True,
         }
     raise make_error(
         prefix="VAL",

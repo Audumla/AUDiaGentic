@@ -12,7 +12,7 @@ families:
   cli-lifecycle:
     payload_contract: provider-cli-lifecycle-payload/v1
     result_contract: provider-cli-lifecycle-result/v1
-    supported_modes: [plan, apply, prune, status]
+    supported_modes: [plan, apply, prune, status, upgrade-status, upgrade]
 
   managed-mcp:
     payload_contract: provider-managed-mcp-payload/v1

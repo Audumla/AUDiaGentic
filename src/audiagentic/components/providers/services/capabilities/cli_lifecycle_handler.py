@@ -40,6 +40,10 @@ def _make_cli_handler(
             return _do_prune(provider_id, descriptor, project_root)
         if mode == "status":
             return _do_status(provider_id, descriptor)
+        if mode == "upgrade-status":
+            return _do_upgrade_status(descriptor)
+        if mode == "upgrade":
+            return _do_upgrade(provider_id, descriptor, project_root)
 
         return CliLifecycleResult(
             ok=False,
@@ -175,6 +179,49 @@ def _do_status(
         supported=True,
         changed=False,
         state="uninstalled",
+    )
+
+
+def _do_upgrade_status(descriptor: Any) -> CliLifecycleResult:
+    """Report local upgrade applicability without querying mutable upstream state."""
+    from ..lifecycle.lifecycle import probe_provider_cli
+
+    probe = probe_provider_cli(descriptor)
+    if not probe or not probe.get("available"):
+        return CliLifecycleResult(
+            ok=True, supported=descriptor.cli_install.upgrade is not None,
+            state="uninstalled", action_needed="install",
+        )
+    if descriptor.cli_install.upgrade is None:
+        return CliLifecycleResult(
+            ok=True, supported=False, state="installed",
+            action_needed="no declared package-manager upgrade recipe",
+        )
+    return CliLifecycleResult(
+        ok=True, supported=True, state="installed",
+        action_needed="run explicit upgrade to reconcile through the package manager",
+    )
+
+
+def _do_upgrade(provider_id: str, descriptor: Any, project_root: Path) -> CliLifecycleResult:
+    """Run only a descriptor-declared explicit package-manager upgrade."""
+    from ..lifecycle.lifecycle import upgrade_provider_cli
+
+    if descriptor.cli_install.upgrade is None:
+        return CliLifecycleResult(
+            ok=True, supported=False, state="installed",
+            action_needed="no declared package-manager upgrade recipe",
+        )
+    result = upgrade_provider_cli(provider_id, project_root=project_root)
+    if result.get("status") == "upgraded":
+        return CliLifecycleResult(ok=True, supported=True, changed=True, state="installed")
+    if result.get("status") == "skipped":
+        return CliLifecycleResult(
+            ok=True, supported=True, state="uninstalled",
+            action_needed=result.get("reason"),
+        )
+    return CliLifecycleResult(
+        ok=False, supported=True, state="failed", action_needed=result.get("reason"),
     )
 
 

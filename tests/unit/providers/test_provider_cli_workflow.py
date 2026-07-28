@@ -53,6 +53,15 @@ def test_workflow_plan_renders_uninstall_command_from_yaml() -> None:
     assert uninstall_step["command"] == ["npm", "uninstall", "-g", "@openai/codex"]
 
 
+def test_workflow_plan_renders_opencode_upgrade_command_from_yaml() -> None:
+    descriptor = get_descriptor("opencode")
+    assert descriptor is not None
+    result = workflow.workflow_provider_cli_plan("opencode", action="upgrade", descriptor=descriptor)
+
+    assert result.status == "planned"
+    assert result.outputs["upgrade"]["command"] == ["npm", "update", "-g", "opencode-ai"]
+
+
 def test_workflow_plan_renders_callable_step_for_pi() -> None:
     descriptor = get_descriptor("pi")
     assert descriptor is not None
@@ -132,3 +141,28 @@ def test_workflow_run_install_failure_transitions_to_failed(monkeypatch, tmp_pat
     assert probe == {"available": False}
     assert status == "failed"
     assert [event["payload"]["new_state"] for event in events] == ["installing", "failed"]
+
+
+def test_workflow_run_upgrade_emits_state_transitions(monkeypatch, tmp_path: Path) -> None:
+    descriptor = get_descriptor("opencode")
+    assert descriptor is not None
+
+    class FakeStep:
+        id = "upgrade"
+
+        def plan(self, context):
+            return StepResult(status="planned")
+
+        def run(self, context, answers=None):
+            return StepResult(status="ok", outputs={"command": ["npm", "update", "-g", "opencode-ai"], "returncode": 0})
+
+    monkeypatch.setattr(workflow, "_build_step", lambda *a, **kw: FakeStep())
+    result, probe, status, events = workflow.workflow_provider_cli_run(
+        "opencode", action="upgrade", descriptor=descriptor, dry_run=False, timeout=30,
+        project_root=tmp_path, on_progress=None, probe_fn=lambda _d: {"available": True},
+    )
+
+    assert result.status == "ok"
+    assert probe == {"available": True}
+    assert status == "upgraded"
+    assert [event["payload"]["new_state"] for event in events] == ["upgrading", "installed"]
