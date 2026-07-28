@@ -17,17 +17,20 @@ _Managed by AUDiaGentic — generated from component configs. Edit the owning co
 
 ## Agent ledger process
 
-After substantive implementation work, record a change event with the ag-ledger
-MCP tool record_change_event — the ledger is the authoritative release record.
-Required fields: change-class, files, technical-summary, user-summary-candidate,
-status ('unreleased'). Other fields are auto-generated.
-- Check release ledger state before changing release notes, changelog fragments, or release workflow files.
-- Keep release artifacts and job records synchronized with implementation and review outcomes.
-- Do not bypass ledger updates by editing generated release outputs only.
+Record a change event after substantive implementation work using
+record_change_event — accepts one dict or a list for batch mode
+(one call, one trailing sync). Required per event: change-class,
+files, technical-summary, user-summary-candidate,
+status ('unreleased'). Include plan-item-ids when the work ties to
+a plan item — the planning component auto-links the event.
 
-When recording a change event for work associated with one or more plan items,
-include "plan-item-ids" in the event dict (e.g. {"plan-item-ids": ["CC07", "CC08"]}).
-The planning component will automatically link the ledger event ID to those items.
+Before committing: call get_pending_events — it groups pending events
+by shared plan-item-ids (default), file overlap
+(group_by="files"), or returns a flat list (group_by="flat").
+All modes return de-duplicated file lists per group.
+
+Use get_fragment(event_id) to inspect a recorded event.
+Sync with sync_ledger before committing.
 
 ## Planning process
 
