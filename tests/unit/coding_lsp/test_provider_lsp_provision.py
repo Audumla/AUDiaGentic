@@ -4,7 +4,11 @@ import subprocess
 from pathlib import Path
 
 from audiagentic.components.providers.adapters.pi import hooks as pi_desc
-from audiagentic.components.providers.descriptors.base import Capability, ProviderDescriptor
+from audiagentic.components.providers.descriptors.base import (
+    Capability,
+    LspSelfSupportSpec,
+    ProviderDescriptor,
+)
 from audiagentic.foundation.toolchains.config.managed_config import ManagedConfigSpec
 
 
@@ -31,13 +35,19 @@ def _desc(
     caps: list[Capability] = []
     if mcp_config is not None:
         caps.append(Capability(kind="mcp", mechanism=mcp_config))
-    if on_lsp_enabled is not None:
-        caps.append(Capability(kind="lsp-self-support", mechanism=on_lsp_enabled))
+    if on_lsp_enabled is not None or lsp_support_probe is not None:
+        caps.append(
+            Capability(
+                kind="lsp-self-support",
+                mechanism=LspSelfSupportSpec(
+                    on_enabled=on_lsp_enabled, probe=lsp_support_probe
+                ),
+            )
+        )
     return ProviderDescriptor(
         provider_id=provider_id,
         display_name=display_name,
         capabilities=tuple(caps),
-        lsp_support_probe=lsp_support_probe,
         receive_lsp_mcp=receive_lsp_mcp,
     )
 

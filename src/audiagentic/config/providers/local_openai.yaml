@@ -17,8 +17,6 @@ prompt_aliases:
   - lo
 access_mode: none
 
-cli_probe: null
-
 receive_lsp_mcp: false
 
 capabilities:

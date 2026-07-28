@@ -16,16 +16,13 @@ annotations:
 prompt_aliases:
   - gm
 
-cli_probe:
-  - gemini
-  - "--version"
-
 capabilities:
   cli-install:
     mechanism:
       toolchain: npm
       package: "@google/gemini-cli"
       executable: gemini
+      probe: [gemini, "--version"]
 
   host-extensions:
     mechanism:
