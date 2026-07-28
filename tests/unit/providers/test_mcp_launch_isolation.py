@@ -68,6 +68,52 @@ def test_pi_acp_uses_request_owned_wrapper(tmp_path, monkeypatch) -> None:
     assert launch.environment["PI_CODING_AGENT_DIR"].startswith(str(tmp_path / "runtime"))
 
 
+def test_pi_acp_rpc_tap_wraps_with_the_python_shim(tmp_path, monkeypatch) -> None:
+    """AS40: enable_rpc_tap installs the tee shim (not a direct pi exec) and
+    configures a per-request tap address/authkey in the launch environment."""
+    monkeypatch.setattr(pi_acp, "_system_pi_acp_argv", lambda: ["pi-acp"])
+    monkeypatch.setattr(pi_acp.shutil, "which", lambda name: "C:/tools/pi.cmd" if name == "pi" else None)
+
+    launch = pi_acp.build_acp_launch(
+        tmp_path,
+        request_runtime_root=tmp_path / "runtime",
+        enable_rpc_tap=True,
+    )
+
+    wrapper = Path(launch.environment["PI_ACP_PI_COMMAND"])
+    content = wrapper.read_text()
+    assert "rpc_tap_shim" in content
+    assert "C:/tools/pi.cmd" in content
+    assert "AUDIAGENTIC_PI_TAP_ADDRESS" in launch.environment
+    assert "AUDIAGENTIC_PI_TAP_AUTHKEY" in launch.environment
+    # authkey is per-request random, not a fixed/predictable value
+    assert len(launch.environment["AUDIAGENTIC_PI_TAP_AUTHKEY"]) == 64
+
+
+def test_pi_acp_rpc_tap_addresses_differ_per_request(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(pi_acp, "_system_pi_acp_argv", lambda: ["pi-acp"])
+    monkeypatch.setattr(pi_acp.shutil, "which", lambda name: "C:/tools/pi.cmd" if name == "pi" else None)
+
+    first = pi_acp.build_acp_launch(
+        tmp_path, request_runtime_root=tmp_path / "request-a", enable_rpc_tap=True
+    )
+    second = pi_acp.build_acp_launch(
+        tmp_path, request_runtime_root=tmp_path / "request-b", enable_rpc_tap=True
+    )
+
+    assert first.environment["AUDIAGENTIC_PI_TAP_ADDRESS"] != second.environment["AUDIAGENTIC_PI_TAP_ADDRESS"]
+    assert first.environment["AUDIAGENTIC_PI_TAP_AUTHKEY"] != second.environment["AUDIAGENTIC_PI_TAP_AUTHKEY"]
+
+
+def test_pi_acp_rpc_tap_requires_a_runtime_root(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(pi_acp, "_system_pi_acp_argv", lambda: ["pi-acp"])
+
+    import pytest
+
+    with pytest.raises(Exception, match="request-owned runtime root"):
+        pi_acp.build_acp_launch(tmp_path, enable_rpc_tap=True)
+
+
 def test_opencode_surface_isolates_global_config_and_plugins(tmp_path) -> None:
     project_config = tmp_path / ".opencode" / "opencode.json"
     project_config.parent.mkdir()
