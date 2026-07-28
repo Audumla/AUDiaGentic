@@ -1,11 +1,9 @@
-"""Update llama-server binaries to the latest ggml-org/llama.cpp release."""
+"""Install the manifest-pinned llama.cpp release into a rig runtime."""
 
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
-import re
 import shutil
 import subprocess
 import urllib.request
@@ -13,14 +11,10 @@ import zipfile
 from pathlib import Path
 from typing import NamedTuple
 
-from audiagentic.foundation.cli_io import print_error, print_message
+from audiagentic.foundation.cli_io import print_message
 from audiagentic.foundation.system.process import executable_command
-from audiagentic.runtime.rig.constants import (
-    GITHUB_API,
-    GITHUB_REPO,
-    PLATFORM_PATTERNS,
-    platform_dir_name,
-)
+from audiagentic.runtime.rig.constants import platform_dir_name
+from audiagentic.runtime.rig.embedded.release_manifest import load_llama_cpp_release_asset
 from audiagentic.runtime.rig.errors import make_rig_binary_error
 from audiagentic.runtime.system.platform import platform_key
 
@@ -37,57 +31,16 @@ class ReleaseInfo(NamedTuple):
     download_url: str
 
 
-def _http_get(url: str) -> bytes:
-    """Perform an HTTP GET request."""
-    req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return resp.read()
-
-
-def _latest_release() -> dict:
-    """Fetch the latest release from GitHub API."""
-    print_message(f"Fetching latest release from {GITHUB_REPO} ...")
-    data = _http_get(f"{GITHUB_API}/releases/latest")
-    return json.loads(data)
-
-
-def _find_asset_for_platform(release: dict, plat: str) -> ReleaseInfo | None:
-    """Find the matching asset for the given platform in the release."""
-    display, pattern, is_zip, inner_exe = PLATFORM_PATTERNS[plat]
-    tag = release.get("tag_name", release.get("name", "unknown"))
-
-    # Try to find a SHA256 file alongside the asset
-    assets = {a["name"]: a for a in release.get("assets", [])}
-
-    for asset_name, asset in assets.items():
-        if pattern.match(asset_name):
-            # Look for a corresponding .sha256 file
-            sha256 = None
-            sha_name = f"{asset_name}.sha256"
-            if sha_name in assets:
-                try:
-                    sha_content = _http_get(assets[sha_name]["browser_download_url"]).decode().strip()
-                    sha_match = re.search(r"^[0-9a-fA-F]{64}", sha_content)
-                    if sha_match:
-                        sha256 = sha_match.group(0)
-                except Exception:
-                    logger.warning("Failed to read SHA256 for %s", sha_name)
-
-            return ReleaseInfo(
-                tag=tag,
-                filename=asset_name,
-                sha256=sha256,
-                is_zip=is_zip,
-                inner_exe=inner_exe,
-                download_url=asset["browser_download_url"],
-            )
-
-    print_error(f"  No matching asset found for {display} in release {tag}")
-    print_error(f"  Expected pattern: {pattern.pattern}")
-    print_error("  Available assets:")
-    for a in release.get("assets", []):
-        print_error(f"    - {a['name']}")
-    return None
+def _pinned_release() -> ReleaseInfo:
+    asset = load_llama_cpp_release_asset()
+    return ReleaseInfo(
+        tag=asset.version,
+        filename=asset.filename,
+        sha256=asset.sha256,
+        is_zip=asset.archive == "zip",
+        inner_exe=asset.executable,
+        download_url=asset.download_url,
+    )
 
 
 def _download(url: str, dest: Path) -> None:
@@ -99,8 +52,7 @@ def _download(url: str, dest: Path) -> None:
 
 def _verify_sha256(path: Path, expected: str | None) -> None:
     if not expected:
-        print_message("  SHA256 not available, skipping verification")
-        return
+        raise make_rig_binary_error("CFG", 1, "A pinned SHA256 is required for rig binary installation.")
     h = hashlib.sha256(path.read_bytes()).hexdigest()
     if h != expected:
         raise make_rig_binary_error(
@@ -162,51 +114,10 @@ def _flatten_extracted_archive(dest_dir: Path, inner_exe: str) -> None:
     shutil.rmtree(extracted_root)
 
 
-def _kill_running_server(target_dir: Path) -> None:
-    """Kill any running llama-server that may have the binary locked."""
-    import subprocess
-    if platform_key() == "win":
-        subprocess.run(
-            ["taskkill", "/F", "/IM", "llama-server.exe"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False, timeout=10,
-        )
-    else:
-        try:
-            subprocess.run(
-                ["pkill", "-f", "llama-server"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-                timeout=10,
-            )
-        except FileNotFoundError:
-            pass  # pkill not available, server likely not running
-        except subprocess.TimeoutExpired:
-            pass
-
-
 def update_binaries(runtime_dir: Path | None = None, target_bin_dir: Path | None = None) -> None:
-    """Download and install llama-server binaries for the current platform."""
+    """Install the configured pinned llama.cpp release for the current platform."""
 
-    plat = platform_key()
-    if plat not in PLATFORM_PATTERNS:
-        raise make_rig_binary_error(
-            "CFG",
-            1,
-            f"Unsupported platform: {plat}",
-            platform=plat,
-        )
-
-    # Fetch latest release dynamically
-    release_data = _latest_release()
-    release = _find_asset_for_platform(release_data, plat)
-    if not release:
-        raise make_rig_binary_error(
-            "RES",
-            2,
-            f"Could not find matching asset for {plat}",
-            platform=plat,
-        )
+    release = _pinned_release()
 
     print_message(f"Found release {release.tag}, downloading {release.filename}")
 
@@ -217,13 +128,14 @@ def update_binaries(runtime_dir: Path | None = None, target_bin_dir: Path | None
     elif runtime_dir:
         target_dir = runtime_dir / "bin" / "llama-server" / plat_dir
     else:
-        # Default: bundled embedded rig bin next to this module.
-        target_dir = Path(__file__).parent / "bin" / "llama-server" / plat_dir
+        from audiagentic.foundation.paths.home import global_harness_runtime
+
+        # Package files are never an install target.  The default is the
+        # recipe-owned global runtime; callers may explicitly select a project
+        # runtime through target_bin_dir.
+        target_dir = global_harness_runtime() / "rig" / "bin" / "llama-server" / plat_dir
 
     target_dir.mkdir(parents=True, exist_ok=True)
-
-    # Kill any running server that may lock the binary
-    _kill_running_server(target_dir)
 
     # Download to temp
     tmp_dir = Path(__file__).parent / ".tmp_download"
@@ -249,7 +161,7 @@ def update_binaries(runtime_dir: Path | None = None, target_bin_dir: Path | None
         )
 
     # Set executable permission on Unix
-    if plat != "win32":
+    if platform_key() != "win":
         bin_path.chmod(0o755)
 
     # Show version
