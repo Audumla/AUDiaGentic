@@ -11,10 +11,14 @@ from pathlib import Path
 from typing import Literal
 
 from audiagentic.components.providers.descriptors.base import (
+    ACPFeatureNote,
     AgentFile,
     CliInstallRecipe,
     HostCapability,
+    LaunchSpec,
+    LspSelfSupportSpec,
     ModelsSpec,
+    ObsTransportNote,
     ProviderPermissions,
 )
 from audiagentic.foundation.toolchains.config.managed_config import (
@@ -75,16 +79,18 @@ MECHANISM_SCHEMA_MAP: dict[str, type] = {
     "permissions-struct": ProviderPermissions,
     "agent-file": AgentFile,
     "model-spec": ModelsSpec,
+    "launch-spec": LaunchSpec,
+    "lsp-self-support-spec": LspSelfSupportSpec,
+    "obs-transport-note": ObsTransportNote,
+    "acp-feature-note": ACPFeatureNote,
 }
 
 # Mechanism schemas that are conceptual patterns (no real Python type).
 # These pass VAL-PCAP-013 by definition.
 CONCEPTUAL_MECHANISMS: frozenset[str] = frozenset(
     {
-        "acp-caps-list",
         "boolean-set",
         "callable-ref",
-        "lsp-automation-spec",
         "none",
         "surfaces-struct",
         "tier-enum",
@@ -111,6 +117,17 @@ def _get_config_dir() -> Path:
     import audiagentic.components.providers as pkg
 
     return Path(pkg.__file__).resolve().parent.parent.parent / "config" / "providers"
+
+
+def _known_provider_ids(config_dir: Path) -> frozenset[str]:
+    """Provider ids inferred from provider YAML filenames (excludes `_*.yaml`
+    catalogue/family files). Used by VAL-PCAP-014 to reject provider-named
+    kind ids — a lightweight filename check, not a descriptor load."""
+    return frozenset(
+        p.stem.replace("_", "-")
+        for p in config_dir.glob("*.yaml")
+        if not p.stem.startswith("_")
+    )
 
 
 def load_catalogue() -> CapabilityCatalogue:
@@ -195,6 +212,19 @@ def load_catalogue() -> CapabilityCatalogue:
                     f"'{kid}' — must be one of "
                     f"{sorted(MECHANISM_SCHEMA_MAP)} or {sorted(CONCEPTUAL_MECHANISMS)}"
                 )
+
+        # VAL-PCAP-014: a kind id is a domain-neutral concept, never a
+        # provider name or implementation detail. Distinguish per-provider
+        # variation via mechanism/evidence on a shared kind, not by baking
+        # the provider id into the kind id.
+        kind_tokens = set(kid.split("-"))
+        provider_hit = kind_tokens & _known_provider_ids(config_dir)
+        if provider_hit:
+            raise CatalogueError(
+                f"VAL-PCAP-014: kind '{kid}' embeds provider id(s) "
+                f"{sorted(provider_hit)} — kinds must be provider-neutral; "
+                "disambiguate via mechanism/evidence on a shared kind instead"
+            )
 
         kinds_by_id[kid] = CapabilityKind(
             id=kid,

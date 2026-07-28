@@ -8,16 +8,13 @@ description: "VS Code extension for AI-assisted coding with multi-model support 
 url: "https://roocode.com"
 access_mode: env
 
-cli_probe:
-  - code
-  - "--list-extensions"
-
 capabilities:
   cli-install:
     mechanism:
       toolchain: vscode
       package: "RooVeterinaryInc.roo-cline"
       executable: code
+      probe: [code, "--list-extensions"]
       probe_fn: "audiagentic.components.providers.adapters.roo.hooks:_roo_probe"
 
   host-extensions:
@@ -53,7 +50,10 @@ capabilities:
         managed: false
         description: "Roo ignore file"
 
-execution:
-  mode: unsupported
-  error-code: CON-ROO-001
-  message: "Roo Code is a VS Code extension provider and has no CLI execution adapter"
+  launch:
+    mechanism:
+      recipes:
+        execution:
+          mode: unsupported
+          error-code: CON-ROO-001
+          message: "Roo Code is a VS Code extension provider and has no CLI execution adapter"
