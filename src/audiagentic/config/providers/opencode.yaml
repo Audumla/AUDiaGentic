@@ -35,38 +35,7 @@ interactive:
     prompt: --message
     mode-cases:
       json: [--output-format, json]
-automation_capabilities:
-  - family_id: cli-lifecycle
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-cli-lifecycle-payload/v1
-    result_contract: provider-cli-lifecycle-result/v1
-    ownership_scope_required: false
-  - family_id: managed-mcp
-    supported_modes: [apply, prune, status]
-    payload_contract: provider-managed-mcp-payload/v1
-    result_contract: provider-managed-mcp-result/v1
-    ownership_scope_required: true
-  - family_id: language-server-projection
-    supported_modes: [apply, prune, status]
-    payload_contract: provider-language-server-projection-payload/v1
-    result_contract: provider-language-server-projection-result/v1
-    ownership_scope_required: true
 
-  - family_id: plugin-entry
-    supported_modes: [apply, prune, status]
-    payload_contract: provider-plugin-entry-payload/v1
-    result_contract: provider-plugin-entry-result/v1
-    ownership_scope_required: true
-  - family_id: generated-surfaces
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-generated-surface-payload/v1
-    result_contract: provider-generated-surface-result/v1
-    ownership_scope_required: true
-  - family_id: model-projection
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-model-projection-payload/v1
-    result_contract: provider-model-projection-result/v1
-    ownership_scope_required: false
 display_name: "OpenCode"
 description: "Terminal-based AI coding assistant. Supports multiple LLM providers via a unified CLI."
 url: "https://opencode.ai"
@@ -77,282 +46,167 @@ cli_probe:
   - opencode
   - "--version"
 
-cli_install:
-  toolchain: npm
-  package: opencode-ai
-  executable: opencode
-  probe_fn: "audiagentic.components.providers.adapters.opencode.catalog:_opencode_probe"
 
-host_capabilities:
-  - host: vscode
-    capability_id: "sst-dev.opencode"
-    display_name: "OpenCode"
+capabilities:
+  cli-install:
+    mechanism:
+      toolchain: npm
+      package: opencode-ai
+      executable: opencode
+      probe_fn: "audiagentic.components.providers.adapters.opencode.catalog:_opencode_probe"
 
-capability_facts:
-  - capability_id: launch-isolation
-    subject: mcp_launch_isolation_tier
-    mechanism: "isolated XDG config plus per-process OPENCODE_CONFIG_CONTENT"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
+  host-extensions:
+    mechanism:
+      host: vscode
+      capability_id: "sst-dev.opencode"
+      display_name: "OpenCode"
+
+  mcp:
+    mechanism:
+      config_path: ".opencode/opencode.json"
+      reader: "audiagentic.components.providers.adapters.opencode.mcp_format:read_opencode_mcp"
+      writer: "audiagentic.components.providers.adapters.opencode.mcp_format:write_opencode_mcp"
+      remover: "audiagentic.components.providers.adapters.opencode.mcp_format:remove_opencode_mcp"
+      format: "opencode-mcp"
+      refresh_mode: "file-watch"
+
+  plugins:
+    mechanism:
+      config_path: ".opencode/opencode.json"
+      reader: "audiagentic.components.providers.adapters.opencode.plugin_array:read_opencode_plugins"
+      writer: "audiagentic.components.providers.adapters.opencode.plugin_array:write_opencode_plugins"
+      remover: "audiagentic.components.providers.adapters.opencode.plugin_array:remove_opencode_plugin"
+      format: "opencode-plugin-array"
+      refresh_mode: "none"
+
+  lsp-config:
+    mechanism:
+      config_path: ".opencode/opencode.json"
+      reader: "audiagentic.components.providers.adapters.opencode.language_servers:read_language_servers_opencode"
+      writer: "audiagentic.components.providers.adapters.opencode.language_servers:write_language_servers_opencode"
+      remover: "audiagentic.components.providers.adapters.opencode.language_servers:remove_language_servers_opencode"
+      format: "opencode-json"
+
+  models:
+    mechanism:
+      store:
+        config_path: ".opencode/opencode.json"
+        reader: "audiagentic.components.providers.adapters.opencode.model_config:read_opencode_models"
+        writer: "audiagentic.components.providers.adapters.opencode.model_config:write_opencode_models"
+        remover: "audiagentic.components.providers.adapters.opencode.model_config:remove_opencode_model"
+        format: "opencode-models-json"
+        refresh_mode: "none"
+      entry_renderer: "audiagentic.components.providers.adapters.opencode.model_entry:render_opencode_model_entry"
+      refresh: "audiagentic.components.providers.adapters.opencode.catalog:_fetch_opencode_catalog"
+      connectors: [openai-compatible, openai, anthropic]
     evidence:
-      evidence_tier: execution
-      tool_version: "1.18.3"
-      fact_anchor: "tests/unit/providers/test_mcp_launch_isolation.py"
-      review_state: verified
-  - capability_id: cli-install
-    subject: cli_install
-    mechanism: "npm install: opencode-ai with shell probe opencode --version"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
+      note: >-
+        catalog refresh: opencode models --verbose; requires an installed
+        OpenCode CLI; catalog contents depend on provider authentication and
+        upstream cache state (tool_version 1.17.18)
+      source: "docs/reference/model-source-evidence/opencode.md#opencode-evidence"
+
+  surface-skill:
+    mechanism: ".opencode/skills/{tag}/SKILL.md"
+
+  permissions:
+    mechanism:
+      can_write_files: true
+      can_execute_shell: true
+      can_browse_web: false
+      can_read_env: true
+      notes: "CLI agent; multi-provider backend, full tool use"
+
+  agent-files:
+    mechanism:
+      rel_path: "AGENTS.md"
+      managed: false
+      description: "OpenCode project instructions"
+
+  launch-isolation:
     evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/opencode.yaml#cli_install"
-      review_state: verified
-  - capability_id: host-extension
-    subject: host_capabilities
-    mechanism: "vscode extension sst-dev.opencode"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
+      note: >-
+        isolated XDG config plus per-process OPENCODE_CONFIG_CONTENT, verified
+        (tool_version 1.18.3)
+      source: "tests/unit/providers/test_mcp_launch_isolation.py"
+
+  model-config-projection:
     evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/opencode.yaml#host_capabilities"
-      review_state: verified
-  - capability_id: mcp-config
-    subject: mcp_config
-    mechanism: "reader/writer/remover over .opencode/opencode.json"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/opencode.yaml#mcp_config"
-      review_state: verified
-  - capability_id: plugin-config
-    subject: plugin_config
-    mechanism: "reader/writer/remover over .opencode/opencode.json plugin array"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/opencode.yaml#plugin_config"
-      review_state: verified
-  - capability_id: lsp-config
-    subject: language_servers_config
-    mechanism: "reader/writer/remover over .opencode/opencode.json language servers"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/opencode.yaml#language_servers_config"
-      review_state: verified
-  - capability_id: model-catalog-refresh
-    subject: fetch_catalog_fn
-    mechanism: "opencode models --verbose"
-    constraints:
-      - "Provider command requires an installed OpenCode CLI."
-    limitations:
-      - "Catalog contents depend on provider authentication and upstream cache state."
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: execution
-      tool_version: "1.17.18"
-      fact_anchor: "docs/reference/model-source-evidence/opencode.md#opencode-evidence"
-      review_state: verified
-  - capability_id: surface-skill
-    subject: skill_surface_path
-    mechanism: ".opencode/skills/{tag}/SKILL.md path template"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/opencode.yaml#skill_surface_path"
-      review_state: verified
-  - capability_id: perm-declaration
-    subject: permissions
-    mechanism: "ProviderPermissions boolean flags"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/opencode.yaml#permissions"
-      review_state: verified
-  - capability_id: model-config-projection
-    subject: "external:model-config-projection"
-    mechanism: "structured provider config"
-    constraints:
-      - "Config filename and winning container remain unresolved."
-    limitations:
-      - "No safe automatic projection contract is verified."
-    support_assessment: blocked
-    action_needed: "Resolve config.json versus opencode.json and provider key shape."
-    evidence:
-      evidence_tier: unverified
-      tool_version: "1.17.18"
-      fact_anchor: "docs/reference/model-source-evidence/opencode.md#opencode-evidence"
-      review_state: pending-review
+      note: >-
+        BLOCKED: structured provider config; config filename and winning
+        container remain unresolved; no safe automatic projection contract is
+        verified (tool_version 1.17.18) — resolve config.json versus
+        opencode.json and provider key shape.
+      source: "docs/reference/model-source-evidence/opencode.md#opencode-evidence"
+
   # --- ACP capability family (plan agent-sessions AS01-AS07) -------------
   # Segregates ACP/live-session features so they can be requested per state
   # while the capability is being built out. Evidence-only per boundary
   # rules — the executable authority is the adapter's acp submodule hook
   # (load_acp_launch_builder) consumed by gateway session dispatch.
-  - capability_id: acp-stdio-transport
-    subject: "external:acp-stdio-transport"
-    mechanism: "native `opencode acp` stdio ACP server launched via adapters/opencode/acp.py build_acp_launch; model selected via OPENCODE_CONFIG_CONTENT inline config"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
+  acp-stdio-transport:
     evidence:
-      evidence_tier: execution
-      tool_version: repository
-      fact_anchor: "tests/e2e/agents/test_opencode_acp_e2e.py"
-      review_state: verified
-  - capability_id: acp-live-session
-    subject: "external:acp-live-session"
-    mechanism: "gateway SessionRuntime keep-alive session over `opencode acp` (session_keep_alive / session_id request fields; FIFO turn queue, idle/lifetime reaper)"
-    constraints:
-      - "long-running turns can hit transport event-volume caps before terminal completion (overseer R&D finding 2026-07-17) — checkpoint/compaction strategy pending"
-    limitations:
-      - "in-flight continuation ('bump' during a stalled prompt) is not safe — cancelling the await kills the transport; same-session continuation AFTER a terminal turn is verified"
-    support_assessment: partial
-    action_needed: "AS07 formal live gate + AS06 no-orphan proof; MA28 overseer delegation succeeded live 2026-07-17 (terminal end_turn, cleanup verified)."
+      note: >-
+        native `opencode acp` stdio ACP server launched via
+        adapters/opencode/acp.py build_acp_launch; model selected via
+        OPENCODE_CONFIG_CONTENT inline config. Verified.
+      source: "tests/e2e/agents/test_opencode_acp_e2e.py"
+
+  acp-live-session:
     evidence:
-      evidence_tier: execution
-      tool_version: repository
-      fact_anchor: "tests/unit/agents/test_agents_gateway_sessions.py"
-      review_state: pending-review
-  - capability_id: acp-session-resume
-    subject: "external:acp-session-resume"
-    mechanism: "planned: ACP session/load gated on advertised capability, anchored by persisted provider-session-ref; CLI fallback `opencode run --session <id>`"
-    constraints: []
-    limitations:
-      - "not implemented; sessions currently die with the gateway process"
-    support_assessment: blocked
-    action_needed: "AS10."
+      note: >-
+        gateway SessionRuntime keep-alive session over `opencode acp`
+        (session_keep_alive / session_id request fields; FIFO turn queue,
+        idle/lifetime reaper). Long-running turns can hit transport
+        event-volume caps before terminal completion (overseer R&D finding
+        2026-07-17) — checkpoint/compaction strategy pending. In-flight
+        continuation ('bump' during a stalled prompt) is not safe —
+        cancelling the await kills the transport; same-session continuation
+        AFTER a terminal turn is verified. NEXT: AS07 formal live gate + AS06
+        no-orphan proof; MA28 overseer delegation succeeded live 2026-07-17
+        (terminal end_turn, cleanup verified).
+      source: "tests/unit/agents/test_agents_gateway_sessions.py"
+
+  acp-session-resume:
     evidence:
-      evidence_tier: documentation
-      tool_version: "1.17.18"
-      fact_anchor: "docs/planning/active/agent-sessions/AS10.md"
-      review_state: pending-review
-  - capability_id: acp-shared-live-session
-    subject: "external:acp-shared-live-session"
-    mechanism: "no known opencode mechanism for multi-client attachment to one live session"
-    constraints: []
-    limitations:
-      - "gateway-side remote channeling (AS09) can expose OUR session to remote clients, but opencode offers no native peer-client surface comparable to Codex App Server"
-    support_assessment: blocked
-    action_needed: "Revisit if opencode ships a server/attach surface; otherwise AS09 covers the need gateway-side."
+      note: >-
+        planned: ACP session/load gated on advertised capability, anchored by
+        persisted provider-session-ref; CLI fallback `opencode run --session
+        <id>`. Not implemented; sessions currently die with the gateway
+        process. NEXT: AS10.
+      source: "docs/planning/active/agent-sessions/AS10.md"
+
+  acp-shared-live-session:
     evidence:
-      evidence_tier: documentation
-      tool_version: "1.17.18"
-      fact_anchor: "docs/planning/active/agent-sessions/AS09.md"
-      review_state: pending-review
+      note: >-
+        no known opencode mechanism for multi-client attachment to one live
+        session. Gateway-side remote channeling (AS09) can expose OUR session
+        to remote clients, but opencode offers no native peer-client surface
+        comparable to Codex App Server. NEXT: revisit if opencode ships a
+        server/attach surface; otherwise AS09 covers the need gateway-side.
+      source: "docs/planning/active/agent-sessions/AS09.md"
+
   # --- AS27 harness observability capability facts -----------------------
   # Inventory and conformance for agent-loop status observation.
-  - capability_id: obs-opencode-acp
-    subject: "external:harness-observability/opencode-acp"
-    mechanism: "AS27 inventory: Recipe A transport-observation; validated O1 publisher on linux-amd64 only (local probe proven); opencode acp stdio supports windows/macOS/linux as vendor product platforms but local observability validation requires exact per-platform probe"
-    constraints: []
-    limitations:
-      - "cancel-turn not supported in current version"
-    support_assessment: verified
-    action_needed: null
+  obs-opencode-acp:
     evidence:
-      evidence_tier: execution
-      tool_version: repository
-      fact_anchor: "src/audiagentic/components/providers/services/harness_observability_inventory.py#opencode-opencode-acp"
-      review_state: verified
-  - capability_id: obs-opencode-cli-session
-    subject: "external:harness-observability/opencode-cli-session"
-    mechanism: "AS27 inventory: Recipe A/C candidate; blocked pending synchronous completion / idle/status probe; never parse prose"
-    constraints:
-      - "requires server event/status API and plugin route proof"
-    limitations:
-      - "no validated transport observation mechanism"
-    support_assessment: blocked
-    action_needed: "prove synchronous completion, session idle/status, SSE ordering and correlation"
+      note: >-
+        AS27 inventory: Recipe A transport-observation; validated O1
+        publisher on linux-amd64 only (local probe proven); opencode acp
+        stdio supports windows/macOS/linux as vendor product platforms but
+        local observability validation requires exact per-platform probe.
+        cancel-turn not supported in current version.
+      source: "src/audiagentic/components/providers/services/harness_observability_inventory.py#opencode-opencode-acp"
+
+  obs-opencode-cli-session:
     evidence:
-      evidence_tier: unverified
-      tool_version: repository
-      fact_anchor: "src/audiagentic/components/providers/services/harness_observability_inventory.py#opencode-opencode-cli-session"
-      review_state: pending-review
-
-permissions:
-  can_write_files: true
-  can_execute_shell: true
-  can_browse_web: false
-  can_read_env: true
-  notes: "CLI agent; multi-provider backend, full tool use"
-
-skill_surface_path: ".opencode/skills/{tag}/SKILL.md"
-
-agent_files:
-  - rel_path: "AGENTS.md"
-    managed: false
-    description: "OpenCode project instructions"
-
-fetch_catalog_fn: "audiagentic.components.providers.adapters.opencode.catalog:_fetch_opencode_catalog"
-
-model_entry_renderer: "audiagentic.components.providers.adapters.opencode.model_entry:render_opencode_model_entry"
-
-supported_connectors:
-  - openai-compatible
-  - openai
-  - anthropic
-
-model_config:
-  config_path: ".opencode/opencode.json"
-  reader: "audiagentic.components.providers.adapters.opencode.model_config:read_opencode_models"
-  writer: "audiagentic.components.providers.adapters.opencode.model_config:write_opencode_models"
-  remover: "audiagentic.components.providers.adapters.opencode.model_config:remove_opencode_model"
-  format: "opencode-models-json"
-  refresh_mode: "none"
-
-mcp_config:
-  config_path: ".opencode/opencode.json"
-  reader: "audiagentic.components.providers.adapters.opencode.mcp_format:read_opencode_mcp"
-  writer: "audiagentic.components.providers.adapters.opencode.mcp_format:write_opencode_mcp"
-  remover: "audiagentic.components.providers.adapters.opencode.mcp_format:remove_opencode_mcp"
-  format: "opencode-mcp"
-  refresh_mode: "file-watch"
-
-plugin_config:
-  config_path: ".opencode/opencode.json"
-  reader: "audiagentic.components.providers.adapters.opencode.plugin_array:read_opencode_plugins"
-  writer: "audiagentic.components.providers.adapters.opencode.plugin_array:write_opencode_plugins"
-  remover: "audiagentic.components.providers.adapters.opencode.plugin_array:remove_opencode_plugin"
-  format: "opencode-plugin-array"
-  refresh_mode: "none"
-
-language_servers_config:
-  config_path: ".opencode/opencode.json"
-  reader: "audiagentic.components.providers.adapters.opencode.language_servers:read_language_servers_opencode"
-  writer: "audiagentic.components.providers.adapters.opencode.language_servers:write_language_servers_opencode"
-  remover: "audiagentic.components.providers.adapters.opencode.language_servers:remove_language_servers_opencode"
-  format: "opencode-json"
+      note: >-
+        AS27 inventory: Recipe A/C candidate; blocked pending synchronous
+        completion / idle/status probe; never parse prose. Requires server
+        event/status API and plugin route proof; no validated transport
+        observation mechanism yet — prove synchronous completion, session
+        idle/status, SSE ordering and correlation.
+      source: "src/audiagentic/components/providers/services/harness_observability_inventory.py#opencode-opencode-cli-session"
 
 # AS29 session-surface declarations — one per provider surface+version
 # ACP (stdio) and CLI run --session are distinct; never interchangeable fallbacks.

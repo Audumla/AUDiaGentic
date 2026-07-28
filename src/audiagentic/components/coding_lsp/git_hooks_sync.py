@@ -59,7 +59,7 @@ def _hook_body_for_language(language_id: str, hooks_spec: dict[str, Any]) -> str
     if "format" in hooks_spec:
         lines.append(f"# format: {hooks_spec['format']}")
 
-    lines.append("# <<< audiagentic:_HOOK_BLOCK_ID:language-hooks <<<\n")
+    lines.append(f"# <<< audiagentic:{_HOOK_BLOCK_ID}:language-hooks <<<\n")
     return "\n".join(lines) + "\n"
 
 

@@ -9,6 +9,7 @@ OpenCode stores language servers under the top-level `lsp` object in
 The full document is preserved on write — only the managed `lsp.<name>`
 entries are touched, leaving `mcp` and other keys intact.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
