@@ -21,7 +21,7 @@ _exec_err = make_error_factory("VAL", "EXEC", "recipe-execution")
 logger = logging.getLogger(__name__)
 
 
-_SUPPORTED_MODES = ("apply", "prune", "status", "plan")
+_SUPPORTED_MODES = ("apply", "prune", "status", "plan", "upgrade")
 
 
 def execute_recipe(
@@ -49,6 +49,9 @@ def execute_recipe_mode(
     uninstall steps. ``status`` runs the verify (or install) probe read-only.
     ``plan`` describes what apply would do without executing. A YAML file plus a
     parameter dict is sufficient for the whole lifecycle — no Python per recipe.
+    ``upgrade`` is intentionally unavailable to a declarative recipe until it
+    declares an upgrade lifecycle; this prevents apply from becoming an implicit
+    package update.
     """
     if mode not in _SUPPORTED_MODES:
         return RecipeResult.fail(
@@ -80,6 +83,8 @@ def execute_recipe_mode(
         return _status(mat, ctx)
     if mode == "plan":
         return _plan(mat)
+    if mode == "upgrade":
+        return _upgrade(mat, ctx)
     return _apply(mat, ctx)
 
 
@@ -163,4 +168,35 @@ def _plan(mat: Any) -> RecipeResult:
         RecipeState.ABSENT,
         status=f"would run {install} install + {configure} configure step(s)",
         details={"recipe_id": mat.recipe_id, "install": install, "configure": configure},
+    )
+
+
+def _upgrade(mat: Any, ctx: dict[str, Any]) -> RecipeResult:
+    """Run an explicitly declared upgrade sequence, never install steps."""
+    if not mat.upgrade_steps:
+        return RecipeResult.ok(
+            RecipeState.NOT_APPLICABLE,
+            status="recipe has no declared upgrade lifecycle",
+            details={"recipe_id": mat.recipe_id, "version": mat.recipe_version},
+        )
+    result = run_steps(
+        mat.upgrade_steps,
+        ctx,
+        ok_state=RecipeState.UPGRADING,
+        ok_status="upgrade steps succeeded",
+        fail_prefix="upgrade sequence failed",
+    )
+    if not result.success:
+        return result
+    if mat.verify is not None:
+        verify_result = check_with_retry(mat.verify, context=ctx)
+        if not verify_result.passed:
+            return RecipeResult.fail(
+                f"upgrade verify probe failed: {verify_result.detail}",
+                details={"probe": verify_result.detail},
+            )
+    return RecipeResult.ok(
+        RecipeState.UPGRADED,
+        status="recipe upgraded successfully",
+        details={"recipe_id": mat.recipe_id, "version": mat.recipe_version},
     )
