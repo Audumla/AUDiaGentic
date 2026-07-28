@@ -145,7 +145,11 @@ def _do_apply(
     entries = [_entry_to_materialized(e) for e in request.entries]
     managed_ids = set(request.managed_ids) if request.managed_ids else None
     result = sync_managed_provider_models(
-        provider_id, project_root, entries, managed_ids=managed_ids
+        provider_id,
+        project_root,
+        entries,
+        managed_ids=managed_ids,
+        config_path=Path(request.config_path) if request.config_path else None,
     )
     collisions = result.get("collisions") or []
     return ModelProjectionResult(

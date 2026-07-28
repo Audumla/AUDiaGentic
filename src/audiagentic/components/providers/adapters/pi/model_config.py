@@ -15,12 +15,11 @@ def read_pi_models(config_path: Path) -> dict[str, tuple[str, Any]]:
         return {}
     data = json.loads(config_path.read_text(encoding="utf-8"))
     result: dict[str, tuple[str, Any]] = {}
-    for model in data.get("models", []):
-        mid = model.get("managed_id") or model.get("model_id", "")
-        if not mid:
-            continue
-        name = model.get("visible_name", model.get("model_id", ""))
-        result[mid] = (name, dict(model))
+    for provider_id, provider in (data.get("providers") or {}).items():
+        for model in provider.get("models", []) if isinstance(provider, dict) else []:
+            mid = model.get("managed_id") or model.get("model_id", "")
+            if mid:
+                result[mid] = (str(model.get("name") or model.get("id") or mid), dict(model))
     return result
 
 
@@ -35,22 +34,28 @@ def write_pi_models(
     current_data = {}
     if config_path.is_file():
         current_data = json.loads(config_path.read_text(encoding="utf-8"))
-    existing_models = {
-        m.get("managed_id") or m.get("model_id", ""): m for m in current_data.get("models", [])
-    }
-    models_list = list(existing_models.values())
-    seen_ids = set(existing_models.keys())
+    providers = current_data.setdefault("providers", {})
     for name, payload in desired.items():
-        entry = dict(payload) if isinstance(payload, dict) else payload
+        entry = dict(payload) if isinstance(payload, dict) else {}
         mid = entry.get("managed_id") or name
-        entry["managed_id"] = mid
-        if mid in existing_models:
-            idx = models_list.index(existing_models[mid])
-            models_list[idx] = entry
+        provider_id = str(entry.pop("provider_id"))
+        provider = providers.setdefault(provider_id, {})
+        for key in ("baseUrl", "api", "apiKey", "compat"):
+            provider[key] = entry.pop(key)
+        models = provider.setdefault("models", [])
+        native = {
+            "id": entry.pop("model_id"), "name": entry.pop("visible_name"),
+            "reasoning": False, "input": ["text"],
+            "contextWindow": entry.pop("contextWindow"), "maxTokens": entry.pop("maxTokens"),
+            "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
+            "managed_id": mid,
+        }
+        for index, existing in enumerate(models):
+            if existing.get("managed_id") == mid:
+                models[index] = native
+                break
         else:
-            models_list.append(entry)
-            seen_ids.add(mid)
-    current_data["models"] = models_list
+            models.append(native)
     atomic_write_json(config_path, current_data, sort_keys=False)
 
 
@@ -59,13 +64,14 @@ def remove_pi_model(config_path: Path, managed_id: str) -> bool:
     if not config_path.is_file():
         return False
     data = json.loads(config_path.read_text(encoding="utf-8"))
-    original_len = len(data.get("models", []))
-    data["models"] = [
-        m
-        for m in data.get("models", [])
-        if (m.get("managed_id") or m.get("model_id", "")) != managed_id
-    ]
-    removed = len(data["models"]) < original_len
+    removed = False
+    for provider in (data.get("providers") or {}).values():
+        if not isinstance(provider, dict):
+            continue
+        models = provider.get("models") or []
+        kept = [m for m in models if m.get("managed_id") != managed_id]
+        removed = removed or len(kept) != len(models)
+        provider["models"] = kept
     if removed:
         atomic_write_json(config_path, data, sort_keys=False)
     return removed

@@ -63,6 +63,7 @@ class ModelProjectionRequest:
 
     managed_ids: tuple[str, ...]
     entries: tuple[ModelProjectionEntry, ...] = ()
+    config_path: str | None = None
 
     def __post_init__(self) -> None:
         ids = [entry.managed_id for entry in self.entries]
@@ -75,6 +76,7 @@ class ModelProjectionRequest:
         return {
             "managed_ids": list(self.managed_ids),
             "entries": [entry.to_mapping() for entry in self.entries],
+            "config_path": self.config_path,
         }
 
     @classmethod
@@ -85,6 +87,7 @@ class ModelProjectionRequest:
         return cls(
             managed_ids=tuple(str(mid) for mid in value.get("managed_ids", ())),
             entries=tuple(ModelProjectionEntry.from_mapping(item) for item in raw_entries),
+            config_path=str(value["config_path"]) if value.get("config_path") else None,
         )
 
 

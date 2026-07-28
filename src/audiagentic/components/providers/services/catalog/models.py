@@ -11,7 +11,7 @@ reader/writer/remover — RV271).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -298,6 +298,7 @@ def sync_managed_provider_models(
     entries: list[MaterializedModelEntry],
     *,
     managed_ids: set[str] | None = None,
+    config_path: Path | None = None,
 ) -> dict[str, Any]:
     """Sync AUDiaGentic-owned model entries for one provider.
 
@@ -309,6 +310,8 @@ def sync_managed_provider_models(
     if spec is None:
         return {"provider_id": provider_id, "ok": True, "skipped": "no model_config defined"}
 
+    if config_path is not None:
+        spec = replace(spec, config_path=config_path)
     desired, skipped_connectors = _build_desired_entries(provider_id, descriptor, entries)
     result = sync_managed_config(
         spec,
