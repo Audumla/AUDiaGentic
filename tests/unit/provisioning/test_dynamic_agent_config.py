@@ -158,7 +158,7 @@ def test_component_install_refreshes_materialized_agent_config(
     harness_root = tmp_path / "harness"
     project_root.mkdir()
 
-    refresh_calls: list[tuple[Path, Path | None]] = []
+    refresh_calls: list[tuple[Path, str]] = []
 
     monkeypatch.setattr(
         "audiagentic.foundation.paths.home.global_harness_runtime",
@@ -170,8 +170,12 @@ def test_component_install_refreshes_materialized_agent_config(
         lambda _harness_type: "/usr/bin/pi",
     )
     monkeypatch.setattr(
-        "audiagentic.runtime.harness.pi.install.refresh_materialized_agent_config",
-        lambda target, project_root=None: refresh_calls.append((target, project_root)),
+        "audiagentic.components.providers.providers_api.materialize_provider_config",
+        lambda project_root, provider_id, **_kw: refresh_calls.append((project_root, provider_id)),
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.project.project_components.attach_harness_refresh",
+        lambda result, _project_root: result,
     )
 
     args = argparse.Namespace(component_cmd="install", component_id="coding-lsp")
@@ -180,4 +184,4 @@ def test_component_install_refreshes_materialized_agent_config(
 
     assert rc == 0
     assert refresh_calls
-    assert all(call[0] == harness_root and call[1] == project_root for call in refresh_calls)
+    assert all(call[0] == project_root and call[1] == "pi" for call in refresh_calls)

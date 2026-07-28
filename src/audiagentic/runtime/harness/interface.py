@@ -9,21 +9,11 @@ architectural limit — broadening ACP to more providers (HA06, currently
 blocked on the AS19 foundation) directly grows the set of usable harnesses,
 with zero new runtime code, once the requirement below is fully retired.
 
-CURRENT (transitional) implementation shape: every harness implementation is
-still a package at runtime/harness/<type>/ exposing two submodules —
-``install`` and ``runner`` — each providing the functions listed in the
-protocols below. ``get_harness_type()``'s config resolution is already fully
-open (any string, config-driven, no hardcoded list) — the ``_mod()``
-dispatcher immediately below it is what still requires a bespoke Python
-package per type via ``importlib``. That requirement is transitional debt,
-not permanent architecture: once HA07's materialize deep-cut and HA06's ACP
-broadening both land, install/runner become generic orchestration
-parametrized by ``provider_id``, and a new AG-CLI-capable provider needs only
-a capability declaration in its own descriptor YAML, not a new
-runtime/harness/<type>/ package. Do not add new harness-specific code to this
-package on the assumption that "harness" means "pi or opencode" — write it as
-provider-capability-driven from the start wherever possible, even before the
-full generalization lands.
+CURRENT implementation shape: runtime orchestration is provider-agnostic.
+``get_harness_type()`` resolves the configured provider; the façade delegates
+materialization and launch construction through ``providers_api``. A new
+AG-CLI-capable provider needs a descriptor capability and its own adapter,
+never a ``runtime/harness/<type>/`` package.
 
 The harness facade (harness/__init__.py) dispatches to these via importlib.
 No harness-specific imports are permitted in the facade or this file.

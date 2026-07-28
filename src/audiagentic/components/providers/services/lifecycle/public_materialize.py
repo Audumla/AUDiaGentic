@@ -13,24 +13,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.providers.contracts.model_projection import (
-    ModelProjectionRequest,
-)
 
-# Import MaterializedModelEntry from its actual location
-from audiagentic.components.providers.services.catalog.models import (
-    MaterializedModelEntry,
-)
+def _upsert_ag_rig_source(project_root: Path, harness_cfg: dict) -> None:
+    """Persist the rig as the ordinary local OpenAI-compatible endpoint.
 
-
-def _build_rig_model_entry(
-    harness_cfg: dict,
-) -> MaterializedModelEntry:
-    """Build a MaterializedModelEntry for the local embedded rig.
-
-    Constructs the entry from harness_cfg.rig.* config so it can be
-    applied via the model-projection capability family.
+    The port/model are runtime-derived facts, but the source remains normal
+    project desired state consumed by ``build_model_projection_request``.
     """
+    from audiagentic.components.providers.services.config.model_source_config import (
+        load_model_sources,
+        write_model_sources,
+    )
     from audiagentic.runtime.harness.config import (
         require_harness_rig_port,
     )
@@ -38,18 +31,20 @@ def _build_rig_model_entry(
     rig_section = harness_cfg.get("rig", {})
     model_name = rig_section.get("model") or "qwen3.5-0.8b"
     port = require_harness_rig_port(harness_cfg)
-
-    return MaterializedModelEntry(
-        source_id="ag-rig",
-        model_id=model_name,
-        visible_name="AUDiaGentic local planner",
-        connector="openai-compatible",
-        managed_id=f"ag-rig-{model_name}",
-        endpoint={
-            "base-url": f"http://127.0.0.1:{port}/v1",
-            "single-model": True,
-        },
-    )
+    document = load_model_sources(project_root)
+    sources = document.setdefault("sources", {})
+    desired = {
+        "source-class": "local-endpoint",
+        "display-name": "AUDiaGentic Embedded Rig",
+        "connector": "openai-compatible",
+        "model-id": str(model_name),
+        "base-url": f"http://127.0.0.1:{port}/v1",
+        "provider-overrides": {"provider-id": rig_section.get("provider", "audiagentic")},
+        "enabled": True,
+    }
+    if sources.get("ag-rig") != desired:
+        sources["ag-rig"] = desired
+        write_model_sources(project_root, document)
 
 
 def materialize_provider_config(
@@ -69,11 +64,31 @@ def materialize_provider_config(
     from audiagentic.components.providers import providers_api
     from audiagentic.foundation.cli_io import print_message
 
-    rig_entry = _build_rig_model_entry(harness_cfg)
-    request = ModelProjectionRequest(
-        managed_ids=(rig_entry.managed_id,),
-        entries=(rig_entry,),
+    _upsert_ag_rig_source(project_root, harness_cfg)
+    from audiagentic.components.providers.services.catalog.models import (
+        build_model_projection_request,
     )
+
+    request = build_model_projection_request(project_root, provider_id, enabled=True)
+
+    from audiagentic.components.providers.services.execution.execution import (
+        load_materialize_builder,
+        load_materialize_model_config_path_resolver,
+    )
+    builder = load_materialize_builder(provider_id)
+    if builder is None:
+        from audiagentic.foundation.contracts.errors import make_error
+
+        raise make_error(
+            prefix="CFG", component="HRN", number=9, kind="harness-config",
+            message=f"Provider {provider_id!r} does not declare config materialization.",
+            details={"provider_id": provider_id},
+        )
+    resolver = load_materialize_model_config_path_resolver(provider_id)
+    if resolver is not None:
+        from dataclasses import replace
+
+        request = replace(request, config_path=str(resolver(project_root, agent_runtime)))
 
     # Model config via model-projection family (managed)
     try:
@@ -95,31 +110,7 @@ def materialize_provider_config(
             exc_info=True,
         )
 
-    # Surface rendering + provider-specific files via adapter install modules
-    if provider_id == "pi":
-        from audiagentic.components.providers.adapters.pi.install import (
-            materialize_provider_specific as _materialize_pi,
-        )
-
-        _materialize_pi(
-            project_root,
-            harness_cfg,
-            agent_runtime=agent_runtime,
-        )
-    elif provider_id == "opencode":
-        from audiagentic.components.providers.adapters.opencode.install import (
-            materialize_provider_specific as _materialize_opencode,
-        )
-
-        _materialize_opencode(project_root, harness_cfg)
-    else:
-        from audiagentic.foundation.contracts.errors import make_error
-
-        raise make_error(
-            prefix="CFG",
-            component="HRN",
-            number=9,
-            kind="harness-config",
-            message=f"No materialize handler for provider {provider_id!r}.",
-            details={"provider_id": provider_id},
-        )
+    # Surface rendering + provider-specific files are a provider adapter
+    # capability.  Do not centralize provider ids here: a new provider becomes
+    # materializable by supplying adapters/<id>/install.py.
+    builder(project_root, harness_cfg, agent_runtime=agent_runtime)

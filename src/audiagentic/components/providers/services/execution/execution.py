@@ -170,6 +170,20 @@ def load_execution_environment_builder(provider_id: str) -> Callable[..., Any] |
     return _adapter_hook(provider_id, "execution_environment", "build_execution_environment")
 
 
+def load_materialize_builder(provider_id: str) -> Callable[..., Any] | None:
+    """Load a provider-owned durable-config materializer, if declared.
+
+    Materialization is an adapter capability: adding a harness provider means
+    adding its descriptor and adapter, never extending a runtime dispatcher.
+    """
+    return _adapter_hook(provider_id, "install", "materialize_provider_config")
+
+
+def load_materialize_model_config_path_resolver(provider_id: str) -> Callable[..., Path] | None:
+    """Load the provider-owned launch-visible model-config target resolver."""
+    return _adapter_hook(provider_id, "install", "materialize_model_config_path")
+
+
 _EXECUTION_MODE_BY_DECLARATION: dict[str, str] = {
     "cli": "descriptor",
     "stub": "stub",
