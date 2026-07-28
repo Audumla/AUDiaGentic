@@ -11,7 +11,7 @@ from jsonschema import Draft202012Validator
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
-AUTOMATION_MODES = frozenset({"plan", "apply", "prune", "status"})
+AUTOMATION_MODES = frozenset({"plan", "apply", "prune", "status", "upgrade-status", "upgrade"})
 
 
 def _validate_family_in_catalogue(capability: ProviderAutomationCapability) -> None:

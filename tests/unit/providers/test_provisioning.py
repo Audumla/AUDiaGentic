@@ -391,6 +391,38 @@ def test_cli_lifecycle_status_returns_uninstalled_when_cli_absent(
     assert result.state == "uninstalled"
 
 
+def test_opencode_cli_upgrade_is_explicit_and_descriptor_declared(monkeypatch, tmp_path: Path) -> None:
+    import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
+    from audiagentic.components.providers.services.capabilities.automation_registry import (
+        build_automation_registry,
+    )
+
+    monkeypatch.setattr(lifecycle, "probe_provider_cli", lambda d: {"available": True})
+    registry = build_automation_registry(tmp_path)
+    status = registry.dispatch("opencode", "cli-lifecycle", "upgrade-status", {})
+
+    assert status.ok is True
+    assert status.supported is True
+    assert status.state == "installed"
+    assert status.changed is False
+    assert status.action_needed == "run explicit upgrade to reconcile through the package manager"
+
+
+def test_cli_upgrade_is_not_applicable_without_declared_step(monkeypatch, tmp_path: Path) -> None:
+    import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
+    from audiagentic.components.providers.services.capabilities.automation_registry import (
+        build_automation_registry,
+    )
+
+    monkeypatch.setattr(lifecycle, "probe_provider_cli", lambda d: {"available": True})
+    registry = build_automation_registry(tmp_path)
+    status = registry.dispatch("codex", "cli-lifecycle", "upgrade-status", {})
+
+    assert status.ok is True
+    assert status.supported is False
+    assert status.state == "installed"
+
+
 def test_cli_lifecycle_apply_noop_when_already_installed(
     monkeypatch, tmp_path: Path
 ) -> None:

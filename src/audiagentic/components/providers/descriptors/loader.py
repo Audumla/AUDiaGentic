@@ -271,6 +271,8 @@ def _build_cli_install(data: dict[str, Any]) -> CliInstallRecipe:
             executable=executable,
             install=build_step(toolchain, "install", package, *extra),
             uninstall=build_step(toolchain, un_action, uninstall_package),
+            upgrade=(build_step(toolchain, "upgrade", package, *extra)
+                     if data.get("upgrade", False) and has_action(toolchain, "upgrade") else None),
             probe=list(data["probe"]) if "probe" in data else None,
             probe_fn=resolve_ref(data["probe_fn"]) if "probe_fn" in data else None,
         )
@@ -285,6 +287,8 @@ def _build_cli_install(data: dict[str, Any]) -> CliInstallRecipe:
             executable=data["executable"],
             install=build_step_from_spec(install_spec) if install_spec else None,  # type: ignore[arg-type]
             uninstall=build_step_from_spec(uninstall_spec) if uninstall_spec else None,  # type: ignore[arg-type]
+            upgrade=(build_step_from_spec(data["upgrade"])
+                     if isinstance(data.get("upgrade"), dict) else None),
             probe=list(data["probe"]) if "probe" in data else None,
             probe_fn=resolve_ref(data["probe_fn"]) if "probe_fn" in data else None,
         )
