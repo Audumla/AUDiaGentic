@@ -200,6 +200,9 @@ class CliInstallRecipe:
     executable: str
     install: ShellStep | SequenceStep | CallableStep
     uninstall: ShellStep | SequenceStep | CallableStep
+    # Explicit package-manager reconciliation.  None means an upgrade is not
+    # safely declared for this provider; callers must report not applicable.
+    upgrade: ShellStep | SequenceStep | CallableStep | None = None
     uninstall_name: str | None = None
     probe: list[str] | None = None
     probe_fn: Callable[[Any], dict[str, Any] | None] | None = None
@@ -223,6 +226,8 @@ def cli_recipe(
         executable=executable,
         install=build_step(toolchain, "install", package, *extra),
         uninstall=build_step(toolchain, un_action, un_pkg),
+        upgrade=(build_step(toolchain, "upgrade", package, *extra)
+                 if has_action(toolchain, "upgrade") else None),
         **kwargs,
     )
 

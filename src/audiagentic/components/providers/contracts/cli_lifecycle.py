@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
-CliLifecycleMode = Literal["plan", "apply", "prune", "status"]
+CliLifecycleMode = Literal["plan", "apply", "prune", "status", "upgrade-status", "upgrade"]
 
 
 @dataclass(frozen=True)
