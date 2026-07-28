@@ -36,7 +36,7 @@ def _resolve_project_root(project_root: Path | None = None) -> Path:
 
 def _build_system_md(target: Path, *, project_root: Path | None = None) -> None:
     """Build SYSTEM.md with dynamic tool list from installed components."""
-    from audiagentic.runtime.harness.system_prompt import (
+    from audiagentic.foundation.components.prompt_injections import (
         apply_system_prompt_injections,
         build_system_prompt_injections,
     )

@@ -290,6 +290,7 @@ class MaterializedRecipe:
     configure_steps: tuple[Any, ...] = field(default_factory=tuple)
     verify: Probe | None = None
     uninstall_steps: tuple[Any, ...] = field(default_factory=tuple)
+    upgrade_steps: tuple[Any, ...] = field(default_factory=tuple)
     dry_run_steps: tuple[Any, ...] = field(default_factory=tuple)
     resolved_params: ResolvedParameters | None = None
 
@@ -329,6 +330,9 @@ def materialize_recipe(
     uninstall_steps = tuple(
         _build_steps(template.lifecycle.uninstall_steps, params, recipe_id)
     )
+    upgrade_steps = tuple(
+        _build_steps(template.lifecycle.upgrade_steps, params, recipe_id)
+    )
     dry_run_steps = tuple(
         _build_steps(template.lifecycle.dry_run_steps, params, recipe_id)
     )
@@ -341,6 +345,7 @@ def materialize_recipe(
         configure_steps=configure_steps,
         verify=verify,
         uninstall_steps=uninstall_steps,
+        upgrade_steps=upgrade_steps,
         dry_run_steps=dry_run_steps,
         resolved_params=params,
     )

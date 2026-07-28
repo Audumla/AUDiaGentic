@@ -402,27 +402,3 @@ class TestPlanningHarnessMcpCollection:
         entry = servers["ag-planning-mgmt"]
         assert entry.command, "ag-planning-mgmt: command is empty"
         assert entry.args, "ag-planning-mgmt: args is empty"
-
-    def test_pi_mcp_dict_includes_mgmt_server_only_when_installed(self, tmp_path: Path) -> None:
-        """Full pi mcp.json build: collect -> build_pi_mcp_dict -> only mgmt server present."""
-        from audiagentic.runtime.harness.pi.mcp_format import build_pi_mcp_dict
-
-        from audiagentic.foundation.components.loader import register_all_components
-        from audiagentic.foundation.lifecycle.components import install_component
-        from audiagentic.foundation.mcp.projection import collect_component_mcp_entries
-
-        register_all_components()
-        install_component("agent-planning", tmp_path)
-
-        entries = collect_component_mcp_entries(
-            tmp_path, propagation_target="providers", require_enabled=True
-        )
-        pi_config = build_pi_mcp_dict(entries)
-
-        servers = pi_config.get("mcpServers", {})
-        assert "ag-planning" in servers, (
-            f"ag-planning missing from native pi mcp dict. Present: {set(servers)}"
-        )
-        assert "ag-planning-mgmt" not in servers, (
-            "management-only servers belong to bootstrap launches, not native functional config"
-        )

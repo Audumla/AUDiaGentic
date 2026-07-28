@@ -15,9 +15,7 @@ _SCOPES = (
     "components/providers/services/mcp/managed_mcp_registry.py",
     "components/providers/surfaces",
     "components/providers/skill_surfaces.py",
-    "runtime/harness/opencode/install",
-    "runtime/harness/pi/install",
-    "runtime/harness/pi/mcp_format.py",
+    "runtime/harness",
     "components/source_control/source_control_bootstrap.py",
     "components/release/release_please",
 )

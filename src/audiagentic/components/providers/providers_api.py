@@ -287,6 +287,15 @@ def prepare_interactive_provider_launch(
     )
 
 
+def translate_interactive_runner_args(provider_id: str, runner_params: object) -> list[str]:
+    """Translate generic TUI runner parameters through the provider boundary."""
+    from audiagentic.components.providers.services.execution.public_execution import (
+        translate_interactive_runner_args as _translate,
+    )
+
+    return _translate(provider_id, runner_params)
+
+
 def materialize_provider_config(
     project_root: Path,
     provider_id: str,

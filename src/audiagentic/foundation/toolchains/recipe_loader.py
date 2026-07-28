@@ -89,11 +89,12 @@ class RecipeLifecycleTemplate:
     configure_steps: tuple[ValidatedStepTemplate, ...] = field(default_factory=tuple)
     verify: ValidatedProbeTemplate | None = None
     uninstall_steps: tuple[ValidatedStepTemplate, ...] = field(default_factory=tuple)
+    upgrade_steps: tuple[ValidatedStepTemplate, ...] = field(default_factory=tuple)
     dry_run_steps: tuple[ValidatedStepTemplate, ...] = field(default_factory=tuple)
 
     def _check_empty(self) -> None:
-        if not self.install_steps and not self.probe and not self.verify:
-            raise _recipe_err(5, "empty lifecycle definition — no probe, install, or verify")
+        if not self.install_steps and not self.upgrade_steps and not self.probe and not self.verify:
+            raise _recipe_err(5, "empty lifecycle definition — no probe, install, upgrade, or verify")
 
 
 @dataclass(frozen=True)
@@ -122,7 +123,7 @@ class DeclarativeRecipeTemplate:
             seen_params.add(p.name)
 
         seen_step_ids: set[str] = set()
-        for phase in ("install_steps", "configure_steps", "uninstall_steps", "dry_run_steps"):
+        for phase in ("install_steps", "configure_steps", "uninstall_steps", "upgrade_steps", "dry_run_steps"):
             steps = getattr(self.lifecycle, phase)
             for s in steps:
                 if s.id in seen_step_ids:
@@ -162,6 +163,11 @@ class DeclarativeRecipeTemplate:
                         ]
                     }
                     if self.lifecycle.uninstall_steps
+                    else {}
+                ),
+                **(
+                    {"upgrade-steps": [s.data for s in self.lifecycle.upgrade_steps]}
+                    if self.lifecycle.upgrade_steps
                     else {}
                 ),
                 **(
@@ -247,7 +253,7 @@ def load_recipe_from_yaml(path: str | Path) -> DeclarativeRecipeTemplate:
     # hard-coded step-type list). Foundation registers builtins; other layers
     # register their own step types + fragments via register_step_type.
     lifecycle_raw = raw.get("lifecycle", {})
-    for phase in ("install-steps", "configure-steps", "uninstall-steps", "dry-run-steps"):
+    for phase in ("install-steps", "configure-steps", "uninstall-steps", "upgrade-steps", "dry-run-steps"):
         _validate_step_defs(lifecycle_raw.get(phase, []), phase, errors)
     if errors:
         raise _recipe_err(1, "schema validation failed", messages=errors, path=str(p))
@@ -282,6 +288,7 @@ def load_recipe_from_yaml(path: str | Path) -> DeclarativeRecipeTemplate:
         configure_steps=_build_steps(lifecycle_raw.get("configure-steps", [])),
         verify=verify_t,
         uninstall_steps=_build_steps(lifecycle_raw.get("uninstall-steps", [])),
+        upgrade_steps=_build_steps(lifecycle_raw.get("upgrade-steps", [])),
         dry_run_steps=_build_steps(lifecycle_raw.get("dry-run-steps", [])),
     )
 
