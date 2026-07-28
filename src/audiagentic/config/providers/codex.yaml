@@ -9,10 +9,6 @@ url: "https://github.com/openai/codex"
 prompt_aliases:
   - cx
 
-cli_probe:
-  - codex
-  - "--version"
-
 capabilities:
   surface-instruction:
     mechanism: "AGENTS.md"
@@ -22,6 +18,7 @@ capabilities:
       toolchain: npm
       package: "@openai/codex"
       executable: codex
+      probe: [codex, "--version"]
 
   host-extensions:
     mechanism:
@@ -84,54 +81,56 @@ capabilities:
         .codex/config.toml precedence over ~/.codex/config.toml.
       source: "docs/reference/model-source-evidence/codex.md#codex-evidence"
 
-  # --- ACP capability family (plan agent-sessions AS13/AS14) -------------
-  # Segregates ACP/live-session features so they can be requested per state
-  # while the capability is being built out. Evidence-only per boundary
+  # --- ACP protocol-feature evidence (plan agent-sessions AS13/AS14) -----
+  # One neutral kind, one list entry per feature so verification status
+  # (verified/planned/blocked) stays per-feature. Evidence-only per boundary
   # rules — the executable authority is the adapter's acp submodule hook
   # (load_acp_launch_builder) consumed by gateway session dispatch.
-  acp-stdio-transport:
-    evidence:
-      note: >-
-        @agentclientprotocol/codex-acp bridge (npx or local binary) exposing
-        an ACP stdio server over Codex App Server; launched via
-        adapters/codex/acp.py build_acp_launch. Bridge package is not yet a
-        managed install (AS13 step 2 — aux_installs extension); npx fallback
-        is ad-hoc. Cannot attach to an already-open interactive Codex TUI —
-        the ACP client owns the session. model_id passthrough unverified;
-        model selection rides on codex config.toml/CODEX_HOME. NEXT: AS13
-        managed install, model passthrough verification, live validation
-        against real codex-acp.
-      source: "tests/unit/providers/test_codex_acp_launch.py"
-
-  acp-live-session:
-    evidence:
-      note: >-
-        gateway SessionRuntime keep-alive session over the codex-acp stdio
-        bridge (session_keep_alive / session_id request fields); default-deny
-        permission policy may block codex approval requests until a policy_fn
-        story exists; unvalidated live — launch builder and routing tested
-        with fakes only. NEXT: AS13 live two-turn context retention + clean
-        close on real codex-acp.
-      source: "tests/unit/providers/test_codex_acp_launch.py"
-
-  acp-session-resume:
-    evidence:
-      note: >-
-        planned: ACP session/load if codex-acp advertises it; natively
-        thread/resume via Codex App Server. Not implemented; ACP-created
-        codex sessions are known not to appear in CLI /resume listing
-        (upstream gap) — resume must be by persisted provider-session-ref,
-        never by discovery. NEXT: AS10 (ACP session/load) / AS14 (App Server
-        thread/resume).
-      source: "docs/planning/active/agent-sessions/AS14.md"
-
-  acp-shared-live-session:
-    evidence:
-      note: >-
-        planned: Codex App Server ws JSON-RPC (codex app-server --listen)
-        with human TUI and gateway as peer clients; turn/start, turn/steer,
-        turn/interrupt. Upstream ws transport experimental — localhost/SSH
-        tunnel only, no TLS/auth assumptions; no gateway integration yet,
-        requires external-process-ownership mode in SessionRuntime. NEXT:
-        AS14 design + implementation after AS11 trial evidence.
-      source: "docs/planning/active/agent-sessions/AS14.md"
+  acp:
+    - mechanism:
+        feature: stdio-transport
+      evidence:
+        note: >-
+          @agentclientprotocol/codex-acp bridge (npx or local binary) exposing
+          an ACP stdio server over Codex App Server; launched via
+          adapters/codex/acp.py build_acp_launch. Bridge package is not yet a
+          managed install (AS13 step 2 — aux_installs extension); npx fallback
+          is ad-hoc. Cannot attach to an already-open interactive Codex TUI —
+          the ACP client owns the session. model_id passthrough unverified;
+          model selection rides on codex config.toml/CODEX_HOME. NEXT: AS13
+          managed install, model passthrough verification, live validation
+          against real codex-acp.
+        source: "tests/unit/providers/test_codex_acp_launch.py"
+    - mechanism:
+        feature: live-session
+      evidence:
+        note: >-
+          gateway SessionRuntime keep-alive session over the codex-acp stdio
+          bridge (session_keep_alive / session_id request fields); default-deny
+          permission policy may block codex approval requests until a policy_fn
+          story exists; unvalidated live — launch builder and routing tested
+          with fakes only. NEXT: AS13 live two-turn context retention + clean
+          close on real codex-acp.
+        source: "tests/unit/providers/test_codex_acp_launch.py"
+    - mechanism:
+        feature: session-resume
+      evidence:
+        note: >-
+          planned: ACP session/load if codex-acp advertises it; natively
+          thread/resume via Codex App Server. Not implemented; ACP-created
+          codex sessions are known not to appear in CLI /resume listing
+          (upstream gap) — resume must be by persisted provider-session-ref,
+          never by discovery. NEXT: AS10 (ACP session/load) / AS14 (App Server
+          thread/resume).
+        source: "docs/planning/active/agent-sessions/AS14.md"
+    - mechanism:
+        feature: shared-live-session
+      evidence:
+        note: >-
+          planned: Codex App Server ws JSON-RPC (codex app-server --listen)
+          with human TUI and gateway as peer clients; turn/start, turn/steer,
+          turn/interrupt. Upstream ws transport experimental — localhost/SSH
+          tunnel only, no TLS/auth assumptions; no gateway integration yet,
+          requires external-process-ownership mode in SessionRuntime. NEXT:
+          AS14 design + implementation after AS11 trial evidence.
+        source: "docs/planning/active/agent-sessions/AS14.md"

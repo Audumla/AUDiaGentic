@@ -9,16 +9,13 @@ url: "https://claude.ai/code"
 prompt_aliases:
   - cld
 
-cli_probe:
-  - claude
-  - "--version"
-
 capabilities:
   cli-install:
     mechanism:
       toolchain: npm
       package: "@anthropic-ai/claude-code"
       executable: claude
+      probe: [claude, "--version"]
 
   host-extensions:
     mechanism:

@@ -3,28 +3,87 @@
   "$id": "provider-managed-mcp-payload/v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["ownership_scope", "entries"],
+  "required": [
+    "ownership_scope",
+    "entries"
+  ],
   "properties": {
-    "ownership_scope": {"type": "string", "minLength": 1},
+    "ownership_scope": {
+      "type": "string",
+      "minLength": 1
+    },
     "entries": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["managed_id", "name"],
+        "required": [
+          "managed_id",
+          "name"
+        ],
         "properties": {
-          "managed_id": {"type": "string", "minLength": 1},
-          "name": {"type": "string", "minLength": 1},
-          "command": {"type": "string", "minLength": 1},
-          "args": {"type": "array", "items": {"type": "string"}},
-          "env": {"type": "object", "additionalProperties": {"type": "string"}},
-          "url": {"type": "string", "minLength": 1},
-          "headers": {"type": "object", "additionalProperties": {"type": "string"}},
-          "transport": {"enum": ["http", "sse"]}
+          "managed_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "command": {
+            "type": "string",
+            "minLength": 1
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "env": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1
+          },
+          "headers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "transport": {
+            "enum": [
+              "http",
+              "sse"
+            ]
+          }
         },
         "oneOf": [
-          {"required": ["command"], "not": {"required": ["url"]}},
-          {"required": ["url"], "not": {"required": ["command"]}}
+          {
+            "required": [
+              "command"
+            ],
+            "not": {
+              "required": [
+                "url"
+              ]
+            }
+          },
+          {
+            "required": [
+              "url"
+            ],
+            "not": {
+              "required": [
+                "command"
+              ]
+            }
+          }
         ]
       }
     }

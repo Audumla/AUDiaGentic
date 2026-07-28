@@ -50,11 +50,33 @@ def _fake_descriptor(
     session_surfaces: Any = (),
 ) -> ProviderDescriptor:
     """Build a minimal fake ProviderDescriptor for testing."""
+    from audiagentic.components.providers.descriptors.base import (
+        Capability,
+        CliInstallRecipe,
+    )
+
+    capabilities = (
+        (
+            Capability(
+                kind="cli-install",
+                mechanism=CliInstallRecipe(
+                    package_manager="test",
+                    package_name="test",
+                    executable="test",
+                    install=None,  # type: ignore[arg-type]
+                    uninstall=None,  # type: ignore[arg-type]
+                    probe=cli_probe,
+                ),
+            ),
+        )
+        if cli_probe is not None
+        else ()
+    )
     return ProviderDescriptor(
         provider_id=provider_id,
         display_name=provider_id,
         execution_isolation_tier="no-isolation",
-        cli_probe=cli_probe,
+        capabilities=capabilities,
         session_surfaces=session_surfaces,
     )
 

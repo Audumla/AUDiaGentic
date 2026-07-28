@@ -9,16 +9,13 @@ url: "https://cline.bot"
 prompt_aliases:
   - cln
 
-cli_probe:
-  - cline
-  - "--version"
-
 capabilities:
   cli-install:
     mechanism:
       toolchain: npm
       package: cline
       executable: cline
+      probe: [cline, "--version"]
 
   host-extensions:
     mechanism:
