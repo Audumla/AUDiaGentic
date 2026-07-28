@@ -12,8 +12,13 @@ import shutil
 from pathlib import Path
 
 from audiagentic.foundation.cli_io import print_message
-from audiagentic.runtime.harness.paths import _RIG_CONFIG
-from audiagentic.runtime.rig.embedded.config import load_rig_model, resolve_profile_definition
+
+
+def materialize_model_config_path(project_root: Path, agent_runtime: Path | None) -> Path:
+    """Pi launches read models from the isolated agent runtime."""
+    from audiagentic.foundation.paths.home import global_harness_runtime
+
+    return (agent_runtime or global_harness_runtime()) / "agent" / "models.json"
 
 
 def _resolve_project_root(project_root: Path | None = None) -> Path:
@@ -51,7 +56,30 @@ def _build_system_md(target: Path, *, project_root: Path | None = None) -> None:
     (target / "SYSTEM.md").write_text(content, encoding="utf-8")
 
 
-def materialize_provider_specific(
+def _build_settings_config(ui_cfg: dict, *, target: Path) -> dict:
+    """Render Pi UI settings; model projection owns models.json separately."""
+    theme_name = ui_cfg.get("theme", "dark")
+    theme_colors = ui_cfg.get("theme_colors") or {}
+    if theme_colors:
+        from audiagentic.components.providers import providers_api
+
+        pkg = providers_api.get_pi_coding_agent_package_dir()
+        theme_dir = pkg / "dist" / "modes" / "interactive" / "theme" if pkg else target
+        base_path = theme_dir / f"{theme_name}.json"
+        base = json.loads(base_path.read_text(encoding="utf-8")) if base_path.exists() else {"vars": {}, "colors": {}, "export": {}}
+        base.setdefault("colors", {}).update(theme_colors)
+        custom = target / "agent" / "themes" / "audiagentic.json"
+        custom.parent.mkdir(parents=True, exist_ok=True)
+        custom.write_text(json.dumps(base, indent=2) + "\n", encoding="utf-8")
+        theme_name = str(custom)
+    settings: dict = {"theme": theme_name}
+    for key, dest, cast in (("quiet_startup", "quietStartup", bool), ("collapse_changelog", "collapseChangelog", bool), ("thinking", "defaultThinkingLevel", str), ("editor_padding_x", "editorPaddingX", int)):
+        if key in ui_cfg:
+            settings[dest] = cast(ui_cfg[key])
+    return settings
+
+
+def materialize_provider_config(
     project_root: Path,
     harness_cfg: dict,
     *,
@@ -72,13 +100,8 @@ def materialize_provider_specific(
         agent_runtime: Target directory for agent files (harness runtime root).
             Defaults to the global harness runtime from foundation.paths.home.
     """
-    from audiagentic.components.providers.adapters.pi import local_rig_config as _rig
     from audiagentic.foundation.config import load_layered_config
     from audiagentic.foundation.paths.home import global_harness_runtime
-    from audiagentic.runtime.harness.config import (
-        require_harness_provider,
-        require_harness_rig_port,
-    )
 
     if agent_runtime is None:
         runtime = global_harness_runtime()
@@ -121,46 +144,10 @@ def materialize_provider_specific(
     if append_src.exists():
         shutil.copy2(append_src, agent_dir / "APPEND_SYSTEM.md")
 
-    # models.json — rig provider entry (shape builder lives here).
-    model_name: str = harness_cfg.get("rig", {}).get("model")
-    if not model_name:
-        from audiagentic.foundation.contracts.errors import make_error
-
-        raise make_error(
-            prefix="CFG",
-            component="HCFG",
-            number=8,
-            kind="harness-config",
-            message="No model configured. Set 'model' in ag.yaml or via AUDIAGENTIC_PI_MODEL env var.",
-            details={"field": "rig.model"},
-        )
-
-    model_profile: dict = {}
-    model_id = model_name
-    if _RIG_CONFIG.exists():
-        profile_name, rig_model_id = load_rig_model(_RIG_CONFIG)
-        if model_name == rig_model_id:
-            model_id = rig_model_id
-            model_profile = resolve_profile_definition(profile_name, _RIG_CONFIG)
-        else:
-            model_profile = resolve_profile_definition(model_name, _RIG_CONFIG)
-
-    models_config = _rig.build_models_config(
-        provider_id=require_harness_provider(harness_cfg),
-        rig_port=require_harness_rig_port(harness_cfg),
-        api_key=DEFAULT_API_KEY,
-        model_id=model_id,
-        model_profile=model_profile,
-    )
-    (agent_dir / "models.json").write_text(
-        json.dumps(models_config, indent=2) + "\n",
-        encoding="utf-8",
-    )
-
     # settings.json — UI settings (shape builder lives here).
     (agent_dir / "settings.json").write_text(
         json.dumps(
-            _rig.build_settings_config(pi_cfg.get("ui", {}), target=agent_runtime),
+            _build_settings_config(pi_cfg.get("ui", {}), target=agent_runtime),
             indent=2,
         )
         + "\n",
@@ -189,4 +176,3 @@ def materialize_provider_specific(
 # --------------------------------------------------------------------------- #
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates" / "agent"
-DEFAULT_API_KEY = "dummy"

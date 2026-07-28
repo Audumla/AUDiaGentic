@@ -9,7 +9,6 @@ config shapes and delivery mechanism (HA11).
 
 from __future__ import annotations
 
-import importlib
 import json
 import logging
 import os
@@ -57,15 +56,6 @@ def _harness_error(code_number: int, message: str, **details: object) -> AudiaGe
     )
 
 
-def _forward(module_key: str, fn_name: str, *args, **kwargs):
-    """Forward a call to the active harness module."""
-    project_root = kwargs.get("project_root") or (
-        args[0] if args and hasattr(args[0], "resolve") else None
-    )
-    mod = _mod(module_key, project_root)
-    return getattr(mod, fn_name)(*args, **kwargs)
-
-
 def default_config_path() -> Path:
     """Package-default harness config path (config/provisioning/harness/ag.yaml)."""
     from .paths import _HARNESS_CONFIG
@@ -111,39 +101,34 @@ def get_harness_type(project_root: Path | None = None) -> str:
     return resolved.harness_type if resolved is not None else order[0]
 
 
-def _mod(subpath: str, project_root: Path | None = None):
-    t = get_harness_type(project_root)
-    if not isinstance(t, str) or not _HARNESS_TYPE_PATTERN.fullmatch(t):
-        raise _harness_error(
-            1,
-            f"Invalid harness type {t!r}. "
-            "Use a package-style identifier such as 'pi' or 'opencode'.",
-            harness_type=t,
-        )
-    try:
-        return importlib.import_module(f"audiagentic.runtime.harness.{t}.{subpath}")
-    except ModuleNotFoundError as exc:
-        expected = f"audiagentic.runtime.harness.{t}"
-        if exc.name and (exc.name == expected or exc.name.startswith(f"{expected}.")):
-            raise _harness_error(
-                2,
-                f"Unknown harness type {t!r}. "
-                "Create runtime/harness/<type>/ or set harness.type in ag.yaml.",
-                harness_type=t,
-            ) from exc
-        raise
-
-
 # --- install / lifecycle ---
 
 
 def install_to(target: Path, project_root: Path | None = None) -> int:
-    return _forward("install", "install_to", target, project_root=project_root)
+    from audiagentic.components.providers import providers_api
+
+    from .config import load_harness_config
+
+    root = project_root or Path.cwd()
+    for path in (target / "agent", target / "logs", target / "rig" / "bin" / "models"):
+        path.mkdir(parents=True, exist_ok=True)
+    from .provisioning import provision_embedded_rig, should_provision_embedded_rig
+
+    if should_provision_embedded_rig():
+        provision_embedded_rig(target, root)
+    providers_api.materialize_provider_config(
+        root,
+        get_harness_type(root),
+        load_harness_config(project_root=root),
+        agent_runtime=target,
+    )
+    return 0
 
 
 def version_info(project_root: Path | None = None) -> dict[str, str]:
-    """Configured agent + MCP adapter versions for the active harness."""
-    return _forward("install", "version_info", project_root=project_root)
+    """No harness-specific runtime is bundled; versions are CLI-owned."""
+    del project_root
+    return {}
 
 
 def cleanup_runtime(target: Path) -> int:
@@ -152,9 +137,12 @@ def cleanup_runtime(target: Path) -> int:
     A system-installed harness belongs to the user and is never removed by
     AUDiaGentic cleanup.
     """
-    from .pi.install import cleanup_runtime as _cleanup_runtime
+    import shutil
 
-    return _cleanup_runtime(target)
+    agent_dir = target / "agent"
+    if agent_dir.exists():
+        shutil.rmtree(agent_dir)
+    return 0
 
 
 def build_runtime_sync(
@@ -164,11 +152,14 @@ def build_runtime_sync(
     target: str | None = None,
     has_mcp_servers: bool = True,
 ) -> dict[str, object]:
-    mod = _mod("install")
-    kw: dict = {"reason": reason, "component_id": component_id, "has_mcp_servers": has_mcp_servers}
-    if target is not None:
-        kw["target"] = target
-    return mod.build_runtime_sync(**kw)
+    from .reload import build_runtime_sync as _build
+
+    return _build(
+        reason=reason,
+        component_id=component_id,
+        target=target or f"{get_harness_type()}-runtime",
+        has_mcp_servers=has_mcp_servers,
+    )
 
 
 def refresh_harness_config_if_installed(
@@ -239,11 +230,9 @@ def request_runtime_reload(
     reason: str,
     component_id: str | None = None,
     has_mcp_servers: bool = True,
-) -> Path:
-    return _forward(
-        "install",
-        "request_runtime_reload",
-        project_root,
+) -> dict[str, object]:
+    del project_root
+    return build_runtime_sync(
         reason=reason,
         component_id=component_id,
         has_mcp_servers=has_mcp_servers,
@@ -254,9 +243,10 @@ def request_runtime_reload(
 
 
 def build_global_context(*, project_root: Path, agent_runtime: Path, enable_mcp: bool):
-    return _forward(
-        "runner",
-        "build_global_context",
+    from .run_common import build_global_context as _build
+
+    return _build(
+        get_harness_type(project_root),
         project_root=project_root,
         agent_runtime=agent_runtime,
         enable_mcp=enable_mcp,
@@ -264,17 +254,21 @@ def build_global_context(*, project_root: Path, agent_runtime: Path, enable_mcp:
 
 
 def run_agent(ctx, params: list[str] | RunnerParams, **kw):
-    if isinstance(params, RunnerParams):
-        params = translate_agent_args(params)
-    return _forward("runner", "run_agent", ctx, params, **kw)
+    from .run_common import run_provider_agent
+
+    return run_provider_agent(ctx, get_harness_type(ctx.project_root), params, **kw)
 
 
 def translate_agent_args(params: RunnerParams) -> list[str]:
-    return _mod("runner").translate_agent_args(params)
+    from audiagentic.components.providers import providers_api
+
+    return providers_api.translate_interactive_runner_args(get_harness_type(), params)
 
 
 def env_flag(name: str, default: bool = False) -> bool:
-    return _mod("runner").env_flag(name, default)
+    from .config import env_flag as _env_flag
+
+    return _env_flag(name, default)
 
 
 # --- harness-specific helpers (pi-only until generalised) ---
@@ -354,7 +348,7 @@ def load_active_profile(
 
 def load_pi_config(project_root: Path | None = None) -> dict:
     """Load Pi-specific harness config (pi.yaml). Only used by Pi-aware callers."""
-    from .pi.install.constants import load_pi_config as _load
+    from audiagentic.components.providers.adapters.pi.interactive import load_pi_config as _load
 
     return _load(project_root=project_root)
 

@@ -8,18 +8,17 @@ without network credentials and is also the Docker user-path gate.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from types import SimpleNamespace
 
 from audiagentic.launcher import _main
 
 
-def _stub_pi_download(monkeypatch) -> None:
-    """Keep the test about our lifecycle, not npm availability."""
+def _stub_embedded_rig_provision(monkeypatch) -> None:
+    """Keep this lifecycle test independent of binary/model downloads."""
     monkeypatch.setattr(
-        "audiagentic.runtime.harness.pi.install._provision_embedded_rig",
-        lambda *_a, **_kw: None,
+        "audiagentic.runtime.harness.provisioning.provision_embedded_rig",
+        lambda *_args, **_kwargs: None,
     )
 
 
@@ -62,8 +61,7 @@ def test_bootstrap_refresh_launch_and_cleanup_materialize_owned_paths(
 
     runtime = global_harness_runtime()
     project.mkdir()
-    _stub_pi_download(monkeypatch)
-
+    _stub_embedded_rig_provision(monkeypatch)
     # Install a real component so MCP collection exercises the normal
     # descriptor/lifecycle path rather than a hand-built config fixture.
     from audiagentic.foundation.components.loader import register_all_components
@@ -80,16 +78,8 @@ def test_bootstrap_refresh_launch_and_cleanup_materialize_owned_paths(
     assert (runtime / "agent" / "settings.json").is_file()
     assert (runtime / "SYSTEM.md").is_file()
 
-    mcp_path = project / ".audiagentic" / "mcp.json"
-    installed_mcp = json.loads(mcp_path.read_text(encoding="utf-8"))
-    # ag-planning (propagate: providers) → projected to harness mcp.json
-    assert "ag-planning" in installed_mcp["mcpServers"], (
-        f"Expected ag-planning in project mcp.json. Got: {list(installed_mcp['mcpServers'].keys())}"
-    )
-    # ag-planning-mgmt (propagate: audiagentic) → NOT projected to harness
-    assert "ag-planning-mgmt" not in installed_mcp["mcpServers"], (
-        f"ag-planning-mgmt should NOT be in project mcp.json (propagate: audiagentic). Got: {list(installed_mcp['mcpServers'].keys())}"
-    )
+    # Provider-facing MCP entries are now assembled into the provider-owned,
+    # launch-time surface rather than a shared durable harness mcp.json file.
 
     # Bootstrap is repeatable and preserves the harness's large/user-owned area.
     sentinel = runtime / "rig" / "bin" / "models" / "user-model.gguf"
@@ -115,13 +105,7 @@ def test_bootstrap_refresh_launch_and_cleanup_materialize_owned_paths(
     monkeypatch.setattr("audiagentic.runtime.harness.run_agent", lambda *_a, **_kw: 0)
     monkeypatch.setattr("audiagentic.runtime.harness.translate_agent_args", lambda _params: [])
     assert _main(["--project", str(project), "--prompt", "hello"]) == 0
-    refreshed_mcp = json.loads(mcp_path.read_text(encoding="utf-8"))
-    # ag-planning survives launch-time refresh
-    assert "ag-planning" in refreshed_mcp["mcpServers"]
-    assert "ag-planning-mgmt" not in refreshed_mcp["mcpServers"]
-
     assert _main(["--project", str(project), "cleanup", "--target", str(runtime)]) == 0
     assert not (runtime / "cli").exists()
     assert not (runtime / "agent").exists()
     assert sentinel.read_bytes() == b"user-owned"
-    assert mcp_path.exists(), "project-owned MCP configuration must survive cleanup"

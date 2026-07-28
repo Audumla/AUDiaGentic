@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -174,3 +176,85 @@ def run_supervised(command: list[str], cwd: Path, env: dict[str, str], log_path:
     returncode = int(supervised_run(command, cwd=cwd, env=env))
     append_run_finished(log_path, returncode)
     return returncode
+
+
+def run_provider_agent(
+    ctx: AgentContext,
+    provider_id: str,
+    runner_params: object,
+    *,
+    smoke: bool,
+) -> int:
+    """Run an interactive provider through the public providers API.
+
+    Runtime owns the shared session lifecycle, MCP projection, logging and
+    supervision.  The provider adapter owns command shape and environment.
+    No runtime package is required for an individual provider.
+    """
+    from audiagentic.components.providers import providers_api
+    from audiagentic.runtime.harness.config import require_smoke_timeout
+    from audiagentic.runtime.rig.http import require_models_endpoint
+
+    if not smoke:
+        print_message("\033[2J\033[H", flush=False)
+
+    ctx.agent_work.mkdir(parents=True, exist_ok=True)
+    (ctx.project_root / ".audiagentic" / "sessions").mkdir(parents=True, exist_ok=True)
+    if ctx.enable_mcp:
+        if ctx.prepared_mcp_surface is None:
+            ctx.prepared_mcp_surface = providers_api.prepare_projected_provider_mcp_surface(
+                ctx.project_root,
+                provider_id=provider_id,
+                runtime_root=ctx.launch_runtime_root,
+                require_exact_isolation=True,
+            )
+        mcp_surface = ctx.prepared_mcp_surface
+    else:
+        mcp_surface = None
+
+    launch = providers_api.prepare_interactive_provider_launch(
+        ctx.project_root,
+        provider_id=provider_id,
+        provider=ctx.provider,
+        model=ctx.model,
+        agent_runtime=ctx.agent_runtime,
+        mcp_surface=mcp_surface,
+        runner_params=runner_params,
+        smoke=smoke,
+    )
+    env = {**build_base_run_env(ctx), **launch.environment}
+    log_path = make_log_path(ctx, "smoke" if smoke else "run")
+    command = [launch.executable, *launch.args]
+
+    if smoke:
+        print_message(f"Checking local LLM endpoint: {ctx.endpoint}/models")
+        require_models_endpoint(ctx.endpoint, timeout=15)
+        timeout = float(os.environ.get("AUDIAGENTIC_AG_SMOKE_TIMEOUT") or require_smoke_timeout(ctx.harness_cfg))
+        with log_path.open("w", encoding="utf-8") as handle:
+            process = subprocess.Popen(command, cwd=ctx.agent_work, env=env, stdout=handle, stderr=subprocess.STDOUT, text=True)
+            try:
+                returncode = process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                from audiagentic.foundation.system.process import kill_process_tree
+
+                kill_process_tree(process.pid)
+                handle.write(f"\nSmoke timed out after {timeout:.1f}s\n")
+                return 124
+        sys.stdout.write(log_path.read_text(encoding="utf-8"))
+        return int(returncode)
+
+    print_startup_info(ctx, log_path, title=f"AUDiaGentic ({provider_id})")
+    runner_args = (
+        list(runner_params)
+        if isinstance(runner_params, list)
+        else providers_api.translate_interactive_runner_args(provider_id, runner_params)
+    )
+    write_run_started(log_path, ctx, runner_args)
+    # Provider launch builders already incorporate RunnerParams.  Raw list
+    # arguments are the legacy passthrough form and are appended here.
+    return run_supervised(
+        [*command, *runner_args] if isinstance(runner_params, list) else command,
+        ctx.agent_work,
+        env,
+        log_path,
+    )

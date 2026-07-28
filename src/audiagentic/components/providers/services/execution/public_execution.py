@@ -280,6 +280,20 @@ def prepare_interactive_provider_launch(
     )
 
 
+def translate_interactive_runner_args(provider_id: str, runner_params: object) -> list[str]:
+    """Translate generic runner parameters through one provider's launch API."""
+    from .execution import _adapter_hook
+
+    translator = _adapter_hook(provider_id, "interactive", "translate_runner_args")
+    if translator is not None:
+        return list(translator(runner_params))
+    from audiagentic.components.providers.adapters.recipe_launch import (
+        translate_recipe_runner_args,
+    )
+
+    return translate_recipe_runner_args(provider_id, runner_params)
+
+
 def prepare_provider_mcp_surface(
     project_root: Path,
     *,

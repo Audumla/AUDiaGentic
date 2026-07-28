@@ -43,4 +43,4 @@ def test_unknown_provider_raises(tmp_path: Path):
     with pytest.raises(Exception) as exc_info:
         materialize_provider_config(project_root, "unknown", HARNESS_CFG)
 
-    assert "No materialize handler" in str(exc_info.value)
+    assert "does not declare config materialization" in str(exc_info.value)
