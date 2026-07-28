@@ -202,6 +202,17 @@ class ProvisioningRecipe(ABC):
             status="upgrade is not applicable to this recipe",
         )
 
+    def upgrade_status(self, context: dict[str, Any]) -> RecipeResult:
+        """Report upgrade eligibility without mutation or upstream refresh.
+
+        Owned artifact recipes override this to distinguish current from
+        ``UPGRADE_AVAILABLE`` using their declared provenance and local probe.
+        """
+        return RecipeResult.ok(
+            RecipeState.NOT_APPLICABLE,
+            status="upgrade status is not applicable to this recipe",
+        )
+
     def dry_run(self, context: dict[str, Any]) -> RecipeResult:
         """Describe what :meth:`provision` would do, without doing any of it.
 

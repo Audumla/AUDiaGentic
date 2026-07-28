@@ -4,6 +4,11 @@ from pathlib import Path
 
 from audiagentic.foundation.toolchains.recipe_contract import RecipeState
 from audiagentic.foundation.toolchains.recipe_execution import execute_recipe_mode
+from audiagentic.foundation.toolchains.recipe_patterns import (
+    DeclaredStepRecipe,
+    InstallManifest,
+    run_recipe_mode,
+)
 
 
 def _recipe(path: Path) -> Path:
@@ -35,6 +40,21 @@ def test_declarative_upgrade_runs_only_declared_upgrade_steps(tmp_path: Path) ->
     assert result.success is True, result.error
     assert result.state is RecipeState.UPGRADED
     assert target.read_text(encoding="utf-8") == "upgraded"
+
+
+def test_upgrade_status_is_explicit_and_non_mutating(tmp_path: Path) -> None:
+    target = tmp_path / "upgrade-status.txt"
+    recipe = DeclaredStepRecipe(
+        InstallManifest(
+            upgrade_steps=({"type": "write-file", "id": "upgrade", "path": str(target), "content": "updated"},),
+        ),
+        {},
+    )
+
+    result = run_recipe_mode(recipe, "upgrade-status")
+
+    assert result.state is RecipeState.UPGRADE_AVAILABLE
+    assert not target.exists()
 
 
 def test_declarative_upgrade_is_not_applicable_without_steps(tmp_path: Path) -> None:
