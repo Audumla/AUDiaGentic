@@ -45,10 +45,6 @@ _FETCH_TIMEOUT_SECONDS = 10.0
 # api_key may be None; fetchers receive ONLY these two connectivity values.
 SourceCatalogFetcher = Callable[[str, str | None], list[dict[str, Any]]]
 
-# resolver(source_config) -> list of neutral model dicts (model-id, ...).
-# Used for `computed` discovery: derived from local config at resolve time,
-# not fetched or static-filed.
-SourceCatalogResolver = Callable[[dict[str, Any]], list[dict[str, Any]]]
 
 
 @dataclass
@@ -172,67 +168,6 @@ def register_catalog_fetcher(
     connector: str, fetcher: SourceCatalogFetcher, *, replace: bool = False
 ) -> None:
     _fetchers.register(connector, fetcher, replace=replace)
-
-
-def _load_builtin_resolvers() -> None:
-    # V1 scope: only the ag-rig resolver (HA07). New resolvers registered when
-    # a new `computed` source is needed — same pattern as connector fetchers.
-    from audiagentic.runtime.harness.config import load_harness_config
-    from audiagentic.runtime.rig.embedded.config import resolve_profile_definition
-
-    def _resolve_ag_rig(source_config: dict[str, Any]) -> list[dict[str, Any]]:
-        """Resolve the embedded rig model from harness config + rig profile."""
-        harness_cfg = load_harness_config()
-        if not isinstance(harness_cfg, dict):
-            return []
-        rig_cfg = harness_cfg.get("rig", None)
-        if not isinstance(rig_cfg, dict):
-            rig_cfg = {}
-        model_id_raw = rig_cfg.get("model")
-        if not model_id_raw:
-            model_id_raw = "audiagentic-rig"
-        # Resolve profile definition (same path as local_rig_config.py callers)
-        try:
-            profile = resolve_profile_definition(str(model_id_raw))
-        except Exception:  # noqa: BLE001 — degrade gracefully
-            return []
-        agent_cfg = profile.get("agent", None)
-        if not isinstance(agent_cfg, dict):
-            agent_cfg = {}
-        server_cfg = profile.get("server", None)
-        if not isinstance(server_cfg, dict):
-            server_cfg = {}
-        try:
-            port = int(rig_cfg.get("port", 8999))
-        except (TypeError, ValueError):
-            port = 8999
-        raw_ctx = agent_cfg.get("context_size", server_cfg.get("context_size", 262144))
-        try:
-            context_size = int(raw_ctx)
-        except (TypeError, ValueError):
-            context_size = 262144
-        return [
-            {
-                "model-id": model_id_raw,
-                "display-name": str(
-                    agent_cfg.get("name", f"AUDiaGentic local planner ({model_id_raw})")
-                ),
-                "base-url": f"http://127.0.0.1:{port}/v1",
-                "context-window": context_size,
-            }
-        ]
-
-    _resolvers.register("ag-rig", _resolve_ag_rig)
-
-
-_resolvers: Registry[SourceCatalogResolver] = Registry(loader=_load_builtin_resolvers)
-
-
-def register_catalog_resolver(
-    source_id: str, resolver: SourceCatalogResolver, *, replace: bool = False
-) -> None:
-    """Register a computed discovery resolver for one source id."""
-    _resolvers.register(source_id, resolver, replace=replace)
 
 
 # --- failure classification (arch-standards §8.1, table-driven) ------------------
@@ -481,61 +416,9 @@ def get_source_catalog(
 
     ``refresh=False`` (the ordinary reconcile path) NEVER performs a network
     call: static catalogs load from data files, list-api sources read the
-    cache, ``none`` discovery yields an empty result, and ``computed``
-    discovery resolves via a registered resolver function (HA07).
+    cache, and ``none`` discovery yields an empty result.
     """
     discovery = source.get("model-discovery", "none")
-
-    if discovery == "computed":
-        resolver = _resolvers.get(source_id)
-        if resolver is None:
-            return SourceCatalogResult(
-                source_id=source_id,
-                discovery_mode="computed",
-                freshness="missing",
-                failure_class="configuration",
-                error_code="CON-SRCCAT-003",
-                action_needed=(
-                    f"no computed resolver registered for source '{source_id}'; "
-                    "register one via register_catalog_resolver or use static-catalog / list-api discovery"
-                ),
-            )
-        try:
-            models = resolver(source)
-        except Exception:  # noqa: BLE001 — computed resolvers degrade gracefully
-            return SourceCatalogResult(
-                source_id=source_id,
-                discovery_mode="computed",
-                freshness="missing",
-                failure_class="transient",
-                action_needed=f"computed resolver for '{source_id}' failed; check harness config",
-            )
-        # Validate the resolved models against the catalog schema
-        try:
-            _validate_catalog_payload(
-                {
-                    "contract-version": "v1",
-                    "source-id": source_id,
-                    "discovery-mode": "computed",
-                    "models": models,
-                },
-                origin="computed-resolver",
-            )
-        except AudiaGenticError:
-            return SourceCatalogResult(
-                source_id=source_id,
-                discovery_mode="computed",
-                freshness="missing",
-                failure_class="contract",
-                action_needed=f"computed resolver for '{source_id}' returned invalid model data",
-            )
-        _timeline(project_root, source_id, "source-catalog.resolved", {"count": len(models)})
-        return SourceCatalogResult(
-            source_id=source_id,
-            discovery_mode="computed",
-            models=models,
-            freshness="fresh",
-        )
 
     if discovery == "static-catalog":
         models = load_static_catalog(source_id)
@@ -575,5 +458,4 @@ __all__ = [
     "get_source_catalog",
     "load_static_catalog",
     "register_catalog_fetcher",
-    "register_catalog_resolver",
 ]

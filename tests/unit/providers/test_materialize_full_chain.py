@@ -49,4 +49,4 @@ def test_unknown_provider_raises(tmp_path: Path):
             project_root, "unknown", HARNESS_CFG
         )
 
-    assert "No materialize handler" in str(exc_info.value)
+    assert "does not declare config materialization" in str(exc_info.value)

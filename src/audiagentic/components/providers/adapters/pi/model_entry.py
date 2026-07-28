@@ -24,19 +24,16 @@ def render_pi_model_entry(entry: MaterializedModelEntry) -> tuple[str, dict[str,
     a literal key.
     """
     endpoint = entry.endpoint
+    overrides = endpoint.get("provider-overrides") or {}
     payload: dict[str, Any] = {
+        "provider_id": str(overrides.get("provider-id") or entry.source_id),
+        "baseUrl": endpoint.get("base-url", ""),
+        "api": "openai-completions",
+        "apiKey": "dummy",
+        "compat": {"supportsDeveloperRole": False, "supportsReasoningEffort": False},
         "model_id": entry.model_id,
         "visible_name": entry.visible_name,
-        "connector": entry.connector,
+        "contextWindow": int(entry.limits.get("context-window", 262144)),
+        "maxTokens": int(entry.limits.get("max-output-tokens", 4096)),
     }
-    if endpoint.get("base-url"):
-        payload["base_url"] = endpoint["base-url"]
-    if endpoint.get("single-model"):
-        payload["compat"] = True
-    if connector_opts := endpoint.get("connector-options"):
-        payload.update(connector_opts)
-    if limits := entry.limits:
-        payload["limits"] = dict(limits)
-    # auth_ref not wired — Pi requires literal apiKey; blocked per SECRET
-    # POSTURE rule until sponsor-approved secret-materialization decision.
     return (entry.visible_name, payload)
