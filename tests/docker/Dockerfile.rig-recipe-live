@@ -1,0 +1,14 @@
+FROM audia-test-base:latest
+
+WORKDIR /app
+ENV AUDIAGENTIC_DOCKER_TESTS=1
+ENV AUDIAGENTIC_RIG_RECIPE_DOCKER=1
+ENV HOME=/tmp/audiagentic-test-home
+ENV AUDIAGENTIC_HOME=/tmp/audiagentic-test-home/.audiagentic
+ENV PYTHONPATH="/app/src"
+
+COPY pyproject.toml README.md ./
+COPY src ./src
+COPY tests ./tests
+
+CMD ["bash", "-c", "python -m pip install -q --no-cache-dir --break-system-packages uv && uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[test]' && /venv/bin/pytest tests/integration/rig/test_llama_cpp_recipe_live.py -q --tb=short --timeout=240"]
