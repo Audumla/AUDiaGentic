@@ -42,7 +42,7 @@ def test_launch_fails_loud_when_config_refresh_fails(tmp_path: Path, monkeypatch
     launched: list[int] = []
     monkeypatch.setattr(
         "audiagentic.runtime.harness.build_global_context",
-        lambda **_kw: launched.append(1) or SimpleNamespace(manages_rig=False),
+        lambda **_kw: launched.append(1) or SimpleNamespace(embedded_rig=False),
     )
     monkeypatch.setattr(
         "audiagentic.runtime.harness.run_agent", lambda *_a, **_kw: launched.append(1) or 0
@@ -99,7 +99,7 @@ def test_bootstrap_refresh_launch_and_cleanup_materialize_owned_paths(
     )
     monkeypatch.setattr(
         "audiagentic.runtime.harness.build_global_context",
-        lambda **_kw: SimpleNamespace(manages_rig=False),
+        lambda **_kw: SimpleNamespace(embedded_rig=False),
     )
     monkeypatch.setattr("audiagentic.runtime.harness.env_flag", lambda *_a: False)
     monkeypatch.setattr("audiagentic.runtime.harness.run_agent", lambda *_a, **_kw: 0)

@@ -36,7 +36,9 @@ def _patch_common(monkeypatch: pytest.MonkeyPatch, *, harness_available: bool = 
     )
     monkeypatch.setattr(
         "audiagentic.runtime.harness.rig.launch_rig_if_needed",
-        lambda *a, **kw: ("http://127.0.0.1:42001/v1", "qwen3.5-0.8b", 4242, True),
+        lambda *a, **kw: __import__(
+            "audiagentic.runtime.harness.rig", fromlist=["RigConnection"]
+        ).RigConnection("http://127.0.0.1:42001/v1", "qwen3.5-0.8b", True),
     )
     monkeypatch.setattr(
         "audiagentic.runtime.rig.models.query_server_model",
