@@ -214,8 +214,6 @@ class TestCreateAsyncTester(unittest.TestCase):
         with patch(
             "audiagentic.runtime.rig.embedded.launch.start_embedded_rig",
             return_value=mock_result,
-        ), patch(
-            "audiagentic.runtime.rig.registry.register_client",
         ):
             from .ai_tester import create_async_tester
             tester = create_async_tester(model_profile="qwen2.5:3b")

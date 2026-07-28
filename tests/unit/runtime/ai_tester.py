@@ -195,10 +195,10 @@ class LocalAITester:
         }
 
     def stop(self) -> None:
-        """Stop the embedded rig if this was the last client."""
-        from audiagentic.runtime.rig.registry import shutdown_rig_if_last
-        if self.port > 0:
-            shutdown_rig_if_last(port=self.port)
+        """Stop the test-owned direct rig process, if present."""
+        from audiagentic.foundation.system.process import kill_pid
+        if getattr(self, "_owns_process", False) and self.pid:
+            kill_pid(self.pid)
 
 
 @contextmanager
@@ -231,7 +231,6 @@ def local_ai_tester(
             print(result.content)
     """
     from audiagentic.runtime.rig.embedded.launch import start_embedded_rig
-    from audiagentic.runtime.rig.registry import register_client, shutdown_rig_if_last
 
     tester = LocalAITester(api_key=api_key, timeout=timeout)
 
@@ -249,12 +248,12 @@ def local_ai_tester(
         tester.pid = result.pid
         tester.endpoint = result.base_url
 
-        register_client()
+        tester._owns_process = True
 
         yield tester
 
     finally:
-        shutdown_rig_if_last(port=tester.port)
+        tester.stop()
 
 
 def create_async_tester(
@@ -284,7 +283,6 @@ def create_async_tester(
         LocalAITester instance. Caller is responsible for calling stop().
     """
     from audiagentic.runtime.rig.embedded.launch import start_embedded_rig
-    from audiagentic.runtime.rig.registry import register_client
 
     tester = LocalAITester(api_key=api_key, timeout=timeout)
 
@@ -301,6 +299,6 @@ def create_async_tester(
     tester.pid = result.pid
     tester.endpoint = result.base_url
 
-    register_client()
+    tester._owns_process = True
 
     return tester
