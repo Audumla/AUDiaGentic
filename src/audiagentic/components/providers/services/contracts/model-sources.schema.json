@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "model-sources.schema.json",
+  "type": "object",
+  "required": ["contract-version", "sources"],
+  "properties": {
+    "contract-version": {
+      "const": "v1"
+    },
+    "sources": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/source"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": ["source-class", "connector"],
+      "properties": {
+        "source-class": {
+          "type": "string",
+          "enum": ["local-endpoint", "remote-account"]
+        },
+        "display-name": {
+          "type": "string"
+        },
+        "vendor-id": {
+          "type": "string",
+          "description": "Optional upstream vendor/account group id such as anthropic, google, openai, or openrouter. Distinct from the harness provider id."
+        },
+        "connector": {
+          "type": "string",
+          "enum": [
+            "openai-compatible",
+            "anthropic",
+            "gemini",
+            "openrouter",
+            "litellm",
+            "ollama",
+            "native-vendor"
+          ]
+        },
+        "connector-options": {
+          "type": "object",
+          "description": "Free-form per-connector parameters (RV323). No per-connector sub-schema at v1 — known/required keys per verified connector are documented in PROVIDER_CAPABILITY_REFERENCE/endpoints/provider-model-endpoints.md, not enforced here."
+        },
+        "base-url": {
+          "type": "string"
+        },
+        "api-key-ref": {
+          "type": "string",
+          "description": "Secret reference (e.g. env:VAR_NAME), never a literal credential."
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "model-discovery": {
+          "type": "string",
+          "enum": ["static-catalog", "list-api", "none"],
+          "description": "remote-account only: what AUDiaGentic knows about the source's models. Not applicable to local-endpoint, whose one model is fully declared inline."
+        },
+        "model-filter": {
+          "type": "object",
+          "description": "remote-account only. Include/exclude glob patterns applied to custom-entries projection and AG-side alias exposure. Does NOT constrain native key injection, which always enables the full vendor/aggregator model set.",
+          "properties": {
+            "include": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "exclude": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "additionalProperties": false
+        },
+        "model-id": {
+          "type": "string",
+          "description": "local-endpoint only: the single model this source declares."
+        },
+        "context-window": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max-output-tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "capabilities": {
+          "type": "object",
+          "properties": {
+            "tool-use": { "type": "boolean" },
+            "reasoning": { "type": "boolean" },
+            "vision": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        },
+        "provider-overrides": {
+          "type": "object",
+          "description": "Per-AUDiaGentic-provider-id rendering overrides (not upstream model-vendor ids — see arch-standards §1 terminology note)."
+        },
+        "default": {
+          "type": "boolean",
+          "description": "True marks this source's model as the default selection when a job/profile omits an explicit model."
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": { "source-class": { "const": "local-endpoint" } },
+            "required": ["source-class"]
+          },
+          "then": {
+            "required": ["model-id"]
+          }
+        }
+      ]
+    }
+  }
+}

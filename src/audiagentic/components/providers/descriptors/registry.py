@@ -9,7 +9,7 @@ from audiagentic.foundation.features.base import ImplementationDescriptor
 from audiagentic.foundation.features.registry import register as register_feature_descriptor
 from audiagentic.foundation.registry_utils import Registry
 
-from ..services.host_capabilities import host_extension_statuses
+from ..services.host.host_capabilities import host_extension_statuses
 from .base import ProviderDescriptor
 from .feature_mapping import impl_features_for
 

@@ -36,7 +36,7 @@ from audiagentic.components.providers.providers_api import (
 
 # Import provider-layer recipe steps so their types are registered before
 # _run_recipe loads recipes (managed-mcp, managed-hooks, managed-plugin).
-from audiagentic.components.providers.services import recipe_steps  # noqa: F401
+from audiagentic.components.providers.services.capabilities import recipe_steps  # noqa: F401
 from audiagentic.foundation.toolchains.recipe_contract import RecipeResult
 from audiagentic.foundation.toolchains.recipe_execution import execute_recipe_mode
 from audiagentic.foundation.toolchains.recipe_loader import load_recipe_from_yaml

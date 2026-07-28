@@ -84,7 +84,9 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
     # rerun by removing the launch-reconciled stamp or setting
     # AUDIAGENTIC_RECONCILE_PROVIDERS_ON_LAUNCH=1.
     try:
-        from audiagentic.components.providers.services.lifecycle import reconcile_all_providers
+        from audiagentic.components.providers.services.lifecycle.lifecycle import (
+            reconcile_all_providers,
+        )
 
         if _should_reconcile_providers_on_launch(project_root):
             _status("reconciling providers...")
