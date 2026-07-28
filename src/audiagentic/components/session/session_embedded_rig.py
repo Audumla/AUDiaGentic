@@ -30,9 +30,33 @@ def active_embedded_rig_port() -> int:
     return 42001
 
 
-async def update_embedded_rig() -> dict[str, Any]:
-    from audiagentic.runtime.rig.embedded.binaries import update_binaries as _update
+def embedded_rig_upgrade_status(*, scope: str) -> dict[str, Any]:
+    """Return the owned recipe's local, non-mutating upgrade assessment."""
     from audiagentic.runtime.rig.embedded.launch import runtime_bin_dir
+    from audiagentic.runtime.rig.embedded.recipe import llama_cpp_recipe
+
+    if scope == "global":
+        from audiagentic.foundation.paths.home import global_harness_runtime
+
+        target = global_harness_runtime() / "rig" / "bin"
+    elif scope == "local":
+        target = runtime_bin_dir()
+    else:
+        return {"ok": False, "error": "scope must be 'local' or 'global'", "scope": scope}
+    result = llama_cpp_recipe(target).upgrade_status({})
+    return {
+        "ok": result.success,
+        "scope": scope,
+        "state": result.state.value,
+        "status": result.status,
+        "details": result.details,
+        "target_bin_dir": str(target),
+    }
+
+
+async def update_embedded_rig() -> dict[str, Any]:
+    from audiagentic.runtime.rig.embedded.launch import runtime_bin_dir
+    from audiagentic.runtime.rig.embedded.recipe import llama_cpp_recipe
 
     def _work(sink):
         out = io.StringIO()
@@ -66,7 +90,9 @@ async def update_embedded_rig() -> dict[str, Any]:
                     sink(ComponentOutputEvent(message="[rig] updating embedded rig binaries"))
 
             with contextlib.redirect_stdout(out):
-                _update(target_bin_dir=bin_dir)
+                result = llama_cpp_recipe(bin_dir).upgrade({})
+            if not result.success:
+                return {"ok": False, "error": result.error or result.status, "output": out.getvalue().strip()}
 
             if sink:
                 sink(ComponentOutputEvent(message=out.getvalue().strip()))
@@ -93,8 +119,8 @@ async def update_global_embedded_rig() -> dict[str, Any]:
 
 
 def _update_global_embedded_rig_impl(harness_runtime, *, sink=None) -> dict[str, Any]:
-    from audiagentic.runtime.rig.embedded.binaries import update_binaries as _update
     from audiagentic.runtime.rig.embedded.launch import runtime_bin_dir
+    from audiagentic.runtime.rig.embedded.recipe import llama_cpp_recipe
 
     out = io.StringIO()
     try:
@@ -102,7 +128,9 @@ def _update_global_embedded_rig_impl(harness_runtime, *, sink=None) -> dict[str,
         if sink:
             sink(ComponentOutputEvent(message="[rig] updating global embedded rig binaries"))
         with contextlib.redirect_stdout(out):
-            _update(target_bin_dir=global_bin_dir)
+            result = llama_cpp_recipe(global_bin_dir).upgrade({})
+        if not result.success:
+            return {"ok": False, "error": result.error or result.status, "output": out.getvalue().strip()}
         active_bin_dir = runtime_bin_dir()
         global_active = active_bin_dir.resolve() == global_bin_dir.resolve()
         project_local_overrides_global = not global_active

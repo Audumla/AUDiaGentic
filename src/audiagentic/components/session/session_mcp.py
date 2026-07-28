@@ -72,6 +72,14 @@ def build_server() -> FastMCP:
         except Exception as exc:
             return report_error("session", "update_rig", exc, logger)
 
+    @mcp.tool()
+    @log_tool_call
+    def rig_upgrade_status(scope: str = "local") -> dict[str, Any]:
+        try:
+            return session_api.rig_upgrade_status(scope=scope)
+        except Exception as exc:
+            return report_error("session", "rig_upgrade_status", exc, logger)
+
     return mcp
 
 

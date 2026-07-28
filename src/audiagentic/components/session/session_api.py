@@ -102,6 +102,11 @@ async def update_rig(*, scope: str = "local") -> dict[str, Any]:
     return await handler()
 
 
+def rig_upgrade_status(*, scope: str = "local") -> dict[str, Any]:
+    """Expose the local recipe's read-only upgrade decision."""
+    return session_embedded_rig.embedded_rig_upgrade_status(scope=scope)
+
+
 def _auto_update_status() -> dict[str, Any]:
     from audiagentic.runtime.update.checker import check_update, current_version
 
