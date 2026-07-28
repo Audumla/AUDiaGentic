@@ -14,7 +14,7 @@ from audiagentic.components.providers.descriptors.registry import (
     all_descriptors,
     get_descriptor,
 )
-from audiagentic.components.providers.services.lifecycle import (
+from audiagentic.components.providers.services.lifecycle.lifecycle import (
     install_provider_cli,
     uninstall_provider_cli,
 )

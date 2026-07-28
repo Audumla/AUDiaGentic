@@ -24,10 +24,10 @@ from audiagentic.components.providers.contracts.session_surface import (
 )
 from audiagentic.components.providers.descriptors.base import ProviderDescriptor
 from audiagentic.components.providers.descriptors.registry import register
-from audiagentic.components.providers.services.provider_config import (
+from audiagentic.components.providers.services.config.provider_config import (
     set_provider_enabled,
 )
-from audiagentic.components.providers.services.session_surface_resolution import (
+from audiagentic.components.providers.services.session.session_surface_resolution import (
     _platform_matches,
     resolve_session_surface,
 )
@@ -280,7 +280,7 @@ class TestInstalledVersionDiscovery:
 
         # Mock installed version to '2.5.0' — satisfies both constraints.
         monkeypatch.setattr(
-            "audiagentic.components.providers.services.session_surface_resolution._probe_installed_version",
+            "audiagentic.components.providers.services.session.session_surface_resolution._probe_installed_version",
             lambda d: "2.5.0",
         )
 
@@ -302,7 +302,7 @@ class TestInstalledVersionDiscovery:
 
         # Mock installed version to '2.0.0' — below >=3.0.
         monkeypatch.setattr(
-            "audiagentic.components.providers.services.session_surface_resolution._probe_installed_version",
+            "audiagentic.components.providers.services.session.session_surface_resolution._probe_installed_version",
             lambda d: "2.0.0",
         )
 
@@ -326,7 +326,7 @@ class TestInstalledVersionDiscovery:
         # Hint asks for >=2.0 which narrows to the >=2.0 declaration, but installed
         # version doesn't satisfy it → unsupported.
         monkeypatch.setattr(
-            "audiagentic.components.providers.services.session_surface_resolution._probe_installed_version",
+            "audiagentic.components.providers.services.session.session_surface_resolution._probe_installed_version",
             lambda d: "1.5.0",
         )
 
@@ -347,7 +347,7 @@ class TestInstalledVersionDiscovery:
         set_provider_enabled(tmp_path, "hint-ok", enabled=True)
 
         monkeypatch.setattr(
-            "audiagentic.components.providers.services.session_surface_resolution._probe_installed_version",
+            "audiagentic.components.providers.services.session.session_surface_resolution._probe_installed_version",
             lambda d: "2.5.0",
         )
 
@@ -544,7 +544,7 @@ class TestResolvedVersionSemantics:
         set_provider_enabled(tmp_path, "ver-success", enabled=True)
 
         monkeypatch.setattr(
-            "audiagentic.components.providers.services.session_surface_resolution._probe_installed_version",
+            "audiagentic.components.providers.services.session.session_surface_resolution._probe_installed_version",
             lambda d: "3.7.2",
         )
 
@@ -827,7 +827,7 @@ class TestNoAgentImport:
 
     def test_no_agent_import_in_session_surface_resolution(self):
         mod = __import__(
-            "audiagentic.components.providers.services.session_surface_resolution",
+            "audiagentic.components.providers.services.session.session_surface_resolution",
             fromlist=["resolve_session_surface"],
         )
         source = _inspect_source(mod)

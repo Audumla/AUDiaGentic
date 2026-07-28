@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from audiagentic.components.providers.descriptors.registry import all_descriptors
-from audiagentic.components.providers.services.lifecycle import (
+from audiagentic.components.providers.services.lifecycle.lifecycle import (
     reconcile_all_providers,
     reconcile_provider,
 )
@@ -28,7 +28,7 @@ def test_provider_descriptors_register_feature_implementations() -> None:
 def test_cli_install_does_not_dispatch_other_automation_families(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
 
     monkeypatch.setattr(
         lifecycle,
@@ -70,7 +70,7 @@ def test_cli_install_does_not_dispatch_other_automation_families(
 def test_reconcile_provider_enables_when_cli_available_and_not_enabled(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
 
     monkeypatch.setattr(
         lifecycle,
@@ -90,8 +90,8 @@ def test_reconcile_provider_enables_when_cli_available_and_not_enabled(
 def test_reconcile_provider_disables_when_cli_absent_and_was_enabled(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.providers.services.lifecycle as lifecycle
-    from audiagentic.components.providers.services.provider_config import (
+    import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
+    from audiagentic.components.providers.services.config.provider_config import (
         set_provider_enabled,
     )
 
@@ -113,8 +113,8 @@ def test_reconcile_provider_disables_when_cli_absent_and_was_enabled(
 def test_reconcile_provider_noop_when_already_in_sync_enabled(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.providers.services.lifecycle as lifecycle
-    from audiagentic.components.providers.services.provider_config import (
+    import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
+    from audiagentic.components.providers.services.config.provider_config import (
         set_provider_enabled,
     )
 
@@ -135,7 +135,7 @@ def test_reconcile_provider_noop_when_already_in_sync_enabled(
 def test_reconcile_provider_noop_when_already_in_sync_disabled(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
 
     monkeypatch.setattr(
         lifecycle,
@@ -153,7 +153,7 @@ def test_reconcile_provider_noop_when_already_in_sync_disabled(
 def test_reconcile_all_providers_returns_one_entry_per_descriptor(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
 
     monkeypatch.setattr(
         lifecycle,
@@ -177,8 +177,8 @@ def test_reconcile_all_providers_returns_one_entry_per_descriptor(
 def test_reconcile_provider_does_not_fetch_catalog_by_default(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.providers.services.catalog as catalog_mod
-    import audiagentic.components.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.catalog.catalog as catalog_mod
+    import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
 
     catalog_called: list[str] = []
 
@@ -202,7 +202,7 @@ def test_reconcile_provider_does_not_fetch_catalog_by_default(
 def test_reconcile_provider_fetches_catalog_when_flag_set(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
 
     catalog_called: list[str] = []
 
@@ -213,7 +213,7 @@ def test_reconcile_provider_fetches_catalog_when_flag_set(
                    "executable": "/usr/bin/claude", "returncode": 0, "stdout": "1.0", "stderr": ""},
     )
 
-    import audiagentic.components.providers.services.catalog as catalog_mod
+    import audiagentic.components.providers.services.catalog.catalog as catalog_mod
     monkeypatch.setattr(
         catalog_mod,
         "fetch_provider_catalog",
@@ -227,7 +227,7 @@ def test_reconcile_provider_fetches_catalog_when_flag_set(
 
 
 def test_reconcile_provider_emits_progress(monkeypatch, tmp_path: Path) -> None:
-    import audiagentic.components.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
 
     monkeypatch.setattr(
         lifecycle,
@@ -246,8 +246,8 @@ def test_reconcile_provider_emits_progress(monkeypatch, tmp_path: Path) -> None:
 def test_reconcile_all_providers_does_not_fetch_catalogs_by_default(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.providers.services.catalog as catalog_mod
-    import audiagentic.components.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.catalog.catalog as catalog_mod
+    import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
 
     catalog_called: list[str] = []
 
@@ -271,7 +271,7 @@ def test_reconcile_all_providers_does_not_fetch_catalogs_by_default(
 def test_reconcile_all_providers_emits_progress_with_total(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
     from audiagentic.foundation.contracts.output import ComponentOutputEvent
 
     monkeypatch.setattr(
@@ -295,7 +295,7 @@ def test_reconcile_all_providers_emits_progress_with_total(
 def test_cli_lifecycle_plan_returns_installed_when_cli_available(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
 
     monkeypatch.setattr(
         lifecycle,
@@ -304,7 +304,7 @@ def test_cli_lifecycle_plan_returns_installed_when_cli_available(
                    "executable": "/usr/bin/codex", "returncode": 0, "stdout": "1.0", "stderr": ""},
     )
 
-    from audiagentic.components.providers.services.automation_registry import (
+    from audiagentic.components.providers.services.capabilities.automation_registry import (
         build_automation_registry,
     )
 
@@ -320,7 +320,7 @@ def test_cli_lifecycle_plan_returns_installed_when_cli_available(
 def test_cli_lifecycle_plan_predicts_install_when_cli_absent(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
 
     monkeypatch.setattr(
         lifecycle,
@@ -329,7 +329,7 @@ def test_cli_lifecycle_plan_predicts_install_when_cli_absent(
                    "executable": None, "returncode": None, "stdout": "", "stderr": "not found"},
     )
 
-    from audiagentic.components.providers.services.automation_registry import (
+    from audiagentic.components.providers.services.capabilities.automation_registry import (
         build_automation_registry,
     )
 
@@ -346,7 +346,7 @@ def test_cli_lifecycle_plan_predicts_install_when_cli_absent(
 def test_cli_lifecycle_status_returns_installed_when_cli_available(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
 
     monkeypatch.setattr(
         lifecycle,
@@ -355,7 +355,7 @@ def test_cli_lifecycle_status_returns_installed_when_cli_available(
                    "executable": "/usr/bin/codex", "returncode": 0, "stdout": "1.0", "stderr": ""},
     )
 
-    from audiagentic.components.providers.services.automation_registry import (
+    from audiagentic.components.providers.services.capabilities.automation_registry import (
         build_automation_registry,
     )
 
@@ -370,7 +370,7 @@ def test_cli_lifecycle_status_returns_installed_when_cli_available(
 def test_cli_lifecycle_status_returns_uninstalled_when_cli_absent(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
 
     monkeypatch.setattr(
         lifecycle,
@@ -379,7 +379,7 @@ def test_cli_lifecycle_status_returns_uninstalled_when_cli_absent(
                    "executable": None, "returncode": None, "stdout": "", "stderr": "not found"},
     )
 
-    from audiagentic.components.providers.services.automation_registry import (
+    from audiagentic.components.providers.services.capabilities.automation_registry import (
         build_automation_registry,
     )
 
@@ -394,7 +394,7 @@ def test_cli_lifecycle_status_returns_uninstalled_when_cli_absent(
 def test_cli_lifecycle_apply_noop_when_already_installed(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
 
     monkeypatch.setattr(
         lifecycle,
@@ -403,7 +403,7 @@ def test_cli_lifecycle_apply_noop_when_already_installed(
                    "executable": "/usr/bin/codex", "returncode": 0, "stdout": "1.0", "stderr": ""},
     )
 
-    from audiagentic.components.providers.services.automation_registry import (
+    from audiagentic.components.providers.services.capabilities.automation_registry import (
         build_automation_registry,
     )
 
@@ -419,7 +419,7 @@ def test_cli_lifecycle_apply_noop_when_already_installed(
 def test_cli_lifecycle_prune_noop_when_already_uninstalled(
     monkeypatch, tmp_path: Path
 ) -> None:
-    import audiagentic.components.providers.services.lifecycle as lifecycle
+    import audiagentic.components.providers.services.lifecycle.lifecycle as lifecycle
 
     monkeypatch.setattr(
         lifecycle,
@@ -428,7 +428,7 @@ def test_cli_lifecycle_prune_noop_when_already_uninstalled(
                    "executable": None, "returncode": None, "stdout": "", "stderr": "not found"},
     )
 
-    from audiagentic.components.providers.services.automation_registry import (
+    from audiagentic.components.providers.services.capabilities.automation_registry import (
         build_automation_registry,
     )
 
@@ -490,7 +490,7 @@ def test_cli_lifecycle_result_rejects_invalid_state_with_owned_error() -> None:
 def test_automation_registry_registers_cli_for_providers_with_cli_install(
     tmp_path: Path,
 ) -> None:
-    from audiagentic.components.providers.services.automation_registry import (
+    from audiagentic.components.providers.services.capabilities.automation_registry import (
         build_automation_registry,
     )
 
@@ -510,7 +510,7 @@ def test_automation_registry_registers_cli_for_providers_with_cli_install(
 def test_automation_registry_no_cli_for_local_openai(
     tmp_path: Path,
 ) -> None:
-    from audiagentic.components.providers.services.automation_registry import (
+    from audiagentic.components.providers.services.capabilities.automation_registry import (
         build_automation_registry,
     )
 

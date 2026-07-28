@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from audiagentic.components.providers.descriptors import registry as descriptor_registry
-from audiagentic.components.providers.services.provider_config import set_provider_enabled
+from audiagentic.components.providers.services.config.provider_config import set_provider_enabled
 from audiagentic.foundation.features.state import get_implementation_state
 
 

@@ -19,7 +19,7 @@ from audiagentic.components.providers.adapters.goose.mcp_format import (
     remove_goose_yaml,
     write_goose_yaml,
 )
-from audiagentic.components.providers.services.mcp import (
+from audiagentic.components.providers.services.mcp.mcp import (
     add_provider_mcp_server,
     list_provider_mcp_servers,
     reload_provider_mcp,

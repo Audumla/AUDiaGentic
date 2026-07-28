@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from audiagentic.components.providers.services.execution import resolve_launch_builder
+from audiagentic.components.providers.services.execution.execution import resolve_launch_builder
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
@@ -45,7 +45,7 @@ def test_unrecognized_profile_name_is_unsupported_not_an_error() -> None:
 
 
 def test_undeclared_intent_is_unsupported(monkeypatch) -> None:
-    from audiagentic.components.providers.services import execution as exec_mod
+    from audiagentic.components.providers.services.execution import execution as exec_mod
 
     monkeypatch.setattr(
         exec_mod, "_declared_launches",
@@ -55,7 +55,7 @@ def test_undeclared_intent_is_unsupported(monkeypatch) -> None:
 
 
 def test_declared_intent_without_builder_fails_closed(monkeypatch) -> None:
-    from audiagentic.components.providers.services import execution as exec_mod
+    from audiagentic.components.providers.services.execution import execution as exec_mod
 
     monkeypatch.setattr(exec_mod, "_declared_launches", lambda pid: {"agent": {}})
     monkeypatch.setattr(exec_mod, "_adapter_hook", lambda pid, sub, fn: None)
@@ -69,7 +69,7 @@ def test_declared_intent_without_builder_fails_closed(monkeypatch) -> None:
 
 
 def test_undeclared_launches_falls_back_to_probing(monkeypatch) -> None:
-    from audiagentic.components.providers.services import execution as exec_mod
+    from audiagentic.components.providers.services.execution import execution as exec_mod
 
     monkeypatch.setattr(exec_mod, "_declared_launches", lambda pid: {})
     assert resolve_launch_builder("pi", "interactive") is not None
@@ -78,7 +78,7 @@ def test_undeclared_launches_falls_back_to_probing(monkeypatch) -> None:
 def test_new_profile_name_uses_convention_no_registry_edit_needed(monkeypatch) -> None:
     """A launch profile with no _LAUNCH_BUILDERS entry is looked up by
     convention -- adapters/<id>/<name>.py::build_launch -- no dict edit."""
-    from audiagentic.components.providers.services import execution as exec_mod
+    from audiagentic.components.providers.services.execution import execution as exec_mod
 
     monkeypatch.setattr(exec_mod, "_declared_launches", lambda pid: {"benchmark": {}})
     calls: list[tuple[str, str, str]] = []

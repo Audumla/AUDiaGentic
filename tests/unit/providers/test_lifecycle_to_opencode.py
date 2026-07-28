@@ -11,7 +11,9 @@ from pathlib import Path
 
 def test_bootstrap_on_enabled_projects_ag_lsp_to_opencode(tmp_path: Path) -> None:
     """Full lifecycle path: coding-lsp enabled → bootstrap → opencode.json."""
-    from audiagentic.components.providers.services.provider_config import set_provider_enabled
+    from audiagentic.components.providers.services.config.provider_config import (
+        set_provider_enabled,
+    )
     from audiagentic.foundation.components.loader import register_all_components
     from audiagentic.foundation.features.base import ImplementationState
     from audiagentic.foundation.features.state import set_implementation_state

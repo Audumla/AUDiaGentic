@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.providers.services.execution import load_acp_launch_builder
+from audiagentic.components.providers.services.execution.execution import load_acp_launch_builder
 
 
 def test_codex_exposes_acp_launch_builder():

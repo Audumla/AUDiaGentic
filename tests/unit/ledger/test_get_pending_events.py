@@ -1,4 +1,5 @@
 """Tests for ledger_api.get_pending_events."""
+
 from __future__ import annotations
 
 from pathlib import Path

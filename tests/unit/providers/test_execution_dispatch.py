@@ -4,7 +4,7 @@ import pytest
 
 from audiagentic.components.providers.adapters.base_runner import resolve_execution_model
 from audiagentic.components.providers.adapters.codex import adapter as codex_adapter
-from audiagentic.components.providers.services.execution import execute_provider
+from audiagentic.components.providers.services.execution.execution import execute_provider
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 

@@ -35,7 +35,7 @@ class TestPiRunnerResolution:
 
     def test_load_runner_resolves_pi_descriptor_runner(self) -> None:
         """Prove _load_runner('pi') resolves make_runner_from_execution."""
-        from audiagentic.components.providers.services.execution import (
+        from audiagentic.components.providers.services.execution.execution import (
             _load_runner,
         )
 
@@ -45,7 +45,7 @@ class TestPiRunnerResolution:
     def test_describe_execution_support_reports_descriptor_mode(self) -> None:
         """describe_execution_support('pi') must report 'descriptor' mode
         after adapter.py deletion (MA35)."""
-        from audiagentic.components.providers.services.execution import (
+        from audiagentic.components.providers.services.execution.execution import (
             describe_execution_support,
         )
 
@@ -235,7 +235,7 @@ class TestPiRecipeStdinDelivery:
         """Prove the full execution dispatch path uses Pi's recipe runner.
 
         execute_provider('pi', ...) → _load_runner('pi') → descriptor runner."""
-        from audiagentic.components.providers.services.execution import (
+        from audiagentic.components.providers.services.execution.execution import (
             execute_provider,
         )
 
