@@ -9,16 +9,13 @@ url: "https://continue.dev"
 prompt_aliases:
   - ctr
 
-cli_probe:
-  - cn
-  - "--version"
-
 capabilities:
   cli-install:
     mechanism:
       toolchain: npm
       package: "@continuedev/cli"
       executable: cn
+      probe: [cn, "--version"]
       probe_fn: "audiagentic.components.providers.adapters.continue_.hooks:_continue_probe"
 
   host-extensions:
@@ -50,5 +47,8 @@ capabilities:
       managed: false
       description: "Continue configuration"
 
-execution:
-  mode: ok-stub
+  launch:
+    mechanism:
+      recipes:
+        execution:
+          mode: ok-stub

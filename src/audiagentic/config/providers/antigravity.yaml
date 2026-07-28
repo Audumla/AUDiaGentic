@@ -11,16 +11,13 @@ prompt_aliases:
   - ag
   - agy
 
-cli_probe:
-  - agy
-  - "--version"
-
 capabilities:
   cli-install:
     mechanism:
       package_manager: script
       package_name: antigravity-cli
       executable: agy
+      probe: [agy, "--version"]
       install:
         type: shell
         id: install
@@ -70,7 +67,10 @@ capabilities:
       managed: false
       description: "Shared project instructions"
 
-execution:
-  mode: stub
-  aliases: [agy]
-  message: "Antigravity adapter is registered; execution bridge not wired yet."
+  launch:
+    mechanism:
+      recipes:
+        execution:
+          mode: stub
+          aliases: [agy]
+          message: "Antigravity adapter is registered; execution bridge not wired yet."

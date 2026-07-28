@@ -32,12 +32,16 @@ from audiagentic.foundation.workflow.invocation.from_spec import build_step_from
 
 from .automation_capabilities import validate_automation_capabilities
 from .base import (
+    ACPFeatureNote,
     AgentFile,
     Capability,
     CapabilityEvidence,
     CliInstallRecipe,
     HostCapability,
+    LaunchSpec,
+    LspSelfSupportSpec,
     ModelsSpec,
+    ObsTransportNote,
     ProviderDescriptor,
     ProviderPermissions,
 )
@@ -136,6 +140,30 @@ def _build_models_spec(data: dict[str, Any]) -> ModelsSpec:
     )
 
 
+def _build_launch_spec(data: dict[str, Any]) -> LaunchSpec:
+    """Build the compound `launch` mechanism from YAML dict.
+
+    ``intents`` values are {interaction: [...], observability: [...]} channel
+    lists; ``recipes`` are per-profile declarative launch blocks (keyed by
+    profile/submodule name, e.g. 'execution', 'interactive', 'acp' — open
+    ended, resolved dynamically by resolve_launch_builder/descriptor_launch_builder).
+    """
+    intents = {
+        name: {k: tuple(v) for k, v in block.items()}
+        for name, block in (data.get("intents") or {}).items()
+    }
+    recipes = {name: dict(block) for name, block in (data.get("recipes") or {}).items()}
+    return LaunchSpec(intents=intents, recipes=recipes)
+
+
+def _build_lsp_self_support_spec(data: dict[str, Any]) -> LspSelfSupportSpec:
+    """Build the compound `lsp-self-support` mechanism from YAML dict."""
+    return LspSelfSupportSpec(
+        on_enabled=resolve_ref(data["on_enabled"]) if "on_enabled" in data else None,
+        probe=resolve_ref(data["probe"]) if "probe" in data else None,
+    )
+
+
 def _project_mechanism(mechanism_schema: str, raw: Any) -> Any:
     """Shape a capability's declared mechanism into its typed form per the
     catalogue's mechanism_schema. Primitive/unknown schemas keep the raw value.
@@ -158,9 +186,17 @@ def _project_mechanism(mechanism_schema: str, raw: Any) -> Any:
         )
     if mechanism_schema == "model-spec":
         return _build_models_spec(raw)
+    if mechanism_schema == "launch-spec":
+        return _build_launch_spec(raw)
+    if mechanism_schema == "lsp-self-support-spec":
+        return _build_lsp_self_support_spec(raw)
+    if mechanism_schema == "obs-transport-note":
+        return ObsTransportNote(**raw)
+    if mechanism_schema == "acp-feature-note":
+        return ACPFeatureNote(**raw)
     if mechanism_schema == "callable-ref":
         return resolve_ref(raw) if isinstance(raw, str) else raw
-    # boolean-set, tier-enum, surfaces-struct, acp-caps-list, lsp-automation-spec, none
+    # boolean-set, tier-enum, surfaces-struct, none
     return raw
 
 
@@ -235,6 +271,7 @@ def _build_cli_install(data: dict[str, Any]) -> CliInstallRecipe:
             executable=executable,
             install=build_step(toolchain, "install", package, *extra),
             uninstall=build_step(toolchain, un_action, uninstall_package),
+            probe=list(data["probe"]) if "probe" in data else None,
             probe_fn=resolve_ref(data["probe_fn"]) if "probe_fn" in data else None,
         )
     else:
@@ -248,6 +285,7 @@ def _build_cli_install(data: dict[str, Any]) -> CliInstallRecipe:
             executable=data["executable"],
             install=build_step_from_spec(install_spec) if install_spec else None,  # type: ignore[arg-type]
             uninstall=build_step_from_spec(uninstall_spec) if uninstall_spec else None,  # type: ignore[arg-type]
+            probe=list(data["probe"]) if "probe" in data else None,
             probe_fn=resolve_ref(data["probe_fn"]) if "probe_fn" in data else None,
         )
 
@@ -539,12 +577,13 @@ def _construct_provider_descriptor(**values: Any) -> ProviderDescriptor:
 # mcp_config, model_config, plugin_config, hooks_config, language_servers_config,
 # host_capabilities, capability_facts, automation_capabilities, permissions,
 # agent_files, skill_surface_path, instruction_file, surfaces, fetch_catalog_fn,
-# on_lsp_enabled, supported_connectors, model_entry_renderer, vendor_key_injection)
-# are NOT registered — DescriptorSpec.load rejects any unregistered key
-# (VAL-DESC-004), so a provider still declaring one fails loudly rather than
-# being silently dropped. Declare them under `capabilities:` instead
-# (PC01/PC03/PC04, provider-capability-model). model_entry_renderer and
-# vendor_key_injection fold into the `models` capability's compound mechanism.
+# on_lsp_enabled, supported_connectors, model_entry_renderer, vendor_key_injection,
+# launches, execution, interactive, acp) are NOT registered — DescriptorSpec.load
+# rejects any unregistered key (VAL-DESC-004), so a provider still declaring one
+# fails loudly rather than being silently dropped. Declare them under
+# `capabilities:` instead (PC01/PC03/PC04, provider-capability-model).
+# model_entry_renderer/vendor_key_injection fold into `models`;
+# launches/execution/interactive/acp fold into `launch`.
 PROVIDER_SPEC = DescriptorSpec(constructor=_construct_provider_descriptor)
 
 PROVIDER_SPEC.add("provider_id", yaml_key="provider_id", kind="data", required=True)
@@ -552,17 +591,11 @@ PROVIDER_SPEC.add("display_name", yaml_key="display_name", kind="data", required
 PROVIDER_SPEC.add("description", yaml_key="description", kind="data", default="")
 PROVIDER_SPEC.add("url", yaml_key="url", kind="data", default="")
 PROVIDER_SPEC.add("prompt_aliases", yaml_key="prompt_aliases", kind="data", default=tuple(), converter=_list_to_tuple)
-PROVIDER_SPEC.add("cli_probe", yaml_key="cli_probe", kind="data", default=None)
 PROVIDER_SPEC.add("capabilities", yaml_key="capabilities", kind="nested", builder=_build_capabilities, default=tuple())
 PROVIDER_SPEC.add("execution_isolation_tier", yaml_key="execution_isolation_tier", kind="data", required=True)
 PROVIDER_SPEC.add("mcp_launch_isolation_tier", yaml_key="mcp_launch_isolation_tier", kind="data", default="unsupported")
 PROVIDER_SPEC.add("access_mode", yaml_key="access_mode", kind="data", default="cli")
-PROVIDER_SPEC.add("lsp_support_probe", yaml_key="lsp_support_probe", kind="ref", default=None)
 PROVIDER_SPEC.add("receive_lsp_mcp", yaml_key="receive_lsp_mcp", kind="data", default=True)
-PROVIDER_SPEC.add("launches", yaml_key="launches", kind="data", default=dict())
-PROVIDER_SPEC.add("execution", yaml_key="execution", kind="data", default=None)
-PROVIDER_SPEC.add("interactive", yaml_key="interactive", kind="data", default=None)
-PROVIDER_SPEC.add("acp", yaml_key="acp", kind="data", default=None)
 PROVIDER_SPEC.add("deprecated", yaml_key="deprecated", kind="data", default=False)
 PROVIDER_SPEC.add("annotations", yaml_key="annotations", kind="data", default=dict())
 PROVIDER_SPEC.add("session_surfaces", yaml_key="session_surfaces", kind="nested", builder=_build_session_surfaces, default=tuple())

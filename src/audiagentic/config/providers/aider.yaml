@@ -7,16 +7,13 @@ display_name: "Aider"
 description: "AI pair programming in your terminal. Edit code directly in your git repo via chat."
 url: "https://aider.chat"
 
-cli_probe:
-  - aider
-  - "--version"
-
 capabilities:
   cli-install:
     mechanism:
       toolchain: uv
       package: "aider-chat@latest"
       executable: aider
+      probe: [aider, "--version"]
       extra:
         - "--force"
         - "--python"
@@ -43,7 +40,10 @@ capabilities:
         managed: false
         description: "Aider project configuration"
 
-execution:
-  mode: stub
-  aliases: [aider]
-  message: "Aider adapter is registered; execution bridge not wired yet."
+  launch:
+    mechanism:
+      recipes:
+        execution:
+          mode: stub
+          aliases: [aider]
+          message: "Aider adapter is registered; execution bridge not wired yet."

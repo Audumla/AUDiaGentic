@@ -238,22 +238,35 @@ def test_roo_execution_unsupported():
 def test_fixture_provider_yaml_only_execution(monkeypatch):
     """A provider with only an execution: block runs through the shared pipeline."""
     import audiagentic.components.providers.adapters.base_runner as base_runner
-    from audiagentic.components.providers.descriptors.base import ProviderDescriptor
+    from audiagentic.components.providers.descriptors.base import (
+        Capability,
+        LaunchSpec,
+        ProviderDescriptor,
+    )
     from audiagentic.components.providers.descriptors.registry import register
     from audiagentic.components.providers.services.execution.execution import execute_provider
 
     register(ProviderDescriptor(
         provider_id="fixture-exec",
         display_name="Fixture Exec",
-        execution={
-            "mode": "cli",
-            "executable": "fixture-exec",
-            "aliases": ["fixture-exec"],
-            "prompt-title": "Fixture",
-            "error-code": "EXT-FIX-001",
-            "args-template": ["run", "{model-flags}", "{prompt}"],
-            "model-flag": "--model",
-        },
+        capabilities=(
+            Capability(
+                kind="launch",
+                mechanism=LaunchSpec(
+                    recipes={
+                        "execution": {
+                            "mode": "cli",
+                            "executable": "fixture-exec",
+                            "aliases": ["fixture-exec"],
+                            "prompt-title": "Fixture",
+                            "error-code": "EXT-FIX-001",
+                            "args-template": ["run", "{model-flags}", "{prompt}"],
+                            "model-flag": "--model",
+                        },
+                    },
+                ),
+            ),
+        ),
     ))
 
     captured: dict = {}

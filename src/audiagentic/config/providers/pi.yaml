@@ -4,33 +4,12 @@
 provider_id: pi
 execution_isolation_tier: full-isolation
 mcp_launch_isolation_tier: exact
-# Declared launch capability (HA04): intent -> queryable channel surface the
-# harness assembles (by role). The caller picks the intent; pi's builder owns
-# the transports/channels.
-#   execute      run one turn, captured (adapter.py, stdin-piped)
-#   interactive  human tty (adapters/pi/interactive.py)
-#   agent        live agent session (adapters/pi/acp.py; pi also offers RPC
-#                hooks for observability)
-launches:
-  execute:
-    interaction: [native]
-    observability: [pipe]
-  interactive:
-    interaction: [native]
-    observability: [pipe]
-  agent:
-    interaction: [acp]
-    observability: [acp, rpc]
 display_name: "Pi Coding Agent"
 description: >-
   Lightweight local coding agent TUI by Earendil Works.
   Supports MCP tool use via the pi-mcp-adapter extension.
 url: "https://www.earendilworks.com/pi"
 access_mode: "none"
-
-cli_probe: null
-
-lsp_support_probe: "audiagentic.components.providers.adapters.pi.hooks:_pi_lens_present"
 
 capabilities:
   cli-install:
@@ -81,7 +60,9 @@ capabilities:
       source: "docs/reference/model-source-evidence/pi.md#pi-evidence"
 
   lsp-self-support:
-    mechanism: "audiagentic.components.providers.adapters.pi.hooks:_pi_ensure_lens"
+    mechanism:
+      on_enabled: "audiagentic.components.providers.adapters.pi.hooks:_pi_ensure_lens"
+      probe: "audiagentic.components.providers.adapters.pi.hooks:_pi_lens_present"
 
   permissions:
     mechanism:
@@ -115,20 +96,42 @@ capabilities:
         only, not required for native vendors (tool_version 0.79.8)
       source: "docs/reference/model-source-evidence/pi.md#pi-evidence"
 
-# One-shot gateway execution uses the shared YAML-driven CLI runner. Live
-# sessions use the provider ACP builder in adapters/pi/acp.py instead.
-execution:
-  mode: cli
-  executable: pi
-  aliases: [pi]
-  prompt-title: Pi
-  error-code: EXT-PI-001
-  extractor-name: pi-plaintext
-  args-template: ["--print", "{model-flags}"]
-  # {prompt} omitted — goes via stdin (run_streaming_command input_text=)
-  # to preserve embedded newlines; Pi's --print drops the first newline
-  # when the prompt arrives as a CLI argument (SH21).
-  model-flag: "--model"
-  approval-mode-flags:
-    yolo: []
-    auto-edit: []
+  launch:
+    mechanism:
+      # Declared launch capability (HA04): intent -> queryable channel surface
+      # the harness assembles (by role). The caller picks the intent; pi's
+      # builder owns the transports/channels.
+      #   execute      run one turn, captured (adapter.py, stdin-piped)
+      #   interactive  human tty (adapters/pi/interactive.py)
+      #   agent        live agent session (adapters/pi/acp.py; pi also offers
+      #                RPC hooks for observability)
+      intents:
+        execute:
+          interaction: [native]
+          observability: [pipe]
+        interactive:
+          interaction: [native]
+          observability: [pipe]
+        agent:
+          interaction: [acp]
+          observability: [acp, rpc]
+      # One-shot gateway execution uses the shared YAML-driven CLI runner.
+      # Live sessions use the provider ACP builder in adapters/pi/acp.py
+      # instead (hand-written builder wins over any declarative recipe, so
+      # interactive/acp need no recipe blocks here).
+      recipes:
+        execution:
+          mode: cli
+          executable: pi
+          aliases: [pi]
+          prompt-title: Pi
+          error-code: EXT-PI-001
+          extractor-name: pi-plaintext
+          args-template: ["--print", "{model-flags}"]
+          # {prompt} omitted — goes via stdin (run_streaming_command
+          # input_text=) to preserve embedded newlines; Pi's --print drops
+          # the first newline when the prompt arrives as a CLI argument (SH21).
+          model-flag: "--model"
+          approval-mode-flags:
+            yolo: []
+            auto-edit: []

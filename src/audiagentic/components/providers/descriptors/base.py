@@ -48,6 +48,19 @@ class HostCapability:
 
 
 @dataclass(frozen=True)
+class ObsTransportNote:
+    """Mechanism for the `obs-transport-observability` evidence-only kind.
+
+    ``transport`` names a generic session-transport concept (e.g.
+    ``acp-stdio``, ``cli-session``) — never a provider-specific tag. Distinct
+    transports for one provider are separate list entries under the same
+    kind, disambiguated by this field rather than by kind naming.
+    """
+
+    transport: str
+
+
+@dataclass(frozen=True)
 class ModelsSpec:
     """Compound mechanism for the unified `models` capability.
 
@@ -65,6 +78,62 @@ class ModelsSpec:
     refresh: Callable[[dict[str, Any]], list[dict[str, Any]]] | None = None
     connectors: tuple[str, ...] = ()
     credentials: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class LaunchSpec:
+    """Compound mechanism for the unified `launch` capability (HA04).
+
+    ``intents`` declares, per launch intent (execute/interactive/agent), the
+    harness's queryable channel surface: ``interaction`` (how it's driven —
+    native tty/stdin, acp, ...) and ``observability`` (how we introspect it —
+    pipe = none, rpc, acp events, hooks, ...). The caller picks an intent; the
+    harness assembles its richest surface — the caller never selects
+    transports/channels directly. An undeclared intent means unsupported.
+
+    ``recipes`` are declarative launch recipes keyed by profile/submodule name
+    (``execution``, ``interactive``, ``acp``, or any future launch kind — open
+    ended, not a closed enum). A hand-written ``adapters/<id>/<kind>.py``
+    builder always wins over the recipe of the same key.
+    """
+
+    intents: dict[str, dict[str, tuple[str, ...]]] = field(default_factory=dict)
+    recipes: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class LspSelfSupportSpec:
+    """Compound mechanism for the `lsp-self-support` capability.
+
+    ``on_enabled`` is the mutating hook run when the coding-lsp component is
+    enabled (installs the provider's own LSP support). ``probe`` is its
+    optional non-mutating companion for status queries — never runs
+    ``on_enabled``'s side effect just to check state.
+
+    NOTE: this stays a separate kind from `lsp-config` (PC07 step 4 finding)
+    — they dispatch through two genuinely separate, already-wired automation
+    handlers (self_provided_lsp_handler.py vs language_server_family.py, two
+    distinct family_ids). Folding them into one descriptor-level kind without
+    also merging that dispatch code would silently break provisioning; that's
+    a separate, larger change than this pass, not assumed here.
+    """
+
+    on_enabled: Callable[[Path | None], dict[str, Any]] | None = None
+    probe: Callable[[Path | None], dict[str, Any]] | None = None
+
+
+@dataclass(frozen=True)
+class ACPFeatureNote:
+    """Mechanism for one entry of the `acp` evidence-only list kind.
+
+    ``feature`` names a generic ACP protocol feature concept (e.g.
+    ``stdio-transport``, ``live-session``, ``session-resume``,
+    ``shared-live-session``) — never a provider-specific tag. One list entry
+    per feature per provider, each with its own evidence, since verification
+    status (verified / planned / blocked) genuinely differs per feature.
+    """
+
+    feature: str
 
 
 @dataclass(frozen=True)
@@ -120,7 +189,11 @@ class CliInstallRecipe:
     Custom provisioners (e.g. pi-harness, raw shell scripts) pass steps directly.
 
     probe_fn is kept as a callable returning a structured availability dict
-    because its semantics differ from install/uninstall (read-only, typed result).
+    because its semantics differ from install/uninstall (read-only, typed
+    result); probe_fn wins when both are declared. probe is the plain
+    shell-command fallback (e.g. ["aider", "--version"]) used when no probe_fn
+    is set — both concern the same "is this CLI really there" question, so
+    both live on the one capability that already owns install/uninstall.
     """
     package_manager: str        # metadata/display only
     package_name: str           # metadata/display only
@@ -128,6 +201,7 @@ class CliInstallRecipe:
     install: ShellStep | SequenceStep | CallableStep
     uninstall: ShellStep | SequenceStep | CallableStep
     uninstall_name: str | None = None
+    probe: list[str] | None = None
     probe_fn: Callable[[Any], dict[str, Any] | None] | None = None
 
 
@@ -160,7 +234,6 @@ class ProviderDescriptor:
     description: str = ""
     url: str = ""
     prompt_aliases: tuple[str, ...] = field(default_factory=tuple)
-    cli_probe: list[str] | None = None
     # The provider-level execution configuration isolation fact.  It is not an
     # automation-family property: gateway admission and worker materialization
     # need one provider-wide declaration, independently of supported families.
@@ -181,44 +254,14 @@ class ProviderDescriptor:
     # "env"  — accessed via environment / API key (no local binary)
     # "none" — passthrough bridge, no direct provider access
     access_mode: str = "cli"
-    # Optional non-mutating companion to on_lsp_enabled. Reports whether the
-    # provider's self-provided LSP support is already present, without
-    # provisioning it. The self-provided-lsp family uses this for status mode so
-    # a query never triggers the install side effect of on_lsp_enabled. When a
-    # provider declares on_lsp_enabled but no probe, status reports evidence-only
-    # "unknown" rather than executing the hook.
-    lsp_support_probe: Callable[[Path | None], dict[str, Any]] | None = None
     # Controls whether this provider receives the ag-lsp MCP server from the
     # coding-lsp component. When True (default), the provider gets the MCP server
     # regardless of whether it has its own LSP implementation. Set to False to
     # opt-out of receiving the ag-lsp MCP.
     receive_lsp_mcp: bool = True
-    # Declarative execution pipeline (AR12). When present and no hand-written
-    # adapter.py exists, adapters/base_runner.py builds the runner from this
-    # block (mode: cli | stub | ok-stub | unsupported; see base_runner docstring
-    # for the full schema). Custom adapter modules always win.
-    # Declared launch capability (HA04). Callers pick an INTENT; the harness
-    # adapter assembles its richest surface to fulfill it — the caller never
-    # selects transports/channels. Intents:
-    #   execute      run one turn, capture a result (gateway task)
-    #   interactive  a live session for a human at a terminal
-    #   agent        a live programmatic agent session
-    # The value is the harness's queryable channel surface for that intent, by
-    # role: ``interaction`` (how it's driven: native tty/stdin, acp, ...) and
-    # ``observability`` (how we introspect it: pipe = none, rpc, acp events,
-    # hooks, ...). The harness uses all it can; a caller may query this to
-    # request a constrained subset. resolve_launch_builder gates on the intent
-    # keys; an empty map means undeclared (dispatch probes, migration default).
-    launches: dict[str, dict[str, tuple[str, ...]]] = field(default_factory=dict)
-    execution: dict[str, Any] | None = None
-    # Declarative launch recipes for the ACP and interactive-TUI launch kinds
-    # (HA04). When present and no hand-written adapters/<id>/{acp,interactive}.py
-    # exists, recipe_launch builds a ProviderLaunch from this block via
-    # build_launch_spec. The block is both the recipe (executable/args/
-    # environment) and its own config (tools/lockdown/... for the flag
-    # primitives). Hand-written builders always win.
-    interactive: dict[str, Any] | None = None
-    acp: dict[str, Any] | None = None
+    # launches/execution/interactive/acp fold into the `launch` capability
+    # (LaunchSpec, below) — see the launches/execution/interactive/acp
+    # @property accessors for the per-field docs, unchanged in shape/type.
     # Whether this provider is deprecated (superseded by another tool or EOL).
     # Drives structured behavior: filtering from active listings, warnings on
     # dispatch, migration prompts. Distinct from annotations — do not store
@@ -257,6 +300,11 @@ class ProviderDescriptor:
         return self._mechanism("cli-install")
 
     @property
+    def cli_probe(self) -> list[str] | None:
+        recipe = self._mechanism("cli-install")
+        return recipe.probe if recipe else None
+
+    @property
     def mcp_config(self) -> ManagedConfigSpec | None:
         return self._mechanism("mcp")
 
@@ -284,6 +332,25 @@ class ProviderDescriptor:
         """Per-vendor credential reference (secrets.py scheme:locator strings)."""
         return self._models_spec().credentials
 
+    def _launch_spec(self) -> LaunchSpec:
+        return self._mechanism("launch") or LaunchSpec()
+
+    @property
+    def launches(self) -> dict[str, dict[str, tuple[str, ...]]]:
+        return self._launch_spec().intents
+
+    @property
+    def execution(self) -> dict[str, Any] | None:
+        return self._launch_spec().recipes.get("execution")
+
+    @property
+    def interactive(self) -> dict[str, Any] | None:
+        return self._launch_spec().recipes.get("interactive")
+
+    @property
+    def acp(self) -> dict[str, Any] | None:
+        return self._launch_spec().recipes.get("acp")
+
     @property
     def plugin_config(self) -> ManagedConfigSpec | None:
         return self._mechanism("plugins")
@@ -298,7 +365,13 @@ class ProviderDescriptor:
 
     @property
     def on_lsp_enabled(self) -> Callable[[Path | None], dict[str, Any]] | None:
-        return self._mechanism("lsp-self-support")
+        spec = self._mechanism("lsp-self-support")
+        return spec.on_enabled if spec else None
+
+    @property
+    def lsp_support_probe(self) -> Callable[[Path | None], dict[str, Any]] | None:
+        spec = self._mechanism("lsp-self-support")
+        return spec.probe if spec else None
 
     @property
     def skill_surface_path(self) -> str | None:

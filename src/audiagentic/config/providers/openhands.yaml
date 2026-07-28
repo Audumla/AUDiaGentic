@@ -7,16 +7,13 @@ display_name: "OpenHands"
 description: "Open-source autonomous AI agent (formerly OpenDevin). Runs tasks in sandboxed Docker containers with full shell, browser, and file access."
 url: "https://www.all-hands.dev"
 
-cli_probe:
-  - openhands
-  - "--version"
-
 capabilities:
   cli-install:
     mechanism:
       toolchain: uv
       package: openhands
       executable: openhands
+      probe: [openhands, "--version"]
       extra:
         - "--python"
         - "3.12"
@@ -68,7 +65,10 @@ capabilities:
         section key names and SDK acceptance against installed version.
       source: "docs/reference/model-source-evidence/openhands.md#openhands-evidence"
 
-execution:
-  mode: stub
-  aliases: [openhands]
-  message: "OpenHands adapter is registered; sandbox execution bridge not wired yet."
+  launch:
+    mechanism:
+      recipes:
+        execution:
+          mode: stub
+          aliases: [openhands]
+          message: "OpenHands adapter is registered; sandbox execution bridge not wired yet."

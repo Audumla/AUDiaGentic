@@ -3,21 +3,11 @@
 
 provider_id: qwen
 execution_isolation_tier: full-isolation
-# Launch capability (HA04): CLI-only, so the execute intent over native pipe
-# (declarative execution: recipe below). No live interactive/agent launch.
-launches:
-  execute:
-    interaction: [native]
-    observability: [pipe]
 display_name: "Qwen (Alibaba)"
 description: "Alibaba Cloud's Qwen Code CLI. Open-source coding agent built on the Qwen model family."
 url: "https://github.com/QwenLM/qwen-code"
 prompt_aliases:
   - qw
-
-cli_probe:
-  - qwen
-  - "--version"
 
 capabilities:
   cli-install:
@@ -25,6 +15,7 @@ capabilities:
       toolchain: npm
       package: "@qwen-code/qwen-code"
       executable: qwen
+      probe: [qwen, "--version"]
       probe_fn: "audiagentic.components.providers.adapters.qwen.hooks:_qwen_probe"
 
   host-extensions:
@@ -87,15 +78,24 @@ capabilities:
         (tool_version 0.13.1)
       source: "docs/reference/model-source-evidence/qwen.md#qwen-evidence"
 
-execution:
-  mode: cli
-  executable: qwen
-  aliases: [qwen]
-  prompt-title: Qwen
-  error-code: EXT-QWEN-001
-  extractor-name: qwen-plaintext
-  args-template: ["{approval-flags}", "{model-flags}", "{prompt}"]
-  model-flag: "-m"
-  approval-mode-flags:
-    yolo: ["--yolo"]
-    auto-edit: ["--approval-mode", "auto-edit"]
+  launch:
+    mechanism:
+      # Launch capability (HA04): CLI-only, so the execute intent over native
+      # pipe. No live interactive/agent launch.
+      intents:
+        execute:
+          interaction: [native]
+          observability: [pipe]
+      recipes:
+        execution:
+          mode: cli
+          executable: qwen
+          aliases: [qwen]
+          prompt-title: Qwen
+          error-code: EXT-QWEN-001
+          extractor-name: qwen-plaintext
+          args-template: ["{approval-flags}", "{model-flags}", "{prompt}"]
+          model-flag: "-m"
+          approval-mode-flags:
+            yolo: ["--yolo"]
+            auto-edit: ["--approval-mode", "auto-edit"]
