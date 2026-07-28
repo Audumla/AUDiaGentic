@@ -225,6 +225,7 @@ def test_session_server_exposes_expected_tools(tmp_path, _session_server):
         "status",
         "config",
         "set_auto_update",
+        "rig_upgrade_status",
         "update_rig",
     }.issubset(names)
     assert "cli_visibility" not in names
@@ -369,13 +370,13 @@ def test_ledger_server_can_get_summary(tmp_path, project_root, _ledger_server):
 
 
 def test_update_rig_works_directly(tmp_path: Path) -> None:
-    """Test the update_binaries work function directly (avoids MCP subprocess timeout)."""
+    """Exercise the owned llama.cpp recipe directly (avoids MCP subprocess timeout)."""
     import contextlib
     import io
 
     from audiagentic.foundation.contracts.output import ComponentOutputEvent
     from audiagentic.foundation.paths.home import global_harness_runtime
-    from audiagentic.runtime.rig.embedded.binaries import update_binaries as _update
+    from audiagentic.runtime.rig.embedded.recipe import llama_cpp_recipe
 
     os.environ["AUDIAGENTIC_HOME"] = str(tmp_path / ".audiagentic")
     out = io.StringIO()
@@ -386,7 +387,8 @@ def test_update_rig_works_directly(tmp_path: Path) -> None:
 
     harness = global_harness_runtime()
     with contextlib.redirect_stdout(out):
-        _update(runtime_dir=harness)
+        result = llama_cpp_recipe(harness / "rig" / "bin").provision({})
+    assert result.success, result.error or result.status
     _sink(ComponentOutputEvent(message=out.getvalue().strip()))
 
     assert len(events) > 0
