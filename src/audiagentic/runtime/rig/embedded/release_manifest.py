@@ -6,6 +6,7 @@ code never asks GitHub which release happens to be latest.
 """
 from __future__ import annotations
 
+import platform
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -36,14 +37,17 @@ def _manifest_path() -> Path:
 
 
 def _asset_key() -> str:
-    platform = platform_key()
-    if platform == "win":
+    host_platform = platform_key()
+    architecture = platform.machine().lower()
+    is_x64 = architecture in {"x86_64", "amd64"}
+    is_arm64 = architecture in {"arm64", "aarch64"}
+    if host_platform == "win" and is_x64:
         return "win-x64"
-    if platform == "darwin":
+    if host_platform == "darwin" and is_arm64:
         return "darwin-arm64"
-    if platform == "linux":
+    if host_platform == "linux" and is_x64:
         return "linux-x64"
-    return platform
+    return f"{host_platform}-{architecture}"
 
 
 def load_llama_cpp_release_asset() -> LlamaCppReleaseAsset:

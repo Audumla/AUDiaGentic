@@ -26,10 +26,12 @@ def should_provision_embedded_rig() -> bool:
 
 def provision_embedded_rig(target: Path, project_root: Path | None) -> None:
     """Provision test/explicit embedded-rig assets without provider ownership."""
-    from audiagentic.runtime.rig.embedded.binaries import update_binaries
+    from audiagentic.runtime.rig.embedded.recipe import llama_cpp_recipe
 
     bin_dir = target / "rig" / "bin"
-    update_binaries(target_bin_dir=bin_dir)
+    result = llama_cpp_recipe(bin_dir).provision({})
+    if not result.success:
+        raise RuntimeError(result.error or result.status)
     models_dir = bin_dir / "models"
     models_dir.mkdir(parents=True, exist_ok=True)
     targets = (models_dir / "Qwen3.5-0.8B.Q8_0.gguf", models_dir / "Qwen_Qwen3.5-2B-Q4_K_S.gguf")

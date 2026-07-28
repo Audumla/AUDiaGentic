@@ -15,6 +15,7 @@ terminates or corrupts the driven session").
 """
 from __future__ import annotations
 
+import io
 import os
 import subprocess
 import sys
@@ -22,6 +23,30 @@ import threading
 from collections.abc import Callable
 
 CHUNK_SIZE = 65536
+
+
+def _read_available(source, size: int) -> bytes:
+    """Read up to *size* bytes, returning as soon as any are available.
+
+    Real OS pipes (the actual ``pi`` child's stdout/stderr, and our own
+    stdin when driven by a real parent like pi-acp) are backed by a
+    ``BufferedReader``, whose ``read(size)`` blocks trying to accumulate the
+    *full* requested size before returning -- fine for bulk transfer, fatal
+    for interactive RPC framing where a caller writes one small JSON line and
+    then waits for a response: the line sits stuck in our buffer instead of
+    being forwarded, and the real `pi-acp` <-> `pi` round trip never
+    completes (found by running the real pi-acp + pi binaries, not the
+    fake/echo children unit tests use). ``os.read`` on the raw fd has normal
+    streaming semantics -- it returns whatever is currently available.  Test
+    doubles (``io.BytesIO``, custom writer classes) have no real fd, so fall
+    back to their own ``read()``, which is already immediate since their
+    contents are fully in memory.
+    """
+    try:
+        fd = source.fileno()
+    except (AttributeError, io.UnsupportedOperation, OSError):
+        return source.read(size)
+    return os.read(fd, size)
 TAP_ADDRESS_ENV = "AUDIAGENTIC_PI_TAP_ADDRESS"
 TAP_AUTHKEY_ENV = "AUDIAGENTIC_PI_TAP_AUTHKEY"
 _STDERR_CAPTURE_BOUND = 4096
@@ -88,7 +113,7 @@ def _pump_stdin(source, dest) -> None:
     """Byte-for-byte passthrough of our stdin into the child's stdin."""
     try:
         while True:
-            chunk = source.read(CHUNK_SIZE)
+            chunk = _read_available(source, CHUNK_SIZE)
             if not chunk:
                 break
             dest.write(chunk)
@@ -106,7 +131,7 @@ def _pump_stdout(source, dest, tap: _TapSink) -> None:
     """Fan the child's stdout to (a) our own stdout unchanged, (b) the tap."""
     try:
         while True:
-            chunk = source.read(CHUNK_SIZE)
+            chunk = _read_available(source, CHUNK_SIZE)
             if not chunk:
                 break
             dest.write(chunk)
@@ -121,7 +146,7 @@ def _drain_stderr(source, *, bound: int = _STDERR_CAPTURE_BOUND) -> bytearray:
     captured = bytearray()
     try:
         while True:
-            chunk = source.read(CHUNK_SIZE)
+            chunk = _read_available(source, CHUNK_SIZE)
             if not chunk:
                 break
             if len(captured) < bound:
@@ -153,6 +178,18 @@ def run_tee(
         )
     )
     child = spawn(argv)
+    # Adopt the real `pi` child into a kill-on-close Job Object (Windows) so it
+    # cannot outlive this shim even if the shim itself is hard-killed -- the
+    # same orphan-on-crash gap `supervised_process` closes for other harness
+    # grandchildren. No-op on POSIX and for test doubles without a real pid.
+    _job_handle = None
+    child_pid = getattr(child, "pid", None)
+    if child_pid is not None:
+        from audiagentic.foundation.system.supervised_process import (
+            adopt_pid_into_kill_job,
+        )
+
+        _job_handle = adopt_pid_into_kill_job(child_pid)
     tap = _TapSink(tap_address, tap_authkey, connect_timeout=tap_connect_timeout)
     threads = [
         threading.Thread(target=_pump_stdin, args=(stdin, child.stdin), daemon=True),
@@ -165,6 +202,13 @@ def run_tee(
     for t in threads:
         t.join(timeout=2.0)
     tap.close()
+    if _job_handle is not None and os.name == "nt":
+        import ctypes
+
+        try:
+            ctypes.windll.kernel32.CloseHandle(_job_handle)
+        except OSError:
+            pass
     return exit_code
 
 

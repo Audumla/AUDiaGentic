@@ -12,7 +12,7 @@ import tempfile
 import urllib.request
 import uuid
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
 from audiagentic.foundation.cli_io import print_message
@@ -87,9 +87,22 @@ def _extract_tar_gz(tar_path: Path, dest_dir: Path, inner_exe: str) -> None:
     with tarfile.open(tar_path, "r:gz") as tf:
         members = tf.getmembers()
         _safe_members([member.name for member in members])
-        if any(member.issym() or member.islnk() for member in members):
-            raise make_rig_binary_error("CON", 6, "Archive links are not permitted.")
-        tf.extractall(dest_dir, members=members)
+        for member in members:
+            if member.issym() or member.islnk():
+                link = PurePosixPath(member.linkname)
+                if link.is_absolute() or ".." in link.parts:
+                    raise make_rig_binary_error("CON", 6, "Archive contains an unsafe link target.")
+        try:
+            tf.extractall(dest_dir, members=members, filter="fully_trusted")
+        except TypeError:
+            # `filter` (PEP 706) is only backported to Python 3.11.4+/3.10.12+/
+            # 3.9.17+/3.8.17+; older 3.11.x (e.g. Debian bookworm's system
+            # python3, 3.11.2) raises TypeError on the kwarg. Extraction
+            # without `filter` is exactly the "fully_trusted" behavior on
+            # those interpreters (no filtering existed at all pre-3.12), so
+            # this is not a security downgrade -- members were already
+            # validated by `_safe_members` and the symlink check above.
+            tf.extractall(dest_dir, members=members)
     _flatten_extracted_archive(dest_dir, inner_exe)
 
 
