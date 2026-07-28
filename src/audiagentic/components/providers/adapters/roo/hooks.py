@@ -4,7 +4,9 @@ from __future__ import annotations
 import shutil
 
 from audiagentic.components.providers.adapters.probe import run_cli
-from audiagentic.components.providers.services.host_capabilities import list_installed_extensions
+from audiagentic.components.providers.services.host.host_capabilities import (
+    list_installed_extensions,
+)
 
 _EXTENSION_ID = "RooVeterinaryInc.roo-cline"
 

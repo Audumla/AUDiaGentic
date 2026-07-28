@@ -51,7 +51,7 @@ def _build_system_md(target: Path, *, project_root: Path | None = None) -> None:
     (target / "SYSTEM.md").write_text(content, encoding="utf-8")
 
 
-def materialize_provider_config(
+def materialize_provider_specific(
     project_root: Path,
     harness_cfg: dict,
     *,

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from audiagentic.components.providers.services.models import MaterializedModelEntry
+from audiagentic.components.providers.services.catalog.models import MaterializedModelEntry
 
 
 def render_opencode_model_entry(entry: MaterializedModelEntry) -> tuple[str, dict[str, Any]]:
