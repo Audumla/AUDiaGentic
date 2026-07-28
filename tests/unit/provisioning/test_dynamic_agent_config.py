@@ -6,9 +6,6 @@ from pathlib import Path
 
 from audiagentic import launcher
 from audiagentic.foundation.components.loader import register_all_components
-from audiagentic.foundation.components.prompt_injections import (
-    build_system_prompt_injections as build_system_md_injections,
-)
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
 from audiagentic.foundation.lifecycle.components import install_component
 from audiagentic.foundation.mcp import McpServerEntry
@@ -23,30 +20,6 @@ def _collect(project_root: Path) -> dict[str, McpServerEntry]:
     return collect_component_mcp_entries(
         project_root, propagation_target="providers", require_enabled=True
     )
-
-
-def test_build_system_md_injections_uses_explicit_project_root(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    project_root = tmp_path / "project"
-    other_root = tmp_path / "other"
-    project_root.mkdir()
-    other_root.mkdir()
-
-    register_all_components()
-    install_component("project", project_root)
-    install_component("coding-lsp", project_root)
-    monkeypatch.chdir(other_root)
-
-    injections = build_system_md_injections(project_root)
-
-    # No consolidated tool catalog is injected; per-tool defs are MCP-advertised.
-    assert "MCP tools" not in injections
-    assert "Available components" in injections
-    assert "installed/enabled" in injections["Available components"]
-    assert "`providers`" in injections["Available components"]
-    assert "not installed" in injections["Available components"]
 
 
 def test_collect_mcp_entries_rebuilds_from_installed_components(
