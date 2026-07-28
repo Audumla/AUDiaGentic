@@ -31,11 +31,6 @@ families:
     supported_modes: [plan, apply, prune, status]
     ownership_scope_required: true
 
-  language-server:
-    payload_contract: provider-language-server-payload/v1
-    result_contract: provider-language-server-result/v1
-    supported_modes: [plan, apply, prune, status]
-
   managed-hooks:
     payload_contract: provider-managed-hooks-payload/v1
     result_contract: provider-managed-hooks-result/v1
@@ -101,12 +96,29 @@ kinds:
     cardinality: single
     mechanism_schema: surfaces-struct
 
-  lsp-automation:
+  # NOTE: no "lsp-automation" kind here (PC07 step 4 finding, deleted -- it
+  # was unused). lsp-config and lsp-self-support below dispatch through two
+  # genuinely separate, already-wired automation handlers
+  # (language-server-projection family vs self-provided-lsp family) --
+  # merging them into one kind without also merging that dispatch code would
+  # silently break provisioning; that's a separate, larger change, not
+  # assumed here. (The unwired "language-server" family this kind was meant
+  # to eventually share was dead weight -- no handler consumed it, no
+  # contract files existed for it -- so it's deleted, not kept.)
+
+  lsp-config:
     domain: lsp
     authority: provisioned
-    family_id: language-server
+    family_id: language-server-projection
     cardinality: single
-    mechanism_schema: lsp-automation-spec
+    mechanism_schema: managed-config-spec
+
+  lsp-self-support:
+    domain: lsp
+    authority: provisioned
+    family_id: self-provided-lsp
+    cardinality: single
+    mechanism_schema: lsp-self-support-spec
 
   # ── Operational (no FamilyPin) ──
 
@@ -127,6 +139,15 @@ kinds:
     authority: operational
     cardinality: list
     mechanism_schema: agent-file
+
+  launch:
+    domain: exec
+    authority: operational
+    cardinality: single
+    mechanism_schema: launch-spec
+    # Compound: declared per-intent channel surface (execute/interactive/agent
+    # -> interaction/observability channels) + declarative launch recipes
+    # keyed by profile name. Folds launches + execution + interactive + acp.
 
   surface-skill:
     domain: surface
@@ -163,10 +184,16 @@ kinds:
 
   # ── Evidence-only (no FamilyPin, no mechanism) ──
 
-  acp-support:
+  acp:
     domain: acp
     authority: evidence-only
-    mechanism_schema: acp-caps-list
+    cardinality: list
+    mechanism_schema: acp-feature-note
+    # One neutral kind for ACP protocol-feature evidence; a provider with
+    # multiple observed/planned features declares one list entry per
+    # feature (mechanism.feature: stdio-transport|live-session|
+    # session-resume|shared-live-session), each with its own evidence --
+    # verification status genuinely differs per feature.
 
   model-local-state:
     domain: model
@@ -178,58 +205,14 @@ kinds:
     authority: evidence-only
     mechanism_schema: none
 
-  # ── Harness observability (evidence-only, obs-* pattern) ──
+  # ── Harness observability (evidence-only) ──
+  # One neutral kind for "can the harness observe this provider's execution
+  # over transport X" claims. Distinct transports for one provider are
+  # separate list entries (mechanism.transport), never separate kinds --
+  # a kind id must never embed a provider name (VAL-PCAP-014).
 
-  obs-opencode-acp:
+  obs-transport-observability:
     domain: obs
     authority: evidence-only
-    mechanism_schema: none
-
-  obs-opencode-cli-session:
-    domain: obs
-    authority: evidence-only
-    mechanism_schema: none
-
-  # ── Legacy kinds (kept for PC01 validation, consolidated in a future pass) ──
-  # These are superseded by canonical kinds listed under canonical_kind.
-  # They pass VAL-PCAP-009 but signal future migration.
-
-  lsp-config:
-    domain: lsp
-    authority: provisioned
-    family_id: language-server-projection
-    cardinality: single
-    mechanism_schema: managed-config-spec
-    canonical_kind: lsp-automation
-
-  lsp-self-support:
-    domain: lsp
-    authority: provisioned
-    family_id: self-provided-lsp
-    cardinality: single
-    mechanism_schema: callable-ref
-    canonical_kind: lsp-automation
-
-  acp-stdio-transport:
-    domain: acp
-    authority: evidence-only
-    mechanism_schema: none
-    canonical_kind: acp-support
-
-  acp-live-session:
-    domain: acp
-    authority: evidence-only
-    mechanism_schema: none
-    canonical_kind: acp-support
-
-  acp-shared-live-session:
-    domain: acp
-    authority: evidence-only
-    mechanism_schema: none
-    canonical_kind: acp-support
-
-  acp-session-resume:
-    domain: acp
-    authority: evidence-only
-    mechanism_schema: none
-    canonical_kind: acp-support
+    cardinality: list
+    mechanism_schema: obs-transport-note

@@ -7,16 +7,13 @@ display_name: "Plandex"
 description: "Open-source AI coding agent for large, complex tasks. Manages long-running plans across many files with version control and sandboxed changes."
 url: "https://plandex.ai"
 
-cli_probe:
-  - plandex
-  - "--version"
-
 capabilities:
   cli-install:
     mechanism:
       toolchain: brew
       package: "plandex-ai/tap/plandex"
       executable: plandex
+      probe: [plandex, "--version"]
       uninstall_package: plandex
 
   surfaces:
@@ -42,7 +39,10 @@ capabilities:
         managed: false
         description: "Shared project instructions"
 
-execution:
-  mode: stub
-  aliases: [plandex, pdx]
-  message: "Plandex adapter is registered; execution bridge not wired yet."
+  launch:
+    mechanism:
+      recipes:
+        execution:
+          mode: stub
+          aliases: [plandex, pdx]
+          message: "Plandex adapter is registered; execution bridge not wired yet."

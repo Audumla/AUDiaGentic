@@ -3,21 +3,11 @@
 
 provider_id: copilot
 execution_isolation_tier: no-isolation
-# Launch capability (HA04): CLI-only, execute intent over native pipe
-# (declarative execution: recipe below).
-launches:
-  execute:
-    interaction: [native]
-    observability: [pipe]
 display_name: "GitHub Copilot"
 description: "GitHub's AI coding assistant. Inline completions, chat, and multi-file edits across VS Code and JetBrains."
 url: "https://github.com/features/copilot"
 prompt_aliases:
   - cp
-
-cli_probe:
-  - copilot
-  - "--version"
 
 capabilities:
   cli-install:
@@ -25,6 +15,7 @@ capabilities:
       toolchain: npm
       package: "@github/copilot"
       executable: copilot
+      probe: [copilot, "--version"]
       probe_fn: "audiagentic.components.providers.adapters.copilot.hooks:_copilot_probe"
 
   host-extensions:
@@ -72,11 +63,19 @@ capabilities:
         managed: false
         description: "GitHub Copilot repo instructions"
 
-execution:
-  mode: cli
-  executable: copilot
-  aliases: [gh]
-  prompt-title: Copilot
-  error-code: EXT-COPIL-001
-  extractor-name: copilot-plaintext
-  args-template: ["copilot", "suggest", "-t", "shell", "{prompt}"]
+  launch:
+    mechanism:
+      # Launch capability (HA04): CLI-only, execute intent over native pipe.
+      intents:
+        execute:
+          interaction: [native]
+          observability: [pipe]
+      recipes:
+        execution:
+          mode: cli
+          executable: copilot
+          aliases: [gh]
+          prompt-title: Copilot
+          error-code: EXT-COPIL-001
+          extractor-name: copilot-plaintext
+          args-template: ["copilot", "suggest", "-t", "shell", "{prompt}"]

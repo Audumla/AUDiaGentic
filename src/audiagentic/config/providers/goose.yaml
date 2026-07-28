@@ -7,16 +7,13 @@ display_name: "Goose (Block)"
 description: "Open-source AI agent by Block. Extensible toolkit of MCP extensions for dev workflows."
 url: "https://block.github.io/goose"
 
-cli_probe:
-  - goose
-  - "--version"
-
 capabilities:
   cli-install:
     mechanism:
       package_manager: script
       package_name: "https://github.com/block/goose/releases/download/stable/download_cli.sh"
       executable: goose
+      probe: [goose, "--version"]
       install:
         type: shell
         id: install
@@ -65,7 +62,10 @@ capabilities:
         managed: false
         description: "Shared project instructions"
 
-execution:
-  mode: stub
-  aliases: [goose]
-  message: "Goose adapter is registered; execution bridge not wired yet."
+  launch:
+    mechanism:
+      recipes:
+        execution:
+          mode: stub
+          aliases: [goose]
+          message: "Goose adapter is registered; execution bridge not wired yet."
