@@ -3,6 +3,7 @@
 Handles language enable/disable, dependency installation, and config status.
 Separated from lsp_api.py (LSP protocol operations) for single-responsibility.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -57,7 +58,9 @@ def _configured_language_ids(project_root: Path | None) -> list[str]:
     """Languages enabled in feature state and supported by the active implementation."""
     if project_root is None:
         return []
-    return [binding.feature for binding in active_language_bindings(resolve_project_root(project_root))]
+    return [
+        binding.feature for binding in active_language_bindings(resolve_project_root(project_root))
+    ]
 
 
 def configured_dependency_ids(project_root: Path | None) -> list[str]:
@@ -230,7 +233,9 @@ def config_status(root: str = ".") -> dict[str, Any]:
         },
         "implementation": active_lsp_implementation(project_root),
         "languages": language_status,
-        "missing_binaries": [lang for lang, status in language_status.items() if not status["binary_available"]],
+        "missing_binaries": [
+            lang for lang, status in language_status.items() if not status["binary_available"]
+        ],
         "detectable": list(detect_project_languages(project_root).keys()),
     }
 
@@ -276,7 +281,12 @@ def get_config(root: str = ".", implementation_id: str | None = None) -> dict[st
     project_root = resolve_project_root(root)
     target_impl = implementation_id or active_lsp_implementation(project_root)
     if not target_impl:
-        return {"implementation": None, "config": {}, "schema": {}, "error": "No active implementation"}
+        return {
+            "implementation": None,
+            "config": {},
+            "schema": {},
+            "error": "No active implementation",
+        }
 
     desc = get_implementation(_COMPONENT_ID, target_impl)
     impl_state = get_implementation_state(project_root, _COMPONENT_ID, target_impl)
@@ -324,6 +334,7 @@ def set_config(root: str, implementation_id: str, updates: dict[str, Any]) -> di
                     }
             else:
                 from audiagentic.foundation.contracts.errors import AudiaGenticError
+
                 try:
                     validate_option(key, value, schema)
                 except (AudiaGenticError, ValueError) as exc:
@@ -348,7 +359,10 @@ def add_language(root: str, language: str) -> dict[str, Any]:
     project_root = resolve_project_root(root)
     specs = available_language_specs()
     if language not in specs:
-        return {"ok": False, "error": f"Unknown language: {language}. Available: {list(specs.keys())}"}
+        return {
+            "ok": False,
+            "error": f"Unknown language: {language}. Available: {list(specs.keys())}",
+        }
     # Enablement is feature state; lsp.json is then regenerated as a pure cache.
     _set_language_feature_enabled(project_root, language, True)
     _regenerate_lsp_cache(project_root)
@@ -374,7 +388,9 @@ async def enable_language(root: str, language: str) -> dict[str, Any]:
     language is not rolled back on install failure.
     """
     project_root = resolve_project_root(root)
-    already_configured = get_feature_state(project_root, _COMPONENT_ID, "language", language).enabled
+    already_configured = get_feature_state(
+        project_root, _COMPONENT_ID, "language", language
+    ).enabled
 
     added = add_language(str(project_root), language)
     if not added.get("ok"):
@@ -400,6 +416,9 @@ async def enable_language(root: str, language: str) -> dict[str, Any]:
 
 
 def remove_language(root: str, language: str) -> dict[str, Any]:
+    from audiagentic.components.coding_lsp.git_hooks_sync import (
+        _sync_hook_for_language,
+    )
     from audiagentic.components.coding_lsp.lsp_api import _session_manager
 
     project_root = resolve_project_root(root)
@@ -414,8 +433,11 @@ def remove_language(root: str, language: str) -> dict[str, Any]:
     from audiagentic.components.coding_lsp.language_servers_sync import (
         prune_language_servers_from_providers,
     )
+
     prune_language_servers_from_providers(project_root)
     _sync_to_providers(project_root)
+    # Remove the pre-commit hook block for this language.
+    _sync_hook_for_language(project_root, language, install=False)
     lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
     return {"ok": True, "language": language, "path": str(lsp_path)}
 
@@ -433,9 +455,7 @@ def list_languages() -> dict[str, Any]:
     }
 
 
-async def install_lsp_dependencies(
-    names: list[str], *, root: str = "."
-) -> dict[str, Any]:
+async def install_lsp_dependencies(names: list[str], *, root: str = ".") -> dict[str, Any]:
     """Install language-server binaries — scoped to configured languages.
 
     The workflow is built from the active implementation plus enabled language
@@ -459,7 +479,11 @@ async def install_lsp_dependencies(
         targets = missing_configured_dependencies(project_root)
 
     if not targets:
-        return {"ok": True, "installed": [], "skipped": "no missing dependencies for configured languages"}
+        return {
+            "ok": True,
+            "installed": [],
+            "skipped": "no missing dependencies for configured languages",
+        }
 
     from audiagentic.components.coding_lsp.language_servers_sync import (
         provision_provider_lsp_support,
