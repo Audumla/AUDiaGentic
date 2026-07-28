@@ -30,7 +30,7 @@ def test_pi_materializes_distinct_request_owned_configs(tmp_path, monkeypatch) -
         lambda: adapter,
     )
     monkeypatch.setattr(
-        "audiagentic.components.providers.services.system_probe.resolve_system_package_root",
+        "audiagentic.components.providers.services.host.system_probe.resolve_system_package_root",
         lambda _cli: package_root,
     )
     monkeypatch.setattr(

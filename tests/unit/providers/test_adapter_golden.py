@@ -88,7 +88,7 @@ def _run_with_fakes(monkeypatch, provider_id: str, stdout: str):
             monkeypatch.setattr(mod, "build_extractor_stream_sinks", lambda *a, **k: ([], []))
     assert patched_any, f"no pipeline module found for {provider_id}"
 
-    from audiagentic.components.providers.services.execution import execute_provider
+    from audiagentic.components.providers.services.execution.execution import execute_provider
 
     ctx = dict(_PACKET_CTX, **{"provider-id": provider_id})
     result = execute_provider(provider_id=provider_id, packet_ctx=ctx, provider_cfg=dict(_PROVIDER_CFG))
@@ -155,7 +155,7 @@ def test_gemini_prefers_packet_model_over_provider_default(monkeypatch):
     monkeypatch.setattr(mod, "require_executable", lambda pid, *a: f"/bin/{pid}")
     monkeypatch.setattr(mod, "build_extractor_stream_sinks", lambda *a, **k: ([], []))
 
-    from audiagentic.components.providers.services.execution import execute_provider
+    from audiagentic.components.providers.services.execution.execution import execute_provider
 
     ctx = dict(_PACKET_CTX, **{"provider-id": "gemini", "model-id": "packet-model"})
     provider_cfg = dict(_PROVIDER_CFG, **{"default-model": "provider-default-model"})
@@ -183,7 +183,7 @@ def test_gemini_falls_back_to_provider_default_without_packet_model(monkeypatch)
     monkeypatch.setattr(mod, "require_executable", lambda pid, *a: f"/bin/{pid}")
     monkeypatch.setattr(mod, "build_extractor_stream_sinks", lambda *a, **k: ([], []))
 
-    from audiagentic.components.providers.services.execution import execute_provider
+    from audiagentic.components.providers.services.execution.execution import execute_provider
 
     ctx = dict(_PACKET_CTX, **{"provider-id": "gemini"})
     execute_provider(provider_id="gemini", packet_ctx=ctx, provider_cfg=dict(_PROVIDER_CFG))
@@ -215,7 +215,7 @@ def test_probe_stub_providers(monkeypatch, provider_id: str, aliases: tuple[str,
     except ModuleNotFoundError:
         pass
 
-    from audiagentic.components.providers.services.execution import execute_provider
+    from audiagentic.components.providers.services.execution.execution import execute_provider
 
     ctx = dict(_PACKET_CTX, **{"provider-id": provider_id})
     result = execute_provider(provider_id=provider_id, packet_ctx=ctx, provider_cfg=dict(_PROVIDER_CFG))
@@ -228,7 +228,7 @@ def test_probe_stub_providers(monkeypatch, provider_id: str, aliases: tuple[str,
 
 
 def test_roo_execution_unsupported():
-    from audiagentic.components.providers.services.execution import execute_provider
+    from audiagentic.components.providers.services.execution.execution import execute_provider
 
     ctx = dict(_PACKET_CTX, **{"provider-id": "roo"})
     with pytest.raises(AudiaGenticError, match="CON-ROO-001"):
@@ -240,7 +240,7 @@ def test_fixture_provider_yaml_only_execution(monkeypatch):
     import audiagentic.components.providers.adapters.base_runner as base_runner
     from audiagentic.components.providers.descriptors.base import ProviderDescriptor
     from audiagentic.components.providers.descriptors.registry import register
-    from audiagentic.components.providers.services.execution import execute_provider
+    from audiagentic.components.providers.services.execution.execution import execute_provider
 
     register(ProviderDescriptor(
         provider_id="fixture-exec",
@@ -276,7 +276,7 @@ def test_fixture_provider_yaml_only_execution(monkeypatch):
 
 
 def test_continue_ok_stub():
-    from audiagentic.components.providers.services.execution import execute_provider
+    from audiagentic.components.providers.services.execution.execution import execute_provider
 
     ctx = dict(_PACKET_CTX, **{"provider-id": "continue"})
     result = execute_provider(provider_id="continue", packet_ctx=ctx, provider_cfg=dict(_PROVIDER_CFG))

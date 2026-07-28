@@ -11,7 +11,7 @@ from audiagentic.components.providers.contracts.managed_hooks import (
     ManagedHooksEntry,
     ManagedHooksRequest,
 )
-from audiagentic.components.providers.services import managed_hooks_family as family
+from audiagentic.components.providers.services.capabilities import managed_hooks_family as family
 from audiagentic.foundation.toolchains.config.managed_config import ManagedConfigSpec
 
 
@@ -165,9 +165,7 @@ def test_codex_hook_enable_removes_legacy_key_when_current_key_exists(tmp_path):
 
     hooks_format._enable_codex_hooks(config_path)
 
-    assert config_path.read_text(encoding="utf-8") == (
-        "[features]\nhooks = true\nforeign = true\n"
-    )
+    assert config_path.read_text(encoding="utf-8") == ("[features]\nhooks = true\nforeign = true\n")
 
 
 def test_status_reports_registered_managed_hook_ids(monkeypatch, tmp_path):
@@ -241,6 +239,7 @@ def test_managed_hooks_provider_source_is_requester_blind():
         / "components"
         / "providers"
         / "services"
+        / "capabilities"
         / "managed_hooks_family.py",
         repo_root
         / "src"

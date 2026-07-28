@@ -22,10 +22,10 @@ import pytest
 from audiagentic.components.providers.contracts.session_surface import SurfaceHint
 from audiagentic.components.providers.descriptors.base import ProviderDescriptor
 from audiagentic.components.providers.descriptors.registry import register
-from audiagentic.components.providers.services.provider_config import (
+from audiagentic.components.providers.services.config.provider_config import (
     set_provider_enabled,
 )
-from audiagentic.components.providers.services.session_surface_resolution import (
+from audiagentic.components.providers.services.session.session_surface_resolution import (
     resolve_session_surface,
 )
 from audiagentic.foundation.transports.session_surface import (
@@ -120,7 +120,7 @@ class TestVendorSupportNotEligibility:
         The inventory is authoritative — even if YAML declares all platforms
         as validated, the inventory gate rejects platforms without evidence.
         """
-        from audiagentic.components.providers.services.harness_observability_inventory import (
+        from audiagentic.components.providers.services.session.harness_observability_inventory import (
             is_eligible_transport_observation_publisher,
         )
 
@@ -140,7 +140,7 @@ class TestVendorSupportNotEligibility:
 
     def test_vendor_support_only_surface_not_eligible(self):
         """A surface with vendor support but no inventory entry is never eligible."""
-        from audiagentic.components.providers.services.harness_observability_inventory import (
+        from audiagentic.components.providers.services.session.harness_observability_inventory import (
             is_eligible_transport_observation_publisher,
         )
 
@@ -184,7 +184,7 @@ class TestOpencodeNonLinuxRejection:
             return False
 
         monkeypatch.setattr(
-            "audiagentic.components.providers.services.session_surface_resolution._get_inventory_proof",
+            "audiagentic.components.providers.services.session.session_surface_resolution._get_inventory_proof",
             fake_inventory_check,
         )
 
@@ -238,7 +238,7 @@ class TestOpencodeNonLinuxRejection:
             return False
 
         monkeypatch.setattr(
-            "audiagentic.components.providers.services.session_surface_resolution._get_inventory_proof",
+            "audiagentic.components.providers.services.session.session_surface_resolution._get_inventory_proof",
             fake_inventory_check,
         )
 
@@ -293,7 +293,7 @@ class TestOpencodeNonLinuxRejection:
             return False  # no platform proven
 
         monkeypatch.setattr(
-            "audiagentic.components.providers.services.session_surface_resolution._get_inventory_proof",
+            "audiagentic.components.providers.services.session.session_surface_resolution._get_inventory_proof",
             fake_inventory_check,
         )
 
@@ -340,7 +340,7 @@ class TestOpencodeNonLinuxRejection:
             return False  # no platform proven
 
         monkeypatch.setattr(
-            "audiagentic.components.providers.services.session_surface_resolution._get_inventory_proof",
+            "audiagentic.components.providers.services.session.session_surface_resolution._get_inventory_proof",
             fake_inventory_check,
         )
 
@@ -399,7 +399,7 @@ class TestYamlCannotBypassInventory:
             return False
 
         monkeypatch.setattr(
-            "audiagentic.components.providers.services.session_surface_resolution._get_inventory_proof",
+            "audiagentic.components.providers.services.session.session_surface_resolution._get_inventory_proof",
             fake_inventory_check,
         )
 
@@ -491,7 +491,7 @@ class TestLocallyProvenPlatformPreserved:
             return False
 
         monkeypatch.setattr(
-            "audiagentic.components.providers.services.session_surface_resolution._get_inventory_proof",
+            "audiagentic.components.providers.services.session.session_surface_resolution._get_inventory_proof",
             fake_inventory_check,
         )
 
@@ -533,7 +533,7 @@ class TestLocallyProvenPlatformPreserved:
 
     def test_inventory_eligible_linux(self):
         """Inventory confirms linux-amd64 eligibility for opencode-acp."""
-        from audiagentic.components.providers.services.harness_observability_inventory import (
+        from audiagentic.components.providers.services.session.harness_observability_inventory import (
             is_eligible_transport_observation_publisher,
         )
         assert is_eligible_transport_observation_publisher(
@@ -554,7 +554,7 @@ class TestYamlInventoryConsistency:
 
     def test_linux_consistent_validated_o1(self):
         """linux-amd64: YAML VALIDATED/O1 matches inventory platform_evidence."""
-        from audiagentic.components.providers.services.harness_observability_inventory import (
+        from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
         fact = get_harness_surface_capability_fact("opencode", "opencode-acp")
@@ -571,7 +571,7 @@ class TestYamlInventoryConsistency:
         But if YAML were to claim VALIDATED/O1 for windows, the inventory
         gate would reject it — verified by TestOpencodeNonLinuxRejection.
         """
-        from audiagentic.components.providers.services.harness_observability_inventory import (
+        from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
         fact = get_harness_surface_capability_fact("opencode", "opencode-acp")
@@ -581,7 +581,7 @@ class TestYamlInventoryConsistency:
 
     def test_darwin_inconsistent_rejected(self):
         """darwin-arm64: YAML DECLARED/O0 — no inventory proof."""
-        from audiagentic.components.providers.services.harness_observability_inventory import (
+        from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
         fact = get_harness_surface_capability_fact("opencode", "opencode-acp")
@@ -595,7 +595,7 @@ class TestYamlInventoryConsistency:
         claiming VALIDATED/O1+ transport observation has its platforms listed
         in the inventory's platform_evidence.
         """
-        from audiagentic.components.providers.services.harness_observability_inventory import (
+        from audiagentic.components.providers.services.session.harness_observability_inventory import (
             CapabilityFactValidationState,
             get_all_harness_surface_facts,
         )

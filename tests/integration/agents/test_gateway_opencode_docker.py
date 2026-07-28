@@ -193,7 +193,7 @@ def _provision_provider_project(tmp_path: Path, provider_id: str, monkeypatch) -
     """Real end-to-end provisioning shared by every test below: harness
     runtime install, real provider CLI install, real model-source wiring."""
     from audiagentic.components.providers import providers_api
-    from audiagentic.components.providers.services.provider_config import (
+    from audiagentic.components.providers.services.config.provider_config import (
         patch_provider_config,
     )
     from audiagentic.launcher import _main

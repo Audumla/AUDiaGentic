@@ -7,7 +7,7 @@ import pytest
 from audiagentic.components.providers.descriptors.automation_capabilities import (
     ProviderAutomationCapability,
 )
-from audiagentic.components.providers.services.recipe_definitions import (
+from audiagentic.components.providers.services.capabilities.recipe_definitions import (
     ProviderAutomationRegistry,
     RecipeDefinition,
     load_recipe_definition,

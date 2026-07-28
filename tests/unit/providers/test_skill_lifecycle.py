@@ -107,7 +107,7 @@ def test_prune_keeps_active_tag_skill_files(
 
     # Enabled-aware: a skill-capable provider must be enabled for its active-tag
     # skills to survive prune.
-    from audiagentic.components.providers.services.provider_config import (
+    from audiagentic.components.providers.services.config.provider_config import (
         set_provider_enabled,
     )
     for descriptor in all_descriptors().values():

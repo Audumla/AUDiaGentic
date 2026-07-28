@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.providers.services import mcp_projection
+from audiagentic.components.providers.services.mcp import mcp_projection
 from audiagentic.foundation.components.base import ComponentDescriptor, McpServerDeclaration
 from audiagentic.foundation.mcp.launch import mcp_interpreter
 from audiagentic.foundation.mcp.projection import collect_component_mcp_entries

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from audiagentic.components.providers import providers_api
-from audiagentic.components.providers.services.status import build_provider_status
+from audiagentic.components.providers.services.lifecycle.status import build_provider_status
 
 
 def test_provider_status_reports_cli_and_catalog(tmp_path: Path) -> None:
@@ -96,7 +96,7 @@ def test_provider_status_reports_vscode_extension_installation(monkeypatch, tmp_
         ),
         encoding="utf-8",
     )
-    from audiagentic.components.providers.services import host_adapter as host_adapter_mod
+    from audiagentic.components.providers.services.host import host_adapter as host_adapter_mod
 
     monkeypatch.setattr(
         host_adapter_mod.HostAdapter,
@@ -131,7 +131,7 @@ def test_provider_status_uses_error_envelope_for_vscode_probe_failure(monkeypatc
         ),
         encoding="utf-8",
     )
-    from audiagentic.components.providers.services import host_adapter as host_adapter_mod
+    from audiagentic.components.providers.services.host import host_adapter as host_adapter_mod
 
     monkeypatch.setattr(
         host_adapter_mod.HostAdapter,

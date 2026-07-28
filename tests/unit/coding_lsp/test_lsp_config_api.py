@@ -45,20 +45,37 @@ def test_remove_language_calls_prune_providers(tmp_path: Path) -> None:
         "audiagentic.components.coding_lsp.language_servers_sync.prune_language_servers_from_providers"
     ) as mock_prune:
         mock_prune.return_value = {"ok": True, "pruned": []}
-        with patch(
-            "audiagentic.components.coding_lsp.lsp_config_api._sync_to_providers"
-        ):
-            with patch(
-                "audiagentic.components.coding_lsp.lsp_config_api._regenerate_lsp_cache"
-            ):
-                with patch(
-                    "audiagentic.components.coding_lsp.lsp_api._session_manager"
-                ):
+        with patch("audiagentic.components.coding_lsp.lsp_config_api._sync_to_providers"):
+            with patch("audiagentic.components.coding_lsp.lsp_config_api._regenerate_lsp_cache"):
+                with patch("audiagentic.components.coding_lsp.lsp_api._session_manager"):
                     result = remove_language(str(tmp_path), "python")
 
     assert result["ok"] is True
     assert result["language"] == "python"
     mock_prune.assert_called_once_with(tmp_path)
+
+
+def test_remove_language_syncs_hook_removal(tmp_path: Path) -> None:
+    """Removing a language must also remove its pre-commit hook block."""
+    _enable_language(tmp_path, "python")
+
+    with patch(
+        "audiagentic.components.coding_lsp.git_hooks_sync._sync_hook_for_language"
+    ) as mock_hook:
+        mock_hook.return_value = True
+        with patch(
+            "audiagentic.components.coding_lsp.language_servers_sync.prune_language_servers_from_providers"
+        ) as mock_prune:
+            mock_prune.return_value = {"ok": True, "pruned": []}
+            with patch("audiagentic.components.coding_lsp.lsp_config_api._sync_to_providers"):
+                with patch(
+                    "audiagentic.components.coding_lsp.lsp_config_api._regenerate_lsp_cache"
+                ):
+                    with patch("audiagentic.components.coding_lsp.lsp_api._session_manager"):
+                        result = remove_language(str(tmp_path), "python")
+
+    assert result["ok"] is True
+    mock_hook.assert_called_once_with(tmp_path, "python", install=False)
 
 
 def test_remove_language_returns_error_when_not_configured(tmp_path: Path) -> None:

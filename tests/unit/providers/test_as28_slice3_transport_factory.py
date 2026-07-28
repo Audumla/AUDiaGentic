@@ -26,7 +26,7 @@ from audiagentic.components.providers.contracts.session_surface import (
 )
 from audiagentic.components.providers.descriptors.base import ProviderDescriptor
 from audiagentic.components.providers.descriptors.registry import register
-from audiagentic.components.providers.services.provider_config import (
+from audiagentic.components.providers.services.config.provider_config import (
     set_provider_enabled,
 )
 from audiagentic.foundation.transports.acp import (
@@ -216,7 +216,7 @@ class TestUnsupportedNoLaunch:
         set_provider_enabled(tmp_path, "ver-mismatch-prov", enabled=True)
 
         monkeypatch.setattr(
-            "audiagentic.components.providers.services.session_surface_resolution._probe_installed_version",
+            "audiagentic.components.providers.services.session.session_surface_resolution._probe_installed_version",
             lambda d: "2.0.0",
         )
 
@@ -347,7 +347,7 @@ class TestOpenCodeFactoryNeutralProtocol:
         # Mock the ACP launch builder so we get a transport without real CLI.
         dummy_launch = AcpLaunch(executable="dummy", args=(), environment={})
 
-        import audiagentic.components.providers.services.execution as exec_mod
+        import audiagentic.components.providers.services.execution.execution as exec_mod
         orig = exec_mod.load_acp_launch_builder
 
         try:
@@ -383,7 +383,7 @@ class TestOpenCodeFactoryNeutralProtocol:
         set_provider_enabled(tmp_path, "no-expose-prov", enabled=True)
 
         dummy_launch = AcpLaunch(executable="dummy", args=(), environment={})
-        import audiagentic.components.providers.services.execution as exec_mod
+        import audiagentic.components.providers.services.execution.execution as exec_mod
         orig = exec_mod.load_acp_launch_builder
 
         try:
@@ -426,7 +426,7 @@ class TestNoAgentsImports:
 
     def test_no_agent_import_in_public_execution(self):
         """public_execution must not import from components.agents."""
-        from audiagentic.components.providers.services import public_execution
+        from audiagentic.components.providers.services.execution import public_execution
         source = _inspect_source(public_execution)
         for line in source.splitlines():
             stripped = line.strip()
@@ -573,7 +573,7 @@ class TestOldApiUnchanged:
         set_provider_enabled(tmp_path, "stable-prov", enabled=True)
 
         dummy_launch = AcpLaunch(executable="dummy", args=(), environment={})
-        import audiagentic.components.providers.services.execution as exec_mod
+        import audiagentic.components.providers.services.execution.execution as exec_mod
         orig = exec_mod.load_acp_launch_builder
 
         try:
@@ -653,14 +653,14 @@ class TestNoDuplicateResolver:
         register(descriptor)
         set_provider_enabled(tmp_path, "single-prov", enabled=True)
 
-        import audiagentic.components.providers.services.execution as exec_mod
+        import audiagentic.components.providers.services.execution.execution as exec_mod
         orig = exec_mod.load_acp_launch_builder
 
         try:
             dummy_launch = AcpLaunch(executable="dummy", args=(), environment={})
             resolve_count = 0
 
-            from audiagentic.components.providers.services.session_surface_resolution import (
+            from audiagentic.components.providers.services.session.session_surface_resolution import (
                 resolve_session_surface as _resolve,
             )
             orig_resolve = _resolve.__module__
@@ -710,7 +710,7 @@ class TestNoDuplicateResolver:
         set_provider_enabled(tmp_path, "protocol-prov", enabled=True)
 
         dummy_launch = AcpLaunch(executable="dummy", args=(), environment={})
-        import audiagentic.components.providers.services.execution as exec_mod
+        import audiagentic.components.providers.services.execution.execution as exec_mod
         orig = exec_mod.load_acp_launch_builder
 
         try:

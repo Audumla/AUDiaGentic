@@ -123,7 +123,7 @@ def provisioned_project(tmp_path_factory) -> Path:
         assert_health_ok(provider_id, result)
 
     # 4. enable generic MCP LSP providers (no CLI install needed — they receive ag-lsp)
-    from audiagentic.components.providers.services.provider_config import (
+    from audiagentic.components.providers.services.config.provider_config import (
         set_provider_enabled,
     )
     for provider_id in GENERIC_MCP_LSP_PROVIDERS:

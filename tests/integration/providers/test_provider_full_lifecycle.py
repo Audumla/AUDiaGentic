@@ -26,18 +26,18 @@ from audiagentic.components.providers.descriptors.base import ProviderDescriptor
 from audiagentic.components.providers.descriptors.registry import (
     get_descriptor,
 )
-from audiagentic.components.providers.services.lifecycle import (
+from audiagentic.components.providers.services.config.provider_config import (
+    is_provider_enabled,
+    set_provider_enabled,
+)
+from audiagentic.components.providers.services.lifecycle.lifecycle import (
     install_provider_cli,
     uninstall_provider_cli,
 )
-from audiagentic.components.providers.services.mcp import (
+from audiagentic.components.providers.services.mcp.mcp import (
     add_provider_mcp_server,
     list_provider_mcp_servers,
     remove_provider_mcp_server,
-)
-from audiagentic.components.providers.services.provider_config import (
-    is_provider_enabled,
-    set_provider_enabled,
 )
 from audiagentic.components.providers.surfaces.manager import (
     apply_provider_surfaces,

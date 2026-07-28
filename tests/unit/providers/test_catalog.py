@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from audiagentic.components.providers.services.catalog import (
+from audiagentic.components.providers.services.catalog.catalog import (
     fetch_provider_catalog,
     refresh_all_catalogs,
 )
@@ -43,7 +43,7 @@ def test_fetch_catalog_unknown_provider_raises(tmp_path: Path) -> None:
 
 
 def test_fetch_catalog_provider_without_fn_raises(tmp_path: Path, monkeypatch) -> None:
-    import audiagentic.components.providers.services.catalog as cat
+    import audiagentic.components.providers.services.catalog.catalog as cat
 
     monkeypatch.setattr(cat, "all_descriptors", lambda: {"nofetch": _fake_descriptor("nofetch", has_catalog=False)})
 
@@ -52,7 +52,7 @@ def test_fetch_catalog_provider_without_fn_raises(tmp_path: Path, monkeypatch) -
 
 
 def test_fetch_catalog_calls_fn_and_returns_count(tmp_path: Path, monkeypatch) -> None:
-    import audiagentic.components.providers.services.catalog as cat
+    import audiagentic.components.providers.services.catalog.catalog as cat
 
     monkeypatch.setattr(cat, "all_descriptors", lambda: {"myprovider": _fake_descriptor("myprovider")})
     monkeypatch.setattr(cat, "build_model_catalog", lambda **_: {"models": []})
@@ -66,7 +66,7 @@ def test_fetch_catalog_calls_fn_and_returns_count(tmp_path: Path, monkeypatch) -
 
 
 def test_fetch_catalog_emits_progress(tmp_path: Path, monkeypatch) -> None:
-    import audiagentic.components.providers.services.catalog as cat
+    import audiagentic.components.providers.services.catalog.catalog as cat
 
     monkeypatch.setattr(cat, "all_descriptors", lambda: {"myprovider": _fake_descriptor("myprovider")})
     monkeypatch.setattr(cat, "build_model_catalog", lambda **_: {"models": []})
@@ -83,7 +83,7 @@ def test_fetch_catalog_emits_progress(tmp_path: Path, monkeypatch) -> None:
 def test_fetch_catalog_timeout_raises(tmp_path: Path, monkeypatch) -> None:
     import time
 
-    import audiagentic.components.providers.services.catalog as cat
+    import audiagentic.components.providers.services.catalog.catalog as cat
 
     def _slow_fn(cfg):
         time.sleep(5)
@@ -98,7 +98,7 @@ def test_fetch_catalog_timeout_raises(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_fetch_catalog_empty_result_raises(tmp_path: Path, monkeypatch) -> None:
-    import audiagentic.components.providers.services.catalog as cat
+    import audiagentic.components.providers.services.catalog.catalog as cat
 
     empty_desc = MagicMock()
     empty_desc.fetch_catalog_fn = lambda cfg: []
@@ -113,7 +113,7 @@ def test_fetch_catalog_empty_result_raises(tmp_path: Path, monkeypatch) -> None:
 # ---------------------------------------------------------------------------
 
 def test_refresh_all_catalogs_skips_providers_without_fn(tmp_path: Path, monkeypatch) -> None:
-    import audiagentic.components.providers.services.catalog as cat
+    import audiagentic.components.providers.services.catalog.catalog as cat
 
     fetched: list[str] = []
 
@@ -135,7 +135,7 @@ def test_refresh_all_catalogs_skips_providers_without_fn(tmp_path: Path, monkeyp
 
 
 def test_refresh_all_catalogs_tolerates_single_failure(tmp_path: Path, monkeypatch) -> None:
-    import audiagentic.components.providers.services.catalog as cat
+    import audiagentic.components.providers.services.catalog.catalog as cat
 
     def _mock_fetch(provider_id, *, project_root, **kwargs):
         if provider_id == "bad":
@@ -158,7 +158,7 @@ def test_refresh_all_catalogs_tolerates_single_failure(tmp_path: Path, monkeypat
 
 
 def test_refresh_all_catalogs_ok_true_when_all_succeed(tmp_path: Path, monkeypatch) -> None:
-    import audiagentic.components.providers.services.catalog as cat
+    import audiagentic.components.providers.services.catalog.catalog as cat
 
     monkeypatch.setattr(cat, "all_descriptors", lambda: {
         "a": _fake_descriptor("a"),
@@ -177,7 +177,7 @@ def test_refresh_all_catalogs_ok_true_when_all_succeed(tmp_path: Path, monkeypat
 
 
 def test_refresh_all_catalogs_emits_progress_events(tmp_path: Path, monkeypatch) -> None:
-    import audiagentic.components.providers.services.catalog as cat
+    import audiagentic.components.providers.services.catalog.catalog as cat
 
     monkeypatch.setattr(cat, "all_descriptors", lambda: {
         "a": _fake_descriptor("a"),

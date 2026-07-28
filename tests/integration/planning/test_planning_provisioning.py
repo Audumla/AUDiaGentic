@@ -67,7 +67,7 @@ def setup_provider_surfaces(project_root: Path) -> None:
     from audiagentic.components.providers.descriptors.registry import (
         all_descriptors as all_provider_descriptors,
     )
-    from audiagentic.components.providers.services.provider_config import (
+    from audiagentic.components.providers.services.config.provider_config import (
         set_provider_enabled,
     )
     for provider_id in all_provider_descriptors():
@@ -81,7 +81,7 @@ def _stub(path: Path, content: str) -> None:
 
 
 def apply_surfaces(project_root: Path) -> None:
-    from audiagentic.components.providers.services.mcp_sync import sync_all_provider_mcp_servers
+    from audiagentic.components.providers.services.mcp.mcp_sync import sync_all_provider_mcp_servers
     from audiagentic.components.providers.surfaces.manager import (
         apply_provider_surfaces,
         prune_provider_surfaces,

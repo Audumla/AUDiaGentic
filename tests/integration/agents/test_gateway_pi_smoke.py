@@ -88,8 +88,10 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
         get_gateway_client,
         reset_gateway_client,
     )
-    from audiagentic.components.providers.services.lifecycle import install_provider_cli
-    from audiagentic.components.providers.services.provider_config import patch_provider_config
+    from audiagentic.components.providers.services.config.provider_config import (
+        patch_provider_config,
+    )
+    from audiagentic.components.providers.services.lifecycle.lifecycle import install_provider_cli
     from audiagentic.foundation.paths.home import global_harness_runtime
     from audiagentic.foundation.system.process import kill_process_tree
     from audiagentic.runtime.rig.embedded.launch import start_embedded_rig

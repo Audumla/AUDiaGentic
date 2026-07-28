@@ -3,7 +3,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from audiagentic.components.providers.adapters.local_openai.catalog import _fetch_catalog
-from audiagentic.components.providers.services.provider_catalog import (
+from audiagentic.components.providers.services.config.provider_catalog import (
     build_model_catalog,
     validate_model_catalog,
 )

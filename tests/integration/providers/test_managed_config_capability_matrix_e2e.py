@@ -62,17 +62,21 @@ from audiagentic.components.providers.contracts.managed_hooks import (
 )
 from audiagentic.components.providers.contracts.plugin_entry import PluginEntryRequest
 from audiagentic.components.providers.descriptors.registry import get_descriptor
-from audiagentic.components.providers.services.lifecycle import (
+from audiagentic.components.providers.services.capabilities.managed_hooks_family import (
+    manage_hook_entries,
+)
+from audiagentic.components.providers.services.capabilities.plugin_entries import (
+    manage_plugin_entry,
+)
+from audiagentic.components.providers.services.lifecycle.lifecycle import (
     install_provider_cli,
     uninstall_provider_cli,
 )
-from audiagentic.components.providers.services.managed_hooks_family import manage_hook_entries
-from audiagentic.components.providers.services.mcp import (
+from audiagentic.components.providers.services.mcp.mcp import (
     add_provider_mcp_server,
     list_provider_mcp_servers,
     remove_provider_mcp_server,
 )
-from audiagentic.components.providers.services.plugin_entries import manage_plugin_entry
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.lifecycle.components import install_component
 from audiagentic.foundation.toolchains.config.managed_config import resolve_managed_config_path

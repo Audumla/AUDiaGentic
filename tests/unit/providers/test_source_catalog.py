@@ -1,4 +1,5 @@
 """MO12 normalized model-source catalog cache tests."""
+
 from __future__ import annotations
 
 import json
@@ -7,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.components.providers.services import source_catalog
-from audiagentic.components.providers.services.source_catalog import (
+from audiagentic.components.providers.services.catalog import source_catalog
+from audiagentic.components.providers.services.catalog.source_catalog import (
     SourceCatalogResult,
     apply_model_filter,
     classify_remote_failure,
@@ -32,19 +33,31 @@ def _source(**overrides) -> dict:
 
 
 def _cache_file(tmp_path: Path, source_id: str) -> Path:
-    return tmp_path / ".audiagentic" / "runtime" / "providers" / "source-catalogs" / f"{source_id}.json"
+    return (
+        tmp_path
+        / ".audiagentic"
+        / "runtime"
+        / "providers"
+        / "source-catalogs"
+        / f"{source_id}.json"
+    )
 
 
 def _seed_cache(tmp_path: Path, source_id: str, models: list[dict]) -> None:
     path = _cache_file(tmp_path, source_id)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({
-        "contract-version": "v1",
-        "source-id": source_id,
-        "discovery-mode": "list-api",
-        "fetched-at": "2026-07-12T00:00:00Z",
-        "models": models,
-    }), encoding="utf-8")
+    path.write_text(
+        json.dumps(
+            {
+                "contract-version": "v1",
+                "source-id": source_id,
+                "discovery-mode": "list-api",
+                "fetched-at": "2026-07-12T00:00:00Z",
+                "models": models,
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 # --- result shapes per discovery mode ------------------------------------------
@@ -204,9 +217,7 @@ def test_corrupt_cache_is_contract_failure_not_empty(tmp_path: Path) -> None:
 
 
 def test_unknown_connector_is_configuration_failure(tmp_path: Path) -> None:
-    result = get_source_catalog(
-        tmp_path, "src", _source(connector="native-vendor"), refresh=True
-    )
+    result = get_source_catalog(tmp_path, "src", _source(connector="native-vendor"), refresh=True)
     assert result.failure_class == "configuration"
     assert "no list-api fetcher" in (result.action_needed or "")
 
@@ -221,7 +232,8 @@ def test_secret_resolved_only_into_fetcher_and_never_persisted(tmp_path: Path, m
 
     register_catalog_fetcher("keyed", fetcher, replace=True)
     result = get_source_catalog(
-        tmp_path, "src",
+        tmp_path,
+        "src",
         _source(connector="keyed", **{"api-key-ref": "env:CATALOG_KEY"}),
         refresh=True,
     )
@@ -236,7 +248,9 @@ def test_secret_resolved_only_into_fetcher_and_never_persisted(tmp_path: Path, m
 def test_classification_table() -> None:
     assert classify_remote_failure(urllib.error.HTTPError("u", 429, "", None, None)) == "transient"
     assert classify_remote_failure(urllib.error.HTTPError("u", 503, "", None, None)) == "transient"
-    assert classify_remote_failure(urllib.error.HTTPError("u", 403, "", None, None)) == "authorization"
+    assert (
+        classify_remote_failure(urllib.error.HTTPError("u", 403, "", None, None)) == "authorization"
+    )
     assert classify_remote_failure(TimeoutError()) == "transient"
     assert classify_remote_failure(json.JSONDecodeError("x", "y", 0)) == "contract"
     assert classify_remote_failure(ValueError("bad url")) == "configuration"
@@ -273,7 +287,9 @@ def test_filter_is_stably_sorted() -> None:
 
 def _degraded_timeline_records(tmp_path: Path) -> list[dict]:
     timeline = tmp_path / ".audiagentic" / "runtime" / "providers" / "source-catalog-timeline.jsonl"
-    records = [json.loads(line) for line in timeline.read_text(encoding="utf-8").splitlines() if line]
+    records = [
+        json.loads(line) for line in timeline.read_text(encoding="utf-8").splitlines() if line
+    ]
     return [r for r in records if r.get("event") == "source-catalog.degraded"]
 
 

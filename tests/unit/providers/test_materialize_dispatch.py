@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.components.providers.services.public_materialize import (
+from audiagentic.components.providers.services.lifecycle.public_materialize import (
     materialize_provider_config,
 )
 

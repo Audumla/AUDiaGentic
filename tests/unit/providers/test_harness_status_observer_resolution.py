@@ -29,7 +29,7 @@ class TestResolveTransportObservationLease:
 
     @pytest.fixture()
     def resolver(self):
-        from audiagentic.components.providers.services.harness_status_observer_resolution import (
+        from audiagentic.components.providers.services.session.harness_status_observer_resolution import (
             resolve_transport_observation_lease,
         )
 

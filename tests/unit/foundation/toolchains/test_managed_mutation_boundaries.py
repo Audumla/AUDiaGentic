@@ -12,7 +12,7 @@ AUDIT_PATH = WORKSPACE_ROOT / "docs" / "reference" / "MANAGED_MUTATION_AUDIT.md"
 _SCOPES = (
     "components/memory/hindsight",
     "components/providers/adapters",
-    "components/providers/services/managed_mcp_registry.py",
+    "components/providers/services/mcp/managed_mcp_registry.py",
     "components/providers/surfaces",
     "components/providers/skill_surfaces.py",
     "runtime/harness/opencode/install",
@@ -179,7 +179,7 @@ def test_direct_managed_spec_calls_are_core_or_recorded_violation() -> None:
     # Equality (not subset) so a stale allowlist entry fails loudly instead
     # of silently weakening the guard.
     allowed_core = {
-        "src/audiagentic/components/providers/services/mcp.py",
+        "src/audiagentic/components/providers/services/mcp/mcp.py",
         "src/audiagentic/foundation/toolchains/config/managed_config.py",
     }
     found: dict[str, set[str]] = {}
@@ -212,8 +212,8 @@ def test_no_second_managed_registry_implementation() -> None:
             ):
                 definitions.append(f"{path.relative_to(WORKSPACE_ROOT).as_posix()}:{node.name}")
     assert definitions == [
-        "src/audiagentic/components/providers/services/managed_mcp_registry.py:load_managed_mcp_registry",
-        "src/audiagentic/components/providers/services/managed_mcp_registry.py:save_managed_mcp_registry",
+        "src/audiagentic/components/providers/services/mcp/managed_mcp_registry.py:load_managed_mcp_registry",
+        "src/audiagentic/components/providers/services/mcp/managed_mcp_registry.py:save_managed_mcp_registry",
     ]
 
 

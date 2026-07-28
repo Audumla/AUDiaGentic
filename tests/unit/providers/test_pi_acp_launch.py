@@ -5,7 +5,7 @@ import os
 
 import pytest
 
-from audiagentic.components.providers.services.execution import load_acp_launch_builder
+from audiagentic.components.providers.services.execution.execution import load_acp_launch_builder
 
 # The pi-acp bridge is resolved from the system install (PATH, else npx), not an
 # embedded copy. Tests stub that resolver rather than a managed-runtime path.

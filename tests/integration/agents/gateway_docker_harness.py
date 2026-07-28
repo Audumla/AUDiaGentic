@@ -114,7 +114,7 @@ def enable_local_openai(project_root: Path, rig_port: int) -> None:
     direct config patching is the real provisioning path for this provider,
     not a shortcut around one.
     """
-    from audiagentic.components.providers.services.provider_config import (
+    from audiagentic.components.providers.services.config.provider_config import (
         patch_provider_config,
         set_provider_enabled,
     )

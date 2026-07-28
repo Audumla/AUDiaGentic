@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from audiagentic.components.providers.services.lifecycle import (
+from audiagentic.components.providers.services.lifecycle.lifecycle import (
     provider_cli_plan,
 )
 

@@ -79,7 +79,7 @@ def test_cli_lifecycle_public_operation_returns_typed_result(monkeypatch, tmp_pa
             return {"ok": True, "supported": True, "state": "installed"}
 
     monkeypatch.setattr(
-        "audiagentic.components.providers.services.automation_registry.build_automation_registry",
+        "audiagentic.components.providers.services.capabilities.automation_registry.build_automation_registry",
         lambda project_root: _Registry(),
     )
 

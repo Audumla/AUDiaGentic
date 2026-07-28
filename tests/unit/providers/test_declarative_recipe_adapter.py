@@ -26,7 +26,7 @@ import pytest
 # CC41 Activity 6.1: adapter lives in providers/services, not foundation.
 # If this import succeeds and the foundation import below also succeeds,
 # the boundary is correct.
-from audiagentic.components.providers.services.recipe_definitions import (
+from audiagentic.components.providers.services.capabilities.recipe_definitions import (
     FamilyPin,
     ProviderAutomationCapability,
     ProviderAutomationRegistry,
@@ -128,7 +128,7 @@ def _make_handler_from_template(
         params = request_to_params(payload)
         mat = materialize_recipe(template, params)
 
-        from audiagentic.components.providers.services.declarative_recipe_handler import (
+        from audiagentic.components.providers.services.capabilities.declarative_recipe_handler import (
             _DeclarativeStepRecipe,
         )
 
@@ -158,7 +158,7 @@ def test_adapter_lives_in_providers_not_foundation() -> None:
 
 def test_adapter_imports_only_allowed_foundation_types() -> None:
     """Adapter source imports only foundation primitives and provider types."""
-    import audiagentic.components.providers.services.declarative_recipe_handler as mod
+    import audiagentic.components.providers.services.capabilities.declarative_recipe_handler as mod
 
     source = Path(mod.__file__).read_text(encoding="utf-8")
     lower_src = source.lower()
@@ -196,7 +196,7 @@ def test_make_declarative_handler_uses_project_catalogue_recipe(
     tmp_path: Path,
 ) -> None:
     """The public factory resolves a concrete recipe through the catalogue."""
-    from audiagentic.components.providers.services.declarative_recipe_handler import (
+    from audiagentic.components.providers.services.capabilities.declarative_recipe_handler import (
         make_declarative_handler,
     )
 
@@ -360,7 +360,7 @@ def _fixture_capability(family_id: str, pin: FamilyPin) -> ProviderAutomationCap
 
 def test_declarative_adapter_works_in_family_registrar_shape() -> None:
     """A FamilyRegistrar-shaped entry with a declarative make_handler works."""
-    from audiagentic.components.providers.services.automation_registry import (
+    from audiagentic.components.providers.services.capabilities.automation_registry import (
         FamilyRegistrar,
     )
 
@@ -403,7 +403,7 @@ def test_declarative_adapter_works_in_family_registrar_shape() -> None:
 
 def test_declarative_adapter_registers_with_provider_automation_registry() -> None:
     """Declarative adapter can be registered via the ProviderAutomationRegistry."""
-    from audiagentic.components.providers.services.automation_registry import (
+    from audiagentic.components.providers.services.capabilities.automation_registry import (
         FamilyRegistrar,
     )
 
@@ -589,7 +589,7 @@ def test_materializer_accepts_only_string_params() -> None:
 
 def test_adapter_has_no_universal_binding_schema() -> None:
     """The adapter module has no universal binding or recipe-binding types."""
-    import audiagentic.components.providers.services.declarative_recipe_handler as mod
+    import audiagentic.components.providers.services.capabilities.declarative_recipe_handler as mod
 
     assert not hasattr(mod, "RecipeBinding")
     assert not hasattr(mod, "UniversalRecipe")
@@ -598,6 +598,6 @@ def test_adapter_has_no_universal_binding_schema() -> None:
 
 def test_adapter_exports_only_make_declarative_handler() -> None:
     """Adapter public API is minimal — only the factory function."""
-    import audiagentic.components.providers.services.declarative_recipe_handler as mod
+    import audiagentic.components.providers.services.capabilities.declarative_recipe_handler as mod
 
     assert mod.__all__ == ["make_declarative_handler"]

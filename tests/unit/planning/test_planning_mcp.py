@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from audiagentic.components.planning import planning_mcp
 
 _ROOT = Path("/fake/root")
@@ -32,7 +34,7 @@ def test_plan_create_item_delegates_to_api():
 
 
 def test_plan_list_items_delegates_to_api():
-    page = {"items": [], "total": 0, "returned": 0, "offset": 0, "limit": 50, "has_more": False}
+    page = {"items": [], "total": 0, "returned": 0, "offset": 0, "limit": 20, "has_more": False}
     with (
         _patch_root(),
         patch(
@@ -40,13 +42,21 @@ def test_plan_list_items_delegates_to_api():
             return_value=page,
         ) as mock,
     ):
-        result = planning_mcp.plan_list_items(state="active", plan="my-plan")
+        result = planning_mcp.plan_list_items(plan="my-plan")
     assert result == page
-    mock.assert_called_once_with(_ROOT, "active", "my-plan", None, 50, 0)
+    mock.assert_called_once_with(_ROOT, None, "my-plan", None, 20, 0)
 
 
-def test_plan_list_items_defaults_none_filters():
-    page = {"items": [], "total": 0, "returned": 0, "offset": 0, "limit": 50, "has_more": False}
+def test_plan_list_items_rejects_unfiltered():
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    with _patch_root():
+        with pytest.raises(AudiaGenticError, match="VAL-PLN-026"):
+            planning_mcp.plan_list_items()
+
+
+def test_plan_list_items_accepts_id_prefix():
+    page = {"items": [], "total": 0, "returned": 0, "offset": 0, "limit": 20, "has_more": False}
     with (
         _patch_root(),
         patch(
@@ -54,8 +64,9 @@ def test_plan_list_items_defaults_none_filters():
             return_value=page,
         ) as mock,
     ):
-        planning_mcp.plan_list_items()
-    mock.assert_called_once_with(_ROOT, None, None, None, 50, 0)
+        result = planning_mcp.plan_list_items(id_prefix="CC")
+    assert result == page
+    mock.assert_called_once_with(_ROOT, None, None, "CC", 20, 0)
 
 
 def test_plan_get_item_delegates_to_api():

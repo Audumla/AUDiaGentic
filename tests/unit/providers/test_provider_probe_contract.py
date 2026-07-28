@@ -15,7 +15,7 @@ import shutil
 import pytest
 
 from audiagentic.components.providers.descriptors.registry import all_descriptors
-from audiagentic.components.providers.services.lifecycle import probe_provider_cli
+from audiagentic.components.providers.services.lifecycle.lifecycle import probe_provider_cli
 
 # pi probes the harness runtime on disk, not PATH — not a shutil.which contract.
 _NON_PATH_PROBES = {"pi"}

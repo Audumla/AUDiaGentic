@@ -34,7 +34,7 @@ def _install_agent_ledger(tmp_path: Path) -> None:
 
 def _enable_provider(tmp_path: Path, *provider_ids: str) -> None:
     """Enable providers so enabled-aware surface projection targets them."""
-    from audiagentic.components.providers.services.provider_config import (
+    from audiagentic.components.providers.services.config.provider_config import (
         set_provider_enabled,
     )
 

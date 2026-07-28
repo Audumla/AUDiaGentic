@@ -16,7 +16,7 @@ import pytest
 from audiagentic.components.providers.adapters.recipe_launch import (
     translate_recipe_runner_args,
 )
-from audiagentic.components.providers.services.execution import resolve_launch_builder
+from audiagentic.components.providers.services.execution.execution import resolve_launch_builder
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 

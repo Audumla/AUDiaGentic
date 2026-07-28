@@ -120,7 +120,7 @@ def _reset_test_registries():
         import importlib
 
         mod = __import__(
-            "audiagentic.components.providers.services.feature_resolution",
+            "audiagentic.components.providers.services.config.feature_resolution",
             fromlist=["all_descriptors", "enabled_provider_ids"],
         )
         importlib.reload(mod)

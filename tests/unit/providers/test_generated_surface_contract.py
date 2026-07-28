@@ -9,7 +9,7 @@ from audiagentic.components.providers.contracts.generated_surface import (
     GeneratedSurfaceRequest,
     GeneratedSurfaceResult,
 )
-from audiagentic.components.providers.services.generated_surface_family import (
+from audiagentic.components.providers.services.capabilities.generated_surface_family import (
     FAMILY_ID,
     PIN,
 )
