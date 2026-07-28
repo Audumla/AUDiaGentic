@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.components.providers.services.host_adapter import (
+from audiagentic.components.providers.services.host.host_adapter import (
     HostAdapter,
     all_host_adapters,
     get_host_adapter,
@@ -71,7 +71,7 @@ def test_second_host_is_config_only(tmp_path: Path):
         assert "pub.some-ext" in path.read_text(encoding="utf-8")
     finally:
         all_host_adapters()  # ensure loaded
-        from audiagentic.components.providers.services import host_adapter as mod
+        from audiagentic.components.providers.services.host import host_adapter as mod
         mod._registry.pop("fixture-editor", None)
 
 

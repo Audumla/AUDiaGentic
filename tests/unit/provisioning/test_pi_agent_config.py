@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
+from audiagentic.components.providers import providers_api
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.runtime.harness.pi.install.config import materialize_agent_config
 
 
 def _harness_cfg() -> dict:
@@ -40,7 +39,9 @@ def test_materialize_writes_agents_md_via_contributions(
         _fake_operate,
     )
 
-    materialize_agent_config(target_dir, _harness_cfg(), project_root=project_root)
+    providers_api.materialize_provider_config(
+        project_root, "pi", _harness_cfg(), agent_runtime=target_dir
+    )
 
     # Verify the contribution pipeline was invoked for pi
     assert calls == [(project_root, "pi", "apply")]
@@ -66,14 +67,14 @@ def test_materialize_tolerates_surface_apply_failure(
         _raise,
     )
 
-    materialize_agent_config(target_dir, _harness_cfg(), project_root=project_root)
+    providers_api.materialize_provider_config(
+        project_root, "pi", _harness_cfg(), agent_runtime=target_dir
+    )
 
     # Core files should still be written despite the surface failure
+    # (model config goes through model-projection family, not materialize)
     agent_dir = target_dir / "agent"
-    assert (agent_dir / "models.json").exists()
     assert (agent_dir / "settings.json").exists()
-    models_data = json.loads((agent_dir / "models.json").read_text(encoding="utf-8"))
-    assert "audiagentic" in models_data.get("providers", {})
 
 
 def test_surface_renderer_registered_for_pi() -> None:

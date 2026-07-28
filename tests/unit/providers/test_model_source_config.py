@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.components.providers.services.model_source_config import (
+from audiagentic.components.providers.services.config.model_source_config import (
     load_model_sources,
     model_sources_path,
     validate_model_sources,

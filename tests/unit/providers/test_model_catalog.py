@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 from audiagentic.components.providers import providers_api
 from audiagentic.components.providers.providers_mcp import build_server
-from audiagentic.components.providers.services.models import resolve_model_selection
-from audiagentic.components.providers.services.provider_catalog import (
+from audiagentic.components.providers.services.catalog.models import resolve_model_selection
+from audiagentic.components.providers.services.config.provider_catalog import (
     build_model_catalog,
     validate_model_catalog,
 )
@@ -41,7 +41,7 @@ def test_list_provider_models_has_no_refresh_mode() -> None:
 
 def test_list_provider_models_does_not_fetch_catalog(monkeypatch, tmp_path) -> None:
     from audiagentic.components.providers.descriptors import registry
-    from audiagentic.components.providers.services import catalog
+    from audiagentic.components.providers.services.catalog import catalog
 
     monkeypatch.setattr(
         registry,

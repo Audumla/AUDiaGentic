@@ -452,7 +452,7 @@ class TestGatewayPiSmokeErrorPathRedaction:
         worker boundary. Worker-level diagnostics are already covered by
         test_sh21_prompt_truncation_and_diagnostics.py.
         """
-        from audiagentic.components.providers.services.execution import (
+        from audiagentic.components.providers.services.execution.execution import (
             execute_provider,
         )
         from audiagentic.foundation.contracts.errors import AudiaGenticError

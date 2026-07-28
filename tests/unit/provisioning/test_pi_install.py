@@ -1,65 +1,97 @@
+"""Pi provider config materialization tests via providers_api (HA11).
+
+Replaces old tests that imported from runtime.harness.pi.install — those
+packages are deleted as part of HA11. All materialize work now routes through
+providers_api.materialize_provider_config.
+"""
+
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-from audiagentic.runtime.harness.pi.install import install_to
+import pytest
+from audiagentic.components.providers import providers_api
 
 
-def test_install_to_provisions_rig_and_materializes_no_embedded_cli(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    # install_to no longer bundles a harness CLI (no npm install); it only
-    # provisions the rig backend and materializes the agent config.
-    target = tmp_path / "harness"
+def _harness_cfg() -> dict:
+    return {"rig": {"model": "qwen3.5-0.8b", "port": 42001, "provider": "audiagentic"}}
+
+
+def test_materialize_pi_writes_settings_json(tmp_path: Path) -> None:
+    """Pi materialize writes settings.json via providers_api."""
+    harness_root = tmp_path / "harness"
     project_root = tmp_path / "project"
-    project_root.mkdir(parents=True)
+    project_root.mkdir()
+    harness_root.mkdir()
 
-    rig_calls: list[Path] = []
-    materialize_calls: list[Path] = []
-
-    monkeypatch.setattr(
-        "audiagentic.runtime.harness.pi.install._c.load_harness_config",
-        lambda project_root=None: {},
-    )
-    monkeypatch.setattr(
-        "audiagentic.runtime.harness.pi.install.materialize_agent_config",
-        lambda target, harness_cfg, project_root=None: materialize_calls.append(target),
-    )
-    monkeypatch.setattr(
-        "audiagentic.runtime.harness.pi.install._should_provision_embedded_rig",
-        lambda: True,
-    )
-    monkeypatch.setattr(
-        "audiagentic.runtime.harness.pi.install._provision_embedded_rig",
-        lambda target, project_root=None: rig_calls.append(target),
+    providers_api.materialize_provider_config(
+        project_root, "pi", _harness_cfg(), agent_runtime=harness_root
     )
 
-    rc = install_to(target, project_root=project_root)
-
-    assert rc == 0
-    assert rig_calls == [target]
-    assert materialize_calls == [target]
-    # No embedded harness CLI is created.
-    assert not (target / "cli" / "node_modules" / ".bin").exists()
+    settings_path = harness_root / "agent" / "settings.json"
+    assert settings_path.exists(), "settings.json should be written"
+    data = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert "theme" in data, f"settings.json missing 'theme': {data}"
 
 
-def test_install_to_seeds_test_model_when_repo_fixture_exists(
-    tmp_path: Path,
+def test_materialize_pi_copies_append_system_md(tmp_path: Path) -> None:
+    """Pi materialize copies APPEND_SYSTEM.md via providers_api."""
+    harness_root = tmp_path / "harness"
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    harness_root.mkdir()
+
+    providers_api.materialize_provider_config(
+        project_root, "pi", _harness_cfg(), agent_runtime=harness_root
+    )
+
+    append_md = harness_root / "agent" / "APPEND_SYSTEM.md"
+    assert append_md.exists(), "APPEND_SYSTEM.md should be copied"
+
+
+def test_materialize_pi_removes_stale_system_md(tmp_path: Path) -> None:
+    """Pi materialize deletes stale agent/SYSTEM.md via providers_api."""
+    harness_root = tmp_path / "harness"
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    harness_root.mkdir()
+
+    # Pre-seed a stale SYSTEM.md at agent/ (should be deleted).
+    (harness_root / "agent").mkdir(parents=True, exist_ok=True)
+    (harness_root / "agent" / "SYSTEM.md").write_text("stale")
+
+    providers_api.materialize_provider_config(
+        project_root, "pi", _harness_cfg(), agent_runtime=harness_root
+    )
+
+    assert not (harness_root / "agent" / "SYSTEM.md").exists(), (
+        "Stale agent/SYSTEM.md should be deleted during Pi materialize"
+    )
+
+
+def test_materialize_pi_applies_provider_surface_contributions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    repo_root = tmp_path
-    project_root = repo_root / "tmp" / "project"
-    fixture_model = repo_root / "tests" / "unit" / "runtime" / "Qwen3.5-0.8B-UD-Q5_K_XL.gguf"
-    target = repo_root / "runtime"
-    project_root.mkdir(parents=True)
-    (repo_root / "src" / "audiagentic").mkdir(parents=True)
-    fixture_model.parent.mkdir(parents=True, exist_ok=True)
-    fixture_model.write_bytes(b"gguf")
+    """Pi materialize invokes operate_provider_surfaces."""
+    harness_root = tmp_path / "harness"
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    harness_root.mkdir()
 
-    from audiagentic.runtime.harness.pi.install import _seed_test_model
+    calls: list[tuple] = []
 
-    _seed_test_model(target, project_root)
+    def _fake_operate(project_root: Path, provider_id: str, *, mode: str) -> dict:
+        calls.append((str(project_root), provider_id, mode))
+        return {"ok": True, "written": []}
 
-    seeded = target / "rig" / "bin" / "models" / "Qwen3.5-0.8B.Q8_0.gguf"
-    assert seeded.exists()
-    assert seeded.read_bytes() == b"gguf"
+    monkeypatch.setattr(
+        "audiagentic.components.providers.providers_api.operate_provider_surfaces",
+        _fake_operate,
+    )
+
+    providers_api.materialize_provider_config(
+        project_root, "pi", _harness_cfg(), agent_runtime=harness_root
+    )
+
+    assert calls == [(str(project_root), "pi", "apply")]

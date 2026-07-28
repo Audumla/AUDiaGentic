@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from audiagentic.components.providers.services.provider_config import (
+from audiagentic.components.providers.services.config.provider_config import (
     load_provider_config,
     load_provider_config_lenient,
 )

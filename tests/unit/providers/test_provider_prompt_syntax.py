@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.providers.services.prompt_syntax import load_prompt_syntax
+from audiagentic.components.providers.services.execution.prompt_syntax import load_prompt_syntax
 
 
 def test_provider_syntax_loads_project_profile_overlay(tmp_path: Path) -> None:

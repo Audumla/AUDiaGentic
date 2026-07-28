@@ -36,7 +36,7 @@ except Exception:  # noqa: BLE001
 
 def test_local_openai_provider_with_real_rig():
     """Launch the embedded rig with qwen3.5-2b and call the local_openai adapter."""
-    from audiagentic.components.providers.services.execution import execute_provider
+    from audiagentic.components.providers.services.execution.execution import execute_provider
 
     from ...unit.runtime.ai_tester import local_ai_tester
 

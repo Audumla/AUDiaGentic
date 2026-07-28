@@ -270,7 +270,7 @@ class TestRequesterProvidersImportAllowlist:
 
         Regression note (MA29): this test caught function-level imports in
         _migrate_mcp_ownership_to_scope which bypassed the module-level guard
-        by importing providers.services.managed_mcp_registry and
+        by importing providers.services.mcp.managed_mcp_registry and
         providers.descriptors.registry directly inside a function. The fix was
         to move that migration into providers (adopt_legacy_mcp_ownership) and
         call it through providers_api. AST walk in _get_imports covers all

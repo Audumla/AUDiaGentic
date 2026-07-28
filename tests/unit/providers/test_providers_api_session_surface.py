@@ -22,7 +22,7 @@ from audiagentic.components.providers.contracts.session_surface import (
 )
 from audiagentic.components.providers.descriptors.base import ProviderDescriptor
 from audiagentic.components.providers.descriptors.registry import register
-from audiagentic.components.providers.services.provider_config import (
+from audiagentic.components.providers.services.config.provider_config import (
     set_provider_enabled,
 )
 from audiagentic.foundation.transports.session_surface import (
@@ -239,7 +239,7 @@ class TestPreparedSessionTransportReusesSnapshot:
         def _mock_builder(project_root, **kwargs):
             return dummy_launch
 
-        import audiagentic.components.providers.services.execution as exec_mod
+        import audiagentic.components.providers.services.execution.execution as exec_mod
         orig = exec_mod.load_acp_launch_builder
 
         try:
@@ -308,7 +308,7 @@ class TestPreparedSessionTransportReusesSnapshot:
         from audiagentic.foundation.transports import AcpLaunch
 
         dummy_launch = AcpLaunch(executable="dummy", args=(), environment={})
-        import audiagentic.components.providers.services.execution as exec_mod
+        import audiagentic.components.providers.services.execution.execution as exec_mod
         orig = exec_mod.load_acp_launch_builder
 
         try:
@@ -364,7 +364,7 @@ class TestPriorBehaviorStability:
         set_provider_enabled(tmp_path, "stable-test", enabled=True)
 
         dummy_launch = AcpLaunch(executable="dummy", args=(), environment={})
-        import audiagentic.components.providers.services.execution as exec_mod
+        import audiagentic.components.providers.services.execution.execution as exec_mod
         orig = exec_mod.load_acp_launch_builder
 
         try:

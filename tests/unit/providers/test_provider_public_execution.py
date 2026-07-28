@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from audiagentic.components.providers import providers_api
-from audiagentic.components.providers.services import public_execution
+from audiagentic.components.providers.services.execution import public_execution
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
@@ -27,9 +27,7 @@ def _request(base_root: Path, **overrides) -> providers_api.ProviderExecutionReq
 def test_execution_contract_round_trips_wire_mapping(tmp_path: Path) -> None:
     request = _request(tmp_path)
 
-    restored = providers_api.ProviderExecutionRequest.from_mapping(
-        request.to_mapping()
-    )
+    restored = providers_api.ProviderExecutionRequest.from_mapping(request.to_mapping())
 
     assert restored == request
     result = providers_api.ProviderExecutionResult(
@@ -39,9 +37,7 @@ def test_execution_contract_round_trips_wire_mapping(tmp_path: Path) -> None:
         attempt_epoch=2,
         result_data={"status": "ok", "output": "done"},
     )
-    assert providers_api.ProviderExecutionResult.from_mapping(
-        result.to_mapping()
-    ) == result
+    assert providers_api.ProviderExecutionResult.from_mapping(result.to_mapping()) == result
 
 
 @pytest.mark.parametrize(
@@ -93,7 +89,8 @@ def test_execute_turn_uses_provider_owned_resolution_and_attempt_identity(
         lambda _provider_id: "full-isolation",
     )
 
-    from audiagentic.components.providers.services import execution, models
+    from audiagentic.components.providers.services.catalog import models
+    from audiagentic.components.providers.services.execution import execution
 
     monkeypatch.setattr(
         models,
@@ -143,7 +140,7 @@ def test_runtime_state_is_provider_scoped(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from audiagentic.components.providers.services import provider_config
+    from audiagentic.components.providers.services.config import provider_config
 
     monkeypatch.setattr(
         provider_config,
@@ -180,7 +177,8 @@ def test_prepare_acp_launch_keeps_provider_resolution_behind_public_seam(
         "get_provider_runtime_config_state",
         lambda *_args: {"provider-id": "fixture", "enabled": True, "config": {}},
     )
-    from audiagentic.components.providers.services import execution, models
+    from audiagentic.components.providers.services.catalog import models
+    from audiagentic.components.providers.services.execution import execution
     from audiagentic.foundation.transports import AcpLaunch
 
     monkeypatch.setattr(
@@ -212,7 +210,7 @@ def test_prepare_acp_launch_rejects_unsupported_provider(
         "get_provider_runtime_config_state",
         lambda *_args: {"provider-id": "fixture", "enabled": True, "config": {}},
     )
-    from audiagentic.components.providers.services import execution
+    from audiagentic.components.providers.services.execution import execution
 
     monkeypatch.setattr(execution, "load_acp_launch_builder", lambda _provider_id: None)
 
@@ -223,13 +221,15 @@ def test_prepare_acp_launch_rejects_unsupported_provider(
     assert captured.value.code == "UNS-PEXE-002"
 
 
-def test_prepare_execution_env_uses_project_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_prepare_execution_env_uses_project_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The execution environment builder must read from project-level config
     so that custom providers added by model_source_add/apply_model_sources are
     included in the inline OPENCODE_CONFIG_CONTENT passed to isolated workers."""
     import json
 
-    from audiagentic.components.providers.services import models
+    from audiagentic.components.providers.services.catalog import models
 
     # Write a global config WITHOUT the custom provider (simulates real state).
     global_config = Path.home() / ".config" / "opencode"
@@ -257,7 +257,9 @@ def test_prepare_execution_env_uses_project_config(tmp_path: Path, monkeypatch: 
         lambda **_kwargs: {"model-id": "model-a"},
     )
 
-    result = providers_api.prepare_provider_execution_environment(_request(tmp_path, provider_id="opencode"))
+    result = providers_api.prepare_provider_execution_environment(
+        _request(tmp_path, provider_id="opencode")
+    )
 
     doc = json.loads(result["OPENCODE_CONFIG_CONTENT"])
     assert "audiagentic" in doc.get("enabled_providers", [])

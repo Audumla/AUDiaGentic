@@ -13,7 +13,7 @@ from audiagentic.components.providers.adapters.opencode.mcp_format import (
     read_opencode_mcp,
     write_opencode_mcp,
 )
-from audiagentic.components.providers.services.mcp import sync_managed_provider_mcp_subset
+from audiagentic.components.providers.services.mcp.mcp import sync_managed_provider_mcp_subset
 from audiagentic.foundation.mcp import McpServerEntry
 
 

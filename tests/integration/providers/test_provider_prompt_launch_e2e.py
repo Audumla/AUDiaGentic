@@ -19,8 +19,8 @@ from pathlib import Path
 import pytest
 
 from audiagentic.components.providers.descriptors.registry import all_descriptors
-from audiagentic.components.providers.services.execution import execute_provider
-from audiagentic.components.providers.services.lifecycle import (
+from audiagentic.components.providers.services.execution.execution import execute_provider
+from audiagentic.components.providers.services.lifecycle.lifecycle import (
     install_provider_cli,
     uninstall_provider_cli,
 )

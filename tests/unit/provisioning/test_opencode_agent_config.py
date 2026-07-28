@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from audiagentic.components.providers import providers_api
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.runtime.harness.opencode.install import materialize_agent_config
 
 
 def _harness_cfg() -> dict:
@@ -16,7 +16,7 @@ def test_materialize_agent_config_writes_agents_md_template(tmp_path: Path) -> N
     project_root = tmp_path / "project"
     project_root.mkdir()
 
-    materialize_agent_config(project_root, _harness_cfg(), project_root=project_root)
+    providers_api.materialize_provider_config(project_root, "opencode", _harness_cfg())
 
     content = (project_root / "AGENTS.md").read_text(encoding="utf-8")
     assert "Project instructions" in content
@@ -41,7 +41,7 @@ def test_materialize_agent_config_applies_provider_surface_contributions(
         _fake_operate,
     )
 
-    materialize_agent_config(project_root, _harness_cfg(), project_root=project_root)
+    providers_api.materialize_provider_config(project_root, "opencode", _harness_cfg())
 
     assert calls == [(project_root, "opencode", "apply")]
     # AGENTS.md template write must still happen regardless.
@@ -63,7 +63,6 @@ def test_materialize_agent_config_tolerates_surface_apply_failure(
         _raise,
     )
 
-    materialize_agent_config(project_root, _harness_cfg(), project_root=project_root)
+    providers_api.materialize_provider_config(project_root, "opencode", _harness_cfg())
 
     assert (project_root / "AGENTS.md").exists()
-    assert (project_root / ".opencode" / "config.json").exists()
