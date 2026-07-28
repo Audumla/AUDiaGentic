@@ -45,29 +45,6 @@ def require_harness_provider(harness_cfg: dict) -> str:
     return provider.strip()
 
 
-def require_harness_rig_port(harness_cfg: dict) -> int:
-    rig_cfg = harness_cfg.get("rig")
-    if not isinstance(rig_cfg, dict):
-        raise _harness_config_error(
-            2,
-            "Harness config missing required 'rig' section. "
-            "Expected config/provisioning/harness/ag.yaml to define rig.port.",
-            field="rig",
-        )
-    raw = rig_cfg.get("port")
-    if raw is None:
-        raise _harness_config_error(
-            3,
-            "Harness config missing required 'rig.port'. "
-            "Set it in config/provisioning/harness/ag.yaml or override config.",
-            field="rig.port",
-        )
-    try:
-        return int(raw)
-    except (TypeError, ValueError) as exc:
-        raise _harness_config_error(4, f"Invalid harness config value for rig.port: {raw!r}", value=raw) from exc
-
-
 def require_smoke_timeout(harness_cfg: dict) -> float:
     smoke_cfg = harness_cfg.get("smoke")
     if not isinstance(smoke_cfg, dict):
