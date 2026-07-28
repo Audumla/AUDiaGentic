@@ -10,7 +10,7 @@ from audiagentic.components.providers.contracts.plugin_entry import (
     PluginEntryRequest,
     PluginEntryResult,
 )
-from audiagentic.components.providers.services import plugin_entries
+from audiagentic.components.providers.services.capabilities import plugin_entries
 
 
 def test_descriptor_plugin_capability_apply_status_prune(monkeypatch, tmp_path):
@@ -131,7 +131,7 @@ def test_foreign_plugin_entries_preserved(monkeypatch, tmp_path):
 
 
 def test_serialized_contracts_match_concrete_schemas():
-    contract_dir = Path(plugin_entries.__file__).resolve().parents[1] / "contracts"
+    contract_dir = Path(plugin_entries.__file__).resolve().parents[2] / "contracts"
     payload_schema = json.loads(
         (contract_dir / "provider-plugin-entry-payload.schema.json").read_text(
             encoding="utf-8"
