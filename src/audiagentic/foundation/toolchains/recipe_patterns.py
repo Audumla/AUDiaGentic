@@ -260,6 +260,20 @@ class DeclaredStepRecipe(ProvisioningRecipe):
             )
         return RecipeResult.ok(RecipeState.UPGRADED, status=f"{self._subject} upgraded")
 
+    def upgrade_status(self, context: dict[str, Any]) -> RecipeResult:
+        if not self._m.upgrade_steps:
+            return super().upgrade_status(context)
+        verified = self.verify(context)
+        if not verified.success:
+            return RecipeResult.ok(
+                RecipeState.ABSENT,
+                status=f"{self._subject} is absent; install is required before upgrade",
+            )
+        return RecipeResult.ok(
+            RecipeState.UPGRADE_AVAILABLE,
+            status=f"{self._subject} has a declared explicit upgrade lifecycle",
+        )
+
     def prune(self, context: dict[str, Any]) -> RecipeResult:
         return RecipeResult.ok(RecipeState.ABSENT, status="nothing to prune")
 
@@ -279,6 +293,7 @@ _MODE_TO_LIFECYCLE = {
     "plan": "dry_run",
     "prune": "uninstall",
     "status": "verify",
+    "upgrade-status": "upgrade_status",
     "upgrade": "upgrade",
 }
 

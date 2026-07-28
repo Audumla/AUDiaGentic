@@ -21,7 +21,7 @@ _exec_err = make_error_factory("VAL", "EXEC", "recipe-execution")
 logger = logging.getLogger(__name__)
 
 
-_SUPPORTED_MODES = ("apply", "prune", "status", "plan", "upgrade")
+_SUPPORTED_MODES = ("apply", "prune", "status", "plan", "upgrade-status", "upgrade")
 
 
 def execute_recipe(
@@ -85,6 +85,8 @@ def execute_recipe_mode(
         return _plan(mat)
     if mode == "upgrade":
         return _upgrade(mat, ctx)
+    if mode == "upgrade-status":
+        return _upgrade_status(mat, ctx)
     return _apply(mat, ctx)
 
 
@@ -198,5 +200,22 @@ def _upgrade(mat: Any, ctx: dict[str, Any]) -> RecipeResult:
     return RecipeResult.ok(
         RecipeState.UPGRADED,
         status="recipe upgraded successfully",
+        details={"recipe_id": mat.recipe_id, "version": mat.recipe_version},
+    )
+
+
+def _upgrade_status(mat: Any, ctx: dict[str, Any]) -> RecipeResult:
+    if not mat.upgrade_steps:
+        return RecipeResult.ok(
+            RecipeState.NOT_APPLICABLE,
+            status="recipe has no declared upgrade lifecycle",
+            details={"recipe_id": mat.recipe_id, "version": mat.recipe_version},
+        )
+    current = _status(mat, ctx)
+    if current.state is RecipeState.ABSENT:
+        return current
+    return RecipeResult.ok(
+        RecipeState.UPGRADE_AVAILABLE,
+        status="recipe has a declared explicit upgrade lifecycle",
         details={"recipe_id": mat.recipe_id, "version": mat.recipe_version},
     )
