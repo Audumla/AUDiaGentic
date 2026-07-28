@@ -4,22 +4,6 @@
 
 provider_id: antigravity
 execution_isolation_tier: no-isolation
-automation_capabilities:
-  - family_id: cli-lifecycle
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-cli-lifecycle-payload/v1
-    result_contract: provider-cli-lifecycle-result/v1
-    ownership_scope_required: false
-  - family_id: managed-mcp
-    supported_modes: [apply, prune, status]
-    payload_contract: provider-managed-mcp-payload/v1
-    result_contract: provider-managed-mcp-result/v1
-    ownership_scope_required: true
-  - family_id: generated-surfaces
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-generated-surface-payload/v1
-    result_contract: provider-generated-surface-result/v1
-    ownership_scope_required: true
 display_name: "Antigravity"
 description: "Google's Antigravity CLI and IDE. AI-first development platform with code execution and browser tools."
 url: "https://antigravity.google"
@@ -31,113 +15,60 @@ cli_probe:
   - agy
   - "--version"
 
-cli_install:
-  package_manager: script
-  package_name: antigravity-cli
-  executable: agy
-  install:
-    type: shell
-    id: install
-    command:
-      - bash
-      - "-lc"
-      - "curl -fsSL https://antigravity.google/cli/install.sh | bash"
-  uninstall:
-    type: shell
-    id: uninstall
-    command:
-      - bash
-      - "-lc"
-      - "rm -f $(which agy) 2>/dev/null; rm -rf ~/.gemini/antigravity 2>/dev/null; true"
+capabilities:
+  cli-install:
+    mechanism:
+      package_manager: script
+      package_name: antigravity-cli
+      executable: agy
+      install:
+        type: shell
+        id: install
+        command:
+          - bash
+          - "-lc"
+          - "curl -fsSL https://antigravity.google/cli/install.sh | bash"
+      uninstall:
+        type: shell
+        id: uninstall
+        command:
+          - bash
+          - "-lc"
+          - "rm -f $(which agy) 2>/dev/null; rm -rf ~/.gemini/antigravity 2>/dev/null; true"
 
-capability_facts:
-  - capability_id: cli-install
-    subject: cli_install
-    mechanism: "curl-based install script with shell probe agy --version"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/antigravity.yaml#cli_install"
-      review_state: verified
-  - capability_id: mcp-config
-    subject: mcp_config
-    mechanism: "reader/writer/remover over ~/.gemini/antigravity/mcp_config.json"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/antigravity.yaml#mcp_config"
-      review_state: verified
-  - capability_id: surfaces
-    subject: surfaces
-    mechanism: "flat-skill renderer with .agents/skills/{tag}/SKILL.md skill path and AGENTS.md instruction file"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/antigravity.yaml#surfaces"
-      review_state: verified
-  - capability_id: exec-adapter
-    subject: execution
-    mechanism: "mode: stub"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/antigravity.yaml#execution"
-      review_state: verified
-  - capability_id: perm-declaration
-    subject: permissions
-    mechanism: "ProviderPermissions boolean flags"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/antigravity.yaml#permissions"
-      review_state: verified
+  mcp:
+    mechanism:
+      config_path: "~/.gemini/antigravity/mcp_config.json"
+      reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
+      writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
+      remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
+      format: "mcp-json"
+      refresh_mode: "file-watch"
 
-permissions:
-  can_write_files: true
-  can_execute_shell: true
-  can_browse_web: true
-  can_read_env: true
-  notes: "Google's Antigravity development assistant."
+  surfaces:
+    mechanism:
+      renderer: flat-skill
+      contribution-file: "AGENTS.md"
 
-instruction_file: "AGENTS.md"
-skill_surface_path: ".agents/skills/{tag}/SKILL.md"
+  surface-skill:
+    mechanism: ".agents/skills/{tag}/SKILL.md"
 
-agent_files:
-  - rel_path: "AGENTS.md"
-    managed: false
-    description: "Shared project instructions"
+  surface-instruction:
+    mechanism: "AGENTS.md"
 
-mcp_config:
-  config_path: "~/.gemini/antigravity/mcp_config.json"
-  reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
-  writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
-  remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
-  format: "mcp-json"
-  refresh_mode: "file-watch"
+  permissions:
+    mechanism:
+      can_write_files: true
+      can_execute_shell: true
+      can_browse_web: true
+      can_read_env: true
+      notes: "Google's Antigravity development assistant."
 
-surfaces:
-  renderer: flat-skill
-  contribution-file: "AGENTS.md"
+  agent-files:
+    mechanism:
+      rel_path: "AGENTS.md"
+      managed: false
+      description: "Shared project instructions"
 
 execution:
   mode: stub

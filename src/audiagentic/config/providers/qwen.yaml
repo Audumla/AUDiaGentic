@@ -9,27 +9,6 @@ launches:
   execute:
     interaction: [native]
     observability: [pipe]
-automation_capabilities:
-  - family_id: cli-lifecycle
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-cli-lifecycle-payload/v1
-    result_contract: provider-cli-lifecycle-result/v1
-    ownership_scope_required: false
-  - family_id: managed-mcp
-    supported_modes: [apply, prune, status]
-    payload_contract: provider-managed-mcp-payload/v1
-    result_contract: provider-managed-mcp-result/v1
-    ownership_scope_required: true
-  - family_id: language-server-projection
-    supported_modes: [apply, prune, status]
-    payload_contract: provider-language-server-projection-payload/v1
-    result_contract: provider-language-server-projection-result/v1
-    ownership_scope_required: true
-  - family_id: generated-surfaces
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-generated-surface-payload/v1
-    result_contract: provider-generated-surface-result/v1
-    ownership_scope_required: true
 display_name: "Qwen (Alibaba)"
 description: "Alibaba Cloud's Qwen Code CLI. Open-source coding agent built on the Qwen model family."
 url: "https://github.com/QwenLM/qwen-code"
@@ -40,167 +19,73 @@ cli_probe:
   - qwen
   - "--version"
 
-cli_install:
-  toolchain: npm
-  package: "@qwen-code/qwen-code"
-  executable: qwen
-  probe_fn: "audiagentic.components.providers.adapters.qwen.hooks:_qwen_probe"
+capabilities:
+  cli-install:
+    mechanism:
+      toolchain: npm
+      package: "@qwen-code/qwen-code"
+      executable: qwen
+      probe_fn: "audiagentic.components.providers.adapters.qwen.hooks:_qwen_probe"
 
-host_capabilities:
-  - host: vscode
-    capability_id: "qwenlm.qwen-code-vscode-ide-companion"
-    display_name: "Qwen Code Companion"
+  host-extensions:
+    mechanism:
+      host: vscode
+      capability_id: "qwenlm.qwen-code-vscode-ide-companion"
+      display_name: "Qwen Code Companion"
 
-capability_facts:
-  - capability_id: cli-install
-    subject: cli_install
-    mechanism: "npm install: @qwen-code/qwen-code with shell probe qwen --version"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/qwen.yaml#cli_install"
-      review_state: verified
-  - capability_id: host-extension
-    subject: host_capabilities
-    mechanism: "vscode extension qwenlm.qwen-code-vscode-ide-companion"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/qwen.yaml#host_capabilities"
-      review_state: verified
-  - capability_id: mcp-config
-    subject: mcp_config
-    mechanism: >-
-      reader/writer/remover over ~/.qwen/settings.json (user) or
-      .qwen/settings.json (project)
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/qwen.yaml#mcp_config"
-      review_state: verified
-  - capability_id: lsp-config
-    subject: language_servers_config
-    mechanism: "reader/writer/remover over .lsp.json"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/qwen.yaml#language_servers_config"
-      review_state: verified
-  - capability_id: surfaces
-    subject: surfaces
-    mechanism: "flat-skill renderer with QWEN.md instruction file"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/qwen.yaml#surfaces"
-      review_state: verified
-  - capability_id: exec-adapter
-    subject: execution
-    mechanism: "mode: cli with qwen executable, yolo and auto-edit approval modes"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/qwen.yaml#execution"
-      review_state: verified
-  - capability_id: perm-declaration
-    subject: permissions
-    mechanism: "ProviderPermissions boolean flags"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/qwen.yaml#permissions"
-      review_state: verified
-  - capability_id: model-credentials
-    subject: "external:model-credentials"
-    mechanism: "--auth-type with env vars: OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY"
-    constraints:
-      - "only one auth-type active at a time"
-    limitations:
-      - "cannot have multiple vendors enabled concurrently"
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: execution
-      tool_version: "0.13.1"
-      fact_anchor: "docs/reference/model-source-evidence/qwen.md#qwen-evidence"
-      review_state: verified
-  - capability_id: model-local-state
-    subject: "external:model-local-state"
-    mechanism: "~/.qwen/settings.json with security.auth.selectedType and model.name"
-    constraints:
-      - "user-global, home-scoped"
-    limitations:
-      - "project-local config path not verified"
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: execution
-      tool_version: "0.13.1"
-      fact_anchor: "docs/reference/model-source-evidence/qwen.md#qwen-evidence"
-      review_state: verified
+  mcp:
+    mechanism:
+      config_path: "~/.qwen/settings.json"
+      reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
+      writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
+      remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
+      format: "mcp-json"
+      refresh_mode: "restart-required"
 
-permissions:
-  can_write_files: true
-  can_execute_shell: true
-  can_browse_web: false
-  can_read_env: true
-  notes: "CLI agent; Alibaba Cloud account auth required"
+  lsp-config:
+    mechanism:
+      config_path: ".lsp.json"
+      reader: "audiagentic.components.providers.adapters.qwen.language_servers:read_language_servers_qwen"
+      writer: "audiagentic.components.providers.adapters.qwen.language_servers:write_language_servers_qwen"
+      remover: "audiagentic.components.providers.adapters.qwen.language_servers:remove_language_servers_qwen"
+      format: "qwen-lsp-json"
 
-vendor_key_injection:
-  openai: {mechanism: env, key: OPENAI_API_KEY}
-  anthropic: {mechanism: env, key: ANTHROPIC_API_KEY}
-  google: {mechanism: env, key: GEMINI_API_KEY}
+  surfaces:
+    mechanism:
+      renderer: flat-skill
+      contribution-file: "QWEN.md"
 
-instruction_file: "QWEN.md"
+  surface-instruction:
+    mechanism: "QWEN.md"
 
-agent_files: []
+  permissions:
+    mechanism:
+      can_write_files: true
+      can_execute_shell: true
+      can_browse_web: false
+      can_read_env: true
+      notes: "CLI agent; Alibaba Cloud account auth required"
 
-mcp_config:
-  config_path: "~/.qwen/settings.json"
-  reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
-  writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
-  remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
-  format: "mcp-json"
-  refresh_mode: "restart-required"
+  models:
+    mechanism:
+      credentials:
+        openai: "env:OPENAI_API_KEY"
+        anthropic: "env:ANTHROPIC_API_KEY"
+        google: "env:GEMINI_API_KEY"
+    evidence:
+      note: >-
+        --auth-type with env vars: OPENAI_API_KEY, ANTHROPIC_API_KEY,
+        GEMINI_API_KEY; only one auth-type active at a time; cannot have
+        multiple vendors enabled concurrently (tool_version 0.13.1)
+      source: "docs/reference/model-source-evidence/qwen.md#qwen-evidence"
 
-language_servers_config:
-  config_path: ".lsp.json"
-  reader: "audiagentic.components.providers.adapters.qwen.language_servers:read_language_servers_qwen"
-  writer: "audiagentic.components.providers.adapters.qwen.language_servers:write_language_servers_qwen"
-  remover: "audiagentic.components.providers.adapters.qwen.language_servers:remove_language_servers_qwen"
-  format: "qwen-lsp-json"
-
-surfaces:
-  renderer: flat-skill
-  contribution-file: "QWEN.md"
+  model-local-state:
+    evidence:
+      note: >-
+        ~/.qwen/settings.json with security.auth.selectedType and model.name;
+        user-global, home-scoped; project-local config path not verified
+        (tool_version 0.13.1)
+      source: "docs/reference/model-source-evidence/qwen.md#qwen-evidence"
 
 execution:
   mode: cli

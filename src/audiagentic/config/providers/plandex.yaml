@@ -3,17 +3,6 @@
 
 provider_id: plandex
 execution_isolation_tier: no-isolation
-automation_capabilities:
-  - family_id: cli-lifecycle
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-cli-lifecycle-payload/v1
-    result_contract: provider-cli-lifecycle-result/v1
-    ownership_scope_required: false
-  - family_id: generated-surfaces
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-generated-surface-payload/v1
-    result_contract: provider-generated-surface-result/v1
-    ownership_scope_required: true
 display_name: "Plandex"
 description: "Open-source AI coding agent for large, complex tasks. Manages long-running plans across many files with version control and sandboxed changes."
 url: "https://plandex.ai"
@@ -22,82 +11,36 @@ cli_probe:
   - plandex
   - "--version"
 
-cli_install:
-  toolchain: brew
-  package: "plandex-ai/tap/plandex"
-  executable: plandex
-  uninstall_package: plandex
+capabilities:
+  cli-install:
+    mechanism:
+      toolchain: brew
+      package: "plandex-ai/tap/plandex"
+      executable: plandex
+      uninstall_package: plandex
 
-host_capabilities: []
+  surfaces:
+    mechanism:
+      renderer: none
+      contribution-file: "AGENTS.md"
 
-capability_facts:
-  - capability_id: cli-install
-    subject: cli_install
-    mechanism: "brew install: plandex-ai/tap/plandex with shell probe plandex --version"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/plandex.yaml#cli_install"
-      review_state: verified
-  - capability_id: surfaces
-    subject: surfaces
-    mechanism: "renderer: none with AGENTS.md contribution file"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/plandex.yaml#surfaces"
-      review_state: verified
-  - capability_id: exec-adapter
-    subject: execution
-    mechanism: "mode: stub"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/plandex.yaml#execution"
-      review_state: verified
-  - capability_id: perm-declaration
-    subject: permissions
-    mechanism: "ProviderPermissions boolean flags"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/plandex.yaml#permissions"
-      review_state: verified
+  permissions:
+    mechanism:
+      can_write_files: true
+      can_execute_shell: true
+      can_browse_web: false
+      can_read_env: true
+      notes: "Plan-and-apply agent; sandboxes changes until user approves; supports OpenAI-compatible backends"
 
-permissions:
-  can_write_files: true
-  can_execute_shell: true
-  can_browse_web: false
-  can_read_env: true
-  notes: "Plan-and-apply agent; sandboxes changes until user approves; supports OpenAI-compatible backends"
-
-agent_files:
-  - rel_path: ".plandex/"
-    managed: false
-    description: "Plandex plans and context directory"
-  - rel_path: "AGENTS.md"
-    managed: false
-    description: "Shared project instructions"
-
-surfaces:
-  renderer: none
-  contribution-file: "AGENTS.md"
+  agent-files:
+    - mechanism:
+        rel_path: ".plandex/"
+        managed: false
+        description: "Plandex plans and context directory"
+    - mechanism:
+        rel_path: "AGENTS.md"
+        managed: false
+        description: "Shared project instructions"
 
 execution:
   mode: stub

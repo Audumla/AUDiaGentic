@@ -34,9 +34,9 @@ class Capability:
     catalogue and shapes the mechanism value accordingly.
     """
 
-    kind: str  # catalogue key, e.g. 'mcp-config', 'host-extension'
+    kind: str  # catalogue key, e.g. 'mcp', 'host-extensions'
     mechanism: Any  # shaped by catalogue's mechanism_schema for this kind
-    modes: tuple[str, ...] = ()  # automation only; must match family's supported_modes
+    modes: tuple[str, ...] = ()  # provisioned only; must match family's supported_modes
     evidence: CapabilityEvidence | None = None
 
 
@@ -48,13 +48,36 @@ class HostCapability:
 
 
 @dataclass(frozen=True)
-class CapabilityEvidence:
-    """Evidence supporting one provider capability fact."""
+class ModelsSpec:
+    """Compound mechanism for the unified `models` capability.
 
-    evidence_tier: str = "unverified"
-    tool_version: str | None = None
-    fact_anchor: str | None = None
-    review_state: str = "pending-review"
+    Folds the model-endpoint story into one record: the managed store
+    (curation), the adapter-owned entry renderer, the catalog-refresh
+    callable, the connector shapes this provider's config can render, and
+    per-vendor credential references. Credential values are plain
+    ``secrets.py`` reference strings (e.g. ``"env:OPENAI_API_KEY"``),
+    resolved only at the narrow consuming boundary via
+    ``resolve_secret_ref``/``has_ambient_value`` — never stored resolved.
+    """
+
+    store: ManagedConfigSpec | None = None
+    entry_renderer: Callable[[Any], tuple[str, Any]] | None = None
+    refresh: Callable[[dict[str, Any]], list[dict[str, Any]]] | None = None
+    connectors: tuple[str, ...] = ()
+    credentials: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class CapabilityEvidence:
+    """A plain provenance trail for one capability — not a review record.
+
+    Deep provenance (probe validation, platform evidence) lives in the owning
+    subsystem (AS27/AS54/MI08/MO); this is just a note plus an optional
+    pointer to where it came from.
+    """
+
+    note: str | None = None
+    source: str | None = None
 
 
 @dataclass(frozen=True)
@@ -158,25 +181,6 @@ class ProviderDescriptor:
     # "env"  — accessed via environment / API key (no local binary)
     # "none" — passthrough bridge, no direct provider access
     access_mode: str = "cli"
-    # Adapter-owned entry renderer: converts one provider-NEUTRAL
-    # MaterializedModelEntry into (visible_name, native_payload) — the payload
-    # model_config.writer accepts. Declared as a YAML dotted ref and resolved
-    # at load, exactly like reader/writer/remover — a plain callable on the
-    # descriptor, not a runtime string-keyed lookup. Provider-native
-    # vocabulary (Pi's baseUrl/compat, Codex's model_providers table) lives
-    # exclusively in these adapter functions (RV271).
-    model_entry_renderer: Callable[[Any], tuple[str, Any]] | None = None
-    # Model-source connector capability declarations (MO01 step 4). Empty by
-    # default: an undeclared (provider, connector)/(provider, vendor) pair
-    # projects nothing — values are populated only from MO09-verified evidence,
-    # never guessed. Config-over-code (arch-standards §2): provider YAML is the
-    # sole declaration surface, never a provider-id branch in service code.
-    #
-    # vendor_key_injection: (vendor-id) -> {"mechanism": "env"|"config", "key": <env-var-name-or-config-path>}
-    # for the native-key-injection projection path (RV332/RV337 standalone-first
-    # ranking: config-mechanism entries prefer the tool's own env-indirection
-    # syntax over resolved literals where the tool supports it).
-    vendor_key_injection: dict[str, dict[str, str]] = field(default_factory=dict)
     # Optional non-mutating companion to on_lsp_enabled. Reports whether the
     # provider's self-provided LSP support is already present, without
     # provisioning it. The self-provided-lsp family uses this for status mode so
@@ -254,27 +258,43 @@ class ProviderDescriptor:
 
     @property
     def mcp_config(self) -> ManagedConfigSpec | None:
-        return self._mechanism("mcp-config")
+        return self._mechanism("mcp")
+
+    def _models_spec(self) -> ModelsSpec:
+        return self._mechanism("models") or ModelsSpec()
 
     @property
     def model_config(self) -> ManagedConfigSpec | None:
-        return self._mechanism("model-config")
+        return self._models_spec().store
+
+    @property
+    def model_entry_renderer(self) -> Callable[[Any], tuple[str, Any]] | None:
+        return self._models_spec().entry_renderer
+
+    @property
+    def fetch_catalog_fn(self) -> Callable[[dict[str, Any]], list[dict[str, Any]]] | None:
+        return self._models_spec().refresh
+
+    @property
+    def supported_connectors(self) -> tuple[str, ...]:
+        return self._models_spec().connectors
+
+    @property
+    def vendor_key_injection(self) -> dict[str, str]:
+        """Per-vendor credential reference (secrets.py scheme:locator strings)."""
+        return self._models_spec().credentials
 
     @property
     def plugin_config(self) -> ManagedConfigSpec | None:
-        return self._mechanism("plugin-config")
+        return self._mechanism("plugins")
 
     @property
     def hooks_config(self) -> ManagedConfigSpec | None:
-        return self._mechanism("hook-config")
+        return self._mechanism("hooks")
 
     @property
     def language_servers_config(self) -> ManagedConfigSpec | None:
         return self._mechanism("lsp-config")
-
-    @property
-    def fetch_catalog_fn(self) -> Callable[[dict[str, Any]], list[dict[str, Any]]] | None:
-        return self._mechanism("model-catalog-refresh")
 
     @property
     def on_lsp_enabled(self) -> Callable[[Path | None], dict[str, Any]] | None:
@@ -290,23 +310,19 @@ class ProviderDescriptor:
 
     @property
     def surfaces(self) -> dict[str, Any] | None:
-        return self._mechanism("surface-render")
+        return self._mechanism("surfaces")
 
     @property
     def permissions(self) -> ProviderPermissions:
-        return self._mechanism("perm-declaration") or ProviderPermissions()
+        return self._mechanism("permissions") or ProviderPermissions()
 
     @property
     def host_capabilities(self) -> tuple[HostCapability, ...]:
-        return self._mechanisms("host-extension")
+        return self._mechanisms("host-extensions")
 
     @property
     def agent_files(self) -> tuple[AgentFile, ...]:
-        return self._mechanisms("file-agent")
-
-    @property
-    def supported_connectors(self) -> tuple[str, ...]:
-        return self._mechanism("model-connectors") or ()
+        return self._mechanisms("agent-files")
 
     @property
     def capability_facts(self) -> tuple[ProviderCapabilityFact, ...]:
@@ -323,6 +339,13 @@ class ProviderDescriptor:
         for cap in self.capabilities:
             kind = cat.kinds_by_id.get(cap.kind)
             if kind is None or kind.authority != "provisioned" or not kind.family_id:
+                continue
+            # `models` is a compound mechanism (store/entry_renderer/refresh/
+            # connectors/credentials); only `store` is an actual reconcile-able
+            # resource. A provider declaring only refresh/connectors/credentials
+            # (e.g. claude, local-openai) must NOT register model-projection
+            # dispatch eligibility — there is nothing to reconcile against.
+            if cap.kind == "models" and not getattr(cap.mechanism, "store", None):
                 continue
             if kind.family_id in seen:
                 continue
