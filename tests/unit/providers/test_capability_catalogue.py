@@ -92,7 +92,7 @@ def test_legacy_kinds_have_canonical_kind():
 
 def test_legacy_kinds_pass_catalogue_validation():
     """Legacy kinds are valid catalogue members and pass VAL-PCAP-009."""
-    legacy_ids = {"surfaces", "lsp-config", "lsp-self-support"}
+    legacy_ids = {"lsp-config", "lsp-self-support"}
     for lid in legacy_ids:
         kind = validate_capability_id(lid)
         assert kind is not None, f"legacy kind '{lid}' should be a catalogue member"

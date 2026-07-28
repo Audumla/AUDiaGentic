@@ -3,22 +3,6 @@
 
 provider_id: roo
 execution_isolation_tier: no-isolation
-automation_capabilities:
-  - family_id: cli-lifecycle
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-cli-lifecycle-payload/v1
-    result_contract: provider-cli-lifecycle-result/v1
-    ownership_scope_required: false
-  - family_id: managed-mcp
-    supported_modes: [apply, prune, status]
-    payload_contract: provider-managed-mcp-payload/v1
-    result_contract: provider-managed-mcp-result/v1
-    ownership_scope_required: true
-  - family_id: generated-surfaces
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-generated-surface-payload/v1
-    result_contract: provider-generated-surface-result/v1
-    ownership_scope_required: true
 display_name: "Roo Code"
 description: "VS Code extension for AI-assisted coding with multi-model support and custom modes."
 url: "https://roocode.com"
@@ -28,101 +12,46 @@ cli_probe:
   - code
   - "--list-extensions"
 
-cli_install:
-  toolchain: vscode
-  package: "RooVeterinaryInc.roo-cline"
-  executable: code
-  probe_fn: "audiagentic.components.providers.adapters.roo.hooks:_roo_probe"
+capabilities:
+  cli-install:
+    mechanism:
+      toolchain: vscode
+      package: "RooVeterinaryInc.roo-cline"
+      executable: code
+      probe_fn: "audiagentic.components.providers.adapters.roo.hooks:_roo_probe"
 
-host_capabilities:
-  - host: vscode
-    capability_id: "RooVeterinaryInc.roo-cline"
-    display_name: "Roo Code"
+  host-extensions:
+    mechanism:
+      host: vscode
+      capability_id: "RooVeterinaryInc.roo-cline"
+      display_name: "Roo Code"
 
-capability_facts:
-  - capability_id: cli-install
-    subject: cli_install
-    mechanism: "vscode install: RooVeterinaryInc.roo-cline with shell probe code --list-extensions"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/roo.yaml#cli_install"
-      review_state: verified
-  - capability_id: host-extension
-    subject: host_capabilities
-    mechanism: "vscode extension RooVeterinaryInc.roo-cline"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/roo.yaml#host_capabilities"
-      review_state: verified
-  - capability_id: mcp-config
-    subject: mcp_config
-    mechanism: "reader/writer/remover over .roo/mcp.json"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/roo.yaml#mcp_config"
-      review_state: verified
-  - capability_id: exec-adapter
-    subject: execution
-    mechanism: "mode: unsupported (VS Code extension, no CLI execution adapter)"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/roo.yaml#execution"
-      review_state: verified
-  - capability_id: perm-declaration
-    subject: permissions
-    mechanism: "ProviderPermissions boolean flags"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/roo.yaml#permissions"
-      review_state: verified
+  mcp:
+    mechanism:
+      config_path: ".roo/mcp.json"
+      reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
+      writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
+      remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
+      format: "mcp-json"
+      refresh_mode: "restart-required"
 
-permissions:
-  can_write_files: true
-  can_execute_shell: true
-  can_browse_web: true
-  can_read_env: true
-  notes: "VS Code agent with mode support and local model/provider flexibility"
+  permissions:
+    mechanism:
+      can_write_files: true
+      can_execute_shell: true
+      can_browse_web: true
+      can_read_env: true
+      notes: "VS Code agent with mode support and local model/provider flexibility"
 
-agent_files:
-  - rel_path: ".roo/rules/audiagentic.md"
-    managed: true
-    description: "AUDiaGentic rules for Roo"
-  - rel_path: ".rooignore"
-    managed: false
-    description: "Roo ignore file"
-
-mcp_config:
-  config_path: ".roo/mcp.json"
-  reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
-  writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
-  remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
-  format: "mcp-json"
-  refresh_mode: "restart-required"
+  agent-files:
+    - mechanism:
+        rel_path: ".roo/rules/audiagentic.md"
+        managed: true
+        description: "AUDiaGentic rules for Roo"
+    - mechanism:
+        rel_path: ".rooignore"
+        managed: false
+        description: "Roo ignore file"
 
 execution:
   mode: unsupported

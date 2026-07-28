@@ -1,4 +1,5 @@
 """MO02 model-endpoint sync tests: ownership, collisions, truth-table, boundaries."""
+
 from __future__ import annotations
 
 import ast
@@ -10,7 +11,7 @@ import pytest
 from audiagentic.components.providers import providers_api
 from audiagentic.components.providers.descriptors import registry as descriptor_registry
 from audiagentic.components.providers.descriptors.base import ProviderDescriptor
-from audiagentic.components.providers.services.models import (
+from audiagentic.components.providers.services.catalog.models import (
     MaterializedModelEntry,
     build_model_projection_request,
     materialize_local_endpoint_sources,
@@ -54,26 +55,28 @@ def _render(entry: MaterializedModelEntry) -> tuple[str, dict]:
 
 
 def _fake_descriptor(**overrides) -> ProviderDescriptor:
-    from audiagentic.components.providers.descriptors.base import Capability
+    from audiagentic.components.providers.descriptors.base import Capability, ModelsSpec
 
     fields = dict(
         provider_id="fakemodels",
         display_name="Fake Models Provider",
         capabilities=(
             Capability(
-                kind="model-config",
-                mechanism=ManagedConfigSpec(
-                    config_path=".fake/models.json",
-                    reader=_read_json,
-                    writer=_write_json,
-                    remover=_remove_json,
-                    format="fake-json",
-                    refresh_mode="file-watch",
+                kind="models",
+                mechanism=ModelsSpec(
+                    store=ManagedConfigSpec(
+                        config_path=".fake/models.json",
+                        reader=_read_json,
+                        writer=_write_json,
+                        remover=_remove_json,
+                        format="fake-json",
+                        refresh_mode="file-watch",
+                    ),
+                    entry_renderer=_render,
+                    connectors=("openai-compatible",),
                 ),
             ),
-            Capability(kind="model-connectors", mechanism=("openai-compatible",)),
         ),
-        model_entry_renderer=_render,
     )
     fields.update(overrides)
     return ProviderDescriptor(**fields)
@@ -91,7 +94,9 @@ def fake_provider(monkeypatch):
     return descriptor
 
 
-def _entry(source_id: str, model_id: str, connector: str = "openai-compatible") -> MaterializedModelEntry:
+def _entry(
+    source_id: str, model_id: str, connector: str = "openai-compatible"
+) -> MaterializedModelEntry:
     return MaterializedModelEntry(
         source_id=source_id,
         model_id=model_id,
@@ -120,9 +125,7 @@ def test_apply_update_remove_preserves_unmanaged(fake_provider, tmp_path: Path) 
     assert data["local-a"]["model"] == "model-a"
 
     # update one, remove the other
-    result = sync_managed_provider_models(
-        "fakemodels", tmp_path, [_entry("local-a", "model-a-v2")]
-    )
+    result = sync_managed_provider_models("fakemodels", tmp_path, [_entry("local-a", "model-a-v2")])
     assert result["ok"] is True
     data = _read_json(config_path)
     assert data["local-a"]["model"] == "model-a-v2"
@@ -178,7 +181,27 @@ def test_provider_without_model_config_is_clean_skip(tmp_path: Path) -> None:
 
 
 def test_model_config_without_renderer_raises(monkeypatch, tmp_path: Path) -> None:
-    descriptor = _fake_descriptor(model_entry_renderer=None)
+    from audiagentic.components.providers.descriptors.base import Capability, ModelsSpec
+
+    descriptor = _fake_descriptor(
+        capabilities=(
+            Capability(
+                kind="models",
+                mechanism=ModelsSpec(
+                    store=ManagedConfigSpec(
+                        config_path=".fake/models.json",
+                        reader=_read_json,
+                        writer=_write_json,
+                        remover=_remove_json,
+                        format="fake-json",
+                        refresh_mode="file-watch",
+                    ),
+                    entry_renderer=None,
+                    connectors=("openai-compatible",),
+                ),
+            ),
+        ),
+    )
     monkeypatch.setattr(descriptor_registry, "get_descriptor", lambda pid: descriptor)
     with pytest.raises(AudiaGenticError) as exc:
         sync_managed_provider_models("fakemodels", tmp_path, [_entry("a", "m")])
@@ -277,9 +300,7 @@ def test_public_model_projection_plan_uses_registered_family(tmp_path: Path) -> 
         ),
     )
 
-    result = providers_api.manage_model_projection(
-        tmp_path, "pi", mode="plan", request=request
-    )
+    result = providers_api.manage_model_projection(tmp_path, "pi", mode="plan", request=request)
 
     assert isinstance(result, providers_api.ModelProjectionResult)
     assert result.ok is True
@@ -290,64 +311,73 @@ def test_public_model_projection_plan_uses_registered_family(tmp_path: Path) -> 
 
 
 def test_projection_request_includes_stale_owned_ids(fake_provider, tmp_path: Path) -> None:
-    model_ownership_registry(tmp_path).save(
-        {"fakemodels": {"model-endpoints/removed": "Removed"}}
-    )
+    model_ownership_registry(tmp_path).save({"fakemodels": {"model-endpoints/removed": "Removed"}})
     providers_api.model_source_add(tmp_path, "local-a", dict(_SOURCE))
 
-    request = build_model_projection_request(
-        tmp_path, "fakemodels", enabled=True
-    )
+    request = build_model_projection_request(tmp_path, "fakemodels", enabled=True)
 
     assert request.managed_ids == (
         "model-endpoints/local-a",
         "model-endpoints/removed",
     )
-    assert tuple(entry.managed_id for entry in request.entries) == (
-        "model-endpoints/local-a",
-    )
+    assert tuple(entry.managed_id for entry in request.entries) == ("model-endpoints/local-a",)
 
 
 def test_cached_vendor_catalog_materializes_filtered_models(tmp_path: Path) -> None:
-    providers_api.model_source_add(tmp_path, "anthropic-endpoint", {
-        "source-class": "remote-account",
-        "connector": "anthropic",
-        "model-discovery": "list-api",
-        "model-filter": {"include": ["claude-*"]},
-        "api-key-ref": "env:ANTHROPIC_API_KEY",
-    })
+    providers_api.model_source_add(
+        tmp_path,
+        "anthropic-endpoint",
+        {
+            "source-class": "remote-account",
+            "connector": "anthropic",
+            "model-discovery": "list-api",
+            "model-filter": {"include": ["claude-*"]},
+            "api-key-ref": "env:ANTHROPIC_API_KEY",
+        },
+    )
     cache = (
-        tmp_path / ".audiagentic" / "runtime" / "providers"
-        / "source-catalogs" / "anthropic-endpoint.json"
+        tmp_path
+        / ".audiagentic"
+        / "runtime"
+        / "providers"
+        / "source-catalogs"
+        / "anthropic-endpoint.json"
     )
     cache.parent.mkdir(parents=True)
-    cache.write_text(json.dumps({
-        "contract-version": "v1",
-        "source-id": "anthropic-endpoint",
-        "discovery-mode": "list-api",
-        "fetched-at": "2026-07-18T00:00:00Z",
-        "models": [
-            {"model-id": "claude-sonnet", "context-window": 200000},
-            {"model-id": "other-model"},
-        ],
-    }), encoding="utf-8")
+    cache.write_text(
+        json.dumps(
+            {
+                "contract-version": "v1",
+                "source-id": "anthropic-endpoint",
+                "discovery-mode": "list-api",
+                "fetched-at": "2026-07-18T00:00:00Z",
+                "models": [
+                    {"model-id": "claude-sonnet", "context-window": 200000},
+                    {"model-id": "other-model"},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
 
     request = build_model_projection_request(tmp_path, "pi", enabled=True)
 
-    assert request.managed_ids == (
-        "model-endpoints/anthropic-endpoint/claude-sonnet",
-    )
+    assert request.managed_ids == ("model-endpoints/anthropic-endpoint/claude-sonnet",)
     assert request.entries[0].connector == "anthropic"
     assert request.entries[0].auth_ref == "env:ANTHROPIC_API_KEY"
 
 
 def test_native_vendor_group_is_not_duplicated_as_custom_entries(tmp_path: Path) -> None:
-    providers_api.model_source_add(tmp_path, "anthropic-main", {
-        "source-class": "remote-account",
-        "vendor-id": "anthropic",
-        "connector": "anthropic",
-        "model-discovery": "none",
-    })
+    providers_api.model_source_add(
+        tmp_path,
+        "anthropic-main",
+        {
+            "source-class": "remote-account",
+            "vendor-id": "anthropic",
+            "connector": "anthropic",
+            "model-discovery": "none",
+        },
+    )
 
     request = build_model_projection_request(tmp_path, "pi", enabled=True)
 
@@ -355,29 +385,41 @@ def test_native_vendor_group_is_not_duplicated_as_custom_entries(tmp_path: Path)
 
 
 def test_model_inventory_groups_vendor_and_harness_modes(monkeypatch, tmp_path: Path) -> None:
-    providers_api.model_source_add(tmp_path, "anthropic-main", {
-        "source-class": "remote-account",
-        "vendor-id": "anthropic",
-        "connector": "anthropic",
-        "model-discovery": "none",
-    })
-    monkeypatch.setattr(providers_api, "list_provider_models", lambda _root, provider_id: {
-        "ok": True,
-        "models": ([{"model_id": "anthropic/claude-sonnet", "vendor_id": "anthropic"}]
-                   if provider_id == "opencode" else []),
-    })
+    providers_api.model_source_add(
+        tmp_path,
+        "anthropic-main",
+        {
+            "source-class": "remote-account",
+            "vendor-id": "anthropic",
+            "connector": "anthropic",
+            "model-discovery": "none",
+        },
+    )
+    monkeypatch.setattr(
+        providers_api,
+        "list_provider_models",
+        lambda _root, provider_id: {
+            "ok": True,
+            "models": (
+                [{"model_id": "anthropic/claude-sonnet", "vendor_id": "anthropic"}]
+                if provider_id == "opencode"
+                else []
+            ),
+        },
+    )
 
     inventory = providers_api.list_model_inventory(tmp_path)
 
-    assert inventory["vendors"] == [{
-        "vendor_id": "anthropic",
-        "harnesses": ["opencode"],
-        "sources": [{"source_id": "anthropic-main", "enabled": True}],
-        "enabled": True,
-        "models": [{"model_id": "anthropic/claude-sonnet", "vendor_id": "anthropic"}],
-    }]
-    modes = {(row["provider_id"], row["mode"])
-             for row in inventory["sources"][0]["harnesses"]}
+    assert inventory["vendors"] == [
+        {
+            "vendor_id": "anthropic",
+            "harnesses": ["opencode"],
+            "sources": [{"source_id": "anthropic-main", "enabled": True}],
+            "enabled": True,
+            "models": [{"model_id": "anthropic/claude-sonnet", "vendor_id": "anthropic"}],
+        }
+    ]
+    modes = {(row["provider_id"], row["mode"]) for row in inventory["sources"][0]["harnesses"]}
     assert ("opencode", "native-catalog") in modes
     assert ("pi", "native-vendor") in modes
     assert ("pi", "custom-entries") not in modes
@@ -385,13 +427,17 @@ def test_model_inventory_groups_vendor_and_harness_modes(monkeypatch, tmp_path: 
 
 def test_vendor_enablement_updates_all_group_sources(tmp_path: Path) -> None:
     for source_id, connector in (("anthropic-a", "anthropic"), ("anthropic-b", "anthropic")):
-        providers_api.model_source_add(tmp_path, source_id, {
-            "source-class": "remote-account",
-            "vendor-id": "anthropic",
-            "connector": connector,
-            "model-discovery": "none",
-            "enabled": False,
-        })
+        providers_api.model_source_add(
+            tmp_path,
+            source_id,
+            {
+                "source-class": "remote-account",
+                "vendor-id": "anthropic",
+                "connector": connector,
+                "model-discovery": "none",
+                "enabled": False,
+            },
+        )
 
     result = providers_api.model_vendor_set_enabled(tmp_path, "anthropic", True)
 
@@ -401,7 +447,8 @@ def test_vendor_enablement_updates_all_group_sources(tmp_path: Path) -> None:
 
 
 def test_holistic_apply_fans_out_only_registered_model_family(monkeypatch, tmp_path: Path) -> None:
-    from audiagentic.components.providers.services import models, provider_config
+    from audiagentic.components.providers.services.catalog import models
+    from audiagentic.components.providers.services.config import provider_config
 
     calls: list[str] = []
     monkeypatch.setattr(provider_config, "is_provider_enabled", lambda _root, _pid: True)
@@ -413,9 +460,7 @@ def test_holistic_apply_fans_out_only_registered_model_family(monkeypatch, tmp_p
 
     def _apply(_root, provider_id, *, mode, request):
         calls.append(provider_id)
-        return providers_api.ModelProjectionResult(
-            ok=True, supported=True, provider_id=provider_id
-        )
+        return providers_api.ModelProjectionResult(ok=True, supported=True, provider_id=provider_id)
 
     monkeypatch.setattr(providers_api, "manage_model_projection", _apply)
 
@@ -438,9 +483,7 @@ def test_update_remove_set_enabled_roundtrip(tmp_path: Path) -> None:
     listing = providers_api.model_source_list(tmp_path)
     assert listing["sources"]["local-a"]["enabled"] is False
 
-    providers_api.model_source_update(
-        tmp_path, "local-a", {"display-name": "Renamed"}
-    )
+    providers_api.model_source_update(tmp_path, "local-a", {"display-name": "Renamed"})
     providers_api.model_source_remove(tmp_path, "local-a")
     assert providers_api.model_source_list(tmp_path)["sources"] == {}
 
@@ -463,11 +506,9 @@ def test_invalid_config_rejected_without_partial_write(tmp_path: Path) -> None:
 
 
 def test_model_config_status_fields(fake_provider, tmp_path: Path) -> None:
-    from audiagentic.components.providers.services.status import _model_config_status
+    from audiagentic.components.providers.services.lifecycle.status import _model_config_status
 
-    sync_managed_provider_models(
-        "fakemodels", tmp_path, [_entry("local-a", "model-a")]
-    )
+    sync_managed_provider_models("fakemodels", tmp_path, [_entry("local-a", "model-a")])
     status = _model_config_status("fakemodels", fake_provider, tmp_path)
     assert status["supported"] is True
     assert status["format"] == "fake-json"
@@ -479,7 +520,7 @@ def test_model_config_status_fields(fake_provider, tmp_path: Path) -> None:
 
 def test_model_config_status_unsupported_provider(tmp_path: Path) -> None:
     from audiagentic.components.providers.descriptors.registry import get_descriptor
-    from audiagentic.components.providers.services.status import _model_config_status
+    from audiagentic.components.providers.services.lifecycle.status import _model_config_status
 
     status = _model_config_status("claude", get_descriptor("claude"), tmp_path)
     assert status["supported"] is False
@@ -492,7 +533,13 @@ def test_model_config_status_unsupported_provider(tmp_path: Path) -> None:
 def test_models_service_has_no_adapter_imports_or_provider_branches() -> None:
     source = (
         Path(__file__).resolve().parents[3]
-        / "src" / "audiagentic" / "components" / "providers" / "services" / "models.py"
+        / "src"
+        / "audiagentic"
+        / "components"
+        / "providers"
+        / "services"
+        / "catalog"
+        / "models.py"
     ).read_text(encoding="utf-8")
     tree = ast.parse(source)
     for node in ast.walk(tree):

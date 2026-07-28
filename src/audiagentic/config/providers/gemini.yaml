@@ -4,22 +4,6 @@
 
 provider_id: gemini
 execution_isolation_tier: no-isolation
-automation_capabilities:
-  - family_id: cli-lifecycle
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-cli-lifecycle-payload/v1
-    result_contract: provider-cli-lifecycle-result/v1
-    ownership_scope_required: false
-  - family_id: managed-mcp
-    supported_modes: [apply, prune, status]
-    payload_contract: provider-managed-mcp-payload/v1
-    result_contract: provider-managed-mcp-result/v1
-    ownership_scope_required: true
-  - family_id: generated-surfaces
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-generated-surface-payload/v1
-    result_contract: provider-generated-surface-result/v1
-    ownership_scope_required: true
 display_name: "Gemini (Google)"
 description: "Google's Gemini CLI. Agentic coding assistant with large context window and Google tool integrations."
 url: "https://github.com/google-gemini/gemini-cli"
@@ -36,113 +20,49 @@ cli_probe:
   - gemini
   - "--version"
 
-cli_install:
-  toolchain: npm
-  package: "@google/gemini-cli"
-  executable: gemini
+capabilities:
+  cli-install:
+    mechanism:
+      toolchain: npm
+      package: "@google/gemini-cli"
+      executable: gemini
 
-host_capabilities:
-  - host: vscode
-    capability_id: "google.gemini-cli-vscode-ide-companion"
-    display_name: "Gemini CLI Companion"
+  host-extensions:
+    mechanism:
+      host: vscode
+      capability_id: "google.gemini-cli-vscode-ide-companion"
+      display_name: "Gemini CLI Companion"
 
-capability_facts:
-  - capability_id: cli-install
-    subject: cli_install
-    mechanism: "npm install: @google/gemini-cli with shell probe gemini --version"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/gemini.yaml#cli_install"
-      review_state: verified
-  - capability_id: host-extension
-    subject: host_capabilities
-    mechanism: "vscode extension google.gemini-cli-vscode-ide-companion"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/gemini.yaml#host_capabilities"
-      review_state: verified
-  - capability_id: mcp-config
-    subject: mcp_config
-    mechanism: "reader/writer/remover over .gemini/settings.json"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/gemini.yaml#mcp_config"
-      review_state: verified
-  - capability_id: surfaces
-    subject: surfaces
-    mechanism: "flat-skill renderer with .gemini/commands/{tag}.md skill path and GEMINI.md instruction file"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/gemini.yaml#surfaces"
-      review_state: verified
-  - capability_id: depr-status
-    subject: deprecated
-    mechanism: "boolean with annotations, replaced by antigravity"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/gemini.yaml#deprecated"
-      review_state: verified
-  - capability_id: perm-declaration
-    subject: permissions
-    mechanism: "ProviderPermissions boolean flags"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/gemini.yaml#permissions"
-      review_state: verified
+  mcp:
+    mechanism:
+      config_path: ".gemini/settings.json"
+      reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
+      writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
+      remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
+      format: "mcp-json"
+      refresh_mode: "restart-required"
 
-permissions:
-  can_write_files: true
-  can_execute_shell: true
-  can_browse_web: true
-  can_read_env: true
-  notes: "CLI agent with tool use; Google account auth required"
+  surfaces:
+    mechanism:
+      renderer: flat-skill
+      contribution-file: "GEMINI.md"
 
-instruction_file: "GEMINI.md"
-skill_surface_path: ".gemini/commands/{tag}.md"
+  surface-skill:
+    mechanism: ".gemini/commands/{tag}.md"
 
-agent_files:
-  - rel_path: "GEMINI.md"
-    managed: false
-    description: "Gemini project instructions"
+  surface-instruction:
+    mechanism: "GEMINI.md"
 
-mcp_config:
-  config_path: ".gemini/settings.json"
-  reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
-  writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
-  remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
-  format: "mcp-json"
-  refresh_mode: "restart-required"
+  permissions:
+    mechanism:
+      can_write_files: true
+      can_execute_shell: true
+      can_browse_web: true
+      can_read_env: true
+      notes: "CLI agent with tool use; Google account auth required"
 
-surfaces:
-  renderer: flat-skill
-  contribution-file: "GEMINI.md"
+  agent-files:
+    mechanism:
+      rel_path: "GEMINI.md"
+      managed: false
+      description: "Gemini project instructions"

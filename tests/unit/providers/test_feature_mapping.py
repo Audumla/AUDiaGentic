@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from audiagentic.components.providers.descriptors.base import (
     AgentFile,
+    Capability,
     ProviderDescriptor,
 )
 from audiagentic.components.providers.descriptors.feature_mapping import (
@@ -15,15 +16,25 @@ from audiagentic.foundation.features.base import FEATURE_SCOPE_IMPLEMENTATION
 from audiagentic.foundation.toolchains.config.managed_config import ManagedConfigSpec
 
 
-def _provider(provider_id: str = "x", **kwargs) -> ProviderDescriptor:
-    from audiagentic.components.providers.descriptors.loader import (
-        _capabilities_from_values,
-    )
-
+def _provider(
+    provider_id: str = "x",
+    *,
+    agent_files: tuple[AgentFile, ...] = (),
+    instruction_file: str | None = None,
+    skill_surface_path: str | None = None,
+    mcp_config: ManagedConfigSpec | None = None,
+) -> ProviderDescriptor:
+    caps: list[Capability] = [Capability(kind="agent-files", mechanism=f) for f in agent_files]
+    if instruction_file:
+        caps.append(Capability(kind="surface-instruction", mechanism=instruction_file))
+    if skill_surface_path:
+        caps.append(Capability(kind="surface-skill", mechanism=skill_surface_path))
+    if mcp_config:
+        caps.append(Capability(kind="mcp", mechanism=mcp_config))
     return ProviderDescriptor(
         provider_id=provider_id,
         display_name=provider_id,
-        capabilities=_capabilities_from_values(kwargs),
+        capabilities=tuple(caps),
     )
 
 

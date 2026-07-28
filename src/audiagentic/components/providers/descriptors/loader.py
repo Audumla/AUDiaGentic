@@ -30,14 +30,14 @@ from audiagentic.foundation.transports.session_surface import (
 )
 from audiagentic.foundation.workflow.invocation.from_spec import build_step_from_spec
 
-from .automation_capabilities import ProviderAutomationCapability, validate_automation_capabilities
+from .automation_capabilities import validate_automation_capabilities
 from .base import (
     AgentFile,
     Capability,
     CapabilityEvidence,
     CliInstallRecipe,
     HostCapability,
-    ProviderCapabilityFact,
+    ModelsSpec,
     ProviderDescriptor,
     ProviderPermissions,
 )
@@ -86,18 +86,6 @@ def _build_permissions(data: dict[str, Any]) -> ProviderPermissions:
     )
 
 
-def _build_host_capabilities(data: list[dict[str, Any]]) -> tuple[HostCapability, ...]:
-    """Build HostCapability tuple from YAML list."""
-    return tuple(
-        HostCapability(
-            host=item["host"],
-            capability_id=item["capability_id"],
-            display_name=item["display_name"],
-        )
-        for item in data
-    )
-
-
 def _build_managed_config_spec(data: dict[str, Any]) -> ManagedConfigSpec:
     """Generic ManagedConfigSpec projector for managed-reconcile kinds.
 
@@ -113,6 +101,38 @@ def _build_managed_config_spec(data: dict[str, Any]) -> ManagedConfigSpec:
         refresh_mode=data.get("refresh_mode", "none"),
         reload_fn=resolve_ref(data["reload_fn"]) if "reload_fn" in data else None,
         capabilities=frozenset({REMOTE_CAPABILITY}) if data.get("remote") else frozenset(),
+    )
+
+
+def _build_models_spec(data: dict[str, Any]) -> ModelsSpec:
+    """Build the compound `models` mechanism from YAML dict.
+
+    ``credentials`` values are secrets.py reference strings (``scheme:locator``,
+    e.g. ``"env:OPENAI_API_KEY"``) — validated against the shared grammar at
+    load time so a malformed reference fails at descriptor load, not at first
+    use.
+    """
+    from audiagentic.components.providers.services.secrets import parse_secret_ref
+
+    credentials = data.get("credentials") or {}
+    for vendor_id, ref in credentials.items():
+        try:
+            parse_secret_ref(ref)
+        except AudiaGenticError as exc:
+            raise AudiaGenticError(
+                code="VAL-PCAP-009",
+                kind="providers",
+                message=f"models.credentials.{vendor_id}: {exc.message}",
+                details={"vendor_id": vendor_id, "value": ref},
+            ) from exc
+
+    store_data = data.get("store")
+    return ModelsSpec(
+        store=_build_managed_config_spec(store_data) if store_data else None,
+        entry_renderer=resolve_ref(data["entry_renderer"]) if "entry_renderer" in data else None,
+        refresh=resolve_ref(data["refresh"]) if "refresh" in data else None,
+        connectors=tuple(data.get("connectors") or ()),
+        credentials=dict(credentials),
     )
 
 
@@ -136,6 +156,8 @@ def _project_mechanism(mechanism_schema: str, raw: Any) -> Any:
             managed=raw.get("managed", True),
             description=raw.get("description", ""),
         )
+    if mechanism_schema == "model-spec":
+        return _build_models_spec(raw)
     if mechanism_schema == "callable-ref":
         return resolve_ref(raw) if isinstance(raw, str) else raw
     # boolean-set, tier-enum, surfaces-struct, acp-caps-list, lsp-automation-spec, none
@@ -169,154 +191,23 @@ def _build_capabilities(data: dict[str, Any]) -> tuple[Capability, ...]:
             )
         for item in (entry if isinstance(entry, list) else [entry]):
             item = item or {}
+            evidence_data = item.get("evidence")
+            evidence = (
+                CapabilityEvidence(
+                    note=evidence_data.get("note"), source=evidence_data.get("source")
+                )
+                if evidence_data
+                else None
+            )
             out.append(
                 Capability(
                     kind=kind,
                     mechanism=_project_mechanism(kind_obj.mechanism_schema, item.get("mechanism")),
                     modes=tuple(item.get("modes", ())),
+                    evidence=evidence,
                 )
             )
     return tuple(out)
-
-
-def _build_capability_facts(
-    data: list[dict[str, Any]],
-) -> tuple[ProviderCapabilityFact, ...]:
-    """Build provider-owned capability facts from a YAML list."""
-    if not isinstance(data, list):
-        raise AudiaGenticError(
-            code="VAL-PCAP-009",
-            kind="providers",
-            message="capability_facts must be a list",
-        )
-    fact_fields = {
-        "capability_id",
-        "subject",
-        "mechanism",
-        "constraints",
-        "limitations",
-        "support_assessment",
-        "action_needed",
-        "evidence",
-    }
-    evidence_fields = {
-        "evidence_tier",
-        "tool_version",
-        "fact_anchor",
-        "review_state",
-    }
-    facts: list[ProviderCapabilityFact] = []
-    for item in data:
-        if not isinstance(item, dict):
-            raise AudiaGenticError(
-                code="VAL-PCAP-009",
-                kind="providers",
-                message="each capability fact must be a mapping",
-            )
-        unknown_fact_fields = sorted(set(item) - fact_fields)
-        if unknown_fact_fields:
-            raise AudiaGenticError(
-                code="VAL-PCAP-009",
-                kind="providers",
-                message="unknown capability fact fields",
-                details={"fields": unknown_fact_fields},
-            )
-        if not item.get("capability_id") or not item.get("subject"):
-            raise AudiaGenticError(
-                code="VAL-PCAP-009",
-                kind="providers",
-                message="capability fact requires capability_id and subject",
-            )
-        evidence_data = item.get("evidence") or {}
-        if not isinstance(evidence_data, dict):
-            raise AudiaGenticError(
-                code="VAL-PCAP-009",
-                kind="providers",
-                message="capability fact evidence must be a mapping",
-            )
-        unknown_evidence_fields = sorted(set(evidence_data) - evidence_fields)
-        if unknown_evidence_fields:
-            raise AudiaGenticError(
-                code="VAL-PCAP-009",
-                kind="providers",
-                message="unknown capability evidence fields",
-                details={"fields": unknown_evidence_fields},
-            )
-        facts.append(
-            ProviderCapabilityFact(
-                capability_id=item["capability_id"],
-                subject=item["subject"],
-                mechanism=item.get("mechanism"),
-                constraints=tuple(item.get("constraints") or ()),
-                limitations=tuple(item.get("limitations") or ()),
-                support_assessment=item.get("support_assessment"),
-                action_needed=item.get("action_needed"),
-                evidence=CapabilityEvidence(
-                    evidence_tier=evidence_data.get("evidence_tier", "unverified"),
-                    tool_version=evidence_data.get("tool_version"),
-                    fact_anchor=evidence_data.get("fact_anchor"),
-                    review_state=evidence_data.get("review_state", "pending-review"),
-                ),
-            )
-        )
-    return tuple(facts)
-
-
-def _build_automation_capabilities(
-    data: list[dict[str, Any]],
-) -> tuple[ProviderAutomationCapability, ...]:
-    if not isinstance(data, list):
-        raise AudiaGenticError(
-            code="VAL-PCAP-010",
-            kind="providers",
-            message="automation_capabilities must be a list",
-        )
-    fields = {
-        "family_id",
-        "supported_modes",
-        "payload_contract",
-        "result_contract",
-        "ownership_scope_required",
-    }
-    capabilities: list[ProviderAutomationCapability] = []
-    for item in data:
-        if not isinstance(item, dict):
-            raise AudiaGenticError(
-                code="VAL-PCAP-010",
-                kind="providers",
-                message="each automation capability must be a mapping",
-            )
-        unknown = sorted(set(item) - fields)
-        if unknown:
-            raise AudiaGenticError(
-                code="VAL-PCAP-010",
-                kind="providers",
-                message="unknown automation capability fields",
-                details={"fields": unknown},
-            )
-        capabilities.append(
-            ProviderAutomationCapability(
-                family_id=str(item.get("family_id") or ""),
-                supported_modes=tuple(item.get("supported_modes") or ()),
-                payload_contract=str(item.get("payload_contract") or ""),
-                result_contract=str(item.get("result_contract") or ""),
-                ownership_scope_required=bool(item.get("ownership_scope_required")),
-            )
-        )
-    validate_automation_capabilities(capabilities)
-    return tuple(capabilities)
-
-
-def _build_agent_files(data: list[dict[str, Any]]) -> tuple[AgentFile, ...]:
-    """Build AgentFile tuple from YAML list."""
-    return tuple(
-        AgentFile(
-            rel_path=item["rel_path"],
-            managed=item.get("managed", True),
-            description=item.get("description", ""),
-        )
-        for item in data
-    )
 
 
 def _build_cli_install(data: dict[str, Any]) -> CliInstallRecipe:
@@ -359,68 +250,6 @@ def _build_cli_install(data: dict[str, Any]) -> CliInstallRecipe:
             uninstall=build_step_from_spec(uninstall_spec) if uninstall_spec else None,  # type: ignore[arg-type]
             probe_fn=resolve_ref(data["probe_fn"]) if "probe_fn" in data else None,
         )
-
-
-def _build_mcp_config(data: dict[str, Any]) -> ManagedConfigSpec:
-    """Build the MCP ManagedConfigSpec from YAML dict."""
-    return ManagedConfigSpec(
-        config_path=data["config_path"],
-        reader=resolve_ref(data["reader"]),
-        writer=resolve_ref(data["writer"]),
-        remover=resolve_ref(data["remover"]),
-        format=data.get("format", ""),
-        refresh_mode=data["refresh_mode"],
-        reload_fn=resolve_ref(data["reload_fn"]) if "reload_fn" in data else None,
-        capabilities=frozenset({REMOTE_CAPABILITY}) if data.get("remote", True) else frozenset(),
-    )
-
-
-def _build_language_servers_config(data: dict[str, Any]) -> ManagedConfigSpec:
-    """Build the language-servers ManagedConfigSpec from YAML dict."""
-    return ManagedConfigSpec(
-        config_path=data["config_path"],
-        reader=resolve_ref(data["reader"]),
-        writer=resolve_ref(data["writer"]),
-        remover=resolve_ref(data["remover"]),
-        format=data.get("format", ""),
-    )
-
-
-def _build_model_config(data: dict[str, Any]) -> ManagedConfigSpec:
-    """Build the model-endpoints ManagedConfigSpec from YAML dict (MO02)."""
-    return ManagedConfigSpec(
-        config_path=data["config_path"],
-        reader=resolve_ref(data["reader"]),
-        writer=resolve_ref(data["writer"]),
-        remover=resolve_ref(data["remover"]),
-        format=data.get("format", ""),
-        refresh_mode=data.get("refresh_mode", "none"),
-        reload_fn=resolve_ref(data["reload_fn"]) if "reload_fn" in data else None,
-    )
-
-
-def _build_plugin_config(data: dict[str, Any]) -> ManagedConfigSpec:
-    """Build the plugin-entry ManagedConfigSpec from YAML dict (MA20)."""
-    return ManagedConfigSpec(
-        config_path=data["config_path"],
-        reader=resolve_ref(data["reader"]),
-        writer=resolve_ref(data["writer"]),
-        remover=resolve_ref(data["remover"]),
-        format=data.get("format", ""),
-        refresh_mode=data.get("refresh_mode", "none"),
-    )
-
-
-def _build_hooks_config(data: dict[str, Any]) -> ManagedConfigSpec:
-    """Build the managed-hooks ManagedConfigSpec from YAML dict (MA26)."""
-    return ManagedConfigSpec(
-        config_path=data["config_path"],
-        reader=resolve_ref(data["reader"]),
-        writer=resolve_ref(data["writer"]),
-        remover=resolve_ref(data["remover"]),
-        format=data.get("format", ""),
-        refresh_mode=data.get("refresh_mode", "none"),
-    )
 
 
 def _build_session_surfaces(
@@ -670,66 +499,8 @@ def _build_session_surfaces(
     return tuple(declarations)
 
 
-# Flat descriptor field -> (catalogue kind id, cardinality). A data table, not a
-# branch ladder: derives the unified capabilities view from the legacy flat
-# fields so consumers can read descriptor.capabilities before providers migrate
-# to a `capabilities:` block (PC02 transitional bridge). Mechanism values are the
-# already-typed flat field objects.
-_FLAT_CAPABILITY_MAP: tuple[tuple[str, str, str], ...] = (
-    ("cli_install", "cli-install", "single"),
-    ("mcp_config", "mcp-config", "single"),
-    ("hooks_config", "hook-config", "single"),
-    ("model_config", "model-config", "single"),
-    ("plugin_config", "plugin-config", "single"),
-    ("language_servers_config", "lsp-config", "single"),
-    ("fetch_catalog_fn", "model-catalog-refresh", "single"),
-    ("on_lsp_enabled", "lsp-self-support", "single"),
-    ("skill_surface_path", "surface-skill", "single"),
-    ("instruction_file", "surface-instruction", "single"),
-    ("surfaces", "surface-render", "single"),
-    ("host_capabilities", "host-extension", "list"),
-    ("agent_files", "file-agent", "list"),
-)
-
-
-# Flat YAML keys whose parsed values are consumed into `capabilities` and NOT
-# stored as descriptor fields (they no longer exist on ProviderDescriptor).
-_FLAT_DESCRIPTOR_KEYS: frozenset[str] = frozenset(
-    {attr for attr, _kind, _card in _FLAT_CAPABILITY_MAP}
-    | {"permissions", "supported_connectors", "capability_facts", "automation_capabilities"}
-)
-
-
-def _capabilities_from_values(values: dict[str, Any]) -> tuple[Capability, ...]:
-    """Project parsed flat block values into the unified capabilities list.
-
-    Transitional: providers still declare flat YAML blocks; this consumes their
-    parsed (typed) values into `capabilities` so the descriptor exposes one shape
-    and the flat fields can be dropped. Deleted once providers author
-    `capabilities:` directly.
-    """
-    out: list[Capability] = [
-        Capability(kind="perm-declaration", mechanism=values.get("permissions") or ProviderPermissions())
-    ]
-    for attr, kind, card in _FLAT_CAPABILITY_MAP:
-        value = values.get(attr)
-        if not value:
-            continue
-        if card == "list":
-            out.extend(Capability(kind=kind, mechanism=item) for item in value)
-        else:
-            out.append(Capability(kind=kind, mechanism=value))
-    if values.get("supported_connectors"):
-        out.append(Capability(kind="model-connectors", mechanism=values["supported_connectors"]))
-    return tuple(out)
-
-
 def _construct_provider_descriptor(**values: Any) -> ProviderDescriptor:
-    authored = values.pop("capabilities", None)
-    capabilities = tuple(authored) if authored else _capabilities_from_values(values)
-    for key in _FLAT_DESCRIPTOR_KEYS:
-        values.pop(key, None)
-    descriptor = ProviderDescriptor(capabilities=capabilities, **values)
+    descriptor = ProviderDescriptor(**values)
     if descriptor.execution_isolation_tier not in {
         "full-isolation",
         "partial-isolation",
@@ -764,7 +535,16 @@ def _construct_provider_descriptor(**values: Any) -> ProviderDescriptor:
     return descriptor
 
 
-# Provider descriptor field specification
+# Provider descriptor field specification. Retired top-level keys (cli_install,
+# mcp_config, model_config, plugin_config, hooks_config, language_servers_config,
+# host_capabilities, capability_facts, automation_capabilities, permissions,
+# agent_files, skill_surface_path, instruction_file, surfaces, fetch_catalog_fn,
+# on_lsp_enabled, supported_connectors, model_entry_renderer, vendor_key_injection)
+# are NOT registered — DescriptorSpec.load rejects any unregistered key
+# (VAL-DESC-004), so a provider still declaring one fails loudly rather than
+# being silently dropped. Declare them under `capabilities:` instead
+# (PC01/PC03/PC04, provider-capability-model). model_entry_renderer and
+# vendor_key_injection fold into the `models` capability's compound mechanism.
 PROVIDER_SPEC = DescriptorSpec(constructor=_construct_provider_descriptor)
 
 PROVIDER_SPEC.add("provider_id", yaml_key="provider_id", kind="data", required=True)
@@ -773,31 +553,12 @@ PROVIDER_SPEC.add("description", yaml_key="description", kind="data", default=""
 PROVIDER_SPEC.add("url", yaml_key="url", kind="data", default="")
 PROVIDER_SPEC.add("prompt_aliases", yaml_key="prompt_aliases", kind="data", default=tuple(), converter=_list_to_tuple)
 PROVIDER_SPEC.add("cli_probe", yaml_key="cli_probe", kind="data", default=None)
-PROVIDER_SPEC.add("cli_install", yaml_key="cli_install", kind="nested", builder=_build_cli_install, default=None)
-PROVIDER_SPEC.add("host_capabilities", yaml_key="host_capabilities", kind="nested", builder=_build_host_capabilities, default=tuple())
-PROVIDER_SPEC.add("capability_facts", yaml_key="capability_facts", kind="nested", builder=_build_capability_facts, default=tuple())
 PROVIDER_SPEC.add("capabilities", yaml_key="capabilities", kind="nested", builder=_build_capabilities, default=tuple())
 PROVIDER_SPEC.add("execution_isolation_tier", yaml_key="execution_isolation_tier", kind="data", required=True)
 PROVIDER_SPEC.add("mcp_launch_isolation_tier", yaml_key="mcp_launch_isolation_tier", kind="data", default="unsupported")
-PROVIDER_SPEC.add("automation_capabilities", yaml_key="automation_capabilities", kind="nested", builder=_build_automation_capabilities, default=tuple())
-PROVIDER_SPEC.add("permissions", yaml_key="permissions", kind="nested", builder=_build_permissions, default=ProviderPermissions())
-PROVIDER_SPEC.add("agent_files", yaml_key="agent_files", kind="nested", builder=_build_agent_files, default=tuple())
 PROVIDER_SPEC.add("access_mode", yaml_key="access_mode", kind="data", default="cli")
-PROVIDER_SPEC.add("skill_surface_path", yaml_key="skill_surface_path", kind="data", default=None)
-PROVIDER_SPEC.add("instruction_file", yaml_key="instruction_file", kind="data", default=None)
-PROVIDER_SPEC.add("fetch_catalog_fn", yaml_key="fetch_catalog_fn", kind="ref", default=None)
-PROVIDER_SPEC.add("mcp_config", yaml_key="mcp_config", kind="nested", builder=_build_mcp_config, default=None)
-PROVIDER_SPEC.add("plugin_config", yaml_key="plugin_config", kind="nested", builder=_build_plugin_config, default=None)
-PROVIDER_SPEC.add("language_servers_config", yaml_key="language_servers_config", kind="nested", builder=_build_language_servers_config, default=None)
-PROVIDER_SPEC.add("hooks_config", yaml_key="hooks_config", kind="nested", builder=_build_hooks_config, default=None)
-PROVIDER_SPEC.add("model_config", yaml_key="model_config", kind="nested", builder=_build_model_config, default=None)
-PROVIDER_SPEC.add("model_entry_renderer", yaml_key="model_entry_renderer", kind="ref", default=None)
-PROVIDER_SPEC.add("supported_connectors", yaml_key="supported_connectors", kind="data", default=tuple(), converter=_list_to_tuple)
-PROVIDER_SPEC.add("vendor_key_injection", yaml_key="vendor_key_injection", kind="data", default=dict())
-PROVIDER_SPEC.add("on_lsp_enabled", yaml_key="on_lsp_enabled", kind="ref", default=None)
 PROVIDER_SPEC.add("lsp_support_probe", yaml_key="lsp_support_probe", kind="ref", default=None)
 PROVIDER_SPEC.add("receive_lsp_mcp", yaml_key="receive_lsp_mcp", kind="data", default=True)
-PROVIDER_SPEC.add("surfaces", yaml_key="surfaces", kind="data", default=None)
 PROVIDER_SPEC.add("launches", yaml_key="launches", kind="data", default=dict())
 PROVIDER_SPEC.add("execution", yaml_key="execution", kind="data", default=None)
 PROVIDER_SPEC.add("interactive", yaml_key="interactive", kind="data", default=None)

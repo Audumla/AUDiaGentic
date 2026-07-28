@@ -4,22 +4,8 @@ import subprocess
 from pathlib import Path
 
 from audiagentic.components.providers.adapters.pi import hooks as pi_desc
-from audiagentic.components.providers.descriptors.automation_capabilities import (
-    ProviderAutomationCapability,
-)
-from audiagentic.components.providers.descriptors.base import ProviderDescriptor
+from audiagentic.components.providers.descriptors.base import Capability, ProviderDescriptor
 from audiagentic.foundation.toolchains.config.managed_config import ManagedConfigSpec
-
-
-def _managed_mcp_capability() -> ProviderAutomationCapability:
-    """The declaration a provider needs to participate in managed-mcp."""
-    return ProviderAutomationCapability(
-        family_id="managed-mcp",
-        supported_modes=("apply", "prune", "status"),
-        payload_contract="provider-managed-mcp-payload/v1",
-        result_contract="provider-managed-mcp-result/v1",
-        ownership_scope_required=True,
-    )
 
 
 def _mcp_spec() -> ManagedConfigSpec:
@@ -32,21 +18,27 @@ def _mcp_spec() -> ManagedConfigSpec:
     )
 
 
-def _desc(provider_id: str, display_name: str, **flat) -> ProviderDescriptor:
-    """Build a descriptor from legacy flat kwargs by routing them into the
-    unified capabilities map (the flat fields were removed; automation is
-    synthesized from the capabilities)."""
-    from audiagentic.components.providers.descriptors.loader import (
-        _capabilities_from_values,
-    )
-
-    kept = {k: flat.pop(k) for k in ("lsp_support_probe", "receive_lsp_mcp") if k in flat}
-    flat.pop("automation_capabilities", None)
+def _desc(
+    provider_id: str,
+    display_name: str,
+    *,
+    mcp_config: ManagedConfigSpec | None = None,
+    on_lsp_enabled=None,
+    lsp_support_probe=None,
+    receive_lsp_mcp: bool = True,
+) -> ProviderDescriptor:
+    """Build a descriptor with the unified capabilities map directly."""
+    caps: list[Capability] = []
+    if mcp_config is not None:
+        caps.append(Capability(kind="mcp", mechanism=mcp_config))
+    if on_lsp_enabled is not None:
+        caps.append(Capability(kind="lsp-self-support", mechanism=on_lsp_enabled))
     return ProviderDescriptor(
         provider_id=provider_id,
         display_name=display_name,
-        capabilities=_capabilities_from_values(flat),
-        **kept,
+        capabilities=tuple(caps),
+        lsp_support_probe=lsp_support_probe,
+        receive_lsp_mcp=receive_lsp_mcp,
     )
 
 
@@ -118,8 +110,9 @@ def test_install_pi_lens_runs_install_command(tmp_path: Path, monkeypatch) -> No
 
 
 def test_managed_mcp_all_skips_no_capability(tmp_path: Path, monkeypatch) -> None:
-    # Providers without managed-mcp capability return supported=False;
-    # providers with mcp_config but no managed-mcp declaration are skipped.
+    # A provider with an mcp-config capability gets managed-mcp automation
+    # synthesized automatically (capability presence = automation eligibility
+    # under the unified model); both providers here declare mcp-config.
     self_lsp = _desc(
         provider_id="selflsp",
         display_name="Self LSP",
@@ -131,7 +124,6 @@ def test_managed_mcp_all_skips_no_capability(tmp_path: Path, monkeypatch) -> Non
         provider_id="withcap",
         display_name="With Capability",
         mcp_config=_mcp_spec(),
-        automation_capabilities=(_managed_mcp_capability(),),
     )
     providers = {"selflsp": self_lsp, "withcap": with_cap}
 
@@ -146,12 +138,12 @@ def test_managed_mcp_all_skips_no_capability(tmp_path: Path, monkeypatch) -> Non
         lambda: providers,
     )
     monkeypatch.setattr(
-        "audiagentic.components.providers.services.managed_mcp_family.get_descriptor",
+        "audiagentic.components.providers.services.capabilities.managed_mcp_family.get_descriptor",
         lambda pid: providers.get(pid),
     )
     # Patch the mcp.py _descriptor which is called by sync_managed_provider_mcp_scope
     monkeypatch.setattr(
-        "audiagentic.components.providers.services.mcp._descriptor",
+        "audiagentic.components.providers.services.mcp.mcp._descriptor",
         lambda pid: providers.get(pid),
     )
     # Mock the registry to avoid file I/O
@@ -160,7 +152,7 @@ def test_managed_mcp_all_skips_no_capability(tmp_path: Path, monkeypatch) -> Non
         "save": lambda self, d: None,
     })()
     monkeypatch.setattr(
-        "audiagentic.components.providers.services.managed_mcp_registry.mcp_ownership_registry",
+        "audiagentic.components.providers.services.mcp.managed_mcp_registry.mcp_ownership_registry",
         lambda root: mock_reg,
     )
 
@@ -179,21 +171,10 @@ def test_managed_mcp_all_skips_no_capability(tmp_path: Path, monkeypatch) -> Non
 def test_provision_fans_out_to_hooks(tmp_path: Path, monkeypatch) -> None:
     calls: list[str] = []
 
-    from audiagentic.components.providers.descriptors.automation_capabilities import (
-        ProviderAutomationCapability,
-    )
-
     with_hook = _desc(
         provider_id="hooked",
         display_name="Hooked",
         on_lsp_enabled=lambda root: calls.append("hooked") or {"ok": True},
-        automation_capabilities=(ProviderAutomationCapability(
-            family_id="self-provided-lsp",
-            supported_modes=("apply", "status"),
-            payload_contract="provider-self-provided-lsp-payload/v1",
-            result_contract="provider-self-provided-lsp-result/v1",
-            ownership_scope_required=False,
-        ),),
     )
     without = _desc(provider_id="nohook", display_name="No hook")
 
@@ -210,11 +191,11 @@ def test_provision_fans_out_to_hooks(tmp_path: Path, monkeypatch) -> None:
         return {"hooked": with_hook, "nohook": without}.get(pid)
 
     monkeypatch.setattr(
-        "audiagentic.components.providers.services.self_provided_lsp_handler.get_descriptor",
+        "audiagentic.components.providers.services.capabilities.self_provided_lsp_handler.get_descriptor",
         _get_descriptor,
     )
     monkeypatch.setattr(
-        "audiagentic.components.providers.services.feature_resolution.enabled_provider_ids",
+        "audiagentic.components.providers.services.config.feature_resolution.enabled_provider_ids",
         lambda root: {"hooked", "nohook"},
     )
 
@@ -229,12 +210,12 @@ def test_provision_fans_out_to_hooks(tmp_path: Path, monkeypatch) -> None:
 # ---------------------------------------------------------------------------
 
 def _self_lsp_handler(descriptor, tmp_path: Path, monkeypatch):
-    from audiagentic.components.providers.services.self_provided_lsp_handler import (
+    from audiagentic.components.providers.services.capabilities.self_provided_lsp_handler import (
         _make_self_provided_lsp_handler,
     )
 
     monkeypatch.setattr(
-        "audiagentic.components.providers.services.self_provided_lsp_handler.get_descriptor",
+        "audiagentic.components.providers.services.capabilities.self_provided_lsp_handler.get_descriptor",
         lambda pid: descriptor,
     )
     return _make_self_provided_lsp_handler(descriptor.provider_id, tmp_path)

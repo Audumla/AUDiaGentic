@@ -3,22 +3,6 @@
 
 provider_id: openhands
 execution_isolation_tier: no-isolation
-automation_capabilities:
-  - family_id: cli-lifecycle
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-cli-lifecycle-payload/v1
-    result_contract: provider-cli-lifecycle-result/v1
-    ownership_scope_required: false
-  - family_id: managed-mcp
-    supported_modes: [apply, prune, status]
-    payload_contract: provider-managed-mcp-payload/v1
-    result_contract: provider-managed-mcp-result/v1
-    ownership_scope_required: true
-  - family_id: generated-surfaces
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-generated-surface-payload/v1
-    result_contract: provider-generated-surface-result/v1
-    ownership_scope_required: true
 display_name: "OpenHands"
 description: "Open-source autonomous AI agent (formerly OpenDevin). Runs tasks in sandboxed Docker containers with full shell, browser, and file access."
 url: "https://www.all-hands.dev"
@@ -27,130 +11,62 @@ cli_probe:
   - openhands
   - "--version"
 
-cli_install:
-  toolchain: uv
-  package: openhands
-  executable: openhands
-  extra:
-    - "--python"
-    - "3.12"
-  probe_fn: "audiagentic.components.providers.adapters.openhands.hooks:_openhands_probe"
+capabilities:
+  cli-install:
+    mechanism:
+      toolchain: uv
+      package: openhands
+      executable: openhands
+      extra:
+        - "--python"
+        - "3.12"
+      probe_fn: "audiagentic.components.providers.adapters.openhands.hooks:_openhands_probe"
 
-host_capabilities: []
+  mcp:
+    mechanism:
+      config_path: ".openhands/config.toml"
+      reader: "audiagentic.components.providers.adapters.openhands.toml_format:read_mcp_toml"
+      writer: "audiagentic.components.providers.adapters.openhands.toml_format:write_mcp_toml"
+      remover: "audiagentic.components.providers.adapters.openhands.toml_format:remove_mcp_toml"
+      format: "mcp-toml"
+      refresh_mode: "restart-required"
 
-capability_facts:
-  - capability_id: cli-install
-    subject: cli_install
-    mechanism: "uv install: openhands with shell probe openhands --version"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/openhands.yaml#cli_install"
-      review_state: verified
-  - capability_id: mcp-config
-    subject: mcp_config
-    mechanism: "reader/writer/remover over .openhands/config.toml (TOML format)"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/openhands.yaml#mcp_config"
-      review_state: verified
-  - capability_id: surfaces
-    subject: surfaces
-    mechanism: "renderer: none with AGENTS.md contribution file"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/openhands.yaml#surfaces"
-      review_state: verified
-  - capability_id: exec-adapter
-    subject: execution
-    mechanism: "mode: stub"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/openhands.yaml#execution"
-      review_state: verified
-  - capability_id: perm-declaration
-    subject: permissions
-    mechanism: "ProviderPermissions boolean flags"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/openhands.yaml#permissions"
-      review_state: verified
-  - capability_id: model-credentials
-    subject: "external:model-credentials"
-    mechanism: "LLM_API_KEY, LLM_BASE_URL, LLM_MODEL env vars with --override-with-envs"
-    constraints:
-      - "single model at a time per session"
-    limitations:
-      - "env var recognition verified; execution proof requires authenticated launch test"
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: execution
-      tool_version: "1.16.0"
-      fact_anchor: "docs/reference/model-source-evidence/openhands.md#openhands-evidence"
-      review_state: verified
-  - capability_id: model-local-state
-    subject: "external:model-local-state"
-    mechanism: ".openhands/config.toml with [llm] section (model, api_key, base_url)"
-    constraints:
-      - "project-local"
-    limitations:
-      - "[llm] key names inferred from SDK docs, not verified against installed version"
-    support_assessment: blocked
-    action_needed: "Verify [llm] section key names and SDK acceptance against installed version."
-    evidence:
-      evidence_tier: unverified
-      tool_version: "1.16.0"
-      fact_anchor: "docs/reference/model-source-evidence/openhands.md#openhands-evidence"
-      review_state: pending-review
+  surfaces:
+    mechanism:
+      renderer: none
+      contribution-file: "AGENTS.md"
 
-permissions:
-  can_write_files: true
-  can_execute_shell: true
-  can_browse_web: true
-  can_read_env: true
-  notes: "Autonomous development agent; best treated as sandboxed/isolated provider"
+  permissions:
+    mechanism:
+      can_write_files: true
+      can_execute_shell: true
+      can_browse_web: true
+      can_read_env: true
+      notes: "Autonomous development agent; best treated as sandboxed/isolated provider"
 
-agent_files:
-  - rel_path: ".openhands/settings.json"
-    managed: false
-    description: "OpenHands settings"
+  agent-files:
+    mechanism:
+      rel_path: ".openhands/settings.json"
+      managed: false
+      description: "OpenHands settings"
 
-mcp_config:
-  config_path: ".openhands/config.toml"
-  reader: "audiagentic.components.providers.adapters.openhands.toml_format:read_mcp_toml"
-  writer: "audiagentic.components.providers.adapters.openhands.toml_format:write_mcp_toml"
-  remover: "audiagentic.components.providers.adapters.openhands.toml_format:remove_mcp_toml"
-  format: "mcp-toml"
-  refresh_mode: "restart-required"
+  models:
+    evidence:
+      note: >-
+        credentials: LLM_API_KEY, LLM_BASE_URL, LLM_MODEL env vars with
+        --override-with-envs; single model at a time per session; env var
+        recognition verified, execution proof requires authenticated launch
+        test (tool_version 1.16.0)
+      source: "docs/reference/model-source-evidence/openhands.md#openhands-evidence"
 
-surfaces:
-  renderer: none
-  contribution-file: "AGENTS.md"
+  model-local-state:
+    evidence:
+      note: >-
+        .openhands/config.toml with [llm] section (model, api_key, base_url);
+        project-local; [llm] key names inferred from SDK docs, not verified
+        against installed version (tool_version 1.16.0) — BLOCKED: verify [llm]
+        section key names and SDK acceptance against installed version.
+      source: "docs/reference/model-source-evidence/openhands.md#openhands-evidence"
 
 execution:
   mode: stub

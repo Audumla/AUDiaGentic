@@ -3,18 +3,6 @@
 
 provider_id: continue
 execution_isolation_tier: partial-isolation
-automation_capabilities:
-
-  - family_id: cli-lifecycle
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-cli-lifecycle-payload/v1
-    result_contract: provider-cli-lifecycle-result/v1
-    ownership_scope_required: false
-  - family_id: managed-mcp
-    supported_modes: [apply, prune, status]
-    payload_contract: provider-managed-mcp-payload/v1
-    result_contract: provider-managed-mcp-result/v1
-    ownership_scope_required: true
 display_name: "Continue"
 description: "Open-source AI code assistant for VS Code and JetBrains. Chat, autocomplete, and edit with any model."
 url: "https://continue.dev"
@@ -25,98 +13,42 @@ cli_probe:
   - cn
   - "--version"
 
-cli_install:
-  toolchain: npm
-  package: "@continuedev/cli"
-  executable: cn
-  probe_fn: "audiagentic.components.providers.adapters.continue_.hooks:_continue_probe"
+capabilities:
+  cli-install:
+    mechanism:
+      toolchain: npm
+      package: "@continuedev/cli"
+      executable: cn
+      probe_fn: "audiagentic.components.providers.adapters.continue_.hooks:_continue_probe"
 
-host_capabilities:
-  - host: vscode
-    capability_id: "Continue.continue"
-    display_name: "Continue"
+  host-extensions:
+    mechanism:
+      host: vscode
+      capability_id: "Continue.continue"
+      display_name: "Continue"
 
-capability_facts:
-  - capability_id: cli-install
-    subject: cli_install
-    mechanism: "npm install: @continuedev/cli with shell probe cn --version"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/continue.yaml#cli_install"
-      review_state: verified
-  - capability_id: host-extension
-    subject: host_capabilities
-    mechanism: "vscode extension Continue.continue"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/continue.yaml#host_capabilities"
-      review_state: verified
-  - capability_id: mcp-config
-    subject: mcp_config
-    mechanism: "reader/writer/remover over .continue/config.json (continue-json format)"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/continue.yaml#mcp_config"
-      review_state: verified
-  - capability_id: exec-adapter
-    subject: execution
-    mechanism: "mode: ok-stub"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/continue.yaml#execution"
-      review_state: verified
-  - capability_id: perm-declaration
-    subject: permissions
-    mechanism: "ProviderPermissions boolean flags"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/continue.yaml#permissions"
-      review_state: verified
+  mcp:
+    mechanism:
+      config_path: ".continue/config.json"
+      reader: "audiagentic.components.providers.adapters.continue_.mcp_format:read_continue_json"
+      writer: "audiagentic.components.providers.adapters.continue_.mcp_format:write_continue_json"
+      remover: "audiagentic.components.providers.adapters.continue_.mcp_format:remove_continue_json"
+      format: "continue-json"
+      refresh_mode: "restart-required"
 
-permissions:
-  can_write_files: true
-  can_execute_shell: false
-  can_browse_web: false
-  can_read_env: false
-  notes: "VS Code extension; multi-model backend, primarily completion and chat"
+  permissions:
+    mechanism:
+      can_write_files: true
+      can_execute_shell: false
+      can_browse_web: false
+      can_read_env: false
+      notes: "VS Code extension; multi-model backend, primarily completion and chat"
 
-agent_files:
-  - rel_path: ".continue/config.json"
-    managed: false
-    description: "Continue configuration"
-
-mcp_config:
-  config_path: ".continue/config.json"
-  reader: "audiagentic.components.providers.adapters.continue_.mcp_format:read_continue_json"
-  writer: "audiagentic.components.providers.adapters.continue_.mcp_format:write_continue_json"
-  remover: "audiagentic.components.providers.adapters.continue_.mcp_format:remove_continue_json"
-  format: "continue-json"
-  refresh_mode: "restart-required"
+  agent-files:
+    mechanism:
+      rel_path: ".continue/config.json"
+      managed: false
+      description: "Continue configuration"
 
 execution:
   mode: ok-stub

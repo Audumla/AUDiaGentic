@@ -1,8 +1,62 @@
-# Provider capability kind catalogue — authoritative index.
-# Every capability_fact.capability_id must resolve here (VAL-PCAP-009).
-# Automation kinds must reference a valid family in _families.yaml.
+# Provider capability catalogue — authoritative index.
+# Every provider capabilities: entry's kind must resolve here (VAL-PCAP-009).
+# Provisioned kinds must reference a valid family below (VAL-PCAP-011).
 # Mechanism schemas must resolve via MECHANISM_SCHEMA_MAP (VAL-PCAP-013).
 # Namespace is closed — no new kinds outside this file.
+
+families:
+  # Family declarations — source of truth for family contracts. Replaces
+  # Python FamilyPin constants; validated at load time. Every provisioned
+  # kind's family_id must match an entry here.
+
+  cli-lifecycle:
+    payload_contract: provider-cli-lifecycle-payload/v1
+    result_contract: provider-cli-lifecycle-result/v1
+    supported_modes: [plan, apply, prune, status]
+
+  managed-mcp:
+    payload_contract: provider-managed-mcp-payload/v1
+    result_contract: provider-managed-mcp-result/v1
+    supported_modes: [apply, prune, status]
+    ownership_scope_required: true
+
+  model-projection:
+    payload_contract: provider-model-projection-payload/v1
+    result_contract: provider-model-projection-result/v1
+    supported_modes: [plan, apply, prune, status]
+
+  generated-surfaces:
+    payload_contract: provider-generated-surface-payload/v1
+    result_contract: provider-generated-surface-result/v1
+    supported_modes: [plan, apply, prune, status]
+    ownership_scope_required: true
+
+  language-server:
+    payload_contract: provider-language-server-payload/v1
+    result_contract: provider-language-server-result/v1
+    supported_modes: [plan, apply, prune, status]
+
+  managed-hooks:
+    payload_contract: provider-managed-hooks-payload/v1
+    result_contract: provider-managed-hooks-result/v1
+    supported_modes: [apply, prune, status]
+    ownership_scope_required: true
+
+  language-server-projection:
+    payload_contract: provider-language-server-projection-payload/v1
+    result_contract: provider-language-server-projection-result/v1
+    supported_modes: [apply, prune, status]
+
+  plugin-entry:
+    payload_contract: provider-plugin-entry-payload/v1
+    result_contract: provider-plugin-entry-result/v1
+    supported_modes: [apply, prune, status]
+    ownership_scope_required: true
+
+  self-provided-lsp:
+    payload_contract: provider-self-provided-lsp-payload/v1
+    result_contract: provider-self-provided-lsp-result/v1
+    supported_modes: [apply, status]
 
 kinds:
   # ── Automation (family_id present, reconciles against _families.yaml) ──
@@ -14,28 +68,33 @@ kinds:
     cardinality: single
     mechanism_schema: cli-install-recipe
 
-  mcp-config:
+  mcp:
     domain: mcp
     authority: provisioned
     family_id: managed-mcp
     cardinality: single
     mechanism_schema: managed-config-spec
 
-  hook-config:
+  hooks:
     domain: hook
     authority: provisioned
     family_id: managed-hooks
     cardinality: single
     mechanism_schema: managed-config-spec
 
-  model-config:
+  models:
     domain: model
     authority: provisioned
     family_id: model-projection
     cardinality: single
-    mechanism_schema: managed-config-spec
+    mechanism_schema: model-spec
+    # Compound: curation (store) + entry_renderer + catalog refresh + the
+    # connector shapes this provider can render + per-vendor credential
+    # references (secrets.py scheme:locator strings). Folds the former
+    # model-endpoints/model-catalog-refresh/model-connectors/model-credentials
+    # kinds and the vendor_key_injection field into one capability.
 
-  surface-render:
+  surfaces:
     domain: surface
     authority: provisioned
     family_id: generated-surfaces
@@ -49,33 +108,21 @@ kinds:
     cardinality: single
     mechanism_schema: lsp-automation-spec
 
-  model-catalog-refresh:
-    domain: model
-    authority: operational
-    cardinality: single
-    mechanism_schema: callable-ref
-
   # ── Operational (no FamilyPin) ──
 
-  lsp-mcp-receive:
-    domain: lsp
-    authority: operational
-    cardinality: single
-    mechanism_schema: boolean-set
-
-  host-extension:
+  host-extensions:
     domain: ext
     authority: operational
     cardinality: list
     mechanism_schema: host-capability
 
-  perm-declaration:
+  permissions:
     domain: perm
     authority: operational
     cardinality: single
     mechanism_schema: permissions-struct
 
-  file-agent:
+  agent-files:
     domain: file
     authority: operational
     cardinality: list
@@ -86,7 +133,7 @@ kinds:
     authority: provisioned
     family_id: generated-surfaces
     cardinality: single
-    mechanism_schema: callable-ref
+    mechanism_schema: none
 
   surface-instruction:
     domain: surface
@@ -107,30 +154,12 @@ kinds:
     cardinality: single
     mechanism_schema: tier-enum
 
-  exec-adapter:
-    domain: exec
-    authority: operational
-    cardinality: single
-    mechanism_schema: tier-enum
-
-  plugin-config:
+  plugins:
     domain: plugin
     authority: provisioned
     family_id: plugin-entry
     cardinality: single
     mechanism_schema: managed-config-spec
-
-  model-connectors:
-    domain: model
-    authority: operational
-    cardinality: single
-    mechanism_schema: boolean-set
-
-  depr-status:
-    domain: depr
-    authority: operational
-    cardinality: single
-    mechanism_schema: none
 
   # ── Evidence-only (no FamilyPin, no mechanism) ──
 
@@ -140,11 +169,6 @@ kinds:
     mechanism_schema: acp-caps-list
 
   model-local-state:
-    domain: model
-    authority: evidence-only
-    mechanism_schema: none
-
-  model-credentials:
     domain: model
     authority: evidence-only
     mechanism_schema: none
@@ -166,24 +190,16 @@ kinds:
     authority: evidence-only
     mechanism_schema: none
 
-  # ── Legacy kinds (kept for PC01 validation, consolidated in PC03) ──
+  # ── Legacy kinds (kept for PC01 validation, consolidated in a future pass) ──
   # These are superseded by canonical kinds listed under canonical_kind.
   # They pass VAL-PCAP-009 but signal future migration.
-
-  surfaces:
-    domain: surface
-    authority: provisioned
-    family_id: generated-surfaces
-    cardinality: single
-    mechanism_schema: surfaces-struct
-    canonical_kind: surface-render
 
   lsp-config:
     domain: lsp
     authority: provisioned
     family_id: language-server-projection
     cardinality: single
-    mechanism_schema: lsp-automation-spec
+    mechanism_schema: managed-config-spec
     canonical_kind: lsp-automation
 
   lsp-self-support:
@@ -191,7 +207,7 @@ kinds:
     authority: provisioned
     family_id: self-provided-lsp
     cardinality: single
-    mechanism_schema: lsp-automation-spec
+    mechanism_schema: callable-ref
     canonical_kind: lsp-automation
 
   acp-stdio-transport:

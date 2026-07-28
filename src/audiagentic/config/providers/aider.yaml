@@ -3,17 +3,6 @@
 
 provider_id: aider
 execution_isolation_tier: partial-isolation
-automation_capabilities:
-  - family_id: cli-lifecycle
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-cli-lifecycle-payload/v1
-    result_contract: provider-cli-lifecycle-result/v1
-    ownership_scope_required: false
-  - family_id: generated-surfaces
-    supported_modes: [plan, apply, prune, status]
-    payload_contract: provider-generated-surface-payload/v1
-    result_contract: provider-generated-surface-result/v1
-    ownership_scope_required: true
 display_name: "Aider"
 description: "AI pair programming in your terminal. Edit code directly in your git repo via chat."
 url: "https://aider.chat"
@@ -22,72 +11,37 @@ cli_probe:
   - aider
   - "--version"
 
-cli_install:
-  toolchain: uv
-  package: "aider-chat@latest"
-  executable: aider
-  extra:
-    - "--force"
-    - "--python"
-    - "python3.12"
-    - "--with"
-    - "pip"
-  uninstall_package: "aider-chat"
+capabilities:
+  cli-install:
+    mechanism:
+      toolchain: uv
+      package: "aider-chat@latest"
+      executable: aider
+      extra:
+        - "--force"
+        - "--python"
+        - "python3.12"
+        - "--with"
+        - "pip"
+      uninstall_package: "aider-chat"
 
-host_capabilities: []
+  permissions:
+    mechanism:
+      can_write_files: true
+      can_execute_shell: true
+      can_browse_web: true
+      can_read_env: true
+      notes: "Terminal pair-programming agent; local model capable via OpenAI-compatible backends"
 
-capability_facts:
-  - capability_id: cli-install
-    subject: cli_install
-    mechanism: "uv install: aider-chat@latest with shell probe aider --version"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/aider.yaml#cli_install"
-      review_state: verified
-  - capability_id: exec-adapter
-    subject: execution
-    mechanism: "mode: stub"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/aider.yaml#execution"
-      review_state: verified
-  - capability_id: perm-declaration
-    subject: permissions
-    mechanism: "ProviderPermissions boolean flags"
-    constraints: []
-    limitations: []
-    support_assessment: verified
-    action_needed: null
-    evidence:
-      evidence_tier: installed-artifact
-      tool_version: repository
-      fact_anchor: "config/providers/aider.yaml#permissions"
-      review_state: verified
-
-permissions:
-  can_write_files: true
-  can_execute_shell: true
-  can_browse_web: true
-  can_read_env: true
-  notes: "Terminal pair-programming agent; local model capable via OpenAI-compatible backends"
-
-agent_files:
-  - rel_path: "AGENTS.md"
-    managed: false
-    description: "Shared project instructions"
-  - rel_path: ".aider.conf.yml"
-    managed: false
-    description: "Aider project configuration"
+  agent-files:
+    - mechanism:
+        rel_path: "AGENTS.md"
+        managed: false
+        description: "Shared project instructions"
+    - mechanism:
+        rel_path: ".aider.conf.yml"
+        managed: false
+        description: "Aider project configuration"
 
 execution:
   mode: stub
