@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
+import os
 import shutil
 import subprocess
+import tempfile
 import urllib.request
+import uuid
 import zipfile
 from pathlib import Path
 from typing import NamedTuple
@@ -66,8 +70,14 @@ def _verify_sha256(path: Path, expected: str | None) -> None:
     print_message("  SHA256 verified")
 
 
+def _safe_members(names: list[str]) -> None:
+    if any(Path(name).is_absolute() or ".." in Path(name).parts for name in names):
+        raise make_rig_binary_error("CON", 6, "Archive contains an unsafe member path.")
+
+
 def _extract_zip(zip_path: Path, dest_dir: Path, inner_exe: str) -> None:
     with zipfile.ZipFile(zip_path, "r") as zf:
+        _safe_members(zf.namelist())
         zf.extractall(dest_dir)
     _flatten_extracted_archive(dest_dir, inner_exe)
 
@@ -75,7 +85,11 @@ def _extract_zip(zip_path: Path, dest_dir: Path, inner_exe: str) -> None:
 def _extract_tar_gz(tar_path: Path, dest_dir: Path, inner_exe: str) -> None:
     import tarfile
     with tarfile.open(tar_path, "r:gz") as tf:
-        tf.extractall(dest_dir)
+        members = tf.getmembers()
+        _safe_members([member.name for member in members])
+        if any(member.issym() or member.islnk() for member in members):
+            raise make_rig_binary_error("CON", 6, "Archive links are not permitted.")
+        tf.extractall(dest_dir, members=members)
     _flatten_extracted_archive(dest_dir, inner_exe)
 
 
@@ -114,6 +128,16 @@ def _flatten_extracted_archive(dest_dir: Path, inner_exe: str) -> None:
     shutil.rmtree(extracted_root)
 
 
+def installed_release(target_dir: Path) -> dict[str, str] | None:
+    """Read recipe-owned release provenance without probing the network."""
+    path = target_dir / ".audiagentic-llama-cpp.json"
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
 def update_binaries(runtime_dir: Path | None = None, target_bin_dir: Path | None = None) -> None:
     """Install the configured pinned llama.cpp release for the current platform."""
 
@@ -135,44 +159,52 @@ def update_binaries(runtime_dir: Path | None = None, target_bin_dir: Path | None
         # runtime through target_bin_dir.
         target_dir = global_harness_runtime() / "rig" / "bin" / "llama-server" / plat_dir
 
-    target_dir.mkdir(parents=True, exist_ok=True)
+    target_dir.parent.mkdir(parents=True, exist_ok=True)
+    existing = installed_release(target_dir)
+    if existing and existing.get("release-version") == release.tag and (target_dir / release.inner_exe).exists():
+        print_message(f"llama.cpp {release.tag} is already verified at {target_dir}")
+        return
 
-    # Download to temp
-    tmp_dir = Path(__file__).parent / ".tmp_download"
-    tmp_dir.mkdir(exist_ok=True)
-    archive_path = tmp_dir / release.filename
-
-    _download(release.download_url, archive_path)
-    _verify_sha256(archive_path, release.sha256)
-
-    # Extract
-    if release.is_zip:
-        _extract_zip(archive_path, target_dir, release.inner_exe)
-    else:
-        _extract_tar_gz(archive_path, target_dir, release.inner_exe)
-
-    bin_path = target_dir / release.inner_exe
-    if not bin_path.exists():
-        raise make_rig_binary_error(
-            "RES",
-            3,
-            f"{release.inner_exe} not found after extraction",
-            path=str(bin_path),
-        )
-
-    # Set executable permission on Unix
-    if platform_key() != "win":
-        bin_path.chmod(0o755)
-
-    # Show version
-    result = subprocess.run([*executable_command(bin_path), "--version"], capture_output=True, text=True)
-    version_output = result.stdout.strip() or result.stderr.strip()
-    print_message(f"Installed: {bin_path}")
-    print_message(f"Version:   {version_output}")
-
-    # Cleanup
-    archive_path.unlink()
-    tmp_dir.rmdir()
+    with tempfile.TemporaryDirectory(prefix="audiagentic-llama-cpp-") as temporary:
+        tmp_dir = Path(temporary)
+        archive_path = tmp_dir / release.filename
+        stage_dir = target_dir.parent / f".{target_dir.name}.stage-{uuid.uuid4().hex}"
+        _download(release.download_url, archive_path)
+        _verify_sha256(archive_path, release.sha256)
+        stage_dir.mkdir()
+        try:
+            if release.is_zip:
+                _extract_zip(archive_path, stage_dir, release.inner_exe)
+            else:
+                _extract_tar_gz(archive_path, stage_dir, release.inner_exe)
+            bin_path = stage_dir / release.inner_exe
+            if not bin_path.exists():
+                raise make_rig_binary_error("RES", 3, f"{release.inner_exe} not found after extraction", path=str(bin_path))
+            if platform_key() != "win":
+                bin_path.chmod(0o755)
+            result = subprocess.run([*executable_command(bin_path), "--version"], capture_output=True, text=True)
+            version_output = result.stdout.strip() or result.stderr.strip()
+            if result.returncode != 0 or not version_output:
+                raise make_rig_binary_error("CON", 7, "llama-server version probe failed", path=str(bin_path))
+            (stage_dir / ".audiagentic-llama-cpp.json").write_text(json.dumps({
+                "recipe-id": "llama-cpp", "release-version": release.tag,
+                "asset-url": release.download_url, "sha256": release.sha256,
+                "installed-version": version_output,
+            }, indent=2) + "\n", encoding="utf-8")
+            previous = target_dir.parent / f".{target_dir.name}.previous-{uuid.uuid4().hex}"
+            if target_dir.exists():
+                os.replace(target_dir, previous)
+            try:
+                os.replace(stage_dir, target_dir)
+            except BaseException:
+                if previous.exists():
+                    os.replace(previous, target_dir)
+                raise
+            shutil.rmtree(previous, ignore_errors=True)
+        finally:
+            shutil.rmtree(stage_dir, ignore_errors=True)
+    print_message(f"Installed: {target_dir / release.inner_exe}")
+    print_message(f"Version:   {installed_release(target_dir).get('installed-version', release.tag)}")
     print_message("Done.")
 
 
