@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.providers.descriptors.base import HostCapability
-from audiagentic.components.providers.services.host_adapter import get_host_adapter
+from audiagentic.components.providers.services.host.host_adapter import get_host_adapter
 from audiagentic.foundation.io import atomic_write_json, load_json_file
 
 logger = logging.getLogger(__name__)

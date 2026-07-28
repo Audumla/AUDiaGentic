@@ -11,6 +11,7 @@ to import this module after loading descriptors.
 Neither this module nor the lifecycle layer know about each other directly —
 decoupled via the event bus.
 """
+
 from __future__ import annotations
 
 from functools import partial
@@ -19,7 +20,7 @@ from pathlib import Path
 from audiagentic.foundation.event import get_bus, subscribe_component_lifecycle
 
 from ..providers_api import operate_provider_surfaces
-from ..services.mcp_projection import sync_component_mcp_to_providers
+from ..services.mcp.mcp_projection import sync_component_mcp_to_providers
 
 
 def _apply_surfaces(project_root: Path, payload: dict, metadata: dict) -> None:
@@ -31,7 +32,9 @@ def _prune_then_apply_surfaces(project_root: Path, payload: dict, metadata: dict
     operate_provider_surfaces(project_root, mode="apply")
 
 
-def _sync_component_mcp(project_root: Path, payload: dict, metadata: dict, *, enabled: bool) -> None:
+def _sync_component_mcp(
+    project_root: Path, payload: dict, metadata: dict, *, enabled: bool
+) -> None:
     sync_component_mcp_to_providers(payload["component_id"], project_root, enabled=enabled)
 
 
