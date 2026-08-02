@@ -69,3 +69,15 @@ capabilities:
           mode: stub
           aliases: [goose]
           message: "Goose adapter is registered; execution bridge not wired yet."
+
+# CC53: AS27 harness-observability inventory (this provider's own facts —
+# see harness_observability_inventory.py for the domain semantics).
+harness_observability:
+  - surface_id: goose-acp
+    candidate_source: official ACP/API route
+    evidence:
+      validated: false
+      reference: prove prompt terminal response and correlation
+    recipe: A
+    lifecycle_source: none
+    probe_anchor: prove prompt terminal response and correlation

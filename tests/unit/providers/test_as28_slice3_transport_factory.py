@@ -34,11 +34,10 @@ from audiagentic.foundation.transports.acp import (
     AcpLaunch,
 )
 from audiagentic.foundation.transports.session_surface import (
-    EffectiveObservationLevel,
     PreparedSessionTransport,
     SessionMappingFacts,
     SessionSurfaceRef,
-    SurfaceValidationState,
+    ValidationEvidence,
 )
 
 # ── Helpers: fake descriptor construction ───────────────────────────────────
@@ -141,7 +140,7 @@ class TestExactSnapshotReuse:
         # Both resolve through the same AS29 resolver; refs must match.
         assert resolved.ref.provider_id == prepared.surface.ref.provider_id
         assert resolved.ref.surface_id == prepared.surface.ref.surface_id
-        assert resolved.validation.state == prepared.surface.validation.state
+        assert resolved.validation.evidence == prepared.surface.validation.evidence
 
     def test_effective_provider_ref_identifies_surface(self, tmp_path: Path):
         """effective_provider_ref carries provider_id + surface_id from resolution."""
@@ -184,7 +183,7 @@ class TestUnsupportedNoLaunch:
 
         assert isinstance(prepared, PreparedSessionTransport)
         assert prepared.transport is None
-        assert prepared.surface.validation.state == SurfaceValidationState.UNSUPPORTED
+        assert not prepared.surface.validation.evidence.validated
 
     def test_disabled_provider_transport_none(self, tmp_path: Path):
         """Disabled provider returns UNSUPPORTED with transport=None."""
@@ -204,7 +203,7 @@ class TestUnsupportedNoLaunch:
         )
 
         assert prepared.transport is None
-        assert prepared.surface.validation.state == SurfaceValidationState.UNSUPPORTED
+        assert not prepared.surface.validation.evidence.validated
 
     def test_no_surface_match_transport_none(self, tmp_path: Path):
         """No matching surface_id returns UNSUPPORTED with transport=None."""
@@ -224,7 +223,7 @@ class TestUnsupportedNoLaunch:
         )
 
         assert prepared.transport is None
-        assert prepared.surface.validation.state == SurfaceValidationState.UNSUPPORTED
+        assert not prepared.surface.validation.evidence.validated
 
     def test_version_mismatch_transport_none(self, tmp_path: Path, monkeypatch):
         """Version mismatch returns UNSUPPORTED with transport=None."""
@@ -251,7 +250,7 @@ class TestUnsupportedNoLaunch:
         )
 
         assert prepared.transport is None
-        assert prepared.surface.validation.state == SurfaceValidationState.UNSUPPORTED
+        assert not prepared.surface.validation.evidence.validated
 
     def test_platform_mismatch_transport_none(self, tmp_path: Path):
         """Platform mismatch returns UNSUPPORTED with transport=None."""
@@ -261,9 +260,13 @@ class TestUnsupportedNoLaunch:
             "plat-mismatch-prov",
             session_surfaces=(
                 _fake_surface_decl(
-                    validation_state=SurfaceValidationState.VALIDATED,
-                    effective_level=EffectiveObservationLevel.O2,
-                    platforms=(PlatformEvidence(platform="linux-amd64"),),
+                    evidence=ValidationEvidence(validated=True, reference="test"),
+                    platforms=(
+                        PlatformEvidence(
+                            platform="linux-amd64",
+                            evidence=ValidationEvidence(validated=True, reference="test"),
+                        ),
+                    ),
                 ),
             ),
         )
@@ -279,17 +282,16 @@ class TestUnsupportedNoLaunch:
         )
 
         assert prepared.transport is None
-        assert prepared.surface.validation.state == SurfaceValidationState.UNSUPPORTED
+        assert not prepared.surface.validation.evidence.validated
 
     def test_unvalidated_high_level_transport_none(self, tmp_path: Path):
-        """Unvalidated O2+ returns UNSUPPORTED with transport=None."""
+        """A declared-but-unvalidated surface returns transport=None (AS59:
+        no more O-level ceiling — public_execution's own gate requires
+        evidence.validated=True to build a transport at all)."""
         descriptor = _fake_descriptor(
             "unval-prov",
             session_surfaces=(
-                _fake_surface_decl(
-                    validation_state=SurfaceValidationState.DECLARED,
-                    effective_level=EffectiveObservationLevel.O3,
-                ),
+                _fake_surface_decl(evidence=ValidationEvidence(validated=False)),
             ),
         )
         register(descriptor)
@@ -304,14 +306,15 @@ class TestUnsupportedNoLaunch:
         )
 
         assert prepared.transport is None
-        assert prepared.surface.validation.state == SurfaceValidationState.UNSUPPORTED
+        assert not prepared.surface.validation.evidence.validated
 
     def test_blocked_declaration_transport_none(self, tmp_path: Path):
-        """Blocked declaration returns UNSUPPORTED with transport=None."""
+        """An unvalidated declaration (no separate 'blocked' state in AS59)
+        returns transport=None."""
         descriptor = _fake_descriptor(
             "blocked-prov",
             session_surfaces=(
-                _fake_surface_decl(validation_state=SurfaceValidationState.BLOCKED),
+                _fake_surface_decl(evidence=ValidationEvidence(validated=False)),
             ),
         )
         register(descriptor)
@@ -326,7 +329,7 @@ class TestUnsupportedNoLaunch:
         )
 
         assert prepared.transport is None
-        assert prepared.surface.validation.state == SurfaceValidationState.UNSUPPORTED
+        assert not prepared.surface.validation.evidence.validated
 
     def test_missing_adapter_factory_transport_none(self, tmp_path: Path):
         """Missing adapter_ref factory returns UNSUPPORTED with transport=None."""
@@ -348,7 +351,7 @@ class TestUnsupportedNoLaunch:
         )
 
         assert prepared.transport is None
-        assert prepared.surface.validation.state == SurfaceValidationState.UNSUPPORTED
+        assert not prepared.surface.validation.evidence.validated
 
 
 # ── OpenCode ACP factory returns neutral protocol ───────────────────────────
@@ -361,7 +364,10 @@ class TestOpenCodeFactoryNeutralProtocol:
         descriptor = _fake_descriptor(
             "acp-prov",
             cli_probe=["echo", "1.0"],
-            session_surfaces=(_fake_surface_decl(),),
+            # A real transport is only built for a validated surface.
+            session_surfaces=(
+                _fake_surface_decl(evidence=ValidationEvidence(validated=True, reference="test")),
+            ),
         )
         register(descriptor)
         set_provider_enabled(tmp_path, "acp-prov", enabled=True)
@@ -388,8 +394,8 @@ class TestOpenCodeFactoryNeutralProtocol:
             # Transport is an AcpAgentSessionTransport (neutral protocol), not raw AcpLaunch.
             assert isinstance(prepared.transport, AcpAgentSessionTransport)
             assert prepared.transport is not dummy_launch  # not the raw launch
-            # Surface is supported (not UNSUPPORTED).
-            assert prepared.surface.validation.state != SurfaceValidationState.UNSUPPORTED
+            # Surface is supported and validated.
+            assert prepared.surface.validation.evidence.validated is True
 
         finally:
             exec_mod.load_acp_launch_builder = orig
@@ -399,7 +405,9 @@ class TestOpenCodeFactoryNeutralProtocol:
         descriptor = _fake_descriptor(
             "no-expose-prov",
             cli_probe=["echo", "1.0"],
-            session_surfaces=(_fake_surface_decl(),),
+            session_surfaces=(
+                _fake_surface_decl(evidence=ValidationEvidence(validated=True, reference="test")),
+            ),
         )
         register(descriptor)
         set_provider_enabled(tmp_path, "no-expose-prov", enabled=True)
@@ -566,7 +574,7 @@ class TestNoProcessLaunch:
         )
 
         assert prepared.transport is None
-        assert prepared.surface.validation.state == SurfaceValidationState.UNSUPPORTED
+        assert not prepared.surface.validation.evidence.validated
 
 
 # ── Old API unchanged (backward compatibility) ──────────────────────────────
@@ -726,7 +734,9 @@ class TestNoDuplicateResolver:
         descriptor = _fake_descriptor(
             "protocol-prov",
             cli_probe=["echo", "1.0"],
-            session_surfaces=(_fake_surface_decl(),),
+            session_surfaces=(
+                _fake_surface_decl(evidence=ValidationEvidence(validated=True, reference="test")),
+            ),
         )
         register(descriptor)
         set_provider_enabled(tmp_path, "protocol-prov", enabled=True)

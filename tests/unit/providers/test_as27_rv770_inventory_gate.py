@@ -30,12 +30,11 @@ from audiagentic.components.providers.services.session.session_surface_resolutio
 )
 from audiagentic.foundation.transports.session_surface import (
     ControlSupport,
-    EffectiveObservationLevel,
     LifecycleSource,
     PlatformEvidence,
     SessionIdentityOperation,
     SessionMappingFacts,
-    SurfaceValidationState,
+    ValidationEvidence,
 )
 
 # ── Helpers ──────────────────────────────────────────────────────────────
@@ -82,8 +81,7 @@ def _fake_descriptor(
 def _fake_surface_decl(
     surface_id: str = "acp",
     version_constraint: str = ">=1.0",
-    validation_state: SurfaceValidationState = SurfaceValidationState.DECLARED,
-    effective_level: EffectiveObservationLevel = EffectiveObservationLevel.O0,
+    evidence: Any = None,
     identity_operations: dict | None = None,
     ownership_modes: tuple = (),
     controls: dict | None = None,
@@ -91,10 +89,14 @@ def _fake_surface_decl(
     adapter_ref: str | None = None,
     platforms: Any = (),
 ) -> Any:
-    """Build a fake SessionSurfaceDeclaration for testing."""
+    """Build a fake SessionSurfaceDeclaration for testing.
+
+    ``evidence`` defaults to an unvalidated ``ValidationEvidence()``.
+    """
     from audiagentic.components.providers.descriptors.session_surface_declarations import (
         SessionSurfaceDeclaration,
     )
+
     return SessionSurfaceDeclaration(
         surface_id=surface_id,
         version_constraint=version_constraint,
@@ -104,8 +106,7 @@ def _fake_surface_decl(
         controls=controls or {},
         lifecycle_source=lifecycle_source,
         adapter_ref=adapter_ref,
-        validation_state=validation_state,
-        effective_level=effective_level,
+        evidence=evidence or ValidationEvidence(),
         platforms=platforms,
     )
 
@@ -121,12 +122,14 @@ def _isolate_registry(tmp_path: Path):
     from audiagentic.components.providers.descriptors.registry import (
         _registry,
     )
+
     _registry._items.clear()
     _registry._loaded = True  # Prevent YAML auto-load on subsequent access
     yield tmp_path
 
 
 # ── Test 1: Vendor cross-platform support alone does not grant eligibility ─
+
 
 class TestVendorSupportNotEligibility:
     """Vendor product support (windows/macOS/linux) is NOT status evidence.
@@ -149,15 +152,21 @@ class TestVendorSupportNotEligibility:
         # opencode-acp is vendor-supported on windows/darwin/linux but
         # only locally validated on linux-amd64.
         assert is_eligible_transport_observation_publisher(
-            "opencode", "opencode-acp", platform="linux-amd64",
+            "opencode",
+            "opencode-acp",
+            platform="linux-amd64",
         )
         # Windows — vendor supports it, but no local probe → not eligible.
         assert not is_eligible_transport_observation_publisher(
-            "opencode", "opencode-acp", platform="windows-amd64",
+            "opencode",
+            "opencode-acp",
+            platform="windows-amd64",
         )
         # Darwin — vendor supports it, but no local probe → not eligible.
         assert not is_eligible_transport_observation_publisher(
-            "opencode", "opencode-acp", platform="darwin-arm64",
+            "opencode",
+            "opencode-acp",
+            platform="darwin-arm64",
         )
 
     def test_vendor_support_only_surface_not_eligible(self):
@@ -169,14 +178,19 @@ class TestVendorSupportNotEligibility:
         # codex-acp has vendor support on windows/macOS/linux but
         # is probe-required in the inventory.
         assert not is_eligible_transport_observation_publisher(
-            "codex", "codex-acp", platform="linux-amd64",
+            "codex",
+            "codex-acp",
+            platform="linux-amd64",
         )
         assert not is_eligible_transport_observation_publisher(
-            "codex", "codex-acp", platform="windows-amd64",
+            "codex",
+            "codex-acp",
+            platform="windows-amd64",
         )
 
 
 # ── Test 2: OpenCode Windows/Darwin rejected until local probe ───────────
+
 
 class TestOpencodeNonLinuxRejection:
     """OpenCode opencode-acp on windows-amd64 and darwin-arm64 is rejected
@@ -215,21 +229,18 @@ class TestOpencodeNonLinuxRejection:
             session_surfaces=(
                 _fake_surface_decl(
                     surface_id="opencode-acp",
-                    validation_state=SurfaceValidationState.VALIDATED,
-                    effective_level=EffectiveObservationLevel.O1,
+                    evidence=ValidationEvidence(validated=True, reference="test"),
                     identity_operations={
                         SessionIdentityOperation.OPEN: ControlSupport.SUPPORTED,
                     },
                     lifecycle_source=LifecycleSource.TRANSPORT,
                     adapter_ref=(
-                        "audiagentic.components.providers.adapters.opencode.acp:"
-                        "build_acp_launch"
+                        "audiagentic.components.providers.adapters.opencode.acp:build_acp_launch"
                     ),
                     platforms=(
                         PlatformEvidence(
                             platform="windows-amd64",
-                            validation_state=SurfaceValidationState.VALIDATED,
-                            effective_level=EffectiveObservationLevel.O1,
+                            evidence=ValidationEvidence(validated=True, reference="test"),
                             probe_artifact="tests/e2e/agents/test_opencode_acp_e2e.py",
                         ),
                     ),
@@ -240,11 +251,12 @@ class TestOpencodeNonLinuxRejection:
         set_provider_enabled(Path("/tmp"), "opencode", enabled=True)
 
         hint = SurfaceHint(
-            surface_id="opencode-acp", platform_hint="windows-amd64",
+            surface_id="opencode-acp",
+            platform_hint="windows-amd64",
         )
         result = resolve_session_surface(Path("/tmp"), "opencode", hint)
         # Inventory lacks windows-amd64 → no-inventory-proof → unsupported.
-        assert result.validation.state == SurfaceValidationState.UNSUPPORTED
+        assert not result.validation.evidence.validated
 
     def test_windows_declared_o0_resolves_ok(self, monkeypatch):
         """The real opencode.yaml has windows as DECLARED/O0 → resolves ok.
@@ -269,29 +281,24 @@ class TestOpencodeNonLinuxRejection:
             session_surfaces=(
                 _fake_surface_decl(
                     surface_id="opencode-acp",
-                    validation_state=SurfaceValidationState.VALIDATED,
-                    effective_level=EffectiveObservationLevel.O1,
+                    evidence=ValidationEvidence(validated=True, reference="test"),
                     identity_operations={
                         SessionIdentityOperation.OPEN: ControlSupport.SUPPORTED,
                     },
                     lifecycle_source=LifecycleSource.TRANSPORT,
                     adapter_ref=(
-                        "audiagentic.components.providers.adapters.opencode.acp:"
-                        "build_acp_launch"
+                        "audiagentic.components.providers.adapters.opencode.acp:build_acp_launch"
                     ),
                     platforms=(
                         # linux-amd64: validated (in inventory)
                         PlatformEvidence(
                             platform="linux-amd64",
-                            validation_state=SurfaceValidationState.VALIDATED,
-                            effective_level=EffectiveObservationLevel.O1,
+                            evidence=ValidationEvidence(validated=True, reference="test"),
                             probe_artifact="tests/e2e/agents/test_opencode_acp_e2e.py",
                         ),
                         # windows-amd64: declared (not in inventory for O1)
                         PlatformEvidence(
-                            platform="windows-amd64",
-                            validation_state=SurfaceValidationState.DECLARED,
-                            effective_level=EffectiveObservationLevel.O0,
+                            platform="windows-amd64", evidence=ValidationEvidence(validated=False)
                         ),
                     ),
                 ),
@@ -301,16 +308,17 @@ class TestOpencodeNonLinuxRejection:
         set_provider_enabled(Path("/tmp"), "opencode", enabled=True)
 
         hint = SurfaceHint(
-            surface_id="opencode-acp", platform_hint="windows-amd64",
+            surface_id="opencode-acp",
+            platform_hint="windows-amd64",
         )
         result = resolve_session_surface(Path("/tmp"), "opencode", hint)
         # DECLARED/O0 — no inventory gate triggered (not O1+ validated).
-        assert result.validation.state == SurfaceValidationState.DECLARED
-        assert result.validation.effective_level == EffectiveObservationLevel.O0
+        assert not result.validation.evidence.validated
 
     def test_darwin_arm64_rejected_by_resolver(self, monkeypatch):
         """If YAML claims VALIDATED/O1 for darwin-arm64, the inventory gate
         rejects it because the AS27 inventory lacks platform evidence."""
+
         def fake_inventory_check(provider_id, surface_id, target_platform):
             return False  # no platform proven
 
@@ -324,21 +332,18 @@ class TestOpencodeNonLinuxRejection:
             session_surfaces=(
                 _fake_surface_decl(
                     surface_id="opencode-acp",
-                    validation_state=SurfaceValidationState.VALIDATED,
-                    effective_level=EffectiveObservationLevel.O1,
+                    evidence=ValidationEvidence(validated=True, reference="test"),
                     identity_operations={
                         SessionIdentityOperation.OPEN: ControlSupport.SUPPORTED,
                     },
                     lifecycle_source=LifecycleSource.TRANSPORT,
                     adapter_ref=(
-                        "audiagentic.components.providers.adapters.opencode.acp:"
-                        "build_acp_launch"
+                        "audiagentic.components.providers.adapters.opencode.acp:build_acp_launch"
                     ),
                     platforms=(
                         PlatformEvidence(
                             platform="darwin-arm64",
-                            validation_state=SurfaceValidationState.VALIDATED,
-                            effective_level=EffectiveObservationLevel.O1,
+                            evidence=ValidationEvidence(validated=True, reference="test"),
                             probe_artifact="tests/e2e/agents/test_opencode_acp_e2e.py",
                         ),
                     ),
@@ -349,15 +354,17 @@ class TestOpencodeNonLinuxRejection:
         set_provider_enabled(Path("/tmp"), "opencode", enabled=True)
 
         hint = SurfaceHint(
-            surface_id="opencode-acp", platform_hint="darwin-arm64",
+            surface_id="opencode-acp",
+            platform_hint="darwin-arm64",
         )
         result = resolve_session_surface(Path("/tmp"), "opencode", hint)
         # Inventory lacks darwin-arm64 → no-inventory-proof → unsupported.
-        assert result.validation.state == SurfaceValidationState.UNSUPPORTED
+        assert not result.validation.evidence.validated
 
     def test_darwin_amd64_rejected_by_resolver(self, monkeypatch):
         """If YAML claims VALIDATED/O1 for darwin-amd64, the inventory gate
         rejects it because the AS27 inventory lacks platform evidence."""
+
         def fake_inventory_check(provider_id, surface_id, target_platform):
             return False  # no platform proven
 
@@ -371,21 +378,18 @@ class TestOpencodeNonLinuxRejection:
             session_surfaces=(
                 _fake_surface_decl(
                     surface_id="opencode-acp",
-                    validation_state=SurfaceValidationState.VALIDATED,
-                    effective_level=EffectiveObservationLevel.O1,
+                    evidence=ValidationEvidence(validated=True, reference="test"),
                     identity_operations={
                         SessionIdentityOperation.OPEN: ControlSupport.SUPPORTED,
                     },
                     lifecycle_source=LifecycleSource.TRANSPORT,
                     adapter_ref=(
-                        "audiagentic.components.providers.adapters.opencode.acp:"
-                        "build_acp_launch"
+                        "audiagentic.components.providers.adapters.opencode.acp:build_acp_launch"
                     ),
                     platforms=(
                         PlatformEvidence(
                             platform="darwin-amd64",
-                            validation_state=SurfaceValidationState.VALIDATED,
-                            effective_level=EffectiveObservationLevel.O1,
+                            evidence=ValidationEvidence(validated=True, reference="test"),
                             probe_artifact="tests/e2e/agents/test_opencode_acp_e2e.py",
                         ),
                     ),
@@ -396,14 +400,16 @@ class TestOpencodeNonLinuxRejection:
         set_provider_enabled(Path("/tmp"), "opencode", enabled=True)
 
         hint = SurfaceHint(
-            surface_id="opencode-acp", platform_hint="darwin-amd64",
+            surface_id="opencode-acp",
+            platform_hint="darwin-amd64",
         )
         result = resolve_session_surface(Path("/tmp"), "opencode", hint)
         # Inventory lacks darwin-amd64 → no-inventory-proof → unsupported.
-        assert result.validation.state == SurfaceValidationState.UNSUPPORTED
+        assert not result.validation.evidence.validated
 
 
 # ── Test 3: YAML cannot promote a platform absent from inventory ──────────
+
 
 class TestYamlCannotBypassInventory:
     """Descriptor YAML cannot claim O1+ on a platform without inventory proof.
@@ -416,6 +422,7 @@ class TestYamlCannotBypassInventory:
 
     def test_yaml_validated_o1_no_inventory_proof(self, monkeypatch):
         """YAML claims VALIDATED/O1 but inventory has no entry → rejected."""
+
         # Mock: inventory has no proof for any platform
         def fake_inventory_check(provider_id, surface_id, target_platform):
             return False
@@ -430,21 +437,18 @@ class TestYamlCannotBypassInventory:
             session_surfaces=(
                 _fake_surface_decl(
                     surface_id="some-acp",
-                    validation_state=SurfaceValidationState.VALIDATED,
-                    effective_level=EffectiveObservationLevel.O1,
+                    evidence=ValidationEvidence(validated=True, reference="test"),
                     identity_operations={
                         SessionIdentityOperation.OPEN: ControlSupport.SUPPORTED,
                     },
                     lifecycle_source=LifecycleSource.TRANSPORT,
                     adapter_ref=(
-                        "audiagentic.components.providers.adapters.opencode.acp:"
-                        "build_acp_launch"
+                        "audiagentic.components.providers.adapters.opencode.acp:build_acp_launch"
                     ),
                     platforms=(
                         PlatformEvidence(
                             platform="linux-amd64",
-                            validation_state=SurfaceValidationState.VALIDATED,
-                            effective_level=EffectiveObservationLevel.O1,
+                            evidence=ValidationEvidence(validated=True, reference="test"),
                             probe_artifact="some-probe.py",
                         ),
                     ),
@@ -455,11 +459,12 @@ class TestYamlCannotBypassInventory:
         set_provider_enabled(Path("/tmp"), "some-provider", enabled=True)
 
         hint = SurfaceHint(
-            surface_id="some-acp", platform_hint="linux-amd64",
+            surface_id="some-acp",
+            platform_hint="linux-amd64",
         )
         result = resolve_session_surface(Path("/tmp"), "some-provider", hint)
         # No inventory entry for (some-provider, some-acp) → unsupported.
-        assert result.validation.state == SurfaceValidationState.UNSUPPORTED
+        assert not result.validation.evidence.validated
 
     def test_yaml_declared_o0_no_inventory_ok(self):
         """YAML claims DECLARED/O0 with no inventory — allowed (no O1+ claim)."""
@@ -468,16 +473,13 @@ class TestYamlCannotBypassInventory:
             session_surfaces=(
                 _fake_surface_decl(
                     surface_id="declared-acp",
-                    validation_state=SurfaceValidationState.DECLARED,
-                    effective_level=EffectiveObservationLevel.O0,
+                    evidence=ValidationEvidence(validated=False),
                     identity_operations={
                         SessionIdentityOperation.OPEN: ControlSupport.SUPPORTED,
                     },
                     platforms=(
                         PlatformEvidence(
-                            platform="linux-amd64",
-                            validation_state=SurfaceValidationState.DECLARED,
-                            effective_level=EffectiveObservationLevel.O0,
+                            platform="linux-amd64", evidence=ValidationEvidence(validated=False)
                         ),
                     ),
                 ),
@@ -487,15 +489,16 @@ class TestYamlCannotBypassInventory:
         set_provider_enabled(Path("/tmp"), "declared-prov", enabled=True)
 
         hint = SurfaceHint(
-            surface_id="declared-acp", platform_hint="linux-amd64",
+            surface_id="declared-acp",
+            platform_hint="linux-amd64",
         )
         result = resolve_session_surface(Path("/tmp"), "declared-prov", hint)
         # DECLARED/O0 — no inventory proof needed (no O1+ claim).
-        assert result.validation.state == SurfaceValidationState.DECLARED
-        assert result.validation.effective_level == EffectiveObservationLevel.O0
+        assert not result.validation.evidence.validated
 
 
 # ── Test 4: Locally proven platform preserves existing behavior ──────────
+
 
 class TestLocallyProvenPlatformPreserved:
     """linux-amd64 for opencode-acp is the only locally proven platform.
@@ -506,6 +509,7 @@ class TestLocallyProvenPlatformPreserved:
 
     def test_linux_amd64_preserves_validated_o1(self, monkeypatch):
         """linux-amd64 resolves as VALIDATED/O1 — existing behavior preserved."""
+
         # Mock: inventory has proof for linux-amd64 only
         def fake_inventory_check(provider_id, surface_id, target_platform):
             if provider_id == "opencode" and surface_id == "opencode-acp":
@@ -522,21 +526,18 @@ class TestLocallyProvenPlatformPreserved:
             session_surfaces=(
                 _fake_surface_decl(
                     surface_id="opencode-acp",
-                    validation_state=SurfaceValidationState.VALIDATED,
-                    effective_level=EffectiveObservationLevel.O1,
+                    evidence=ValidationEvidence(validated=True, reference="test"),
                     identity_operations={
                         SessionIdentityOperation.OPEN: ControlSupport.SUPPORTED,
                     },
                     lifecycle_source=LifecycleSource.TRANSPORT,
                     adapter_ref=(
-                        "audiagentic.components.providers.adapters.opencode.acp:"
-                        "build_acp_launch"
+                        "audiagentic.components.providers.adapters.opencode.acp:build_acp_launch"
                     ),
                     platforms=(
                         PlatformEvidence(
                             platform="linux-amd64",
-                            validation_state=SurfaceValidationState.VALIDATED,
-                            effective_level=EffectiveObservationLevel.O1,
+                            evidence=ValidationEvidence(validated=True, reference="test"),
                             probe_artifact="tests/e2e/agents/test_opencode_acp_e2e.py",
                         ),
                     ),
@@ -547,23 +548,27 @@ class TestLocallyProvenPlatformPreserved:
         set_provider_enabled(Path("/tmp"), "opencode", enabled=True)
 
         hint = SurfaceHint(
-            surface_id="opencode-acp", platform_hint="linux-amd64",
+            surface_id="opencode-acp",
+            platform_hint="linux-amd64",
         )
         result = resolve_session_surface(Path("/tmp"), "opencode", hint)
-        assert result.validation.state == SurfaceValidationState.VALIDATED
-        assert result.validation.effective_level == EffectiveObservationLevel.O1
+        assert result.validation.evidence.validated
 
     def test_inventory_eligible_linux(self):
         """Inventory confirms linux-amd64 eligibility for opencode-acp."""
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             is_eligible_transport_observation_publisher,
         )
+
         assert is_eligible_transport_observation_publisher(
-            "opencode", "opencode-acp", platform="linux-amd64",
+            "opencode",
+            "opencode-acp",
+            platform="linux-amd64",
         )
 
 
 # ── Test 5: YAML/inventory consistency for validated O1 transport ────────
+
 
 class TestYamlInventoryConsistency:
     """For any surface claiming VALIDATED/O1 transport observation,
@@ -579,6 +584,7 @@ class TestYamlInventoryConsistency:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
+
         fact = get_harness_surface_capability_fact("opencode", "opencode-acp")
         assert fact is not None
         assert "linux-amd64" in fact.platform_evidence
@@ -596,6 +602,7 @@ class TestYamlInventoryConsistency:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
+
         fact = get_harness_surface_capability_fact("opencode", "opencode-acp")
         assert fact is not None
         # windows-amd64 is NOT in inventory → not validated.
@@ -606,6 +613,7 @@ class TestYamlInventoryConsistency:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
+
         fact = get_harness_surface_capability_fact("opencode", "opencode-acp")
         assert fact is not None
         assert "darwin-arm64" not in fact.platform_evidence
@@ -618,18 +626,14 @@ class TestYamlInventoryConsistency:
         in the inventory's platform_evidence.
         """
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
-            CapabilityFactValidationState,
             get_all_harness_surface_facts,
         )
+
         for (pid, sid), fact in get_all_harness_surface_facts().items():
-            if (
-                fact.validation_state == CapabilityFactValidationState.VALIDATED
-                and fact.effective_production_level.numeric >= 1
-            ):
-                # This surface claims O1+ validated — all its platforms
-                # must be in platform_evidence.
+            if fact.evidence.validated:
+                # This surface claims validated transport observation — all
+                # its platforms must be in platform_evidence.
                 for pe_platform in fact.platform_evidence:
                     assert pe_platform in fact.platform_evidence, (
-                        f"{pid}/{sid} claims {pe_platform} validated but "
-                        f"inventory lacks evidence"
+                        f"{pid}/{sid} claims {pe_platform} validated but inventory lacks evidence"
                     )

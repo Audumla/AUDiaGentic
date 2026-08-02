@@ -29,7 +29,7 @@ from audiagentic.foundation.transports.session_surface import (
     PreparedSessionTransport,
     SessionMappingFacts,
     SessionSurfaceRef,
-    SurfaceValidationState,
+    ValidationEvidence,
 )
 from audiagentic.foundation.transports.session_surface import (
     ResolvedSessionSurface as FoundationResolvedSessionSurface,
@@ -149,7 +149,7 @@ class TestResolveSessionSurfacePublicApi:
         hint = SurfaceHint(surface_id="acp")
         result = resolve_session_surface(tmp_path, "nonexistent", hint)
 
-        assert result.validation.state == SurfaceValidationState.UNSUPPORTED
+        assert not result.validation.evidence.validated
 
     def test_resolve_disabled_provider_unsupported(self, tmp_path: Path):
         """Disabled provider returns UNSUPPORTED snapshot through public API."""
@@ -167,7 +167,7 @@ class TestResolveSessionSurfacePublicApi:
         hint = SurfaceHint(surface_id="acp")
         result = resolve_session_surface(tmp_path, "disabled-fwd", hint)
 
-        assert result.validation.state == SurfaceValidationState.UNSUPPORTED
+        assert not result.validation.evidence.validated
 
 
 # ── Adapter-ref redaction ───────────────────────────────────────────────────
@@ -250,7 +250,13 @@ class TestPreparedSessionTransportReusesSnapshot:
         descriptor = _fake_descriptor(
             "transport-test",
             cli_probe=["echo", "1.0"],
-            session_surfaces=(_fake_surface_decl(),),
+            # prepare_provider_session_transport only builds a real transport
+            # for a validated surface (public_execution.py's gate) — a
+            # declared-but-unvalidated surface still resolves (see the
+            # resolver tests) but never gets a live transport.
+            session_surfaces=(
+                _fake_surface_decl(evidence=ValidationEvidence(validated=True, reference="test")),
+            ),
         )
         register(descriptor)
         set_provider_enabled(tmp_path, "transport-test", enabled=True)
@@ -284,9 +290,12 @@ class TestPreparedSessionTransportReusesSnapshot:
             assert isinstance(prepared.transport, AcpAgentSessionTransport)
             # The raw AcpLaunch is not exposed directly — it's wrapped.
             assert prepared.transport is not dummy_launch
-            # Surface is a ResolvedSessionSurface and is supported.
+            # Surface is a ResolvedSessionSurface and resolution succeeded
+            # (declared-but-unvalidated is a legitimate non-error outcome —
+            # resolved_version carries the real value, not the "unknown"
+            # neutral placeholder an unsupported snapshot would use).
             assert isinstance(prepared.surface, ResolvedSessionSurface)
-            assert prepared.surface.validation.state != SurfaceValidationState.UNSUPPORTED
+            assert prepared.surface.ref.resolved_version != "unknown"
             # Effective provider ref identifies the resolved surface.
             assert isinstance(prepared.effective_provider_ref, SessionSurfaceRef)
             assert prepared.effective_provider_ref.provider_id == "transport-test"
@@ -309,8 +318,9 @@ class TestPreparedSessionTransportReusesSnapshot:
         assert isinstance(prepared, PreparedSessionTransport)
         # No live transport for unsupported surface.
         assert prepared.transport is None
-        # Surface snapshot is UNSUPPORTED.
-        assert prepared.surface.validation.state == SurfaceValidationState.UNSUPPORTED
+        # Surface snapshot is unsupported (unknown-provider path).
+        assert not prepared.surface.validation.evidence.validated
+        assert prepared.surface.ref.resolved_version == "unknown"
         # Effective provider ref still identifies the attempted resolution.
         assert prepared.effective_provider_ref.provider_id == "nonexistent-provider"
 
@@ -356,7 +366,7 @@ class TestPreparedSessionTransportReusesSnapshot:
             # but they should be structurally identical.
             assert resolved.ref.provider_id == prepared.surface.ref.provider_id
             assert resolved.ref.surface_id == prepared.surface.ref.surface_id
-            assert resolved.validation.state == prepared.surface.validation.state
+            assert resolved.validation.evidence == prepared.surface.validation.evidence
 
         finally:
             exec_mod.load_acp_launch_builder = orig
@@ -465,7 +475,7 @@ def _make_unsupported_surface() -> ResolvedSessionSurface:
     return ResolvedSessionSurface(
         ref=ref,
         identity=SessionIdentityCapabilities(),
-        validation=SurfaceValidation(state=SurfaceValidationState.UNSUPPORTED),
+        validation=SurfaceValidation(evidence=ValidationEvidence(validated=False)),
     )
 
 

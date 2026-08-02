@@ -79,7 +79,11 @@ def test_remove_language_syncs_hook_removal(tmp_path: Path) -> None:
 
 
 def test_remove_language_returns_error_when_not_configured(tmp_path: Path) -> None:
-    result = remove_language(str(tmp_path), "python")
+    with patch(
+        "audiagentic.components.coding_lsp.lsp_config_api.resolve_project_root",
+        return_value=tmp_path,
+    ):
+        result = remove_language(str(tmp_path), "python")
     assert result["ok"] is False
     assert "not configured" in result["error"]
 
@@ -105,7 +109,13 @@ def _register_ag_lsp() -> None:
 def test_get_config_exposes_mutation_enabled_schema(tmp_path: Path) -> None:
     _register_ag_lsp()
 
-    result = get_config(str(tmp_path), "ag-lsp")
+    # Mock resolve_project_root to prevent walking up to a real .audiagentic directory
+    # that would carry over mutation-enabled state from other test runs
+    with patch(
+        "audiagentic.components.coding_lsp.lsp_config_api.resolve_project_root",
+        return_value=tmp_path,
+    ):
+        result = get_config(str(tmp_path), "ag-lsp")
 
     assert result["implementation"] == "ag-lsp"
     assert "mutation-enabled" in result["schema"]
@@ -116,28 +126,40 @@ def test_get_config_exposes_mutation_enabled_schema(tmp_path: Path) -> None:
 def test_set_config_persists_mutation_enabled(tmp_path: Path) -> None:
     _register_ag_lsp()
 
-    result = set_config(str(tmp_path), "ag-lsp", {"mutation-enabled": True})
-    assert result["ok"] is True
-    assert result["config"]["mutation-enabled"] is True
+    with patch(
+        "audiagentic.components.coding_lsp.lsp_config_api.resolve_project_root",
+        return_value=tmp_path,
+    ):
+        result = set_config(str(tmp_path), "ag-lsp", {"mutation-enabled": True})
+        assert result["ok"] is True
+        assert result["config"]["mutation-enabled"] is True
 
-    fetched = get_config(str(tmp_path), "ag-lsp")
-    assert fetched["config"]["mutation-enabled"] is True
+        fetched = get_config(str(tmp_path), "ag-lsp")
+        assert fetched["config"]["mutation-enabled"] is True
 
 
 def test_set_config_rejects_unknown_option(tmp_path: Path) -> None:
     _register_ag_lsp()
 
-    result = set_config(str(tmp_path), "ag-lsp", {"bogus": "x"})
-    assert result["ok"] is False
-    assert "unknown option" in result["error"]
+    with patch(
+        "audiagentic.components.coding_lsp.lsp_config_api.resolve_project_root",
+        return_value=tmp_path,
+    ):
+        result = set_config(str(tmp_path), "ag-lsp", {"bogus": "x"})
+        assert result["ok"] is False
+        assert "unknown option" in result["error"]
 
 
 def test_set_config_rejects_wrong_type(tmp_path: Path) -> None:
     _register_ag_lsp()
 
-    result = set_config(str(tmp_path), "ag-lsp", {"mutation-enabled": "not-a-bool"})
-    assert result["ok"] is False
-    assert "invalid value" in result["error"]
+    with patch(
+        "audiagentic.components.coding_lsp.lsp_config_api.resolve_project_root",
+        return_value=tmp_path,
+    ):
+        result = set_config(str(tmp_path), "ag-lsp", {"mutation-enabled": "not-a-bool"})
+        assert result["ok"] is False
+        assert "invalid value" in result["error"]
 
 
 def test_set_config_unknown_implementation(tmp_path: Path) -> None:

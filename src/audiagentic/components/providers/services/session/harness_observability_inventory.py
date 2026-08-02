@@ -12,60 +12,64 @@ Conformance rule: a lifecycle observation declaration may not claim
 transport-observation publishability unless the surface is validated,
 effective_level >= O1, and present in the Recipe-A eligible set.
 
+CC53: the inventory data itself lives in each provider's own descriptor
+(``config/providers/<id>.yaml``'s ``harness_observability:`` block), not a
+central cross-provider Python dict or a central cross-provider config file
+— per ARCHITECTURE_STANDARDS.md Section 2 ("Entity declarations belong in
+configuration, not central Python lists" / "config and code for a provider
+is isolated within its own folder"). ``descriptors/loader.py``'s
+``_build_harness_observability`` validates each provider's own YAML shape;
+this module aggregates across all loaded provider descriptors and owns the
+domain conversion (evidence dict -> ValidationEvidence, lifecycle_source
+string -> enum) plus the conformance/eligibility logic. Adding a new
+provider surface is a config edit inside that provider's own file, not a
+code change and not an edit to any other provider's file.
+
 Error codes:
     VAL-HINV-001  — unsupported lifecycle source claimed as transport-observation publisher
     VAL-HINV-002  — non-validated surface claims effective level >= O1 for transport observation
+    VAL-HINV-004  — a provider's harness_observability entry has an invalid 'evidence' field
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import StrEnum
+from typing import Any
 
 from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.foundation.transports.session_surface import (
-    EffectiveObservationLevel,
     LifecycleSource,
-    SurfaceValidationState,
+    ValidationEvidence,
 )
 
 # ---------------------------------------------------------------------------
 # Inventory value types
 # ---------------------------------------------------------------------------
 
-class CapabilityFactValidationState(StrEnum):
-    """Validation state for a harness observability capability fact."""
-    PROBE_REQUIRED = "probe-required"
-    BLOCKED = "blocked"
-    UNSUPPORTED = "unsupported"
-    VALIDATED = "validated"
-
 
 @dataclass(frozen=True)
 class HarnessSurfaceCapabilityFact:
     """A single harness-surface capability fact for the AS27 inventory.
 
-    Records declared capability, validation state, and effective production
-    level independently — three axes never collapsed into one O-level.
+    ``evidence`` replaces the former three-field triple
+    (declared_capability, validation_state, effective_production_level) with
+    a single ValidationEvidence(validated, reference).
     """
 
     # Provider + surface identity
     provider_id: str
     surface_id: str
 
-    # Declared capability (evidence-planning metadata)
-    declared_capability: EffectiveObservationLevel = EffectiveObservationLevel.O0
-
     # Candidate source — what documentation or prior evidence points to
     candidate_source: str | None = None
 
-    # Validation state (probe-required / blocked / unsupported / validated)
-    validation_state: CapabilityFactValidationState = CapabilityFactValidationState.PROBE_REQUIRED
-
-    # Effective production level — the ONLY value consumed by runtime resolution
-    effective_production_level: EffectiveObservationLevel = EffectiveObservationLevel.O0
+    # Validation evidence — replaces the three-field triple (AS59)
+    evidence: ValidationEvidence = field(default_factory=ValidationEvidence)
 
     # Recipe classification (A/B/C/D per AS27 spec)
-    recipe: str = "D"  # A=transport-observation, B=managed-hook, C=structured-output, D=unresolved/external
+    recipe: str = (
+        "D"  # A=transport-observation, B=managed-hook, C=structured-output, D=unresolved/external
+    )
 
     # Transport observation mechanism — only transport-observation is eligible
     # for AS19 publishing; others are inventory-only
@@ -85,359 +89,78 @@ class HarnessSurfaceCapabilityFact:
 
 
 # ---------------------------------------------------------------------------
-# The AS27 inventory — every known harness surface
+# The AS27 inventory — aggregated from each provider's own descriptor (CC53)
 # ---------------------------------------------------------------------------
 
+
+def _parse_entry(provider_id: str, entry: dict[str, Any]) -> HarnessSurfaceCapabilityFact:
+    """Convert one already-shape-validated harness_observability entry
+    (see descriptors/loader.py::_build_harness_observability) into a
+    HarnessSurfaceCapabilityFact. ``surface_id``/``recipe``/status and
+    evidence tuples are already validated/normalized by the loader; this
+    function owns the domain conversion the loader deliberately leaves to
+    this layer: evidence dict -> ValidationEvidence, lifecycle_source
+    string -> enum."""
+    surface_id = str(entry["surface_id"])
+
+    evidence_raw = entry.get("evidence") or {}
+    if not isinstance(evidence_raw, dict):
+        raise make_error(
+            prefix="VAL", component="HINV", number=4,
+            kind="harness-observability-inventory-entry",
+            message=f"inventory entry {provider_id}/{surface_id} has a non-mapping 'evidence' field",
+            details={"provider_id": provider_id, "surface_id": surface_id},
+        )
+    evidence = ValidationEvidence(
+        validated=bool(evidence_raw.get("validated", False)),
+        reference=str(evidence_raw.get("reference", "") or ""),
+    )
+
+    return HarnessSurfaceCapabilityFact(
+        provider_id=provider_id,
+        surface_id=surface_id,
+        candidate_source=entry.get("candidate_source"),
+        evidence=evidence,
+        recipe=str(entry.get("recipe", "D")),
+        lifecycle_source=LifecycleSource(entry.get("lifecycle_source", LifecycleSource.NONE.value)),
+        supported_statuses=frozenset(entry.get("supported_statuses") or ()),
+        probe_anchor=entry.get("probe_anchor"),
+        platform_evidence=tuple(entry.get("platform_evidence") or ()),
+        limitations=tuple(entry.get("limitations") or ()),
+    )
+
+
 def _build_inventory() -> dict[tuple[str, str], HarnessSurfaceCapabilityFact]:
-    """Build the authoritative harness observability inventory.
+    """Aggregate the authoritative harness observability inventory across
+    every provider's own descriptor.
 
     OpenCode ACP (opencode-acp) is the only validated transport-observation
     publisher. All other surfaces are inventory-only: probe-required/blocked/
     unsupported with O0 effective level.
     """
+    from audiagentic.components.providers.descriptors.loader import (
+        get_providers_config_dir,
+        load_providers_from_directory,
+    )
+
+    providers = load_providers_from_directory(get_providers_config_dir())
+
     facts: dict[tuple[str, str], HarnessSurfaceCapabilityFact] = {}
-
-    # ── OpenCode (opencode-acp is the ONLY validated transport-observation) ──
-
-    facts[("opencode", "opencode-acp")] = HarnessSurfaceCapabilityFact(
-        provider_id="opencode",
-        surface_id="opencode-acp",
-        declared_capability=EffectiveObservationLevel.O2,
-        candidate_source="native ACP stdio transport",
-        validation_state=CapabilityFactValidationState.VALIDATED,
-        effective_production_level=EffectiveObservationLevel.O1,
-        recipe="A",
-        lifecycle_source=LifecycleSource.TRANSPORT,
-        supported_statuses=frozenset({
-            "model-thinking",
-            "tool-calling",
-            "waiting-permission",
-        }),
-        probe_anchor="tests/e2e/agents/test_opencode_acp_e2e.py",
-        platform_evidence=("linux-amd64",),
-    )
-
-    # OpenCode CLI session — Recipe A/C candidate, not validated
-    facts[("opencode", "opencode-cli-session")] = HarnessSurfaceCapabilityFact(
-        provider_id="opencode",
-        surface_id="opencode-cli-session",
-        declared_capability=EffectiveObservationLevel.O1,
-        candidate_source="CLI run --session synchronous completion / idle/status",
-        validation_state=CapabilityFactValidationState.BLOCKED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="A/C",
-        lifecycle_source=LifecycleSource.NONE,
-    )
-
-    # ── Codex ──
-
-    facts[("codex", "codex-acp")] = HarnessSurfaceCapabilityFact(
-        provider_id="codex",
-        surface_id="codex-acp",
-        declared_capability=EffectiveObservationLevel.O2,
-        candidate_source="ACP adapter bridge",
-        validation_state=CapabilityFactValidationState.PROBE_REQUIRED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="A",
-        lifecycle_source=LifecycleSource.NONE,
-        probe_anchor="AS13 bridge/version proof",
-    )
-
-    facts[("codex", "codex-cli")] = HarnessSurfaceCapabilityFact(
-        provider_id="codex",
-        surface_id="codex-cli",
-        declared_capability=EffectiveObservationLevel.O2,
-        candidate_source="native hooks TOML reader/writer/remover",
-        validation_state=CapabilityFactValidationState.PROBE_REQUIRED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="B",
-        lifecycle_source=LifecycleSource.NONE,
-        probe_anchor="installed TOML/hooks reader-writer-remover proof",
-    )
-
-    # ── Claude Code ──
-
-    facts[("claude", "claude-acp")] = HarnessSurfaceCapabilityFact(
-        provider_id="claude",
-        surface_id="claude-acp",
-        declared_capability=EffectiveObservationLevel.O2,
-        candidate_source="ACP adapter",
-        validation_state=CapabilityFactValidationState.PROBE_REQUIRED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="A",
-        lifecycle_source=LifecycleSource.NONE,
-        probe_anchor="verify package, launch, terminal and correlation",
-    )
-
-    facts[("claude", "claude-cli")] = HarnessSurfaceCapabilityFact(
-        provider_id="claude",
-        surface_id="claude-cli",
-        declared_capability=EffectiveObservationLevel.O2,
-        candidate_source="native hooks: UserPromptSubmit/PreToolUse/PostToolUse/Stop/SessionEnd",
-        validation_state=CapabilityFactValidationState.PROBE_REQUIRED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="B",
-        lifecycle_source=LifecycleSource.NONE,
-        probe_anchor="project hook lifecycle and non-vetoing emitter proof",
-    )
-
-    # ── Cline ──
-
-    facts[("cline", "cline-acp")] = HarnessSurfaceCapabilityFact(
-        provider_id="cline",
-        surface_id="cline-acp",
-        declared_capability=EffectiveObservationLevel.O2,
-        candidate_source="ACP: npx @cline/cline-acp --mcp --acp",
-        validation_state=CapabilityFactValidationState.PROBE_REQUIRED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="A",
-        lifecycle_source=LifecycleSource.NONE,
-        probe_anchor="session/turn/tool correlation proof",
-    )
-
-    # ── Gemini ──
-
-    facts[("gemini", "gemini-acp")] = HarnessSurfaceCapabilityFact(
-        provider_id="gemini",
-        surface_id="gemini-acp",
-        declared_capability=EffectiveObservationLevel.O2,
-        candidate_source="npx @google/gemini-cli --acp",
-        validation_state=CapabilityFactValidationState.PROBE_REQUIRED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="A",
-        lifecycle_source=LifecycleSource.NONE,
-        probe_anchor="independent of CLI hooks — prove event fidelity",
-    )
-
-    facts[("gemini", "gemini-cli")] = HarnessSurfaceCapabilityFact(
-        provider_id="gemini",
-        surface_id="gemini-cli",
-        declared_capability=EffectiveObservationLevel.O3,
-        candidate_source="BeforeAgent/BeforeModel/AfterModel/BeforeTool/AfterTool/AfterAgent/SessionEnd",
-        validation_state=CapabilityFactValidationState.PROBE_REQUIRED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="B",
-        lifecycle_source=LifecycleSource.NONE,
-        probe_anchor="probe project config and environment inheritance on Gemini 0.49.0",
-    )
-
-    # ── Qwen ──
-
-    facts[("qwen", "qwen-acp")] = HarnessSurfaceCapabilityFact(
-        provider_id="qwen",
-        surface_id="qwen-acp",
-        declared_capability=EffectiveObservationLevel.O2,
-        candidate_source="npx @qwen-code/qwen-code --acp --experimental-skills",
-        validation_state=CapabilityFactValidationState.PROBE_REQUIRED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="A",
-        lifecycle_source=LifecycleSource.NONE,
-        probe_anchor="prove flag/event effects",
-    )
-
-    # ── Kilo ──
-
-    facts[("kilo", "kilo-acp")] = HarnessSurfaceCapabilityFact(
-        provider_id="kilo",
-        surface_id="kilo-acp",
-        declared_capability=EffectiveObservationLevel.O2,
-        candidate_source="kilo acp",
-        validation_state=CapabilityFactValidationState.PROBE_REQUIRED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="A",
-        lifecycle_source=LifecycleSource.NONE,
-        probe_anchor="descriptor and transport proof first; prove transport/control/observation contract",
-    )
-
-    # ── Copilot ──
-
-    facts[("copilot", "copilot-acp")] = HarnessSurfaceCapabilityFact(
-        provider_id="copilot",
-        surface_id="copilot-acp",
-        declared_capability=EffectiveObservationLevel.O2,
-        candidate_source="official ACP server: copilot --acp --stdio or loopback TCP",
-        validation_state=CapabilityFactValidationState.PROBE_REQUIRED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="A",
-        lifecycle_source=LifecycleSource.NONE,
-        probe_anchor="pin CLI/protocol and test stdio or loopback TCP; public-preview version/Docker probe required",
-    )
-
-    # ── Pi ──
-
-    facts[("pi", "pi-rpc")] = HarnessSurfaceCapabilityFact(
-        provider_id="pi",
-        surface_id="pi-rpc",
-        declared_capability=EffectiveObservationLevel.O2,
-        candidate_source="JSONL agent/turn/message/tool events via pi --mode rpc --no-session",
-        validation_state=CapabilityFactValidationState.PROBE_REQUIRED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="A",
-        lifecycle_source=LifecycleSource.NONE,
-        probe_anchor="primary Pi route; prove schema/correlation/lifecycle/close semantics",
-    )
-
-    facts[("pi", "pi-community-acp")] = HarnessSurfaceCapabilityFact(
-        provider_id="pi",
-        surface_id="pi-community-acp",
-        declared_capability=EffectiveObservationLevel.O2,
-        candidate_source="community ACP adapter (optional route)",
-        validation_state=CapabilityFactValidationState.PROBE_REQUIRED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="A",
-        lifecycle_source=LifecycleSource.NONE,
-        probe_anchor="pinned Docker probe only; never required for Pi coverage; never primary path",
-    )
-
-    # ── Goose ──
-
-    facts[("goose", "goose-acp")] = HarnessSurfaceCapabilityFact(
-        provider_id="goose",
-        surface_id="goose-acp",
-        declared_capability=EffectiveObservationLevel.O2,
-        candidate_source="official ACP/API route",
-        validation_state=CapabilityFactValidationState.PROBE_REQUIRED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="A",
-        lifecycle_source=LifecycleSource.NONE,
-        probe_anchor="prove prompt terminal response and correlation",
-    )
-
-    # ── OpenHands ──
-
-    facts[("openhands", "openhands-canvas")] = HarnessSurfaceCapabilityFact(
-        provider_id="openhands",
-        surface_id="openhands-canvas",
-        declared_capability=EffectiveObservationLevel.O2,
-        candidate_source="WebSocket event stream and conversation state (Canvas/SDK)",
-        validation_state=CapabilityFactValidationState.PROBE_REQUIRED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="A",
-        lifecycle_source=LifecycleSource.NONE,
-        probe_anchor="probe exact Canvas/SDK version, event terminal semantics, ordering, replay and correlation",
-    )
-
-    # ── Aider (Recipe D) ──
-
-    facts[("aider", "aider-cli")] = HarnessSurfaceCapabilityFact(
-        provider_id="aider",
-        surface_id="aider-cli",
-        declared_capability=EffectiveObservationLevel.O0,
-        candidate_source=None,
-        validation_state=CapabilityFactValidationState.UNSUPPORTED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="D",
-        lifecycle_source=LifecycleSource.NONE,
-    )
-
-    # ── Continue ──
-
-    facts[("continue", "continue-headless")] = HarnessSurfaceCapabilityFact(
-        provider_id="continue",
-        surface_id="continue-headless",
-        declared_capability=EffectiveObservationLevel.O0,
-        candidate_source="structured one-shot result",
-        validation_state=CapabilityFactValidationState.PROBE_REQUIRED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="C",
-        lifecycle_source=LifecycleSource.NONE,
-        probe_anchor="one-shot terminal evidence is not reusable-session O2 without explicit persistent boundary",
-    )
-
-    facts[("continue", "continue-tui")] = HarnessSurfaceCapabilityFact(
-        provider_id="continue",
-        surface_id="continue-tui",
-        declared_capability=EffectiveObservationLevel.O0,
-        candidate_source=None,
-        validation_state=CapabilityFactValidationState.UNSUPPORTED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="D",
-        lifecycle_source=LifecycleSource.NONE,
-    )
-
-    # ── Antigravity ──
-
-    facts[("antigravity", "antigravity-cli")] = HarnessSurfaceCapabilityFact(
-        provider_id="antigravity",
-        surface_id="antigravity-cli",
-        declared_capability=EffectiveObservationLevel.O0,
-        candidate_source="hooks/plugins/status — candidate route not source-pinned",
-        validation_state=CapabilityFactValidationState.PROBE_REQUIRED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="B",
-        lifecycle_source=LifecycleSource.NONE,
-        probe_anchor="primary-source probe required; prove non-vetoing machine event and config lifecycle; no Gemini inference",
-    )
-
-    # ── Plandex (Recipe D) ──
-
-    facts[("plandex", "plandex-cli")] = HarnessSurfaceCapabilityFact(
-        provider_id="plandex",
-        surface_id="plandex-cli",
-        declared_capability=EffectiveObservationLevel.O0,
-        candidate_source=None,
-        validation_state=CapabilityFactValidationState.UNSUPPORTED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="D",
-        lifecycle_source=LifecycleSource.NONE,
-    )
-
-    # ── Roo (Recipe D) ──
-
-    facts[("roo", "roo-cli")] = HarnessSurfaceCapabilityFact(
-        provider_id="roo",
-        surface_id="roo-cli",
-        declared_capability=EffectiveObservationLevel.O0,
-        candidate_source=None,
-        validation_state=CapabilityFactValidationState.UNSUPPORTED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="D",
-        lifecycle_source=LifecycleSource.NONE,
-    )
-
-    # ── Zed surfaces (Recipe D) ──
-
-    facts[("zed", "zed-external-agent")] = HarnessSurfaceCapabilityFact(
-        provider_id="zed",
-        surface_id="zed-external-agent",
-        declared_capability=EffectiveObservationLevel.O0,
-        candidate_source="delegates to the selected external agent's ACP/native route",
-        validation_state=CapabilityFactValidationState.BLOCKED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="D",
-        lifecycle_source=LifecycleSource.NONE,
-    )
-
-    facts[("zed", "zed-terminal")] = HarnessSurfaceCapabilityFact(
-        provider_id="zed",
-        surface_id="zed-terminal",
-        declared_capability=EffectiveObservationLevel.O0,
-        candidate_source=None,
-        validation_state=CapabilityFactValidationState.UNSUPPORTED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="D",
-        lifecycle_source=LifecycleSource.NONE,
-    )
-
-    # ── Crush (Recipe D) ──
-
-    facts[("crush", "crush-backend")] = HarnessSurfaceCapabilityFact(
-        provider_id="crush",
-        surface_id="crush-backend",
-        declared_capability=EffectiveObservationLevel.O0,
-        candidate_source="possible server/session event route — needs primary-source evidence",
-        validation_state=CapabilityFactValidationState.PROBE_REQUIRED,
-        effective_production_level=EffectiveObservationLevel.O0,
-        recipe="D",
-        lifecycle_source=LifecycleSource.NONE,
-    )
-
+    for provider_id, descriptor in providers.items():
+        for entry in descriptor.harness_observability:
+            fact = _parse_entry(provider_id, entry)
+            # No cross-provider key collision is possible: surface_id
+            # uniqueness within a provider is already enforced by
+            # _build_harness_observability, and provider_id differs by
+            # definition across descriptors.
+            facts[(provider_id, fact.surface_id)] = fact
     return facts
 
 
 # ---------------------------------------------------------------------------
 # Public inventory API
 # ---------------------------------------------------------------------------
+
 
 def get_harness_surface_capability_fact(
     provider_id: str,
@@ -464,7 +187,7 @@ def is_eligible_transport_observation_publisher(
 ) -> bool:
     """Check if a harness surface is eligible for transport-observation publishing.
 
-    Only validated surfaces with effective_production_level >= O1 and
+    Only validated surfaces with evidence.validated=True and
     lifecycle_source == transport-observation are eligible. Additionally,
     if the surface records ``platform_evidence``, the current/requested
     platform must appear in that list — an empty ``platform_evidence``
@@ -488,12 +211,8 @@ def is_eligible_transport_observation_publisher(
     fact = get_harness_surface_capability_fact(provider_id, surface_id)
     if fact is None:
         return False
-    # Gate 1: validation + effective level + lifecycle source
-    base_eligible = (
-        fact.validation_state == CapabilityFactValidationState.VALIDATED
-        and fact.effective_production_level.numeric >= 1
-        and fact.lifecycle_source == LifecycleSource.TRANSPORT
-    )
+    # Gate 1: validation + lifecycle source (AS59 — no O0-O4 ladder)
+    base_eligible = fact.evidence.validated and fact.lifecycle_source == LifecycleSource.TRANSPORT
     if not base_eligible:
         return False
     # Gate 2: platform must be in validated evidence (empty = no platform restriction)
@@ -517,8 +236,11 @@ def list_eligible_transport_observation_surfaces(
         platform: Target platform triple (e.g. "linux-amd64"). Defaults to
             auto-detected platform. Inject for deterministic tests.
 
-    Currently only opencode-acp satisfies this gate, on all validated
-    platforms (windows-amd64, darwin-arm64, darwin-amd64, linux-amd64).
+    Currently opencode-acp satisfies this gate on all its validated platforms
+    (windows-amd64, darwin-arm64, darwin-amd64, linux-amd64); pi-community-acp
+    satisfies it only on linux-amd64 — the sole platform with a real, proven
+    prompt turn (the Windows real-binary proof only covers the session/new
+    handshake, never a real prompt).
     """
     return [
         (fid, sid)
@@ -531,24 +253,26 @@ def list_eligible_transport_observation_surfaces(
 # Conformance enforcement
 # ---------------------------------------------------------------------------
 
+
 def validate_harness_observability_conformance(
     provider_id: str,
     surface_id: str,
     lifecycle_source: LifecycleSource,
-    effective_level: EffectiveObservationLevel,
-    validation_state: SurfaceValidationState | CapabilityFactValidationState,
+    *,
+    validated: bool = False,
 ) -> None:
     """Enforce AS27 conformance for a harness observability declaration.
 
     A lifecycle observation declaration may NOT claim transport-observation
-    publishability unless the surface is validated, effective_level >= O1,
+    publishability unless the surface is validated (evidence.validated=True)
     and present in the Recipe-A eligible set.
 
     Raises:
         AudiaGenticError (VAL-HINV-001): unsupported lifecycle source claimed
             as transport-observation publisher
         AudiaGenticError (VAL-HINV-002): non-validated surface claims
-            effective level >= O1 for transport observation
+            transport observation publishing
+        AudiaGenticError (VAL-HINV-003): no lifecycle source but evidence.validated
     """
     fact = get_harness_surface_capability_fact(provider_id, surface_id)
 
@@ -558,12 +282,11 @@ def validate_harness_observability_conformance(
         return
 
     # Rule 1: only transport-observation lifecycle source may be a publisher
-    if (
-        lifecycle_source == LifecycleSource.TRANSPORT
-        and fact.validation_state != CapabilityFactValidationState.VALIDATED
-    ):
+    if lifecycle_source == LifecycleSource.TRANSPORT and not fact.evidence.validated:
         raise make_error(
-            prefix="VAL", component="HINV", number=1,
+            prefix="VAL",
+            component="HINV",
+            number=1,
             kind="harness-observability-conformance",
             message=(
                 f"unsupported lifecycle source '{lifecycle_source.value}' "
@@ -573,52 +296,41 @@ def validate_harness_observability_conformance(
             details={
                 "provider_id": provider_id,
                 "surface_id": surface_id,
-                "validation_state": fact.validation_state.value,
+                "validated": fact.evidence.validated,
             },
         )
 
-    # Rule 2: non-validated surfaces cannot claim effective_level >= O1 for
-    # transport observation publishing
-    is_not_validated = (
-        isinstance(validation_state, CapabilityFactValidationState)
-        and validation_state != CapabilityFactValidationState.VALIDATED
-    ) or (
-        isinstance(validation_state, SurfaceValidationState)
-        and validation_state != SurfaceValidationState.VALIDATED
-    )
-    if (
-        lifecycle_source == LifecycleSource.TRANSPORT
-        and effective_level.numeric >= 1
-        and is_not_validated
-    ):
+    # Rule 2: non-validated surfaces cannot claim transport observation publishing
+    if lifecycle_source == LifecycleSource.TRANSPORT and not validated:
         raise make_error(
-            prefix="VAL", component="HINV", number=2,
+            prefix="VAL",
+            component="HINV",
+            number=2,
             kind="harness-observability-conformance",
             message=(
                 f"non-validated surface {provider_id}/{surface_id} claims "
-                f"effective level '{effective_level.value}' for transport observation"
+                f"transport observation publishing"
             ),
             details={
                 "provider_id": provider_id,
                 "surface_id": surface_id,
-                "effective_level": effective_level.value,
-                "validation_state": validation_state.value,
+                "validated": validated,
             },
         )
 
-    # Rule 3: unsupported lifecycle sources (none) may not carry O1+ for transport
-    if lifecycle_source == LifecycleSource.NONE and effective_level.numeric >= 1:
+    # Rule 3: no lifecycle source but evidence.validated=True is inconsistent
+    if lifecycle_source == LifecycleSource.NONE and validated:
         raise make_error(
-            prefix="VAL", component="HINV", number=3,
+            prefix="VAL",
+            component="HINV",
+            number=3,
             kind="harness-observability-conformance",
             message=(
-                f"surface {provider_id}/{surface_id} with no lifecycle source "
-                f"claims effective level '{effective_level.value}'"
+                f"surface {provider_id}/{surface_id} with no lifecycle source has validated=True"
             ),
             details={
                 "provider_id": provider_id,
                 "surface_id": surface_id,
-                "effective_level": effective_level.value,
             },
         )
 
@@ -627,12 +339,18 @@ def validate_harness_observability_conformance(
 # Inventory serialization (for reference docs and diagnostics)
 # ---------------------------------------------------------------------------
 
+
 def render_harness_inventory_markdown() -> str:
     """Render the AS27 inventory as a deterministic markdown table."""
     facts = _build_inventory()
     headers = [
-        "Provider", "Surface", "Recipe", "Declared",
-        "Validation", "Effective", "Lifecycle Source", "Probe Anchor",
+        "Provider",
+        "Surface",
+        "Recipe",
+        "Validated",
+        "Reference",
+        "Lifecycle Source",
+        "Probe Anchor",
     ]
     lines: list[str] = [
         "# AS27 Harness Observability Inventory",
@@ -646,9 +364,8 @@ def render_harness_inventory_markdown() -> str:
             provider_id,
             surface_id,
             fact.recipe,
-            fact.declared_capability.value,
-            fact.validation_state.value,
-            fact.effective_production_level.value,
+            str(fact.evidence.validated),
+            fact.evidence.reference or "",
             fact.lifecycle_source.value,
             fact.probe_anchor or "",
         ]

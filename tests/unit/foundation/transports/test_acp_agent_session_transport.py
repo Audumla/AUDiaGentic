@@ -402,6 +402,102 @@ class TestAcpAgentSessionTransportOpenClose:
                 lambda observation: None,  # type: ignore
             )
 
+    @pytest.mark.asyncio
+    async def test_pre_spawn_hook_forwarded_to_inner_transport(self, tmp_path, monkeypatch):
+        """AS41: the wrapper forwards pre_spawn_hook unchanged to the inner
+        AcpSessionTransport — it does not intercept or wrap it."""
+        _install_sdk(monkeypatch)
+
+        seen = {}
+
+        class _Hook:
+            def on_environment_ready(self, environment):
+                seen["environment"] = dict(environment)
+                return "hook-state"
+
+            def on_close(self, hook_state):
+                seen["closed_with"] = hook_state
+
+        launch = AcpLaunch("agent", args=(), environment={"TAP_ADDRESS": "127.0.0.1:9"})
+        transport = AcpAgentSessionTransport(launch, cwd=tmp_path, pre_spawn_hook=_Hook())
+        await transport.open()
+        assert seen["environment"] == {"TAP_ADDRESS": "127.0.0.1:9"}
+
+        await transport.close()
+        assert seen["closed_with"] == "hook-state"
+
+    @pytest.mark.asyncio
+    async def test_auxiliary_observation_source_drained_through_same_sink(self, tmp_path, monkeypatch):
+        """AS41: an AuxiliaryObservationSource returned as hook_state is
+        drained during the turn and its observations arrive through the
+        SAME sink as native ACP events — the caller sees one stream."""
+        from audiagentic.foundation.transports.acp import TransportObservation
+        from audiagentic.foundation.transports.agent_session import (
+            CorrelationQuality,
+            SessionPrompt,
+            TransportObservationKind,
+        )
+
+        _install_sdk(monkeypatch)
+
+        class _FakeAuxSource:
+            def __init__(self):
+                self._emitted = False
+                self.closed = False
+
+            async def poll(self, ag_session_id, turn_id):
+                if not self._emitted:
+                    self._emitted = True
+                    return TransportObservation(
+                        ag_session_id=ag_session_id,
+                        turn_id=turn_id,
+                        sequence=0,
+                        kind=TransportObservationKind.ACTIVITY,
+                        observed_at="2026-01-01T00:00:00Z",
+                        correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+                        attributes={},
+                    )
+                return None
+
+            def close(self):
+                self.closed = True
+
+        class _Hook:
+            def __init__(self, source):
+                self._source = source
+
+            def on_environment_ready(self, environment):
+                return self._source
+
+            def on_close(self, hook_state):
+                if hook_state is not None:
+                    hook_state.close()
+
+        aux_source = _FakeAuxSource()
+        transport = AcpAgentSessionTransport(
+            AcpLaunch("agent"), cwd=tmp_path, pre_spawn_hook=_Hook(aux_source),
+        )
+        await transport.open()
+
+        delivered: list[TransportObservation] = []
+
+        async def sink(observation: TransportObservation) -> None:
+            delivered.append(observation)
+
+        await transport.prompt(SessionPrompt(turn_id="t-aux", body="hello"), sink)
+
+        # At least one observation came from the auxiliary source, correctly
+        # correlated to this turn, delivered through the same sink as ACP's
+        # own native events (which also fire for this prompt).
+        aux_delivered = [
+            o for o in delivered
+            if o.turn_id == "t-aux" and o.sequence == 0 and o.observed_at == "2026-01-01T00:00:00Z"
+        ]
+        assert len(aux_delivered) == 1
+
+        await transport.close()
+        assert aux_source.closed
+
 
 class TestAcpAgentSessionTransportPrompt:
     """prompt() maps ACP events to TransportObservation and delivers via sink."""

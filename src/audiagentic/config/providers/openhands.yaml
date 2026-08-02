@@ -72,3 +72,15 @@ capabilities:
           mode: stub
           aliases: [openhands]
           message: "OpenHands adapter is registered; sandbox execution bridge not wired yet."
+
+# CC53: AS27 harness-observability inventory (this provider's own facts —
+# see harness_observability_inventory.py for the domain semantics).
+harness_observability:
+  - surface_id: openhands-canvas
+    candidate_source: WebSocket event stream and conversation state (Canvas/SDK)
+    evidence:
+      validated: false
+      reference: probe exact Canvas/SDK version, event terminal semantics, ordering, replay and correlation
+    recipe: A
+    lifecycle_source: none
+    probe_anchor: probe exact Canvas/SDK version, event terminal semantics, ordering, replay and correlation

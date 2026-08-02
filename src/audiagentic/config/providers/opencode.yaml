@@ -241,36 +241,40 @@ session_surfaces:
       - channel: "assistant-text"
         max_bytes: 65536
         max_events: 100
-    validation_state: "declared"
-    effective_level: "O1"
+    evidence:
+      validated: true
+      reference: "tests/e2e/agents/test_opencode_acp_e2e.py"
     # Platform evidence — only linux-amd64 has exact local probe evidence.
     # Windows/macOS/Linux are vendor-supported platforms (product capability
     # fact), but local observability validation is proven only for linux-amd64.
-    # Parent VALIDATED because at least one platform is validated.
-    # Other platforms remain DECLARED/O0 until their own probes pass.
+    # Parent evidence.validated=true because at least one platform is validated.
+    # Other platforms remain unvalidated until their own probes pass.
     platforms:
       - platform: "linux-amd64"
         tool_version: "repository"
         probe_artifact: "tests/e2e/agents/test_opencode_acp_e2e.py"
-        validation_state: "validated"
-        effective_level: "O1"
+        evidence:
+          validated: true
+          reference: "tests/e2e/agents/test_opencode_acp_e2e.py"
       # Vendor-supported platforms — no local probe evidence yet.
-      # Validation state remains DECLARED; effective level O0 until proven.
       - platform: "windows-amd64"
         tool_version: "repository"
         probe_artifact: "tests/e2e/agents/test_opencode_acp_e2e.py"
-        validation_state: "declared"
-        effective_level: "O0"
+        evidence:
+          validated: false
+          reference: ""
       - platform: "darwin-arm64"
         tool_version: "repository"
         probe_artifact: "tests/e2e/agents/test_opencode_acp_e2e.py"
-        validation_state: "declared"
-        effective_level: "O0"
+        evidence:
+          validated: false
+          reference: ""
       - platform: "darwin-amd64"
         tool_version: "repository"
         probe_artifact: "tests/e2e/agents/test_opencode_acp_e2e.py"
-        validation_state: "declared"
-        effective_level: "O0"
+        evidence:
+          validated: false
+          reference: ""
     adapter_ref: "audiagentic.components.providers.adapters.opencode.acp:build_acp_launch"
   - surface_id: opencode-cli-session
     version_constraint: ">=1.0"
@@ -285,5 +289,31 @@ session_surfaces:
     lifecycle_source: "none"
     lifecycle_installation: "none"
     content_channels: []
-    validation_state: "blocked"
-    effective_level: "O0"
+    evidence:
+      validated: false
+      reference: ""
+
+# CC53: AS27 harness-observability inventory (this provider's own facts —
+# see harness_observability_inventory.py for the domain semantics).
+harness_observability:
+  - surface_id: opencode-acp
+    candidate_source: native ACP stdio transport
+    evidence:
+      validated: true
+      reference: tests/e2e/agents/test_opencode_acp_e2e.py
+    recipe: A
+    lifecycle_source: transport
+    supported_statuses:
+      - model-thinking
+      - tool-calling
+      - waiting-permission
+    probe_anchor: tests/e2e/agents/test_opencode_acp_e2e.py
+    platform_evidence:
+      - linux-amd64
+  - surface_id: opencode-cli-session
+    candidate_source: CLI run --session synchronous completion / idle/status
+    evidence:
+      validated: false
+      reference: CLI run --session synchronous completion / idle/status (blocked)
+    recipe: A/C
+    lifecycle_source: none

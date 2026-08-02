@@ -685,6 +685,41 @@ def close_llm_session(project_root: Path, session_id: str) -> dict[str, Any]:
     return _public_session_projection(record)
 
 
+def resume_llm_session(
+    project_root: Path,
+    source_session_id: str,
+    *,
+    control_id: str,
+    identity_context_fingerprint: str | None = None,
+    execution_context_fingerprint: str | None = None,
+    model_id: str | None = None,
+) -> dict[str, Any]:
+    """AS49: explicitly resume a terminal session as a new linked generation.
+
+    Never triggered by ordinary continuation — this is the sole public entry
+    point a client calls with the exact terminal ``source_session_id`` it
+    wants to resume. ``control_id`` makes repeated calls idempotent (returns
+    the original result, never creates a second successor generation).
+    Raises a typed AudiaGenticError for every distinct rejection reason
+    (source not terminal, capability unsupported/unvalidated, identity or
+    execution context mismatch, provider rejection, persistence failure —
+    see agents_gateway_session_resume.py) rather than silently opening a
+    fresh conversation.
+    """
+    from audiagentic.components.agents.agents_gateway_sessions import get_session_runtime
+
+    runtime = get_session_runtime()
+    record = runtime.resume_session(
+        project_root,
+        source_session_id,
+        control_id=control_id,
+        identity_context_fingerprint=identity_context_fingerprint,
+        execution_context_fingerprint=execution_context_fingerprint,
+        model_id=model_id,
+    )
+    return _public_session_projection(record)
+
+
 def gateway_overview(project_root: Path) -> dict[str, Any]:
     """Operator-facing summary: persisted request counts by state (works even
     after a process restart) plus in-process queue depths for active profiles.

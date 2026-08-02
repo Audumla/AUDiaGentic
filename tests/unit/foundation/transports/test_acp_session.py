@@ -18,9 +18,13 @@ import pytest
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.acp import (
     ERR_EXECUTION_FAILED,
+    ERR_FS_ESCAPE,
+    ERR_RESUME_UNSUPPORTED,
     ERR_SESSION_NOT_OPEN,
+    ERR_UNKNOWN_TERMINAL,
     AcpLaunch,
     AcpSessionTransport,
+    _TurnPipeline,
 )
 
 
@@ -44,14 +48,19 @@ class _FakeProc:
         return self.returncode if self.returncode is not None else 0
 
 
-def _install_sdk(monkeypatch, *, prompt_side_effect=None, proc=None, exited=None):
+def _install_sdk(monkeypatch, *, prompt_side_effect=None, proc=None, exited=None, load_session_supported=False):
     """Install a fake acp SDK; returns (conn, proc, captured, exited-list)."""
     captured = {"client": None}
     exited = exited if exited is not None else []
 
     conn = MagicMock()
-    conn.initialize = AsyncMock()
+    conn.initialize = AsyncMock(
+        return_value=SimpleNamespace(
+            agent_capabilities=SimpleNamespace(load_session=load_session_supported),
+        )
+    )
     conn.new_session = AsyncMock(return_value=SimpleNamespace(session_id="s1"))
+    conn.load_session = AsyncMock(return_value=SimpleNamespace())
     turn_counter = {"n": 0}
 
     async def default_prompt(session_id, prompt):
@@ -86,10 +95,28 @@ def _install_sdk(monkeypatch, *, prompt_side_effect=None, proc=None, exited=None
     acp_mod.PROTOCOL_VERSION = 1
     acp_mod.spawn_agent_process = spawn
     acp_mod.text_block = lambda text: {"type": "text", "text": text}
+    # AS60: minimal response-model stand-ins for the fs/terminal Client
+    # methods — real acp.schema pydantic models aren't needed to prove this
+    # module's own confinement/forwarding/tracking logic, just something
+    # with the right attribute names.
+    acp_mod.WriteTextFileResponse = lambda: SimpleNamespace()
+    acp_mod.ReadTextFileResponse = lambda content: SimpleNamespace(content=content)
+    acp_mod.CreateTerminalResponse = lambda terminal_id: SimpleNamespace(terminal_id=terminal_id)
+    acp_mod.TerminalOutputResponse = lambda output, truncated, exit_status: SimpleNamespace(
+        output=output, truncated=truncated, exit_status=exit_status
+    )
+    acp_mod.WaitForTerminalExitResponse = lambda exit_code, signal: SimpleNamespace(
+        exit_code=exit_code, signal=signal
+    )
     interfaces_mod = types.ModuleType("acp.interfaces")
     interfaces_mod.Client = object
+    schema_mod = types.ModuleType("acp.schema")
+    schema_mod.TerminalExitStatus = lambda exit_code=None, signal=None: SimpleNamespace(
+        exit_code=exit_code, signal=signal
+    )
     monkeypatch.setitem(sys.modules, "acp", acp_mod)
     monkeypatch.setitem(sys.modules, "acp.interfaces", interfaces_mod)
+    monkeypatch.setitem(sys.modules, "acp.schema", schema_mod)
     return conn, proc, captured, exited
 
 
@@ -136,6 +163,128 @@ async def test_prompt_before_open_raises(tmp_path, monkeypatch):
     transport = AcpSessionTransport(AcpLaunch("agent"), cwd=tmp_path)
     with pytest.raises(AudiaGenticError, match=ERR_SESSION_NOT_OPEN):
         await transport.prompt("never opened")
+
+
+# ── AS49/AS10: generic ACP session/load resume support ─────────────────────
+
+@pytest.mark.asyncio
+async def test_open_resumed_calls_load_session_when_supported(tmp_path, monkeypatch):
+    conn, proc, captured, exited = _install_sdk(monkeypatch, load_session_supported=True)
+    transport = AcpSessionTransport(AcpLaunch("agent"), cwd=tmp_path)
+    session_id = await transport.open_resumed("predecessor-ref-123")
+
+    assert session_id == "predecessor-ref-123"
+    assert transport.session_id == "predecessor-ref-123"
+    assert transport.supports_resume is True
+    conn.load_session.assert_awaited_once()
+    conn.new_session.assert_not_awaited()
+    assert transport.is_alive()
+
+
+@pytest.mark.asyncio
+async def test_open_resumed_raises_and_tears_down_child_when_unsupported(tmp_path, monkeypatch):
+    conn, proc, captured, exited = _install_sdk(monkeypatch, load_session_supported=False)
+    transport = AcpSessionTransport(AcpLaunch("agent"), cwd=tmp_path)
+
+    with pytest.raises(AudiaGenticError, match=ERR_RESUME_UNSUPPORTED):
+        await transport.open_resumed("predecessor-ref-123")
+
+    conn.load_session.assert_not_awaited()
+    assert exited  # spawned child was torn down, never leaked
+    assert not transport.is_alive()
+    assert transport.supports_resume is False
+
+
+@pytest.mark.asyncio
+async def test_open_after_open_resumed_still_rejected(tmp_path, monkeypatch):
+    """The already-opened/closed guard applies uniformly to both open paths."""
+    _install_sdk(monkeypatch, load_session_supported=True)
+    transport = AcpSessionTransport(AcpLaunch("agent"), cwd=tmp_path)
+    await transport.open_resumed("predecessor-ref-123")
+
+    with pytest.raises(AudiaGenticError, match=ERR_SESSION_NOT_OPEN):
+        await transport.open()
+
+
+# ── AS41: PreSpawnHook inversion-of-control seam ────────────────────────────
+
+class _RecordingHook:
+    def __init__(self, *, raise_on_environment_ready=False, raise_on_close=False):
+        self.environment_seen = None
+        self.close_calls = []
+        self._raise_on_environment_ready = raise_on_environment_ready
+        self._raise_on_close = raise_on_close
+
+    def on_environment_ready(self, environment):
+        self.environment_seen = dict(environment)
+        if self._raise_on_environment_ready:
+            raise RuntimeError("boom-on-environment-ready")
+        return {"listener": "fake-listener-handle"}
+
+    def on_close(self, hook_state):
+        self.close_calls.append(hook_state)
+        if self._raise_on_close:
+            raise RuntimeError("boom-on-close")
+
+
+@pytest.mark.asyncio
+async def test_pre_spawn_hook_called_with_launch_environment_before_spawn(tmp_path, monkeypatch):
+    _install_sdk(monkeypatch)
+    hook = _RecordingHook()
+    launch = AcpLaunch("agent", args=(), environment={"TAP_ADDRESS": "127.0.0.1:9", "TAP_AUTHKEY": "secret"})
+    transport = AcpSessionTransport(launch, cwd=tmp_path, pre_spawn_hook=hook)
+    await transport.open()
+
+    assert hook.environment_seen == {"TAP_ADDRESS": "127.0.0.1:9", "TAP_AUTHKEY": "secret"}
+
+
+@pytest.mark.asyncio
+async def test_pre_spawn_hook_state_passed_to_on_close_symmetrically(tmp_path, monkeypatch):
+    _install_sdk(monkeypatch)
+    hook = _RecordingHook()
+    transport = AcpSessionTransport(AcpLaunch("agent"), cwd=tmp_path, pre_spawn_hook=hook)
+    await transport.open()
+    assert hook.close_calls == []  # not called yet
+
+    await transport.close()
+    assert hook.close_calls == [{"listener": "fake-listener-handle"}]
+
+
+@pytest.mark.asyncio
+async def test_pre_spawn_hook_failure_does_not_block_open(tmp_path, monkeypatch):
+    """Hook setup is best-effort — a broken hook must never prevent a session
+    from opening (AS41: tap enrichment is optional, never load-bearing)."""
+    _install_sdk(monkeypatch)
+    hook = _RecordingHook(raise_on_environment_ready=True)
+    transport = AcpSessionTransport(AcpLaunch("agent"), cwd=tmp_path, pre_spawn_hook=hook)
+    session_id = await transport.open()
+
+    assert session_id == "s1"
+    assert transport.is_alive()
+    # hook_state stays None since on_environment_ready raised before returning.
+    await transport.close()
+    assert hook.close_calls == [None]
+
+
+@pytest.mark.asyncio
+async def test_pre_spawn_hook_on_close_failure_does_not_raise(tmp_path, monkeypatch):
+    _install_sdk(monkeypatch)
+    hook = _RecordingHook(raise_on_close=True)
+    transport = AcpSessionTransport(AcpLaunch("agent"), cwd=tmp_path, pre_spawn_hook=hook)
+    await transport.open()
+
+    await transport.close()  # must not raise
+    assert not transport.is_alive()
+
+
+@pytest.mark.asyncio
+async def test_no_pre_spawn_hook_is_a_no_op(tmp_path, monkeypatch):
+    """Default (no hook) behaves exactly as before this feature existed."""
+    _install_sdk(monkeypatch)
+    transport = AcpSessionTransport(AcpLaunch("agent"), cwd=tmp_path)
+    session_id = await transport.open()
+    assert session_id == "s1"
+    await transport.close()  # must not raise
 
 
 @pytest.mark.asyncio
@@ -351,3 +500,141 @@ async def test_real_wire_kinds_map_to_canonical(tmp_path, monkeypatch):
     assert tool.ext["acp"]["status"] == "completed"
     assert tool.ext["acp"]["tool_call_id"] == "tc9"
     assert "payload" not in tool.ext["acp"]
+
+
+# ── AS60: real fs/terminal Client execution ─────────────────────────────────
+
+def test_confine_path_allows_relative_and_absolute_paths_inside_root(tmp_path):
+    transport = AcpSessionTransport(AcpLaunch("agent"), cwd=tmp_path)
+    resolved_relative = transport._confine_path("inner/file.txt")
+    resolved_absolute = transport._confine_path(str(tmp_path / "inner" / "file.txt"))
+    assert resolved_relative == resolved_absolute
+    assert resolved_relative == (tmp_path / "inner" / "file.txt").resolve()
+
+
+def test_confine_path_rejects_traversal_outside_root(tmp_path):
+    transport = AcpSessionTransport(AcpLaunch("agent"), cwd=tmp_path)
+    with pytest.raises(AudiaGenticError, match=ERR_FS_ESCAPE):
+        transport._confine_path("../outside.txt")
+    with pytest.raises(AudiaGenticError, match=ERR_FS_ESCAPE):
+        transport._confine_path(str(tmp_path.parent / "sibling" / "outside.txt"))
+
+
+@pytest.mark.asyncio
+async def test_write_then_read_text_file_round_trips_through_real_fs(tmp_path, monkeypatch):
+    conn, proc, captured, exited = _install_sdk(monkeypatch)
+    transport = AcpSessionTransport(AcpLaunch("agent"), cwd=tmp_path)
+    await transport.open()
+    client = captured["client"]
+    transport._current_turn = turn = _TurnPipeline(None)
+
+    write_resp = await client.write_text_file("s1", str(tmp_path / "notes.txt"), "hello world")
+    assert write_resp is not None
+    assert (tmp_path / "notes.txt").read_text(encoding="utf-8") == "hello world"
+
+    read_resp = await client.read_text_file("s1", str(tmp_path / "notes.txt"))
+    assert read_resp.content == "hello world"
+
+    kinds = [e.kind for e in turn.events]
+    assert kinds.count("file-change") == 2  # one write, one read
+    await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_write_text_file_outside_root_raises_and_never_touches_disk(tmp_path, monkeypatch):
+    conn, proc, captured, exited = _install_sdk(monkeypatch)
+    transport = AcpSessionTransport(AcpLaunch("agent"), cwd=tmp_path)
+    await transport.open()
+    client = captured["client"]
+    transport._current_turn = _TurnPipeline(None)
+
+    outside = tmp_path.parent / "escape.txt"
+    with pytest.raises(AudiaGenticError, match=ERR_FS_ESCAPE):
+        await client.write_text_file("s1", str(outside), "should not land")
+    assert not outside.exists()
+    await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_create_terminal_runs_real_process_and_captures_output(tmp_path, monkeypatch):
+    conn, proc, captured, exited = _install_sdk(monkeypatch)
+    transport = AcpSessionTransport(AcpLaunch("agent"), cwd=tmp_path)
+    await transport.open()
+    client = captured["client"]
+    transport._current_turn = turn = _TurnPipeline(None)
+
+    create_resp = await client.create_terminal(
+        "s1", sys.executable, args=["-c", "print('AS60_TERMINAL_PROOF')"],
+    )
+    terminal_id = create_resp.terminal_id
+    assert terminal_id in transport._terminals
+
+    exit_resp = await client.wait_for_terminal_exit("s1", terminal_id)
+    assert exit_resp.exit_code == 0
+
+    output_resp = await client.terminal_output("s1", terminal_id)
+    assert "AS60_TERMINAL_PROOF" in output_resp.output
+    assert output_resp.truncated is False
+
+    release_resp = await client.release_terminal("s1", terminal_id)
+    assert release_resp is None
+    assert terminal_id not in transport._terminals
+
+    started = [e for e in turn.events if e.kind == "terminal-output"]
+    assert len(started) >= 1
+    await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_terminal_output_unknown_id_raises(tmp_path, monkeypatch):
+    conn, proc, captured, exited = _install_sdk(monkeypatch)
+    transport = AcpSessionTransport(AcpLaunch("agent"), cwd=tmp_path)
+    await transport.open()
+    client = captured["client"]
+
+    with pytest.raises(AudiaGenticError, match=ERR_UNKNOWN_TERMINAL):
+        await client.terminal_output("s1", "term-does-not-exist")
+    await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_kill_terminal_stops_a_running_process(tmp_path, monkeypatch):
+    conn, proc, captured, exited = _install_sdk(monkeypatch)
+    transport = AcpSessionTransport(AcpLaunch("agent"), cwd=tmp_path)
+    await transport.open()
+    client = captured["client"]
+    transport._current_turn = _TurnPipeline(None)
+
+    create_resp = await client.create_terminal(
+        "s1", sys.executable, args=["-c", "import time; time.sleep(30)"],
+    )
+    terminal_id = create_resp.terminal_id
+
+    kill_resp = await client.kill_terminal("s1", terminal_id)
+    assert kill_resp is None
+
+    exit_resp = await client.wait_for_terminal_exit("s1", terminal_id)
+    assert exit_resp.exit_code != 0 or exit_resp.signal is not None
+    await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_close_force_kills_terminals_the_agent_never_released(tmp_path, monkeypatch):
+    conn, proc, captured, exited = _install_sdk(monkeypatch)
+    transport = AcpSessionTransport(AcpLaunch("agent"), cwd=tmp_path)
+    await transport.open()
+    client = captured["client"]
+    transport._current_turn = _TurnPipeline(None)
+
+    create_resp = await client.create_terminal(
+        "s1", sys.executable, args=["-c", "import time; time.sleep(30)"],
+    )
+    handle = transport._terminals[create_resp.terminal_id]
+
+    await transport.close()
+
+    assert transport._terminals == {}
+    # close() sends kill() but doesn't block on reaping — await it here to
+    # prove the process actually died rather than merely being signaled.
+    await asyncio.wait_for(handle.proc.wait(), timeout=5)
+    assert handle.proc.returncode is not None

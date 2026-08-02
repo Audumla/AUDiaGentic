@@ -11,14 +11,13 @@ import pytest
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.session_surface import (
-    EffectiveObservationLevel,
     LifecycleSource,
-    SurfaceValidationState,
 )
 
 # ---------------------------------------------------------------------------
 # Inventory existence tests
 # ---------------------------------------------------------------------------
+
 
 class TestHarnessInventoryCompleteness:
     """Every known harness surface has exactly one explicit inventory entry."""
@@ -27,6 +26,7 @@ class TestHarnessInventoryCompleteness:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
+
         fact = get_harness_surface_capability_fact("opencode", "opencode-acp")
         assert fact is not None
         assert fact.provider_id == "opencode"
@@ -36,6 +36,7 @@ class TestHarnessInventoryCompleteness:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
+
         fact = get_harness_surface_capability_fact("opencode", "opencode-cli-session")
         assert fact is not None
 
@@ -43,6 +44,7 @@ class TestHarnessInventoryCompleteness:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
+
         fact = get_harness_surface_capability_fact("codex", "codex-acp")
         assert fact is not None
 
@@ -50,6 +52,7 @@ class TestHarnessInventoryCompleteness:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
+
         fact = get_harness_surface_capability_fact("codex", "codex-cli")
         assert fact is not None
 
@@ -57,6 +60,7 @@ class TestHarnessInventoryCompleteness:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
+
         fact = get_harness_surface_capability_fact("claude", "claude-acp")
         assert fact is not None
 
@@ -64,6 +68,7 @@ class TestHarnessInventoryCompleteness:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
+
         fact = get_harness_surface_capability_fact("claude", "claude-cli")
         assert fact is not None
 
@@ -71,6 +76,7 @@ class TestHarnessInventoryCompleteness:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
+
         fact = get_harness_surface_capability_fact("gemini", "gemini-acp")
         assert fact is not None
 
@@ -78,6 +84,7 @@ class TestHarnessInventoryCompleteness:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
+
         fact = get_harness_surface_capability_fact("gemini", "gemini-cli")
         assert fact is not None
 
@@ -85,6 +92,7 @@ class TestHarnessInventoryCompleteness:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
+
         fact = get_harness_surface_capability_fact("copilot", "copilot-acp")
         assert fact is not None
 
@@ -92,6 +100,7 @@ class TestHarnessInventoryCompleteness:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
+
         fact = get_harness_surface_capability_fact("pi", "pi-rpc")
         assert fact is not None
 
@@ -99,6 +108,7 @@ class TestHarnessInventoryCompleteness:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
+
         fact = get_harness_surface_capability_fact("goose", "goose-acp")
         assert fact is not None
 
@@ -106,6 +116,7 @@ class TestHarnessInventoryCompleteness:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
+
         fact = get_harness_surface_capability_fact("aider", "aider-cli")
         assert fact is not None
 
@@ -113,6 +124,7 @@ class TestHarnessInventoryCompleteness:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
+
         fact = get_harness_surface_capability_fact("plandex", "plandex-cli")
         assert fact is not None
 
@@ -120,6 +132,7 @@ class TestHarnessInventoryCompleteness:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
+
         fact = get_harness_surface_capability_fact("roo", "roo-cli")
         assert fact is not None
 
@@ -127,12 +140,16 @@ class TestHarnessInventoryCompleteness:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
+
         fact = get_harness_surface_capability_fact("unknown", "unknown-surface")
         assert fact is None
 
+
 # ---------------------------------------------------------------------------
-# Eligibility gate tests — opencode-acp is the only eligible publisher
+# Eligibility gate tests — opencode-acp and pi-community-acp are eligible on
+# linux-amd64 (AS41 Path A); every other surface remains ineligible.
 # ---------------------------------------------------------------------------
+
 
 class TestTransportObservationEligibility:
     """Only opencode-acp satisfies the transport-observation eligibility gate."""
@@ -142,8 +159,11 @@ class TestTransportObservationEligibility:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             is_eligible_transport_observation_publisher,
         )
+
         assert is_eligible_transport_observation_publisher(
-            "opencode", "opencode-acp", platform="linux-amd64",
+            "opencode",
+            "opencode-acp",
+            platform="linux-amd64",
         )
 
     def test_opencode_acp_not_eligible_on_windows(self):
@@ -151,8 +171,11 @@ class TestTransportObservationEligibility:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             is_eligible_transport_observation_publisher,
         )
+
         assert not is_eligible_transport_observation_publisher(
-            "opencode", "opencode-acp", platform="windows-amd64",
+            "opencode",
+            "opencode-acp",
+            platform="windows-amd64",
         )
 
     def test_opencode_acp_not_eligible_on_darwin_arm64(self):
@@ -160,8 +183,11 @@ class TestTransportObservationEligibility:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             is_eligible_transport_observation_publisher,
         )
+
         assert not is_eligible_transport_observation_publisher(
-            "opencode", "opencode-acp", platform="darwin-arm64",
+            "opencode",
+            "opencode-acp",
+            platform="darwin-arm64",
         )
 
     def test_opencode_acp_not_eligible_on_darwin_amd64(self):
@@ -169,70 +195,85 @@ class TestTransportObservationEligibility:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             is_eligible_transport_observation_publisher,
         )
+
         assert not is_eligible_transport_observation_publisher(
-            "opencode", "opencode-acp", platform="darwin-amd64",
+            "opencode",
+            "opencode-acp",
+            platform="darwin-amd64",
         )
 
     def test_opencode_cli_session_not_eligible(self):
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             is_eligible_transport_observation_publisher,
         )
-        assert not is_eligible_transport_observation_publisher(
-            "opencode", "opencode-cli-session"
-        )
+
+        assert not is_eligible_transport_observation_publisher("opencode", "opencode-cli-session")
 
     def test_codex_acp_not_eligible(self):
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             is_eligible_transport_observation_publisher,
         )
+
         assert not is_eligible_transport_observation_publisher("codex", "codex-acp")
 
     def test_gemini_cli_not_eligible(self):
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             is_eligible_transport_observation_publisher,
         )
+
         assert not is_eligible_transport_observation_publisher("gemini", "gemini-cli")
 
     def test_copilot_acp_not_eligible(self):
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             is_eligible_transport_observation_publisher,
         )
+
         assert not is_eligible_transport_observation_publisher("copilot", "copilot-acp")
 
     def test_pi_rpc_not_eligible(self):
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             is_eligible_transport_observation_publisher,
         )
+
         assert not is_eligible_transport_observation_publisher("pi", "pi-rpc")
 
     def test_aider_cli_not_eligible(self):
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             is_eligible_transport_observation_publisher,
         )
+
         assert not is_eligible_transport_observation_publisher("aider", "aider-cli")
 
     def test_unknown_surface_not_eligible(self):
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             is_eligible_transport_observation_publisher,
         )
-        assert not is_eligible_transport_observation_publisher(
-            "unknown", "unknown-surface"
-        )
 
-    def test_eligible_list_linux_has_opencode_acp(self):
-        """On linux-amd64, opencode-acp is the only eligible surface."""
+        assert not is_eligible_transport_observation_publisher("unknown", "unknown-surface")
+
+    def test_eligible_list_linux_has_opencode_acp_and_pi_community_acp(self):
+        """On linux-amd64, opencode-acp and pi-community-acp are eligible.
+
+        AS41 Path A: pi-community-acp gained real evidence.validated=True
+        this session (a genuine Docker-proven prompt turn), so it is now
+        eligible alongside opencode-acp — not a regression, the correct
+        outcome of closing a real capability gap.
+        """
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             list_eligible_transport_observation_surfaces,
         )
+
         eligible = list_eligible_transport_observation_surfaces(platform="linux-amd64")
-        assert len(eligible) == 1
+        assert len(eligible) == 2
         assert ("opencode", "opencode-acp") in eligible
+        assert ("pi", "pi-community-acp") in eligible
 
     def test_eligible_list_windows_empty(self):
         """On windows-amd64, no surface is eligible — opencode-acp not validated there."""
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             list_eligible_transport_observation_surfaces,
         )
+
         eligible = list_eligible_transport_observation_surfaces(platform="windows-amd64")
         assert len(eligible) == 0
 
@@ -241,12 +282,15 @@ class TestTransportObservationEligibility:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             list_eligible_transport_observation_surfaces,
         )
+
         eligible = list_eligible_transport_observation_surfaces(platform="darwin-arm64")
         assert len(eligible) == 0
+
 
 # ---------------------------------------------------------------------------
 # Conformance enforcement tests
 # ---------------------------------------------------------------------------
+
 
 class TestConformanceEnforcement:
     """Conformance rules prevent unvalidated surfaces from publishing."""
@@ -256,13 +300,13 @@ class TestConformanceEnforcement:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             validate_harness_observability_conformance,
         )
+
         # Should not raise for the validated opencode-acp surface.
         validate_harness_observability_conformance(
             provider_id="opencode",
             surface_id="opencode-acp",
             lifecycle_source=LifecycleSource.TRANSPORT,
-            effective_level=EffectiveObservationLevel.O1,
-            validation_state=SurfaceValidationState.VALIDATED,
+            validated=True,
         )
 
     def test_unsupported_surface_claims_transport_raises(self):
@@ -270,13 +314,13 @@ class TestConformanceEnforcement:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             validate_harness_observability_conformance,
         )
+
         with pytest.raises(AudiaGenticError) as exc_info:
             validate_harness_observability_conformance(
                 provider_id="aider",
                 surface_id="aider-cli",
                 lifecycle_source=LifecycleSource.TRANSPORT,
-                effective_level=EffectiveObservationLevel.O1,
-                validation_state=SurfaceValidationState.DECLARED,
+                validated=False,
             )
         assert "VAL-HINV-001" in exc_info.value.code
 
@@ -285,13 +329,13 @@ class TestConformanceEnforcement:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             validate_harness_observability_conformance,
         )
+
         with pytest.raises(AudiaGenticError) as exc_info:
             validate_harness_observability_conformance(
                 provider_id="gemini",
                 surface_id="gemini-acp",
                 lifecycle_source=LifecycleSource.TRANSPORT,
-                effective_level=EffectiveObservationLevel.O1,
-                validation_state=SurfaceValidationState.DECLARED,
+                validated=False,
             )
         assert "VAL-HINV-001" in exc_info.value.code
 
@@ -306,29 +350,29 @@ class TestConformanceEnforcement:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             validate_harness_observability_conformance,
         )
+
         with pytest.raises(AudiaGenticError) as exc_info:
             validate_harness_observability_conformance(
                 provider_id="gemini",
                 surface_id="gemini-cli",
                 lifecycle_source=LifecycleSource.TRANSPORT,
-                effective_level=EffectiveObservationLevel.O2,
-                validation_state=SurfaceValidationState.DECLARED,
+                validated=False,
             )
         # Rule 1 fires first: unsupported lifecycle source for non-validated surface
         assert "VAL-HINV-001" in exc_info.value.code
 
-    def test_none_lifecycle_with_O1_raises(self):
-        """A surface with no lifecycle source claiming O1 raises VAL-HINV-003."""
+    def test_none_lifecycle_with_validated_raises(self):
+        """A surface with no lifecycle source claiming validated=True raises VAL-HINV-003."""
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             validate_harness_observability_conformance,
         )
+
         with pytest.raises(AudiaGenticError) as exc_info:
             validate_harness_observability_conformance(
                 provider_id="opencode",
                 surface_id="opencode-cli-session",
                 lifecycle_source=LifecycleSource.NONE,
-                effective_level=EffectiveObservationLevel.O1,
-                validation_state=SurfaceValidationState.BLOCKED,
+                validated=True,
             )
         assert "VAL-HINV-003" in exc_info.value.code
 
@@ -337,18 +381,20 @@ class TestConformanceEnforcement:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             validate_harness_observability_conformance,
         )
+
         # Should not raise — unknown surfaces are just not in the matrix.
         validate_harness_observability_conformance(
             provider_id="unknown",
             surface_id="unknown-surface",
             lifecycle_source=LifecycleSource.NONE,
-            effective_level=EffectiveObservationLevel.O0,
-            validation_state=SurfaceValidationState.UNSUPPORTED,
+            validated=False,
         )
+
 
 # ---------------------------------------------------------------------------
 # Inventory data integrity tests
 # ---------------------------------------------------------------------------
+
 
 class TestInventoryDataIntegrity:
     """No duplicate (provider_id, surface_id) pairs; no inconsistent state."""
@@ -357,6 +403,7 @@ class TestInventoryDataIntegrity:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_all_harness_surface_facts,
         )
+
         facts = get_all_harness_surface_facts()
         keys = list(facts.keys())
         assert len(keys) == len(set(keys)), "Duplicate (provider_id, surface_id) found"
@@ -364,35 +411,35 @@ class TestInventoryDataIntegrity:
     def test_validated_surfaces_have_probe_anchor(self):
         """Every validated surface must have a probe anchor."""
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
-            CapabilityFactValidationState,
             get_all_harness_surface_facts,
         )
+
         for (pid, sid), fact in get_all_harness_surface_facts().items():
-            if fact.validation_state == CapabilityFactValidationState.VALIDATED:
+            if fact.evidence.validated:
                 assert fact.probe_anchor is not None, (
                     f"{pid}/{sid} is validated but has no probe_anchor"
                 )
 
-    def test_validated_surfaces_have_effective_level_at_least_O1(self):
-        """Every validated surface must have effective_production_level >= O1."""
+    def test_validated_surfaces_have_reference(self):
+        """Every validated surface must carry a non-empty evidence reference."""
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
-            CapabilityFactValidationState,
             get_all_harness_surface_facts,
         )
+
         for (pid, sid), fact in get_all_harness_surface_facts().items():
-            if fact.validation_state == CapabilityFactValidationState.VALIDATED:
-                assert fact.effective_production_level.numeric >= 1, (
-                    f"{pid}/{sid} is validated but effective level < O1"
+            if fact.evidence.validated:
+                assert fact.evidence.reference, (
+                    f"{pid}/{sid} is validated but has no evidence reference"
                 )
 
     def test_recipe_a_surfaces_have_transport_source(self):
         """Recipe A surfaces must have transport lifecycle source if validated."""
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
-            CapabilityFactValidationState,
             get_all_harness_surface_facts,
         )
+
         for (pid, sid), fact in get_all_harness_surface_facts().items():
-            if fact.recipe == "A" and fact.validation_state == CapabilityFactValidationState.VALIDATED:
+            if fact.recipe == "A" and fact.evidence.validated:
                 assert fact.lifecycle_source == LifecycleSource.TRANSPORT, (
                     f"{pid}/{sid} is Recipe A validated but lifecycle_source != transport"
                 )
@@ -402,54 +449,44 @@ class TestInventoryDataIntegrity:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_all_harness_surface_facts,
         )
+
         for (pid, sid), fact in get_all_harness_surface_facts().items():
             if fact.recipe == "D":
                 assert fact.lifecycle_source == LifecycleSource.NONE, (
                     f"{pid}/{sid} is Recipe D but has lifecycle_source != none"
                 )
 
-    def test_unsupported_surfaces_have_O0_effective_level(self):
-        """Unsupported surfaces must have effective_production_level == O0."""
+    def test_no_non_validated_transport_source_without_validation(self):
+        """No non-validated surface declares a transport lifecycle source
+        (AS59: the transport source itself is only meaningful once proven —
+        there is no separate O-level ladder to check independently)."""
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
-            CapabilityFactValidationState,
             get_all_harness_surface_facts,
         )
-        for (pid, sid), fact in get_all_harness_surface_facts().items():
-            if fact.validation_state == CapabilityFactValidationState.UNSUPPORTED:
-                assert fact.effective_production_level.numeric == 0, (
-                    f"{pid}/{sid} is unsupported but effective level > O0"
-                )
 
-    def test_no_non_validated_O1_plus_transport(self):
-        """No non-validated surface has transport lifecycle source with O1+."""
-        from audiagentic.components.providers.services.session.harness_observability_inventory import (
-            CapabilityFactValidationState,
-            get_all_harness_surface_facts,
-        )
         for (pid, sid), fact in get_all_harness_surface_facts().items():
-            if (
-                fact.lifecycle_source == LifecycleSource.TRANSPORT
-                and fact.effective_production_level.numeric >= 1
-            ):
-                assert fact.validation_state == CapabilityFactValidationState.VALIDATED, (
-                    f"{pid}/{sid} claims transport+O1+ but is not validated"
+            if fact.lifecycle_source == LifecycleSource.TRANSPORT:
+                assert fact.evidence.validated, (
+                    f"{pid}/{sid} claims transport lifecycle source but is not validated"
                 )
 
     def test_supported_statuses_nonempty_only_when_validated(self):
         """Only validated surfaces may have non-empty supported_statuses."""
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
-            CapabilityFactValidationState,
             get_all_harness_surface_facts,
         )
+
         for (pid, sid), fact in get_all_harness_surface_facts().items():
             if fact.supported_statuses:
-                assert fact.validation_state == CapabilityFactValidationState.VALIDATED, (
+                assert fact.evidence.validated, (
                     f"{pid}/{sid} has supported_statuses but is not validated"
                 )
+
 
 # ---------------------------------------------------------------------------
 # Recipe A surface resolver integration test
 # ---------------------------------------------------------------------------
+
 
 class TestRecipeASurfaceResolverIntegration:
     """Resolver eligibility is derived from the platform-aware inventory."""
@@ -463,17 +500,20 @@ class TestRecipeASurfaceResolverIntegration:
 
         eligible_list = list_eligible_transport_observation_surfaces(platform="linux-amd64")
         for pid, sid in eligible_list:
-            assert is_eligible_transport_observation_publisher(
-                pid, sid, platform="linux-amd64",
-            ), f"{pid}/{sid} in list but not eligible"
+            assert is_eligible_transport_observation_publisher(pid, sid, platform="linux-amd64"), (
+                f"{pid}/{sid} in list but not eligible"
+            )
 
     def test_recipe_a_opencode_acp_eligible_on_linux(self):
         """opencode-acp is eligible on linux-amd64."""
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             is_eligible_transport_observation_publisher,
         )
+
         assert is_eligible_transport_observation_publisher(
-            "opencode", "opencode-acp", platform="linux-amd64",
+            "opencode",
+            "opencode-acp",
+            platform="linux-amd64",
         )
 
     def test_recipe_a_excludes_non_validated_on_linux(self):
@@ -481,19 +521,28 @@ class TestRecipeASurfaceResolverIntegration:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             is_eligible_transport_observation_publisher,
         )
+
         assert not is_eligible_transport_observation_publisher(
-            "codex", "codex-acp", platform="linux-amd64",
+            "codex",
+            "codex-acp",
+            platform="linux-amd64",
         )
         assert not is_eligible_transport_observation_publisher(
-            "gemini", "gemini-acp", platform="linux-amd64",
+            "gemini",
+            "gemini-acp",
+            platform="linux-amd64",
         )
         assert not is_eligible_transport_observation_publisher(
-            "copilot", "copilot-acp", platform="linux-amd64",
+            "copilot",
+            "copilot-acp",
+            platform="linux-amd64",
         )
+
 
 # ---------------------------------------------------------------------------
 # Platform-neutral eligibility conformance tests
 # ---------------------------------------------------------------------------
+
 
 class TestPlatformNeutralEligibility:
     """Platform support alone is not status evidence; AS29 surface validation is.
@@ -517,6 +566,7 @@ class TestPlatformNeutralEligibility:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
+
         fact = get_harness_surface_capability_fact("opencode", "opencode-acp")
         assert fact is not None
         # platform_evidence contains only the proven platform
@@ -531,6 +581,7 @@ class TestPlatformNeutralEligibility:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
+
         fact = get_harness_surface_capability_fact("codex", "codex-acp")
         assert fact is not None
         assert fact.platform_evidence == ()
@@ -540,10 +591,13 @@ class TestPlatformNeutralEligibility:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             is_eligible_transport_observation_publisher,
         )
+
         # codex-acp has no platform_evidence (empty = no restriction)
         # but it is NOT validated, so it is not eligible.
         assert not is_eligible_transport_observation_publisher(
-            "codex", "codex-acp", platform="linux-amd64",
+            "codex",
+            "codex-acp",
+            platform="linux-amd64",
         )
 
     def test_eligibility_gate_requires_effective_level(self):
@@ -551,9 +605,12 @@ class TestPlatformNeutralEligibility:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             is_eligible_transport_observation_publisher,
         )
+
         # opencode-cli-session is blocked, O0 — never eligible regardless of platform.
         assert not is_eligible_transport_observation_publisher(
-            "opencode", "opencode-cli-session", platform="linux-amd64",
+            "opencode",
+            "opencode-cli-session",
+            platform="linux-amd64",
         )
 
     def test_cross_platform_eligible_set_consistent(self):
@@ -576,14 +633,19 @@ class TestPlatformNeutralEligibility:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             is_eligible_transport_observation_publisher,
         )
+
         # opencode-acp does not list linux-386 — reject it.
         assert not is_eligible_transport_observation_publisher(
-            "opencode", "opencode-acp", platform="linux-386",
+            "opencode",
+            "opencode-acp",
+            platform="linux-386",
         )
+
 
 # ---------------------------------------------------------------------------
 # Markdown rendering test
 # ---------------------------------------------------------------------------
+
 
 class TestMarkdownRendering:
     """Inventory renders as deterministic markdown."""
@@ -592,6 +654,7 @@ class TestMarkdownRendering:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             render_harness_inventory_markdown,
         )
+
         rendered = render_harness_inventory_markdown()
         assert "# AS27 Harness Observability Inventory" in rendered
 
@@ -599,6 +662,7 @@ class TestMarkdownRendering:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             render_harness_inventory_markdown,
         )
+
         rendered = render_harness_inventory_markdown()
         assert "opencode-acp" in rendered
 
@@ -606,8 +670,137 @@ class TestMarkdownRendering:
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             render_harness_inventory_markdown,
         )
+
         rendered = render_harness_inventory_markdown()
         # Each row starts with "| "
         rows = [line for line in rendered.split("\n") if line.startswith("|")]
         # Header + separator + data rows
         assert len(rows) >= 10
+
+
+# ---------------------------------------------------------------------------
+# CC53: YAML-backed loader validation
+# ---------------------------------------------------------------------------
+
+
+class TestInventoryYamlLoader:
+    """CC53 (revised): each provider owns its own harness_observability
+    entries inside its own config/providers/<id>.yaml descriptor — there is
+    no central cross-provider inventory file anymore. This module
+    aggregates across every loaded provider descriptor
+    (descriptors/loader.py::load_providers_from_directory). These tests
+    prove the aggregation is correct against the real config tree and that
+    adding a surface to one provider's own file is a config-only change
+    that never touches another provider's file or any Python code."""
+
+    def test_real_provider_config_loads_without_error(self):
+        from audiagentic.components.providers.services.session.harness_observability_inventory import (
+            get_all_harness_surface_facts,
+        )
+
+        facts = get_all_harness_surface_facts()
+        assert len(facts) >= 20  # every known provider surface, real config
+
+    def test_malformed_evidence_field_raises_VAL_HINV_004(self):
+        from audiagentic.components.providers.services.session.harness_observability_inventory import (
+            _parse_entry,
+        )
+
+        with pytest.raises(AudiaGenticError, match="VAL-HINV-004"):
+            _parse_entry("acme", {"surface_id": "acme-cli", "evidence": "not-a-mapping"})
+
+    def test_unknown_lifecycle_source_raises_at_the_provider_descriptor_layer(self, tmp_path):
+        """The YAML-shape validation (including lifecycle_source) happens
+        one layer down, in descriptors/loader.py::_build_harness_observability
+        — proven directly against a real provider descriptor file here,
+        rather than against this module (which only sees already-valid
+        entries)."""
+        import yaml
+
+        from audiagentic.components.providers.descriptors.loader import load_provider_descriptor
+
+        bad_path = tmp_path / "acme.yaml"
+        bad_path.write_text(
+            yaml.safe_dump(
+                {
+                    "provider_id": "acme",
+                    "display_name": "Acme",
+                    "execution_isolation_tier": "no-isolation",
+                    "harness_observability": [
+                        {"surface_id": "acme-cli", "lifecycle_source": "not-a-real-source"}
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(AudiaGenticError):
+            load_provider_descriptor(bad_path)
+
+    def test_duplicate_surface_id_within_one_provider_raises_at_the_descriptor_layer(self, tmp_path):
+        import yaml
+
+        from audiagentic.components.providers.descriptors.loader import load_provider_descriptor
+
+        bad_path = tmp_path / "acme.yaml"
+        bad_path.write_text(
+            yaml.safe_dump(
+                {
+                    "provider_id": "acme",
+                    "display_name": "Acme",
+                    "execution_isolation_tier": "no-isolation",
+                    "harness_observability": [
+                        {"surface_id": "acme-cli"},
+                        {"surface_id": "acme-cli"},
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(AudiaGenticError, match="duplicate"):
+            load_provider_descriptor(bad_path)
+
+    def test_adding_a_surface_is_scoped_to_its_own_provider_file(self, tmp_path):
+        """The actual point of CC53: a brand-new provider's harness
+        observability facts live entirely in its own file, are picked up by
+        aggregation with zero changes elsewhere, and are eligible through
+        the same public functions every other provider uses."""
+        import yaml
+
+        from audiagentic.components.providers.descriptors.loader import (
+            load_providers_from_directory,
+        )
+        from audiagentic.components.providers.services.session import (
+            harness_observability_inventory as hoi,
+        )
+
+        config_dir = tmp_path / "providers"
+        config_dir.mkdir()
+        (config_dir / "newharness.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "provider_id": "newharness",
+                    "display_name": "New Harness",
+                    "execution_isolation_tier": "no-isolation",
+                    "harness_observability": [
+                        {
+                            "surface_id": "newharness-acp",
+                            "evidence": {"validated": True, "reference": "tests/fake.py"},
+                            "lifecycle_source": "transport",
+                            "supported_statuses": ["model-thinking"],
+                            "platform_evidence": ["linux-amd64"],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        providers = load_providers_from_directory(config_dir)
+        descriptor = providers["newharness"]
+        assert [e["surface_id"] for e in descriptor.harness_observability] == ["newharness-acp"]
+
+        fact = hoi._parse_entry("newharness", descriptor.harness_observability[0])
+        assert fact.evidence.validated is True
+        assert fact.lifecycle_source == LifecycleSource.TRANSPORT

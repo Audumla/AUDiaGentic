@@ -9,6 +9,7 @@ Dispatch edges one-way: agents_gateway_dispatch -> this module (no back-imports)
 Shared helpers from dispatch.py are imported lazily inside functions to avoid
 module-level cycles.
 """
+
 from __future__ import annotations
 
 import logging
@@ -21,6 +22,7 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
+
 
 # ── AS28 slice 4a helpers ────────────────────────────────────────
 def _build_default_surface_hint(provider_id: str) -> Any:
@@ -114,6 +116,7 @@ def _dispatch_session_request(
             request_runtime_root.mkdir(parents=True, exist_ok=True)
             request_runtime = request_runtime_root
             from audiagentic.components.providers import providers_api
+
             mcp_entries = providers_api.collect_management_mcp_launch_entries(project_root)
             # AS28 slice 4a: pass provider context — the session runtime
             # resolves the transport via providers_api.prepare_provider_session_transport.
@@ -134,12 +137,16 @@ def _dispatch_session_request(
                 idle_timeout_seconds=(
                     record.get("session-idle-timeout-seconds")
                     if record.get("session-idle-timeout-seconds") is not None
-                    else first_present(params, "session-idle-timeout-seconds", "session_idle_timeout_seconds")
+                    else first_present(
+                        params, "session-idle-timeout-seconds", "session_idle_timeout_seconds"
+                    )
                 ),
                 max_lifetime_seconds=(
                     record.get("session-max-lifetime-seconds")
                     if record.get("session-max-lifetime-seconds") is not None
-                    else first_present(params, "session-max-lifetime-seconds", "session_max_lifetime_seconds")
+                    else first_present(
+                        params, "session-max-lifetime-seconds", "session_max_lifetime_seconds"
+                    )
                 ),
                 # RV680: per-turn deadline and opt-in event-silence watchdog,
                 # profile-param driven; None → runtime defaults, 0 disables.
@@ -220,7 +227,9 @@ def _dispatch_session_request(
 
         _raise_if_cancelled(project_root, request_id)
         store.record_gateway_timeline(
-            project_root, request_id, "attempt.started",
+            project_root,
+            request_id,
+            "attempt.started",
             state=store.read_record(project_root, request_id)["state"],
             attributes={
                 "agent-profile-id": agent_profile_id,
@@ -231,7 +240,9 @@ def _dispatch_session_request(
             },
         )
         result = runtime.prompt_in_session(
-            project_root, session_id, dispatch_prompt,
+            project_root,
+            session_id,
+            dispatch_prompt,
             request_id=request_id,
             correlation_id=record.get("correlation-id"),
         )
@@ -243,7 +254,8 @@ def _dispatch_session_request(
         if request_runtime is not None:
             _quarantine_request_runtime(request_runtime, request_runtime_root.parent / "quarantine")
         store.append_owned_attempt(
-            project_root, request_id,
+            project_root,
+            request_id,
             owner_epoch=record["dispatch-owner-epoch"],
             worker_id=record["worker-id"],
             attempt_epoch=record["attempt-epoch"],
@@ -256,7 +268,9 @@ def _dispatch_session_request(
             finished_at=now_iso_z(),
         )
         return _transition_owned_attempt(
-            project_root, record, "failed",
+            project_root,
+            record,
+            "failed",
             updates={"error": exc, "session-id": session_id, "finished-at": now_iso_z()},
         )
 
@@ -268,7 +282,8 @@ def _dispatch_session_request(
         model_id = session_record.get("model-id") or profile.get("model_id")
         output_text = _session_output_from_result(result)
         store.append_owned_attempt(
-            project_root, request_id,
+            project_root,
+            request_id,
             owner_epoch=record["dispatch-owner-epoch"],
             worker_id=record["worker-id"],
             attempt_epoch=record["attempt-epoch"],
@@ -280,24 +295,27 @@ def _dispatch_session_request(
             finished_at=now_iso_z(),
         )
         # Post-turn: close continued session if keep_alive=false and quiescent.
-        if (
-            record.get("session-id") is not None
-            and record.get("session-keep-alive") is False
-        ):
+        if record.get("session-id") is not None and record.get("session-keep-alive") is False:
             _post_turn_close_continued_session_if_quiescent(
-                project_root, session_id, runtime,
+                project_root,
+                session_id,
+                runtime,
             )
         if request_runtime is not None and record.get("session-keep-alive") is not True:
             _cleanup_request_runtime(request_runtime)
         return _transition_owned_attempt(
-            project_root, record, "cancelled",
+            project_root,
+            record,
+            "cancelled",
             updates={
                 "provider-id": provider_id,
                 "model-id": model_id,
                 "output": output_text,
                 "completion": {
                     "stop-reason": result.stop_reason,
-                    "binding": binding_store.public_binding_projection(session_record.get("binding")),
+                    "binding": binding_store.public_binding_projection(
+                        session_record.get("binding")
+                    ),
                     "total-events": result.observations_delivered + result.dropped_observations,
                     "dropped-events": result.dropped_observations,
                 },
@@ -310,10 +328,9 @@ def _dispatch_session_request(
     session_record = session_store.read_session_record(project_root, session_id)
     model_id = session_record.get("model-id") or profile.get("model_id")
     output_text = _session_output_from_result(result)
-    from audiagentic.components.agents.agents_gateway_dispatch import _write_output_chunk
-    _write_output_chunk(project_root, request_id, output_text, 0)
     store.append_owned_attempt(
-        project_root, request_id,
+        project_root,
+        request_id,
         owner_epoch=record["dispatch-owner-epoch"],
         worker_id=record["worker-id"],
         attempt_epoch=record["attempt-epoch"],
@@ -321,21 +338,22 @@ def _dispatch_session_request(
         provider_id=provider_id,
         model_id=model_id,
         state="completed",
-            started_at=started_at,
-            finished_at=now_iso_z(),
-        )
+        started_at=started_at,
+        finished_at=now_iso_z(),
+    )
     # Post-turn: close continued session if keep_alive=false and quiescent.
-    if (
-        record.get("session-id") is not None
-        and record.get("session-keep-alive") is False
-    ):
+    if record.get("session-id") is not None and record.get("session-keep-alive") is False:
         _post_turn_close_continued_session_if_quiescent(
-            project_root, session_id, runtime,
+            project_root,
+            session_id,
+            runtime,
         )
     if request_runtime is not None and record.get("session-keep-alive") is not True:
         _cleanup_request_runtime(request_runtime)
     return _transition_owned_attempt(
-        project_root, record, "completed",
+        project_root,
+        record,
+        "completed",
         updates={
             "provider-id": provider_id,
             "model-id": model_id,

@@ -1,0 +1,31 @@
+# Crush — provider descriptor
+# CC53: minimal registered descriptor (no adapter code yet — candidate
+# route only). Mirrors aider.yaml's stub launch pattern for "known but not
+# wired" providers, so this file can own its own harness_observability
+# entries per ARCHITECTURE_STANDARDS.md Section 2 instead of living in a
+# central cross-provider Python list.
+
+provider_id: crush
+execution_isolation_tier: no-isolation
+display_name: "Crush"
+description: "Crush — candidate route, possible server/session event stream not yet source-pinned."
+
+capabilities:
+  launch:
+    mechanism:
+      recipes:
+        execution:
+          mode: stub
+          aliases: [crush]
+          message: "Crush adapter is registered; execution bridge not wired yet."
+
+# CC53: AS27 harness-observability inventory (this provider's own facts —
+# see harness_observability_inventory.py for the domain semantics).
+harness_observability:
+  - surface_id: crush-backend
+    candidate_source: possible server/session event route — needs primary-source evidence
+    evidence:
+      validated: false
+      reference: possible server/session event route — needs primary-source evidence
+    recipe: D
+    lifecycle_source: none

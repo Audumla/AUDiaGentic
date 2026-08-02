@@ -219,7 +219,11 @@ def run_provider_agent(
         model=ctx.model,
         agent_runtime=ctx.agent_runtime,
         mcp_surface=mcp_surface,
-        runner_params=runner_params,
+        # Raw list[str] is the legacy passthrough form (see runner_args below)
+        # — it is appended to the command after launch, never translated by
+        # a provider adapter's translate_runner_args(), which expects an
+        # actual RunnerParams object with .prompt/.verbose/.mode attributes.
+        runner_params=None if isinstance(runner_params, list) else runner_params,
         smoke=smoke,
     )
     env = {**build_base_run_env(ctx), **launch.environment}

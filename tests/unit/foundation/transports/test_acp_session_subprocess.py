@@ -4,6 +4,7 @@ Drives AcpSessionTransport against a real child process (fake_acp_agent.py)
 with no mocks. Proves context retention across turns and the no-orphan
 guarantee after close.
 """
+
 from __future__ import annotations
 
 import os
@@ -11,6 +12,9 @@ import sys
 from pathlib import Path
 
 import pytest
+
+# ACP transport requires the optional `audiagentic[acp]` extra; skip when missing.
+pytest.importorskip("acp", reason="ACP transport dependency not installed")
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.acp import (
@@ -85,9 +89,7 @@ async def test_close_kills_child_process_no_orphan(tmp_path):
         # ProcessLookupError; we catch both.
         try:
             os.kill(child_pid, 0)
-            raise AssertionError(
-                f"Child process {child_pid} still alive after close() — orphan!"
-            )
+            raise AssertionError(f"Child process {child_pid} still alive after close() — orphan!")
         except (ProcessLookupError, OSError):
             pass  # expected: process is dead
     finally:
@@ -187,6 +189,32 @@ async def test_intra_turn_event_ordering_model_tool_model(tmp_path):
         # Verify terminal result event exists
         result_events = [e for e in result.events if e.terminal]
         assert len(result_events) > 0, "no terminal result event"
-        assert result_events[0].kind == "result", f"terminal event should be 'result', got {result_events[0].kind}"
+        assert result_events[0].kind == "result", (
+            f"terminal event should be 'result', got {result_events[0].kind}"
+        )
+    finally:
+        await transport.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(_SUBPROCESS_TIMEOUT)
+async def test_write_read_terminal_are_real_over_the_live_acp_wire(tmp_path):
+    """AS60: the fake agent drives write_text_file/read_text_file/
+    create_terminal/wait_for_terminal_exit/terminal_output/release_terminal
+    for real over a live subprocess — not mocked at any layer. The agent
+    reports success via its final assistant message once it has itself
+    verified the round trip, so this test only needs to check that message
+    plus the file this client's write_text_file implementation actually put
+    on disk."""
+    launch = AcpLaunch(executable=sys.executable, args=(_FAKE_AGENT,))
+    transport = AcpSessionTransport(launch, cwd=tmp_path)
+
+    try:
+        await transport.open()
+        result = await transport.prompt("test-fs-terminal")
+
+        texts = [e.text for e in result.events if e.kind == "assistant-message"]
+        assert texts == ["AS60_OK"], f"fs/terminal round trip failed: events={result.events}"
+        assert (tmp_path / "as60_proof.txt").read_text(encoding="utf-8") == "AS60_FS_PROOF"
     finally:
         await transport.close()
