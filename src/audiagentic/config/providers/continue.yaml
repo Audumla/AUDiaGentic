@@ -30,6 +30,7 @@ capabilities:
       reader: "audiagentic.components.providers.adapters.continue_.mcp_format:read_continue_json"
       writer: "audiagentic.components.providers.adapters.continue_.mcp_format:write_continue_json"
       remover: "audiagentic.components.providers.adapters.continue_.mcp_format:remove_continue_json"
+      transports: [stdio, http]  # writer emits url-form entries
       format: "continue-json"
       refresh_mode: "restart-required"
 

@@ -34,6 +34,7 @@ capabilities:
       reader: "audiagentic.components.providers.adapters.opencode.mcp_format:read_opencode_mcp"
       writer: "audiagentic.components.providers.adapters.opencode.mcp_format:write_opencode_mcp"
       remover: "audiagentic.components.providers.adapters.opencode.mcp_format:remove_opencode_mcp"
+      transports: [stdio, http]  # writer emits url-form entries
       format: "opencode-mcp"
       refresh_mode: "file-watch"
 
