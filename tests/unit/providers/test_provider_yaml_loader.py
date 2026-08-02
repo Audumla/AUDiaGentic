@@ -237,3 +237,137 @@ class TestLoadProvidersFromDirectory:
         assert providers["claude"].vendor_key_injection == {}
         assert providers["pi"].vendor_key_injection["anthropic"] == "env:ANTHROPIC_API_KEY"
         assert providers["qwen"].vendor_key_injection["google"] == "env:GEMINI_API_KEY"
+
+
+class TestManagedConfigTransports:
+    """`transports` replaced the old boolean `remote` flag.
+
+    It declares which entry shapes an adapter's registered reader/writer
+    actually implement. That distinction matters: the previous flag conflated
+    "the harness format supports remote" with "our writer emits remote", so
+    goose declared remote support its writer could not serialize and silently
+    dropped the url.
+    """
+
+    def test_every_mcp_adapter_declares_transports_explicitly(self) -> None:
+        """There is no default: omission is a load error, not a stdio claim.
+
+        The previous boolean silently treated "undeclared" as "stdio only",
+        which is how eleven adapters stayed misdeclared. Absence must not
+        manufacture a capability.
+        """
+        providers = load_providers_from_directory(get_providers_config_dir())
+        for provider_id, descriptor in sorted(providers.items()):
+            if descriptor.mcp_config is None:
+                continue
+            assert descriptor.mcp_config.transports, (
+                f"{provider_id} has an mcp_config with no transports"
+            )
+
+    def test_transports_absent_from_domain_neutral_kinds(self) -> None:
+        """hooks/lsp-config/plugins/models carry no transport concept."""
+        providers = load_providers_from_directory(get_providers_config_dir())
+        for provider_id, descriptor in sorted(providers.items()):
+            for attr in ("hooks_config", "language_servers_config",
+                         "model_config", "plugin_config"):
+                spec = getattr(descriptor, attr, None)
+                if spec is None:
+                    continue
+                assert not hasattr(spec, "transports"), (
+                    f"{provider_id}.{attr} carries a transports field; the "
+                    f"transport concept belongs to mcp-config-spec only"
+                )
+
+    def test_missing_transports_is_a_load_error(self) -> None:
+        """An mcp mechanism without transports fails loudly."""
+        from audiagentic.components.providers.descriptors.loader import (
+            _build_mcp_config_spec,
+        )
+        from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+        with pytest.raises(AudiaGenticError) as exc:
+            _build_mcp_config_spec({
+                "config_path": ".mcp.json",
+                "reader": "audiagentic.foundation.mcp.json_format:read_mcp_json",
+                "writer": "audiagentic.foundation.mcp.json_format:write_mcp_json",
+                "remover": "audiagentic.foundation.mcp.json_format:remove_mcp_json",
+            })
+        assert exc.value.code == "VAL-PCAP-012"
+
+    def test_http_declaration_survives_a_real_round_trip(self, tmp_path: Path) -> None:
+        """Every provider claiming http must actually persist a url-form entry.
+
+        This is a behavioural check, not a source grep: write a remote entry
+        through the declared writer, read it back through the declared reader,
+        and require the endpoint to survive. Goose previously declared remote
+        support while its writer hardcoded ``type: "stdio"``, silently dropping
+        the url — exactly what this catches.
+        """
+        from audiagentic.foundation.mcp import McpServerEntry
+
+        providers = load_providers_from_directory(get_providers_config_dir())
+        for provider_id, descriptor in sorted(providers.items()):
+            spec = descriptor.mcp_config
+            if spec is None or "http" not in spec.transports:
+                continue
+
+            target = tmp_path / provider_id / "config-under-test"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            entry = McpServerEntry(
+                name="round-trip",
+                url="https://example.invalid/mcp/bank/",
+                headers={"Authorization": "Bearer tok"},
+                transport="http",
+            )
+            spec.writer(target, {"round-trip": entry})
+            restored = spec.reader(target)
+
+            assert "round-trip" in restored, (
+                f"{provider_id} declares http but the entry vanished on read-back"
+            )
+            got = restored["round-trip"]
+            assert got.is_remote, (
+                f"{provider_id} declares http but the entry came back non-remote — "
+                f"the writer likely serialized it as a stdio command"
+            )
+            assert got.url == "https://example.invalid/mcp/bank/", (
+                f"{provider_id} declares http but the url did not survive: {got.url!r}"
+            )
+
+    def test_unknown_transport_is_a_load_error(self) -> None:
+        """An unrecognised transport fails loudly rather than being ignored."""
+        from audiagentic.components.providers.descriptors.loader import (
+            _build_mcp_config_spec,
+        )
+        from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+        with pytest.raises(AudiaGenticError) as exc:
+            _build_mcp_config_spec({
+                "config_path": ".mcp.json",
+                "reader": "audiagentic.foundation.mcp.json_format:read_mcp_json",
+                "writer": "audiagentic.foundation.mcp.json_format:write_mcp_json",
+                "remover": "audiagentic.foundation.mcp.json_format:remove_mcp_json",
+                "transports": ["stdio", "carrier-pigeon"],
+            })
+        assert exc.value.code == "VAL-PCAP-012"
+        assert "carrier-pigeon" in str(exc.value.details)
+
+    def test_no_provider_still_uses_the_removed_remote_flag(self) -> None:
+        """The boolean is gone; a stale `remote:` key must not silently no-op."""
+        import yaml
+
+        config_dir = get_providers_config_dir()
+        offenders = []
+        for path in sorted(config_dir.glob("*.yaml")):
+            if path.name.startswith("_"):
+                continue
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            for kind, entry in (data.get("capabilities") or {}).items():
+                entries = entry if isinstance(entry, list) else [entry]
+                for item in entries:
+                    if not isinstance(item, dict):
+                        continue
+                    mechanism = item.get("mechanism") or {}
+                    if isinstance(mechanism, dict) and "remote" in mechanism:
+                        offenders.append(f"{path.name}:{kind}")
+        assert not offenders, f"stale `remote:` key still present in {offenders}"

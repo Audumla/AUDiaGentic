@@ -17,8 +17,9 @@ from audiagentic.foundation.config.refs import resolve_ref
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.paths.names import get_package_providers_config_dir
 from audiagentic.foundation.toolchains.config.managed_config import (
-    REMOTE_CAPABILITY,
+    KNOWN_TRANSPORTS,
     ManagedConfigSpec,
+    McpConfigSpec,
 )
 from audiagentic.foundation.transports.session_surface import (
     ContentChannelCapability,
@@ -90,8 +91,10 @@ def _build_permissions(data: dict[str, Any]) -> ProviderPermissions:
 def _build_managed_config_spec(data: dict[str, Any]) -> ManagedConfigSpec:
     """Generic ManagedConfigSpec projector for managed-reconcile kinds.
 
-    Serves every managed-config-spec kind (mcp, models, plugins, hooks,
-    language-servers). The ``remote`` modifier is opt-in (mcp only).
+    Serves the domain-neutral managed-config-spec kinds (models, plugins,
+    hooks, language-servers). The ``mcp`` kind uses ``mcp-config-spec``, which
+    adds a required ``transports`` declaration — see
+    :func:`_build_mcp_config_spec`.
     """
     return ManagedConfigSpec(
         config_path=data["config_path"],
@@ -101,7 +104,50 @@ def _build_managed_config_spec(data: dict[str, Any]) -> ManagedConfigSpec:
         format=data.get("format", ""),
         refresh_mode=data.get("refresh_mode", "none"),
         reload_fn=resolve_ref(data["reload_fn"]) if "reload_fn" in data else None,
-        capabilities=frozenset({REMOTE_CAPABILITY}) if data.get("remote") else frozenset(),
+    )
+
+
+def _build_mcp_config_spec(data: dict[str, Any]) -> McpConfigSpec:
+    """Projector for the ``mcp`` kind's ``mcp-config-spec`` mechanism.
+
+    Identical to the generic managed-config projector plus a **required**
+    ``transports`` list naming the entry shapes this adapter's reader/writer
+    implement. There is deliberately no default: an omitted declaration used to
+    mean "stdio only", which had the loader assert a capability no author
+    stated and left eleven adapters silently misdeclared.
+    """
+    raw = data.get("transports")
+    if raw is None:
+        raise AudiaGenticError(
+            code="VAL-PCAP-012",
+            kind="providers",
+            message=(
+                "mcp mechanism must declare transports, a non-empty subset of "
+                f"{sorted(KNOWN_TRANSPORTS)}; omitting it is not a claim of stdio support"
+            ),
+            details={"known": sorted(KNOWN_TRANSPORTS)},
+        )
+    transports = [raw] if isinstance(raw, str) else list(raw)
+    unknown = sorted(set(transports) - KNOWN_TRANSPORTS)
+    if unknown:
+        raise AudiaGenticError(
+            code="VAL-PCAP-012",
+            kind="providers",
+            message=(
+                f"unknown mcp transports {unknown}; "
+                f"expected a subset of {sorted(KNOWN_TRANSPORTS)}"
+            ),
+            details={"transports": unknown, "known": sorted(KNOWN_TRANSPORTS)},
+        )
+    return McpConfigSpec(
+        config_path=data["config_path"],
+        reader=resolve_ref(data["reader"]),
+        writer=resolve_ref(data["writer"]),
+        remover=resolve_ref(data["remover"]),
+        format=data.get("format", ""),
+        refresh_mode=data.get("refresh_mode", "none"),
+        reload_fn=resolve_ref(data["reload_fn"]) if "reload_fn" in data else None,
+        transports=frozenset(transports),
     )
 
 
@@ -169,6 +215,8 @@ def _project_mechanism(mechanism_schema: str, raw: Any) -> Any:
         return None
     if mechanism_schema == "managed-config-spec":
         return _build_managed_config_spec(raw)
+    if mechanism_schema == "mcp-config-spec":
+        return _build_mcp_config_spec(raw)
     if mechanism_schema == "cli-install-recipe":
         return _build_cli_install(raw)
     if mechanism_schema == "permissions-struct":

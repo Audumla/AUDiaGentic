@@ -31,11 +31,11 @@ capabilities:
 
   mcp:
     mechanism:
-      remote: true   # streamable_http extension support
       config_path: "~/.config/goose/config.yaml"
       reader: "audiagentic.components.providers.adapters.goose.mcp_format:read_goose_yaml"
       writer: "audiagentic.components.providers.adapters.goose.mcp_format:write_goose_yaml"
       remover: "audiagentic.components.providers.adapters.goose.mcp_format:remove_goose_yaml"
+      transports: [stdio, http]  # goose extensions support type: streamable_http with uri/headers (INSTALL_MAP.md 9)
       format: "goose-yaml"
       refresh_mode: "restart-required"
 
