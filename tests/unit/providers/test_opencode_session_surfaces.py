@@ -3,7 +3,7 @@
 Loads the real OpenCode provider YAML and proves:
 - Duplicate prevention (distinct surface IDs, same version)
 - Distinct ACP vs CLI surface IDs (not interchangeable fallbacks)
-- Controls/content channels require validated evidence (AS59 rule)
+- Controls/content channels require validated evidence (AS67 rule)
 - Evidence matches what's actually proven in this repo
 - No raw command, token, secret, or native protocol identifier leaks
 """
@@ -134,7 +134,7 @@ class TestACPSurfaceProperties:
     def test_acp_evidence_validated_with_reference(self, acp):
         """ACP parent evidence.validated is True — at least one platform
 
-        (linux-amd64) is genuinely proven (AS59 rule 3b: a validated parent
+        (linux-amd64) is genuinely proven (AS67 rule 3b: a validated parent
         requires at least one validated platform, not that every platform be
         validated — Windows/macOS remain unvalidated declarations)."""
         assert acp.evidence.validated is True
@@ -218,7 +218,7 @@ class TestCLISessionSurfaceProperties:
         """CLI session has no content channels declared yet."""
         assert len(cli.content_channels) == 0
 
-# ── Controls/content require validated evidence (AS59 rule 2) ──────────────
+# ── Controls/content require validated evidence (AS67 rule 2) ──────────────
 
 class TestControlsRequireValidatedEvidence:
     """No surface declares controls/content channels without validated evidence."""
@@ -234,7 +234,7 @@ class TestControlsRequireValidatedEvidence:
 
     def test_validated_has_at_least_one_validated_platform(self):
         """If a parent's evidence.validated is True, at least one platform row
-        must also be validated (AS59 rule 3b — not every platform, just one;
+        must also be validated (AS67 rule 3b — not every platform, just one;
         cross-platform borrowing of PROOF is still not allowed elsewhere)."""
         desc = _load_opencode()
         for s in desc.session_surfaces:

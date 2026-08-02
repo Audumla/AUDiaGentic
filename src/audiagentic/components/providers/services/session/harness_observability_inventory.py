@@ -63,7 +63,7 @@ class HarnessSurfaceCapabilityFact:
     # Candidate source — what documentation or prior evidence points to
     candidate_source: str | None = None
 
-    # Validation evidence — replaces the three-field triple (AS59)
+    # Validation evidence — replaces the three-field triple (AS67)
     evidence: ValidationEvidence = field(default_factory=ValidationEvidence)
 
     # Recipe classification (A/B/C/D per AS27 spec)
@@ -211,7 +211,7 @@ def is_eligible_transport_observation_publisher(
     fact = get_harness_surface_capability_fact(provider_id, surface_id)
     if fact is None:
         return False
-    # Gate 1: validation + lifecycle source (AS59 — no O0-O4 ladder)
+    # Gate 1: validation + lifecycle source (AS67 — no O0-O4 ladder)
     base_eligible = fact.evidence.validated and fact.lifecycle_source == LifecycleSource.TRANSPORT
     if not base_eligible:
         return False
