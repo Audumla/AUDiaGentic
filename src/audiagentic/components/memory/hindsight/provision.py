@@ -116,7 +116,7 @@ def _resolve_family(
 # Recipe resolution — generic family recipes + provider compound recipes
 # ---------------------------------------------------------------------------
 
-_REMOTE_CAPABILITY = "remote"
+_HTTP_TRANSPORT = "http"
 _GENERIC_MCP = "hindsight-managed-mcp.yaml"
 _GENERIC_MCP_STDIO = "hindsight-managed-mcp-stdio.yaml"
 _PLUGIN_RECIPE = "hindsight-plugin.yaml"
@@ -166,7 +166,7 @@ def _resolve_recipe(
 
     family = _resolve_family(pid)
     if family == "managed-mcp":
-        if _REMOTE_CAPABILITY in _mcp_surface(pid, root).get("capabilities", []):
+        if _HTTP_TRANSPORT in _mcp_surface(pid, root).get("transports", []):
             return _RECIPE_DIR / _GENERIC_MCP, base_params
         return _RECIPE_DIR / _GENERIC_MCP_STDIO, {
             "PROVIDER": pid,

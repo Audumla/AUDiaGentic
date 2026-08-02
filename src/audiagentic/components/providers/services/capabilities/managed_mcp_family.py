@@ -11,7 +11,7 @@ from audiagentic.components.providers.contracts.managed_mcp import (
 )
 from audiagentic.components.providers.descriptors.registry import get_descriptor
 from audiagentic.foundation.mcp import McpServerEntry
-from audiagentic.foundation.toolchains.config.managed_config import REMOTE_CAPABILITY
+from audiagentic.foundation.toolchains.config.managed_config import TRANSPORT_HTTP
 
 from ..mcp.managed_mcp_registry import mcp_ownership_registry
 from ..mcp.mcp import (
@@ -66,13 +66,16 @@ def manage_mcp_entries(
     desired = _desired(request)
     if (
         any(entry.is_remote for _, entry in desired.values())
-        and REMOTE_CAPABILITY not in descriptor.mcp_config.capabilities
+        and TRANSPORT_HTTP not in descriptor.mcp_config.transports
     ):
         return _result(
             ok=False,
             supported=False,
             provider_id=provider_id,
-            action_needed="provider MCP config does not support remote entries",
+            action_needed=(
+                "provider MCP adapter does not implement the http transport; "
+                "declare transports: [stdio, http] once its reader/writer emit url-form entries"
+            ),
             error_code="CON-PMCP-001",
         )
 

@@ -41,7 +41,52 @@ class ManagedConfigSpec:
     format: str = ""
     refresh_mode: str = "none"
     reload_fn: Callable[[Path], dict[str, Any]] | None = None
-    capabilities: frozenset[str] = field(default_factory=frozenset)
+
+
+#: Entry transports an MCP config adapter can express.
+#:
+#: ``stdio`` — command/args-shaped entries.
+#: ``http``  — url-form (remote) entries.
+#:
+#: These state what the registered reader/writer **implement**, not what the
+#: harness supports. Declaring a transport we cannot serialize silently drops
+#: the entry's url; a harness whose own format supports a transport our adapter
+#: does not is a gap in the adapter and belongs in ``capability_facts`` as a
+#: limitation, not here.
+TRANSPORT_STDIO = "stdio"
+TRANSPORT_HTTP = "http"
+KNOWN_TRANSPORTS = frozenset({TRANSPORT_STDIO, TRANSPORT_HTTP})
+
+
+@dataclass(frozen=True)
+class McpConfigSpec(ManagedConfigSpec):
+    """Managed-config contract for the ``mcp`` kind.
+
+    MCP entries carry a transport; hooks, LSP configs and plugins do not. That
+    is why this is a separate schema rather than a field on the shared
+    :class:`ManagedConfigSpec` — a transport declaration on a hooks file is
+    meaningless, and a default would have the loader assert a capability no
+    author stated.
+
+    ``transports`` is **required**: a new MCP adapter cannot be registered
+    without saying which entry shapes it can faithfully persist.
+    """
+
+    transports: frozenset[str] = field(default_factory=frozenset)
+
+    def __post_init__(self) -> None:
+        if not self.transports:
+            raise _config_error(
+                2,
+                "mcp mechanism must declare transports (a non-empty subset of "
+                f"{sorted(KNOWN_TRANSPORTS)}); absence is not a claim of stdio support",
+            )
+        unknown = sorted(self.transports - KNOWN_TRANSPORTS)
+        if unknown:
+            raise _config_error(
+                2,
+                f"unknown mcp transports {unknown}; expected a subset of {sorted(KNOWN_TRANSPORTS)}",
+            )
 
 
 def resolve_managed_config_path(spec: ManagedConfigSpec, project_root: Path | None) -> Path:
@@ -236,11 +281,3 @@ def reload_managed_config(
         "method": "restart-required",
         "action_needed": f"restart {display_name} to apply config changes",
     }
-
-
-#: Capability flag recorded in :attr:`ManagedConfigSpec.capabilities` when a
-#: kind's format can express url-form (remote) entries — MCP-specific
-#: semantics preserved through the generic capability set rather than a
-#: named field (keeps the spec itself domain-neutral). Absence means
-#: stdio-shaped entries only.
-REMOTE_CAPABILITY = "remote"

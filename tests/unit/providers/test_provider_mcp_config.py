@@ -178,19 +178,58 @@ class TestGooseYamlFormat:
         assert "my-ext" in result
         assert result["my-ext"].command == "uvx"
 
-    def test_write_preserves_non_stdio_extensions(self, tmp_path: Path) -> None:
+    def test_write_preserves_unrelated_extensions(self, tmp_path: Path) -> None:
+        """Unrelated extensions survive, and a legacy list is normalised to a map."""
         import yaml
 
         path = tmp_path / "config.yaml"
         path.write_text(yaml.dump({"extensions": [{"name": "other", "type": "builtin"}]}))
         entry = McpServerEntry(name="srv", command="cmd", args=())
         write_goose_yaml(path, {"srv": entry})
-        import yaml as _yaml
 
-        data = _yaml.safe_load(path.read_text())
-        names = [e["name"] for e in data["extensions"]]
-        assert "other" in names
-        assert "srv" in names
+        data = yaml.safe_load(path.read_text())
+        assert isinstance(data["extensions"], dict), "writes emit goose's mapping form"
+        assert set(data["extensions"]) == {"other", "srv"}
+        assert data["extensions"]["other"]["type"] == "builtin"
+
+    def test_remote_entry_round_trips_as_streamable_http(self, tmp_path: Path) -> None:
+        """Goose's documented remote form is uri + headers under streamable_http.
+
+        Regression guard: the writer previously hardcoded type "stdio" and
+        emitted cmd/args, so a url-form entry silently lost its endpoint.
+        """
+        import yaml
+
+        path = tmp_path / "config.yaml"
+        entry = McpServerEntry(
+            name="remote-srv",
+            url="https://example.invalid/mcp/bank/",
+            headers={"Authorization": "Bearer tok"},
+            transport="http",
+        )
+        write_goose_yaml(path, {"remote-srv": entry})
+
+        raw = yaml.safe_load(path.read_text())["extensions"]["remote-srv"]
+        assert raw["type"] == "streamable_http"
+        assert raw["uri"] == "https://example.invalid/mcp/bank/"
+        assert raw["headers"] == {"Authorization": "Bearer tok"}
+        assert "cmd" not in raw
+
+        back = read_goose_yaml(path)["remote-srv"]
+        assert back.is_remote
+        assert back.url == "https://example.invalid/mcp/bank/"
+        assert back.headers == {"Authorization": "Bearer tok"}
+
+    def test_reads_legacy_list_shape(self, tmp_path: Path) -> None:
+        """Configs written by the previous list-emitting version still load."""
+        import yaml
+
+        path = tmp_path / "config.yaml"
+        path.write_text(yaml.dump({"extensions": [
+            {"name": "old", "type": "stdio", "cmd": "uvx", "args": ["x"]},
+        ]}))
+        result = read_goose_yaml(path)
+        assert result["old"].command == "uvx"
 
     def test_remove_entry(self, tmp_path: Path) -> None:
         path = tmp_path / "config.yaml"

@@ -25,6 +25,7 @@ capabilities:
       reader: "audiagentic.components.providers.adapters.openhands.toml_format:read_mcp_toml"
       writer: "audiagentic.components.providers.adapters.openhands.toml_format:write_mcp_toml"
       remover: "audiagentic.components.providers.adapters.openhands.toml_format:remove_mcp_toml"
+      transports: [stdio, http]  # writer emits url-form entries
       format: "mcp-toml"
       refresh_mode: "restart-required"
 

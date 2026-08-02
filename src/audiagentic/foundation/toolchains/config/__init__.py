@@ -14,8 +14,11 @@ from audiagentic.foundation.toolchains.config.managed_block import (
     remove_managed_block,
 )
 from audiagentic.foundation.toolchains.config.managed_config import (
-    REMOTE_CAPABILITY,
+    KNOWN_TRANSPORTS,
+    TRANSPORT_HTTP,
+    TRANSPORT_STDIO,
     ManagedConfigSpec,
+    McpConfigSpec,
     resolve_managed_config_path,
 )
 
@@ -24,7 +27,10 @@ __all__ = [
     "ConfigPatcher",
     "FragmentStore",
     "ManagedConfigSpec",
-    "REMOTE_CAPABILITY",
+    "McpConfigSpec",
+    "KNOWN_TRANSPORTS",
+    "TRANSPORT_HTTP",
+    "TRANSPORT_STDIO",
     "UNSET",
     "apply_managed_block",
     "load_config",

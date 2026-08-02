@@ -15,8 +15,11 @@ from audiagentic.components.providers.services.capabilities import managed_mcp_f
 
 
 def _descriptor(*, remote: bool = False):
+    # `transports` names the entry shapes the adapter's reader/writer implement;
+    # http is what allows a url-form entry to be written faithfully.
+    transports = frozenset({"stdio", "http"}) if remote else frozenset({"stdio"})
     return SimpleNamespace(
-        mcp_config=SimpleNamespace(capabilities=frozenset({"remote"}) if remote else frozenset()),
+        mcp_config=SimpleNamespace(transports=transports),
         automation_capability=lambda family_id: object() if family_id == "managed-mcp" else None,
     )
 

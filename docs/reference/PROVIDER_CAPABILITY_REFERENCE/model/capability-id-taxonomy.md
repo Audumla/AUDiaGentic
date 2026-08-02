@@ -34,7 +34,7 @@ Provider self-provides LSP via a callable hook that installs support, with an op
 
 #### `mcp`
 
-**Authority:** provisioned | **Cardinality:** single | **Family:** managed-mcp (modes: apply, prune, status) | **Mechanism:** managed-config-spec
+**Authority:** provisioned | **Cardinality:** single | **Family:** managed-mcp (modes: apply, prune, status) | **Mechanism:** mcp-config-spec
 
 Provider has a manageable MCP server config file with reader/writer/remover operations.
 

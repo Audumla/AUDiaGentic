@@ -28,11 +28,11 @@ capabilities:
 
   mcp:
     mechanism:
-      remote: false  # config format is stdio-only; url-form entries are not expressible
       config_path: ".codex/config.toml"
       reader: "audiagentic.components.providers.adapters.codex.mcp_format:read_codex_toml"
       writer: "audiagentic.components.providers.adapters.codex.mcp_format:write_codex_toml"
       remover: "audiagentic.components.providers.adapters.codex.mcp_format:remove_codex_toml"
+      transports: [stdio]  # codex-toml writer emits command/args entries only
       format: "codex-toml"
       refresh_mode: "restart-required"
 

@@ -903,8 +903,12 @@ async def refresh_provider_catalog(project_root: Path, provider_id: str) -> dict
 
 def _serialize_config_surface(kind: str, spec, project_root: Path) -> dict[str, Any]:
     """Serialize one managed-config surface: {kind, configured, path_scope,
-    resolved_path, format, refresh_mode, capabilities} — never callable reprs
-    or secret refs (MO11 step 3). Home prefixes redact to ``~``."""
+    resolved_path, format, refresh_mode} — never callable reprs or secret refs
+    (MO11 step 3). Home prefixes redact to ``~``.
+
+    ``transports`` is added only for the ``mcp`` kind, whose mechanism is an
+    :class:`McpConfigSpec`; hooks, LSP configs, plugins and models have no
+    transport concept and must not carry an invented one."""
     if spec is None:
         return {"kind": kind, "configured": False}
     from audiagentic.foundation.toolchains.config.managed_config import (
@@ -916,10 +920,12 @@ def _serialize_config_surface(kind: str, spec, project_root: Path) -> dict[str, 
         "configured": True,
         "format": spec.format,
         "refresh_mode": spec.refresh_mode,
-        "capabilities": sorted(spec.capabilities),
         "resolved_path": None,
         "path_scope": None,
     }
+    transports = getattr(spec, "transports", None)
+    if transports is not None:
+        entry["transports"] = sorted(transports)
     try:
         resolved = resolve_managed_config_path(spec, project_root)
     except Exception:  # noqa: BLE001 — callable paths may need runtime context

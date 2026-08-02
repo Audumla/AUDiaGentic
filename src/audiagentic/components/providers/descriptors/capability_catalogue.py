@@ -23,6 +23,7 @@ from audiagentic.components.providers.descriptors.base import (
 )
 from audiagentic.foundation.toolchains.config.managed_config import (
     ManagedConfigSpec,
+    McpConfigSpec,
 )
 
 # ── CapabilityKind ───────────────────────────────────────────────────────
@@ -76,6 +77,7 @@ MECHANISM_SCHEMA_MAP: dict[str, type] = {
     "cli-install-recipe": CliInstallRecipe,
     "host-capability": HostCapability,
     "managed-config-spec": ManagedConfigSpec,
+    "mcp-config-spec": McpConfigSpec,
     "permissions-struct": ProviderPermissions,
     "agent-file": AgentFile,
     "model-spec": ModelsSpec,

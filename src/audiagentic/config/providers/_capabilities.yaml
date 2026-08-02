@@ -68,7 +68,10 @@ kinds:
     authority: provisioned
     family_id: managed-mcp
     cardinality: single
-    mechanism_schema: managed-config-spec
+    # mcp-config-spec = managed-config-spec + required `transports`. MCP entries
+    # carry a transport; hooks/lsp-config/plugins do not, so the field lives
+    # here rather than on the shared schema.
+    mechanism_schema: mcp-config-spec
 
   hooks:
     domain: hook
