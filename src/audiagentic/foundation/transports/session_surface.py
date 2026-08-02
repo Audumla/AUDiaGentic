@@ -92,7 +92,7 @@ class ContentChannelId(StrEnum):
 
 
 # ---------------------------------------------------------------------------
-# Validation / evidence  (AS59 — simplified from O0-O4 ladder)
+# Validation / evidence  (AS67 — simplified from O0-O4 ladder)
 # ---------------------------------------------------------------------------
 
 

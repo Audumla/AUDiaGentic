@@ -194,7 +194,9 @@ class TestLoadProvidersFromDirectory:
                      # can own their harness_observability entries in their
                      # own file (previously only inventory rows in a central
                      # cross-provider Python list, no real descriptor at all).
-                     "kilo", "zed", "crush"}
+                     "kilo", "zed", "crush",
+                     # BR01: browser-driven ChatGPT provider descriptor.
+                     "gpt-auto"}
         loaded = set(providers)
         assert expected == loaded, f"Missing: {expected - loaded}, Extra: {loaded - expected}"
         for descriptor in providers.values():

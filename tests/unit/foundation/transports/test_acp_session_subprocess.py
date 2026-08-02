@@ -199,7 +199,7 @@ async def test_intra_turn_event_ordering_model_tool_model(tmp_path):
 @pytest.mark.asyncio
 @pytest.mark.timeout(_SUBPROCESS_TIMEOUT)
 async def test_write_read_terminal_are_real_over_the_live_acp_wire(tmp_path):
-    """AS60: the fake agent drives write_text_file/read_text_file/
+    """AS68: the fake agent drives write_text_file/read_text_file/
     create_terminal/wait_for_terminal_exit/terminal_output/release_terminal
     for real over a live subprocess — not mocked at any layer. The agent
     reports success via its final assistant message once it has itself
@@ -214,7 +214,7 @@ async def test_write_read_terminal_are_real_over_the_live_acp_wire(tmp_path):
         result = await transport.prompt("test-fs-terminal")
 
         texts = [e.text for e in result.events if e.kind == "assistant-message"]
-        assert texts == ["AS60_OK"], f"fs/terminal round trip failed: events={result.events}"
-        assert (tmp_path / "as60_proof.txt").read_text(encoding="utf-8") == "AS60_FS_PROOF"
+        assert texts == ["AS68_OK"], f"fs/terminal round trip failed: events={result.events}"
+        assert (tmp_path / "as68_proof.txt").read_text(encoding="utf-8") == "AS68_FS_PROOF"
     finally:
         await transport.close()

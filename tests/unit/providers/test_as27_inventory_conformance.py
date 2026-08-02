@@ -458,7 +458,7 @@ class TestInventoryDataIntegrity:
 
     def test_no_non_validated_transport_source_without_validation(self):
         """No non-validated surface declares a transport lifecycle source
-        (AS59: the transport source itself is only meaningful once proven —
+        (AS67: the transport source itself is only meaningful once proven —
         there is no separate O-level ladder to check independently)."""
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_all_harness_surface_facts,

@@ -76,30 +76,30 @@ class FakeAgent:
         # a mocked connection. Count is env-controlled for speed/tuning.
         prompt_text = _first_text(prompt)
         if prompt_text == "test-fs-terminal":
-            # AS60 real-subprocess proof: drive the client's fs/terminal
+            # AS68 real-subprocess proof: drive the client's fs/terminal
             # methods for real over the live ACP wire, not mocked. Writes a
             # file, reads it back, runs a real command, and reports success
             # via the final assistant message so the test can assert without
             # its own client-side introspection.
             write_result = await conn.write_text_file(
-                session_id=session_id, path="as60_proof.txt", content="AS60_FS_PROOF"
+                session_id=session_id, path="as68_proof.txt", content="AS68_FS_PROOF"
             )
-            read_result = await conn.read_text_file(session_id=session_id, path="as60_proof.txt")
+            read_result = await conn.read_text_file(session_id=session_id, path="as68_proof.txt")
             term = await conn.create_terminal(
                 session_id=session_id,
                 command=sys.executable,
-                args=["-c", "print('AS60_TERMINAL_PROOF')"],
+                args=["-c", "print('AS68_TERMINAL_PROOF')"],
             )
             await conn.wait_for_terminal_exit(session_id=session_id, terminal_id=term.terminal_id)
             output = await conn.terminal_output(session_id=session_id, terminal_id=term.terminal_id)
             await conn.release_terminal(session_id=session_id, terminal_id=term.terminal_id)
             ok = (
-                read_result.content == "AS60_FS_PROOF"
-                and "AS60_TERMINAL_PROOF" in output.output
+                read_result.content == "AS68_FS_PROOF"
+                and "AS68_TERMINAL_PROOF" in output.output
             )
             await conn.session_update(
                 session_id,
-                update_agent_message_text("AS60_OK" if ok else "AS60_FAIL"),
+                update_agent_message_text("AS68_OK" if ok else "AS68_FAIL"),
             )
             return PromptResponse(stop_reason="end_turn")
 

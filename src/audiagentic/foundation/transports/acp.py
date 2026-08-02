@@ -10,9 +10,12 @@ for it, it doesn't exist in the tree; treat this docstring as the
 authoritative description until it is). "Soft-frozen" means: stable by
 default, not immutable — thaw it via a plan review (recorded in the
 plan item that motivates the change) rather than editing silently. See
-AS60 for an active thaw of this contract (fs/terminal Client methods,
-currently NotImplementedError stubs, need real execution wired through
-the same turn.emit(...) forwarding request_permission already uses).
+AS68 for the recorded thaw of this contract: the fs/terminal Client
+methods are implemented for real (path-confined file I/O and bounded
+subprocess terminals), forwarding outcomes through the same
+turn.emit(...) channel request_permission already uses. ``create_elicitation``
+remains an intentional NotImplementedError — no evidenced consumer yet,
+per the evidence-led scope rule in ARCHITECTURE_STANDARDS §3.
 
 Session lifecycle extension (RV512 on MA18, plan agent-sessions AS01):
 ``AcpSessionTransport`` keeps one child process and one protocol session
@@ -62,7 +65,7 @@ ERR_SESSION_NOT_OPEN = "CON-ACP-001"
 # advertise agent_capabilities.load_session — never silently falls back to
 # a fresh session (AS49 acceptance criteria: no fallback route for resume).
 ERR_RESUME_UNSUPPORTED = "CON-ACP-004"
-# AS60: real fs/terminal Client execution (thaw of AS28's control-only scope).
+# AS68: real fs/terminal Client execution (thaw of AS28's control-only scope).
 ERR_FS_ESCAPE = "CON-ACP-005"
 ERR_UNKNOWN_TERMINAL = "CON-ACP-006"
 ERR_FS_OPERATION_FAILED = "EXT-ACP-004"
@@ -503,7 +506,7 @@ class _TurnPipeline:
 
 @dataclass
 class _TerminalHandle:
-    """AS60: one live `create_terminal`-spawned subprocess owned by this
+    """AS68: one live `create_terminal`-spawned subprocess owned by this
     transport's ACP session client. `output`/`truncated`/`exit_status` are
     updated by the background drain task; `terminal_output`/
     `wait_for_terminal_exit` read them, never touch the process directly."""
@@ -609,7 +612,7 @@ class AcpSessionTransport:
         self._pre_spawn_hook = pre_spawn_hook
         self._hook_state: Any = None
         self.dropped_between_turns = 0
-        # AS60: real fs/terminal Client execution — live terminals created
+        # AS68: real fs/terminal Client execution — live terminals created
         # by the agent via create_terminal, keyed by terminal_id.
         self._terminals: dict[str, _TerminalHandle] = {}
 
@@ -814,7 +817,7 @@ class AcpSessionTransport:
                         None,
                     )
 
-            # AS60 (2026-07-30): these were originally hard NotImplementedError
+            # AS68 (2026-07-30): these were originally hard NotImplementedError
             # stubs on the theory that AS28's scope was "control/observation
             # only." That theory doesn't hold — in ACP the client IS the
             # execution backend for fs/terminal; the agent has no filesystem
@@ -1232,7 +1235,7 @@ class AcpSessionTransport:
         self._closed = True
         self._current_turn = None
 
-        # AS60: any terminals the agent created but never released must not
+        # AS68: any terminals the agent created but never released must not
         # outlive this transport — cancel their drain tasks and kill the
         # subprocess directly (release_terminal's polite path was never
         # called by the agent, so this is the only remaining guarantee).

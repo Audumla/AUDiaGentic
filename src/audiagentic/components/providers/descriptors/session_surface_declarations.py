@@ -67,7 +67,7 @@ class SessionSurfaceDeclaration:
     source_idempotency: bool = False
     # Content channels (bounded, foundation enums)
     content_channels: tuple[ContentChannelCapability, ...] = ()
-    # Validation / platform evidence (AS59 — simplified)
+    # Validation / platform evidence (AS67 — simplified)
     evidence: ValidationEvidence = field(default_factory=ValidationEvidence)
     platforms: tuple[PlatformEvidence, ...] = ()
     # Descriptor-local adapter reference — a dotted path string, NOT resolved.

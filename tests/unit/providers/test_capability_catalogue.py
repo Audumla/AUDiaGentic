@@ -197,7 +197,7 @@ def test_all_providers_validate_against_catalogue():
     own harness_observability entries) — 16 + 3 = 19.
     """
     descriptors = all_descriptors()
-    assert len(descriptors) == 19, f"Expected 19 providers, got {len(descriptors)}"
+    assert len(descriptors) == 20, f"Expected 20 providers, got {len(descriptors)}"
 
     for pid, desc in descriptors.items():
         validate_provider_capability_facts(desc)  # raises if any fact fails

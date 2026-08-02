@@ -100,7 +100,7 @@ def _fake_surface_decl(
     ``evidence`` defaults to an unvalidated ``ValidationEvidence()`` — pass an
     explicit ``ValidationEvidence(validated=True, reference=...)`` for tests
     that need a proven declaration. Declared-but-unvalidated is a legitimate,
-    non-blocking resolution outcome (AS59), not an error state — do not
+    non-blocking resolution outcome (AS67), not an error state — do not
     conflate "resolved successfully" with "evidence.validated is True" when
     asserting on results built from the default (unvalidated) fixture.
     """

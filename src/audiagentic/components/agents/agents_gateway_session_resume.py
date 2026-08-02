@@ -62,7 +62,7 @@ ERR_IDEMPOTENT_REPLAY_OF_FAILURE = "CON-AGW-116"
 # AS29's declaration schema only requires evidence.validated=True for
 # controls/content_channels (session_surface_declarations.py rule 2) — it
 # never gates identity_operations (open/attach-existing/resume-by-ref/
-# discover) the same way, in either the old O-ladder model or AS59's
+# discover) the same way, in either the old O-ladder model or AS67's
 # ValidationEvidence collapse. A YAML can legally declare
 # resume-by-ref: supported with evidence.validated=False. Resume is the one
 # operation where treating an unproven capability as real is worst, so this
