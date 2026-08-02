@@ -285,7 +285,7 @@ class TestUnsupportedNoLaunch:
         assert not prepared.surface.validation.evidence.validated
 
     def test_unvalidated_high_level_transport_none(self, tmp_path: Path):
-        """A declared-but-unvalidated surface returns transport=None (AS59:
+        """A declared-but-unvalidated surface returns transport=None (AS67:
         no more O-level ceiling — public_execution's own gate requires
         evidence.validated=True to build a transport at all)."""
         descriptor = _fake_descriptor(
@@ -309,7 +309,7 @@ class TestUnsupportedNoLaunch:
         assert not prepared.surface.validation.evidence.validated
 
     def test_blocked_declaration_transport_none(self, tmp_path: Path):
-        """An unvalidated declaration (no separate 'blocked' state in AS59)
+        """An unvalidated declaration (no separate 'blocked' state in AS67)
         returns transport=None."""
         descriptor = _fake_descriptor(
             "blocked-prov",

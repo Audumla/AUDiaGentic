@@ -486,7 +486,7 @@ def _build_session_surfaces(
                 )
             )
 
-        # --- evidence (AS59 — simplified validated:bool + reference:str) ---
+        # --- evidence (AS67 — simplified validated:bool + reference:str) ---
         evidence = _parse_evidence(item.get("evidence"), field_name="evidence")
 
         # --- platforms ---

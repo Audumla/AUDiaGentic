@@ -279,7 +279,7 @@ class TestRejectDuplicateKey:
 
 
 class TestRejectUnvalidatedControlsOrContent:
-    """Controls or content channels require evidence.validated=True (AS59)."""
+    """Controls or content channels require evidence.validated=True (AS67)."""
 
     def test_controls_without_validated_evidence_rejected(self):
         data = _min_valid_descriptor_data()

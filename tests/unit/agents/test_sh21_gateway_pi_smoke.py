@@ -458,15 +458,21 @@ class TestGatewayPiSmokeErrorPathRedaction:
         from audiagentic.foundation.contracts.errors import AudiaGenticError
 
         def failing_require_executable(*args, **kwargs) -> str:
+            # Mirror what the real cli.require_executable raises (cli.py:21):
+            # a wrong code here made the assertion below untestable.
             raise AudiaGenticError(
-                code="VAL-EXEC-001",
+                code="EXT-PROVCLI-001",
                 kind="providers",
                 message="executable not found: pi",
                 details={"provider-id": "pi"},
             )
 
+        # base_runner does `from ...adapters.cli import require_executable` at
+        # import time, so patching the name on `cli` is a no-op and this test
+        # used to execute a REAL provider against a REAL model. Patch the bound
+        # name in base_runner, which is what line 173 actually calls.
         monkeypatch.setattr(
-            "audiagentic.components.providers.adapters.cli.require_executable",
+            "audiagentic.components.providers.adapters.base_runner.require_executable",
             failing_require_executable,
         )
 

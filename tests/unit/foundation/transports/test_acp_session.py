@@ -95,7 +95,7 @@ def _install_sdk(monkeypatch, *, prompt_side_effect=None, proc=None, exited=None
     acp_mod.PROTOCOL_VERSION = 1
     acp_mod.spawn_agent_process = spawn
     acp_mod.text_block = lambda text: {"type": "text", "text": text}
-    # AS60: minimal response-model stand-ins for the fs/terminal Client
+    # AS68: minimal response-model stand-ins for the fs/terminal Client
     # methods — real acp.schema pydantic models aren't needed to prove this
     # module's own confinement/forwarding/tracking logic, just something
     # with the right attribute names.
@@ -502,7 +502,7 @@ async def test_real_wire_kinds_map_to_canonical(tmp_path, monkeypatch):
     assert "payload" not in tool.ext["acp"]
 
 
-# ── AS60: real fs/terminal Client execution ─────────────────────────────────
+# ── AS68: real fs/terminal Client execution ─────────────────────────────────
 
 def test_confine_path_allows_relative_and_absolute_paths_inside_root(tmp_path):
     transport = AcpSessionTransport(AcpLaunch("agent"), cwd=tmp_path)
@@ -564,7 +564,7 @@ async def test_create_terminal_runs_real_process_and_captures_output(tmp_path, m
     transport._current_turn = turn = _TurnPipeline(None)
 
     create_resp = await client.create_terminal(
-        "s1", sys.executable, args=["-c", "print('AS60_TERMINAL_PROOF')"],
+        "s1", sys.executable, args=["-c", "print('AS68_TERMINAL_PROOF')"],
     )
     terminal_id = create_resp.terminal_id
     assert terminal_id in transport._terminals
@@ -573,7 +573,7 @@ async def test_create_terminal_runs_real_process_and_captures_output(tmp_path, m
     assert exit_resp.exit_code == 0
 
     output_resp = await client.terminal_output("s1", terminal_id)
-    assert "AS60_TERMINAL_PROOF" in output_resp.output
+    assert "AS68_TERMINAL_PROOF" in output_resp.output
     assert output_resp.truncated is False
 
     release_resp = await client.release_terminal("s1", terminal_id)
