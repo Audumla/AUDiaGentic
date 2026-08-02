@@ -51,6 +51,16 @@ TAP_ADDRESS_ENV = "AUDIAGENTIC_PI_TAP_ADDRESS"
 TAP_AUTHKEY_ENV = "AUDIAGENTIC_PI_TAP_AUTHKEY"
 _STDERR_CAPTURE_BOUND = 4096
 
+# AS41 diagnostic: when the real `pi` child exits unexpectedly (EOF before
+# pi-acp completes a turn), the shim's own stderr is the only place that can
+# carry the child's crash reason to a human. The shim already captures a
+# bounded stderr buffer internally; this env var makes it dump that buffer to
+# the shim's own stderr on non-zero exit, so a test harness (or any parent
+# reading the shim's stderr) can see *why* the child died instead of a silent
+# EOF. Default off to preserve byte-transparency in production; the e2e
+# diagnostic test sets it.
+_STDERR_DUMP_ON_CRASH_ENV = "AUDIAGENTIC_PI_TAP_DUMP_STDERR_ON_CRASH"
+
 
 class _TapSink:
     """Best-effort, fail-open forwarder to AG's tap connection.
@@ -191,10 +201,15 @@ def run_tee(
 
         _job_handle = adopt_pid_into_kill_job(child_pid)
     tap = _TapSink(tap_address, tap_authkey, connect_timeout=tap_connect_timeout)
+    stderr_captured = bytearray()
+
+    def _drain_and_capture() -> None:
+        stderr_captured.extend(_drain_stderr(child.stderr))
+
     threads = [
         threading.Thread(target=_pump_stdin, args=(stdin, child.stdin), daemon=True),
         threading.Thread(target=_pump_stdout, args=(child.stdout, stdout, tap), daemon=True),
-        threading.Thread(target=_drain_stderr, args=(child.stderr,), daemon=True),
+        threading.Thread(target=_drain_and_capture, daemon=True),
     ]
     for t in threads:
         t.start()
@@ -207,6 +222,20 @@ def run_tee(
 
         try:
             ctypes.windll.kernel32.CloseHandle(_job_handle)
+        except OSError:
+            pass
+    # AS41 diagnostic: on non-zero exit, dump the child's captured stderr to
+    # our own stderr so a parent reading it can see the crash reason. Gated by
+    # an env var (default off) to preserve byte-transparency in production.
+    if exit_code != 0 and os.environ.get(_STDERR_DUMP_ON_CRASH_ENV) == "1" and stderr_captured:
+        try:
+            sys.stderr.write(
+                f"\n[rpc_tap_shim] child exited code={exit_code}; "
+                f"captured stderr (<= {_STDERR_CAPTURE_BOUND} bytes):\n"
+            )
+            sys.stderr.write(stderr_captured.decode("utf-8", errors="replace"))
+            sys.stderr.write("\n[rpc_tap_shim] end captured stderr\n")
+            sys.stderr.flush()
         except OSError:
             pass
     return exit_code

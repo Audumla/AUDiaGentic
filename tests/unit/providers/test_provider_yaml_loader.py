@@ -189,7 +189,12 @@ class TestLoadProvidersFromDirectory:
         providers = load_providers_from_directory(get_providers_config_dir())
         expected = {"aider", "antigravity", "claude", "cline", "codex", "continue",
                      "copilot", "gemini", "goose", "local-openai", "opencode",
-                     "openhands", "pi", "plandex", "qwen", "roo"}
+                     "openhands", "pi", "plandex", "qwen", "roo",
+                     # CC53: minimal registered descriptors so these providers
+                     # can own their harness_observability entries in their
+                     # own file (previously only inventory rows in a central
+                     # cross-provider Python list, no real descriptor at all).
+                     "kilo", "zed", "crush"}
         loaded = set(providers)
         assert expected == loaded, f"Missing: {expected - loaded}, Extra: {loaded - expected}"
         for descriptor in providers.values():

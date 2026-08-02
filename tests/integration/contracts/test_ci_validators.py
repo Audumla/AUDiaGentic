@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 FIXTURES_DIR = ROOT / "docs" / "examples" / "fixtures"
+
+def _env_with_pythonpath() -> dict[str, str]:
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(ROOT / "src")
+    return env
 
 
 def test_validate_ids_fails_on_bad_fixture(tmp_path: Path) -> None:
@@ -30,6 +36,7 @@ providers:
         cwd=ROOT,
         capture_output=True,
         text=True,
+        env=_env_with_pythonpath(),
     )
     assert result.returncode == 2
 
@@ -44,8 +51,8 @@ def test_validate_schemas_fails_on_bad_fixture() -> None:
             cwd=ROOT,
             capture_output=True,
             text=True,
+            env=_env_with_pythonpath(),
         )
         assert result.returncode == 2
     finally:
         bad_fixture.write_text(backup, encoding="utf-8")
-

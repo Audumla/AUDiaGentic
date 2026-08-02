@@ -284,6 +284,16 @@ class ProviderDescriptor:
     # backward compatibility.
     session_surfaces: tuple[SessionSurfaceDeclaration, ...] = field(default_factory=tuple)
 
+    # CC53: AS27 harness-observability inventory facts, owned by this
+    # provider's own descriptor (not a central cross-provider Python list —
+    # ARCHITECTURE_STANDARDS.md Section 2). Each entry is a validated raw
+    # dict; the domain conversion (str -> LifecycleSource enum, etc.) is the
+    # services/session layer's concern, not the descriptor loader's — this
+    # layer only proves the YAML shape is structurally valid. Empty by
+    # default; most providers declare zero or one entry, a few (opencode,
+    # codex, claude, gemini, pi, continue) declare two surface variants.
+    harness_observability: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+
     # ── Capability lookup (PC02 unified accessors) ───────────────────────
 
     def get_capability(self, kind_id: str) -> Capability | None:

@@ -6,6 +6,7 @@ the provider MCP configs and surface files (CLAUDE.md etc.) reflect correct stat
 All tests use tmp_path sandboxes — no Docker required.  The companion e2e tests
 (test_planning_mcp_servers.py) verify the MCP servers respond correctly.
 """
+
 from __future__ import annotations
 
 import json
@@ -34,10 +35,10 @@ _SURFACE_FILES = ["CLAUDE.md", "AGENTS.md"]
 
 _MCP_CONFIG_PATHS: dict[str, str] = {
     "mcp-json-claude": ".mcp.json",
-    "opencode-mcp":    ".opencode/opencode.json",
+    "opencode-mcp": ".opencode/opencode.json",
     "mcp-json-gemini": ".gemini/settings.json",
-    "goose-yaml":      ".goose/config.yaml",
-    "continue-json":   ".continue/config.json",
+    "goose-yaml": ".config/goose/config.yaml",  # ~/.config/goose/config.yaml
+    "continue-json": ".continue/config.json",
 }
 
 # Expected MCP server names from agent-planning component descriptor.
@@ -53,15 +54,12 @@ def setup_provider_surfaces(project_root: Path) -> None:
         if not target.exists():
             target.write_text("", encoding="utf-8")
 
-    (project_root / ".mcp.json").write_text(
-        json.dumps({"mcpServers": {}}), encoding="utf-8"
-    )
+    (project_root / ".mcp.json").write_text(json.dumps({"mcpServers": {}}), encoding="utf-8")
     _stub(project_root / ".opencode" / "opencode.json", '{"mcp": {}}')
     _stub(project_root / ".gemini" / "settings.json", '{"mcpServers": {}}')
-    _stub(
-        project_root / ".goose" / "config.yaml",
-        yaml.dump({"extensions": []}, default_flow_style=False),
-    )
+    # Goose config lives at ~/.config/goose/config.yaml (expanduser resolves HOME)
+    goose_config = Path.home() / ".config" / "goose" / "config.yaml"
+    _stub(goose_config, yaml.dump({"extensions": []}, default_flow_style=False))
     _stub(project_root / ".continue" / "config.json", json.dumps({"mcpServers": []}))
 
     from audiagentic.components.providers.descriptors.registry import (
@@ -70,6 +68,7 @@ def setup_provider_surfaces(project_root: Path) -> None:
     from audiagentic.components.providers.services.config.provider_config import (
         set_provider_enabled,
     )
+
     for provider_id in all_provider_descriptors():
         set_provider_enabled(project_root, provider_id, enabled=True)
 
@@ -94,6 +93,7 @@ def apply_surfaces(project_root: Path) -> None:
 
 def mcp_servers_in(project_root: Path, config_path: str) -> set[str]:
     import tomllib
+
     path = project_root / config_path
     if not path.exists():
         return set()
@@ -137,17 +137,24 @@ def managed_blocks_in(file_path: Path) -> set[str]:
         return set()
     titles = re.findall(r"^#{1,6}\s+(.+?)\s*$", match.group(1), re.MULTILINE)
     from audiagentic.components.providers.surfaces.contributions import load_surface_contributions
+
     id_by_title = {c.title.strip(): c.contribution_id for c in load_surface_contributions()}
     return {id_by_title[t.strip()] for t in titles if t.strip() in id_by_title}
 
 
 def mcp_config_paths(project_root: Path) -> list[str]:
-    return [rel for rel in _MCP_CONFIG_PATHS.values() if (project_root / rel).exists()]
+    paths = [rel for rel in _MCP_CONFIG_PATHS.values() if (project_root / rel).exists()]
+    # Goose config lives at ~/.config/goose/config.yaml (absolute HOME-resolved path)
+    goose_path = Path.home() / ".config" / "goose" / "config.yaml"
+    if goose_path.exists():
+        paths.append(str(goose_path))
+    return paths
 
 
 # ---------------------------------------------------------------------------
 # Component descriptor sanity
 # ---------------------------------------------------------------------------
+
 
 def test_component_declares_mgmt_and_planning_mcp_servers() -> None:
     desc = all_descriptors().get("agent-planning")
@@ -176,8 +183,12 @@ def test_planning_mcp_propagates_to_providers_only() -> None:
 # Provider MCP propagation — install / uninstall / disable
 # ---------------------------------------------------------------------------
 
-def test_install_propagates_ag_planning_to_all_provider_configs(tmp_path: Path) -> None:
+
+def test_install_propagates_ag_planning_to_all_provider_configs(
+    tmp_path: Path, monkeypatch
+) -> None:
     with component_sandbox(tmp_path, "plan-mcp-install") as sb:
+        monkeypatch.setenv("HOME", str(sb.repo))
         install_with_deps("project", sb.repo)
         install_with_deps("providers", sb.repo)
         setup_provider_surfaces(sb.repo)
@@ -191,8 +202,11 @@ def test_install_propagates_ag_planning_to_all_provider_configs(tmp_path: Path) 
             )
 
 
-def test_install_does_not_propagate_mgmt_mcp_to_provider_configs(tmp_path: Path) -> None:
+def test_install_does_not_propagate_mgmt_mcp_to_provider_configs(
+    tmp_path: Path, monkeypatch
+) -> None:
     with component_sandbox(tmp_path, "plan-mgmt-not-in-providers") as sb:
+        monkeypatch.setenv("HOME", str(sb.repo))
         install_with_deps("project", sb.repo)
         install_with_deps("providers", sb.repo)
         setup_provider_surfaces(sb.repo)
@@ -207,8 +221,9 @@ def test_install_does_not_propagate_mgmt_mcp_to_provider_configs(tmp_path: Path)
             )
 
 
-def test_uninstall_removes_ag_planning_from_provider_configs(tmp_path: Path) -> None:
+def test_uninstall_removes_ag_planning_from_provider_configs(tmp_path: Path, monkeypatch) -> None:
     with component_sandbox(tmp_path, "plan-mcp-uninstall") as sb:
+        monkeypatch.setenv("HOME", str(sb.repo))
         install_with_deps("project", sb.repo)
         install_with_deps("providers", sb.repo)
         setup_provider_surfaces(sb.repo)
@@ -230,9 +245,10 @@ def test_uninstall_removes_ag_planning_from_provider_configs(tmp_path: Path) -> 
             )
 
 
-def test_disable_removes_ag_planning_from_provider_configs(tmp_path: Path) -> None:
+def test_disable_removes_ag_planning_from_provider_configs(tmp_path: Path, monkeypatch) -> None:
     """Disabling removes managed provider MCP entries just like uninstall."""
     with component_sandbox(tmp_path, "plan-mcp-disable") as sb:
+        monkeypatch.setenv("HOME", str(sb.repo))
         install_with_deps("project", sb.repo)
         install_with_deps("providers", sb.repo)
         setup_provider_surfaces(sb.repo)
@@ -244,8 +260,7 @@ def test_disable_removes_ag_planning_from_provider_configs(tmp_path: Path) -> No
         for config_rel in mcp_config_paths(sb.repo):
             present = mcp_servers_in(sb.repo, config_rel)
             assert _PLANNING_SERVER not in present, (
-                f"{_PLANNING_SERVER} still in {config_rel} after disable. "
-                f"Present: {present}"
+                f"{_PLANNING_SERVER} still in {config_rel} after disable. Present: {present}"
             )
 
 
@@ -253,8 +268,10 @@ def test_disable_removes_ag_planning_from_provider_configs(tmp_path: Path) -> No
 # Surface contributions — CLAUDE.md injection
 # ---------------------------------------------------------------------------
 
-def test_install_injects_planning_process_contribution(tmp_path: Path) -> None:
+
+def test_install_injects_planning_process_contribution(tmp_path: Path, monkeypatch) -> None:
     with component_sandbox(tmp_path, "plan-surface-install") as sb:
+        monkeypatch.setenv("HOME", str(sb.repo))
         install_with_deps("project", sb.repo)
         install_with_deps("providers", sb.repo)
         setup_provider_surfaces(sb.repo)
@@ -267,8 +284,9 @@ def test_install_injects_planning_process_contribution(tmp_path: Path) -> None:
         )
 
 
-def test_disable_removes_planning_contribution_from_surfaces(tmp_path: Path) -> None:
+def test_disable_removes_planning_contribution_from_surfaces(tmp_path: Path, monkeypatch) -> None:
     with component_sandbox(tmp_path, "plan-surface-disable") as sb:
+        monkeypatch.setenv("HOME", str(sb.repo))
         install_with_deps("project", sb.repo)
         install_with_deps("providers", sb.repo)
         setup_provider_surfaces(sb.repo)
@@ -276,7 +294,9 @@ def test_disable_removes_planning_contribution_from_surfaces(tmp_path: Path) -> 
         apply_surfaces(sb.repo)
 
         claude_md = sb.repo / "CLAUDE.md"
-        assert _PLANNING_CONTRIBUTION in managed_blocks_in(claude_md), "sanity: block not present before disable"
+        assert _PLANNING_CONTRIBUTION in managed_blocks_in(claude_md), (
+            "sanity: block not present before disable"
+        )
 
         disable_component("agent-planning", sb.repo)
         apply_surfaces(sb.repo)
@@ -287,8 +307,9 @@ def test_disable_removes_planning_contribution_from_surfaces(tmp_path: Path) -> 
         )
 
 
-def test_enable_reinjection_restores_planning_contribution(tmp_path: Path) -> None:
+def test_enable_reinjection_restores_planning_contribution(tmp_path: Path, monkeypatch) -> None:
     with component_sandbox(tmp_path, "plan-surface-reenable") as sb:
+        monkeypatch.setenv("HOME", str(sb.repo))
         install_with_deps("project", sb.repo)
         install_with_deps("providers", sb.repo)
         setup_provider_surfaces(sb.repo)
@@ -299,7 +320,9 @@ def test_enable_reinjection_restores_planning_contribution(tmp_path: Path) -> No
 
         disable_component("agent-planning", sb.repo)
         apply_surfaces(sb.repo)
-        assert _PLANNING_CONTRIBUTION not in managed_blocks_in(claude_md), "sanity: block should be gone after disable"
+        assert _PLANNING_CONTRIBUTION not in managed_blocks_in(claude_md), (
+            "sanity: block should be gone after disable"
+        )
 
         enable_component("agent-planning", sb.repo)
         apply_surfaces(sb.repo)
@@ -310,8 +333,9 @@ def test_enable_reinjection_restores_planning_contribution(tmp_path: Path) -> No
         )
 
 
-def test_uninstall_removes_planning_contribution_from_surfaces(tmp_path: Path) -> None:
+def test_uninstall_removes_planning_contribution_from_surfaces(tmp_path: Path, monkeypatch) -> None:
     with component_sandbox(tmp_path, "plan-surface-uninstall") as sb:
+        monkeypatch.setenv("HOME", str(sb.repo))
         install_with_deps("project", sb.repo)
         install_with_deps("providers", sb.repo)
         setup_provider_surfaces(sb.repo)
@@ -334,6 +358,7 @@ def test_uninstall_removes_planning_contribution_from_surfaces(tmp_path: Path) -
 # Lifecycle result contract (EV01)
 # ---------------------------------------------------------------------------
 
+
 def test_install_result_has_no_sync_field(tmp_path: Path) -> None:
     """EV01 deleted the 'sync' advisory: the harness lifecycle subscriber now
     decides reload/refresh itself (see tests/unit/lifecycle/test_harness_seam.py).
@@ -344,6 +369,4 @@ def test_install_result_has_no_sync_field(tmp_path: Path) -> None:
         install_with_deps("project", sb.repo)
         result = install_component("agent-planning", sb.repo)
         assert result.get("ok") is True, result
-        assert "sync" not in result, (
-            "install result resurrected the dead 'sync' advisory field"
-        )
+        assert "sync" not in result, "install result resurrected the dead 'sync' advisory field"

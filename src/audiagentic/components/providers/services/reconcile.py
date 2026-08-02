@@ -283,7 +283,7 @@ def reconcile_all_providers(
     }
 
 
-def reconcile_all(*, project_root: Path) -> None:
+def reconcile_all(project_root: Path) -> None:
     """Generic post-install hook — reconciles all providers.
 
     Called from the component lifecycle as a background thread target.

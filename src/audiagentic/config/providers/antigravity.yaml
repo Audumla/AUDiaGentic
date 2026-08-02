@@ -74,3 +74,15 @@ capabilities:
           mode: stub
           aliases: [agy]
           message: "Antigravity adapter is registered; execution bridge not wired yet."
+
+# CC53: AS27 harness-observability inventory (this provider's own facts —
+# see harness_observability_inventory.py for the domain semantics).
+harness_observability:
+  - surface_id: antigravity-cli
+    candidate_source: hooks/plugins/status — candidate route not source-pinned
+    evidence:
+      validated: false
+      reference: primary-source probe required; prove non-vetoing machine event and config lifecycle; no Gemini inference
+    recipe: B
+    lifecycle_source: none
+    probe_anchor: primary-source probe required; prove non-vetoing machine event and config lifecycle; no Gemini inference

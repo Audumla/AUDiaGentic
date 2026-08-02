@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -67,7 +68,8 @@ def test_release_bootstrap_creates_install_and_release_artifacts(tmp_path: Path)
         result = subprocess.run(
             [
                 sys.executable,
-                "-m", "audiagentic.launcher",
+                "-m",
+                "audiagentic.launcher",
                 "release-bootstrap",
                 "--project-root",
                 str(sandbox.repo),
@@ -76,6 +78,10 @@ def test_release_bootstrap_creates_install_and_release_artifacts(tmp_path: Path)
             capture_output=True,
             text=True,
             check=False,
+            env={
+                **dict(__import__("os").environ),
+                "PYTHONPATH": str(SRC) + os.pathsep + str(ROOT),
+            },
         )
 
         assert result.returncode == 0, result.stderr

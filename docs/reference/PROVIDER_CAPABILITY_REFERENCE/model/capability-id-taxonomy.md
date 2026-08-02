@@ -10,7 +10,7 @@ This is a **closed catalogue**: every provider `capabilities:` entry's kind must
 
 #### `cli-install`
 
-**Authority:** provisioned | **Cardinality:** single | **Family:** cli-lifecycle (modes: plan, apply, prune, status) | **Mechanism:** cli-install-recipe
+**Authority:** provisioned | **Cardinality:** single | **Family:** cli-lifecycle (modes: plan, apply, prune, status, upgrade-status, upgrade) | **Mechanism:** cli-install-recipe
 
 Provider can be installed from the harness via a known install command plus a version probe.
 

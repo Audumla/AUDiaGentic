@@ -203,3 +203,71 @@ def test_tap_address_differs_for_different_runtime_roots(tmp_path: Path) -> None
     other = tmp_path / "other"
     other.mkdir()
     assert rpc_tap_transport.tap_address(tmp_path) != rpc_tap_transport.tap_address(other)
+
+
+def test_stderr_dump_on_crash_env_gated(monkeypatch, capsys) -> None:
+    """AS41 diagnostic: when AUDIAGENTIC_PI_TAP_DUMP_STDERR_ON_CRASH=1 and the
+    child exits non-zero, the shim dumps the child's captured stderr to its
+    own stderr so a parent can see the crash reason. Default off (no env var
+    set) means no dump -- byte-transparency preserved in production."""
+    from audiagentic.components.providers.adapters.pi.rpc_tap_shim import (
+        _STDERR_DUMP_ON_CRASH_ENV,
+    )
+
+    crash_msg = b"pi: fatal: tool-use format not supported by this model\n"
+    child = _FakeChild(stdout_bytes=b"", stderr_bytes=crash_msg, exit_code=42)
+
+    # Default off: no env var set -> no stderr dump.
+    monkeypatch.delenv(_STDERR_DUMP_ON_CRASH_ENV, raising=False)
+    code = run_tee(
+        ["fake"],
+        stdin=io.BytesIO(b""),
+        stdout=_CapturingWriter(),
+        tap_address=None,
+        tap_authkey=None,
+        spawn=lambda argv: child,
+    )
+    assert code == 42
+    captured = capsys.readouterr()
+    assert "captured stderr" not in captured.err
+    assert "fatal" not in captured.err
+
+    # Opt-in: env var set -> stderr dump on non-zero exit.
+    monkeypatch.setenv(_STDERR_DUMP_ON_CRASH_ENV, "1")
+    child2 = _FakeChild(stdout_bytes=b"", stderr_bytes=crash_msg, exit_code=42)
+    code = run_tee(
+        ["fake"],
+        stdin=io.BytesIO(b""),
+        stdout=_CapturingWriter(),
+        tap_address=None,
+        tap_authkey=None,
+        spawn=lambda argv: child2,
+    )
+    assert code == 42
+    captured = capsys.readouterr()
+    assert "rpc_tap_shim" in captured.err
+    assert "code=42" in captured.err
+    assert "fatal" in captured.err
+
+
+def test_stderr_dump_on_crash_skipped_for_zero_exit(monkeypatch, capsys) -> None:
+    """AS41 diagnostic: even with the env var set, a zero-exit child does not
+    trigger a stderr dump -- the feature is crash-only, not a general stderr
+    tee."""
+    from audiagentic.components.providers.adapters.pi.rpc_tap_shim import (
+        _STDERR_DUMP_ON_CRASH_ENV,
+    )
+
+    child = _FakeChild(stdout_bytes=b"", stderr_bytes=b"some warning\n", exit_code=0)
+    monkeypatch.setenv(_STDERR_DUMP_ON_CRASH_ENV, "1")
+    code = run_tee(
+        ["fake"],
+        stdin=io.BytesIO(b""),
+        stdout=_CapturingWriter(),
+        tap_address=None,
+        tap_authkey=None,
+        spawn=lambda argv: child,
+    )
+    assert code == 0
+    captured = capsys.readouterr()
+    assert "captured stderr" not in captured.err

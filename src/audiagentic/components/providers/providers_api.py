@@ -1474,6 +1474,8 @@ def prepare_provider_session_transport(
     request_runtime_root: Path | None = None,
     mcp_entries: tuple[McpLaunchServerEntry, ...] | None = None,
     require_isolated_mcp: bool = False,
+    resume_provider_ref: str | None = None,
+    enable_observability_tap: bool = False,
 ) -> PreparedSessionTransport:
     """Prepare a session transport with resolved surface snapshot.
 
@@ -1509,6 +1511,8 @@ def prepare_provider_session_transport(
         request_runtime_root=request_runtime_root,
         mcp_entries=mcp_entries,
         require_isolated_mcp=require_isolated_mcp,
+        resume_provider_ref=resume_provider_ref,
+        enable_observability_tap=enable_observability_tap,
     )
 
 

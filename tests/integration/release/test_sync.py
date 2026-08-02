@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import platform
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -32,7 +31,11 @@ def test_sync_merges_fragments_idempotent(tmp_path: Path) -> None:
         result = sync_current_release_ledger(sandbox.repo)
         assert result.fragment_count == 2
         ledger = sandbox.repo / "docs" / "releases" / "CURRENT_RELEASE_LEDGER.ndjson"
-        lines = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines() if line.strip()]
+        lines = [
+            json.loads(line)
+            for line in ledger.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
         assert [entry["event-id"] for entry in lines] == ["chg_001", "chg_002"]
 
         # idempotent
@@ -40,7 +43,11 @@ def test_sync_merges_fragments_idempotent(tmp_path: Path) -> None:
         # The first sync purges merged fragments; a second sync therefore has
         # no pending fragments and must leave the durable ledger unchanged.
         assert result2.fragment_count == 0
-        lines2 = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines() if line.strip()]
+        lines2 = [
+            json.loads(line)
+            for line in ledger.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
         assert lines2 == lines
     finally:
         sandbox.cleanup()
@@ -59,7 +66,11 @@ def test_sync_rebuilds_from_fragments_only(tmp_path: Path) -> None:
 
         result = sync_current_release_ledger(sandbox.repo)
         assert result.fragment_count == 1
-        lines = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines() if line.strip()]
+        lines = [
+            json.loads(line)
+            for line in ledger.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
         assert [entry["event-id"] for entry in lines] == ["chg_010"]
     finally:
         sandbox.cleanup()
@@ -71,7 +82,9 @@ def test_sync_replaces_stale_lock(tmp_path: Path) -> None:
         record_change_event(sandbox.repo, _load_event("chg_003"))
         lock_path = sandbox.repo / ".audiagentic" / "runtime" / "ledger" / "sync" / "lock.json"
         lock_path.parent.mkdir(parents=True, exist_ok=True)
-        lock_path.write_text((FIXTURES / "ledger-lock.stale.json").read_text(encoding="utf-8"), encoding="utf-8")
+        lock_path.write_text(
+            (FIXTURES / "ledger-lock.stale.json").read_text(encoding="utf-8"), encoding="utf-8"
+        )
         result = sync_current_release_ledger(sandbox.repo)
         assert result.warning == "stale-lock-replaced"
     finally:
@@ -89,13 +102,8 @@ def test_sync_fails_when_lock_active(tmp_path: Path) -> None:
         # On Windows os.kill() sends a signal rather than checking existence; use
         # pid 1 (always alive on POSIX). On non-Windows we also want an alive pid.
         alive_pid = 1 if platform.system() == "Windows" else os.getpid()
-        lock_payload = {
-            "pid": alive_pid,
-            "hostname": "localhost",
-            "acquired-at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "command": "sync-current-release-ledger",
-        }
-        lock_path.write_text(json.dumps(lock_payload, indent=2), encoding="utf-8")
+        # StartupLock expects the lock file to contain just the PID as a string
+        lock_path.write_text(str(alive_pid), encoding="utf-8")
 
         # On Windows pid 1 never dies and os.kill() is a signal (kills the process).
         # The guard relies on os.kill returning without error -> alive -> locked.

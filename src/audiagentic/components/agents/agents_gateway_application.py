@@ -24,6 +24,9 @@ class GatewayApplication(Protocol):
     def gateway_overview(self, project_root: Path) -> dict[str, Any]: ...
     def list_llm_sessions(self, project_root: Path, **kwargs: Any) -> list[dict[str, Any]]: ...
     def close_llm_session(self, project_root: Path, session_id: str) -> dict[str, Any]: ...
+    def resume_llm_session(
+        self, project_root: Path, source_session_id: str, **kwargs: Any
+    ) -> dict[str, Any]: ...
 
 
 class InProcessGatewayApplication:
@@ -64,6 +67,11 @@ class InProcessGatewayApplication:
 
     def close_llm_session(self, project_root: Path, session_id: str) -> dict[str, Any]:
         return self._api().close_llm_session(project_root, session_id)
+
+    def resume_llm_session(
+        self, project_root: Path, source_session_id: str, **kwargs: Any
+    ) -> dict[str, Any]:
+        return self._api().resume_llm_session(project_root, source_session_id, **kwargs)
 
 
 _APPLICATION: GatewayApplication = InProcessGatewayApplication()

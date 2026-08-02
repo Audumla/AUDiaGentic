@@ -22,3 +22,4 @@ VAL-PLN-022: "This ID references a plan item, not a review. Use the item-scoped 
 VAL-PLN-023: "This update operation targets a plan item, not a review. Use update_item instead."
 VAL-PLN-024: "This delete operation targets a plan item, not a review. Use delete_item instead."
 VAL-PLN-025: "The 'created-by' field is required for plan items. Provide a creator identity (created-by, created_by, or creator_id)."
+VAL-PLN-026: "plan_list_items requires at least one of 'plan' or 'id_prefix'. Use plan='code-cleanup' to filter by plan, or id_prefix='CC' to filter by ID prefix."

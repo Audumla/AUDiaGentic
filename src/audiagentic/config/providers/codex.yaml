@@ -134,3 +134,23 @@ capabilities:
           requires external-process-ownership mode in SessionRuntime. NEXT:
           AS14 design + implementation after AS11 trial evidence.
         source: "docs/planning/active/agent-sessions/AS14.md"
+
+# CC53: AS27 harness-observability inventory (this provider's own facts —
+# see harness_observability_inventory.py for the domain semantics).
+harness_observability:
+  - surface_id: codex-acp
+    candidate_source: ACP adapter bridge
+    evidence:
+      validated: false
+      reference: AS13 bridge/version proof
+    recipe: A
+    lifecycle_source: none
+    probe_anchor: AS13 bridge/version proof
+  - surface_id: codex-cli
+    candidate_source: native hooks TOML reader/writer/remover
+    evidence:
+      validated: false
+      reference: installed TOML/hooks reader-writer-remover proof
+    recipe: B
+    lifecycle_source: none
+    probe_anchor: installed TOML/hooks reader-writer-remover proof

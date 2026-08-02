@@ -7,6 +7,7 @@ run_streaming_command's input_text when {prompt} is absent from args-template,
 preserving embedded newlines that Pi's --print mode would otherwise drop (SH21).
 
 Mock only the subprocess/stream boundary — prove production code paths."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -28,6 +29,7 @@ MULTILINE_PROMPT = (
 
 
 # ── _load_runner resolves the descriptor runner (no adapter) ─────────────
+
 
 class TestPiRunnerResolution:
     """_load_runner('pi') must resolve the descriptor-driven recipe runner,
@@ -58,6 +60,7 @@ class TestPiRunnerResolution:
 
 # ── Recipe path delivers multiline prompt via stdin (MA35) ────────────────
 
+
 class TestPiRecipeStdinDelivery:
     """Verify that Pi's recipe-driven run() pipes the full prompt through
     input_text and the command contains no prompt body — same contract as
@@ -72,15 +75,19 @@ class TestPiRecipeStdinDelivery:
         captured: list[dict[str, Any]] = []
 
         def _capture(command: list[str], *, input_text: str | None = None, **kwargs) -> Any:
-            captured.append({
-                "command": list(command),
-                "input_text": input_text,
-            })
+            captured.append(
+                {
+                    "command": list(command),
+                    "input_text": input_text,
+                }
+            )
+
             # Return a minimal StreamedCommandResult-like object
             class _Result:
                 returncode = 0
                 stdout = "ok"
                 stderr = ""
+
             return _Result()
 
         monkeypatch.setattr(
@@ -94,6 +101,11 @@ class TestPiRecipeStdinDelivery:
         """Mock require_executable so the test doesn't need 'pi' on PATH."""
         monkeypatch.setattr(
             "audiagentic.components.providers.adapters.cli.require_executable",
+            lambda pid, *aliases: "pi-mock",
+        )
+        # Also patch in base_runner which imports it
+        monkeypatch.setattr(
+            "audiagentic.components.providers.adapters.base_runner.require_executable",
             lambda pid, *aliases: "pi-mock",
         )
 
@@ -244,10 +256,12 @@ class TestPiRecipeStdinDelivery:
 
         def _track(command: list[str], *, input_text: str | None = None, **kwargs) -> Any:
             run_called["seen"] = True
+
             class _Result:
                 returncode = 0
                 stdout = "dispatch-ok"
                 stderr = ""
+
             return _Result()
 
         monkeypatch.setattr(
@@ -269,8 +283,6 @@ class TestPiRecipeStdinDelivery:
             provider_cfg={"enabled": True, "access-mode": "cli"},
         )
 
-        assert run_called["seen"], (
-            "execute_provider('pi') did not invoke the recipe runner"
-        )
+        assert run_called["seen"], "execute_provider('pi') did not invoke the recipe runner"
         assert result["provider-id"] == "pi"
         assert result["status"] == "ok"

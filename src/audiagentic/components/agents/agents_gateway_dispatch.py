@@ -8,11 +8,10 @@ Validation/config failures (unknown profile, disabled provider, invalid
 request, missing model, safety/config rejection) are terminal on first
 occurrence — never retried.
 """
+
 from __future__ import annotations
 
-import json
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
@@ -28,32 +27,6 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
-
-_ENV_STREAM_OUTPUT = "AUDIAGENTIC_GATEWAY_STREAM_OUTPUT"
-
-
-def _write_output_chunk(project_root: Path, request_id: str, text: str | None, attempt_index: int) -> None:
-    """Append an output chunk to <request-dir>/output.ndjson if streaming is enabled.
-
-    Fire-and-forget — never raises. Controlled by AUDIAGENTIC_GATEWAY_STREAM_OUTPUT env var.
-    Set to any truthy value (e.g. '1') to enable; unset or empty to disable."""
-    if not os.environ.get(_ENV_STREAM_OUTPUT):
-        return
-    if not text:
-        return
-    try:
-        from audiagentic.components.agents.agents_paths import gateway_root
-
-        out_path = gateway_root(project_root) / request_id / "output.ndjson"
-        with open(out_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps({"attempt": attempt_index, "text": text}) + "\n")
-    except Exception:  # noqa: BLE001
-        logger.debug(
-            "failed to write output chunk (non-fatal)",
-            extra={"request-id": request_id},
-            exc_info=True,
-        )
-
 
 # Classification is code-prefix-driven (the canonical PREFIX-COMPONENT-NNN
 # convention every AudiaGenticError already follows — foundation.contracts.errors
@@ -187,9 +160,7 @@ def _dispatch_one_attempt(
 
     profile = resolve_profile(project_root, agent_profile_id)
     provider_id = profile["provider_id"]
-    if not providers_api.get_provider_runtime_config_state(
-        project_root, provider_id
-    )["enabled"]:
+    if not providers_api.get_provider_runtime_config_state(project_root, provider_id)["enabled"]:
         raise AudiaGenticError(
             code="VAL-AGW-031",
             kind="agents",
@@ -289,7 +260,8 @@ def _try_profile_with_retries(
             )
         except AudiaGenticError as exc:
             store.append_owned_attempt(
-                project_root, record["request-id"],
+                project_root,
+                record["request-id"],
                 owner_epoch=record["dispatch-owner-epoch"],
                 worker_id=record["worker-id"],
                 attempt_epoch=record["attempt-epoch"],
@@ -308,7 +280,8 @@ def _try_profile_with_retries(
         else:
             model_id = _extract_model_id(result, profile)
             store.append_owned_attempt(
-                project_root, record["request-id"],
+                project_root,
+                record["request-id"],
                 owner_epoch=record["dispatch-owner-epoch"],
                 worker_id=record["worker-id"],
                 attempt_epoch=record["attempt-epoch"],
@@ -320,7 +293,6 @@ def _try_profile_with_retries(
                 finished_at=now_iso_z(),
             )
             output_text = result.get("output")
-            _write_output_chunk(project_root, record["request-id"], output_text, attempt_num)
             return {
                 "provider-id": result.get("provider-id", profile.get("provider_id")),
                 "model-id": model_id,
@@ -395,12 +367,14 @@ def dispatch_request(
         error = exc
     else:
         return _transition_owned_attempt(
-            project_root, record, "completed",
+            project_root,
+            record,
+            "completed",
             updates={**outcome, "finished-at": now_iso_z()},
         )
     return _transition_owned_attempt(
-        project_root, record, "failed",
+        project_root,
+        record,
+        "failed",
         updates={"error": error, "finished-at": now_iso_z()},
     )
-
-

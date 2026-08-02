@@ -160,6 +160,7 @@ class TestMemoryComponentBoundaries:
             "audiagentic.components.providers.descriptors.registry",
             "audiagentic.components.providers.contracts.managed_hooks",
             "audiagentic.components.providers.contracts.managed_mcp",
+            "audiagentic.components.providers.services.capabilities",
         }
         violations = []
         for pyfile in _get_python_files(memory_dir / "hindsight"):

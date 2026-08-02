@@ -1,0 +1,32 @@
+# Kilo — provider descriptor
+# CC53: minimal registered descriptor (no adapter code yet — candidate
+# route only). Mirrors aider.yaml's stub launch pattern for "known but not
+# wired" providers, so this file can own its own harness_observability
+# entries per ARCHITECTURE_STANDARDS.md Section 2 instead of living in a
+# central cross-provider Python list.
+
+provider_id: kilo
+execution_isolation_tier: no-isolation
+display_name: "Kilo"
+description: "Kilo Code — candidate ACP route, not yet installed/wired."
+
+capabilities:
+  launch:
+    mechanism:
+      recipes:
+        execution:
+          mode: stub
+          aliases: [kilo]
+          message: "Kilo adapter is registered; execution bridge not wired yet."
+
+# CC53: AS27 harness-observability inventory (this provider's own facts —
+# see harness_observability_inventory.py for the domain semantics).
+harness_observability:
+  - surface_id: kilo-acp
+    candidate_source: kilo acp
+    evidence:
+      validated: false
+      reference: descriptor and transport proof first; prove transport/control/observation contract
+    recipe: A
+    lifecycle_source: none
+    probe_anchor: descriptor and transport proof first; prove transport/control/observation contract

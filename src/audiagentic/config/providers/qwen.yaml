@@ -99,3 +99,15 @@ capabilities:
           approval-mode-flags:
             yolo: ["--yolo"]
             auto-edit: ["--approval-mode", "auto-edit"]
+
+# CC53: AS27 harness-observability inventory (this provider's own facts —
+# see harness_observability_inventory.py for the domain semantics).
+harness_observability:
+  - surface_id: qwen-acp
+    candidate_source: npx @qwen-code/qwen-code --acp --experimental-skills
+    evidence:
+      validated: false
+      reference: prove flag/event effects
+    recipe: A
+    lifecycle_source: none
+    probe_anchor: prove flag/event effects

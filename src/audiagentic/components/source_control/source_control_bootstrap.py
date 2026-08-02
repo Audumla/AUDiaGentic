@@ -4,6 +4,7 @@ Detects git and gh CLI availability and manages the post-commit ledger-stamp hoo
 External MCP server registration is handled generically by mcp.config_builder via
 the external-mcp-servers declarations in source-control.yaml.
 """
+
 from __future__ import annotations
 
 import logging
@@ -113,7 +114,11 @@ def _install_hook_absent(hook_path: Path, project_root: Path) -> bool:
     atomic_write_text(hook_path, content)
     _set_executable(hook_path)
     reg = _hook_registry(project_root)
-    rel = Path(hook_path.relative_to(project_root)).as_posix() if hook_path.is_relative_to(project_root) else Path(hook_path).as_posix()
+    rel = (
+        Path(hook_path.relative_to(project_root)).as_posix()
+        if hook_path.is_relative_to(project_root)
+        else Path(hook_path).as_posix()
+    )
     reg.register(_SOURCE_CONTROL_RECIPE, files=[rel])
     return True
 
@@ -142,7 +147,11 @@ def install_post_commit_hook(
     reason, dry_run_changes. On collision a warning is logged; bytes never overwritten.
     """
     if not ledger_integration_enabled(project_root):
-        return {"installed": False, "reason": "ledger integration not enabled", "ownership_mode": "skipped"}
+        return {
+            "installed": False,
+            "reason": "ledger integration not enabled",
+            "ownership_mode": "skipped",
+        }
 
     hooks_dir = project_root / ".git" / "hooks"
     if not hooks_dir.exists():
@@ -175,6 +184,7 @@ def install_post_commit_hook(
     from audiagentic.foundation.toolchains.config.managed_block import (
         _block_pattern as _detect_block_pattern,
     )
+
     pattern = _detect_block_pattern(_HOOK_BLOCK_ID, "#")
     if pattern.search(existing):
         change = apply_managed_block(hook_path, _HOOK_BLOCK_ID, hook_body_lf)
@@ -256,7 +266,11 @@ def _legacy_remove_fallback(project_root: Path) -> bool:
     if change.existed:
         reg = _hook_registry(project_root)
         bucket = reg.owned(_SOURCE_CONTROL_RECIPE)
-        rel = Path(hook_path.relative_to(project_root)).as_posix() if hook_path.is_relative_to(project_root) else Path(hook_path).as_posix()
+        rel = (
+            Path(hook_path.relative_to(project_root)).as_posix()
+            if hook_path.is_relative_to(project_root)
+            else Path(hook_path).as_posix()
+        )
         files_owned = rel in bucket.get("files", [])
         if not files_owned:
             return True
@@ -301,7 +315,11 @@ def prune_post_commit_hook(
     hook_path = project_root / ".git" / "hooks" / "post-commit"
     reg = _hook_registry(project_root)
     bucket = reg.owned(_SOURCE_CONTROL_RECIPE)
-    rel = Path(hook_path).as_posix()
+    rel = (
+        Path(hook_path.relative_to(project_root)).as_posix()
+        if hook_path.is_relative_to(project_root)
+        else Path(hook_path).as_posix()
+    )
 
     result: dict[str, Any] = {
         "pruned": False,
@@ -313,19 +331,20 @@ def prune_post_commit_hook(
         return result
 
     files_owned = rel in bucket.get("files", [])
-    blocks_owned = any(
-        e.get("block_id") == _HOOK_BLOCK_ID
-        for e in bucket.get("blocks", [])
-    )
+    blocks_owned = any(e.get("block_id") == _HOOK_BLOCK_ID for e in bucket.get("blocks", []))
 
     if files_owned:
         # Whole-owned file — safe to delete entirely (registry proof exists)
         if dry_run:
-            result["dry_run_changes"] = {"action": "delete-whole-file", "ownership_mode": "whole-file"}
+            result["dry_run_changes"] = {
+                "action": "delete-whole-file",
+                "ownership_mode": "whole-file",
+            }
             result["pruned"] = True
         else:
             try:
                 import time as _time
+
                 for attempt in range(3):
                     hook_path.unlink(missing_ok=True)
                     if not hook_path.exists():
@@ -336,7 +355,9 @@ def prune_post_commit_hook(
             except OSError as exc:
                 result["error"] = str(exc)
 
-    elif blocks_owned or _HOOK_BLOCK_ID in (hook_path.read_text(encoding="utf-8") if hook_path.exists() else ""):
+    elif blocks_owned or _HOOK_BLOCK_ID in (
+        hook_path.read_text(encoding="utf-8") if hook_path.exists() else ""
+    ):
         # Block-owned file — remove block only, preserve user content
         if dry_run:
             result["dry_run_changes"] = {"action": "remove-block", "ownership_mode": "block"}
@@ -355,7 +376,11 @@ def _safe_unlink_on_prune(project_root: Path, hook_path: Path) -> None:
     """Delete hook file only if ArtifactRegistry proves AUDiaGentic created it."""
     reg = _hook_registry(project_root)
     bucket = reg.owned(_SOURCE_CONTROL_RECIPE)
-    rel = Path(hook_path.relative_to(project_root)).as_posix() if hook_path.is_relative_to(project_root) else Path(hook_path).as_posix()
+    rel = (
+        Path(hook_path.relative_to(project_root)).as_posix()
+        if hook_path.is_relative_to(project_root)
+        else Path(hook_path).as_posix()
+    )
     if rel in bucket.get("files", []):
         try:
             hook_path.unlink()
@@ -368,6 +393,7 @@ def _safe_unlink_on_prune(project_root: Path, hook_path: Path) -> None:
 
 def status_payload(project_root: Path | None = None) -> ComponentStatusPayload:
     from audiagentic.foundation.components.registry import get_external_probe_results
+
     probe_cache = get_external_probe_results("source-control", project_root) if project_root else {}
     return ComponentStatusPayload(
         enabled=bool(project_root and is_enabled(_COMPONENT_ID, project_root)),
@@ -375,10 +401,12 @@ def status_payload(project_root: Path | None = None) -> ComponentStatusPayload:
         active_implementation=None,
         missing_required=[],
         details={
-            "ledger_integration_enabled": bool(project_root and ledger_integration_enabled(project_root)),
+            "ledger_integration_enabled": bool(
+                project_root and ledger_integration_enabled(project_root)
+            ),
             "mcp_servers": {
-            name: ("available" if probe_cache.get(name, True) else "unavailable")
-            for name in ("git", "github")
+                name: ("available" if probe_cache.get(name, True) else "unavailable")
+                for name in ("git", "github")
             },
             "hint": "Use ag-sc-mgmt.get_source_control_status for full dependency checks.",
         },

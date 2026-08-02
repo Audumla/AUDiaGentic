@@ -16,7 +16,6 @@ from audiagentic.foundation.transports.session_surface import (
     ContentChannelId,
     ContentStreamCapabilities,
     ControlSupport,
-    EffectiveObservationLevel,
     LifecycleInstallation,
     LifecycleObservationCapabilities,
     LifecycleSource,
@@ -29,7 +28,7 @@ from audiagentic.foundation.transports.session_surface import (
     SessionOwnershipMode,
     SessionSurfaceRef,
     SurfaceValidation,
-    SurfaceValidationState,
+    ValidationEvidence,
 )
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -110,27 +109,20 @@ class TestContentChannelId:
         assert ContentChannelId.TOOL_SUMMARY.value == "tool-summary"
 
 
-class TestSurfaceValidationState:
-    def test_all_states_present(self):
-        expected = {"declared", "probe-required", "validated", "blocked", "unsupported"}
-        actual = {s.value for s in SurfaceValidationState}
-        assert actual == expected
+class TestValidationEvidence:
+    def test_defaults(self):
+        evidence = ValidationEvidence()
+        assert evidence.validated is False
+        assert evidence.reference == ""
 
+    def test_validated_requires_reference(self):
+        with pytest.raises(ValueError):
+            ValidationEvidence(validated=True, reference="")
 
-class TestEffectiveObservationLevel:
-    def test_values(self):
-        levels = [EffectiveObservationLevel.O0, EffectiveObservationLevel.O1,
-                  EffectiveObservationLevel.O2, EffectiveObservationLevel.O3,
-                  EffectiveObservationLevel.O4]
-        for lvl in levels:
-            assert lvl.value.startswith("O")
-
-    def test_numeric_property(self):
-        assert EffectiveObservationLevel.O0.numeric == 0
-        assert EffectiveObservationLevel.O1.numeric == 1
-        assert EffectiveObservationLevel.O2.numeric == 2
-        assert EffectiveObservationLevel.O3.numeric == 3
-        assert EffectiveObservationLevel.O4.numeric == 4
+    def test_validated_with_reference(self):
+        evidence = ValidationEvidence(validated=True, reference="tests/e2e/agents/test_opencode_acp_e2e.py")
+        assert evidence.validated is True
+        assert evidence.reference == "tests/e2e/agents/test_opencode_acp_e2e.py"
 
 
 # ── Frozen / immutability ──────────────────────────────────────────────────
@@ -265,8 +257,7 @@ class TestResolvedSessionSurface:
             channels=(ContentChannelCapability(ContentChannelId.ASSISTANT_TEXT, max_bytes=65536),),
         )
         validation = SurfaceValidation(
-            state=SurfaceValidationState.VALIDATED,
-            effective_level=EffectiveObservationLevel.O2,
+            evidence=ValidationEvidence(validated=True, reference="tests/e2e/agents/test_opencode_acp_e2e.py"),
         )
         surface = ResolvedSessionSurface(
             ref=ref, identity=identity, controls=controls,
@@ -293,28 +284,26 @@ class TestPlatformEvidence:
         pe = PlatformEvidence(platform="windows-amd64")
         assert pe.tool_version == ""
         assert pe.probe_artifact == ""
-        assert pe.validation_state == SurfaceValidationState.DECLARED
-        assert pe.effective_level == EffectiveObservationLevel.O0
+        assert pe.evidence.validated is False
 
 
 class TestSurfaceValidation:
     def test_frozen(self):
-        sv = SurfaceValidation(state=SurfaceValidationState.VALIDATED)
+        sv = SurfaceValidation(evidence=ValidationEvidence(validated=True, reference="doc"))
         with pytest.raises(Exception):
-            sv.state = SurfaceValidationState.BLOCKED
+            sv.evidence = ValidationEvidence()
 
     def test_with_platforms(self):
         platforms = (
-            PlatformEvidence(platform="linux-amd64", validation_state=SurfaceValidationState.VALIDATED, effective_level=EffectiveObservationLevel.O2),
+            PlatformEvidence(platform="linux-amd64", evidence=ValidationEvidence(validated=True, reference="doc")),
             PlatformEvidence(platform="windows-amd64"),
         )
         sv = SurfaceValidation(
-            state=SurfaceValidationState.VALIDATED,
-            effective_level=EffectiveObservationLevel.O2,
+            evidence=ValidationEvidence(validated=True, reference="doc"),
             platforms=platforms,
         )
         assert len(sv.platforms) == 2
-        assert sv.platforms[0].validation_state == SurfaceValidationState.VALIDATED
+        assert sv.platforms[0].evidence.validated is True
 
 
 # ── Scalar-only / redaction discipline ─────────────────────────────────────
@@ -356,7 +345,7 @@ class TestScalarOnlyDiscipline:
         content = ContentStreamCapabilities(
             channels=(ContentChannelCapability(ContentChannelId.ASSISTANT_TEXT, max_bytes=65536),),
         )
-        validation = SurfaceValidation(state=SurfaceValidationState.VALIDATED)
+        validation = SurfaceValidation(evidence=ValidationEvidence(validated=True, reference="doc"))
         return ResolvedSessionSurface(ref=ref, identity=identity, controls=controls, lifecycle=lifecycle, content=content, validation=validation)
 
 

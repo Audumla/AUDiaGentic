@@ -4,6 +4,7 @@ The protected session record owns the raw provider ref. This module owns the
 project-local index over a redacted hash so callers never use the ref as a path
 or public identifier.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -176,31 +177,35 @@ def project_public_session(record: dict[str, Any]) -> dict[str, Any]:
 
 # Keys that must never reach public diagnostics: provider refs, raw payloads,
 # prompts, outputs, and tool arguments are not capability facts.
-_CAPABILITIES_FORBIDDEN_KEYS = frozenset({
-    "provider-session-ref",
-    "raw-payload",
-    "prompt",
-    "output",
-    "tool-args",
-    "tool_args",
-    "tool-calls",
-    "tool_calls",
-    "tool-arguments",
-    "provider-surface",
-    "surface-ref",
-    "native-ref",
-})
+_CAPABILITIES_FORBIDDEN_KEYS = frozenset(
+    {
+        "provider-session-ref",
+        "raw-payload",
+        "prompt",
+        "output",
+        "tool-args",
+        "tool_args",
+        "tool-calls",
+        "tool_calls",
+        "tool-arguments",
+        "provider-surface",
+        "surface-ref",
+        "native-ref",
+    }
+)
 
 # Whitelist of safe capability-snapshot keys (enum/id/scalar only).
-_CAPABILITIES_SAFE_KEYS = frozenset({
-    "surface-id",
-    "surface-version",
-    "declared-controls",
-    "observation-mechanism",
-    "observation-source",
-    "supported-statuses",
-    "evidence-tier",
-})
+_CAPABILITIES_SAFE_KEYS = frozenset(
+    {
+        "surface-id",
+        "surface-version",
+        "declared-controls",
+        "observation-mechanism",
+        "observation-source",
+        "supported-statuses",
+        "evidence-tier",
+    }
+)
 
 # Recognized session-record keys for the capability snapshot.
 _CAPABILITIES_SNAPSHOT_KEYS = (
@@ -338,17 +343,17 @@ def register_open_binding(project_root: Path, session_record: dict[str, Any]) ->
                     details={"provider-ref-key-prefix": str(key)[:12]},
                 )
         # Idempotent: skip adding a duplicate entry for the same session.
-        if not any(
-            e.get("session-id") == session_record["session-id"] for e in entries
-        ):
-            entries.append({
-            "binding-id": binding_id,
-            "session-id": session_record["session-id"],
-            "ownership": binding.get("ownership"),
-            "relation": binding.get("relation"),
-            "state": session_record.get("state"),
-            "created-at": binding.get("created-at"),
-        })
+        if not any(e.get("session-id") == session_record["session-id"] for e in entries):
+            entries.append(
+                {
+                    "binding-id": binding_id,
+                    "session-id": session_record["session-id"],
+                    "ownership": binding.get("ownership"),
+                    "relation": binding.get("relation"),
+                    "state": session_record.get("state"),
+                    "created-at": binding.get("created-at"),
+                }
+            )
         payload["bindings"][key] = entries
         atomic_write_json(index_path, payload)
 
@@ -377,6 +382,7 @@ def retire_binding(project_root: Path, session_record: dict[str, Any], *, state:
 
 
 # ── Convenience entry points (create / attach) ────────────────────
+
 
 def create_open_binding(
     *,
@@ -465,6 +471,109 @@ def attach_binding(
     return binding
 
 
+def resume_binding(
+    *,
+    session_id: str,
+    provider_id: str | None,
+    surface_id: str | None,
+    provider_ref: str,
+    predecessor_binding_id: str,
+    ref_namespace: str | None = None,
+    identity_context_fingerprint: str | None = None,
+    execution_context_fingerprint: str | None = None,
+) -> dict[str, Any]:
+    """Create a RESUMED_FROM binding linked to a terminal predecessor.
+
+    Per AS30 step 15: resume never mutates the source record back to active.
+    Callers must pass the predecessor's OWN provider_ref_key-relevant fields
+    unchanged (provider_id/surface_id/ref_namespace/identity_context) so the
+    key stays comparable; only provider_ref and generation differ. Ownership
+    defaults to OWNED — a resumed session is a fresh owned session, not an
+    attachment. Callers are responsible for verifying AS29's resolved surface
+    validates resume_by_ref for this exact provider/surface/identity/project
+    BEFORE calling this — this function does not re-check capability, same
+    as attach_binding does not.
+
+    Raises AudiaGenticError if provider ref is empty or binding creation fails.
+    """
+    if not provider_ref:
+        raise AudiaGenticError(
+            code="VAL-AGW-100",
+            kind="agents",
+            message="provider ref is empty; cannot create resume binding",
+            details={},
+        )
+    binding = build_binding(
+        provider_id=provider_id,
+        provider_session_ref=provider_ref,
+        relation=BindingRelation.RESUMED_FROM,
+        ownership=SessionOwnership.OWNED,
+        surface_id=surface_id,
+        ref_namespace=ref_namespace,
+        predecessor_binding_id=predecessor_binding_id,
+        identity_context_fingerprint=identity_context_fingerprint,
+        execution_context_fingerprint=execution_context_fingerprint,
+    )
+    if binding is None:
+        raise AudiaGenticError(
+            code="VAL-AGW-100",
+            kind="agents",
+            message="provider ref is empty; cannot create resume binding",
+            details={},
+        )
+    return binding
+
+
+def replace_binding(
+    *,
+    session_id: str,
+    provider_id: str | None,
+    surface_id: str | None,
+    provider_ref: str,
+    predecessor_binding_id: str,
+    ref_namespace: str | None = None,
+    identity_context_fingerprint: str | None = None,
+    execution_context_fingerprint: str | None = None,
+) -> dict[str, Any]:
+    """Create a REPLACED binding: AG deliberately opened a different provider
+    session because the predecessor could not legally/safely continue.
+
+    Distinct from resume_binding only in the relation value persisted —
+    callers (not this function) are responsible for the policy distinction
+    of WHY a replacement was chosen over a resume, and must never surface a
+    REPLACED outcome to callers as if it were a successful resume (AS30
+    acceptance_criteria).
+
+    Raises AudiaGenticError if provider ref is empty or binding creation fails.
+    """
+    if not provider_ref:
+        raise AudiaGenticError(
+            code="VAL-AGW-101",
+            kind="agents",
+            message="provider ref is empty; cannot create replacement binding",
+            details={},
+        )
+    binding = build_binding(
+        provider_id=provider_id,
+        provider_session_ref=provider_ref,
+        relation=BindingRelation.REPLACED,
+        ownership=SessionOwnership.OWNED,
+        surface_id=surface_id,
+        ref_namespace=ref_namespace,
+        predecessor_binding_id=predecessor_binding_id,
+        identity_context_fingerprint=identity_context_fingerprint,
+        execution_context_fingerprint=execution_context_fingerprint,
+    )
+    if binding is None:
+        raise AudiaGenticError(
+            code="VAL-AGW-101",
+            kind="agents",
+            message="provider ref is empty; cannot create replacement binding",
+            details={},
+        )
+    return binding
+
+
 # Binding index persistence.
 
 
@@ -495,26 +604,34 @@ def rebuild_index(project_root: Path) -> dict[str, Any]:
             except (OSError, ValueError):
                 continue
             binding = record.get("binding")
-            if not isinstance(binding, dict) or record.get("state") in {"closed", "expired", "failed"}:
+            if not isinstance(binding, dict) or record.get("state") in {
+                "closed",
+                "expired",
+                "failed",
+            }:
                 continue
             key = binding.get("provider-ref-key")
             if not key:
                 continue
             recovered_count += 1
-            payload["bindings"].setdefault(key, []).append({
-                "binding-id": binding.get("binding-id"),
-                "session-id": record.get("session-id"),
-                "ownership": binding.get("ownership"),
-                "relation": binding.get("relation"),
-                "state": record.get("state"),
-                "created-at": binding.get("created-at"),
-            })
+            payload["bindings"].setdefault(key, []).append(
+                {
+                    "binding-id": binding.get("binding-id"),
+                    "session-id": record.get("session-id"),
+                    "ownership": binding.get("ownership"),
+                    "relation": binding.get("relation"),
+                    "state": record.get("state"),
+                    "created-at": binding.get("created-at"),
+                }
+            )
 
     # Detect duplicate active owned bindings (error condition).
     for key, entries in payload["bindings"].items():
         owned_active = [
-            e for e in entries
-            if e.get("ownership") == "owned" and e.get("state") not in {"closed", "expired", "failed"}
+            e
+            for e in entries
+            if e.get("ownership") == "owned"
+            and e.get("state") not in {"closed", "expired", "failed"}
         ]
         if len(owned_active) > 1:
             duplicate_keys.append(str(key)[:12])

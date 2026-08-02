@@ -63,3 +63,23 @@ capabilities:
         rel_path: ".claude/settings.json"
         managed: false
         description: "Claude Code user settings"
+
+# CC53: AS27 harness-observability inventory (this provider's own facts —
+# see harness_observability_inventory.py for the domain semantics).
+harness_observability:
+  - surface_id: claude-acp
+    candidate_source: ACP adapter
+    evidence:
+      validated: false
+      reference: verify package, launch, terminal and correlation
+    recipe: A
+    lifecycle_source: none
+    probe_anchor: verify package, launch, terminal and correlation
+  - surface_id: claude-cli
+    candidate_source: "native hooks: UserPromptSubmit/PreToolUse/PostToolUse/Stop/SessionEnd"
+    evidence:
+      validated: false
+      reference: project hook lifecycle and non-vetoing emitter proof
+    recipe: B
+    lifecycle_source: none
+    probe_anchor: project hook lifecycle and non-vetoing emitter proof

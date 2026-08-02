@@ -113,8 +113,8 @@ class TestEventObserverIdempotent:
             obs.initialize(project_root)
 
             delta = get_bus().subscription_count() - before
-            # 3 trigger subscriptions (disabled included) + 4 gateway outcome subscriptions
-            assert delta == 7, f"expected 7 new subscriptions (3 triggers + 4 outcomes), got {delta}"
+            # 3 trigger subscriptions (disabled included) + 5 gateway outcome subscriptions
+            assert delta == 8, f"expected 8 new subscriptions (3 triggers + 5 outcomes), got {delta}"
 
     def test_shared_pattern_triggers_both_fire(self, tmp_path):
         """EDJ23 FIX 1: two triggers sharing one pattern BOTH fire on a matching event."""
@@ -197,7 +197,7 @@ class TestEventObserverDisabledTrigger:
 
             delta = get_bus().subscription_count() - before
             # 1 trigger subscription (disabled included) + 4 gateway outcome subscriptions
-            assert delta == 5, f"expected 5 new subscriptions (1 trigger + 4 outcomes), got {delta}"
+            assert delta == 6, f"expected 6 new subscriptions (1 trigger + 5 outcomes), got {delta}"
 
             bus = get_bus()
             original_publish = bus.publish

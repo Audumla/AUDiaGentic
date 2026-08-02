@@ -27,9 +27,9 @@ AcpSessionTransport construction in this module's open path.
 AS28 slice 4b-A: the prompt, cancel, and close paths now use the neutral
 AgentSessionTransport seam (SessionPrompt / ObservationSink / SessionTurnResult /
 SessionControlAction.CANCEL_TURN). The ACP callback contract is gone from this
-module; dispatch output extraction still expects AcpResult and is migrated in a
-later slice.
+module.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -48,6 +48,7 @@ from audiagentic.components.agents.agents_event_topics import (
     SESSION_EXPIRED_TOPIC,
     SESSION_FAILED_TOPIC,
     SESSION_OPENED_TOPIC,
+    SESSION_RESUMED_TOPIC,
     SESSION_TURN_FINISHED_TOPIC,
 )
 from audiagentic.components.agents.agents_gateway_turn_events import (
@@ -79,6 +80,7 @@ from audiagentic.foundation.transports.session_surface import PreparedSessionTra
 
 logger = logging.getLogger(__name__)
 
+
 # ── AS28 slice 4a: default provider preparation seam ──────────────
 def _default_prepare_fn(
     project_root: Path,
@@ -88,8 +90,17 @@ def _default_prepare_fn(
     model_id: str | None = None,
     request_runtime_root: Path | None = None,
     mcp_entries=None,
+    resume_provider_ref: str | None = None,
 ) -> PreparedSessionTransport:
-    """Default provider preparation via the public providers_api seam."""
+    """Default provider preparation via the public providers_api seam.
+
+    AS49: ``resume_provider_ref`` forwards to
+    ``providers_api.prepare_provider_session_transport`` — when set, the
+    resulting transport's ``open()`` resumes that exact provider session
+    instead of opening a new one. Callers must have already validated
+    resume eligibility (``agents_gateway_session_resume.validate_resume_eligibility``)
+    before setting this; this function does not re-check capability.
+    """
     from audiagentic.components.providers import providers_api
 
     return providers_api.prepare_provider_session_transport(
@@ -100,7 +111,9 @@ def _default_prepare_fn(
         request_runtime_root=request_runtime_root,
         mcp_entries=None if mcp_entries is None else tuple(mcp_entries),
         require_isolated_mcp=mcp_entries is not None,
+        resume_provider_ref=resume_provider_ref,
     )
+
 
 # Gateway defaults — overridable per session at open time (config over code:
 # dispatch resolves per-profile params session-idle-timeout-seconds /
@@ -120,7 +133,6 @@ DEFAULT_REAP_INTERVAL_SECONDS = 30.0
 DEFAULT_SESSION_QUEUE_MAX = 8
 _OPEN_TIMEOUT_SECONDS = 120.0
 _CLOSE_TIMEOUT_SECONDS = 30.0
-
 
 
 class _SessionHandle:
@@ -202,8 +214,6 @@ class _SessionHandle:
             self.max_lifetime_seconds = max_lifetime_seconds
 
 
-
-
 class SessionRuntime:
     """Registry + lifecycle owner for live agent sessions.
 
@@ -246,7 +256,11 @@ class SessionRuntime:
 
     def _ensure_loop(self) -> asyncio.AbstractEventLoop:
         with self._loop_lock:
-            if self._loop is not None and self._loop_thread is not None and self._loop_thread.is_alive():
+            if (
+                self._loop is not None
+                and self._loop_thread is not None
+                and self._loop_thread.is_alive()
+            ):
                 return self._loop
             if self._shutdown:
                 raise AudiaGenticError(
@@ -314,15 +328,18 @@ class SessionRuntime:
                 # (needed for long-lived remote-control sessions, RV513).
                 idle_timeout_seconds=(
                     DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS
-                    if idle_timeout_seconds is None else idle_timeout_seconds
+                    if idle_timeout_seconds is None
+                    else idle_timeout_seconds
                 ),
                 max_lifetime_seconds=(
                     DEFAULT_SESSION_MAX_LIFETIME_SECONDS
-                    if max_lifetime_seconds is None else max_lifetime_seconds
+                    if max_lifetime_seconds is None
+                    else max_lifetime_seconds
                 ),
                 turn_timeout_seconds=(
                     DEFAULT_TURN_TIMEOUT_SECONDS
-                    if turn_timeout_seconds is None else turn_timeout_seconds
+                    if turn_timeout_seconds is None
+                    else turn_timeout_seconds
                 ),
                 turn_silence_timeout_seconds=(
                     DEFAULT_TURN_SILENCE_TIMEOUT_SECONDS
@@ -356,6 +373,69 @@ class SessionRuntime:
                 correlation_id=correlation_id,
             ),
             timeout=timeout_seconds,
+        )
+
+    def resume_session(
+        self,
+        project_root: Path,
+        source_session_id: str,
+        *,
+        control_id: str,
+        identity_context_fingerprint: str | None = None,
+        execution_context_fingerprint: str | None = None,
+        model_id: str | None = None,
+        idle_timeout_seconds: float | None = None,
+        max_lifetime_seconds: float | None = None,
+        turn_timeout_seconds: float | None = None,
+        turn_silence_timeout_seconds: float | None = None,
+        correlation_id: str | None = None,
+        request_runtime_root: Path | None = None,
+    ) -> dict[str, Any]:
+        """AS49: explicitly resume a terminal session as a new linked generation.
+
+        Never triggered by ordinary continuation — only an explicit client
+        request naming the exact terminal ``source_session_id``. ``control_id``
+        makes the request idempotent: a repeated call with the same id returns
+        the original result rather than creating a second successor.
+
+        ``identity_context_fingerprint``/``execution_context_fingerprint`` are
+        the CALLER's current SH02 context (same convention as
+        ``agents_gateway_session_dispatch``'s continuation path) — they are
+        compared against the source binding's stored values, never re-derived
+        from the source binding itself (that would make the check meaningless).
+        """
+        return self._call(
+            self._resume_session(
+                project_root,
+                source_session_id,
+                control_id=control_id,
+                identity_context_fingerprint=identity_context_fingerprint,
+                execution_context_fingerprint=execution_context_fingerprint,
+                model_id=model_id,
+                idle_timeout_seconds=(
+                    DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS
+                    if idle_timeout_seconds is None
+                    else idle_timeout_seconds
+                ),
+                max_lifetime_seconds=(
+                    DEFAULT_SESSION_MAX_LIFETIME_SECONDS
+                    if max_lifetime_seconds is None
+                    else max_lifetime_seconds
+                ),
+                turn_timeout_seconds=(
+                    DEFAULT_TURN_TIMEOUT_SECONDS
+                    if turn_timeout_seconds is None
+                    else turn_timeout_seconds
+                ),
+                turn_silence_timeout_seconds=(
+                    DEFAULT_TURN_SILENCE_TIMEOUT_SECONDS
+                    if turn_silence_timeout_seconds is None
+                    else turn_silence_timeout_seconds
+                ),
+                correlation_id=correlation_id,
+                request_runtime_root=request_runtime_root,
+            ),
+            timeout=_OPEN_TIMEOUT_SECONDS,
         )
 
     def close_session(
@@ -470,10 +550,13 @@ class SessionRuntime:
                     action=SessionControlAction.CANCEL_TURN,
                 )
                 result = await handle.transport.control(control_req)
-                return bool(getattr(result, "disposition", None) in (
-                    "accepted",
-                    "already-terminal",
-                ))
+                return bool(
+                    getattr(result, "disposition", None)
+                    in (
+                        "accepted",
+                        "already-terminal",
+                    )
+                )
 
             try:
                 return self._call(_cancel(), timeout=5.0)
@@ -536,9 +619,9 @@ class SessionRuntime:
         if loop is None:
             return
         try:
-            asyncio.run_coroutine_threadsafe(
-                self._close_all(reason="shutdown"), loop
-            ).result(timeout=_CLOSE_TIMEOUT_SECONDS)
+            asyncio.run_coroutine_threadsafe(self._close_all(reason="shutdown"), loop).result(
+                timeout=_CLOSE_TIMEOUT_SECONDS
+            )
         except Exception:  # noqa: BLE001 — shutdown must never raise
             logger.warning("session runtime shutdown incomplete", exc_info=True)
 
@@ -572,7 +655,8 @@ class SessionRuntime:
         # the evidence projection registry (no raw evidence, no provider refs).
         current_request = handle.current_request_id
         status_snapshot = self._evidence_projection.redacted_status_snapshot(
-            session_id, request_id=current_request,
+            session_id,
+            request_id=current_request,
         )
         return {
             "available": True,
@@ -672,14 +756,17 @@ class SessionRuntime:
                 from audiagentic.foundation.system.adopted_process import AdoptedChild
 
                 adopted_token = getattr(transport, "_adopted_child", None)
-                child_evidence_available = isinstance(
-                    adopted_token, AdoptedChild
-                ) and adopted_token.evidence is not None
+                child_evidence_available = (
+                    isinstance(adopted_token, AdoptedChild) and adopted_token.evidence is not None
+                )
             except Exception:  # noqa: BLE001 — evidence check is best-effort
                 pass
         try:
             session_store.record_session_timeline(
-                project_root, session_id, "session.opened", state="active",
+                project_root,
+                session_id,
+                "session.opened",
+                state="active",
                 attributes={
                     "agent-profile-id": agent_profile_id,
                     "provider-id": provider_id,
@@ -772,11 +859,9 @@ class SessionRuntime:
         # Binding lifecycle is tied to session — created on open, invalidated
         # automatically on close/failure via invalidate_all_for_session.
         try:
-            binding_id, _token, _ingress_endpoint = (
-                self._observer_ingress.create_observer_binding(
-                    session_id=session_id,
-                    project_root=str(project_root),
-                )
+            binding_id, _token, _ingress_endpoint = self._observer_ingress.create_observer_binding(
+                session_id=session_id,
+                project_root=str(project_root),
             )
             handle.observer_binding_id = binding_id
         except AudiaGenticError:
@@ -788,17 +873,258 @@ class SessionRuntime:
                 exc_info=True,
             )
         self._handles[session_id] = handle
-        _publish_session_event(SESSION_OPENED_TOPIC, {
-            "session-id": session_id,
-            "agent-profile-id": record["agent-profile-id"],
-            "state": "active",
-            "provider-id": record.get("provider-id"),
-            "model-id": record.get("model-id"),
-            # AS17: project foundation process facts into session events.
-            "child-pid": child_pid,
-            "child-creation-identity": child_creation_identity,
-        }, correlation_id=correlation_id)
-        logger.info("gateway session opened", extra={"session-id": session_id, "agent-profile-id": agent_profile_id})
+        _publish_session_event(
+            SESSION_OPENED_TOPIC,
+            {
+                "session-id": session_id,
+                "agent-profile-id": record["agent-profile-id"],
+                "state": "active",
+                "provider-id": record.get("provider-id"),
+                "model-id": record.get("model-id"),
+                # AS17: project foundation process facts into session events.
+                "child-pid": child_pid,
+                "child-creation-identity": child_creation_identity,
+            },
+            correlation_id=correlation_id,
+        )
+        logger.info(
+            "gateway session opened",
+            extra={"session-id": session_id, "agent-profile-id": agent_profile_id},
+        )
+        return record
+
+    async def _resume_session(
+        self,
+        project_root: Path,
+        source_session_id: str,
+        *,
+        control_id: str,
+        identity_context_fingerprint: str | None,
+        execution_context_fingerprint: str | None,
+        model_id: str | None,
+        idle_timeout_seconds: float,
+        max_lifetime_seconds: float,
+        turn_timeout_seconds: float,
+        turn_silence_timeout_seconds: float,
+        correlation_id: str | None,
+        request_runtime_root: Path | None,
+    ) -> dict[str, Any]:
+        """AS49: resolve, validate, and dispatch an explicit resume request.
+
+        Never falls back to opening a fresh session on any failure — every
+        rejection path raises a typed AudiaGenticError (see
+        agents_gateway_session_resume.py for the taxonomy) and records the
+        failure under the idempotency key so a replay returns the same
+        rejection rather than silently retrying against the provider.
+        """
+        if self._shutdown:
+            raise AudiaGenticError(
+                code="CON-AGW-002",
+                kind="agents",
+                message="session runtime has been shut down",
+                details={},
+            )
+
+        from audiagentic.components.agents import (
+            agents_gateway_session_resume as resume_lib,
+        )
+        from audiagentic.components.providers.contracts.session_surface import (
+            SurfaceHint,
+        )
+
+        # ── Idempotency: replay a prior attempt for this exact control id ──
+        prior = resume_lib.lookup_resume_attempt(project_root, source_session_id, control_id)
+        if prior is not None:
+            if prior.get("outcome") == "succeeded" and prior.get("new-session-id"):
+                return session_store.read_session_record(project_root, prior["new-session-id"])
+            raise AudiaGenticError(
+                code=resume_lib.ERR_IDEMPOTENT_REPLAY_OF_FAILURE,
+                kind="agents",
+                message="this resume control id was already used for a request that failed",
+                details={
+                    "source-session-id": source_session_id,
+                    "prior-error-code": prior.get("error-code"),
+                },
+            )
+
+        def _record_failure(exc: AudiaGenticError) -> None:
+            resume_lib.record_resume_attempt(
+                project_root,
+                source_session_id,
+                control_id,
+                outcome="failed",
+                error_code=exc.code,
+                error_message=exc.message,
+            )
+
+        # ── Resolve source record + binding (raw/protected reads) ──
+        try:
+            source_record = session_store.read_session_record(project_root, source_session_id)
+        except AudiaGenticError as exc:
+            _record_failure(exc)
+            raise
+        source_binding = session_store.read_session_binding(project_root, source_session_id)
+        provider_id = (source_binding or {}).get("provider-id")
+        surface_id = (source_binding or {}).get("surface-id")
+
+        from audiagentic.components.providers import providers_api
+
+        surface = providers_api.resolve_session_surface(
+            project_root,
+            provider_id or "",
+            SurfaceHint(surface_id=surface_id or "unknown"),
+        )
+
+        try:
+            resume_lib.validate_resume_eligibility(
+                source_session_id=source_session_id,
+                source_state=source_record["state"],
+                source_binding=source_binding,
+                surface=surface,
+                identity_context_fingerprint=identity_context_fingerprint,
+                execution_context_fingerprint=execution_context_fingerprint,
+            )
+        except AudiaGenticError as exc:
+            _record_failure(exc)
+            raise
+
+        # ── Dispatch exactly one provider-local resume operation ──
+        prepare_kwargs: dict[str, Any] = {
+            "provider_id": provider_id,
+            "surface_hint": SurfaceHint(surface_id=surface_id or "unknown"),
+            "model_id": model_id,
+            "resume_provider_ref": source_binding["provider-session-ref"],
+        }
+        if request_runtime_root is not None:
+            prepare_kwargs["request_runtime_root"] = request_runtime_root
+        prepared = self._provider_prepare_fn(project_root, **prepare_kwargs)
+        if prepared.transport is None:
+            exc = AudiaGenticError(
+                code="CON-AGW-095",
+                kind="agents",
+                message="resolved session surface is unsupported; cannot resume session",
+                details={"provider-id": provider_id, "surface-id": surface_id},
+            )
+            _record_failure(exc)
+            raise exc
+        transport = prepared.transport
+        try:
+            provider_session_ref = await transport.open()
+        except Exception as exc:  # noqa: BLE001 — provider rejection, not a fallback path
+            wrapped = AudiaGenticError(
+                code="EXT-AGW-118",
+                kind="agents",
+                message="provider rejected the resume operation",
+                details={
+                    "provider-id": provider_id,
+                    "surface-id": surface_id,
+                    "error-type": type(exc).__name__,
+                },
+            )
+            _record_failure(wrapped)
+            raise wrapped from exc
+
+        # ── Build the new generation's record + RESUMED_FROM binding ──
+        record = session_store.build_session_record(
+            agent_profile_id=source_record["agent-profile-id"],
+            provider_id=provider_id,
+            model_id=model_id or source_record.get("model-id"),
+            provider_session_ref=str(provider_session_ref) if provider_session_ref else None,
+            idle_timeout_seconds=idle_timeout_seconds,
+            max_lifetime_seconds=max_lifetime_seconds,
+        )
+        session_id = record["session-id"]
+        record["binding"] = binding_store.resume_binding(
+            session_id=session_id,
+            provider_id=provider_id,
+            surface_id=surface_id,
+            provider_ref=str(provider_session_ref),
+            predecessor_binding_id=source_binding["binding-id"],
+            ref_namespace=source_binding.get("ref-namespace"),
+            identity_context_fingerprint=source_binding.get("identity-context-fingerprint"),
+            execution_context_fingerprint=source_binding.get("execution-context-fingerprint"),
+        )
+        try:
+            session_store.write_session_record(project_root, record)
+            binding_store.register_open_binding(project_root, record)
+        except Exception as exc:
+            # Provider resume succeeded but persistence failed: never expose a
+            # live new generation the client cannot look up. Detach/close per
+            # ownership and remove no provisional index state was written.
+            await transport.close()
+            wrapped = AudiaGenticError(
+                code="IO-AGW-119",
+                kind="agents",
+                message="resume succeeded at the provider but persisting the new session record failed",
+                details={"source-session-id": source_session_id},
+            )
+            _record_failure(wrapped)
+            raise wrapped from exc
+
+        child_pid = getattr(transport, "child_pid", None)
+        handle = _SessionHandle(
+            session_id=session_id,
+            transport=transport,
+            project_root=project_root,
+            agent_profile_id=source_record["agent-profile-id"],
+            idle_timeout_seconds=idle_timeout_seconds,
+            max_lifetime_seconds=max_lifetime_seconds,
+            turn_timeout_seconds=turn_timeout_seconds,
+            turn_silence_timeout_seconds=turn_silence_timeout_seconds,
+            created_clock=self._clock(),
+            correlation_id=correlation_id,
+            surface_snapshot=surface,
+            request_runtime_root=request_runtime_root,
+        )
+        handle.child_pid = child_pid
+        # AS19 status-observer lease / observer binding are NOT wired here —
+        # unlike _open_session, a resumed session does not acquire one. Not
+        # in AS49's own scope (that's AS19/AS41 territory); flagged so nobody
+        # assumes resumed sessions get the same live status projection as a
+        # freshly opened one.
+        self._handles[session_id] = handle
+
+        try:
+            session_store.record_session_timeline(
+                project_root,
+                session_id,
+                "session.resumed",
+                state="active",
+                attributes={
+                    "source-session-id": source_session_id,
+                    "predecessor-binding-id": source_binding["binding-id"],
+                    "provider-id": provider_id,
+                    "model-id": record.get("model-id"),
+                    "correlation-id": correlation_id,
+                },
+            )
+        except Exception:  # noqa: BLE001 — a timeline failure must not fail the resume
+            logger.warning(
+                "failed to record session.resumed timeline",
+                extra={"session-id": session_id},
+                exc_info=True,
+            )
+
+        resume_lib.record_resume_attempt(
+            project_root, source_session_id, control_id,
+            outcome="succeeded", new_session_id=session_id,
+        )
+        _publish_session_event(
+            SESSION_RESUMED_TOPIC,
+            {
+                "session-id": session_id,
+                "source-session-id": source_session_id,
+                "agent-profile-id": record["agent-profile-id"],
+                "state": "active",
+                "provider-id": provider_id,
+                "model-id": record.get("model-id"),
+            },
+            correlation_id=correlation_id,
+        )
+        logger.info(
+            "gateway session resumed",
+            extra={"session-id": session_id, "source-session-id": source_session_id},
+        )
         return record
 
     def _require_handle(self, session_id: str) -> _SessionHandle:
@@ -880,7 +1206,10 @@ class SessionRuntime:
                     details={"session-id": session_id},
                 )
             session_store.record_session_timeline(
-                project_root, session_id, "session.turn.started", state="active",
+                project_root,
+                session_id,
+                "session.turn.started",
+                state="active",
                 attributes={"request-id": request_id, "correlation-id": correlation_id},
             )
             handle.latest_turn_event = {
@@ -916,7 +1245,11 @@ class SessionRuntime:
             # AS28 slice 4b-A: build the neutral observation sink that feeds
             # the turn-event pipeline (agents_gateway_turn_events.py).
             _on_event_cb = _make_on_event_callback(
-                session_id, project_root, request_id, handle.agent_profile_id, correlation_id,
+                session_id,
+                project_root,
+                request_id,
+                handle.agent_profile_id,
+                correlation_id,
                 activity_marker=_mark_activity,
                 latest_event_recorder=_record_latest_turn_event,
             )
@@ -982,9 +1315,7 @@ class SessionRuntime:
             )
             try:
                 # Call the neutral seam: AgentSessionTransport.prompt().
-                prompt_coro = handle.transport.prompt(
-                    session_prompt, _observation_sink
-                )
+                prompt_coro = handle.transport.prompt(session_prompt, _observation_sink)
                 if handle.turn_timeout_seconds:
                     # RV680: bound the turn so a wedged harness cannot hold the
                     # profile compute slot forever. Timeout is terminal for the
@@ -1034,25 +1365,34 @@ class SessionRuntime:
         if result.dropped_observations:
             turn_end_attrs["dropped-events"] = result.dropped_observations
         if result.observations_delivered or result.dropped_observations:
-            turn_end_attrs["total-events"] = result.observations_delivered + result.dropped_observations
+            turn_end_attrs["total-events"] = (
+                result.observations_delivered + result.dropped_observations
+            )
         session_store.record_session_timeline(
-            project_root, session_id, "session.turn.finished", state="active",
+            project_root,
+            session_id,
+            "session.turn.finished",
+            state="active",
             attributes=turn_end_attrs,
         )
         try:
             turn_record = session_store.read_session_record(project_root, session_id)
         except AudiaGenticError:
             turn_record = None
-        _publish_session_event(SESSION_TURN_FINISHED_TOPIC, {
-            "session-id": session_id,
-            "agent-profile-id": handle.agent_profile_id,
-            "state": "active",
-            "provider-id": turn_record.get("provider-id") if turn_record else None,
-            "model-id": turn_record.get("model-id") if turn_record else None,
-            "request-id": request_id,
-            "turn-count": turn_record.get("turn-count") if turn_record else None,
-            "stop-reason": result.stop_reason,
-        }, correlation_id=correlation_id)
+        _publish_session_event(
+            SESSION_TURN_FINISHED_TOPIC,
+            {
+                "session-id": session_id,
+                "agent-profile-id": handle.agent_profile_id,
+                "state": "active",
+                "provider-id": turn_record.get("provider-id") if turn_record else None,
+                "model-id": turn_record.get("model-id") if turn_record else None,
+                "request-id": request_id,
+                "turn-count": turn_record.get("turn-count") if turn_record else None,
+                "stop-reason": result.stop_reason,
+            },
+            correlation_id=correlation_id,
+        )
         return result
 
     async def _fail_session(self, handle: _SessionHandle, *, reason: str) -> None:
@@ -1063,13 +1403,17 @@ class SessionRuntime:
             record = session_store.read_session_record(handle.project_root, handle.session_id)
             if record["state"] not in session_store.SESSION_TERMINAL_STATES:
                 updated = session_store.transition_session_record(
-                    handle.project_root, handle.session_id, "failed",
+                    handle.project_root,
+                    handle.session_id,
+                    "failed",
                     updates={"close-reason": reason, "closed-at": now_iso_z()},
                 )
                 binding_store.retire_binding(handle.project_root, updated, state="failed")
             # AS19 Stage-2: invalidate observer bindings on session failure.
             self._observer_ingress.invalidate_all_for_session(handle.session_id)
-            _publish_session_event(SESSION_FAILED_TOPIC, {
+            _publish_session_event(
+                SESSION_FAILED_TOPIC,
+                {
                     "session-id": handle.session_id,
                     "agent-profile-id": record["agent-profile-id"],
                     "state": "failed",
@@ -1077,9 +1421,15 @@ class SessionRuntime:
                     "model-id": record.get("model-id"),
                     "close-reason": reason,
                     "turn-count": record.get("turn-count"),
-                }, correlation_id=handle.correlation_id)
+                },
+                correlation_id=handle.correlation_id,
+            )
         except AudiaGenticError:
-            logger.warning("failed to persist session failure", extra={"session-id": handle.session_id}, exc_info=True)
+            logger.warning(
+                "failed to persist session failure",
+                extra={"session-id": handle.session_id},
+                exc_info=True,
+            )
 
     async def _close(
         self,
@@ -1101,7 +1451,9 @@ class SessionRuntime:
         if record is not None and record["state"] not in session_store.SESSION_TERMINAL_STATES:
             new_state = "expired" if reason in ("idle-timeout", "max-lifetime") else "closed"
             record = session_store.transition_session_record(
-                project_root, session_id, new_state,
+                project_root,
+                session_id,
+                new_state,
                 updates={"close-reason": reason, "closed-at": now_iso_z()},
             )
             binding_store.retire_binding(project_root, record, state=new_state)
@@ -1110,23 +1462,32 @@ class SessionRuntime:
             # AS21 consumer slice: clear evidence projection for this session.
             self._evidence_projection.clear_for_session(session_id)
             session_store.record_session_timeline(
-                project_root, session_id, "session.closed", state=record["state"],
+                project_root,
+                session_id,
+                "session.closed",
+                state=record["state"],
                 attributes={
                     "close-reason": reason,
                     "correlation-id": handle.correlation_id if handle else None,
                 },
             )
             topic = SESSION_EXPIRED_TOPIC if new_state == "expired" else SESSION_CLOSED_TOPIC
-            _publish_session_event(topic, {
-                "session-id": session_id,
-                "agent-profile-id": record["agent-profile-id"],
-                "state": new_state,
-                "provider-id": record.get("provider-id"),
-                "model-id": record.get("model-id"),
-                "close-reason": reason,
-                "turn-count": record.get("turn-count"),
-            }, correlation_id=handle.correlation_id if handle else None)
-        logger.info("gateway session closed", extra={"session-id": session_id, "close-reason": reason})
+            _publish_session_event(
+                topic,
+                {
+                    "session-id": session_id,
+                    "agent-profile-id": record["agent-profile-id"],
+                    "state": new_state,
+                    "provider-id": record.get("provider-id"),
+                    "model-id": record.get("model-id"),
+                    "close-reason": reason,
+                    "turn-count": record.get("turn-count"),
+                },
+                correlation_id=handle.correlation_id if handle else None,
+            )
+        logger.info(
+            "gateway session closed", extra={"session-id": session_id, "close-reason": reason}
+        )
         return record if record is not None else {"session-id": session_id, "state": "closed"}
 
     @staticmethod
@@ -1145,7 +1506,11 @@ class SessionRuntime:
             try:
                 await self._close(handle.project_root, session_id, reason=reason)
             except Exception:  # noqa: BLE001 — close every session regardless
-                logger.warning("session close failed during close-all", extra={"session-id": session_id}, exc_info=True)
+                logger.warning(
+                    "session close failed during close-all",
+                    extra={"session-id": session_id},
+                    exc_info=True,
+                )
 
     async def _reaper(self) -> None:
         """Periodic sweep: idle timeouts, max lifetime, dead children."""
@@ -1189,7 +1554,9 @@ class SessionRuntime:
                     )
                     try:
                         session_store.record_session_timeline(
-                            handle.project_root, session_id, "session.turn.silence-timeout",
+                            handle.project_root,
+                            session_id,
+                            "session.turn.silence-timeout",
                             state="active",
                             attributes={
                                 "request-id": handle.current_request_id,

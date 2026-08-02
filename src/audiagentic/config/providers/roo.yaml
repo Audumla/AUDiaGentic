@@ -57,3 +57,13 @@ capabilities:
           mode: unsupported
           error-code: CON-ROO-001
           message: "Roo Code is a VS Code extension provider and has no CLI execution adapter"
+
+# CC53: AS27 harness-observability inventory (this provider's own facts —
+# see harness_observability_inventory.py for the domain semantics).
+harness_observability:
+  - surface_id: roo-cli
+    evidence:
+      validated: false
+      reference: unsupported
+    recipe: D
+    lifecycle_source: none

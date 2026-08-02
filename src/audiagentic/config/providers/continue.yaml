@@ -52,3 +52,21 @@ capabilities:
       recipes:
         execution:
           mode: ok-stub
+
+# CC53: AS27 harness-observability inventory (this provider's own facts —
+# see harness_observability_inventory.py for the domain semantics).
+harness_observability:
+  - surface_id: continue-headless
+    candidate_source: structured one-shot result
+    evidence:
+      validated: false
+      reference: one-shot terminal evidence is not reusable-session O2 without explicit persistent boundary
+    recipe: C
+    lifecycle_source: none
+    probe_anchor: one-shot terminal evidence is not reusable-session O2 without explicit persistent boundary
+  - surface_id: continue-tui
+    evidence:
+      validated: false
+      reference: unsupported
+    recipe: D
+    lifecycle_source: none

@@ -46,3 +46,13 @@ capabilities:
           mode: stub
           aliases: [plandex, pdx]
           message: "Plandex adapter is registered; execution bridge not wired yet."
+
+# CC53: AS27 harness-observability inventory (this provider's own facts —
+# see harness_observability_inventory.py for the domain semantics).
+harness_observability:
+  - surface_id: plandex-cli
+    evidence:
+      validated: false
+      reference: unsupported
+    recipe: D
+    lifecycle_source: none
