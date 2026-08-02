@@ -188,6 +188,18 @@ class StandaloneGatewayClient:
     def close_llm_session(self, project_root: Path, session_id: str) -> dict[str, Any]:
         return cast(dict[str, Any], self._call("close_llm_session", project_root, {"session_id": session_id}))
 
+    def resume_llm_session(
+        self, project_root: Path, source_session_id: str, **kwargs: Any
+    ) -> dict[str, Any]:
+        return cast(
+            dict[str, Any],
+            self._call(
+                "resume_llm_session",
+                project_root,
+                {"source_session_id": source_session_id, **kwargs},
+            ),
+        )
+
     # SH10 operator lifecycle surface (service-scoped; project root is the
     # caller's admission context only).
 

@@ -3,6 +3,7 @@
 Tests default compatibility, one valid surface, every rejection case, and no
 accidental descriptor import from agents.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -15,19 +16,21 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.session_surface import (
     ContentChannelId,
     ControlSupport,
-    EffectiveObservationLevel,
     LifecycleInstallation,
     ResolvedSessionSurface,
     SessionControlAction,
     SessionIdentityOperation,
     SessionOwnershipMode,
-    SurfaceValidationState,
 )
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
+
 def _valid_surface_data(**overrides) -> dict:
-    """Return a valid YAML-style surface entry dict."""
+    """Return a valid YAML-style surface entry dict.
+
+    Carries controls, so evidence.validated must be True (declarations rule 2).
+    """
     data = {
         "surface_id": "acp",
         "version_constraint": ">=1.0",
@@ -39,8 +42,13 @@ def _valid_surface_data(**overrides) -> dict:
         "controls": {"cancel-turn": "supported"},
         "lifecycle_source": "transport",
         "lifecycle_installation": "none",
-        "validation_state": "declared",
-        "effective_level": "O0",
+        "evidence": {"validated": True, "reference": "tests/fixtures/acp-probe.md"},
+        "platforms": [
+            {
+                "platform": "linux-amd64",
+                "evidence": {"validated": True, "reference": "tests/fixtures/acp-probe.md"},
+            },
+        ],
         "adapter_ref": None,
     }
     data.update(overrides)
@@ -55,7 +63,9 @@ def _min_valid_descriptor_data() -> dict:
         "execution_isolation_tier": "no-isolation",
     }
 
+
 # ── Default compatibility (backward compat) ────────────────────────────────
+
 
 class TestDefaultCompatibility:
     """Providers without session_surfaces continue to work."""
@@ -72,6 +82,7 @@ class TestDefaultCompatibility:
             get_providers_config_dir,
             load_providers_from_directory,
         )
+
         providers = load_providers_from_directory(get_providers_config_dir())
         assert len(providers) > 0
         for desc in providers.values():
@@ -87,7 +98,9 @@ class TestDefaultCompatibility:
         )
         assert desc.session_surfaces == ()
 
+
 # ── One valid surface ──────────────────────────────────────────────────────
+
 
 class TestValidSurface:
     """A valid session-surface declaration loads and validates."""
@@ -105,21 +118,19 @@ class TestValidSurface:
         data = _min_valid_descriptor_data()
         data["session_surfaces"] = [
             _valid_surface_data(
-                validation_state="validated",
-                effective_level="O2",
+                evidence={"validated": True, "reference": "tests/fixtures/acp-probe.md"},
                 platforms=[
                     {
                         "platform": "linux-amd64",
-                        "validation_state": "validated",
-                        "effective_level": "O2",
+                        "evidence": {"validated": True, "reference": "tests/fixtures/acp-probe.md"},
                     },
                 ],
             ),
         ]
         descriptor = PROVIDER_SPEC.build(data)
         decl = descriptor.session_surfaces[0]
-        assert decl.validation_state == SurfaceValidationState.VALIDATED
-        assert decl.effective_level == EffectiveObservationLevel.O2
+        assert decl.evidence.validated is True
+        assert decl.evidence.reference == "tests/fixtures/acp-probe.md"
         assert len(decl.platforms) == 1
 
     def test_valid_surface_with_content_channels(self):
@@ -227,10 +238,13 @@ class TestValidSurface:
     def test_adapter_ref_not_in_resolved_session_surface(self):
         """ResolvedSessionSurface has no adapter_ref field — it is foundation type."""
         import dataclasses
+
         surface_fields = {f.name for f in dataclasses.fields(ResolvedSessionSurface)}
         assert "adapter_ref" not in surface_fields
 
+
 # ── Rejection: duplicate (surface_id, version_constraint) ───────────────────
+
 
 class TestRejectDuplicateKey:
     """Duplicate (surface_id, version_constraint) is rejected."""
@@ -260,94 +274,72 @@ class TestRejectDuplicateKey:
         descriptor = PROVIDER_SPEC.build(data)
         assert len(descriptor.session_surfaces) == 2
 
-# ── Rejection: non-validated O2/O3/O4 ──────────────────────────────────────
 
-class TestRejectNonValidatedHighLevel:
-    """Non-validated effective O2/O3/O4 is rejected."""
+# ── Rejection: controls/content channels without validated evidence ────────
 
-    def test_non_validated_o2_rejected(self):
+
+class TestRejectUnvalidatedControlsOrContent:
+    """Controls or content channels require evidence.validated=True (AS59)."""
+
+    def test_controls_without_validated_evidence_rejected(self):
         data = _min_valid_descriptor_data()
         data["session_surfaces"] = [
             _valid_surface_data(
-                validation_state="declared",
-                effective_level="O2",
+                controls={"cancel-turn": "supported"},
+                evidence={"validated": False, "reference": ""},
+                platforms=[],
             ),
         ]
         with pytest.raises(AudiaGenticError, match="VAL-PCAP-011"):
             PROVIDER_SPEC.build(data)
 
-    def test_non_validated_o3_rejected(self):
+    def test_content_channels_without_validated_evidence_rejected(self):
         data = _min_valid_descriptor_data()
         data["session_surfaces"] = [
             _valid_surface_data(
-                validation_state="declared",
-                effective_level="O3",
+                controls={},
+                content_channels=[{"channel": "assistant-text", "max_bytes": 1024}],
+                evidence={"validated": False, "reference": ""},
+                platforms=[],
             ),
         ]
         with pytest.raises(AudiaGenticError, match="VAL-PCAP-011"):
             PROVIDER_SPEC.build(data)
 
-    def test_non_validated_o4_rejected(self):
+    def test_no_controls_no_content_unvalidated_allowed(self):
+        """A bare open/close-only declaration needs no validated evidence."""
         data = _min_valid_descriptor_data()
         data["session_surfaces"] = [
             _valid_surface_data(
-                validation_state="declared",
-                effective_level="O4",
-            ),
-        ]
-        with pytest.raises(AudiaGenticError, match="VAL-PCAP-011"):
-            PROVIDER_SPEC.build(data)
-
-    def test_probe_required_o2_rejected(self):
-        """probe-required with O2 is also rejected (not validated)."""
-        data = _min_valid_descriptor_data()
-        data["session_surfaces"] = [
-            _valid_surface_data(
-                validation_state="probe-required",
-                effective_level="O2",
-            ),
-        ]
-        with pytest.raises(AudiaGenticError, match="VAL-PCAP-011"):
-            PROVIDER_SPEC.build(data)
-
-    def test_validated_o2_allowed(self):
-        """validated + O2 with platform evidence is allowed."""
-        data = _min_valid_descriptor_data()
-        data["session_surfaces"] = [
-            _valid_surface_data(
-                validation_state="validated",
-                effective_level="O2",
-                platforms=[{"platform": "linux-amd64", "validation_state": "validated"}],
+                controls={},
+                content_channels=[],
+                evidence={"validated": False, "reference": ""},
+                platforms=[],
             ),
         ]
         descriptor = PROVIDER_SPEC.build(data)
         assert len(descriptor.session_surfaces) == 1
 
-    def test_declared_o0_allowed(self):
-        """declared + O0 is allowed (low level, no validation needed)."""
+    def test_controls_with_validated_evidence_allowed(self):
         data = _min_valid_descriptor_data()
         data["session_surfaces"] = [
             _valid_surface_data(
-                validation_state="declared",
-                effective_level="O0",
+                controls={"cancel-turn": "supported"},
+                evidence={"validated": True, "reference": "tests/fixtures/acp-probe.md"},
+                platforms=[
+                    {
+                        "platform": "linux-amd64",
+                        "evidence": {"validated": True, "reference": "tests/fixtures/acp-probe.md"},
+                    },
+                ],
             ),
         ]
         descriptor = PROVIDER_SPEC.build(data)
         assert len(descriptor.session_surfaces) == 1
 
-    def test_declared_o1_allowed(self):
-        """declared + O1 is allowed (below O2 threshold)."""
-        data = _min_valid_descriptor_data()
-        data["session_surfaces"] = [
-            _valid_surface_data(
-                validation_state="declared",
-                effective_level="O1",
-            ),
-        ]
-        descriptor = PROVIDER_SPEC.build(data)
-        assert len(descriptor.session_surfaces) == 1
 
 # ── Rejection: validated with no platform evidence ─────────────────────────
+
 
 class TestRejectValidatedNoEvidence:
     """Validated declaration with no platform evidence is rejected."""
@@ -356,7 +348,8 @@ class TestRejectValidatedNoEvidence:
         data = _min_valid_descriptor_data()
         data["session_surfaces"] = [
             _valid_surface_data(
-                validation_state="validated",
+                evidence={"validated": True, "reference": "tests/fixtures/acp-probe.md"},
+                platforms=[],
             ),
         ]
         with pytest.raises(AudiaGenticError, match="VAL-PCAP-011"):
@@ -366,8 +359,13 @@ class TestRejectValidatedNoEvidence:
         data = _min_valid_descriptor_data()
         data["session_surfaces"] = [
             _valid_surface_data(
-                validation_state="validated",
-                platforms=[{"platform": "windows-amd64", "validation_state": "validated"}],
+                evidence={"validated": True, "reference": "tests/fixtures/acp-probe.md"},
+                platforms=[
+                    {
+                        "platform": "windows-amd64",
+                        "evidence": {"validated": True, "reference": "tests/fixtures/acp-probe.md"},
+                    }
+                ],
             ),
         ]
         descriptor = PROVIDER_SPEC.build(data)
@@ -377,10 +375,16 @@ class TestRejectValidatedNoEvidence:
         data = _min_valid_descriptor_data()
         data["session_surfaces"] = [
             _valid_surface_data(
-                validation_state="validated",
+                evidence={"validated": True, "reference": "tests/fixtures/acp-probe.md"},
                 platforms=[
-                    {"platform": "linux-amd64", "validation_state": "validated"},
-                    {"platform": "windows-amd64", "validation_state": "validated"},
+                    {
+                        "platform": "linux-amd64",
+                        "evidence": {"validated": True, "reference": "tests/fixtures/acp-probe.md"},
+                    },
+                    {
+                        "platform": "windows-amd64",
+                        "evidence": {"validated": True, "reference": "tests/fixtures/acp-probe.md"},
+                    },
                 ],
             ),
         ]
@@ -388,7 +392,9 @@ class TestRejectValidatedNoEvidence:
         decl = descriptor.session_surfaces[0]
         assert len(decl.platforms) == 2
 
+
 # ── Rejection: content channel with zero/absent bounds ─────────────────────
+
 
 class TestRejectZeroBoundContentChannel:
     """Content channel with zero/absent byte AND event bound is rejected."""
@@ -444,7 +450,9 @@ class TestRejectZeroBoundContentChannel:
         descriptor = PROVIDER_SPEC.build(data)
         assert len(descriptor.session_surfaces) == 1
 
+
 # ── Rejection: managed-hook/plugin without adapter_ref ─────────────────────
+
 
 class TestRejectManagedHookPluginNoAdapterRef:
     """Managed-hook/plugin lifecycle without nonempty adapter_ref is rejected."""
@@ -538,7 +546,9 @@ class TestRejectManagedHookPluginNoAdapterRef:
         descriptor = PROVIDER_SPEC.build(data)
         assert len(descriptor.session_surfaces) == 1
 
+
 # ── Rejection: invalid enum domains ────────────────────────────────────────
+
 
 class TestRejectInvalidEnumDomains:
     """Invalid enum values in identity_operations and controls are rejected."""
@@ -653,7 +663,9 @@ class TestRejectInvalidEnumDomains:
         with pytest.raises(AudiaGenticError, match="VAL-PCAP-011"):
             PROVIDER_SPEC.build(data)
 
+
 # ── Rejection: structural errors ───────────────────────────────────────────
+
 
 class TestRejectStructuralErrors:
     """Structural validation errors are rejected."""
@@ -694,7 +706,9 @@ class TestRejectStructuralErrors:
         with pytest.raises(AudiaGenticError, match="VAL-PCAP-011"):
             PROVIDER_SPEC.build(data)
 
+
 # ── Type compatibility: _parse_enum accepts set and frozenset ──────────────
+
 
 class TestParseEnumTypeCompatibility:
     """_parse_enum's allowed_values parameter accepts both set[str] and frozenset[str]."""
@@ -719,7 +733,9 @@ class TestParseEnumTypeCompatibility:
         result = _parse_enum("supported", allowed, _CONTROL_SUPPORT_MAP, "control")
         assert result is ControlSupport.SUPPORTED
 
+
 # ── No accidental descriptor import from agents ────────────────────────────
+
 
 class TestNoAccidentalDescriptorImportFromAgents:
     """The session_surface_declarations module must not import agent components."""
@@ -731,6 +747,7 @@ class TestNoAccidentalDescriptorImportFromAgents:
             fromlist=["SessionSurfaceDeclaration"],
         )
         import inspect
+
         source_code = inspect.getsource(mod)
         for line in source_code.splitlines():
             stripped = line.strip()
@@ -754,6 +771,7 @@ class TestNoAccidentalDescriptorImportFromAgents:
         from audiagentic.components.providers.descriptors.session_surface_declarations import (
             SessionSurfaceDeclaration,
         )
+
         field_types = {f.name: f.type for f in dataclasses.fields(SessionSurfaceDeclaration)}
         assert "adapter_ref" in field_types
         # The type annotation is str | None — not Callable
@@ -761,6 +779,7 @@ class TestNoAccidentalDescriptorImportFromAgents:
     def test_resolved_session_surface_has_no_adapter_ref(self):
         """Foundation ResolvedSessionSurface must never have adapter_ref."""
         import dataclasses
+
         surface_fields = {f.name for f in dataclasses.fields(ResolvedSessionSurface)}
         assert "adapter_ref" not in surface_fields, (
             "ResolvedSessionSurface must not carry descriptor-local adapter_ref"

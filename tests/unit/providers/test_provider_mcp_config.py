@@ -1,4 +1,5 @@
 """Unit tests for generic provider MCP config management."""
+
 from __future__ import annotations
 
 import json
@@ -36,6 +37,7 @@ from audiagentic.foundation.mcp.json_format import (
 
 # --- format handler tests ---
 
+
 class TestMcpJsonFormat:
     def test_read_missing_file_returns_empty(self, tmp_path: Path) -> None:
         result = read_mcp_json(tmp_path / ".mcp.json")
@@ -53,7 +55,11 @@ class TestMcpJsonFormat:
 
     def test_write_preserves_existing_keys(self, tmp_path: Path) -> None:
         path = tmp_path / ".mcp.json"
-        path.write_text(json.dumps({"mcpServers": {"existing": {"command": "old", "args": []}}, "settings": {"x": 1}}))
+        path.write_text(
+            json.dumps(
+                {"mcpServers": {"existing": {"command": "old", "args": []}}, "settings": {"x": 1}}
+            )
+        )
         entry = McpServerEntry(name="new-server", command="uvx", args=())
         write_mcp_json(path, {"new-server": entry})
         data = json.loads(path.read_text())
@@ -77,7 +83,16 @@ class TestMcpJsonFormat:
 
     def test_remove_existing_entry(self, tmp_path: Path) -> None:
         path = tmp_path / ".mcp.json"
-        path.write_text(json.dumps({"mcpServers": {"a": {"command": "x", "args": []}, "b": {"command": "y", "args": []}}}))
+        path.write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "a": {"command": "x", "args": []},
+                        "b": {"command": "y", "args": []},
+                    }
+                }
+            )
+        )
         removed = remove_mcp_json(path, "a")
         assert removed is True
         data = json.loads(path.read_text())
@@ -113,7 +128,12 @@ class TestMcpJsonFormat:
         entry = McpServerEntry(
             name="ag-planning",
             command=sys.executable,
-            args=("-m", "audiagentic.launcher", "mcp", "audiagentic.components.planning.planning_mcp"),
+            args=(
+                "-m",
+                "audiagentic.launcher",
+                "mcp",
+                "audiagentic.components.planning.planning_mcp",
+            ),
         )
         write_mcp_json(path, {"ag-planning": entry})
         data = json.loads(path.read_text())
@@ -126,10 +146,18 @@ class TestMcpJsonFormat:
         import sys
 
         path = tmp_path / ".mcp.json"
-        path.write_text(json.dumps({"mcpServers": {"ag-planning": {
-            "command": "__AUDIAGENTIC_PYTHON__",
-            "args": ["-m", "audiagentic.launcher"],
-        }}}))
+        path.write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "ag-planning": {
+                            "command": "__AUDIAGENTIC_PYTHON__",
+                            "args": ["-m", "audiagentic.launcher"],
+                        }
+                    }
+                }
+            )
+        )
         # Read resolves the placeholder; writing it back must persist a real path.
         entries = read_mcp_json(path)
         write_mcp_json(path, entries)
@@ -152,11 +180,13 @@ class TestGooseYamlFormat:
 
     def test_write_preserves_non_stdio_extensions(self, tmp_path: Path) -> None:
         import yaml
+
         path = tmp_path / "config.yaml"
         path.write_text(yaml.dump({"extensions": [{"name": "other", "type": "builtin"}]}))
         entry = McpServerEntry(name="srv", command="cmd", args=())
         write_goose_yaml(path, {"srv": entry})
         import yaml as _yaml
+
         data = _yaml.safe_load(path.read_text())
         names = [e["name"] for e in data["extensions"]]
         assert "other" in names
@@ -186,7 +216,9 @@ class TestContinueJsonFormat:
 
     def test_write_preserves_existing_servers(self, tmp_path: Path) -> None:
         path = tmp_path / "config.json"
-        path.write_text(json.dumps({"mcpServers": [{"name": "existing", "command": "x", "args": []}]}))
+        path.write_text(
+            json.dumps({"mcpServers": [{"name": "existing", "command": "x", "args": []}]})
+        )
         entry = McpServerEntry(name="new", command="y", args=())
         write_continue_json(path, {"new": entry})
         data = json.loads(path.read_text())
@@ -258,7 +290,6 @@ class TestCodexTomlFormat:
         assert result["srv"].env == entry.env
 
 
-
 class TestAddProviderMcpServer:
     def test_adds_entry_to_mcp_json(self, tmp_path: Path, claude_home: Path) -> None:
         result = add_provider_mcp_server("claude", "my-srv", "uvx", tmp_path, args=("my-tool",))
@@ -269,7 +300,9 @@ class TestAddProviderMcpServer:
         assert "my-srv" in data["mcpServers"]
         assert data["mcpServers"]["my-srv"]["command"] == "uvx"
 
-    def test_file_watch_provider_reports_auto_refreshed(self, tmp_path: Path, claude_home: Path) -> None:
+    def test_file_watch_provider_reports_auto_refreshed(
+        self, tmp_path: Path, claude_home: Path
+    ) -> None:
         result = add_provider_mcp_server("claude", "srv", "cmd", tmp_path)
         assert result["auto_refreshed"] is True
         assert result["method"] == "file-watch"
@@ -371,11 +404,15 @@ class TestSyncManagedProviderMcp:
     def test_preserves_external_entries(self, tmp_path: Path, claude_home: Path) -> None:
         path = claude_home / ".claude" / "mcp.json"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({
-            "mcpServers": {
-                "external-server": {"command": "node", "args": ["custom.js"]},
-            }
-        }))
+        path.write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "external-server": {"command": "node", "args": ["custom.js"]},
+                    }
+                }
+            )
+        )
 
         entry = McpServerEntry(name="ag-project-mgmt", command="python", args=("-m", "mod"))
         result = sync_managed_provider_mcp(
@@ -409,7 +446,9 @@ class TestSyncManagedProviderMcp:
         assert "ag-project" in data["mcpServers"]
         assert "ag-project-mgmt" not in data["mcpServers"]
 
-    def test_adopts_unregistered_entry_with_matching_name(self, tmp_path: Path, claude_home: Path) -> None:
+    def test_adopts_unregistered_entry_with_matching_name(
+        self, tmp_path: Path, claude_home: Path
+    ) -> None:
         """AUDiaGentic takes ownership of any entry whose name matches a managed server.
 
         An entry present in the config file but not in the managed registry was
@@ -419,11 +458,15 @@ class TestSyncManagedProviderMcp:
         """
         path = claude_home / ".claude" / "mcp.json"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({
-            "mcpServers": {
-                "ag-project-mgmt": {"command": "old", "args": ["legacy.js"]},
-            }
-        }))
+        path.write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "ag-project-mgmt": {"command": "old", "args": ["legacy.js"]},
+                    }
+                }
+            )
+        )
 
         entry = McpServerEntry(name="ag-project-mgmt", command="python", args=("-m", "mod"))
         result = sync_managed_provider_mcp(
@@ -497,19 +540,23 @@ class TestSyncManagedProviderMcpSubset:
 class TestMcpConfigSpecOnDescriptors:
     def test_file_watch_providers_have_mcp_json(self) -> None:
         from audiagentic.components.providers.descriptors.registry import get_descriptor
-        for pid in ("claude", "qwen"):
-            desc = get_descriptor(pid)
-            assert desc.mcp_config is not None, f"{pid} missing mcp_config"
-            assert desc.mcp_config.format == "mcp-json", f"{pid}: expected mcp-json, got {desc.mcp_config.format}"
-            assert desc.mcp_config.refresh_mode == "file-watch"
-        # opencode uses its own JSON format
+
+        # opencode uses its own JSON format with file-watch
         opencode = get_descriptor("opencode")
         assert opencode.mcp_config is not None
         assert opencode.mcp_config.format == "opencode-mcp"
         assert opencode.mcp_config.refresh_mode == "file-watch"
+        # claude/qwen use mcp-json format (restart-required)
+        for pid in ("claude", "qwen"):
+            desc = get_descriptor(pid)
+            assert desc.mcp_config is not None, f"{pid} missing mcp_config"
+            assert desc.mcp_config.format == "mcp-json", (
+                f"{pid}: expected mcp-json, got {desc.mcp_config.format}"
+            )
 
     def test_restart_required_providers(self) -> None:
         from audiagentic.components.providers.descriptors.registry import get_descriptor
+
         for pid in ("gemini", "cline", "codex", "copilot", "roo", "pi"):
             desc = get_descriptor(pid)
             assert desc.mcp_config is not None, f"{pid} missing mcp_config"
@@ -517,9 +564,11 @@ class TestMcpConfigSpecOnDescriptors:
 
     def test_special_format_providers(self) -> None:
         from audiagentic.components.providers.descriptors.registry import get_descriptor
+
         goose = get_descriptor("goose")
         assert goose.mcp_config.format == "goose-yaml"
-        assert goose.mcp_config.config_path == ".goose/config.yaml"
+        # goose uses XDG config path on Linux/macOS
+        assert goose.mcp_config.config_path in (".goose/config.yaml", "~/.config/goose/config.yaml")
         cont = get_descriptor("continue")
         assert cont.mcp_config.format == "continue-json"
         assert cont.mcp_config.config_path == ".continue/config.json"
@@ -533,6 +582,7 @@ class TestMcpConfigSpecOnDescriptors:
 
     def test_providers_without_mcp_config(self) -> None:
         from audiagentic.components.providers.descriptors.registry import get_descriptor
+
         for pid in ("aider", "plandex", "local-openai"):
             desc = get_descriptor(pid)
             assert desc.mcp_config is None, f"{pid} should have no mcp_config"
@@ -558,14 +608,17 @@ class TestOpenhandsTomlRoundtrip:
         from audiagentic.foundation.mcp import McpServerEntry
 
         cfg = tmp_path / "config.toml"
-        write_mcp_toml(cfg, {
-            "hindsight": McpServerEntry(
-                name="hindsight",
-                url="http://host:8888/mcp",
-                headers={"Authorization": "Bearer k"},
-                transport="http",
-            ),
-        })
+        write_mcp_toml(
+            cfg,
+            {
+                "hindsight": McpServerEntry(
+                    name="hindsight",
+                    url="http://host:8888/mcp",
+                    headers={"Authorization": "Bearer k"},
+                    transport="http",
+                ),
+            },
+        )
 
         result = read_mcp_toml(cfg)
         assert result["hindsight"].is_remote is True
@@ -573,8 +626,7 @@ class TestOpenhandsTomlRoundtrip:
 
     def test_goose_and_continue_have_restart_required(self) -> None:
         from audiagentic.components.providers.descriptors.registry import get_descriptor
+
         for pid in ("goose", "continue"):
             desc = get_descriptor(pid)
             assert desc.mcp_config.refresh_mode == "restart-required"
-
-

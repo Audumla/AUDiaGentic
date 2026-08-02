@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 from audiagentic.components.coding_lsp.coding_lsp_bootstrap import _active_dependency_ids
 from audiagentic.components.coding_lsp.coding_lsp_config import (
@@ -65,12 +66,15 @@ def test_write_and_read_lsp_config(tmp_path: Path) -> None:
 
 def test_load_runtime_servers_validates_runtime_entries(tmp_path: Path) -> None:
     path = tmp_path / "lsp.json"
-    write_lsp_config(path, {
-        "python": {
-            "command": ["pyright-langserver", "--stdio"],
-            "fileExtensions": [".py"],
-        }
-    })
+    write_lsp_config(
+        path,
+        {
+            "python": {
+                "command": ["pyright-langserver", "--stdio"],
+                "fileExtensions": [".py"],
+            }
+        },
+    )
     servers, errors, exists = load_runtime_servers(path)
     assert exists is True
     assert errors == []
@@ -89,11 +93,14 @@ def test_load_runtime_servers_invalid_json_fails_gracefully(tmp_path: Path) -> N
 
 def test_load_runtime_servers_rejects_missing_file_extensions(tmp_path: Path) -> None:
     path = tmp_path / "lsp.json"
-    write_lsp_config(path, {
-        "python": {
-            "command": ["pyright-langserver", "--stdio"],
-        }
-    })
+    write_lsp_config(
+        path,
+        {
+            "python": {
+                "command": ["pyright-langserver", "--stdio"],
+            }
+        },
+    )
     servers, errors, exists = load_runtime_servers(path)
     assert exists is True
     assert servers == {}
@@ -218,8 +225,13 @@ def test_active_dependency_ids_reads_from_feature_state(tmp_path: Path) -> None:
 
 
 def test_active_dependency_ids_no_enabled_features_returns_empty(tmp_path: Path) -> None:
-    (tmp_path / "pyproject.toml").touch()
-    dep_ids = _active_dependency_ids(tmp_path)
+    # Mock resolve_project_root to prevent walking up to a real .audiagentic directory
+    with patch(
+        "audiagentic.components.coding_lsp.lsp_config_api.resolve_project_root",
+        return_value=tmp_path,
+    ):
+        (tmp_path / "pyproject.toml").touch()
+        dep_ids = _active_dependency_ids(tmp_path)
     assert dep_ids == []
 
 

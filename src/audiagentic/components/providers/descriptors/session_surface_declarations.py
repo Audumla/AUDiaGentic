@@ -8,6 +8,7 @@ loader/build time; adapter callables are *not* resolved here.
 Error codes:
     VAL-PCAP-011 — session-surface declaration validation failures
 """
+
 from __future__ import annotations
 
 import enum
@@ -22,7 +23,6 @@ from audiagentic.foundation.transports.session_surface import (
     ContentChannelCapability,
     ContentChannelId,
     ControlSupport,
-    EffectiveObservationLevel,
     LifecycleInstallation,
     LifecycleSource,
     PlatformEvidence,
@@ -30,12 +30,13 @@ from audiagentic.foundation.transports.session_surface import (
     SessionIdentityOperation,
     SessionMappingFacts,
     SessionOwnershipMode,
-    SurfaceValidationState,
+    ValidationEvidence,
 )
 
 # ---------------------------------------------------------------------------
 # Descriptor-local declaration type (carries adapter_ref — NOT in foundation)
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class SessionSurfaceDeclaration:
@@ -66,9 +67,8 @@ class SessionSurfaceDeclaration:
     source_idempotency: bool = False
     # Content channels (bounded, foundation enums)
     content_channels: tuple[ContentChannelCapability, ...] = ()
-    # Validation / platform evidence (foundation enums)
-    validation_state: SurfaceValidationState = SurfaceValidationState.DECLARED
-    effective_level: EffectiveObservationLevel = EffectiveObservationLevel.O0
+    # Validation / platform evidence (AS59 — simplified)
+    evidence: ValidationEvidence = field(default_factory=ValidationEvidence)
     platforms: tuple[PlatformEvidence, ...] = ()
     # Descriptor-local adapter reference — a dotted path string, NOT resolved.
     # This field must not appear in ResolvedSessionSurface (foundation type).
@@ -78,6 +78,7 @@ class SessionSurfaceDeclaration:
 # ---------------------------------------------------------------------------
 # Validation helper
 # ---------------------------------------------------------------------------
+
 
 def _error(message: str, **details: object) -> AudiaGenticError:
     return AudiaGenticError(
@@ -96,8 +97,7 @@ _OWNERSHIP_MODE_VALUES = {m.value for m in SessionOwnershipMode}
 _LIFECYCLE_SOURCE_VALUES = {s.value for s in LifecycleSource}
 _LIFECYCLE_INSTALLATION_VALUES = {i.value for i in LifecycleInstallation}
 _CONTENT_CHANNEL_VALUES = {c.value for c in ContentChannelId}
-_VALIDATION_STATE_VALUES = {s.value for s in SurfaceValidationState}
-_EFFECTIVE_LEVEL_VALUES = {e.value for e in EffectiveObservationLevel}
+
 
 # Mapping enum string values → enum members
 _SURFACE_IDENTITY_OP_MAP = {op.value: op for op in SessionIdentityOperation}
@@ -107,8 +107,6 @@ _OWNERSHIP_MODE_MAP = {m.value: m for m in SessionOwnershipMode}
 _LIFECYCLE_SOURCE_MAP = {s.value: s for s in LifecycleSource}
 _LIFECYCLE_INSTALLATION_MAP = {i.value: i for i in LifecycleInstallation}
 _CONTENT_CHANNEL_MAP = {c.value: c for c in ContentChannelId}
-_VALIDATION_STATE_MAP = {s.value: s for s in SurfaceValidationState}
-_EFFECTIVE_LEVEL_MAP = {e.value: e for e in EffectiveObservationLevel}
 
 
 def _parse_enum(
@@ -156,18 +154,16 @@ def _validate_declarations(declarations: Sequence[SessionSurfaceDeclaration]) ->
             )
         seen_keys.add(key)
 
-        # Rule 2: non-validated O2/O3/O4
-        if decl.validation_state != SurfaceValidationState.VALIDATED and decl.effective_level.numeric >= 2:
+        # Rule 2: controls or content channels require validated=True
+        if not decl.evidence.validated and (decl.controls or decl.content_channels):
             raise _error(
-                "non-validated effective level O2+ requires validation_state=validated",
+                "controls or content channels require evidence.validated=True",
                 surface_id=decl.surface_id,
                 version_constraint=decl.version_constraint,
-                effective_level=decl.effective_level.value,
-                validation_state=decl.validation_state.value,
             )
 
         # Rule 3: validated with no platform evidence
-        if decl.validation_state == SurfaceValidationState.VALIDATED and not decl.platforms:
+        if decl.evidence.validated and not decl.platforms:
             raise _error(
                 "validated session surface requires at least one PlatformEvidence",
                 surface_id=decl.surface_id,
@@ -175,15 +171,12 @@ def _validate_declarations(declarations: Sequence[SessionSurfaceDeclaration]) ->
             )
 
         # Rule 3b: validated parent requires at least one platform also validated
-        # (local probe evidence). Unvalidated platforms under a VALIDATED parent
+        # (local probe evidence). Unvalidated platforms under a validated parent
         # are allowed — they represent vendor-supported platforms without local
         # probe evidence yet. Cross-platform borrowing of proof is not allowed;
-        # the resolver enforces that O1+ claims require inventory proof.
-        if decl.validation_state == SurfaceValidationState.VALIDATED:
-            has_validated_platform = any(
-                pe.validation_state == SurfaceValidationState.VALIDATED
-                for pe in decl.platforms
-            )
+        # the resolver enforces that validated claims require inventory proof.
+        if decl.evidence.validated:
+            has_validated_platform = any(pe.evidence.validated for pe in decl.platforms)
             if not has_validated_platform:
                 raise _error(
                     "validated session surface requires at least one validated platform",

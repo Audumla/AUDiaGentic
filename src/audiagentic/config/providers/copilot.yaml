@@ -79,3 +79,15 @@ capabilities:
           error-code: EXT-COPIL-001
           extractor-name: copilot-plaintext
           args-template: ["copilot", "suggest", "-t", "shell", "{prompt}"]
+
+# CC53: AS27 harness-observability inventory (this provider's own facts —
+# see harness_observability_inventory.py for the domain semantics).
+harness_observability:
+  - surface_id: copilot-acp
+    candidate_source: "official ACP server: copilot --acp --stdio or loopback TCP"
+    evidence:
+      validated: false
+      reference: pin CLI/protocol and test stdio or loopback TCP; public-preview version/Docker probe required
+    recipe: A
+    lifecycle_source: none
+    probe_anchor: pin CLI/protocol and test stdio or loopback TCP; public-preview version/Docker probe required

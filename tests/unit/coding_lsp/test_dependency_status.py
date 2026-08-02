@@ -19,16 +19,33 @@ def test_install_commands_for_clangd_uses_platform_variant() -> None:
         language_registry.dependency_cfgs(), ["clangd"], workflow_id="coding-lsp"
     )
     if os.name == "nt":
-        assert commands["clangd"] == [[
-            "winget", "install", "--id", "LLVM.LLVM", "-e",
-            "--accept-source-agreements", "--accept-package-agreements",
-        ]]
+        assert commands["clangd"] == [
+            [
+                "winget",
+                "install",
+                "--id",
+                "LLVM.LLVM",
+                "-e",
+                "--accept-source-agreements",
+                "--accept-package-agreements",
+            ]
+        ]
     else:
-        assert commands["clangd"] == [["apt-get", "update", "-q"], ["apt-get", "install", "-y", "clangd"]]
+        # On Linux, sudo is prepended when not running as root
+        from audiagentic.foundation.toolchains.detect import privilege_prefix
+
+        prefix = privilege_prefix()
+        expected = [
+            list(prefix) + ["apt-get", "update", "-q"],
+            list(prefix) + ["apt-get", "install", "-y", "clangd"],
+        ]
+        assert commands["clangd"] == expected
 
 
 def test_status_payload_uses_workflow_derived_install_commands(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr(coding_lsp_bootstrap, "_active_dependency_ids", lambda project_root: ["pyright"])
+    monkeypatch.setattr(
+        coding_lsp_bootstrap, "_active_dependency_ids", lambda project_root: ["pyright"]
+    )
     monkeypatch.setattr(coding_lsp_bootstrap, "detect_missing", lambda probes, names: ["pyright"])
     monkeypatch.setattr(
         "audiagentic.components.coding_lsp.lsp_config_api.active_dependency_cfgs",

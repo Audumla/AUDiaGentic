@@ -8,6 +8,7 @@ This module does NOT provide a runtime resolver — that belongs to AS29/AS30
 provider contracts and services. These value types are the immutable shape agents
 consume once a surface has been resolved.
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -25,6 +26,7 @@ from .agent_session import SessionControlAction
 # ---------------------------------------------------------------------------
 # Identity operations  (AS29 step 1 + RV717 §1)
 # ---------------------------------------------------------------------------
+
 
 class SessionIdentityOperation(StrEnum):
     """Provider session lifecycle operations the gateway may request."""
@@ -46,6 +48,7 @@ class ControlSupport(StrEnum):
 # Ownership modes  (AS29 step 3 / AS30)
 # ---------------------------------------------------------------------------
 
+
 class SessionOwnershipMode(StrEnum):
     OWNED = "owned"
     ADOPTED = "adopted"
@@ -55,6 +58,7 @@ class SessionOwnershipMode(StrEnum):
 # ---------------------------------------------------------------------------
 # Lifecycle source and installation  (AS29 step 3)
 # ---------------------------------------------------------------------------
+
 
 class LifecycleSource(StrEnum):
     """Where lifecycle observations originate."""
@@ -80,6 +84,7 @@ class LifecycleInstallation(StrEnum):
 # Content channels  (AS29 step 3)
 # ---------------------------------------------------------------------------
 
+
 class ContentChannelId(StrEnum):
     ASSISTANT_TEXT = "assistant-text"
     ASSISTANT_FINAL = "assistant-final"
@@ -87,33 +92,31 @@ class ContentChannelId(StrEnum):
 
 
 # ---------------------------------------------------------------------------
-# Validation / evidence  (AS29 step 3 + RV717)
+# Validation / evidence  (AS59 — simplified from O0-O4 ladder)
 # ---------------------------------------------------------------------------
 
-class SurfaceValidationState(StrEnum):
-    DECLARED = "declared"
-    PROBE_REQUIRED = "probe-required"
-    VALIDATED = "validated"
-    BLOCKED = "blocked"
-    UNSUPPORTED = "unsupported"
 
+@dataclass(frozen=True)
+class ValidationEvidence:
+    """Minimal proof that a surface's declared behavior is real.
 
-class EffectiveObservationLevel(StrEnum):
-    O0 = "O0"
-    O1 = "O1"
-    O2 = "O2"
-    O3 = "O3"
-    O4 = "O4"
+    Replaces the over-specified SurfaceValidationState + EffectiveObservationLevel
+    ladder. A URL or internal doc/test path where validation can be verified,
+    plus a simple boolean indicating whether it has actually been proven.
+    """
 
-    @property
-    def numeric(self) -> int:
-        """Numeric tier for ceiling arithmetic (RV717 validation rule)."""
-        return int(self.value[1:]) if len(self.value) > 1 else 0
+    validated: bool = False
+    reference: str = ""  # URL preferred; internal doc/test path acceptable
+
+    def __post_init__(self) -> None:
+        if self.validated and not self.reference.strip():
+            raise ValueError("ValidationEvidence.reference must be non-empty when validated=True")
 
 
 # ---------------------------------------------------------------------------
 # Surface ref  (AS29 step 1)
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class SessionSurfaceRef:
@@ -133,6 +136,7 @@ class SessionSurfaceRef:
 # ---------------------------------------------------------------------------
 # Mapping facts  (RV717 §1 — subsume operation-neutral SessionMappingCapabilities)
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class SessionMappingFacts:
@@ -155,6 +159,7 @@ class SessionMappingFacts:
 # ---------------------------------------------------------------------------
 # Identity capabilities  (AS29 step 1 + RV717 §1)
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class SessionIdentityCapabilities:
@@ -189,6 +194,7 @@ class SessionIdentityCapabilities:
 # Lifecycle observation capabilities  (AS29 step 1 + step 3)
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class LifecycleObservationCapabilities:
     source: LifecycleSource = LifecycleSource.NONE
@@ -202,6 +208,7 @@ class LifecycleObservationCapabilities:
 # Content channel  (AS29 step 3 — bounded)
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class ContentChannelCapability:
     """A single bounded content channel. Must carry byte/event limits."""
@@ -212,14 +219,13 @@ class ContentChannelCapability:
 
     def __post_init__(self) -> None:
         if self.max_bytes < 0 or self.max_events < 0:
-            raise ValueError(
-                "ContentChannelCapability bounds must be non-negative"
-            )
+            raise ValueError("ContentChannelCapability bounds must be non-negative")
 
 
 # ---------------------------------------------------------------------------
 # Content stream capabilities  (AS29 step 1 + step 3)
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class ContentStreamCapabilities:
@@ -233,31 +239,36 @@ class ContentStreamCapabilities:
 # Platform evidence  (AS29 step 11)
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class PlatformEvidence:
-    """Per-platform validation and effective-level record."""
+    """Per-platform validation evidence record.
+
+    ``evidence`` replaces the former (validation_state, effective_level) pair;
+    tool_version and probe_artifact are retained as descriptive metadata only.
+    """
 
     platform: str  # e.g. "windows-amd64", "linux-amd64"
+    evidence: ValidationEvidence = field(default_factory=ValidationEvidence)
     tool_version: str = ""
     probe_artifact: str = ""
-    validation_state: SurfaceValidationState = SurfaceValidationState.DECLARED
-    effective_level: EffectiveObservationLevel = EffectiveObservationLevel.O0
 
 
 # ---------------------------------------------------------------------------
 # Surface validation  (AS29 step 1 + step 3)
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class SurfaceValidation:
-    state: SurfaceValidationState = SurfaceValidationState.DECLARED
-    effective_level: EffectiveObservationLevel = EffectiveObservationLevel.O0
+    evidence: ValidationEvidence = field(default_factory=ValidationEvidence)
     platforms: tuple[PlatformEvidence, ...] = ()
 
 
 # ---------------------------------------------------------------------------
 # Resolved session surface  (AS29 step 1)
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class ResolvedSessionSurface:
@@ -296,9 +307,11 @@ class ResolvedSessionSurface:
     def control_supported(self, action: SessionControlAction) -> bool:
         return self.controls.get(action) == ControlSupport.SUPPORTED
 
+
 # ---------------------------------------------------------------------------
 # Prepared session transport  (AS29 step 5 — slice 5a)
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class PreparedSessionTransport:

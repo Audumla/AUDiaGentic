@@ -121,6 +121,25 @@ def gateway_session_binding_lock_path(project_root: Path) -> Path:
     """Return the project-local lock protecting the binding index."""
     return gateway_sessions_root(project_root) / "session-binding-index.lock"
 
+
+# ── AS49: explicit resume idempotency ───────────────────────────────────────
+
+
+def gateway_session_resume_idempotency_path(project_root: Path, session_id: str) -> Path:
+    """Return the resume-idempotency record path for a source session.
+
+    Scoped per source session-id (not global): a resume request is always
+    "resume THIS terminal session," so co-locating the idempotency record
+    beside the source session's own directory keeps one lock/file pair per
+    resumable source rather than a single contested global index.
+    """
+    return gateway_session_dir(project_root, session_id) / "resume-idempotency.json"
+
+
+def gateway_session_resume_lock_path(project_root: Path, session_id: str) -> Path:
+    """Return the lock path guarding a source session's resume-idempotency record."""
+    return gateway_session_dir(project_root, session_id) / "resume-idempotency.lock"
+
 # ── AS31 Stage-2: output event paths ───────────────────────────────────────
 
 _OUTPUT_DIR = Path("output")

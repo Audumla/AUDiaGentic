@@ -57,7 +57,6 @@ from .session_surface import (
     ContentChannelId,
     ContentStreamCapabilities,
     ControlSupport,
-    EffectiveObservationLevel,
     LifecycleInstallation,
     LifecycleObservationCapabilities,
     LifecycleSource,
@@ -70,7 +69,7 @@ from .session_surface import (
     SessionOwnershipMode,
     SessionSurfaceRef,
     SurfaceValidation,
-    SurfaceValidationState,
+    ValidationEvidence,
 )
 
 __all__ = [
@@ -100,7 +99,6 @@ __all__ = [
     "ContentChannelCapability",
     "ContentChannelId",
     "ContentStreamCapabilities",
-    "EffectiveObservationLevel",
     "LifecycleInstallation",
     "LifecycleObservationCapabilities",
     "LifecycleSource",
@@ -112,7 +110,7 @@ __all__ = [
     "SessionOwnershipMode",
     "SessionSurfaceRef",
     "SurfaceValidation",
-    "SurfaceValidationState",
+    "ValidationEvidence",
     # AS30 session-binding foundation contract
     "BindingRelation",
     "ProviderSessionRef",

@@ -1,0 +1,28 @@
+# gpt-auto — provider descriptor
+# Browser-driven ChatGPT via Playwright. No CLI, no API key — launches Chrome
+# with a persistent profile, types the prompt into chat.openai.com, and reads
+# the response from the DOM.
+
+provider_id: gpt-auto
+execution_isolation_tier: no-isolation
+display_name: "gpt-auto (Browser-Driven ChatGPT)"
+description: >-
+  Drives a real ChatGPT session in a Chromium browser via Playwright.
+  No API key needed — just a logged-in ChatGPT account.
+url: "https://chat.openai.com"
+prompt_aliases:
+  - gpt
+
+access_mode: none
+
+receive_lsp_mcp: false
+
+capabilities:
+  permissions:
+    mechanism:
+      can_write_files: false
+      can_execute_shell: false
+      can_browse_web: true
+      can_read_env: false
+      notes: >-
+        Browser automation only. No file writes, no shell, no MCP, no LSP.

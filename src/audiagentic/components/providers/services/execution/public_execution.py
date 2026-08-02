@@ -1,4 +1,5 @@
 """Provider-owned implementation behind the public one-shot execution seam."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -15,7 +16,6 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.session_surface import (
     PreparedSessionTransport,
     SessionSurfaceRef,
-    SurfaceValidationState,
 )
 
 
@@ -164,8 +164,7 @@ def prepare_provider_execution_environment(
             os.environ["OPENCODE_CONFIG_CONTENT"] = prev_open_code_content
 
     if not isinstance(result, dict) or not all(
-        isinstance(name, str) and isinstance(value, str)
-        for name, value in result.items()
+        isinstance(name, str) and isinstance(value, str) for name, value in result.items()
     ):
         raise AudiaGenticError(
             code="INT-PEXE-003",
@@ -319,7 +318,9 @@ def prepare_provider_mcp_surface(
     from .execution import load_mcp_surface_builder
 
     descriptor = get_descriptor(provider_id)
-    declared_isolation = descriptor.mcp_launch_isolation_tier if descriptor is not None else "unsupported"
+    declared_isolation = (
+        descriptor.mcp_launch_isolation_tier if descriptor is not None else "unsupported"
+    )
     if require_exact_isolation and declared_isolation != "exact":
         raise AudiaGenticError(
             code="UNS-PEXE-004",
@@ -417,9 +418,28 @@ def get_pi_coding_agent_package_dir() -> Path | None:
     return resolve_system_pi_coding_agent()
 
 
+def _observability_hook_factories() -> dict[str, Any]:
+    """AS41: provider_id -> zero-arg PreSpawnHook factory, for providers with
+    a real, concrete observability-enrichment implementation. Deliberately a
+    plain dict, not a plugin registry — one entry today (Pi's RPC tap); add
+    entries only when a provider has a real implementation, never placeholders.
+    Called lazily (from inside prepare_provider_session_transport, never at
+    module import time) so this generic module never unconditionally imports
+    a specific provider adapter.
+    """
+    from audiagentic.components.providers.adapters.pi.rpc_tap_evidence import (
+        PiRpcTapPreSpawnHook,
+    )
+
+    return {"pi": PiRpcTapPreSpawnHook}
+
+
 def _build_transport_from_launch(
     project_root: Path,
     launch: Any,
+    *,
+    resume_provider_ref: str | None = None,
+    pre_spawn_hook: Any = None,
 ) -> Any:
     """Wrap an AcpLaunch in the private AcpAgentSessionTransport adapter.
 
@@ -434,6 +454,13 @@ def _build_transport_from_launch(
         project_root: Working directory for the agent child process.
         launch: An :class:`AcpLaunch` instance from the provider adapter's
             ``build_acp_launch`` function.
+        resume_provider_ref: AS49 — when set, the transport's ``open()`` loads
+            this exact existing provider session (ACP ``session/load``)
+            instead of opening a new one. Callers are responsible for having
+            already verified the resolved surface declares
+            ``resume-by-ref: supported`` before setting this.
+        pre_spawn_hook: AS41 — when set, forwarded unchanged to the transport
+            (see ``foundation.transports.acp.PreSpawnHook``).
 
     Returns:
         An :class:`AcpAgentSessionTransport` (implements ``AgentSessionTransport``).
@@ -443,6 +470,8 @@ def _build_transport_from_launch(
     return AcpAgentSessionTransport(
         launch,
         cwd=project_root,
+        resume_provider_ref=resume_provider_ref,
+        pre_spawn_hook=pre_spawn_hook,
     )
 
 
@@ -456,6 +485,8 @@ def prepare_provider_session_transport(
     request_runtime_root: Path | None = None,
     mcp_entries=None,
     require_isolated_mcp: bool = False,
+    resume_provider_ref: str | None = None,
+    enable_observability_tap: bool = False,
 ) -> PreparedSessionTransport:
     """Resolve a session-surface snapshot and build the transport factory.
 
@@ -487,6 +518,17 @@ def prepare_provider_session_transport(
         model_alias: Optional model alias for launch preparation.
         request_runtime_root: Optional runtime root for provider-local
             environment setup (e.g. Pi session dirs).
+        resume_provider_ref: AS49 — when set, forwarded to the built
+            transport so ``open()`` resumes this exact provider session
+            (ACP ``session/load``) instead of opening a new one. The caller
+            must independently verify the resolved surface declares
+            ``resume-by-ref: supported`` — this function does not check it.
+        enable_observability_tap: AS41 — when set (and the resolved
+            provider's builder declares ``enable_rpc_tap``, currently Pi
+            only), attaches a provider-local enrichment hook to the built
+            transport. Best-effort: if the provider has no such capability,
+            this is silently a no-op — never a supported-vs-unsupported
+            distinction, since observability enrichment is never load-bearing.
 
     Returns:
         A frozen :class:`PreparedSessionTransport` instance.
@@ -505,7 +547,7 @@ def prepare_provider_session_transport(
     )
 
     # ── Unsupported: return with transport=None (never launch) ─────────
-    if surface.validation.state == SurfaceValidationState.UNSUPPORTED:
+    if not surface.validation.evidence.validated:
         return PreparedSessionTransport(
             transport=None,
             surface=surface,
@@ -555,6 +597,16 @@ def prepare_provider_session_transport(
     launch_kwargs: dict[str, Any] = {"model_id": resolved_model_id}
     if request_runtime_root is not None:
         launch_kwargs["request_runtime_root"] = request_runtime_root
+    # AS41: only Pi's build_acp_launch declares enable_rpc_tap today — no
+    # generalized per-provider observability-hook registry exists yet, so
+    # this checks the concrete builder's own signature rather than assuming
+    # every ACP provider understands the kwarg (most don't). Also requires
+    # request_runtime_root, matching build_acp_launch's own precondition.
+    if enable_observability_tap and request_runtime_root is not None:
+        import inspect
+
+        if "enable_rpc_tap" in inspect.signature(builder).parameters:
+            launch_kwargs["enable_rpc_tap"] = True
     if mcp_entries is not None:
         surface = prepare_provider_mcp_surface(
             project_root,
@@ -582,8 +634,22 @@ def prepare_provider_session_transport(
             effective_provider_ref=effective_ref,
         )
 
+    # AS41: attach a provider-local observability enrichment hook, only when
+    # both the caller asked for one AND the builder actually declared
+    # enable_rpc_tap above (so this dict only ever needs an entry for
+    # providers with a real hook implementation — no placeholder entries).
+    pre_spawn_hook = None
+    if "enable_rpc_tap" in launch_kwargs:
+        hook_factory = _observability_hook_factories().get(provider_id)
+        if hook_factory is not None:
+            pre_spawn_hook = hook_factory()
+
     # Wrap in private AcpAgentSessionTransport (AS28 slice 2 adapter).
-    transport = _build_transport_from_launch(project_root, acp_launch)
+    transport = _build_transport_from_launch(
+        project_root, acp_launch,
+        resume_provider_ref=resume_provider_ref,
+        pre_spawn_hook=pre_spawn_hook,
+    )
 
     return PreparedSessionTransport(
         transport=transport,

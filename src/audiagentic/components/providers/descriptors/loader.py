@@ -27,6 +27,7 @@ from audiagentic.foundation.transports.session_surface import (
     SessionControlAction,
     SessionIdentityOperation,
     SessionMappingFacts,
+    ValidationEvidence,
 )
 from audiagentic.foundation.workflow.invocation.from_spec import build_step_from_spec
 
@@ -53,8 +54,6 @@ from .session_surface_declarations import (
     _CONTROL_ACTION_VALUES,
     _CONTROL_SUPPORT_MAP,
     _CONTROL_SUPPORT_VALUES,
-    _EFFECTIVE_LEVEL_MAP,
-    _EFFECTIVE_LEVEL_VALUES,
     _LIFECYCLE_INSTALLATION_MAP,
     _LIFECYCLE_INSTALLATION_VALUES,
     _LIFECYCLE_SOURCE_MAP,
@@ -63,8 +62,6 @@ from .session_surface_declarations import (
     _OWNERSHIP_MODE_VALUES,
     _SURFACE_IDENTITY_OP_MAP,
     _SURFACE_IDENTITY_OP_VALUES,
-    _VALIDATION_STATE_MAP,
-    _VALIDATION_STATE_VALUES,
     SessionSurfaceDeclaration,
     _parse_enum,
     _validate_declarations,
@@ -294,6 +291,29 @@ def _build_cli_install(data: dict[str, Any]) -> CliInstallRecipe:
         )
 
 
+def _parse_evidence(raw: Any, *, field_name: str) -> ValidationEvidence:
+    """Parse a YAML ``evidence`` mapping into a :class:`ValidationEvidence`."""
+    if raw is None:
+        return ValidationEvidence()
+    if not isinstance(raw, dict):
+        raise AudiaGenticError(
+            code="VAL-PCAP-011",
+            kind="providers",
+            message=f"{field_name} must be a mapping",
+        )
+    try:
+        return ValidationEvidence(
+            validated=bool(raw.get("validated", False)),
+            reference=str(raw.get("reference", "")),
+        )
+    except ValueError as exc:
+        raise AudiaGenticError(
+            code="VAL-PCAP-011",
+            kind="providers",
+            message=str(exc),
+        ) from exc
+
+
 def _build_session_surfaces(
     data: list[dict[str, Any]],
 ) -> tuple[SessionSurfaceDeclaration, ...]:
@@ -327,8 +347,7 @@ def _build_session_surfaces(
         "event_ordering_guaranteed",
         "source_idempotency",
         "content_channels",
-        "validation_state",
-        "effective_level",
+        "evidence",
         "platforms",
         "adapter_ref",
     }
@@ -467,17 +486,8 @@ def _build_session_surfaces(
                 )
             )
 
-        # --- validation / effective_level ---
-        validation_state = _parse_enum(
-            item.get("validation_state", "declared"),
-            _VALIDATION_STATE_VALUES,
-            _VALIDATION_STATE_MAP, "validation_state",
-        )
-        effective_level = _parse_enum(
-            item.get("effective_level", "O0"),
-            _EFFECTIVE_LEVEL_VALUES,
-            _EFFECTIVE_LEVEL_MAP, "effective_level",
-        )
+        # --- evidence (AS59 — simplified validated:bool + reference:str) ---
+        evidence = _parse_evidence(item.get("evidence"), field_name="evidence")
 
         # --- platforms ---
         raw_platforms = item.get("platforms") or []
@@ -495,23 +505,13 @@ def _build_session_surfaces(
                     kind="providers",
                     message="platform entry requires 'platform'",
                 )
-            pe_validation = _parse_enum(
-                pe.get("validation_state", "declared"),
-                _VALIDATION_STATE_VALUES,
-                _VALIDATION_STATE_MAP, "platform_validation_state",
-            )
-            pe_effective = _parse_enum(
-                pe.get("effective_level", "O0"),
-                _EFFECTIVE_LEVEL_VALUES,
-                _EFFECTIVE_LEVEL_MAP, "platform_effective_level",
-            )
+            pe_evidence = _parse_evidence(pe.get("evidence"), field_name="platform_evidence")
             platforms.append(
                 PlatformEvidence(
                     platform=str(pe["platform"]),
+                    evidence=pe_evidence,
                     tool_version=str(pe.get("tool_version", "")),
                     probe_artifact=str(pe.get("probe_artifact", "")),
-                    validation_state=pe_validation,
-                    effective_level=pe_effective,
                 )
             )
 
@@ -529,8 +529,7 @@ def _build_session_surfaces(
                 event_ordering_guaranteed=bool(item.get("event_ordering_guaranteed", False)),
                 source_idempotency=bool(item.get("source_idempotency", False)),
                 content_channels=tuple(content_channels),
-                validation_state=validation_state,
-                effective_level=effective_level,
+                evidence=evidence,
                 platforms=tuple(platforms),
                 adapter_ref=str(item["adapter_ref"]).strip() if item.get("adapter_ref") else None,
             )
@@ -539,6 +538,96 @@ def _build_session_surfaces(
     # Cross-entry validation
     _validate_declarations(declarations)
     return tuple(declarations)
+
+
+_HARNESS_OBS_REQUIRED_FIELDS = {"surface_id"}
+_HARNESS_OBS_ALL_FIELDS = {
+    "surface_id",
+    "candidate_source",
+    "evidence",
+    "recipe",
+    "lifecycle_source",
+    "supported_statuses",
+    "probe_anchor",
+    "platform_evidence",
+    "limitations",
+}
+
+
+def _build_harness_observability(data: list[dict[str, Any]]) -> tuple[dict[str, Any], ...]:
+    """Validate a provider's own ``harness_observability:`` YAML block.
+
+    CC53: each provider owns its AS27 observability-inventory entries in its
+    own descriptor file, not a central cross-provider Python list. This
+    builder only proves structural validity (known fields, required
+    surface_id, no duplicate surface_id within the provider) and normalizes
+    ``lifecycle_source`` against the shared enum — it returns plain dicts,
+    not domain objects. The services/session layer
+    (harness_observability_inventory.py) owns turning these into
+    ``HarnessSurfaceCapabilityFact`` instances; this layer only owns "is the
+    YAML shape valid," matching this file's separation of concerns for
+    session_surfaces above.
+    """
+    if not isinstance(data, list):
+        raise AudiaGenticError(
+            code="VAL-PCAP-011",
+            kind="providers",
+            message="harness_observability must be a list",
+        )
+
+    seen_surface_ids: set[str] = set()
+    entries: list[dict[str, Any]] = []
+    for item in data:
+        if not isinstance(item, dict):
+            raise AudiaGenticError(
+                code="VAL-PCAP-011",
+                kind="providers",
+                message="each harness_observability entry must be a mapping",
+            )
+        unknown_fields = sorted(set(item) - _HARNESS_OBS_ALL_FIELDS)
+        if unknown_fields:
+            raise AudiaGenticError(
+                code="VAL-PCAP-011",
+                kind="providers",
+                message="unknown harness_observability fields",
+                details={"fields": unknown_fields},
+            )
+        missing = _HARNESS_OBS_REQUIRED_FIELDS - set(item.keys())
+        if missing:
+            raise AudiaGenticError(
+                code="VAL-PCAP-011",
+                kind="providers",
+                message="harness_observability entry requires surface_id",
+                details={"missing": sorted(missing)},
+            )
+        surface_id = str(item["surface_id"])
+        if surface_id in seen_surface_ids:
+            raise AudiaGenticError(
+                code="VAL-PCAP-011",
+                kind="providers",
+                message=f"duplicate harness_observability surface_id: {surface_id}",
+            )
+        seen_surface_ids.add(surface_id)
+
+        lifecycle_source = _parse_enum(
+            item.get("lifecycle_source", "none"),
+            _LIFECYCLE_SOURCE_VALUES,
+            _LIFECYCLE_SOURCE_MAP, "lifecycle_source",
+        )
+        entries.append(
+            {
+                "surface_id": surface_id,
+                "candidate_source": item.get("candidate_source"),
+                "evidence": item.get("evidence") or {},
+                "recipe": str(item.get("recipe", "D")),
+                "lifecycle_source": lifecycle_source.value,
+                "supported_statuses": tuple(item.get("supported_statuses") or ()),
+                "probe_anchor": item.get("probe_anchor"),
+                "platform_evidence": tuple(item.get("platform_evidence") or ()),
+                "limitations": tuple(item.get("limitations") or ()),
+            }
+        )
+    return tuple(entries)
 
 
 def _construct_provider_descriptor(**values: Any) -> ProviderDescriptor:
@@ -603,6 +692,7 @@ PROVIDER_SPEC.add("receive_lsp_mcp", yaml_key="receive_lsp_mcp", kind="data", de
 PROVIDER_SPEC.add("deprecated", yaml_key="deprecated", kind="data", default=False)
 PROVIDER_SPEC.add("annotations", yaml_key="annotations", kind="data", default=dict())
 PROVIDER_SPEC.add("session_surfaces", yaml_key="session_surfaces", kind="nested", builder=_build_session_surfaces, default=tuple())
+PROVIDER_SPEC.add("harness_observability", yaml_key="harness_observability", kind="nested", builder=_build_harness_observability, default=tuple())
 
 
 def provider_factory(data: dict[str, Any]) -> ProviderDescriptor:

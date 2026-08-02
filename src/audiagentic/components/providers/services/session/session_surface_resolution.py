@@ -35,6 +35,7 @@ diagnostic reasons are NOT encoded into version identity.
 Adapter refs are resolved only to *existence* (to detect missing factories);
 they are never carried into the foundation snapshot.
 """
+
 from __future__ import annotations
 
 import re
@@ -45,7 +46,6 @@ from audiagentic.foundation.transports.session_surface import (
     ContentChannelCapability,
     ContentStreamCapabilities,
     ControlSupport,
-    EffectiveObservationLevel,
     LifecycleInstallation,
     LifecycleObservationCapabilities,
     LifecycleSource,
@@ -58,7 +58,7 @@ from audiagentic.foundation.transports.session_surface import (
     SessionOwnershipMode,
     SessionSurfaceRef,
     SurfaceValidation,
-    SurfaceValidationState,
+    ValidationEvidence,
 )
 
 from ...contracts.session_surface import SurfaceHint
@@ -68,17 +68,17 @@ from ...descriptors.registry import get_descriptor
 # Internal resolution outcome reasons (informational, not exceptions)
 # ---------------------------------------------------------------------------
 
-_UNSUPPORTED_REASONS = frozenset({
-    "unknown-provider",
-    "disabled-provider",
-    "no-surface-id-match",
-    "version-mismatch",
-    "blocked-declaration",
-    "unvalidated-high-level",
-    "no-platform-match",
-    "missing-adapter-factory",
-    "no-inventory-proof",  # YAML claims O1+ but inventory lacks platform evidence
-})
+_UNSUPPORTED_REASONS = frozenset(
+    {
+        "unknown-provider",
+        "disabled-provider",
+        "no-surface-id-match",
+        "version-mismatch",
+        "no-platform-match",
+        "missing-adapter-factory",
+        "no-inventory-proof",  # YAML claims validated but inventory lacks platform evidence
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Platform triple detection (Fix 3: exact normalized target triples)
@@ -93,10 +93,13 @@ _VERSION_RE = re.compile(r"^(\d+(?:.\d+)*)")
 
 def _parse_version(version_str: str) -> tuple[int, ...] | None:
     """Parse a version string into a tuple of integers for comparison."""
-    match = _VERSION_RE.match(version_str.strip())
-    if not match:
+    try:
+        match = _VERSION_RE.match(version_str.strip())
+        if not match:
+            return None
+        return tuple(int(part) for part in match.group(1).split("."))
+    except (ValueError, AttributeError):
         return None
-    return tuple(int(part) for part in match.group(1).split("."))
 
 
 def _version_satisfies(installed_version: str, constraint: str) -> bool | None:
@@ -124,8 +127,8 @@ def _version_satisfies(installed_version: str, constraint: str) -> bool | None:
     _OPS = {
         ">=": installed >= required,
         "<=": installed <= required,
-        ">":  installed > required,
-        "<":  installed < required,
+        ">": installed > required,
+        "<": installed < required,
         "==": installed == required,
     }
     return _OPS.get(operator, False)
@@ -134,6 +137,7 @@ def _version_satisfies(installed_version: str, constraint: str) -> bool | None:
 # ---------------------------------------------------------------------------
 # Installed-version discovery (Fix 2: probe the actual installed version)
 # ---------------------------------------------------------------------------
+
 
 def _probe_installed_version(
     descriptor: Any,
@@ -170,6 +174,7 @@ def _probe_installed_version(
 # Unsupported snapshot factory (Fix 5: stable neutral version, no diagnostics)
 # ---------------------------------------------------------------------------
 
+
 def _unsupported_snapshot(
     provider_id: str,
     surface_id: str,
@@ -193,8 +198,7 @@ def _unsupported_snapshot(
         ref=ref,
         identity=SessionIdentityCapabilities(),
         validation=SurfaceValidation(
-            state=SurfaceValidationState.UNSUPPORTED,
-            effective_level=EffectiveObservationLevel.O0,
+            evidence=ValidationEvidence(validated=False),
         ),
     )
 
@@ -202,6 +206,7 @@ def _unsupported_snapshot(
 # ---------------------------------------------------------------------------
 # Adapter existence check (existence-only, never leaks into snapshot)
 # ---------------------------------------------------------------------------
+
 
 def _adapter_factory_exists(adapter_ref: str) -> bool:
     """Check whether an adapter_ref dotpath resolves to a callable.
@@ -211,6 +216,7 @@ def _adapter_factory_exists(adapter_ref: str) -> bool:
     """
     try:
         from audiagentic.foundation.config.refs import resolve_ref
+
         obj = resolve_ref(adapter_ref)
         return callable(obj)
     except Exception:  # noqa: BLE001 — existence check only
@@ -218,29 +224,9 @@ def _adapter_factory_exists(adapter_ref: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Effective level ceiling enforcement (Fix 4: against selected PE, not decl)
-# ---------------------------------------------------------------------------
-
-def _enforce_validation_ceiling(
-    effective_level: EffectiveObservationLevel,
-    validation_state: SurfaceValidationState,
-) -> tuple[bool, str]:
-    """Return (is_blocked, reason) when O2+ is not validated.
-
-    A non-validated declaration with effective_level >= O2 is ceiling-blocked;
-    the gateway must not treat it as providing advanced capability.
-    """
-    if effective_level.numeric >= 2 and validation_state not in (
-        SurfaceValidationState.BLOCKED,
-        SurfaceValidationState.VALIDATED,
-    ):
-        return True, "unvalidated-high-level"
-    return False, ""
-
-
-# ---------------------------------------------------------------------------
 # Platform match check (Fix 3: exact normalized target triples only)
 # ---------------------------------------------------------------------------
+
 
 def _platform_matches(
     target_platform: str,
@@ -262,6 +248,7 @@ def _platform_matches(
 # ---------------------------------------------------------------------------
 # Declaration selection (Fix 2: installed-version disambiguation)
 # ---------------------------------------------------------------------------
+
 
 def _select_declaration(
     declarations: tuple[Any, ...],
@@ -285,8 +272,9 @@ def _select_declaration(
     failure. The *requested_version* is the hint's version_hint if set, else
     None — used for stable unsupported snapshot construction.
     """
-    # Step 1: filter by surface_id
-    matching = [d for d in declarations if d.surface_id == surface_id]
+    # Step 1: filter by surface_id (defensive: ensure tuple)
+    decls = declarations if isinstance(declarations, tuple) else (declarations,)
+    matching = [d for d in decls if d.surface_id == surface_id]
     if not matching:
         return None, "no-surface-id-match"
 
@@ -324,7 +312,7 @@ def _select_declaration(
         # Final compatibility check for the selected declaration.
         if installed_version is not None:
             result = _version_satisfies(installed_version, decl.version_constraint)
-            if result is False:
+            if result == False:  # noqa: F632
                 return None, "version-mismatch"
         return decl, requested_version
 
@@ -334,6 +322,7 @@ def _select_declaration(
 # ---------------------------------------------------------------------------
 # Declaration → ResolvedSessionSurface builder (Fix 5: actual installed version)
 # ---------------------------------------------------------------------------
+
 
 def _build_resolved_surface(
     surface_id: str,
@@ -349,8 +338,7 @@ def _build_resolved_surface(
     event_ordering_guaranteed: bool,
     source_idempotency: bool,
     content_channels: tuple[ContentChannelCapability, ...],
-    validation_state: SurfaceValidationState,
-    effective_level: EffectiveObservationLevel,
+    evidence: ValidationEvidence,
     platforms: tuple[PlatformEvidence, ...],
 ) -> ResolvedSessionSurface:
     """Construct a successful ResolvedSessionSurface from declaration fields.
@@ -381,8 +369,7 @@ def _build_resolved_surface(
         ),
         content=ContentStreamCapabilities(channels=content_channels),
         validation=SurfaceValidation(
-            state=validation_state,
-            effective_level=effective_level,
+            evidence=evidence,
             platforms=platforms,
         ),
     )
@@ -391,6 +378,7 @@ def _build_resolved_surface(
 # ---------------------------------------------------------------------------
 # Inventory proof lookup (AS27 RV770 — inventory cross-check)
 # ---------------------------------------------------------------------------
+
 
 def _get_inventory_proof(
     provider_id: str,
@@ -430,6 +418,7 @@ def _get_inventory_proof(
 # Public resolver entry point (Fix 1: explicit project_root + provider_id)
 # ---------------------------------------------------------------------------
 
+
 def resolve_session_surface(
     project_root: Path,
     provider_id: str,
@@ -457,7 +446,9 @@ def resolve_session_surface(
     descriptor = get_descriptor(provider_id)
     if descriptor is None:
         return _unsupported_snapshot(
-            provider_id, surface_hint.surface_id, "unknown-provider",
+            provider_id,
+            surface_hint.surface_id,
+            "unknown-provider",
             requested_version=surface_hint.version_hint,
         )
 
@@ -465,9 +456,12 @@ def resolve_session_surface(
     from ..config.provider_config import (
         is_provider_enabled,
     )
+
     if not is_provider_enabled(project_root, provider_id):
         return _unsupported_snapshot(
-            provider_id, surface_hint.surface_id, "disabled-provider",
+            provider_id,
+            surface_hint.surface_id,
+            "disabled-provider",
             requested_version=surface_hint.version_hint,
         )
 
@@ -483,56 +477,48 @@ def resolve_session_surface(
     )
     if declaration is None:
         return _unsupported_snapshot(
-            provider_id, surface_hint.surface_id, requested_version or "no-surface-id-match",
+            provider_id,
+            surface_hint.surface_id,
+            requested_version or "no-surface-id-match",
             requested_version=requested_version,
         )
 
-    # ── 5. Blocked declaration ─────────────────────────────────────
-    if declaration.validation_state == SurfaceValidationState.BLOCKED:
-        return _unsupported_snapshot(
-            provider_id, surface_hint.surface_id, "blocked-declaration",
-            requested_version=declaration.version_constraint,
-        )
-
-    # ── 6. Platform match FIRST (Fix 4: select before enforcement) ─
+    # ── 5. Platform match (Fix 4: select before enforcement) ───────
     target_platform = _resolve_target_platform(surface_hint.platform_hint)
     matched_pe = _platform_matches(target_platform, declaration.platforms)
     if not matched_pe and declaration.platforms:
         return _unsupported_snapshot(
-            provider_id, surface_hint.surface_id, "no-platform-match",
+            provider_id,
+            surface_hint.surface_id,
+            "no-platform-match",
             requested_version=declaration.version_constraint,
         )
 
-    # ── 7. Validation ceiling against selected PE (Fix 4) ──────────
+    # ── 6. Effective evidence for the selected platform ─────────────
     if matched_pe:
-        eff_state = matched_pe.validation_state
-        eff_level = matched_pe.effective_level
+        eff_evidence = matched_pe.evidence
     else:
-        # No per-platform evidence — fall back to declaration level.
-        eff_state = declaration.validation_state
-        eff_level = declaration.effective_level
+        # No per-platform evidence — fall back to declaration-level evidence.
+        eff_evidence = declaration.evidence
 
-    blocked, reason = _enforce_validation_ceiling(eff_level, eff_state)
-    if blocked:
-        return _unsupported_snapshot(
-            provider_id, surface_hint.surface_id, reason,
-            requested_version=declaration.version_constraint,
-        )
-
-    # ── 7b. Inventory proof gate (AS27 RV770) ─────────────────────
+    # ── 6b. Inventory proof gate (AS27 RV770) ───────────────────────
     # Prevent descriptor YAML from bypassing inventory evidence: a validated
-    # O1+ claim on the resolved surface requires that the target platform
-    # appear in the inventory's locally-validated platform_evidence for this
+    # claim on the resolved surface requires that the target platform appear
+    # in the inventory's locally-validated platform_evidence for this
     # (provider_id, surface_id) pair. This gate applies only to observability
     # / effective lifecycle claim resolution; it does not prevent launching
     # a surface whose observer publication is unavailable.
-    if eff_state == SurfaceValidationState.VALIDATED and eff_level.numeric >= 1:
+    if eff_evidence.validated:
         has_inventory_proof = _get_inventory_proof(
-            provider_id, declaration.surface_id, target_platform,
+            provider_id,
+            declaration.surface_id,
+            target_platform,
         )
         if not has_inventory_proof:
             return _unsupported_snapshot(
-                provider_id, surface_hint.surface_id, "no-inventory-proof",
+                provider_id,
+                surface_hint.surface_id,
+                "no-inventory-proof",
                 requested_version=declaration.version_constraint,
             )
 
@@ -540,7 +526,9 @@ def resolve_session_surface(
     if declaration.adapter_ref:
         if not _adapter_factory_exists(declaration.adapter_ref):
             return _unsupported_snapshot(
-                provider_id, surface_hint.surface_id, "missing-adapter-factory",
+                provider_id,
+                surface_hint.surface_id,
+                "missing-adapter-factory",
                 requested_version=declaration.version_constraint,
             )
 
@@ -560,8 +548,7 @@ def resolve_session_surface(
         event_ordering_guaranteed=declaration.event_ordering_guaranteed,
         source_idempotency=declaration.source_idempotency,
         content_channels=declaration.content_channels,
-        validation_state=eff_state,
-        effective_level=eff_level,
+        evidence=eff_evidence,
         platforms=declaration.platforms,
     )
 
@@ -569,6 +556,7 @@ def resolve_session_surface(
 # ---------------------------------------------------------------------------
 # Target platform resolution (Fix 3: normalized triples)
 # ---------------------------------------------------------------------------
+
 
 def _resolve_target_platform(platform_hint: str | None) -> str:
     """Return the target platform as a normalised name.

@@ -18,6 +18,7 @@ LLM_REJECTED_TOPIC = "agents.llm.rejected"
 LLM_INTERRUPTED_TOPIC = "agents.llm.interrupted"
 
 SESSION_OPENED_TOPIC = "agents.session.opened"
+SESSION_RESUMED_TOPIC = "agents.session.resumed"  # AS49: explicit resume-after-death
 SESSION_TURN_FINISHED_TOPIC = "agents.session.turn-finished"
 SESSION_CLOSED_TOPIC = "agents.session.closed"
 SESSION_EXPIRED_TOPIC = "agents.session.expired"

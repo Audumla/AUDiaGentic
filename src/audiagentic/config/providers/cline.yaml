@@ -69,3 +69,15 @@ capabilities:
         worktrees; user-global, home-scoped; no project-local config surface
         discovered (tool_version 3.0.3)
       source: "docs/reference/model-source-evidence/cline.md#cline-evidence"
+
+# CC53: AS27 harness-observability inventory (this provider's own facts —
+# see harness_observability_inventory.py for the domain semantics).
+harness_observability:
+  - surface_id: cline-acp
+    candidate_source: "ACP: npx @cline/cline-acp --mcp --acp"
+    evidence:
+      validated: false
+      reference: session/turn/tool correlation proof
+    recipe: A
+    lifecycle_source: none
+    probe_anchor: session/turn/tool correlation proof

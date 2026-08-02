@@ -135,3 +135,105 @@ capabilities:
           approval-mode-flags:
             yolo: []
             auto-edit: []
+
+# AS29 session-surface declaration for Pi's ACP route.
+# pi-rpc (JSONL agent/turn/message/tool events via `pi --mode rpc --no-session`)
+# is Pi's primary observability route and has no session_surfaces entry yet —
+# see harness_observability_inventory.py#pi-pi-rpc. pi-community-acp below is
+# the ACP-transport route exercised end-to-end by AS40's tee-shim proofs.
+session_surfaces:
+  - surface_id: pi-community-acp
+    version_constraint: ">=0.80"
+    # resume-by-ref: proven 2026-07-29 (tests/integration/providers/
+    # test_pi_acp_resume_live.py, real pi-acp bridge, linux-amd64 Docker) —
+    # agentCapabilities.loadSession is advertised AND session/load genuinely
+    # replays prior turn content in a fresh process after a hard kill of the
+    # original (structural proof via replayed session_update notifications,
+    # not LLM-recall guessing). Not yet proven on windows-amd64/macOS.
+    identity_operations:
+      open: "supported"
+      attach-existing: "unsupported"
+      resume-by-ref: "supported"
+      discover: "unsupported"
+    ownership_modes:
+      - "owned"
+    controls:
+      cancel-turn: "supported"
+      interrupt-turn: "unsupported"
+      steer-turn: "unsupported"
+      respond-permission: "unsupported"
+      close-session: "supported"
+    lifecycle_source: "transport"
+    lifecycle_installation: "none"
+    content_channels:
+      - channel: "assistant-text"
+        max_bytes: 65536
+        max_events: 100
+    evidence:
+      validated: true
+      reference: "tests/integration/providers/test_pi_rpc_tap_real_binaries.py"
+    # Platform evidence — AS40 (2026-07-29) proved byte-transparent ACP
+    # passthrough plus a full conversational turn through the tee shim on
+    # both platforms below. No macOS evidence exists yet.
+    platforms:
+      - platform: "windows-amd64"
+        tool_version: "0.82.1"
+        probe_artifact: "tests/integration/providers/test_pi_rpc_tap_real_binaries.py"
+        evidence:
+          validated: true
+          reference: "tests/integration/providers/test_pi_rpc_tap_real_binaries.py"
+      - platform: "linux-amd64"
+        tool_version: "0.82.1"
+        probe_artifact: "tests/docker/Dockerfile.pi-rpc-tap-e2e"
+        evidence:
+          validated: true
+          reference: "tests/integration/providers/test_pi_rpc_tap_transcript_e2e.py"
+      - platform: "darwin-arm64"
+        evidence:
+          validated: false
+          reference: ""
+      - platform: "darwin-amd64"
+        evidence:
+          validated: false
+          reference: ""
+    adapter_ref: "audiagentic.components.providers.adapters.pi.acp:build_acp_launch"
+
+# CC53: AS27 harness-observability inventory (this provider's own facts —
+# see harness_observability_inventory.py for the domain semantics).
+harness_observability:
+  - surface_id: pi-rpc
+    candidate_source: JSONL agent/turn/message/tool events via pi --mode rpc --no-session
+    evidence:
+      validated: false
+      reference: primary Pi route; prove schema/correlation/lifecycle/close semantics
+    recipe: A
+    lifecycle_source: none
+    probe_anchor: primary Pi route; prove schema/correlation/lifecycle/close semantics
+  - surface_id: pi-community-acp
+    candidate_source: "community ACP adapter (optional route, never primary — pi-rpc is primary)"
+    # AS41 Path A: this surface uses the same provider-neutral
+    # AcpAgentSessionTransport wrapper OpenCode's opencode-acp surface does —
+    # _map_acp_event_to_observation (foundation/transports/acp.py) is already
+    # provider-agnostic. Only "model-thinking" (ACTIVITY -> assistant-message)
+    # is claimed — that is what a real driven prompt turn actually proved
+    # (Docker E2E: real pi-acp + real embedded model, session/new +
+    # session/prompt through to a real assistant reply). tool-calling/
+    # waiting-permission are NOT claimed: no test drove Pi through a tool
+    # call or a permission request via ACP, so claiming those statuses would
+    # invent capability rather than report proven evidence (AS41's own
+    # doctrine).
+    evidence:
+      validated: true
+      reference: tests/integration/providers/test_pi_rpc_tap_transcript_e2e.py
+    recipe: A
+    lifecycle_source: transport
+    supported_statuses:
+      - model-thinking
+    probe_anchor: tests/integration/providers/test_pi_rpc_tap_transcript_e2e.py
+    # linux-amd64 only: that Docker E2E test is the one real proof of an
+    # actual model-thinking-producing prompt turn. The windows-amd64
+    # real-binary proof (test_pi_rpc_tap_real_binaries.py) only proved the
+    # session/new handshake, never a real prompt turn — claiming
+    # windows-amd64 here would overstate what was actually observed.
+    platform_evidence:
+      - linux-amd64

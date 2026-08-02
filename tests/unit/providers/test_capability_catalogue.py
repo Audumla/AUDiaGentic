@@ -191,9 +191,13 @@ def test_val_pcap_013_typoed_mechanism_rejected():
 
 
 def test_all_providers_validate_against_catalogue():
-    """Every capability_id in all 16 shipped provider YAMLs resolves to a catalogue kind."""
+    """Every capability_id in all shipped provider YAMLs resolves to a catalogue kind.
+
+    CC53: kilo/zed/crush gained minimal registered descriptors (stub launch,
+    own harness_observability entries) — 16 + 3 = 19.
+    """
     descriptors = all_descriptors()
-    assert len(descriptors) == 16, f"Expected 16 providers, got {len(descriptors)}"
+    assert len(descriptors) == 19, f"Expected 19 providers, got {len(descriptors)}"
 
     for pid, desc in descriptors.items():
         validate_provider_capability_facts(desc)  # raises if any fact fails

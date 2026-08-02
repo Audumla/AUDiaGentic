@@ -25,6 +25,8 @@ dependencies = [
 acp = ["agent-client-protocol==0.11.0"]
 # MCP server support for the planning tool surface
 mcp = ["mcp==1.27.0", "tomli-w>=1.0"]
+# Browser automation for gpt-auto provider
+gpt-auto = ["playwright>=1.40.0"]
 # Test dependencies
 test = [
   "pytest>=9.0",
@@ -109,6 +111,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
 testpaths = ["tests/unit", "tests/integration", "tests/e2e", "tests/deferred"]
+pythonpath = ["src"]
 addopts = "-ra -q --tb=short --strict-markers --strict-config --import-mode=importlib -p no:randomly"
 timeout = 30
 # Parallel execution: -n auto uses all available CPUs.
