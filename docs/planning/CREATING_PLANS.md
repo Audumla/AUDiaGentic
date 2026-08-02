@@ -25,6 +25,11 @@ deltas in the other are silently lost.
 Use `plan_create_item` to add a new item. Required fields: `plan` (directory name), `title`.
 The `id` is auto-generated — **do not supply it**.
 
+Plan-item and review IDs are globally unique across every plan and lifecycle
+state. Never create or copy a planning Markdown file by hand. If the
+ag-planning MCP is unavailable, record the proposed work in the Notes of an
+existing related item and defer creation; do not guess or reserve an ID.
+
 ```yaml
 plan_create_item:
   plan: code-cleanup
@@ -152,6 +157,15 @@ completions slip through.
 
 Combine a short uppercase plan prefix with a sequence number: `CC07`, `LSP01`, `ML01`.
 Choose a prefix matching the plan name (`CC` → code-cleanup, `LSP` → lsp-mcp-enhancement).
+
+When declaring dependencies, prefer a YAML list of item IDs so validation and
+sequencing tools can read it without interpreting prose:
+
+```yaml
+blocked-by:
+  - CC07
+  - LSP01
+```
 
 ---
 

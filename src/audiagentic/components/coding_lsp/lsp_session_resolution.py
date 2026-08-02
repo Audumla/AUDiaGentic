@@ -58,10 +58,19 @@ def _get_session_or_none(
 
 
 def _refresh_path_after_install() -> None:
-    """Refresh PATH from OS after package manager install.
+    """Augment PATH with user-scope entries added by a package manager install.
 
-    On Windows, winget/scoop may add directories to PATH that the current
-    process doesn't see until restart. Re-read from registry to pick them up.
+    On Windows, winget/scoop may add directories to the user ``Environment``
+    PATH that the current process does not see until restart. Read that value
+    and *append* anything new.
+
+    This must never replace ``os.environ["PATH"]`` with the registry value.
+    HKCU holds only the user-scope PATH, so assigning it wholesale discards the
+    machine-scope (HKLM) and inherited entries — dropping, for example,
+    ``C:\\Program Files\\nodejs``, which then makes every later ``shutil.which``
+    lookup for node/npx fail for the remaining life of the process. Registry
+    PATH is also typically ``REG_EXPAND_SZ``, so unexpanded tokens such as
+    ``%LOCALAPPDATA%`` must be expanded or the appended entries are inert.
     """
     if not sys.platform.startswith("win"):
         return
@@ -69,10 +78,24 @@ def _refresh_path_after_install() -> None:
         import winreg
 
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment", 0, winreg.KEY_READ) as key:
-            path_val, _ = winreg.QueryValueEx(key, "PATH")
-            os.environ["PATH"] = path_val
+            path_val, value_type = winreg.QueryValueEx(key, "PATH")
     except Exception:
-        pass
+        return
+
+    if not isinstance(path_val, str) or not path_val:
+        return
+    if value_type == winreg.REG_EXPAND_SZ:
+        path_val = os.path.expandvars(path_val)
+
+    current = [p for p in os.environ.get("PATH", "").split(os.pathsep) if p]
+    seen = {p.rstrip("\\/").casefold() for p in current}
+    added = [
+        entry
+        for entry in (e.strip() for e in path_val.split(os.pathsep))
+        if entry and entry.rstrip("\\/").casefold() not in seen
+    ]
+    if added:
+        os.environ["PATH"] = os.pathsep.join(current + added)
 
 
 def _find_binary_after_install(name: str) -> bool:
