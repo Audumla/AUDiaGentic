@@ -12,7 +12,6 @@ from tests.unit.agents.test_agents_gateway_sessions import (
 )
 
 from audiagentic.components.agents import agents_gateway_api as gateway
-from audiagentic.components.agents import agents_gateway_queue
 from audiagentic.components.agents import agents_gateway_sessions as sessions_module
 from audiagentic.components.agents.agents_api import create_profile
 from audiagentic.components.agents.agents_gateway_sessions import SessionRuntime
@@ -27,12 +26,6 @@ from audiagentic.foundation.transports import AcpLaunch
 from audiagentic.foundation.transports.agent_session import SessionTurnResult
 
 pytestmark = pytest.mark.no_parallel
-
-
-@pytest.fixture(autouse=True)
-def _fresh_gateway_queue_manager():
-    gateway._QUEUE_MANAGER = agents_gateway_queue.GatewayQueueManager()
-    yield
 
 
 def _make_profile(
@@ -934,4 +927,3 @@ def test_running_session_request_has_latest_turn_event_but_no_output_yet(
     finally:
         gate.set()
         runtime.shutdown()
-

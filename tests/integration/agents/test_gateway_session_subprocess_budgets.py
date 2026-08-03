@@ -11,6 +11,16 @@ transport (no fakes/mocks), sends a "flood" prompt that emits enough
 assistant-message events within one turn to exceed MAX_TOTAL_BYTES, and
 asserts terminal-result retention, dropped-event accounting, and EventBus
 turn-lifecycle delivery all hold together over the real process boundary.
+
+AS28 slice 4a moved transport resolution behind a ``provider_prepare_fn``
+seam (``SessionRuntime.open_session()`` no longer accepts ``launch=`` —
+see its docstring: "no AcpLaunch crosses this boundary"). To still drive a
+real subprocess here, this test injects a ``provider_prepare_fn`` that
+returns a ``PreparedSessionTransport`` wrapping a real, unopened
+``AcpAgentSessionTransport`` (the same neutral ``AgentSessionTransport``
+wrapper production provider adapters use — not the raw ``AcpSessionTransport``,
+whose ``prompt()`` signature ``SessionRuntime`` does not call).
+``SessionRuntime`` itself calls ``transport.open()``.
 """
 from __future__ import annotations
 
@@ -19,6 +29,7 @@ import threading
 from pathlib import Path
 
 import pytest
+from tests.unit.agents.test_agents_gateway_sessions import _build_fake_prepared
 
 from audiagentic.components.agents.agents_event_topics import (
     TURN_MODEL_COMPLETED_TOPIC,
@@ -27,6 +38,7 @@ from audiagentic.components.agents.agents_event_topics import (
 from audiagentic.components.agents.agents_gateway_sessions import SessionRuntime
 from audiagentic.foundation.event import get_bus, reset_bus
 from audiagentic.foundation.transports import AcpLaunch
+from audiagentic.foundation.transports.acp import AcpAgentSessionTransport
 
 _FAKE_AGENT = str(
     Path(__file__).parent.parent.parent
@@ -57,12 +69,18 @@ def test_real_subprocess_flood_evicts_bounded_and_publishes_turn_events(tmp_path
     get_bus().subscribe(TURN_MODEL_STARTED_TOPIC, on_model_started)
     get_bus().subscribe(TURN_MODEL_COMPLETED_TOPIC, on_model_completed)
 
-    runtime = SessionRuntime()
+    def prepare_real_subprocess(project_root, *, provider_id, surface_hint, model_id=None, **_kwargs):
+        transport = AcpAgentSessionTransport(
+            AcpLaunch(executable=sys.executable, args=(_FAKE_AGENT,)),
+            cwd=project_root,
+        )
+        return _build_fake_prepared(transport)
+
+    runtime = SessionRuntime(provider_prepare_fn=prepare_real_subprocess)
     try:
         record = runtime.open_session(
             tmp_path,
             agent_profile_id="profile-1",
-            launch=AcpLaunch(executable=sys.executable, args=(_FAKE_AGENT,)),
             provider_id="opencode",
             model_id="m1",
         )
@@ -74,15 +92,17 @@ def test_real_subprocess_flood_evicts_bounded_and_publishes_turn_events(tmp_path
         )
 
         # Terminal result retained despite bounded eviction of the flood.
+        # AS21 bounds SessionTurnResult to scalars only (no raw events/bytes
+        # on the result — see its docstring); output delivery is the
+        # observation sink's job, asserted via the EventBus below.
         assert result.stop_reason == "end_turn"
-        assert result.terminal_event is not None
-        assert result.terminal_event.kind == "result"
+        assert result.error_code is None
+        assert result.final_summary is not None
 
-        # The flood exceeded MAX_EVENTS — some events were evicted, but the
-        # total-received count and bytes-buffered accounting stay honest.
-        assert result.dropped_events > 0
-        assert result.total_events > len(result.events)
-        assert result.bytes_buffered >= 0
+        # The flood exceeded MAX_EVENTS — some observations were evicted,
+        # but delivery accounting stays honest: some got through, some didn't.
+        assert result.observations_delivered > 0
+        assert result.dropped_observations > 0
 
         # Lifecycle EventBus delivery happened over the real subprocess
         # boundary: exactly one model.started (deduped) and one

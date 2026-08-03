@@ -14,10 +14,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-from audiagentic.components.agents import agents_gateway_api as gateway
-from audiagentic.components.agents import agents_gateway_queue
 from audiagentic.components.agents import agents_gateway_recovery as recovery
 from audiagentic.components.agents import agents_gateway_store as store
 from audiagentic.components.agents.agents_api import create_profile
@@ -25,13 +21,6 @@ from audiagentic.components.agents.agents_event_topics import LLM_INTERRUPTED_TO
 from audiagentic.foundation.event import get_bus
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state
-
-
-@pytest.fixture(autouse=True)
-def _fresh_gateway_queue_manager():
-    """Reset the QueueManager singleton to production-equivalent state."""
-    gateway._QUEUE_MANAGER = agents_gateway_queue.GatewayQueueManager()
-    yield
 
 
 def _make_profile(project_root: Path) -> None:
