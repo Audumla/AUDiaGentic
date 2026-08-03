@@ -51,7 +51,7 @@ def _docker_image_exists(image: str) -> bool:
         return False
 
 
-requires_docker = pytest.mark.skipif(
+requires_container = pytest.mark.skipif(
     DOCKER_EXE is None,
     reason="docker not on PATH",
 )

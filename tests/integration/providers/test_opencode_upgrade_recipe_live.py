@@ -8,6 +8,7 @@ import pytest
 
 @pytest.mark.integration
 @pytest.mark.opt_in
+@pytest.mark.mutates_host
 @pytest.mark.requires_npm
 def test_opencode_install_then_explicit_upgrade_is_verified(tmp_path) -> None:
     if os.environ.get("AUDIAGENTIC_OPENCODE_RECIPE_DOCKER") != "1":

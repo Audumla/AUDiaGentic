@@ -6,10 +6,28 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 DOCKER_DIR = ROOT / "tests" / "docker"
+CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci-tests.yml"
 
 
 def _dockerfiles() -> list[Path]:
     return sorted(DOCKER_DIR.glob("Dockerfile*"))
+
+
+def test_ci_matrix_covers_all_test_dockerfiles() -> None:
+    """Prevent a new Docker test image from silently never running in CI."""
+    workflow = CI_WORKFLOW.read_text(encoding="utf-8")
+    referenced = set(re.findall(r"dockerfile:\s*(Dockerfile\S+)", workflow))
+    available = {path.name for path in _dockerfiles()}
+    intentionally_unbuilt = {"Dockerfile.test-base", "Dockerfile.test.local"}
+
+    assert referenced <= available, (
+        "CI references missing Dockerfiles: "
+        + ", ".join(sorted(referenced - available))
+    )
+    assert available - intentionally_unbuilt <= referenced, (
+        "Dockerfiles are not covered by the CI matrix: "
+        + ", ".join(sorted(available - intentionally_unbuilt - referenced))
+    )
 
 
 def test_recipes_never_copy_the_whole_development_context() -> None:

@@ -10,11 +10,10 @@ Mock only the subprocess/stream boundary — prove production code paths."""
 
 from __future__ import annotations
 
-from typing import Any
 import shutil
+from typing import Any
 
 import pytest
-
 
 pytestmark = [
     pytest.mark.requires_npm,
