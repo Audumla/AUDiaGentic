@@ -8,9 +8,18 @@ Prove that the OpenCode ACP adapter:
 from __future__ import annotations
 
 import ast
+import shutil
 from unittest.mock import patch
 
+import pytest
+
 from audiagentic.foundation.transports.acp import AcpLaunch
+
+
+pytestmark = [
+    pytest.mark.requires_npm,
+    pytest.mark.skipif(shutil.which("opencode") is None, reason="opencode CLI not on PATH"),
+]
 
 # Forbidden imports: the acp.py binding must not import these modules.
 _FORBIDDEN_IMPORTS = frozenset((

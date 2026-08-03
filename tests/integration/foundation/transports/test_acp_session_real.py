@@ -6,12 +6,19 @@ to prove context retention and child process cleanup.
 from __future__ import annotations
 
 import sys
+import importlib.util
 from pathlib import Path
 
 import psutil
 import pytest
 
 from audiagentic.foundation.transports.acp import AcpLaunch, AcpSessionTransport
+
+
+pytestmark = pytest.mark.skipif(
+    importlib.util.find_spec("acp") is None,
+    reason="acp extra is not installed (agent-client-protocol missing)",
+)
 
 # Resolve the fake ACP agent script at module load time
 _FAKE_AGENT_SCRIPT = Path(__file__).resolve().parent.parent.parent.parent / "unit" / "fixtures" / "fake_acp_agent.py"
