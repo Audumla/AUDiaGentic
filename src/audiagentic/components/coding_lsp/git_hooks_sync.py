@@ -234,7 +234,7 @@ def _remove_hook_block(hook_path: Path, project_root: Path, language_id: str) ->
             if block_marker in line:
                 in_block = True
                 continue
-            if in_block and "# <<< audiagentic:_HOOK_BLOCK_ID:language-hooks <<<" in line:
+            if in_block and f"# <<< audiagentic:{_HOOK_BLOCK_ID}:language-hooks <<<" in line:
                 in_block = False
                 continue
             if not in_block:

@@ -28,6 +28,8 @@ from audiagentic.foundation.interaction.models import (
 from audiagentic.foundation.interaction.store import (
     interaction_path,
     interactions_root,
+    read_record,
+    write_record,
 )
 
 __all__ = [
@@ -46,4 +48,6 @@ __all__ = [
     "clear_backend",
     "interactions_root",
     "interaction_path",
+    "read_record",
+    "write_record",
 ]

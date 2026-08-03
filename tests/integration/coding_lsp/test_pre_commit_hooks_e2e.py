@@ -87,7 +87,7 @@ def test_hook_body_for_language_generation() -> None:
     assert "# >>> audiagentic:audiagentic-lsp-hooks:python-ruff >>>" in body
     assert "# check: ruff,check --fix" in body
     assert "# format: ruff,format" in body
-    assert "# <<< audiagentic:_HOOK_BLOCK_ID:language-hooks <<<" in body
+    assert "# <<< audiagentic:audiagentic-lsp-hooks:language-hooks <<<" in body
 
 
 def test_get_hook_path_returns_none_when_no_git_hooks(tmp_path: Path) -> None:

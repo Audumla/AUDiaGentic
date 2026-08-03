@@ -83,7 +83,10 @@ class TestDeletePathStep:
         target = tmp_path / "file.txt"
         target.write_text("data")
 
-        class FakePath(Path):
+        # ``Path`` is a factory/ABC, not a concrete pathlib implementation.
+        # Subclass the platform's concrete path class so newer Python
+        # versions provide the internal parser state (notably ``_flavour``).
+        class FakePath(type(Path())):
             def expanduser(self):
                 p = super().expanduser()
                 if str(p).startswith("~/"):
