@@ -126,7 +126,7 @@ markers = [
   # Speed
   "slow: single test takes >10s; excluded from quick runs (pytest -m 'not slow')",
   # Resource / environment dependencies
-  "requires_docker: needs a Docker daemon running (not just isolation)",
+    "requires_container: must run inside the disposable Docker test environment",
   "requires_network: needs outbound internet access",
   "requires_uv: needs uv on PATH",
   "requires_npm: needs npm on PATH",
@@ -135,9 +135,9 @@ markers = [
   # Behaviour / intent
   "smoke: minimal sanity check; should pass in every environment",
   "opt_in: destructive or expensive; never run by default",
-  "mutates_host: installs/removes packages on the real host; always gated by Docker",
+    "mutates_host: installs/removes packages on the test host; implies disposable-container execution",
   # Legacy / extended markers (kept for backward compatibility)
-  "docker: alias for requires_docker; prefer requires_docker in new tests",
+  "docker: legacy alias for requires_container",
   "dev: exercises local filesystem state; not collected in CI (run: pytest tests/dev/)",
   "mutates_project_fs: writes/deletes project files beyond ephemeral temp paths",
   "long_running: expected runtime >60s; pair with @pytest.mark.timeout(N)",

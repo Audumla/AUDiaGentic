@@ -30,6 +30,25 @@ from audiagentic.foundation.interaction import push_status
 logger = logging.getLogger(__name__)
 
 
+def wire_harness_status() -> None:
+    """Wire the harness capability for standalone MCP composition roots."""
+    from audiagentic.foundation.capabilities import register_harness_status
+
+    from .resolution import harness_cli_available
+
+    register_harness_status({
+        "get_harness_type": get_harness_type,
+        "harness_cli_available": harness_cli_available,
+        "build_runtime_sync": build_runtime_sync,
+        "refresh_harness_config_if_installed": refresh_harness_config_if_installed,
+        "query_rig_server_version": query_rig_server_version,
+        "version_info": version_info,
+        "default_config_path": default_config_path,
+        "load_active_profile": load_active_profile,
+        "resolve_session_info": resolve_session_info,
+    })
+
+
 @dataclass
 class RunnerParams:
     """Harness-agnostic runner parameters.
@@ -298,18 +317,18 @@ def resolve_session_info(project_root: Path | None = None) -> ProviderSessionInf
     harness = global_harness_runtime()
     if harness and (harness / "rig" / "bin").exists():
         server_ver = query_server_version(harness / "rig" / "bin")
-        info = ProviderSessionInfo(**info.__dict__, server_version=server_ver)
+        info = ProviderSessionInfo(**{**info.__dict__, "server_version": server_ver})
         models_path = harness / "agent" / "models.json"
         if models_path.exists():
             try:
                 models_json = json.loads(models_path.read_text(encoding="utf-8"))
-                info = ProviderSessionInfo(**info.__dict__, models_data=models_json)
+                info = ProviderSessionInfo(**{**info.__dict__, "models_data": models_json})
             except (OSError, json.JSONDecodeError):
                 pass  # degraded: no models JSON
 
     # Endpoint from env (remote rig / OpenAI-compatible connection)
     base_url = os.environ.get("AUDIAGENTIC_AG_BASE_URL")
-    info = ProviderSessionInfo(**info.__dict__, base_url=base_url)
+    info = ProviderSessionInfo(**{**info.__dict__, "base_url": base_url})
 
     # Model config from harness config (shared across providers)
     requested = os.environ.get("AUDIAGENTIC_AG_MODEL")
@@ -321,10 +340,10 @@ def resolve_session_info(project_root: Path | None = None) -> ProviderSessionInf
         )
         requested = cfg.get("model")
 
-    info = ProviderSessionInfo(
+    info = ProviderSessionInfo(**{
         **info.__dict__,
-        configured_model=requested if isinstance(requested, str) else None,
-    )
+        "configured_model": requested if isinstance(requested, str) else None,
+    })
 
     return info
 
