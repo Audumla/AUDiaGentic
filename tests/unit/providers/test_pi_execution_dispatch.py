@@ -11,8 +11,15 @@ Mock only the subprocess/stream boundary — prove production code paths."""
 from __future__ import annotations
 
 from typing import Any
+import shutil
 
 import pytest
+
+
+pytestmark = [
+    pytest.mark.requires_npm,
+    pytest.mark.skipif(shutil.which("pi") is None, reason="pi CLI not on PATH"),
+]
 
 # ── Multiline prompt used across tests ────────────────────────────────────
 
