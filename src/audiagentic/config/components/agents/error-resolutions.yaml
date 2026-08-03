@@ -148,3 +148,4 @@ CFG-AGSV-002: "Set AUDIAGENTIC_GATEWAY_MODE to either in-process or standalone."
 CFG-AGSV-003: "Set AUDIAGENTIC_GATEWAY_PORT to an integer from 1 through 65535."
 # AS19 Stage-2: harness status observer ingress error codes
 CON-AGW-OBS-001: "Session already has an active observer binding; only one observer binding per session is allowed."
+VAL-OUTPUT-RELAY-005: "Resolved session surface does not authorize the assistant-text output channel."
