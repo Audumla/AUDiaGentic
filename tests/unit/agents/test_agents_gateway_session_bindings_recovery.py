@@ -493,7 +493,7 @@ class TestWindowsCompatibility:
             project_root
             / ".audiagentic"
             / "runtime"
-            / "agent-llm-gateway"
+            / "agent-execution-gateway"
             / "sessions"
             / ("a" * 20)
             / "record.json"

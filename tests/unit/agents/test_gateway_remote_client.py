@@ -150,5 +150,5 @@ def test_submit_forwards_calling_component_profile(monkeypatch, tmp_path) -> Non
         ) or {"state": "queued"},
     )
 
-    assert client.submit_llm_request(tmp_path, prompt_body="hello") == {"state": "queued"}
+    assert client.submit_execution_request(tmp_path, prompt_body="hello") == {"state": "queued"}
     assert captured["params"]["component_profile"] == "calling-profile"

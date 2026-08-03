@@ -228,7 +228,7 @@ class TestTerminalQualityInStatus:
             fake_execute_provider,
         )
 
-        result = gateway.run_llm_request(tmp_path, prompt_body="hi")
+        result = gateway.run_execution_request(tmp_path, prompt_body="hi")
         assert result["state"] == "completed"
 
         status = gateway.request_runtime_status(tmp_path, result["request-id"])
@@ -259,7 +259,7 @@ class TestTerminalQualityInStatus:
             slow_execute_provider,
         )
 
-        submitted = gateway.submit_llm_request(tmp_path, prompt_body="hi")
+        submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
         status = gateway.request_runtime_status(tmp_path, submitted["request-id"])
 
         assert "terminal-quality" not in status, (
@@ -267,7 +267,7 @@ class TestTerminalQualityInStatus:
         )
 
         hold.set()
-        gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=5)
+        gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=5)
 
     def test_terminal_quality_sh07_shape(self, tmp_path: Path, monkeypatch):
         """SH07 incident shape: completed but output ends mid-progress."""
@@ -290,7 +290,7 @@ class TestTerminalQualityInStatus:
             fake_execute_provider,
         )
 
-        result = gateway.run_llm_request(tmp_path, prompt_body="hi")
+        result = gateway.run_execution_request(tmp_path, prompt_body="hi")
         assert result["state"] == "completed"
 
         status = gateway.request_runtime_status(tmp_path, result["request-id"])
@@ -322,7 +322,7 @@ class TestTerminalQualityInStatus:
             fake_execute_provider,
         )
 
-        result = gateway.run_llm_request(tmp_path, prompt_body="SECRET PROMPT")
+        result = gateway.run_execution_request(tmp_path, prompt_body="SECRET PROMPT")
         assert result["state"] == "completed"
 
         status = gateway.request_runtime_status(tmp_path, result["request-id"])
@@ -352,7 +352,7 @@ class TestTerminalQualityInStatus:
             failing_execute_provider,
         )
 
-        result = gateway.run_llm_request(tmp_path, prompt_body="hi")
+        result = gateway.run_execution_request(tmp_path, prompt_body="hi")
         assert result["state"] == "failed"
 
         status = gateway.request_runtime_status(tmp_path, result["request-id"])
@@ -360,7 +360,7 @@ class TestTerminalQualityInStatus:
 
 
 # ===========================================================================
-# Terminal-quality in wait_llm_request (AS36 step 5b)
+# Terminal-quality in wait_execution_request (AS36 step 5b)
 # ===========================================================================
 
 class TestTerminalQualityInWait:
@@ -382,12 +382,12 @@ class TestTerminalQualityInWait:
             fake_execute_provider,
         )
 
-        submitted = gateway.submit_llm_request(tmp_path, prompt_body="hi")
-        result = gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=10)
+        submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
+        result = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=10)
 
         assert result["state"] == "completed"
         assert "terminal-quality" in result, (
-            "wait_llm_request should include terminal-quality for terminal results"
+            "wait_execution_request should include terminal-quality for terminal results"
         )
         assert result["terminal-quality"]["label"] == TerminalQualityLabel.CLEAN.value
 
@@ -410,8 +410,8 @@ class TestTerminalQualityInWait:
             slow_execute_provider,
         )
 
-        submitted = gateway.submit_llm_request(tmp_path, prompt_body="hi")
-        result = gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=0.2)
+        submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
+        result = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=0.2)
 
         assert result.get("wait-timeout") is True
         assert "terminal-quality" not in result, (
@@ -419,7 +419,7 @@ class TestTerminalQualityInWait:
         )
 
         hold.set()
-        gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=5)
+        gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=5)
 
     def test_terminal_quality_in_wait_sh07_shape(self, tmp_path: Path, monkeypatch):
         """SH07 shape: completed but output ends mid-progress — should be suspicious."""
@@ -442,8 +442,8 @@ class TestTerminalQualityInWait:
             fake_execute_provider,
         )
 
-        submitted = gateway.submit_llm_request(tmp_path, prompt_body="hi")
-        result = gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=10)
+        submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
+        result = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=10)
 
         assert result["state"] == "completed"
         assert "terminal-quality" in result
@@ -470,8 +470,8 @@ class TestTerminalQualityInWait:
             fake_execute_provider,
         )
 
-        submitted = gateway.submit_llm_request(tmp_path, prompt_body="hi")
-        result = gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=10)
+        submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
+        result = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=10)
 
         assert result["state"] == "completed"
         assert "terminal-quality" in result

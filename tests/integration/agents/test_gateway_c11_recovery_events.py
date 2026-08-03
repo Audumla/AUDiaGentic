@@ -17,7 +17,7 @@ from pathlib import Path
 from audiagentic.components.agents import agents_gateway_recovery as recovery
 from audiagentic.components.agents import agents_gateway_store as store
 from audiagentic.components.agents.agents_api import create_profile
-from audiagentic.components.agents.agents_event_topics import LLM_INTERRUPTED_TOPIC
+from audiagentic.components.agents.agents_event_topics import EXECUTION_INTERRUPTED_TOPIC
 from audiagentic.foundation.event import get_bus
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state
@@ -49,14 +49,14 @@ def _make_profile(project_root: Path) -> None:
 
 class TestC11RecoveryEventPropagation:
     """Production-path: recovery transitions stale requests to interrupted,
-    publishes exactly one agents.llm.interrupted event per stale request,
+    publishes exactly one agents.execution.interrupted event per stale request,
     and agent_jobs maps it to failed-equivalent."""
 
     def test_stale_running_request_interrupted_event_published(
         self, tmp_path: Path,
     ) -> None:
         """A stale running request recovered by a new epoch publishes one
-        agents.llm.interrupted event with correct payload fields."""
+        agents.execution.interrupted event with correct payload fields."""
         service_root = tmp_path / "service"
         project_root = tmp_path / "project"
         _make_profile(project_root)
@@ -89,7 +89,7 @@ class TestC11RecoveryEventPropagation:
         def on_interrupted(event_type: str, payload: dict, metadata: dict) -> None:
             events.append(payload)
 
-        handle = get_bus().subscribe(LLM_INTERRUPTED_TOPIC, on_interrupted)
+        handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, on_interrupted)
         try:
             # Recovery with a new epoch should interrupt the stale running request
             report = recovery.recover_gateway_requests(
@@ -123,7 +123,7 @@ class TestC11RecoveryEventPropagation:
         self, tmp_path: Path,
     ) -> None:
         """A stale queued request recovered by a new epoch publishes one
-        agents.llm.interrupted event with replay_required=true."""
+        agents.execution.interrupted event with replay_required=true."""
         service_root = tmp_path / "service"
         project_root = tmp_path / "project"
         _make_profile(project_root)
@@ -146,7 +146,7 @@ class TestC11RecoveryEventPropagation:
         def on_interrupted(event_type: str, payload: dict, metadata: dict) -> None:
             events.append(payload)
 
-        handle = get_bus().subscribe(LLM_INTERRUPTED_TOPIC, on_interrupted)
+        handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, on_interrupted)
         try:
             report = recovery.recover_gateway_requests(
                 service_root, live_owner_epoch="new-epoch"
@@ -190,7 +190,7 @@ class TestC11RecoveryEventPropagation:
         def on_interrupted(event_type: str, payload: dict, metadata: dict) -> None:
             events.append(payload)
 
-        handle = get_bus().subscribe(LLM_INTERRUPTED_TOPIC, on_interrupted)
+        handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, on_interrupted)
         try:
             # Recovery with same epoch — no stale requests to interrupt
             report = recovery.recover_gateway_requests(
@@ -239,7 +239,7 @@ class TestC11RecoveryEventPropagation:
         def on_interrupted(event_type: str, payload: dict, metadata: dict) -> None:
             events.append(payload)
 
-        handle = get_bus().subscribe(LLM_INTERRUPTED_TOPIC, on_interrupted)
+        handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, on_interrupted)
         try:
             # First pass: interrupt the stale request
             recovery.recover_gateway_requests(
@@ -260,7 +260,7 @@ class TestC11RecoveryEventPropagation:
     def test_agent_jobs_outcome_map_handles_interrupted(
         self, tmp_path: Path,
     ) -> None:
-        """agent_jobs GW_OUTCOME_MAP maps agents.llm.interrupted to failed.
+        """agent_jobs GW_OUTCOME_MAP maps agents.execution.interrupted to failed.
         This is the downstream contract that prevents interrupted gateway
         requests from leaving agent_jobs in an indefinite running state."""
         from audiagentic.components.agent_jobs.event_observer import (
@@ -269,10 +269,10 @@ class TestC11RecoveryEventPropagation:
 
         # The mapping must exist and point to a terminal job state
         mapping = EventObserver.GW_OUTCOME_MAP
-        assert LLM_INTERRUPTED_TOPIC in mapping, (
+        assert EXECUTION_INTERRUPTED_TOPIC in mapping, (
             "C11: agent_jobs must handle interrupted gateway outcomes"
         )
-        mapped_state = mapping[LLM_INTERRUPTED_TOPIC]
+        mapped_state = mapping[EXECUTION_INTERRUPTED_TOPIC]
         assert mapped_state == "failed", (
             f"C11: interrupted should map to failed; got {mapped_state!r}. "
             "SH12 may later introduce a dedicated 'interrupted' job state."
@@ -283,4 +283,4 @@ class TestC11RecoveryEventPropagation:
             GW_OUTCOME_TOPICS,
         )
 
-        assert LLM_INTERRUPTED_TOPIC in GW_OUTCOME_TOPICS
+        assert EXECUTION_INTERRUPTED_TOPIC in GW_OUTCOME_TOPICS

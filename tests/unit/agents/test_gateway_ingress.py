@@ -28,7 +28,7 @@ class FakeApplication:
         self.cancels: list[tuple[Path, str]] = []
         self.raise_code: str | None = None
 
-    def submit_llm_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]:
+    def submit_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]:
         if self.raise_code:
             raise AudiaGenticError(
                 code=self.raise_code, kind="agents", message="scripted", details={}
@@ -36,7 +36,7 @@ class FakeApplication:
         self.submissions.append({"project_root": project_root, **kwargs})
         return {"request-id": f"req_{len(self.submissions)}", "state": "queued"}
 
-    def cancel_llm_request(self, project_root: Path, request_id: str) -> dict[str, Any]:
+    def cancel_execution_request(self, project_root: Path, request_id: str) -> dict[str, Any]:
         self.cancels.append((project_root, request_id))
         return {"request-id": request_id, "state": "cancelled"}
 

@@ -1,4 +1,4 @@
-"""Unit tests for agents_gateway_events — agents.llm.gateway.requested normalization,
+"""Unit tests for agents_gateway_events — agents.execution.gateway.requested normalization,
 rejection of malformed payloads, correlation_id/subject preservation through
 to lifecycle events, and idempotent registration (AG12)."""
 from __future__ import annotations
@@ -120,9 +120,9 @@ def test_requested_event_creates_and_queues_request(tmp_path: Path, monkeypatch)
 
     monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider)
 
-    received, done = _collect("agents.llm.completed")
+    received, done = _collect("agents.execution.completed")
 
-    get_bus().publish("agents.llm.gateway.requested", {
+    get_bus().publish("agents.execution.gateway.requested", {
         "project-root": str(tmp_path),
         "prompt-body": "do the thing",
     })
@@ -145,11 +145,11 @@ def test_requested_event_defaults_to_async_not_blocking(tmp_path: Path, monkeypa
 
     monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", slow_execute_provider)
 
-    received, done = _collect("agents.llm.completed")
+    received, done = _collect("agents.execution.completed")
 
     import time
     start = time.monotonic()
-    get_bus().publish("agents.llm.gateway.requested", {
+    get_bus().publish("agents.execution.gateway.requested", {
         "project-root": str(tmp_path),
         "prompt-body": "do the thing",
     })
@@ -161,16 +161,16 @@ def test_requested_event_defaults_to_async_not_blocking(tmp_path: Path, monkeypa
 
 
 def test_requested_event_missing_prompt_body_is_rejected(tmp_path: Path):
-    received, done = _collect("agents.llm.rejected")
-    get_bus().publish("agents.llm.gateway.requested", {"project-root": str(tmp_path)})
+    received, done = _collect("agents.execution.rejected")
+    get_bus().publish("agents.execution.gateway.requested", {"project-root": str(tmp_path)})
     assert done.wait(timeout=5)
     _, payload, _ = received[0]
     assert "prompt-body" in payload["error"]["message"]
 
 
 def test_requested_event_missing_project_root_is_rejected():
-    received, done = _collect("agents.llm.rejected")
-    get_bus().publish("agents.llm.gateway.requested", {"prompt-body": "hi"})
+    received, done = _collect("agents.execution.rejected")
+    get_bus().publish("agents.execution.gateway.requested", {"prompt-body": "hi"})
     assert done.wait(timeout=5)
     _, payload, _ = received[0]
     assert "project-root" in payload["error"]["message"]
@@ -178,15 +178,15 @@ def test_requested_event_missing_project_root_is_rejected():
 
 def test_requested_event_unexpected_exception_publishes_rejected_not_swallowed(tmp_path: Path, monkeypatch):
     """RV32: an unexpected (non-AudiaGenticError) exception during submission
-    must still result in agents.llm.rejected — not silently vanish into
+    must still result in agents.execution.rejected — not silently vanish into
     EventBus's per-subscriber error isolation with no trace for the caller."""
     def boom(*args, **kwargs):
         raise RuntimeError("something broke")
 
-    monkeypatch.setattr("audiagentic.components.agents.agents_gateway_api.submit_llm_request", boom)
+    monkeypatch.setattr("audiagentic.components.agents.agents_gateway_api.submit_execution_request", boom)
 
-    received, done = _collect("agents.llm.rejected")
-    get_bus().publish("agents.llm.gateway.requested", {"project-root": str(tmp_path), "prompt-body": "hi"})
+    received, done = _collect("agents.execution.rejected")
+    get_bus().publish("agents.execution.gateway.requested", {"project-root": str(tmp_path), "prompt-body": "hi"})
     assert done.wait(timeout=5)
     _, payload, _ = received[0]
     assert "unexpected error" in payload["error"]["message"]
@@ -200,10 +200,10 @@ def test_requested_event_preserves_correlation_id_and_subject(tmp_path: Path, mo
 
     monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider)
 
-    received, done = _collect("agents.llm.completed")
+    received, done = _collect("agents.execution.completed")
 
     get_bus().publish(
-        "agents.llm.gateway.requested",
+        "agents.execution.gateway.requested",
         {"project-root": str(tmp_path), "prompt-body": "hi"},
         metadata={"correlation_id": "corr-123", "subject": {"kind": "test"}},
     )
@@ -215,7 +215,7 @@ def test_requested_event_preserves_correlation_id_and_subject(tmp_path: Path, mo
 
 
 # ---------------------------------------------------------------------------
-# EDJ08: agents.llm.gateway.cancel-requested handler
+# EDJ08: agents.execution.gateway.cancel-requested handler
 # ---------------------------------------------------------------------------
 
 
@@ -227,11 +227,11 @@ def test_cancel_requested_event_cancels_request(tmp_path: Path, monkeypatch):
         return {"request-id": request_id, "state": "cancelled"}
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_api.cancel_llm_request", fake_cancel
+        "audiagentic.components.agents.agents_gateway_api.cancel_execution_request", fake_cancel
     )
 
     get_bus().publish(
-        "agents.llm.gateway.cancel-requested",
+        "agents.execution.gateway.cancel-requested",
         {"project-root": str(tmp_path), "request-id": "req_c1"},
         metadata={"job-id": "job-1", "correlation_id": "corr-c1"},
         mode=DeliveryMode.SYNC,
@@ -243,19 +243,19 @@ def test_cancel_requested_event_cancels_request(tmp_path: Path, monkeypatch):
 def test_cancel_requested_missing_request_id_ignored(tmp_path: Path, monkeypatch):
     calls = []
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_api.cancel_llm_request",
+        "audiagentic.components.agents.agents_gateway_api.cancel_execution_request",
         lambda *a: calls.append(a),
     )
 
     # missing request-id — handler must log and return, never raise
     get_bus().publish(
-        "agents.llm.gateway.cancel-requested",
+        "agents.execution.gateway.cancel-requested",
         {"project-root": str(tmp_path)},
         mode=DeliveryMode.SYNC,
     )
     # missing project-root
     get_bus().publish(
-        "agents.llm.gateway.cancel-requested",
+        "agents.execution.gateway.cancel-requested",
         {"request-id": "req_c2"},
         mode=DeliveryMode.SYNC,
     )
@@ -270,12 +270,12 @@ def test_cancel_requested_api_failure_swallowed(tmp_path: Path, monkeypatch):
         raise AudiaGenticError("RES-AGW-001", "agents", "unknown request")
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_api.cancel_llm_request", boom
+        "audiagentic.components.agents.agents_gateway_api.cancel_execution_request", boom
     )
 
     # must not raise
     get_bus().publish(
-        "agents.llm.gateway.cancel-requested",
+        "agents.execution.gateway.cancel-requested",
         {"project-root": str(tmp_path), "request-id": "req_gone"},
         mode=DeliveryMode.SYNC,
     )

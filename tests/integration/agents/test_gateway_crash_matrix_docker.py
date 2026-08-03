@@ -89,8 +89,8 @@ def test_crash_while_admitted_but_unclaimed_recovers_as_replay_required(
     client = StandaloneGatewayClient(f"http://127.0.0.1:{port}", load_auth_token(token_path))
     try:
 
-        first = client.submit_llm_request(tmp_path, prompt_body="hold me", mode="async")
-        second = client.submit_llm_request(tmp_path, prompt_body="stay queued", mode="async")
+        first = client.submit_execution_request(tmp_path, prompt_body="hold me", mode="async")
+        second = client.submit_execution_request(tmp_path, prompt_body="stay queued", mode="async")
 
         # First occupies the sole concurrency slot (rig holds its response);
         # second must sit admitted-only, never claimed, while the slot is full.
@@ -144,7 +144,7 @@ def test_crash_while_running_recovers_as_interrupted(tmp_path: Path, rig_server)
     client = StandaloneGatewayClient(f"http://127.0.0.1:{port}", load_auth_token(token_path))
     request_id = None
     try:
-        submitted = client.submit_llm_request(tmp_path, prompt_body="hang here", mode="async")
+        submitted = client.submit_execution_request(tmp_path, prompt_body="hang here", mode="async")
         request_id = submitted["request-id"]
 
         wait_for_record_state(tmp_path, request_id, {"running"})
@@ -192,11 +192,11 @@ def test_cancel_raced_with_recovery_reaches_consistent_terminal_state(
     client = StandaloneGatewayClient(f"http://127.0.0.1:{port}", load_auth_token(token_path))
     request_id = None
     try:
-        submitted = client.submit_llm_request(tmp_path, prompt_body="hang then cancel", mode="async")
+        submitted = client.submit_execution_request(tmp_path, prompt_body="hang then cancel", mode="async")
         request_id = submitted["request-id"]
         wait_for_record_state(tmp_path, request_id, {"running"})
 
-        client.cancel_llm_request(tmp_path, request_id)
+        client.cancel_execution_request(tmp_path, request_id)
         wait_for(
             lambda: _read_record(tmp_path, request_id).get("cancel-requested") is True,
             timeout=10, what="cancel-requested flag persisted",
@@ -244,7 +244,7 @@ def test_malformed_active_work_entry_is_quarantined_not_deleted_on_restart(
     client = StandaloneGatewayClient(f"http://127.0.0.1:{port}", load_auth_token(token_path))
     request_id = None
     try:
-        submitted = client.submit_llm_request(tmp_path, prompt_body="hang", mode="async")
+        submitted = client.submit_execution_request(tmp_path, prompt_body="hang", mode="async")
         request_id = submitted["request-id"]
         wait_for_record_state(tmp_path, request_id, {"running"})
         kill_subprocess(proc)
@@ -327,7 +327,7 @@ def test_crash_after_claim_before_start_recovers_as_replay_required(
     client = StandaloneGatewayClient(f"http://127.0.0.1:{port}", load_auth_token(token_path))
     request_id = None
     try:
-        submitted = client.submit_llm_request(tmp_path, prompt_body="claim then stall", mode="async")
+        submitted = client.submit_execution_request(tmp_path, prompt_body="claim then stall", mode="async")
         request_id = submitted["request-id"]
 
         # Observed directly from the on-disk control-plane index: claimed
@@ -395,7 +395,7 @@ def test_crash_after_terminal_before_index_cleanup_preserves_terminal_result(
     request_id = None
     pre_crash_record = None
     try:
-        submitted = client.submit_llm_request(tmp_path, prompt_body="complete then stall", mode="async")
+        submitted = client.submit_execution_request(tmp_path, prompt_body="complete then stall", mode="async")
         request_id = submitted["request-id"]
 
         # Caught mid-stall: the terminal write already landed, but cleanup

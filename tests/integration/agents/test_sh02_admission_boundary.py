@@ -1,7 +1,7 @@
 """SH02 integration tests: admission boundary validates through SubmissionEnvelope,
 persists redacted ExecutionManifest, and proves no prompt/secret reaches records or events.
 
-These tests exercise the actual submit_llm_request admission path (not the
+These tests exercise the actual submit_execution_request admission path (not the
 isolated contract unit tests) to verify that the envelope validation, manifest
 resolution, and record redaction work end-to-end.
 """
@@ -53,7 +53,7 @@ class TestRecordRedaction:
         _make_profile(tmp_path, "default", "local-openai")
 
         secret_prompt = "the launch code is sk-AAAABBBBCCCCDDDDEEEE"
-        submitted = gateway.submit_llm_request(tmp_path, prompt_body=secret_prompt)
+        submitted = gateway.submit_execution_request(tmp_path, prompt_body=secret_prompt)
         request_id = submitted["request-id"]
 
         # Read the persisted record directly from disk
@@ -73,7 +73,7 @@ class TestRecordRedaction:
     def test_persisted_record_carries_manifest_fields(self, tmp_path: Path) -> None:
         _make_profile(tmp_path, "default", "local-openai")
 
-        submitted = gateway.submit_llm_request(tmp_path, prompt_body="implement the thing")
+        submitted = gateway.submit_execution_request(tmp_path, prompt_body="implement the thing")
         request_id = submitted["request-id"]
 
         persisted = json.loads(gateway_request_path(tmp_path, request_id).read_text())
@@ -89,7 +89,7 @@ class TestRecordRedaction:
         _make_profile(tmp_path, "default", "local-openai")
         prompt_canary = "METADATA_SECRET_PROMPT"
         idempotency_canary = "RAW_KEY_ALIAS"
-        submitted = gateway.submit_llm_request(
+        submitted = gateway.submit_execution_request(
             tmp_path,
             prompt_body="safe user prompt",
             metadata={
@@ -125,7 +125,7 @@ class TestRecordRedaction:
             fake_execute_provider,
         )
 
-        result = gateway.run_llm_request(tmp_path, prompt_body="the actual prompt")
+        result = gateway.run_execution_request(tmp_path, prompt_body="the actual prompt")
         assert result["state"] == "completed"
         assert result["provider-id"] == "local-openai"
         assert result["model-id"] == "gpt-4o"
@@ -155,7 +155,7 @@ class TestCredentialRejection:
         _make_profile(tmp_path, "default", "local-openai")
 
         with pytest.raises(AudiaGenticError) as exc:
-            gateway.submit_llm_request(
+            gateway.submit_execution_request(
                 tmp_path,
                 prompt_body="implement the thing",
                 metadata={"note": credential_value},
@@ -166,7 +166,7 @@ class TestCredentialRejection:
         _make_profile(tmp_path, "default", "local-openai")
 
         with pytest.raises(AudiaGenticError) as exc:
-            gateway.submit_llm_request(
+            gateway.submit_execution_request(
                 tmp_path,
                 prompt_body="implement the thing",
                 metadata={"context": {"headers": ["Bearer abcdefghijklmnop.qrstuvwxyz"]}},
@@ -186,7 +186,7 @@ class TestCredentialRejection:
         )
 
         # This must NOT raise VAL-AGW-065 — prompt content is exempt from scanning
-        result = gateway.run_llm_request(
+        result = gateway.run_execution_request(
             tmp_path,
             prompt_body="rotate the key sk-AAAABBBBCCCCDDDDEEEE",
         )
@@ -201,7 +201,7 @@ class TestCredentialRejection:
             # Probe whether the event bus is usable
             def _dummy_cb(*args):  # noqa: ARG001
                 pass
-            bus.subscribe("agents.llm.queued", _dummy_cb)
+            bus.subscribe("agents.execution.queued", _dummy_cb)
         except Exception:  # noqa: BLE001 — VAL-EVT-002 means bus was closed
             pytest.skip("event bus closed by earlier test")
 
@@ -215,7 +215,7 @@ class TestCredentialRejection:
         def capture_event(topic: str, payload: dict, metadata: dict | None) -> None:
             captured_events.append({"topic": topic, "payload": payload, "metadata": metadata or {}})
 
-        for topic in ("agents.llm.queued", "agents.llm.started", "agents.llm.completed", "agents.llm.failed"):
+        for topic in ("agents.execution.queued", "agents.execution.started", "agents.execution.completed", "agents.execution.failed"):
             bus.subscribe(topic, capture_event)
 
         def fake_execute_provider(*, execution_request, **_kwargs):
@@ -226,7 +226,7 @@ class TestCredentialRejection:
             fake_execute_provider,
         )
 
-        result = gateway.run_llm_request(
+        result = gateway.run_execution_request(
             tmp_path,
             prompt_body=secret_prompt,
             metadata={

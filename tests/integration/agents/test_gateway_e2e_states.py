@@ -92,41 +92,41 @@ def test_request_state_matrix_completed_failed_timeout_cancelled_rejected(
         controlled_provider,
     )
 
-    completed = gateway.run_llm_request(tmp_path, prompt_body="COMPLETE", timeout_seconds=5)
+    completed = gateway.run_execution_request(tmp_path, prompt_body="COMPLETE", timeout_seconds=5)
     assert completed["state"] == "completed"
     assert completed["output"] == "ok:COMPLETE"
 
-    failed = gateway.run_llm_request(tmp_path, prompt_body="FAIL", timeout_seconds=5)
+    failed = gateway.run_execution_request(tmp_path, prompt_body="FAIL", timeout_seconds=5)
     assert failed["state"] == "failed"
     assert failed["error"]["code"] == "EXT-FAKE-500"
 
-    running = gateway.submit_llm_request(tmp_path, prompt_body="HOLD", mode="async")
+    running = gateway.submit_execution_request(tmp_path, prompt_body="HOLD", mode="async")
     assert provider_started.wait(timeout=2)
-    timed_out = gateway.wait_llm_request(tmp_path, running["request-id"], timeout_seconds=0.05)
+    timed_out = gateway.wait_execution_request(tmp_path, running["request-id"], timeout_seconds=0.05)
     assert timed_out["state"] == "running"
     running_status = gateway.request_runtime_status(tmp_path, running["request-id"])
     assert running_status["queue-state"] == "running"
     assert running_status["profile-slot"] == "active"
 
-    queued = gateway.submit_llm_request(tmp_path, prompt_body="QUEUED", mode="async")
+    queued = gateway.submit_execution_request(tmp_path, prompt_body="QUEUED", mode="async")
     queued_status = gateway.request_runtime_status(tmp_path, queued["request-id"])
     assert queued_status["queue-state"] == "queued"
     assert queued_status["profile-slot"] == "pending"
-    cancelled = gateway.cancel_llm_request(tmp_path, queued["request-id"])
+    cancelled = gateway.cancel_execution_request(tmp_path, queued["request-id"])
     assert cancelled["state"] == "cancelled"
     assert cancelled["cancel-requested"] is True
     assert cancelled["cancel-acknowledged-by"] == "queue-worker"
 
-    still_queued = gateway.submit_llm_request(tmp_path, prompt_body="STILL-QUEUED", mode="async")
+    still_queued = gateway.submit_execution_request(tmp_path, prompt_body="STILL-QUEUED", mode="async")
     assert still_queued["state"] == "queued"
-    overflow = gateway.submit_llm_request(tmp_path, prompt_body="OVERFLOW", mode="async")
+    overflow = gateway.submit_execution_request(tmp_path, prompt_body="OVERFLOW", mode="async")
     assert overflow["state"] == "rejected"
     assert overflow["error"]["code"] == "VAL-AGW-025"
 
     hold.set()
-    finished_running = gateway.wait_llm_request(tmp_path, running["request-id"], timeout_seconds=5)
+    finished_running = gateway.wait_execution_request(tmp_path, running["request-id"], timeout_seconds=5)
     assert finished_running["state"] == "completed"
-    finished_queued = gateway.wait_llm_request(
+    finished_queued = gateway.wait_execution_request(
         tmp_path, still_queued["request-id"], timeout_seconds=5
     )
     assert finished_queued["state"] == "completed"
@@ -169,16 +169,16 @@ def test_running_cancel_is_detected_but_not_fabricated_as_terminal(
         slow_provider,
     )
 
-    submitted = gateway.submit_llm_request(tmp_path, prompt_body="slow", mode="async")
+    submitted = gateway.submit_execution_request(tmp_path, prompt_body="slow", mode="async")
     assert provider_started.wait(timeout=2)
-    cancelled = gateway.cancel_llm_request(tmp_path, submitted["request-id"])
+    cancelled = gateway.cancel_execution_request(tmp_path, submitted["request-id"])
 
     assert cancelled["state"] == "running"
     assert cancelled["cancel-requested"] is True
     assert cancelled["cancel-acknowledged-at"] is None
 
     release_provider.set()
-    result = gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=5)
+    result = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=5)
     assert result["state"] == "completed"
     assert result["cancel-requested"] is True
     assert result["output"] == "finished despite cancel"
@@ -186,15 +186,15 @@ def test_running_cancel_is_detected_but_not_fabricated_as_terminal(
 
 def test_negative_submission_and_lookup_errors_are_explicit(tmp_path: Path) -> None:
     with pytest.raises(AudiaGenticError, match="RES-AGP-003"):
-        gateway.submit_llm_request(tmp_path, prompt_body="no default profile")
+        gateway.submit_execution_request(tmp_path, prompt_body="no default profile")
 
     _make_profile(tmp_path, enabled=False)
-    result = gateway.run_llm_request(tmp_path, prompt_body="provider disabled", timeout_seconds=5)
+    result = gateway.run_execution_request(tmp_path, prompt_body="provider disabled", timeout_seconds=5)
     assert result["state"] == "failed"
     assert result["error"]["code"] == "VAL-AGW-031"
 
     with pytest.raises(AudiaGenticError):
-        gateway.get_llm_request(tmp_path, "req_missing")
+        gateway.get_execution_request(tmp_path, "req_missing")
 
 
 def test_session_states_open_turn_close_and_orphan_detection(
@@ -226,7 +226,7 @@ def test_session_states_open_turn_close_and_orphan_detection(
     )
 
     try:
-        opened = gateway.run_llm_request(
+        opened = gateway.run_execution_request(
             tmp_path,
             prompt_body="open session",
             session_keep_alive=True,
@@ -236,7 +236,7 @@ def test_session_states_open_turn_close_and_orphan_detection(
         assert opened["state"] == "completed", opened
         session_id = opened["session-id"]
 
-        sessions = gateway.list_llm_sessions(tmp_path)
+        sessions = gateway.list_execution_sessions(tmp_path)
         assert [(row["session-id"], row["state"], row["live"]) for row in sessions] == [
             (session_id, "active", True)
         ]
@@ -248,7 +248,7 @@ def test_session_states_open_turn_close_and_orphan_detection(
         assert session_status["session"]["pending-turns"] == 0
         assert "provider-session-ref" not in session_status["session"]
 
-        continued = gateway.run_llm_request(
+        continued = gateway.run_execution_request(
             tmp_path,
             prompt_body="continue session",
             session_id=session_id,
@@ -258,9 +258,9 @@ def test_session_states_open_turn_close_and_orphan_detection(
         assert continued["session-id"] == session_id
         assert transports[0].turns == ["open session", "continue session"]
 
-        closed = gateway.close_llm_session(tmp_path, session_id)
+        closed = gateway.close_execution_session(tmp_path, session_id)
         assert closed["state"] == "closed"
-        assert gateway.list_llm_sessions(tmp_path)[0]["live"] is False
+        assert gateway.list_execution_sessions(tmp_path)[0]["live"] is False
     finally:
         runtime.shutdown()
 
@@ -296,7 +296,7 @@ def test_continued_session_explicit_false_closes_after_turn_if_quiescent(
     )
 
     try:
-        opened = gateway.run_llm_request(
+        opened = gateway.run_execution_request(
             tmp_path,
             prompt_body="open session",
             session_keep_alive=True,
@@ -306,7 +306,7 @@ def test_continued_session_explicit_false_closes_after_turn_if_quiescent(
         session_id = opened["session-id"]
 
         # Continue with explicit keep_alive=False — should close after turn
-        continued = gateway.run_llm_request(
+        continued = gateway.run_execution_request(
             tmp_path,
             prompt_body="one-shot continue",
             session_id=session_id,
@@ -317,7 +317,7 @@ def test_continued_session_explicit_false_closes_after_turn_if_quiescent(
         assert continued["session-id"] == session_id
 
         # Session should be closed (not orphaned/failed) by post-turn close
-        stored = gateway.list_llm_sessions(tmp_path)
+        stored = gateway.list_execution_sessions(tmp_path)
         row = [s for s in stored if s["session-id"] == session_id][0]
         assert row["state"] == "closed"
         assert row["live"] is False
@@ -356,7 +356,7 @@ def test_continued_session_explicit_true_keeps_live_after_turn(
     )
 
     try:
-        opened = gateway.run_llm_request(
+        opened = gateway.run_execution_request(
             tmp_path,
             prompt_body="open session",
             session_keep_alive=True,
@@ -366,7 +366,7 @@ def test_continued_session_explicit_true_keeps_live_after_turn(
         session_id = opened["session-id"]
 
         # Continue with explicit keep_alive=True — should stay live
-        continued = gateway.run_llm_request(
+        continued = gateway.run_execution_request(
             tmp_path,
             prompt_body="continue keeping alive",
             session_id=session_id,
@@ -377,13 +377,13 @@ def test_continued_session_explicit_true_keeps_live_after_turn(
         assert continued["session-id"] == session_id
 
         # Session should still be live
-        stored = gateway.list_llm_sessions(tmp_path)
+        stored = gateway.list_execution_sessions(tmp_path)
         row = [s for s in stored if s["session-id"] == session_id][0]
         assert row["live"] is True
         assert row["state"] == "active"
 
         # Can close it normally
-        closed = gateway.close_llm_session(tmp_path, session_id)
+        closed = gateway.close_execution_session(tmp_path, session_id)
         assert closed["state"] == "closed"
     finally:
         runtime.shutdown()
@@ -416,12 +416,12 @@ def test_wait_does_not_mask_terminal_state_after_timeout(
         delayed_provider,
     )
 
-    submitted = gateway.submit_llm_request(tmp_path, prompt_body="late", mode="async")
+    submitted = gateway.submit_execution_request(tmp_path, prompt_body="late", mode="async")
     assert started.wait(timeout=2)
-    first_wait = gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=0.01)
+    first_wait = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=0.01)
     assert first_wait["state"] == "running"
 
-    second_wait = gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=5)
+    second_wait = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=5)
     assert second_wait["state"] == "completed"
     assert second_wait["output"] == "late success"
 
@@ -456,7 +456,7 @@ def test_request_runtime_status_is_redacted_and_does_not_start_session_runtime(
     )
     monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: None)
 
-    completed = gateway.run_llm_request(tmp_path, prompt_body="secret prompt", timeout_seconds=5)
+    completed = gateway.run_execution_request(tmp_path, prompt_body="secret prompt", timeout_seconds=5)
     runtime_status = gateway.request_runtime_status(tmp_path, completed["request-id"])
 
     assert runtime_status["queue-state"] == "terminal"
@@ -497,7 +497,7 @@ def test_request_runtime_status_projects_latest_session_turn_event(
     )
 
     try:
-        submitted = gateway.submit_llm_request(
+        submitted = gateway.submit_execution_request(
             tmp_path,
             prompt_body="long architecture review",
             mode="async",
@@ -521,7 +521,7 @@ def test_request_runtime_status_projects_latest_session_turn_event(
         assert "provider-session-ref" not in repr(status)
 
         gate.set()
-        finished = gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=5)
+        finished = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=5)
         assert finished["state"] == "completed"
     finally:
         gate.set()
@@ -576,7 +576,7 @@ def test_cancelled_session_turn_preserves_bounded_result_diagnostics(
     )
 
     try:
-        submitted = gateway.submit_llm_request(
+        submitted = gateway.submit_execution_request(
             tmp_path,
             prompt_body="cancel after output",
             mode="async",
@@ -584,9 +584,9 @@ def test_cancelled_session_turn_preserves_bounded_result_diagnostics(
             timeout_seconds=5,
         )
         assert started.wait(timeout=2)
-        cancelled = gateway.cancel_llm_request(tmp_path, submitted["request-id"])
+        cancelled = gateway.cancel_execution_request(tmp_path, submitted["request-id"])
         assert cancelled["cancel-requested"] is True
-        finished = gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=5)
+        finished = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=5)
         assert finished["state"] == "cancelled"
         assert finished["output"] == "partial review finding"
         assert finished["completion"]["stop-reason"] == "cancelled"
@@ -628,7 +628,7 @@ def test_as33_capabilities_absent_when_no_snapshot(
     )
 
     try:
-        completed = gateway.run_llm_request(
+        completed = gateway.run_execution_request(
             tmp_path,
             prompt_body="open session",
             session_keep_alive=True,
@@ -674,7 +674,7 @@ def test_as33_capabilities_exposed_from_explicit_snapshot(
     )
 
     try:
-        completed = gateway.run_llm_request(
+        completed = gateway.run_execution_request(
             tmp_path,
             prompt_body="open session",
             session_keep_alive=True,
@@ -747,7 +747,7 @@ def test_as33_capabilities_redacts_unsafe_fields(
     )
 
     try:
-        completed = gateway.run_llm_request(
+        completed = gateway.run_execution_request(
             tmp_path,
             prompt_body="open session",
             session_keep_alive=True,
@@ -833,7 +833,7 @@ def test_as33_terminal_diagnostics_do_not_start_session_runtime(
     )
     monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: None)
 
-    completed = gateway.run_llm_request(tmp_path, prompt_body="test", timeout_seconds=5)
+    completed = gateway.run_execution_request(tmp_path, prompt_body="test", timeout_seconds=5)
     assert completed["state"] == "completed"
     # This should not raise: peek_session_runtime returns None for terminal.
     runtime_status = gateway.request_runtime_status(tmp_path, completed["request-id"])
@@ -846,7 +846,7 @@ def test_running_session_request_has_latest_turn_event_but_no_output_yet(
     monkeypatch,
 ) -> None:
     """RV735 production symptom: while an async keep-alive session request is
-    still running, get_llm_request has no output but request_runtime_status
+    still running, get_execution_request has no output but request_runtime_status
     exposes session.latest-turn-event for that same request. No prompt text,
     provider-session-ref, full provider-ref-key, or output leaks."""
     _make_profile(tmp_path, provider_id="opencode", model_id="m1")
@@ -876,7 +876,7 @@ def test_running_session_request_has_latest_turn_event_but_no_output_yet(
     )
 
     try:
-        submitted = gateway.submit_llm_request(
+        submitted = gateway.submit_execution_request(
             tmp_path,
             prompt_body="secret architecture review prompt",
             mode="async",
@@ -902,7 +902,7 @@ def test_running_session_request_has_latest_turn_event_but_no_output_yet(
 
         # The production symptom: public status has no output yet, but runtime
         # status shows active turn evidence.
-        public_status = gateway.get_llm_request(tmp_path, request_id)
+        public_status = gateway.get_execution_request(tmp_path, request_id)
         assert public_status["output"] is None, "output should be None while running"
 
         # No prompt text leak in runtime status
@@ -922,7 +922,7 @@ def test_running_session_request_has_latest_turn_event_but_no_output_yet(
         assert full_key not in status_repr
 
         gate.set()
-        finished = gateway.wait_llm_request(tmp_path, request_id, timeout_seconds=5)
+        finished = gateway.wait_execution_request(tmp_path, request_id, timeout_seconds=5)
         assert finished["state"] == "completed"
     finally:
         gate.set()

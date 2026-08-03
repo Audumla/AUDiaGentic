@@ -151,7 +151,7 @@ def transition_record(
 def mark_cancel_requested(project_root: Path, request_id: str) -> dict[str, Any]:
     """Persist cancel-requested=true without changing state.
 
-    Observable via read_record/wait/get_llm_request regardless of whether the
+    Observable via read_record/wait/get_execution_request regardless of whether the
     in-process GatewayQueueManager that owns the running worker is still
     around — the flag survives independently of the in-memory cancel set.
     Idempotent.
@@ -716,7 +716,7 @@ def link_replay(
     """
     with _request_lock(project_root, old_request_id):
         record = _read_record_locked(project_root, old_request_id)
-        if record["state"] != "interrupted" or record.get("replay-required") is not True:
+        if record["state"] != "interrupted" or record.get("replay-required") != True:  # noqa: SIM401
             raise AudiaGenticError(
                 "CON-AGW-103",
                 "agents",

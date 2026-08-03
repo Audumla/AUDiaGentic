@@ -16,12 +16,12 @@ def _patch_root():
     )
 
 
-def test_agent_llm_submit_delegates():
+def test_agent_execution_submit_delegates():
     with _patch_root(), patch(
-        "audiagentic.components.agents.agents_gateway_api.submit_llm_request",
+        "audiagentic.components.agents.agents_gateway_api.submit_execution_request",
         return_value={"request-id": "req_x", "state": "queued"},
     ) as mock:
-        result = agents_gateway_mcp.agent_llm_submit(agent_profile_id="p", prompt_body="hi")
+        result = agents_gateway_mcp.agent_execution_submit(agent_profile_id="p", prompt_body="hi")
     assert result["state"] == "queued"
     mock.assert_called_once_with(
         _ROOT, agent_profile_id="p", prompt_body="hi", mode="async",
@@ -31,42 +31,42 @@ def test_agent_llm_submit_delegates():
     )
 
 
-def test_agent_llm_status_delegates():
+def test_agent_execution_status_delegates():
     with _patch_root(), patch(
-        "audiagentic.components.agents.agents_gateway_api.get_llm_request",
+        "audiagentic.components.agents.agents_gateway_api.get_execution_request",
         return_value={"request-id": "req_x", "state": "completed"},
     ) as mock:
-        result = agents_gateway_mcp.agent_llm_status("req_x")
+        result = agents_gateway_mcp.agent_execution_status("req_x")
     assert result["state"] == "completed"
     mock.assert_called_once_with(_ROOT, "req_x")
 
 
-def test_agent_llm_wait_delegates():
+def test_agent_execution_wait_delegates():
     with _patch_root(), patch(
-        "audiagentic.components.agents.agents_gateway_api.wait_llm_request",
+        "audiagentic.components.agents.agents_gateway_api.wait_execution_request",
         return_value={"request-id": "req_x", "state": "completed"},
     ) as mock:
-        result = agents_gateway_mcp.agent_llm_wait("req_x", timeout_seconds=10)
+        result = agents_gateway_mcp.agent_execution_wait("req_x", timeout_seconds=10)
     assert result["state"] == "completed"
     mock.assert_called_once_with(_ROOT, "req_x", 10)
 
 
-def test_agent_llm_cancel_delegates():
+def test_agent_execution_cancel_delegates():
     with _patch_root(), patch(
-        "audiagentic.components.agents.agents_gateway_api.cancel_llm_request",
+        "audiagentic.components.agents.agents_gateway_api.cancel_execution_request",
         return_value={"request-id": "req_x", "state": "cancelled"},
     ) as mock:
-        result = agents_gateway_mcp.agent_llm_cancel("req_x")
+        result = agents_gateway_mcp.agent_execution_cancel("req_x")
     assert result["state"] == "cancelled"
     mock.assert_called_once_with(_ROOT, "req_x")
 
 
-def test_agent_llm_run_delegates():
+def test_agent_execution_run_delegates():
     with _patch_root(), patch(
-        "audiagentic.components.agents.agents_gateway_api.run_llm_request",
+        "audiagentic.components.agents.agents_gateway_api.run_execution_request",
         return_value={"request-id": "req_x", "state": "completed"},
     ) as mock:
-        result = agents_gateway_mcp.agent_llm_run(agent_profile_id="p", prompt_body="hi")
+        result = agents_gateway_mcp.agent_execution_run(agent_profile_id="p", prompt_body="hi")
     assert result["state"] == "completed"
     # The MCP boundary owns the transport cap and applies it before delegating;
     # the core gateway API honours whatever it is given, so an in-process
@@ -89,21 +89,21 @@ def test_mcp_caps_a_long_requested_wait_but_core_api_does_not():
     assert agents_gateway_mcp._mcp_capped(30.0) == 30.0
 
 
-def test_agent_llm_list_requests_delegates():
+def test_agent_execution_list_requests_delegates():
     with _patch_root(), patch(
-        "audiagentic.components.agents.agents_gateway_api.list_llm_requests",
+        "audiagentic.components.agents.agents_gateway_api.list_execution_requests",
         return_value=[{"request-id": "req_x", "state": "completed"}],
     ) as mock:
-        result = agents_gateway_mcp.agent_llm_list_requests(state="completed", limit=5)
+        result = agents_gateway_mcp.agent_execution_list_requests(state="completed", limit=5)
     assert result == [{"request-id": "req_x", "state": "completed"}]
     mock.assert_called_once_with(_ROOT, state="completed", limit=5)
 
 
-def test_agent_llm_gateway_overview_delegates():
+def test_agent_execution_gateway_overview_delegates():
     with _patch_root(), patch(
         "audiagentic.components.agents.agents_gateway_api.gateway_overview",
         return_value={"total_requests": 3, "by_state": {"completed": 3}, "recent_failures": [], "queues": {}},
     ) as mock:
-        result = agents_gateway_mcp.agent_llm_gateway_overview()
+        result = agents_gateway_mcp.agent_execution_gateway_overview()
     assert result["total_requests"] == 3
     mock.assert_called_once_with(_ROOT)

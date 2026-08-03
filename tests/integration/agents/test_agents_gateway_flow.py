@@ -1,4 +1,4 @@
-"""Integration tests for the Agent LLM Gateway (AG07-AG13): full flows through
+"""Integration tests for the Agent Execution Gateway (AG07-AG13): full flows through
 agents_gateway_api / agents_gateway_events against a fake provider adapter —
 async submit -> wait -> completed, blocking run, event -> completed event, and
 user-facing errors for a disabled provider / missing default profile.
@@ -43,10 +43,10 @@ def test_async_submit_wait_completed_flow(tmp_path: Path, monkeypatch) -> None:
 
     monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider)
 
-    submitted = gateway.submit_llm_request(tmp_path, prompt_body="what is 2+2?")
+    submitted = gateway.submit_execution_request(tmp_path, prompt_body="what is 2+2?")
     assert submitted["state"] in ("queued", "running", "completed")
 
-    result = gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=5)
+    result = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=5)
     assert result["state"] == "completed"
     assert result["output"] == "the answer"
     assert result["provider-id"] == "local-openai"
@@ -64,7 +64,7 @@ def test_blocking_run_returns_terminal_result(tmp_path: Path, monkeypatch) -> No
 
     monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider)
 
-    result = gateway.run_llm_request(tmp_path, prompt_body="what is 2+2?")
+    result = gateway.run_execution_request(tmp_path, prompt_body="what is 2+2?")
     assert result["state"] == "completed"
     assert result["output"] == "blocking answer"
 
@@ -104,8 +104,8 @@ def test_event_triggered_request_reaches_completed_event(tmp_path: Path, monkeyp
             received.append(payload)
             done.set()
 
-        get_bus().subscribe("agents.llm.completed", on_completed)
-        get_bus().publish("agents.llm.gateway.requested", {
+        get_bus().subscribe("agents.execution.completed", on_completed)
+        get_bus().publish("agents.execution.gateway.requested", {
             "project-root": str(tmp_path),
             "prompt-body": "hello from an event",
             "source": "test-integration",
@@ -138,7 +138,7 @@ def test_disabled_provider_produces_user_facing_error(tmp_path: Path, monkeypatc
 
     monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider)
 
-    result = gateway.run_llm_request(tmp_path, prompt_body="hi")
+    result = gateway.run_execution_request(tmp_path, prompt_body="hi")
     assert result["state"] == "failed"
     assert result["error"]["code"] == "VAL-AGW-031"
     assert calls["count"] == 0
@@ -148,5 +148,5 @@ def test_missing_default_profile_raises_user_facing_error(tmp_path: Path) -> Non
     """No profiles configured at all — submitting without an explicit
     agent-profile-id must raise a clear resolution error, not crash."""
     with pytest.raises(AudiaGenticError) as exc_info:
-        gateway.submit_llm_request(tmp_path, prompt_body="hi")
+        gateway.submit_execution_request(tmp_path, prompt_body="hi")
     assert exc_info.value.code == "RES-AGP-003"

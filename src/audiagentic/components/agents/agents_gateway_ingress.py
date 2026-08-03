@@ -1,7 +1,7 @@
 """Durable cross-process gateway trigger ingress (SH09).
 
 Characterization (SH09 step 1): the current cross-process triggers are the
-``agents.llm.gateway.requested`` / ``agents.llm.gateway.cancel-requested``
+``agents.execution.gateway.requested`` / ``agents.execution.gateway.cancel-requested``
 events. The in-process EventBus cannot cross processes and the SH04 HTTP
 client requires the publisher and the service to be online simultaneously.
 Required properties: durable once-only admission despite redelivery, offline
@@ -16,6 +16,7 @@ key unless the publisher supplied one, so redelivery returns the original
 request identity instead of double-dispatching). It imports no gateway
 store/queue/dispatch internals.
 """
+
 from __future__ import annotations
 
 import logging
@@ -79,7 +80,7 @@ def _admit_request(application: Any, event: dict[str, Any]) -> None:
     # same spool event replays the original submission instead of duplicating.
     metadata.setdefault("idempotency_key", f"gateway-spool:{event['event-id']}")
 
-    application.submit_llm_request(
+    application.submit_execution_request(
         Path(project_root_raw),
         agent_profile_id=first_present(payload, "agent-profile-id", "agent_profile_id"),
         prompt_body=prompt_body,
@@ -98,7 +99,7 @@ def _admit_cancel(application: Any, event: dict[str, Any]) -> None:
         raise SpoolPoison("cancel payload missing required 'project-root'")
     if not request_id or not isinstance(request_id, str):
         raise SpoolPoison("cancel payload missing required 'request-id'")
-    application.cancel_llm_request(Path(project_root_raw), request_id)
+    application.cancel_execution_request(Path(project_root_raw), request_id)
 
 
 def drain_gateway_ingress(

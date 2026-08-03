@@ -1,6 +1,6 @@
-# Agent LLM Gateway request state workflow. Loaded by agents_gateway_store.py
-# via the shared foundation.workflow.transitions primitives — mirrors the
-# pattern agent_jobs/workflows.yaml uses for job records, applied to the
+# Agent Execution Gateway request state workflow.
+# Loaded by agents_gateway_store.py through the shared foundation.workflow
+# transitions primitives — mirrors the pattern agent_jobs/workflows.yaml uses
 # gateway's own (unrelated) request/result data shape.
 kinds:
   gateway-request:

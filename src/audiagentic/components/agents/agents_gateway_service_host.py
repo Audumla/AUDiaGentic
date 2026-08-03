@@ -1,4 +1,5 @@
 """Standalone gateway host composition and managed-service ownership."""
+
 from __future__ import annotations
 
 import logging
@@ -24,7 +25,7 @@ from audiagentic.foundation.system.managed_service_contracts import EndpointInfo
 from audiagentic.foundation.system.managed_service_owner import ManagedServiceOwner
 
 logger = logging.getLogger(__name__)
-GATEWAY_SERVICE_KEY = ServiceKey("agent-llm-gateway", "default")
+GATEWAY_SERVICE_KEY = ServiceKey("agent-execution-gateway", "default")
 
 
 class GatewayServiceHost:
@@ -58,7 +59,8 @@ class GatewayServiceHost:
 
     @property
     def endpoint(self) -> str:
-        host, port = self.server.server_address
+        host: str = self.server.server_address[0]
+        port: int = self.server.server_address[1]
         return f"http://{host}:{port}"
 
     @classmethod
@@ -167,13 +169,9 @@ class GatewayServiceHost:
             recover_gateway_requests,
         )
 
-        recover_gateway_requests(
-            self.service_store.root, live_owner_epoch=self.owner_epoch
-        )
+        recover_gateway_requests(self.service_store.root, live_owner_epoch=self.owner_epoch)
         if not self._externally_managed:
-            self.service_store.heartbeat(
-                {"ready": True}, expected_epoch=self.owner_epoch
-            )
+            self.service_store.heartbeat({"ready": True}, expected_epoch=self.owner_epoch)
         self._start_ingress_poller()
         if self.lifecycle is not None:
             self.lifecycle.start()  # type: ignore[attr-defined]
