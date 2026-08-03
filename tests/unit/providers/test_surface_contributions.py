@@ -1,6 +1,17 @@
+"""Provider surface contribution rendering.
+
+Every test here reads the process-wide surfaces registry, which
+``tests/unit/foundation`` resets before each of its own tests via an autouse
+fixture. Custom renderers registered at adapter import time are not restored by
+the post-reset repopulation path, so sharing an xdist worker with a foundation
+test leaves the registry permanently short and these assertions see empty
+contributions. Marked no_parallel until that repopulation is fixed (AS74).
+"""
 from __future__ import annotations
 
 from pathlib import Path
+
+import pytest
 
 import audiagentic.components.providers  # noqa: F401
 from audiagentic.components.providers.contracts.generated_surface import (
@@ -24,6 +35,8 @@ from audiagentic.components.providers.surfaces.manager import (
     build_provider_surface_blocks,
     plan_provider_surfaces,
 )
+
+pytestmark = pytest.mark.no_parallel
 
 
 def _install_agent_ledger(tmp_path: Path) -> None:

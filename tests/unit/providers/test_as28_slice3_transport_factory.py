@@ -662,8 +662,24 @@ class TestPreparedSessionTransportType:
         field_names = {f.name for f in dc.fields(PreparedSessionTransport)}
         assert "adapter_ref" not in field_names
         assert "descriptor" not in field_names
-        # Expected fields: surface, effective_provider_ref, transport
-        assert field_names == {"surface", "effective_provider_ref", "transport"}
+        assert field_names == {
+            "surface",
+            "effective_provider_ref",
+            "transport",
+            # AS71 follow-up: why transport is None, as scalars. Structured
+            # error details stay at the failure site — they may carry paths,
+            # which is exactly what this guard exists to keep off the snapshot.
+            "unavailable_code",
+            "unavailable_message",
+        }
+
+    def test_unavailable_reason_fields_are_scalars(self):
+        """The reason must not become a smuggling route for native payloads."""
+        import dataclasses as dc
+
+        by_name = {f.name: f for f in dc.fields(PreparedSessionTransport)}
+        for name in ("unavailable_code", "unavailable_message"):
+            assert by_name[name].type == "str | None"
 
 
 # ── No duplicate resolver / public ACP leakage ─────────────────────────────

@@ -26,7 +26,7 @@ from tests.e2e.agents.conftest import (
 
 @requires_docker
 @requires_gateway_concurrency_image
-@pytest.mark.docker
+@pytest.mark.requires_docker
 @pytest.mark.slow
 @pytest.mark.timeout(300)
 def test_gateway_concurrency_real_load() -> None:

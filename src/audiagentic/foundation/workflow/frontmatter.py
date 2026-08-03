@@ -71,6 +71,11 @@ def parse_sections(body: str, heading_to_field: dict[str, str]) -> dict[str, str
     ``heading_to_field`` maps document headings to result keys; unknown
     headings are included using their slugified heading text as the key.
     The ``# Title`` heading, when present, is returned under ``title``.
+
+    Slugifying is lossy — capitalization and punctuation cannot be recovered
+    from the key. Pair this with :func:`parse_custom_headings` and pass the
+    result to :func:`build_sectioned_body` so a round-trip preserves the
+    author's original heading text.
     """
     result: dict[str, str] = {}
     title = parse_title(body)
@@ -87,15 +92,40 @@ def parse_sections(body: str, heading_to_field: dict[str, str]) -> dict[str, str
     return result
 
 
+def parse_custom_headings(body: str, heading_to_field: dict[str, str]) -> dict[str, str]:
+    """Return ``slug -> original heading text`` for headings not in the map.
+
+    Only custom headings are returned; known sections already have canonical
+    spellings in ``heading_to_field`` and must not be overridden by whatever
+    the file happened to contain.
+    """
+    result: dict[str, str] = {}
+    for match in _SECTION_RE.finditer(body):
+        heading = match.group(1).strip()
+        if heading in heading_to_field:
+            continue
+        result[_slugify_heading(heading)] = heading
+    return result
+
+
 def build_sectioned_body(
-    title: str, sections: dict[str, str], field_to_heading: dict[str, str]
+    title: str,
+    sections: dict[str, str],
+    field_to_heading: dict[str, str],
+    custom_headings: dict[str, str] | None = None,
 ) -> str:
     """Render a title plus ordered ``## Heading`` sections into a markdown body.
 
     Known sections are written using their canonical heading from
-    ``field_to_heading``; unknown (custom) sections are appended after
-    with a reconstructed heading.
+    ``field_to_heading``; unknown (custom) sections are appended after.
+
+    ``custom_headings`` maps a custom section's slug to the heading text it
+    was read with, so an existing heading survives a round-trip verbatim.
+    A slug with no entry — a section being created for the first time — falls
+    back to a reconstructed heading, which is the only case where the lossy
+    reconstruction is correct, because there is no original to preserve.
     """
+    custom_headings = custom_headings or {}
     parts = [f"# {title}"]
     for key, heading in field_to_heading.items():
         content = sections.get(key, "")
@@ -104,7 +134,8 @@ def build_sectioned_body(
     for key, content in sections.items():
         if key == "title" or key in field_to_heading:
             continue
-        parts.append(f"\n## {_reconstruct_heading(key)}\n\n{content}")
+        heading = custom_headings.get(key) or _reconstruct_heading(key)
+        parts.append(f"\n## {heading}\n\n{content}")
     return "\n".join(parts) + "\n"
 
 

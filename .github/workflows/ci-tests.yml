@@ -6,9 +6,12 @@ on:
 
 jobs:
   # ── Fast host suite ──────────────────────────────────────────────────────────
-  # Whole non-Docker suite in one parallel command. The no_parallel hook in
-  # tests/conftest.py pins stateful modules to a single xdist worker, so
-  # `-n auto --dist loadgroup` is safe. mutates_host tests auto-skip here.
+  # Whole non-Docker suite in one parallel command. `--dist loadfile` keeps each
+  # test module on a single worker — `loadgroup` was splitting individual tests
+  # across workers and breaking module-level setup (measured: 10 failures vs 1
+  # on the same run). The conftest no_parallel hook additionally deselects
+  # genuinely process-global tests from this run entirely; those run in the
+  # serial phase below. mutates_host tests auto-skip here.
   tests:
     runs-on: ubuntu-latest
     steps:
@@ -21,7 +24,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[test]"
       - name: Run host suite (parallel)
-        run: python -m pytest tests/unit tests/integration tests/e2e -n auto --dist loadgroup -m "not docker"
+        run: python -m pytest tests/unit tests/integration tests/e2e -n auto --dist loadfile -m "not docker and not requires_docker"
+      - name: Run held-back serial tests (no_parallel)
+        run: AUDIAGENTIC_SERIAL_PHASE=1 python -m pytest tests/unit tests/integration tests/e2e -m "no_parallel and not docker and not requires_docker"
 
   # ── Docker suites (parallel matrix) ──────────────────────────────────────────
   # Each scenario builds in its own job so they run concurrently instead of the
@@ -33,7 +38,6 @@ jobs:
   # their environments must not share state. See tests/TESTING.md.
   docker-tests:
     runs-on: ubuntu-latest
-    needs: tests
     strategy:
       fail-fast: false
       matrix:
@@ -93,6 +97,30 @@ jobs:
           - name: pi-acp-resume-e2e      # AS49 real pi-acp session/load resume after process death
             dockerfile: Dockerfile.pi-acp-resume-e2e
             tag: audiagentic-pi-acp-resume-e2e
+            base: true
+          - name: acp-e2e                # MA18 step 6 clean-room [acp] extra install + protocol fixture
+            dockerfile: Dockerfile.acp-e2e
+            tag: audia-acp-e2e
+            base: false
+          - name: consumer-pipeline      # AS19/AS30/AS31 observer/session-binding/output-relay pipeline
+            dockerfile: Dockerfile.consumer-pipeline
+            tag: audiagentic-consumer-pipeline
+            base: true
+          - name: harness-user-path      # credential-free harness materialization gate
+            dockerfile: Dockerfile.harness-user-path
+            tag: audiagentic-harness-user-path
+            base: false
+          - name: provider-config-matrix-e2e   # real provider CLI managed-config capability matrix
+            dockerfile: Dockerfile.provider-config-matrix-e2e
+            tag: audiagentic-provider-config-matrix-e2e
+            base: true
+          - name: opencode-recipe-live   # opencode upgrade recipe against a real toolchain
+            dockerfile: Dockerfile.opencode-recipe-live
+            tag: audiagentic-opencode-recipe-live
+            base: true
+          - name: rig-recipe-live        # llama.cpp rig recipe against a real toolchain
+            dockerfile: Dockerfile.rig-recipe-live
+            tag: audiagentic-rig-recipe-live
             base: true
     steps:
       - uses: actions/checkout@v4

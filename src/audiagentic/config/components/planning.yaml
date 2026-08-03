@@ -19,6 +19,7 @@ item-section-headings:
   validation: "Validation"
   effort_risk: "Effort & Risk"
   standards: "Standards"
+  acceptance_criteria: "Acceptance Criteria"
   notes: "Notes"
 
 review-sections:

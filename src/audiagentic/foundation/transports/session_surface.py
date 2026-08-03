@@ -324,8 +324,17 @@ class PreparedSessionTransport:
     ``transport`` is ``None`` when the resolved surface is unsupported —
     callers must inspect ``surface.validation.state`` before using the
     transport.
+
+    When ``transport`` is ``None`` because preparation itself failed (rather
+    than the surface being declared unsupported), ``unavailable_code`` and
+    ``unavailable_message`` carry the classification. Both are plain scalars:
+    the registered error code and its curated message. Structured ``details``
+    are deliberately not carried here — they may hold paths, so they are
+    logged at the failure site instead.
     """
 
     surface: ResolvedSessionSurface = field(repr=False)
     effective_provider_ref: SessionSurfaceRef = field(repr=False)
     transport: Any = None
+    unavailable_code: str | None = None
+    unavailable_message: str | None = None

@@ -69,7 +69,8 @@ _LEGACY_SECTION_DEBT = {
     "SH17": frozenset(["acceptance_criteria", "standards"]),
     "SH21": frozenset(["acceptance_criteria", "standards"]),
     "SH22": frozenset(["acceptance_criteria"]),
-    "TE02": frozenset(["acceptance_criteria", "standards"]),
+    # TE02 removed 2026-08-03: both sections were filled in, and the baseline
+    # is exact shrink-only, so a stale entry fails the guard.
 }
 
 

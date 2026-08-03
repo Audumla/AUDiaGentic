@@ -25,7 +25,7 @@ from tests.e2e.agents.conftest import (
 
 @requires_docker
 @requires_consumer_pipeline_image
-@pytest.mark.docker
+@pytest.mark.requires_docker
 @pytest.mark.slow
 @pytest.mark.timeout(300)
 def test_consumer_pipeline_docker() -> None:

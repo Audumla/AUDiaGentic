@@ -25,7 +25,7 @@ from tests.e2e.agents.conftest import (
 
 @requires_docker
 @requires_gateway_crash_matrix_image
-@pytest.mark.docker
+@pytest.mark.requires_docker
 @pytest.mark.slow
 @pytest.mark.mutates_host
 @pytest.mark.timeout(300)

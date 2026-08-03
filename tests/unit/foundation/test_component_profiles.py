@@ -154,8 +154,15 @@ class TestCwdIndependentResolution:
         assert "profile-component" in ids
 
 
+@pytest.mark.no_parallel
 class TestCrossProfileGuard:
-    """CP07 scenario 3: switching profiles mid-process raises VAL-COMP-010."""
+    """CP07 scenario 3: switching profiles mid-process raises VAL-COMP-010.
+
+    Asserts a process-global invariant (CP05: one component profile per
+    process), so it needs a process that has not already registered a profile.
+    Under xdist a worker is reused across many tests, so this can only run in
+    the serial phase.
+    """
 
     def test_switching_profile_raises(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         base_dir, _ = _build_layered_structure(tmp_path, "profile-a")
@@ -169,7 +176,25 @@ class TestCrossProfileGuard:
 
         monkeypatch.setenv("AUDIAGENTIC_COMPONENT_PROFILE", "profile-b")
 
+        # Registering against the synthetic tree above replaced the error
+        # catalogue with one that has no entries, and AudiaGenticError refuses
+        # to construct an unregistered code. Reload the real catalogue so the
+        # guard can raise VAL-COMP-010 rather than ValueError. Without this the
+        # test only passes when some earlier test happened to leave the real
+        # catalogue loaded in this process.
+        from audiagentic.foundation.contracts.error_resolutions import (
+            load_all_error_resolutions,
+        )
         from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+        repo_config = (
+            Path(__file__).resolve().parents[3]
+            / "src"
+            / "audiagentic"
+            / "config"
+            / "components"
+        )
+        load_all_error_resolutions([repo_config])
 
         with pytest.raises(AudiaGenticError) as exc_info:
             register_all_components()

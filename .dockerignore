@@ -27,6 +27,8 @@ tests/unit/runtime/Qwen3.5-0.8B-UD-Q5_K_XL.gguf
 !docs/
 !docs/examples/
 !docs/examples/**
+!docs/planning/
+!docs/planning/**
 
 !.audiagentic/
 !.audiagentic/config/

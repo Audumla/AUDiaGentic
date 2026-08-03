@@ -77,8 +77,17 @@ def test_materialize_tolerates_surface_apply_failure(
     assert (agent_dir / "settings.json").exists()
 
 
+@pytest.mark.no_parallel
 def test_surface_renderer_registered_for_pi() -> None:
-    """Pi has a contribution renderer registered in the surfaces registry."""
+    """Pi has a contribution renderer registered in the surfaces registry.
+
+    Reads the process-wide surfaces registry with no isolation of its own, so
+    it cannot share a worker with anything that resets registries — which
+    ``tests/unit/foundation`` does before every one of its tests. Pi registers
+    its renderer from a custom ``surface.py`` at import time, and that
+    registration is not restored by the post-reset repopulation path, so a
+    reset on the same worker leaves pi permanently missing.
+    """
     from audiagentic.components.providers.surfaces.registry import (
         load_contribution_renderer_registry,
         load_renderer_registry,

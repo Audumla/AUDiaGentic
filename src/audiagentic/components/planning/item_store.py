@@ -23,6 +23,7 @@ from audiagentic.foundation.workflow import (
 )
 from audiagentic.foundation.workflow.frontmatter import (
     build_sectioned_body,
+    parse_custom_headings,
     parse_frontmatter,
     parse_sections,
     parse_title,
@@ -50,6 +51,7 @@ __all__ = [
     "next_review_id",
     "parse_change_log",
     "parse_frontmatter",
+    "parse_item_custom_headings",
     "parse_item_sections",
     "parse_title",
 
@@ -171,6 +173,15 @@ def parse_item_sections(body: str) -> dict[str, str]:
     return parse_sections(body, HEADING_TO_FIELD)
 
 
+def parse_item_custom_headings(body: str) -> dict[str, str]:
+    """Return ``slug -> original heading`` for an item's non-standard sections.
+
+    Pass the result to :func:`build_item_body` so custom headings survive a
+    write unchanged instead of being rebuilt from their lossy slug.
+    """
+    return parse_custom_headings(body, HEADING_TO_FIELD)
+
+
 def _serialize_section_value(value: Any) -> str:
     """Convert a section value to a markdown string.
 
@@ -215,8 +226,12 @@ def _bullet_items(items: list[Any]) -> list[str]:
     return lines
 
 
-def build_item_body(title: str, sections: dict[str, str]) -> str:
-    return build_sectioned_body(title, sections, ITEM_SECTION_HEADING)
+def build_item_body(
+    title: str,
+    sections: dict[str, str],
+    custom_headings: dict[str, str] | None = None,
+) -> str:
+    return build_sectioned_body(title, sections, ITEM_SECTION_HEADING, custom_headings)
 
 
 def render_item(fm: dict[str, Any], body: str) -> str:
