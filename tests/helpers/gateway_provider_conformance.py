@@ -105,40 +105,40 @@ def assert_one_shot_state_matrix(project_root: Path, provider_id: str, monkeypat
         controlled_provider,
     )
 
-    completed = gateway.run_llm_request(project_root, prompt_body="COMPLETE", timeout_seconds=5)
+    completed = gateway.run_execution_request(project_root, prompt_body="COMPLETE", timeout_seconds=5)
     assert completed["state"] == "completed"
     assert completed["provider-id"] == provider_id
     assert completed["output"] == f"{provider_id}:ok:COMPLETE"
 
-    failed = gateway.run_llm_request(project_root, prompt_body="FAIL", timeout_seconds=5)
+    failed = gateway.run_execution_request(project_root, prompt_body="FAIL", timeout_seconds=5)
     assert failed["state"] == "failed"
     assert failed["error"]["code"] == "EXT-FAKE-500"
     assert failed["attempts"][-1]["provider-id"] == provider_id
 
-    running = gateway.submit_llm_request(project_root, prompt_body="HOLD", mode="async")
+    running = gateway.submit_execution_request(project_root, prompt_body="HOLD", mode="async")
     assert provider_started.wait(timeout=2)
     running_status = gateway.request_runtime_status(project_root, running["request-id"])
     assert running_status["queue-state"] == "running"
     assert running_status["profile-slot"] == "active"
 
-    queued = gateway.submit_llm_request(project_root, prompt_body="QUEUED", mode="async")
+    queued = gateway.submit_execution_request(project_root, prompt_body="QUEUED", mode="async")
     queued_status = gateway.request_runtime_status(project_root, queued["request-id"])
     assert queued_status["queue-state"] == "queued"
     assert queued_status["profile-slot"] == "pending"
 
-    cancelled = gateway.cancel_llm_request(project_root, queued["request-id"])
+    cancelled = gateway.cancel_execution_request(project_root, queued["request-id"])
     assert cancelled["state"] == "cancelled"
     assert cancelled["cancel-acknowledged-by"] == "queue-worker"
 
-    still_queued = gateway.submit_llm_request(project_root, prompt_body="STILL-QUEUED", mode="async")
+    still_queued = gateway.submit_execution_request(project_root, prompt_body="STILL-QUEUED", mode="async")
     assert still_queued["state"] == "queued"
 
-    overflow = gateway.submit_llm_request(project_root, prompt_body="OVERFLOW", mode="async")
+    overflow = gateway.submit_execution_request(project_root, prompt_body="OVERFLOW", mode="async")
     assert overflow["state"] == "rejected"
     assert overflow["error"]["code"] == "VAL-AGW-025"
 
     hold.set()
-    finished = gateway.wait_llm_request(project_root, running["request-id"], timeout_seconds=5)
+    finished = gateway.wait_execution_request(project_root, running["request-id"], timeout_seconds=5)
     assert finished["state"] == "completed"
 
 
@@ -171,7 +171,7 @@ def assert_session_binding_open_flow(project_root: Path, provider_id: str, monke
     )
 
     try:
-        opened = gateway.run_llm_request(
+        opened = gateway.run_execution_request(
             project_root,
             prompt_body="open session",
             session_keep_alive=True,
@@ -187,7 +187,7 @@ def assert_session_binding_open_flow(project_root: Path, provider_id: str, monke
         assert status["session"]["available"] is True
         assert "provider-session-ref" not in repr(status)
 
-        listed = gateway.list_llm_sessions(project_root)
+        listed = gateway.list_execution_sessions(project_root)
         assert listed[0]["binding"]["provider-id"] == provider_id
         assert "provider-session-ref" not in repr(listed)
     finally:

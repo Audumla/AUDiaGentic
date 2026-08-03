@@ -5,17 +5,17 @@ this side-effect-free module is the Python import surface for publishers and
 subscribers inside the owning component.
 """
 
-GATEWAY_REQUESTED_TOPIC = "agents.llm.gateway.requested"
-GATEWAY_CANCEL_REQUESTED_TOPIC = "agents.llm.gateway.cancel-requested"
-GATEWAY_PROFILE_RELOADED_TOPIC = "agents.llm.gateway.profile-reloaded"
+GATEWAY_REQUESTED_TOPIC = "agents.execution.gateway.requested"
+GATEWAY_CANCEL_REQUESTED_TOPIC = "agents.execution.gateway.cancel-requested"
+GATEWAY_PROFILE_RELOADED_TOPIC = "agents.execution.gateway.profile-reloaded"
 
-LLM_QUEUED_TOPIC = "agents.llm.queued"
-LLM_STARTED_TOPIC = "agents.llm.started"
-LLM_COMPLETED_TOPIC = "agents.llm.completed"
-LLM_FAILED_TOPIC = "agents.llm.failed"
-LLM_CANCELLED_TOPIC = "agents.llm.cancelled"
-LLM_REJECTED_TOPIC = "agents.llm.rejected"
-LLM_INTERRUPTED_TOPIC = "agents.llm.interrupted"
+EXECUTION_QUEUED_TOPIC = "agents.execution.queued"
+EXECUTION_STARTED_TOPIC = "agents.execution.started"
+EXECUTION_COMPLETED_TOPIC = "agents.execution.completed"
+EXECUTION_FAILED_TOPIC = "agents.execution.failed"
+EXECUTION_CANCELLED_TOPIC = "agents.execution.cancelled"
+EXECUTION_REJECTED_TOPIC = "agents.execution.rejected"
+EXECUTION_INTERRUPTED_TOPIC = "agents.execution.interrupted"
 
 SESSION_OPENED_TOPIC = "agents.session.opened"
 SESSION_RESUMED_TOPIC = "agents.session.resumed"  # AS49: explicit resume-after-death

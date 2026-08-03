@@ -5,7 +5,7 @@ topic specifications with the topic registry. Validates against
 ``event-topics.schema.json`` and rejects duplicate topics across owners.
 
 File format (YAML):
-    agents.llm.completed:
+    agents.execution.completed:
       description: "Gateway request completed"
       payload-required: ["request-id", "state"]
       payload-optional: ["provider-id", "model-id"]
@@ -111,8 +111,14 @@ def _validate_schema(data: dict[str, Any], path: Path) -> None:
         return
 
     schema_path = Path(__file__).parent.parent / "contracts" / "schemas" / "event-topics.schema.json"
-    with open(schema_path) as f:
-        schema = json.load(f)
+    try:
+        with open(schema_path) as f:
+            schema = json.load(f)
+    except OSError:
+        logger.warning(
+            "events.yaml schema file missing; skipping validation for %s", path
+        )
+        return
     try:
         validate(instance=data, schema=schema)
     except Exception as exc:  # noqa: BLE001 — ValidationError from jsonschema

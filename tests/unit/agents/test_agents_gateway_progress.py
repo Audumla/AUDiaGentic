@@ -324,7 +324,7 @@ def test_request_runtime_status_includes_progress(tmp_path: Path, monkeypatch) -
         fake_execute_provider,
     )
 
-    gateway.run_llm_request(tmp_path, prompt_body="hi")
+    gateway.run_execution_request(tmp_path, prompt_body="hi")
 
     records = store.list_records(tmp_path)
     req_id = records[0]["request-id"]
@@ -351,14 +351,14 @@ def test_wait_timeout_marker_on_non_terminal(tmp_path: Path, monkeypatch) -> Non
         slow_execute_provider,
     )
 
-    submitted = gateway.submit_llm_request(tmp_path, prompt_body="hi")
-    result = gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=0.2)
+    submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
+    result = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=0.2)
 
     assert result["wait-timeout"] is True
     assert "progress" in result
 
     hold.set()
-    gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=5)
+    gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=5)
 
 
 def test_gateway_overview_includes_runtime_fingerprint(tmp_path: Path, monkeypatch) -> None:
@@ -374,7 +374,7 @@ def test_gateway_overview_includes_runtime_fingerprint(tmp_path: Path, monkeypat
         fake_execute_provider,
     )
 
-    gateway.run_llm_request(tmp_path, prompt_body="hi")
+    gateway.run_execution_request(tmp_path, prompt_body="hi")
 
     overview = gateway.gateway_overview(tmp_path)
 
@@ -424,7 +424,7 @@ def test_terminal_wait_does_not_add_timeout_marker(tmp_path: Path, monkeypatch) 
         fake_execute_provider,
     )
 
-    result = gateway.run_llm_request(tmp_path, prompt_body="hi")
+    result = gateway.run_execution_request(tmp_path, prompt_body="hi")
 
     assert "wait-timeout" not in result
     assert result["state"] == "completed"
@@ -769,7 +769,7 @@ def test_project_request_progress_without_summary_is_backward_compat() -> None:
 
 
 def test_wait_timeout_includes_progress_summary(tmp_path: Path, monkeypatch) -> None:
-    """SH15: wait_llm_request timeout path includes richer progress summary."""
+    """SH15: wait_execution_request timeout path includes richer progress summary."""
     _make_profile(tmp_path, "default", "local-openai")
     import threading
 
@@ -786,8 +786,8 @@ def test_wait_timeout_includes_progress_summary(tmp_path: Path, monkeypatch) -> 
         slow_execute_provider,
     )
 
-    submitted = gateway.submit_llm_request(tmp_path, prompt_body="hi")
-    result = gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=0.2)
+    submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
+    result = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=0.2)
 
     assert result["wait-timeout"] is True
     assert "progress" in result
@@ -797,7 +797,7 @@ def test_wait_timeout_includes_progress_summary(tmp_path: Path, monkeypatch) -> 
     assert "phase" in result["progress"]
 
     hold.set()
-    gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=5)
+    gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=5)
 
 
 def test_progress_summary_request_id_filtering(tmp_path: Path) -> None:
@@ -902,7 +902,7 @@ def test_request_runtime_status_includes_sh15_progress_summary(tmp_path: Path, m
         slow_execute_provider,
     )
 
-    submitted = gateway.submit_llm_request(tmp_path, prompt_body="hi")
+    submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
     req_id = submitted["request-id"]
 
     # Give the worker time to start (but it'll block on hold)
@@ -914,4 +914,4 @@ def test_request_runtime_status_includes_sh15_progress_summary(tmp_path: Path, m
     assert "progress" in status
 
     hold.set()
-    gateway.wait_llm_request(tmp_path, req_id, timeout_seconds=5)
+    gateway.wait_execution_request(tmp_path, req_id, timeout_seconds=5)

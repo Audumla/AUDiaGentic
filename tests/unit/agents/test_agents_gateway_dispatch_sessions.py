@@ -103,7 +103,7 @@ def test_keep_alive_opens_session_and_completes(rig):
     # raw prompt through its in-memory argument instead.
     assert transports[0].turns == ["do the thing"]
     assert not transports[0].closed  # keep-alive: session survives the request
-    request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-llm-gateway" / record["request-id"]
+    request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / record["request-id"]
     assert (request_dir / "runtime").is_dir()
 
 
@@ -138,7 +138,7 @@ def test_unsupported_provider_terminal(rig, monkeypatch):
     assert result["state"] == "failed"
     assert result["error"]["code"] == "CON-AGW-095"
     assert transports == []
-    request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-llm-gateway" / record["request-id"]
+    request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / record["request-id"]
     assert (request_dir / "quarantine" / record["request-id"]).is_dir()
 
 

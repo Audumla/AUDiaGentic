@@ -173,7 +173,7 @@ def test_gateway_dispatches_full_isolation_provider_in_a_worker(
         tmp_path, "providers", "qwen", ImplementationState(enabled=True)
     )
 
-    result = gateway.run_llm_request(
+    result = gateway.run_execution_request(
         tmp_path,
         prompt_body="return context",
         component_profile="isolated-profile",
@@ -297,7 +297,7 @@ def test_gateway_runs_three_profiles_in_parallel_os_processes(
     with ThreadPoolExecutor(max_workers=3) as pool:
         results = list(
             pool.map(
-                lambda pair: gateway.run_llm_request(
+                lambda pair: gateway.run_execution_request(
                     tmp_path,
                     prompt_body="return context",
                     agent_profile_id=pair[0],

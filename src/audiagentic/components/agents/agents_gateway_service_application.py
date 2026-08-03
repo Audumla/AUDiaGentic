@@ -1,4 +1,5 @@
 """Framework-neutral application hosted by the standalone gateway service."""
+
 from __future__ import annotations
 
 import os
@@ -49,12 +50,14 @@ class GatewayServiceApplication:
     def health(self) -> dict[str, Any]:
         record = self._service_store.read()
         return {
-            "service": "agent-llm-gateway",
+            "service": "agent-execution-gateway",
             "protocol-version": PROTOCOL_VERSION,
             "owner-epoch": record.owner_epoch,
             "lifetime-scope": None if record.process is None else record.process.scope,
             "state": record.state,
-            "endpoint": None if record.endpoint is None else {
+            "endpoint": None
+            if record.endpoint is None
+            else {
                 "protocol": record.endpoint.protocol,
                 "address": record.endpoint.address,
             },
@@ -99,15 +102,22 @@ class GatewayServiceApplication:
             lease_id, ttl_seconds=ttl_seconds, expected_epoch=owner_epoch
         )
         lease = self._service_store.get_lease(lease_id)
-        return {"lease-id": lease_id, "expires-at": lease.expires_at, "service-revision": updated.revision}
+        return {
+            "lease-id": lease_id,
+            "expires-at": lease.expires_at,
+            "service-revision": updated.revision,
+        }
 
     def release_client(
         self, lease_id: str, *, owner_epoch: str, protocol_version: str
     ) -> dict[str, Any]:
         _require_protocol(protocol_version)
         updated = self._service_store.release_lease(lease_id, expected_epoch=owner_epoch)
-        return {"lease-id": lease_id, "state": self._service_store.get_lease(lease_id).state,
-                "service-revision": updated.revision}
+        return {
+            "lease-id": lease_id,
+            "state": self._service_store.get_lease(lease_id).state,
+            "service-revision": updated.revision,
+        }
 
     def invoke(
         self,
@@ -122,53 +132,59 @@ class GatewayServiceApplication:
         """Invoke one closed v1 gateway operation without transport concerns."""
         _require_protocol(protocol_version)
         try:
-            self._service_store.require_active_lease(
-                lease_id, expected_epoch=owner_epoch
-            )
+            self._service_store.require_active_lease(lease_id, expected_epoch=owner_epoch)
         except AudiaGenticError as exc:
-            raise service_conflict_error(
-                18, "gateway client lease is stale or inactive"
-            ) from exc
+            raise service_conflict_error(18, "gateway client lease is stale or inactive") from exc
         root = _canonical_root(project_root)
         arguments = dict(params or {})
-        if operation == "submit_llm_request":
+        if operation == "submit_execution_request":
             submitted = _validated_submission_arguments(root, arguments)
-            return self._application.submit_llm_request(
-                root, **submitted, _dispatch_owner_epoch=owner_epoch,
+            return self._application.submit_execution_request(
+                root,
+                **submitted,
+                _dispatch_owner_epoch=owner_epoch,
                 _dispatch_service_root=str(self._service_store.root),
             )
-        if operation == "get_llm_request":
-            return self._application.get_llm_request(root, _required(arguments, "request_id"))
-        if operation == "wait_llm_request":
-            return self._application.wait_llm_request(
+        if operation == "get_execution_request":
+            return self._application.get_execution_request(root, _required(arguments, "request_id"))
+        if operation == "wait_execution_request":
+            return self._application.wait_execution_request(
                 root, _required(arguments, "request_id"), arguments.get("timeout_seconds")
             )
-        if operation == "cancel_llm_request":
-            return self._application.cancel_llm_request(root, _required(arguments, "request_id"))
+        if operation == "cancel_execution_request":
+            return self._application.cancel_execution_request(
+                root, _required(arguments, "request_id")
+            )
         if operation == "request_runtime_status":
-            return self._application.request_runtime_status(root, _required(arguments, "request_id"))
-        if operation == "run_llm_request":
+            return self._application.request_runtime_status(
+                root, _required(arguments, "request_id")
+            )
+        if operation == "run_execution_request":
             submitted = _validated_submission_arguments(root, arguments)
-            return self._application.run_llm_request(
-                root, **submitted, _dispatch_owner_epoch=owner_epoch,
+            return self._application.run_execution_request(
+                root,
+                **submitted,
+                _dispatch_owner_epoch=owner_epoch,
                 _dispatch_service_root=str(self._service_store.root),
             )
-        if operation == "list_llm_requests":
+        if operation == "list_execution_requests":
             _reject_unknown(arguments, {"state", "limit"})
-            return self._application.list_llm_requests(
+            return self._application.list_execution_requests(
                 root,
                 state=_optional_string(arguments, "state"),
                 limit=_optional_positive_int(arguments, "limit"),
             )
         if operation == "gateway_overview":
             return self._application.gateway_overview(root)
-        if operation == "list_llm_sessions":
+        if operation == "list_execution_sessions":
             _reject_unknown(arguments, {"state"})
-            return self._application.list_llm_sessions(
+            return self._application.list_execution_sessions(
                 root, state=_optional_string(arguments, "state")
             )
-        if operation == "close_llm_session":
-            return self._application.close_llm_session(root, _required(arguments, "session_id"))
+        if operation == "close_execution_session":
+            return self._application.close_execution_session(
+                root, _required(arguments, "session_id")
+            )
         if operation == "service_status":
             return self._lifecycle_controller().status()
         if operation == "service_drain":
@@ -211,7 +227,9 @@ class GatewayServiceApplication:
 def _required(arguments: dict[str, Any], name: str) -> Any:
     value = arguments.get(name)
     if not isinstance(value, str) or not value:
-        raise service_validation_error(2, "gateway service operation parameter is required", field=name)
+        raise service_validation_error(
+            2, "gateway service operation parameter is required", field=name
+        )
     return value
 
 

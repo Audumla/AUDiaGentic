@@ -44,12 +44,12 @@ def test_submit_returns_immediately_for_long_running_request(tmp_path: Path, mon
 
     monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", slow_execute_provider)
 
-    result = gateway.submit_llm_request(tmp_path, prompt_body="hi")
+    result = gateway.submit_execution_request(tmp_path, prompt_body="hi")
     assert result["request-id"].startswith("req_")
     assert result["state"] in ("queued", "running")  # returned without waiting for completion
 
     hold.set()
-    gateway.wait_llm_request(tmp_path, result["request-id"], timeout_seconds=5)
+    gateway.wait_execution_request(tmp_path, result["request-id"], timeout_seconds=5)
 
 
 def test_run_blocks_until_completion_and_returns_output(tmp_path: Path, monkeypatch):
@@ -60,7 +60,7 @@ def test_run_blocks_until_completion_and_returns_output(tmp_path: Path, monkeypa
 
     monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider)
 
-    result = gateway.run_llm_request(tmp_path, prompt_body="hi")
+    result = gateway.run_execution_request(tmp_path, prompt_body="hi")
     assert result["state"] == "completed"
     assert result["output"] == "the answer"
 
@@ -74,9 +74,9 @@ def test_active_component_profile_changes_execution_fingerprint(tmp_path: Path, 
     monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider)
 
     monkeypatch.setenv("AUDIAGENTIC_COMPONENT_PROFILE", "benchmark-a")
-    first = gateway.run_llm_request(tmp_path, prompt_body="same prompt")
+    first = gateway.run_execution_request(tmp_path, prompt_body="same prompt")
     monkeypatch.setenv("AUDIAGENTIC_COMPONENT_PROFILE", "benchmark-b")
-    second = gateway.run_llm_request(tmp_path, prompt_body="same prompt")
+    second = gateway.run_execution_request(tmp_path, prompt_body="same prompt")
 
     assert first["context-fingerprint"] != second["context-fingerprint"]
 
@@ -95,7 +95,7 @@ def test_submit_replays_same_idempotency_key_without_second_enqueue(tmp_path: Pa
 
     monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", slow_execute_provider)
     metadata = {"idempotency_key": "opaque-client-key"}
-    first = gateway.submit_llm_request(tmp_path, prompt_body="same", metadata=metadata)
+    first = gateway.submit_execution_request(tmp_path, prompt_body="same", metadata=metadata)
     assert started.wait(timeout=2)
     # The index is advisory. A stale-but-valid intent digest must be repaired
     # from the durable record before this replay is allowed through.
@@ -105,14 +105,14 @@ def test_submit_replays_same_idempotency_key_without_second_enqueue(tmp_path: Pa
         "intent-digest": "0" * 64,
         "request-id": first["request-id"],
     })
-    second = gateway.submit_llm_request(tmp_path, prompt_body="same", metadata=metadata)
+    second = gateway.submit_execution_request(tmp_path, prompt_body="same", metadata=metadata)
 
     assert second["request-id"] == first["request-id"]
     assert len(executions) == 1
-    persisted = gateway.get_llm_request(tmp_path, first["request-id"])
+    persisted = gateway.get_execution_request(tmp_path, first["request-id"])
     assert "opaque-client-key" not in str(persisted)
     with pytest.raises(AudiaGenticError, match="CON-AGW-081"):
-        gateway.submit_llm_request(
+        gateway.submit_execution_request(
             tmp_path, prompt_body="different", metadata={"idempotency_key": "opaque-client-key"}
         )
     hold.set()
@@ -130,7 +130,7 @@ def test_direct_submission_rejects_malformed_wire_values_before_resolution(
     tmp_path: Path, kwargs: dict, field: str
 ) -> None:
     with pytest.raises(AudiaGenticError) as exc:
-        gateway.submit_llm_request(tmp_path, prompt_body="hello", **kwargs)
+        gateway.submit_execution_request(tmp_path, prompt_body="hello", **kwargs)
     assert exc.value.code == "VAL-AGW-082"
     assert exc.value.details["field"] == field
 
@@ -145,12 +145,12 @@ def test_wait_returns_timeout_status_for_still_running_request(tmp_path: Path, m
 
     monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", slow_execute_provider)
 
-    submitted = gateway.submit_llm_request(tmp_path, prompt_body="hi")
-    result = gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=0.2)
+    submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
+    result = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=0.2)
     assert result["state"] == "running"
 
     hold.set()
-    gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=5)
+    gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=5)
 
 
 class _RecordingManager:
@@ -173,7 +173,7 @@ def test_core_wait_honours_the_callers_timeout(tmp_path: Path, monkeypatch):
     """
     manager = _RecordingManager()
     monkeypatch.setattr(gateway, "_QUEUE_MANAGER", manager)
-    gateway.wait_llm_request(tmp_path, "req_x", timeout_seconds=10_000)
+    gateway.wait_execution_request(tmp_path, "req_x", timeout_seconds=10_000)
     assert manager.calls["timeout"] == 10_000
 
 
@@ -181,7 +181,7 @@ def test_core_wait_still_bounded_when_no_timeout_requested(tmp_path: Path, monke
     """No requested timeout must not mean 'block forever'."""
     manager = _RecordingManager()
     monkeypatch.setattr(gateway, "_QUEUE_MANAGER", manager)
-    gateway.wait_llm_request(tmp_path, "req_x")
+    gateway.wait_execution_request(tmp_path, "req_x")
     assert manager.calls["timeout"] == gateway.DEFAULT_BLOCKING_TIMEOUT_SECONDS
 
 
@@ -203,7 +203,7 @@ def test_wait_timeout_progress_reflects_live_session_turn_evidence(tmp_path: Pat
         },
     )
 
-    result = gateway.wait_llm_request(tmp_path, "req_x", timeout_seconds=0.1)
+    result = gateway.wait_execution_request(tmp_path, "req_x", timeout_seconds=0.1)
 
     assert result["wait-timeout"] is True
     assert result["progress"]["phase"] == "tool-active"
@@ -225,20 +225,20 @@ def test_cancel_queued_request_reaches_cancelled_state(tmp_path: Path, monkeypat
     monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", slow_execute_provider)
 
     # occupy the only concurrency slot
-    first = gateway.submit_llm_request(tmp_path, prompt_body="first")
+    first = gateway.submit_execution_request(tmp_path, prompt_body="first")
     assert started.wait(timeout=2)
 
-    second = gateway.submit_llm_request(tmp_path, prompt_body="second")
+    second = gateway.submit_execution_request(tmp_path, prompt_body="second")
     assert second["state"] == "queued"
 
-    cancelled = gateway.cancel_llm_request(tmp_path, second["request-id"])
+    cancelled = gateway.cancel_execution_request(tmp_path, second["request-id"])
     assert cancelled["state"] == "cancelled"
 
     hold.set()
-    gateway.wait_llm_request(tmp_path, first["request-id"], timeout_seconds=5)
+    gateway.wait_execution_request(tmp_path, first["request-id"], timeout_seconds=5)
 
 
-def test_list_llm_requests_most_recent_first_and_filterable(tmp_path: Path, monkeypatch):
+def test_list_execution_requests_most_recent_first_and_filterable(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
 
     def fake_execute_provider(*, identity, execution_request, timeout_seconds):
@@ -250,17 +250,17 @@ def test_list_llm_requests_most_recent_first_and_filterable(tmp_path: Path, monk
         from audiagentic.foundation.contracts.errors import AudiaGenticError
         raise AudiaGenticError(code="VAL-FAKE-002", kind="providers", message="bad")
 
-    first = gateway.run_llm_request(tmp_path, prompt_body="first")
+    first = gateway.run_execution_request(tmp_path, prompt_body="first")
     monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", failing_execute_provider)
-    second = gateway.run_llm_request(tmp_path, prompt_body="second")
+    second = gateway.run_execution_request(tmp_path, prompt_body="second")
 
-    all_requests = gateway.list_llm_requests(tmp_path)
+    all_requests = gateway.list_execution_requests(tmp_path)
     assert [r["request-id"] for r in all_requests] == [second["request-id"], first["request-id"]]
 
-    failed_only = gateway.list_llm_requests(tmp_path, state="failed")
+    failed_only = gateway.list_execution_requests(tmp_path, state="failed")
     assert [r["request-id"] for r in failed_only] == [second["request-id"]]
 
-    limited = gateway.list_llm_requests(tmp_path, limit=1)
+    limited = gateway.list_execution_requests(tmp_path, limit=1)
     assert len(limited) == 1
     assert limited[0]["request-id"] == second["request-id"]
 
@@ -276,7 +276,7 @@ def test_gateway_overview_reflects_persisted_state_across_restart(tmp_path: Path
         raise AudiaGenticError(code="VAL-FAKE-003", kind="providers", message="broke")
 
     monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", failing_execute_provider)
-    gateway.run_llm_request(tmp_path, prompt_body="hi")
+    gateway.run_execution_request(tmp_path, prompt_body="hi")
 
     from audiagentic.components.agents import agents_gateway_queue
     gateway._QUEUE_MANAGER = agents_gateway_queue.GatewayQueueManager()  # simulate restart

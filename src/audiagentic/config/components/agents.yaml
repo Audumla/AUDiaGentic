@@ -13,10 +13,10 @@ files:
   - path: .audiagentic/config/agent-profiles.yaml
     lifecycle: create-if-missing
     description: Per-project agent profile configurations
-  - path: .audiagentic/runtime/agent-llm-gateway
+  - path: .audiagentic/runtime/agent-execution-gateway
     lifecycle: runtime-only
     recursive: true
-    description: Agent LLM Gateway request/result records
+    description: Agent Execution Gateway request/result records
 mcp-servers:
   - name: ag-agents-mgmt
     module: audiagentic.components.agents.agents_manage_mcp
@@ -82,51 +82,51 @@ mcp-servers:
   - name: ag-agents-gateway
     module: audiagentic.components.agents.agents_gateway_mcp
     direct-tools:
-      - agent_llm_submit
-      - agent_llm_status
-      - agent_llm_wait
-      - agent_llm_cancel
-      - agent_llm_run
-      - agent_llm_list_requests
-      - agent_llm_gateway_overview
-    description: Agent LLM Gateway — async submit/status/wait/cancel/run and observability (list/overview) for provider execution through an agent profile
+      - agent_execution_submit
+      - agent_execution_status
+      - agent_execution_wait
+      - agent_execution_cancel
+      - agent_execution_run
+      - agent_execution_list_requests
+      - agent_execution_gateway_overview
+    description: Agent Execution Gateway — async submit/status/wait/cancel/run and observability (list/overview) for provider execution through an agent profile
     propagate: providers
     instructions: >
-      Async path: agent_llm_submit returns request-id immediately; poll agent_llm_status
-      or block later with agent_llm_wait. Blocking path: agent_llm_run submits and waits
+      Async path: agent_execution_submit returns request-id immediately; poll agent_execution_status
+      or block later with agent_execution_wait. Blocking path: agent_execution_run submits and waits
       for a terminal result or timeout in one call — use for short one-shot work only.
-      Cancellation is best-effort: agent_llm_cancel on a queued request removes it before
+      Cancellation is best-effort: agent_execution_cancel on a queued request removes it before
       it ever runs; on a running request it only records intent (cancel-requested) —
       the request may still complete normally, and the persisted state reflects what
       actually happened, not the cancel intent. Propagated to providers only; the
       AUDiaGentic CLI harness must not receive the gateway server.
       For most agent profiles, "output" is provider CLI/session execution output, not a
       raw chat completion — only API-style providers (e.g. local-openai) return a direct
-      completion. Use agent_llm_gateway_overview or agent_llm_list_requests to see what's
+      completion. Use agent_execution_gateway_overview or agent_execution_list_requests to see what's
       happening without already knowing a request-id.
     tool-descriptions:
-      agent_llm_submit: >
+      agent_execution_submit: >
         Submit an async request. agent-profile-id defaults to the default profile.
         if not given explicitly. Returns {request-id, state: "queued", ...}.
-      agent_llm_status: >
+      agent_execution_status: >
         Return the current persisted record for request-id (state, output, completion,
         usage, error, attempts). Raises RES-AGW-001 if not found.
-      agent_llm_wait: >
+      agent_execution_wait: >
         Block until request-id reaches a terminal state (completed/failed/cancelled/
         rejected) or timeout-seconds elapses (capped at 300s server-side). Returns the
         record either way — check "state" to distinguish a real result from a timeout
         (state will still be "running"/"queued").
-      agent_llm_cancel: >
+      agent_execution_cancel: >
         Cancel a queued request, or best-effort mark a running one. See instructions
         for the best-effort semantics.
-      agent_llm_run: >
-        Submit and block in one call (submit_llm_request with mode=blocking). Same
-        300s server-side timeout cap as agent_llm_wait.
-      agent_llm_list_requests: >
+      agent_execution_run: >
+        Submit and block in one call (submit_execution_request with mode=blocking). Same
+        300s server-side timeout cap as agent_execution_wait.
+      agent_execution_list_requests: >
         List persisted requests, most recent first. Optional state filter
         (queued/running/completed/failed/cancelled/rejected) and limit. Reads from
         disk, so this works even for requests from an earlier process.
-      agent_llm_gateway_overview: >
+      agent_execution_gateway_overview: >
         Operator summary: persisted request counts by state, the 5 most recent
         failures (redacted error only), and in-process per-profile queue depths.
 

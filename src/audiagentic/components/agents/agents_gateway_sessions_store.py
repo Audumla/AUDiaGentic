@@ -1,4 +1,4 @@
-"""Agent LLM Gateway session record store (plan agent-sessions AS03/AS30).
+"""Agent Execution Gateway session record store (plan agent-sessions AS03/AS30).
 
 Durable, observable state for live agent sessions. Live transport handles are
 in-memory only (agents_gateway_sessions.SessionRuntime); these records are the
@@ -39,7 +39,7 @@ from audiagentic.foundation.workflow import (
 
 logger = logging.getLogger(__name__)
 
-_SCHEMA_STEM = "agent-llm-session"
+_SCHEMA_STEM = "agent-execution-session"
 _WORKFLOW = load_workflow(Path(__file__).with_name("workflows.yaml"), "gateway-session")
 SESSION_TERMINAL_STATES: set[str] = set(states_in_set(_WORKFLOW, "terminal"))
 
@@ -50,7 +50,7 @@ _REDACTED_ERROR_KEYS = {"code", "message", "kind"}
 _MUTABLE_TRANSITION_FIELDS = {"close-reason", "closed-at", "last-activity-at", "error"}
 
 _COMPONENT_ID = "agents"
-_RESOURCE_KIND = "agent-llm-gateway-session"
+_RESOURCE_KIND = "agent-execution-gateway-session"
 
 
 def record_session_timeline(
@@ -678,7 +678,15 @@ def record_session_turn(
         updated = dict(record)
         request_ids.append(request_id)
         updated["request-ids"] = request_ids
-        updated["turn-count"] = int(record.get("turn-count") or 0) + 1
+        try:
+            updated["turn-count"] = int(record.get("turn-count") or 0) + 1
+        except (TypeError, ValueError):
+            logger.warning(
+                "invalid turn-count in session record; resetting",
+                extra={"session-id": session_id},
+                exc_info=True,
+            )
+            updated["turn-count"] = 1
         timestamp = now_iso_z()
         updated["last-activity-at"] = timestamp
         updated["updated-at"] = timestamp

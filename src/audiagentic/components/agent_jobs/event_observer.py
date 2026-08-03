@@ -58,14 +58,14 @@ _TRIGGER_AUDIT_PATH = Path(".audiagentic") / "runtime" / "agent-jobs" / "trigger
 # BU02: agent_jobs must not import agents modules (enforced by test_gateway_boundary.py).
 # The registry-equality test in tests/unit/jobs/test_gateway_topic_mirrors.py asserts
 # these mirror strings match the registered owner topics.
-GW_TOPIC_REQUESTED = "agents.llm.gateway.requested"  # owner: agents/agents_gateway_events
-GW_TOPIC_CANCEL_REQUESTED = "agents.llm.gateway.cancel-requested"  # owner: agents/agents_gateway_events
+GW_TOPIC_REQUESTED = "agents.execution.gateway.requested"  # owner: agents/agents_gateway_events
+GW_TOPIC_CANCEL_REQUESTED = "agents.execution.gateway.cancel-requested"  # owner: agents/agents_gateway_events
 GW_OUTCOME_TOPICS = (
-    "agents.llm.completed",
-    "agents.llm.failed",
-    "agents.llm.rejected",
-    "agents.llm.cancelled",
-    "agents.llm.interrupted",
+    "agents.execution.completed",
+    "agents.execution.failed",
+    "agents.execution.rejected",
+    "agents.execution.cancelled",
+    "agents.execution.interrupted",
 )
 
 
@@ -489,13 +489,12 @@ class EventObserver:
     # ------------------------------------------------------------------
 
     GW_OUTCOME_MAP: dict[str, str] = {
-        "agents.llm.completed": "completed",
-        "agents.llm.failed": "failed",
-        "agents.llm.rejected": "failed",
-        "agents.llm.cancelled": "cancelled",
-        # C11: interrupted gateway request maps to failed job (SH12 N2 may
+        "agents.execution.completed": "completed",
+        "agents.execution.failed": "failed",
+        "agents.execution.rejected": "failed",
+        "agents.execution.cancelled": "cancelled",        # C11: interrupted gateway request maps to failed job (SH12 N2 may
         # later introduce a dedicated 'interrupted' job state).
-        "agents.llm.interrupted": "failed",
+        "agents.execution.interrupted": "failed",
     }
 
     def _handle_gateway_outcome(

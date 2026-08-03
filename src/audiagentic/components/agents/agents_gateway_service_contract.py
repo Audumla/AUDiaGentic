@@ -1,7 +1,8 @@
 """Neutral constants for the authenticated standalone gateway v1 protocol."""
+
 from __future__ import annotations
 
-PROTOCOL_VERSION = "gateway-service-v1"
+PROTOCOL_VERSION = "gateway-service-v2"
 HEALTH_ROUTE = "/v1/health"
 CALL_ROUTE = "/v1/call"
 LEASE_ACQUIRE_ROUTE = "/v1/client-leases/acquire"

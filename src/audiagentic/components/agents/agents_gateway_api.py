@@ -1,11 +1,11 @@
-"""Agent LLM Gateway public API — async submit, blocking run, status, wait, cancel.
+"""Agent Execution Gateway public API — async submit, blocking run, status, wait, cancel.
 
 Thin orchestration over agents_gateway_store (persistence), agents_gateway_queue
 (per-profile concurrency), and agents_gateway_dispatch (provider dispatch/retry/
 fallback). One GatewayQueueManager instance per process (module-level) — see
 its docstring for the process-lifetime caveat.
 
-SH02: submit_llm_request now validates through SubmissionEnvelope and persists a
+SH02: submit_execution_request now validates through SubmissionEnvelope and persists a
 redacted ExecutionManifest alongside each request record. The raw prompt body is
 never persisted (only its digest); it is threaded to dispatch via functools.partial.
 """
@@ -203,7 +203,7 @@ def _enrich_terminal_result(
     return result
 
 
-def submit_llm_request(
+def submit_execution_request(
     project_root: Path,
     *,
     agent_profile_id: str | None = None,
@@ -221,7 +221,7 @@ def submit_llm_request(
     _dispatch_service_root: str | None = None,
 ) -> dict[str, Any]:
     """Submit a gateway request. Returns immediately with request-id and initial state
-    unless mode='blocking', in which case it waits for a terminal result (see run_llm_request).
+    unless mode='blocking', in which case it waits for a terminal result (see run_execution_request).
 
     Sessions (plan agent-sessions): ``session_keep_alive=True`` opens a live
     agent session that survives this request — the response's ``session-id``
@@ -231,7 +231,7 @@ def submit_llm_request(
     settable at open time — 0 disables that bound (long-lived remote-control
     sessions). Turns on one session queue FIFO; the reaper never closes a
     session that is processing or has queued turns. Close explicitly with
-    close_llm_session when done.
+    close_execution_session when done.
 
     SH02: validates through SubmissionEnvelope, resolves an ExecutionManifest,
     and persists only a redacted record (prompt_digest, not raw prompt_body).
@@ -333,7 +333,7 @@ def submit_llm_request(
         canonical_root=canonical_root,
         agent_profile_id=resolved_profile_id,
         provider_id=resolved_provider_id,
-        model_id=resolved_model_id,
+        model_id=resolved_model_id,  # type: ignore[arg-type]
         provider_isolation_tier=isolation_tier,
         agent_runtime_digest=agent_runtime_digest,
     )
@@ -420,7 +420,7 @@ def submit_llm_request(
         # --- 6. Enqueue with dispatch_prompt threaded via functools.partial -
         runner = functools.partial(
             dispatch.dispatch_request,
-            dispatch_prompt=prompt_body,
+            dispatch_prompt=prompt_body,  # type: ignore[arg-type]
             manifest_id=manifest.manifest_id,
             context_fingerprint=manifest.context_fingerprint,
             component_profile=manifest.identity.component_profile,
@@ -445,7 +445,7 @@ def submit_llm_request(
     return record
 
 
-def get_llm_request(project_root: Path, request_id: str) -> dict[str, Any]:
+def get_execution_request(project_root: Path, request_id: str) -> dict[str, Any]:
     """Return the current persisted state of a gateway request."""
     return store.read_public_status(project_root, request_id)
 
@@ -508,7 +508,7 @@ def request_runtime_status(project_root: Path, request_id: str) -> dict[str, Any
     return result
 
 
-def wait_llm_request(
+def wait_execution_request(
     project_root: Path, request_id: str, timeout_seconds: float | None = None
 ) -> dict[str, Any]:
     """Block until a request reaches a terminal state or the timeout elapses.
@@ -530,7 +530,7 @@ def wait_llm_request(
     return result
 
 
-def cancel_llm_request(project_root: Path, request_id: str) -> dict[str, Any]:
+def cancel_execution_request(project_root: Path, request_id: str) -> dict[str, Any]:
     """Cancel a queued request, or best-effort mark a running one cancel-requested.
 
     See GatewayQueueManager.cancel — a running request is not force-terminated;
@@ -540,7 +540,7 @@ def cancel_llm_request(project_root: Path, request_id: str) -> dict[str, Any]:
     return _QUEUE_MANAGER.cancel(project_root, record["agent-profile-id"], request_id)
 
 
-def run_llm_request(
+def run_execution_request(
     project_root: Path,
     *,
     agent_profile_id: str | None = None,
@@ -558,7 +558,7 @@ def run_llm_request(
 ) -> dict[str, Any]:
     """Submit and block until a terminal result or timeout. Not for event-triggered
     paths (AG12 handles those asynchronously through lifecycle events)."""
-    return submit_llm_request(
+    return submit_execution_request(
         project_root,
         agent_profile_id=agent_profile_id,
         prompt_body=prompt_body,
@@ -589,7 +589,7 @@ def gateway_status() -> dict[str, Any]:
     return _QUEUE_MANAGER.all_queue_depths()
 
 
-def list_llm_requests(
+def list_execution_requests(
     project_root: Path,
     *,
     state: str | None = None,
@@ -629,7 +629,7 @@ def _public_session_projection(record: dict[str, Any]) -> dict[str, Any]:
     return projected
 
 
-def list_llm_sessions(
+def list_execution_sessions(
     project_root: Path,
     *,
     state: str | None = None,
@@ -661,7 +661,7 @@ def list_llm_sessions(
     return rows
 
 
-def close_llm_session(project_root: Path, session_id: str) -> dict[str, Any]:
+def close_execution_session(project_root: Path, session_id: str) -> dict[str, Any]:
     """Close a live session on client request. Idempotent — closing a session
     that is already terminal (or whose process died) returns its final record."""
     from audiagentic.components.agents import agents_gateway_session_bindings as binding_store
@@ -685,7 +685,7 @@ def close_llm_session(project_root: Path, session_id: str) -> dict[str, Any]:
     return _public_session_projection(record)
 
 
-def resume_llm_session(
+def resume_execution_session(
     project_root: Path,
     source_session_id: str,
     *,
@@ -745,7 +745,7 @@ def gateway_overview(project_root: Path) -> dict[str, Any]:
             reverse=True,
         )[:5]
     ]
-    sessions = list_llm_sessions(project_root)
+    sessions = list_execution_sessions(project_root)
     return {
         "total_requests": len(records),
         "by_state": by_state,

@@ -14,31 +14,31 @@ from audiagentic.foundation.system.managed_service_contracts import ServiceKey
 
 
 class Application:
-    def submit_llm_request(self, project_root, **kwargs):
+    def submit_execution_request(self, project_root, **kwargs):
         return {"operation": "submit", "root": str(project_root), **kwargs}
 
-    def get_llm_request(self, project_root, request_id):
+    def get_execution_request(self, project_root, request_id):
         return {"operation": "get", "request-id": request_id}
 
-    def wait_llm_request(self, project_root, request_id, timeout_seconds=None):
+    def wait_execution_request(self, project_root, request_id, timeout_seconds=None):
         return {"operation": "wait", "request-id": request_id, "timeout": timeout_seconds}
 
-    def cancel_llm_request(self, project_root, request_id):
+    def cancel_execution_request(self, project_root, request_id):
         return {"operation": "cancel", "request-id": request_id}
 
-    def run_llm_request(self, project_root, **kwargs):
+    def run_execution_request(self, project_root, **kwargs):
         return {"operation": "run", **kwargs}
 
-    def list_llm_requests(self, project_root, **kwargs):
+    def list_execution_requests(self, project_root, **kwargs):
         return [{"operation": "list", **kwargs}]
 
     def gateway_overview(self, project_root):
         return {"operation": "overview"}
 
-    def list_llm_sessions(self, project_root, **kwargs):
+    def list_execution_sessions(self, project_root, **kwargs):
         return [{"operation": "sessions", **kwargs}]
 
-    def close_llm_session(self, project_root, session_id):
+    def close_execution_session(self, project_root, session_id):
         return {"operation": "close", "session-id": session_id}
 
 
@@ -67,7 +67,7 @@ def test_closed_operation_router_calls_public_application(tmp_path: Path) -> Non
     authorization = _authorization(service)
 
     assert service.invoke(
-        "submit_llm_request",
+        "submit_execution_request",
         str(tmp_path),
         {"prompt_body": "hello"},
         **authorization,
@@ -77,14 +77,14 @@ def test_closed_operation_router_calls_public_application(tmp_path: Path) -> Non
         "_dispatch_service_root": str(service._service_store.root),
     }
     assert service.invoke(
-        "wait_llm_request",
+        "wait_execution_request",
         str(tmp_path),
         {"request_id": "req_1", "timeout_seconds": 3},
         **authorization,
     )["timeout"] == 3
 
     submitted = service.invoke(
-        "submit_llm_request",
+        "submit_execution_request",
         str(tmp_path),
         {"prompt_body": "hello", "component_profile": "client-profile"},
         **authorization,
@@ -99,17 +99,17 @@ def test_closed_operation_router_rejects_unknown_or_missing_parameters(tmp_path:
     with pytest.raises(AudiaGenticError, match="VAL-AGSV-001"):
         service.invoke("unknown", str(tmp_path), {}, **authorization)
     with pytest.raises(AudiaGenticError, match="VAL-AGSV-002"):
-        service.invoke("get_llm_request", str(tmp_path), {}, **authorization)
+        service.invoke("get_execution_request", str(tmp_path), {}, **authorization)
     with pytest.raises(AudiaGenticError, match="VAL-AGSV-022"):
         service.invoke(
-            "submit_llm_request",
+            "submit_execution_request",
             str(tmp_path),
             {"prompt_body": "hello", "surprise": True},
             **authorization,
         )
     with pytest.raises(AudiaGenticError, match="VAL-AGW-069"):
         service.invoke(
-            "submit_llm_request",
+            "submit_execution_request",
             str(tmp_path),
             {"prompt_body": "hello", "metadata": {"schema_version": 999}},
             **authorization,

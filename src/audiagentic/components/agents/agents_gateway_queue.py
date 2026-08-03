@@ -1,4 +1,4 @@
-"""Agent LLM Gateway per-profile queue and concurrency manager (AG09).
+"""Agent Execution Gateway per-profile queue and concurrency manager (AG09).
 
 In-process only — a worker thread pool per profile, gated by a semaphore sized
 from the profile's params. Persisted request state (agents_gateway_store) is
@@ -8,6 +8,7 @@ remain in the store but no worker will resume them (see AG13 for a startup
 reconciliation follow-up — out of scope for this slice, same call the plan
 item makes for durability).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -26,13 +27,13 @@ from audiagentic.components.agents import (
 )
 from audiagentic.components.agents import agents_gateway_store as store
 from audiagentic.components.agents.agents_event_topics import (
-    LLM_CANCELLED_TOPIC,
-    LLM_COMPLETED_TOPIC,
-    LLM_FAILED_TOPIC,
-    LLM_INTERRUPTED_TOPIC,
-    LLM_QUEUED_TOPIC,
-    LLM_REJECTED_TOPIC,
-    LLM_STARTED_TOPIC,
+    EXECUTION_CANCELLED_TOPIC,
+    EXECUTION_COMPLETED_TOPIC,
+    EXECUTION_FAILED_TOPIC,
+    EXECUTION_INTERRUPTED_TOPIC,
+    EXECUTION_QUEUED_TOPIC,
+    EXECUTION_REJECTED_TOPIC,
+    EXECUTION_STARTED_TOPIC,
 )
 from audiagentic.components.agents.agents_mapping import first_present
 from audiagentic.components.agents.agents_paths import gateway_request_path
@@ -140,23 +141,24 @@ async def notify_turn_done(request_id: str) -> None:
     """Release the profile compute slot owned by this session turn."""
     await _TURNCB.turn_done(request_id)
 
+
 _TERMINAL_EVENT_SUFFIXES = {"completed", "failed", "cancelled", "rejected", "interrupted"}
 
 # BU02: explicit suffix→topic-constant map replaces the f-string publish.
 # Each value matches a registered agents-owned topic in events.yaml.
 _LIFECYCLE_SUFFIX_TOPIC_MAP: dict[str, str] = {
-    "queued": LLM_QUEUED_TOPIC,
-    "started": LLM_STARTED_TOPIC,
-    "completed": LLM_COMPLETED_TOPIC,
-    "failed": LLM_FAILED_TOPIC,
-    "cancelled": LLM_CANCELLED_TOPIC,
-    "rejected": LLM_REJECTED_TOPIC,
-    "interrupted": LLM_INTERRUPTED_TOPIC,
+    "queued": EXECUTION_QUEUED_TOPIC,
+    "started": EXECUTION_STARTED_TOPIC,
+    "completed": EXECUTION_COMPLETED_TOPIC,
+    "failed": EXECUTION_FAILED_TOPIC,
+    "cancelled": EXECUTION_CANCELLED_TOPIC,
+    "rejected": EXECUTION_REJECTED_TOPIC,
+    "interrupted": EXECUTION_INTERRUPTED_TOPIC,
 }
 
 
 def _publish_lifecycle_event(event_suffix: str, record: dict[str, Any]) -> None:
-    """Publish an agents.llm.<event_suffix> lifecycle event for any gateway
+    """Publish an agents.execution.<event_suffix> lifecycle event for any gateway
     request (MCP-submitted or event-triggered — this is the single choke
     point for every request, so listeners see a complete lifecycle regardless
     of origin). correlation_id/subject are auto-extracted by EventEnvelope
@@ -195,9 +197,11 @@ def _publish_lifecycle_event(event_suffix: str, record: dict[str, Any]) -> None:
         get_bus().publish(topic, payload, metadata=record.get("metadata", {}))
     except Exception:  # noqa: BLE001
         logger.error(
-            "failed to publish gateway lifecycle event", extra={"request-id": record["request-id"], "event": event_suffix},
+            "failed to publish gateway lifecycle event",
+            extra={"request-id": record["request-id"], "event": event_suffix},
             exc_info=True,
         )
+
 
 RequestRunner = Callable[[Path, dict[str, Any]], dict[str, Any]]
 """Callable that dispatches one gateway request record and returns the same
@@ -348,7 +352,7 @@ class GatewayQueueManager:
         agent_profile_id = record["agent-profile-id"]
 
         # SH07 C2: reconstruct snapshot from record's admission-time identity.
-        # The record was built with snapshot fields by submit_llm_request;
+        # The record was built with snapshot fields by submit_execution_request;
         # using them here prevents any project-local params override.
         snapshot = profiles_mod.snapshot_from_record(record)
         if snapshot is None:
@@ -372,15 +376,23 @@ class GatewayQueueManager:
         if not validator.validate_snapshot_current(snapshot):
             logger.info(
                 "gateway request rejected: stale profile snapshot",
-                extra={"request-id": request_id, "agent-profile-id": agent_profile_id, "lane-key": lane_key.public_id()},
+                extra={
+                    "request-id": request_id,
+                    "agent-profile-id": agent_profile_id,
+                    "lane-key": lane_key.public_id(),
+                },
             )
             rejected = store.transition_record(
-                project_root, request_id, "rejected",
-                updates={"error": {
-                    "code": "CON-AGW-101",
-                    "message": "gateway profile changed; resubmit required",
-                    "kind": "agents",
-                }},
+                project_root,
+                request_id,
+                "rejected",
+                updates={
+                    "error": {
+                        "code": "CON-AGW-101",
+                        "message": "gateway profile changed; resubmit required",
+                        "kind": "agents",
+                    }
+                },
             )
             store.record_gateway_timeline(
                 project_root,
@@ -425,15 +437,23 @@ class GatewayQueueManager:
         if queue_full:
             logger.info(
                 "gateway request rejected: queue full",
-                extra={"request-id": request_id, "agent-profile-id": agent_profile_id, "queue-max-size": pq.queue_max_size},
+                extra={
+                    "request-id": request_id,
+                    "agent-profile-id": agent_profile_id,
+                    "queue-max-size": pq.queue_max_size,
+                },
             )
             rejected = store.transition_record(
-                project_root, request_id, "rejected",
-                updates={"error": {
-                    "code": "VAL-AGW-025",
-                    "message": f"queue full for profile {agent_profile_id!r} (max {pq.queue_max_size})",
-                    "kind": "agents",
-                }},
+                project_root,
+                request_id,
+                "rejected",
+                updates={
+                    "error": {
+                        "code": "VAL-AGW-025",
+                        "message": f"queue full for profile {agent_profile_id!r} (max {pq.queue_max_size})",
+                        "kind": "agents",
+                    }
+                },
             )
             store.record_gateway_timeline(
                 project_root,
@@ -451,7 +471,11 @@ class GatewayQueueManager:
 
         logger.info(
             "gateway request queued",
-            extra={"request-id": request_id, "agent-profile-id": agent_profile_id, "pending": pending_count},
+            extra={
+                "request-id": request_id,
+                "agent-profile-id": agent_profile_id,
+                "pending": pending_count,
+            },
         )
         store.record_gateway_timeline(
             project_root,
@@ -503,10 +527,17 @@ class GatewayQueueManager:
 
         try:
             if request_id in pq.cancel_requested:
-                logger.info("gateway request cancelled before dispatch", extra={"request-id": request_id})
+                logger.info(
+                    "gateway request cancelled before dispatch", extra={"request-id": request_id}
+                )
                 cancelled = store.cancel_queued_or_mark_requested(project_root, request_id)
                 if cancelled["state"] == "cancelled":
-                    store.record_gateway_timeline(project_root, request_id, "queue.cancelled-before-dispatch", state="cancelled")
+                    store.record_gateway_timeline(
+                        project_root,
+                        request_id,
+                        "queue.cancelled-before-dispatch",
+                        state="cancelled",
+                    )
                     _publish_lifecycle_event("cancelled", cancelled)
                 return
 
@@ -521,12 +552,16 @@ class GatewayQueueManager:
                     extra={"request-id": request_id, "lane-key": entry.lane_key.public_id()},
                 )
                 rejected = store.transition_record(
-                    project_root, request_id, "rejected",
-                    updates={"error": {
-                        "code": "CON-AGW-101",
-                        "message": "gateway profile changed; resubmit required",
-                        "kind": "agents",
-                    }},
+                    project_root,
+                    request_id,
+                    "rejected",
+                    updates={
+                        "error": {
+                            "code": "CON-AGW-101",
+                            "message": "gateway profile changed; resubmit required",
+                            "kind": "agents",
+                        }
+                    },
                 )
                 store.record_gateway_timeline(
                     project_root,
@@ -545,11 +580,13 @@ class GatewayQueueManager:
             current = store.read_record(project_root, request_id)
             try:
                 claimed = store.claim_dispatch(
-                    project_root, request_id, owner_epoch=owner_epoch,
+                    project_root,
+                    request_id,
+                    owner_epoch=owner_epoch,
                     expected_revision=current["revision"],
                     service_root=service_root,
                 )
-            except AudiaGenticError as exc:
+            except AudiaGenticError as exc:  # noqa: SIM102
                 # Cancellation may linearize after this worker has dequeued the
                 # request but before its durable claim is written.  That makes
                 # this claim deliberately stale: the cancellation is already
@@ -558,10 +595,7 @@ class GatewayQueueManager:
                 # it is evidence of an ownership/revision bug, not a retry
                 # opportunity.
                 latest = store.read_record(project_root, request_id)
-                if (
-                    exc.code in {"CON-AGW-071", "CON-AGW-083"}
-                    and latest["state"] == "cancelled"
-                ):
+                if exc.code in {"CON-AGW-071", "CON-AGW-083"} and latest["state"] == "cancelled":
                     logger.info(
                         "gateway dispatch claim superseded by durable cancellation",
                         extra={"request-id": request_id},
@@ -573,11 +607,16 @@ class GatewayQueueManager:
                 return
             _test_stall_claim_to_start()
             record = store.start_owned_attempt(
-                project_root, request_id, owner_epoch=owner_epoch,
+                project_root,
+                request_id,
+                owner_epoch=owner_epoch,
                 worker_id=f"worker_{uuid.uuid4().hex[:16]}",
                 expected_revision=claimed["revision"],
             )
-            logger.info("gateway request running", extra={"request-id": request_id, "agent-profile-id": agent_profile_id})
+            logger.info(
+                "gateway request running",
+                extra={"request-id": request_id, "agent-profile-id": agent_profile_id},
+            )
             store.record_gateway_timeline(
                 project_root,
                 request_id,
@@ -628,7 +667,10 @@ class GatewayQueueManager:
                 result = runner(project_root, record)
                 logger.info(
                     "gateway request finished",
-                    extra={"request-id": request_id, "state": result.get("state") if isinstance(result, dict) else None},
+                    extra={
+                        "request-id": request_id,
+                        "state": result.get("state") if isinstance(result, dict) else None,
+                    },
                 )
                 if isinstance(result, dict):
                     store.record_gateway_timeline(
@@ -641,14 +683,22 @@ class GatewayQueueManager:
                             "correlation_id": (result.get("metadata") or {}).get("correlation_id"),
                         },
                     )
-                if isinstance(result, dict) and result.get("state") in ("completed", "failed", "cancelled"):
+                if isinstance(result, dict) and result.get("state") in (
+                    "completed",
+                    "failed",
+                    "cancelled",
+                ):
                     _publish_lifecycle_event(result["state"], result)
             except AudiaGenticError as exc:
-                logger.error("gateway request runner raised", extra={"request-id": request_id}, exc_info=True)
+                logger.error(
+                    "gateway request runner raised", extra={"request-id": request_id}, exc_info=True
+                )
                 current = store.read_record(project_root, request_id)
                 if current["state"] == "running":
                     failed = store.transition_owned_terminal(
-                        project_root, request_id, "failed",
+                        project_root,
+                        request_id,
+                        "failed",
                         updates={"error": exc, "finished-at": now_iso_z()},
                         owner_epoch=record["dispatch-owner-epoch"],
                         worker_id=record["worker-id"],
@@ -656,11 +706,17 @@ class GatewayQueueManager:
                     )
                     _publish_lifecycle_event("failed", failed)
             except Exception as exc:  # noqa: BLE001
-                logger.error("gateway request runner raised unexpectedly", extra={"request-id": request_id}, exc_info=True)
+                logger.error(
+                    "gateway request runner raised unexpectedly",
+                    extra={"request-id": request_id},
+                    exc_info=True,
+                )
                 current = store.read_record(project_root, request_id)
                 if current["state"] == "running":
                     failed = store.transition_owned_terminal(
-                        project_root, request_id, "failed",
+                        project_root,
+                        request_id,
+                        "failed",
                         updates={"error": exc, "finished-at": now_iso_z()},
                         owner_epoch=record["dispatch-owner-epoch"],
                         worker_id=record["worker-id"],
@@ -677,7 +733,9 @@ class GatewayQueueManager:
             _TURNCB.clear(request_id)
             self._drain(pq)
 
-    def _find_lane_for_request(self, agent_profile_id: str, request_id: str) -> _ProfileQueue | None:
+    def _find_lane_for_request(
+        self, agent_profile_id: str, request_id: str
+    ) -> _ProfileQueue | None:
         """Scan lanes to find the queue that contains or tracks this request.
 
         Backward-compat: caller only knows agent_profile_id, not the full lane key.
@@ -727,13 +785,17 @@ class GatewayQueueManager:
             # leaving queued+cancel-requested without a queue entry.
             updated = store.cancel_queued_or_mark_requested(project_root, request_id)
             if updated["state"] == "cancelled":
-                logger.info("gateway request cancelled before running", extra={"request-id": request_id})
+                logger.info(
+                    "gateway request cancelled before running", extra={"request-id": request_id}
+                )
             elif is_running:
                 # Persisted so the intent is observable (get/wait) and so the
                 # dispatch retry/fallback loop can see it across process/module
                 # boundaries — the in-memory cancel_requested set alone is not
                 # enough once the record is inspected from outside this manager.
-                logger.info("gateway request cancel-requested (running)", extra={"request-id": request_id})
+                logger.info(
+                    "gateway request cancel-requested (running)", extra={"request-id": request_id}
+                )
                 # RV680: a running SESSION turn is interruptible via the ACP
                 # protocol-level cancel — signal it best-effort. Non-session
                 # requests keep the between-attempts cooperative check only.
@@ -754,7 +816,9 @@ class GatewayQueueManager:
             return updated
         return store.read_record(project_root, request_id)
 
-    def wait(self, project_root: Path, request_id: str, timeout_seconds: float | None) -> dict[str, Any]:
+    def wait(
+        self, project_root: Path, request_id: str, timeout_seconds: float | None
+    ) -> dict[str, Any]:
         """Block until the request reaches a terminal state or timeout elapses.
 
         The durable record remains the authority, so this also works when a
