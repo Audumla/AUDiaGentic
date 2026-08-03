@@ -14,7 +14,6 @@ from types import SimpleNamespace
 import pytest
 
 from audiagentic.components.agents import agents_gateway_api as gateway
-from audiagentic.components.agents import agents_gateway_queue
 from audiagentic.components.agents.agents_api import create_profile
 from audiagentic.components.agents.agents_paths import gateway_request_path
 from audiagentic.components.agents.contracts.execution_context import (
@@ -23,12 +22,6 @@ from audiagentic.components.agents.contracts.execution_context import (
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state
-
-
-@pytest.fixture(autouse=True)
-def _fresh_gateway_queue_manager():
-    gateway._QUEUE_MANAGER = agents_gateway_queue.GatewayQueueManager()
-    yield
 
 
 def _make_profile(project_root: Path, profile_id: str, provider_id: str, *, default: bool = True, **params) -> None:

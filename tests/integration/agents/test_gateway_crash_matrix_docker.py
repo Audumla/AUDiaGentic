@@ -44,6 +44,7 @@ from tests.integration.agents.gateway_docker_harness import read_record as _read
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.opt_in,
+    pytest.mark.requires_container,
     pytest.mark.timeout(180),
 ]
 

@@ -11,22 +11,12 @@ from pathlib import Path
 import pytest
 
 from audiagentic.components.agents import agents_gateway_api as gateway
-from audiagentic.components.agents import agents_gateway_queue
 from audiagentic.components.agents.agents_api import create_profile
 from audiagentic.components.providers.providers_api import ProviderExecutionResult
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.event import get_bus
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state
-
-
-@pytest.fixture(autouse=True)
-def _fresh_gateway_queue_manager():
-    # agents_gateway_api._QUEUE_MANAGER is a process-global singleton by design
-    # (one per hosting process) — reset it per test so requests using the same
-    # default profile id across tests don't share in-memory queue state.
-    gateway._QUEUE_MANAGER = agents_gateway_queue.GatewayQueueManager()
-    yield
 
 
 def _make_profile(project_root: Path, profile_id: str, provider_id: str, *, default: bool = True, **params) -> None:
