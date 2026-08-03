@@ -310,7 +310,7 @@ def test_gateway_runs_real_cli_provider_against_local_rig(
     reset_gateway_client()
     client = get_gateway_client()
     try:
-        result = client.run_llm_request(
+        result = client.run_execution_request(
             tmp_path,
             agent_profile_id="docker-harness-rig",
             prompt_body="Reply exactly GATEWAY_HARNESS_OK",
@@ -347,7 +347,7 @@ def test_gateway_cancel_of_real_provider_request_reaches_terminal_state(
     reset_gateway_client()
     client = get_gateway_client()
     try:
-        submitted = client.submit_llm_request(
+        submitted = client.submit_execution_request(
             tmp_path,
             agent_profile_id="docker-harness-rig",
             prompt_body="Reply exactly GATEWAY_HARNESS_OK",
@@ -356,14 +356,14 @@ def test_gateway_cancel_of_real_provider_request_reaches_terminal_state(
         request_id = submitted["request-id"]
 
         wait_for(
-            lambda: client.get_llm_request(tmp_path, request_id)["state"] == "running",
+            lambda: client.get_execution_request(tmp_path, request_id)["state"] == "running",
             timeout=30, what=f"{provider_id} request to start running",
         )
 
-        client.cancel_llm_request(tmp_path, request_id)
+        client.cancel_execution_request(tmp_path, request_id)
         _RigHandler.hold.set()  # let the held HTTP call return so the process can wind down
 
-        final = client.wait_llm_request(tmp_path, request_id, timeout_seconds=30)
+        final = client.wait_execution_request(tmp_path, request_id, timeout_seconds=30)
         assert final["state"] in {"cancelled", "failed", "completed"}, final
         assert final["state"] != "running"
     finally:
@@ -393,7 +393,7 @@ def test_gateway_rejects_unresolvable_profile_without_touching_provider(
     client = get_gateway_client()
     try:
         with pytest.raises(AudiaGenticError):
-            client.submit_llm_request(
+            client.submit_execution_request(
                 tmp_path,
                 agent_profile_id="profile-that-does-not-exist",
                 prompt_body="should never reach the provider",

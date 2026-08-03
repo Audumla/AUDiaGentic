@@ -531,7 +531,7 @@ def test_terminal_lifecycle_event_carries_provider_and_attempt_info(tmp_path: Pa
         received.append(payload)
         done.set()
 
-    get_bus().subscribe("agents.llm.completed", on_completed)
+    get_bus().subscribe("agents.execution.completed", on_completed)
 
     record = store.build_record(agent_profile_id="p11", prompt_body="x")
     store.write_record(tmp_path, record)

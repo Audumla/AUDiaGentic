@@ -73,7 +73,7 @@ def _read_timeline_entries(project_root: Path, job_id: str) -> list[dict]:
 
 
 class TestGatewayOutcomeCompleted:
-    """EDJ05: agents.llm.completed -> job completed."""
+    """EDJ05: agents.execution.completed -> job completed."""
 
     def test_completed_transitions_running_to_completed(self, tmp_path):
         from audiagentic.foundation.event.event_bus import get_bus, reset_bus
@@ -92,7 +92,7 @@ class TestGatewayOutcomeCompleted:
 
         bus = get_bus()
         bus.publish(
-            "agents.llm.completed",
+            "agents.execution.completed",
             {
                 "request-id": "gw-req-001",
                 "provider-id": "local-openai",
@@ -126,7 +126,7 @@ class TestGatewayOutcomeCompleted:
 
         bus = get_bus()
         bus.publish(
-            "agents.llm.completed",
+            "agents.execution.completed",
             {"request-id": "gw-req-artifact"},
             metadata={"job-id": job_id, "correlation_id": "corr-artifact"},
         )
@@ -155,7 +155,7 @@ class TestGatewayOutcomeCompleted:
 
         bus = get_bus()
         bus.publish(
-            "agents.llm.completed",
+            "agents.execution.completed",
             {
                 "request-id": "gw-req-summary",
                 "provider-id": "test-provider",
@@ -175,7 +175,7 @@ class TestGatewayOutcomeCompleted:
 
 
 class TestGatewayOutcomeFailed:
-    """EDJ05: agents.llm.failed -> job failed."""
+    """EDJ05: agents.execution.failed -> job failed."""
 
     def test_failed_transitions_running_to_failed(self, tmp_path):
         from audiagentic.foundation.event.event_bus import get_bus, reset_bus
@@ -194,7 +194,7 @@ class TestGatewayOutcomeFailed:
 
         bus = get_bus()
         bus.publish(
-            "agents.llm.failed",
+            "agents.execution.failed",
             {"request-id": "gw-req-failed", "error": "provider timeout"},
             metadata={"job-id": job_id, "correlation_id": "corr-failed"},
         )
@@ -205,7 +205,7 @@ class TestGatewayOutcomeFailed:
 
 
 class TestGatewayOutcomeRejected:
-    """EDJ05: agents.llm.rejected -> job failed."""
+    """EDJ05: agents.execution.rejected -> job failed."""
 
     def test_rejected_transitions_running_to_failed(self, tmp_path):
         from audiagentic.foundation.event.event_bus import get_bus, reset_bus
@@ -224,7 +224,7 @@ class TestGatewayOutcomeRejected:
 
         bus = get_bus()
         bus.publish(
-            "agents.llm.rejected",
+            "agents.execution.rejected",
             {"request-id": "gw-req-rejected", "error": "profile not found"},
             metadata={"job-id": job_id, "correlation_id": "corr-rejected"},
         )
@@ -235,7 +235,7 @@ class TestGatewayOutcomeRejected:
 
 
 class TestGatewayOutcomeCancelled:
-    """EDJ05: agents.llm.cancelled -> job cancelled."""
+    """EDJ05: agents.execution.cancelled -> job cancelled."""
 
     def test_cancelled_transitions_running_to_cancelled(self, tmp_path):
         from audiagentic.foundation.event.event_bus import get_bus, reset_bus
@@ -254,7 +254,7 @@ class TestGatewayOutcomeCancelled:
 
         bus = get_bus()
         bus.publish(
-            "agents.llm.cancelled",
+            "agents.execution.cancelled",
             {"request-id": "gw-req-cancelled"},
             metadata={"job-id": job_id, "correlation_id": "corr-cancelled"},
         )
@@ -284,7 +284,7 @@ class TestGatewayOutcomeIdempotency:
 
         bus = get_bus()
         bus.publish(
-            "agents.llm.completed",
+            "agents.execution.completed",
             {"request-id": "gw-req-idem"},
             metadata={"job-id": job_id, "correlation_id": "corr-idem"},
         )
@@ -292,7 +292,7 @@ class TestGatewayOutcomeIdempotency:
         timeline_before = _read_timeline_entries(project_root, job_id)
 
         bus.publish(
-            "agents.llm.completed",
+            "agents.execution.completed",
             {"request-id": "gw-req-idem-dup"},
             metadata={"job-id": job_id, "correlation_id": "corr-idem"},
         )
@@ -322,7 +322,7 @@ class TestGatewayOutcomeIdempotency:
 
         bus = get_bus()
         bus.publish(
-            "agents.llm.completed",
+            "agents.execution.completed",
             {"request-id": "gw-req-unknown"},
             metadata={"job-id": "nonexistent-job", "correlation_id": "corr-unknown"},
         )
@@ -348,7 +348,7 @@ class TestGatewayOutcomeAwaitingApproval:
 
         bus = get_bus()
         bus.publish(
-            "agents.llm.completed",
+            "agents.execution.completed",
             {"request-id": "gw-req-awaiting"},
             metadata={"job-id": job_id, "correlation_id": "corr-awaiting"},
         )

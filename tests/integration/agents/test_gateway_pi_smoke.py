@@ -3,7 +3,7 @@
 SH16: Pi's provider descriptor (config/providers/pi.yaml) already declares
 ``execution_isolation_tier: full-isolation`` and ships a real ACP launch
 adapter (adapters/pi/acp.py) for live sessions, but one-shot gateway dispatch
-(agent_llm submit/run) does not go through that ACP adapter — it goes through
+(agent_execution submit/run) does not go through that ACP adapter — it goes through
 the shared YAML-driven CLI runner (adapters/base_runner.make_cli_runner)
 declared in pi.yaml's ``execution:`` block, which invokes the real ``pi``
 binary directly (``pi --print --model <model> <prompt>``).
@@ -165,13 +165,13 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
         reset_gateway_client()
         client = get_gateway_client()
         try:
-            result = client.run_llm_request(
+            result = client.run_execution_request(
                 tmp_path,
                 agent_profile_id="pi-smoke",
                 prompt_body=_PROMPT,
                 timeout_seconds=180,
             )
-            result = client.wait_llm_request(
+            result = client.wait_execution_request(
                 tmp_path,
                 result["request-id"],
                 timeout_seconds=180,

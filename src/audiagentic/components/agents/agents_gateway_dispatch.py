@@ -1,4 +1,4 @@
-"""Agent LLM Gateway provider dispatch and retry (AG10).
+"""Agent Execution Gateway provider dispatch and retry (AG10).
 
 The RequestRunner passed to GatewayQueueManager.enqueue. Resolves the request's
 agent profile to a provider/model, dispatches through providers.services.execution
@@ -182,8 +182,8 @@ def _dispatch_one_attempt(
         model_alias=profile.get("model_alias"),
         packet_data=packet_ctx,
         worker_id=str(record.get("worker-id") or ""),
-        attempt_epoch=int(record.get("attempt-epoch") or 0),
-        provider_isolation_tier=provider_isolation_tier,
+        attempt_epoch=int(record.get("attempt-epoch") or 0),  # noqa: RUF039
+        provider_isolation_tier=provider_isolation_tier,  # type: ignore[arg-type]
     )
     identity = WorkerExecutionIdentity(
         worker_id=provider_request.worker_id,
@@ -192,7 +192,7 @@ def _dispatch_one_attempt(
         context_fingerprint=context_fingerprint,
         project_root=str(project_root.resolve()),
         component_profile=component_profile,
-        provider_isolation_tier=provider_isolation_tier,
+        provider_isolation_tier=provider_isolation_tier,  # type: ignore[arg-type]
     )
     result = execute_isolated_provider_turn(
         identity=identity,

@@ -23,7 +23,7 @@ from audiagentic.foundation.workflow import (
     transition_allowed,
 )
 
-_SCHEMA_STEM = "agent-llm-record"
+_SCHEMA_STEM = "agent-execution-record"
 _CONTRACT_VERSION = "v2"
 _WORKFLOW = load_workflow(Path(__file__).parent.parent / "workflows.yaml", "gateway-request")
 TERMINAL_STATES: set[str] = set(states_in_set(_WORKFLOW, "terminal"))
@@ -40,7 +40,7 @@ _MUTABLE_RESULT_FIELDS = {
 }
 
 _COMPONENT_ID = "agents"
-_RESOURCE_KIND = "agent-llm-gateway-request"
+_RESOURCE_KIND = "agent-execution-gateway-request"
 ACTIVE_WORK_DIR = "active-work"
 
 logger = logging.getLogger(__name__)

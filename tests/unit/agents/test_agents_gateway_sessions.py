@@ -647,17 +647,17 @@ def test_api_list_and_close_sessions(rig, monkeypatch):
     monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
 
     record = _open(runtime, tmp_path)
-    listed = api.list_llm_sessions(tmp_path)
+    listed = api.list_execution_sessions(tmp_path)
     assert [s["session-id"] for s in listed] == [record["session-id"]]
     assert listed[0]["live"] is True
     assert "provider-session-ref" not in repr(listed)
     assert listed[0]["binding"]["provider-ref-key-prefix"]
 
-    closed = api.close_llm_session(tmp_path, record["session-id"])
+    closed = api.close_execution_session(tmp_path, record["session-id"])
     assert closed["state"] == "closed"
-    assert api.list_llm_sessions(tmp_path)[0]["live"] is False
+    assert api.list_execution_sessions(tmp_path)[0]["live"] is False
     # Idempotent on an already-terminal session
-    again = api.close_llm_session(tmp_path, record["session-id"])
+    again = api.close_execution_session(tmp_path, record["session-id"])
     assert again["state"] == "closed"
 
 
@@ -672,7 +672,7 @@ def test_api_close_orphaned_session_marks_failed(rig, monkeypatch):
     record = session_store.build_session_record(agent_profile_id="profile-1")
     session_store.write_session_record(tmp_path, record)
 
-    closed = api.close_llm_session(tmp_path, record["session-id"])
+    closed = api.close_execution_session(tmp_path, record["session-id"])
     assert closed["state"] == "failed"
     assert closed["close-reason"] == "orphaned"
 
@@ -744,7 +744,7 @@ def test_v1_session_record_migrates_to_v2_binding(tmp_path):
         "last-activity-at": "2026-01-01T00:00:00Z",
         "closed-at": None,
     }
-    path = tmp_path / "runtime" / "agent-llm-gateway" / "sessions" / "ses_legacy" / "record.json"
+    path = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / "sessions" / "ses_legacy" / "record.json"
     path.parent.mkdir(parents=True)
     path.write_text(json.dumps(legacy), encoding="utf-8")
 
@@ -1281,7 +1281,7 @@ def test_stale_persisted_session_lists_not_live_no_runtime_started(tmp_path, mon
         stale_id = record["session-id"]
         session_store.write_session_record(tmp_path, record)
 
-        listed = api.list_llm_sessions(tmp_path)
+        listed = api.list_execution_sessions(tmp_path)
         row = [s for s in listed if s["session-id"] == stale_id][0]
         assert row["live"] is False
         # A stale persisted active session should carry a diagnostic flag.
@@ -1311,7 +1311,7 @@ def test_live_session_lists_without_stale_flag(rig, monkeypatch):
     record = _open(runtime, tmp_path)
     session_id = record["session-id"]
 
-    listed = api.list_llm_sessions(tmp_path)
+    listed = api.list_execution_sessions(tmp_path)
     row = [s for s in listed if s["session-id"] == session_id][0]
     assert row["live"] is True
     # Live sessions must not carry a stale flag.
@@ -1336,7 +1336,7 @@ def test_closing_session_not_in_runtime_is_stale(tmp_path, monkeypatch):
             tmp_path, closing_id, "closing",
         )
 
-        listed = api.list_llm_sessions(tmp_path)
+        listed = api.list_execution_sessions(tmp_path)
         row = [s for s in listed if s["session-id"] == closing_id][0]
         assert row["live"] is False
         assert row.get("runtime-state") == "stale-non-live"
@@ -1360,7 +1360,7 @@ def test_stale_session_when_runtime_exists_but_not_live(rig, monkeypatch):
     stale_id = stale_record["session-id"]
     session_store.write_session_record(tmp_path, stale_record)
 
-    listed = api.list_llm_sessions(tmp_path)
+    listed = api.list_execution_sessions(tmp_path)
     row = [s for s in listed if s["session-id"] == stale_id][0]
     assert row["live"] is False
     assert row.get("runtime-state") == "stale-non-live"
@@ -1405,7 +1405,7 @@ def test_list_sessions_no_provider_ref_leak(rig, monkeypatch):
     monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
 
     record = _open(runtime, tmp_path)
-    listed = api.list_llm_sessions(tmp_path)
+    listed = api.list_execution_sessions(tmp_path)
     row = [s for s in listed if s["session-id"] == record["session-id"]][0]
 
     # repr of the entire listing must not contain provider-session-ref or
@@ -1437,7 +1437,7 @@ def test_api_close_live_session_result_is_redacted(rig, monkeypatch):
     record = _open(runtime, tmp_path)
     session_id = record["session-id"]
 
-    closed = api.close_llm_session(tmp_path, session_id)
+    closed = api.close_execution_session(tmp_path, session_id)
     assert closed["state"] == "closed"
     assert closed["close-reason"] == "client-request"
     assert closed["session-id"] == session_id
@@ -1468,7 +1468,7 @@ def test_api_close_durable_record_retains_protected_binding(rig, monkeypatch):
     session_id = record["session-id"]
     original_ref = record["binding"]["provider-session-ref"]
 
-    closed = api.close_llm_session(tmp_path, session_id)
+    closed = api.close_execution_session(tmp_path, session_id)
     # Public result is redacted
     assert "provider-session-ref" not in repr(closed)
 
@@ -1491,11 +1491,11 @@ def test_api_close_idempotent_terminal_result_is_redacted(rig, monkeypatch):
     session_id = record["session-id"]
 
     # Close first time
-    api.close_llm_session(tmp_path, session_id)
+    api.close_execution_session(tmp_path, session_id)
     full_key = record["binding"]["provider-ref-key"]
 
     # Idempotent second close reads from durable store.
-    again = api.close_llm_session(tmp_path, session_id)
+    again = api.close_execution_session(tmp_path, session_id)
     assert again["state"] == "closed"
     again_repr = repr(again)
     assert "provider-session-ref" not in again_repr
@@ -1522,7 +1522,7 @@ def test_api_close_orphaned_stale_result_is_redacted(rig, monkeypatch):
     full_key = orphan_record["binding"]["provider-ref-key"]
     session_store.write_session_record(tmp_path, orphan_record)
 
-    closed = api.close_llm_session(tmp_path, orphan_id)
+    closed = api.close_execution_session(tmp_path, orphan_id)
     assert closed["state"] == "failed"
     assert closed["close-reason"] == "orphaned"
     # Redacted public result

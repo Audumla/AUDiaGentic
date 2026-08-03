@@ -165,7 +165,7 @@ def public_binding_projection(binding: dict[str, Any] | None) -> dict[str, Any] 
 
 def project_public_session(record: dict[str, Any]) -> dict[str, Any]:
     """Project a session record to its public shape: redacted binding, no
-    protected provider refs. Used by both list_llm_sessions and close_llm_session
+    protected provider refs. Used by both list_execution_sessions and close_execution_session
     so public surfaces are consistent (AS35)."""
     projected = dict(record)
     projected["binding"] = public_binding_projection(record.get("binding"))

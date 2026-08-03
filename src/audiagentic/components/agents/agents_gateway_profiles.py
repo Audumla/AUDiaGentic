@@ -7,6 +7,7 @@ it with set_gateway_registry(). EmbeddedCompatibilityRegistry remains the
 fallback for non-shared/embedded mode, deriving a snapshot from
 project-resolved profile data.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -35,10 +36,20 @@ _SECRET_PARAM_PREFIXES = (
     "auth",
 )
 
-_SECRET_PARAM_KEYS = frozenset({
-    "api-key", "api_key", "api_secret", "secret", "token", "password",
-    "auth", "authorization", "bearer", "client-secret",
-})
+_SECRET_PARAM_KEYS = frozenset(
+    {
+        "api-key",
+        "api_key",
+        "api_secret",
+        "secret",
+        "token",
+        "password",
+        "auth",
+        "authorization",
+        "bearer",
+        "client-secret",
+    }
+)
 
 
 def _strip_secrets(params: Mapping[str, Any]) -> dict[str, Any]:
@@ -47,7 +58,8 @@ def _strip_secrets(params: Mapping[str, Any]) -> dict[str, Any]:
     for k, v in params.items():
         kl = k.lower().replace("-", "_")
         if kl in _SECRET_PARAM_KEYS or any(
-            kl.startswith(prefix) for prefix in ("api_key", "api_secret", "secret_", "token_", "password_")
+            kl.startswith(prefix)
+            for prefix in ("api_key", "api_secret", "secret_", "token_", "password_")
         ):
             continue
         stripped[k] = v
@@ -115,6 +127,7 @@ class GatewayProfileSnapshot:
 # Lane key — stable identity for a queue
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class GatewayExecutionLaneKey:
     """Stable, hashable identity for a gateway execution lane.
@@ -136,6 +149,7 @@ class GatewayExecutionLaneKey:
 # ---------------------------------------------------------------------------
 # Gateway profile registry (SH07 C2)
 # ---------------------------------------------------------------------------
+
 
 class GatewayProfileRegistry(Protocol):
     """Gateway-owned authority for execution profile snapshots.
@@ -171,9 +185,11 @@ class GatewayProfileRegistry(Protocol):
 # In-memory test/shared-mode registry (transitional until admin API ships)
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class _GatewayProfileDef:
     """Immutable gateway-owned profile definition stored in the registry."""
+
     provider_id: str
     model_id: str | None
     generation: str
@@ -235,7 +251,8 @@ class InMemoryGatewayRegistry:
                     "queue_max_size": queue_max_size,
                     "params_digest": _config_digest(params),
                 },
-                sort_keys=True, separators=(",", ":"),
+                sort_keys=True,
+                separators=(",", ":"),
             )
             generation = "gen_" + hashlib.sha256(gen_payload.encode("utf-8")).hexdigest()[:12]
 
@@ -263,7 +280,8 @@ class InMemoryGatewayRegistry:
         redacted_params = _strip_secrets(defn.execution_params)
         config_digest = _config_digest(redacted_params)
         admission_policy_digest = _admission_policy_digest(
-            defn.max_concurrency, defn.queue_max_size,
+            defn.max_concurrency,
+            defn.queue_max_size,
         )
 
         return GatewayProfileSnapshot(
@@ -283,14 +301,16 @@ class InMemoryGatewayRegistry:
         defn = self._profiles.get(snapshot.profile_id)
         if defn is None:
             return False  # Profile removed — stale
-        return defn.generation == snapshot.generation and _config_digest(
-            _strip_secrets(defn.execution_params)
-        ) == snapshot.config_digest
+        return (
+            defn.generation == snapshot.generation
+            and _config_digest(_strip_secrets(defn.execution_params)) == snapshot.config_digest
+        )
 
 
 # ---------------------------------------------------------------------------
 # Embedded compatibility registry (non-shared mode)
 # ---------------------------------------------------------------------------
+
 
 def snapshot_from_resolved_profile(
     profile_id: str,
@@ -307,7 +327,8 @@ def snapshot_from_resolved_profile(
     config_digest = _config_digest(params)
     gen_payload = json.dumps(
         {"profile_id": profile_id, "config_digest": config_digest},
-        sort_keys=True, separators=(",", ":"),
+        sort_keys=True,
+        separators=(",", ":"),
     )
     generation = "gen_" + hashlib.sha256(gen_payload.encode("utf-8")).hexdigest()[:12]
 
@@ -403,18 +424,20 @@ def _profile_generation_summary(registry: InMemoryGatewayRegistry) -> dict[str, 
     Used for reload status output — carries only profile ids, generation
     strings, and config digests. Provider auth material is excluded.
     """
-    profiles: list[dict[str, str]] = []
+    profiles: list[dict[str, Any]] = []
     for profile_id, defn in registry._profiles.items():  # noqa: SLF001
         params_digest = _config_digest(_strip_secrets(defn.execution_params))
-        profiles.append({
-            "profile-id": profile_id,
-            "generation": defn.generation,
-            "config-digest": params_digest,
-            "provider-id": defn.provider_id,
-            "model-id": defn.model_id,
-            "max-concurrency": defn.max_concurrency,
-            "queue-max-size": defn.queue_max_size,
-        })
+        profiles.append(
+            {
+                "profile-id": profile_id,
+                "generation": defn.generation,
+                "config-digest": params_digest,
+                "provider-id": defn.provider_id,
+                "model-id": defn.model_id,
+                "max-concurrency": defn.max_concurrency,
+                "queue-max-size": defn.queue_max_size,
+            }
+        )
     return {"profiles": profiles}
 
 
@@ -441,7 +464,7 @@ def reload_profile_registry(
     recorded config path), validate it off-thread, and swap the module-level
     pointer under a short lock.  On failure the previous registry is retained.
 
-    On successful reload a redacted ``agents.llm.gateway.profile-reloaded``
+    On successful reload a redacted ``agents.execution.gateway.profile-reloaded``
     event is published on the event bus with only profile ids, generation
     strings, and config digests — no provider auth material (SH13 step 4).
 
@@ -475,11 +498,16 @@ def reload_profile_registry(
             code="VAL-AGW-092",
             kind="agents",
             message="no config path available for registry reload",
-            details={"config-path-provided": bool(config_path), "recorded-path": bool(_gateway_registry_config_path)},
+            details={
+                "config-path-provided": bool(config_path),
+                "recorded-path": bool(_gateway_registry_config_path),
+            },
         )
 
     # Capture old summary before attempting swap
-    old_summary = _profile_generation_summary(current) if isinstance(current, InMemoryGatewayRegistry) else {}
+    old_summary = (
+        _profile_generation_summary(current) if isinstance(current, InMemoryGatewayRegistry) else {}
+    )
 
     # SH13 step 3: build new registry off-thread so config I/O + YAML parsing
     # does not block the calling thread (MCP tool call / HTTP handler).
@@ -626,6 +654,7 @@ def snapshot_from_record(record: dict[str, Any]) -> GatewayProfileSnapshot | Non
 # ---------------------------------------------------------------------------
 # Gateway-owned config loading (SH07 C2/RV745 — service-host startup wiring)
 # ---------------------------------------------------------------------------
+
 
 def load_gateway_registry_from_config(path: Path) -> InMemoryGatewayRegistry | None:
     """Build an InMemoryGatewayRegistry from a gateway profiles config file.

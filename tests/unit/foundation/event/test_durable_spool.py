@@ -8,7 +8,7 @@ import pytest
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.event.durable_spool import DurableSpoolTransport, SpoolPoison
 
-TOPIC = "agents.llm.gateway.requested"
+TOPIC = "agents.execution.gateway.requested"
 
 
 def _spool(tmp_path, **kwargs) -> DurableSpoolTransport:

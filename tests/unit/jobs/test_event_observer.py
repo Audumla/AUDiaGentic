@@ -203,7 +203,7 @@ class TestEventObserverDisabledTrigger:
             original_publish = bus.publish
 
             def track_dispatch(*args, **kwargs):
-                if args and args[0] == "agents.llm.gateway.requested":
+                if args and args[0] == "agents.execution.gateway.requested":
                     dispatched.append(args)
                 return original_publish(*args, **kwargs)
 
@@ -240,7 +240,7 @@ class TestEventObserverCorrelationId:
         original_publish = bus.publish
 
         def wrapping_publish(*args, **kwargs):
-            if args and args[0] == "agents.llm.gateway.requested":
+            if args and args[0] == "agents.execution.gateway.requested":
                 nonlocal captured_metadata
                 metadata = kwargs.get("metadata") or (args[2] if len(args) > 2 else {})
                 captured_metadata = dict(metadata or {})
@@ -280,7 +280,7 @@ class TestEventObserverCorrelationId:
         original_publish = bus.publish
 
         def wrapping_publish(*args, **kwargs):
-            if args and args[0] == "agents.llm.gateway.requested":
+            if args and args[0] == "agents.execution.gateway.requested":
                 nonlocal captured_metadata
                 metadata = kwargs.get("metadata") or (args[2] if len(args) > 2 else {})
                 captured_metadata = dict(metadata or {})
@@ -454,7 +454,7 @@ class TestEventObserverRenderErrorDeadLetter:
         original_publish = bus.publish
 
         def track_dispatch(*args, **kwargs):
-            if args and args[0] == "agents.llm.gateway.requested":
+            if args and args[0] == "agents.execution.gateway.requested":
                 dispatched.append(dict(kwargs))
             return original_publish(*args, **kwargs)
 
@@ -573,7 +573,7 @@ class TestEventObserverDispatchTransitions:
         original_publish = bus.publish
 
         def wrapping_publish(*args, **kwargs):
-            if args and args[0] == "agents.llm.gateway.requested":
+            if args and args[0] == "agents.execution.gateway.requested":
                 nonlocal captured_metadata
                 metadata = kwargs.get("metadata") or (args[2] if len(args) > 2 else {})
                 captured_metadata = dict(metadata or {})
@@ -678,7 +678,7 @@ class TestEventObserverMetadataImmutability:
 
         inbound = {"job-id": "job-immut-out"}
         snapshot = dict(inbound)
-        get_bus().publish("agents.llm.completed", {"request-id": "req-1"}, metadata=inbound)
+        get_bus().publish("agents.execution.completed", {"request-id": "req-1"}, metadata=inbound)
 
         assert inbound == snapshot, (
             f"outcome handler mutated inbound metadata: {inbound} != {snapshot}"
@@ -723,7 +723,7 @@ class TestGatewayOutcomeNeverRaises:
 
         # Must not raise even though the transition is refused
         get_bus().publish(
-            "agents.llm.completed",
+            "agents.execution.completed",
             {"request-id": "req-pre"},
             metadata={"job-id": "job-pre-dispatch", "correlation_id": "corr-pre-01"},
         )
@@ -760,7 +760,7 @@ class TestGatewayOutcomeNeverRaises:
         obs.initialize(project_root)
 
         get_bus().publish(
-            "agents.llm.failed",
+            "agents.execution.failed",
             {"request-id": "req-pre-f"},
             metadata={"job-id": "job-pre-fail"},
         )
@@ -791,7 +791,7 @@ class TestGatewayOutcomeNeverRaises:
             side_effect=AudiaGenticError("CON-STATE-001", "agent-jobs", "forced"),
         ):
             get_bus().publish(
-                "agents.llm.completed",
+                "agents.execution.completed",
                 {"request-id": "req-agerr"},
                 metadata={"job-id": "job-agerr"},
             )
@@ -860,7 +860,7 @@ class TestDispatchFailureJobLifecycle:
         original_publish = bus.publish
 
         def failing_gateway_publish(*args, **kwargs):
-            if args and args[0] == "agents.llm.gateway.requested":
+            if args and args[0] == "agents.execution.gateway.requested":
                 raise RuntimeError("gateway publish failure")
             return original_publish(*args, **kwargs)
 
@@ -962,7 +962,7 @@ class TestDeadLetterRedaction:
 
         # created-state job => refused propagation => dead-letter path exercised
         get_bus().publish(
-            "agents.llm.completed",
+            "agents.execution.completed",
             {"request-id": "req-s", "output": "RAW_MODEL_OUTPUT"},
             metadata={"job-id": "job-secret-out"},
         )
@@ -1031,7 +1031,7 @@ class TestFilterSuppression:
             original_publish = bus.publish
 
             def track(*args, **kwargs):
-                if args and args[0] == "agents.llm.gateway.requested":
+                if args and args[0] == "agents.execution.gateway.requested":
                     dispatched.append(args)
                 return original_publish(*args, **kwargs)
 

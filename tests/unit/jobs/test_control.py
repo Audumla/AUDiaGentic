@@ -59,7 +59,7 @@ def _collect_cancel_events():
     def handler(event_type, payload, metadata):
         received.append((event_type, payload, metadata))
 
-    get_bus().subscribe("agents.llm.gateway.cancel-requested", handler)
+    get_bus().subscribe("agents.execution.gateway.cancel-requested", handler)
     return received
 
 
@@ -181,7 +181,7 @@ class TestGatewayCancelPropagation:
         assert dl_path.exists(), "publish failure must dead-letter"
         entries = [json.loads(l) for l in dl_path.read_text().strip().split("\n") if l.strip()]
         assert any(
-            e.get("event_type") == "agents.llm.gateway.cancel-requested"
+            e.get("event_type") == "agents.execution.gateway.cancel-requested"
             and e.get("job_id") == "job-cancel-05"
             for e in entries
         )

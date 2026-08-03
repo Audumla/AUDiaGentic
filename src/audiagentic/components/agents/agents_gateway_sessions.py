@@ -1,4 +1,4 @@
-"""Agent LLM Gateway live session runtime (plan agent-sessions AS02).
+"""Agent Execution Gateway live session runtime (plan agent-sessions AS02).
 
 Owns live agent sessions inside the gateway process: one background daemon
 thread running an asyncio event loop hosts every provider-neutral transport;
@@ -988,6 +988,9 @@ class SessionRuntime:
             _record_failure(exc)
             raise
 
+        # validate_resume_eligibility rejects None bindings, so this is safe:
+        assert source_binding is not None
+
         # ── Dispatch exactly one provider-local resume operation ──
         prepare_kwargs: dict[str, Any] = {
             "provider_id": provider_id,
@@ -1106,8 +1109,11 @@ class SessionRuntime:
             )
 
         resume_lib.record_resume_attempt(
-            project_root, source_session_id, control_id,
-            outcome="succeeded", new_session_id=session_id,
+            project_root,
+            source_session_id,
+            control_id,
+            outcome="succeeded",
+            new_session_id=session_id,
         )
         _publish_session_event(
             SESSION_RESUMED_TOPIC,
@@ -1218,7 +1224,7 @@ class SessionRuntime:
                 "timestamp": now_iso_z(),
             }
 
-            # RV680: every turn gets a cancel signal (so agent_llm_cancel can
+            # RV680: every turn gets a cancel signal (so agent_execution_cancel can
             # reach it via protocol-level session/cancel) and an activity
             # clock the reaper can watch for in-turn silence.
             handle.current_request_id = request_id
@@ -1496,7 +1502,14 @@ class SessionRuntime:
             return
         import shutil
 
-        shutil.rmtree(handle.request_runtime_root, ignore_errors=True)
+        try:
+            shutil.rmtree(handle.request_runtime_root, ignore_errors=True)
+        except OSError:  # noqa: BLE001 — cleanup is best-effort
+            logger.warning(
+                "failed to clean up handle runtime root",
+                extra={"path": str(handle.request_runtime_root)},
+                exc_info=True,
+            )
 
     async def _close_all(self, *, reason: str) -> None:
         for session_id in list(self._handles):

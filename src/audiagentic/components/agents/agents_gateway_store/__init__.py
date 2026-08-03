@@ -1,4 +1,4 @@
-"""Agent LLM Gateway request/result contract and persisted state store.
+"""Agent Execution Gateway request/result contract and persisted state store.
 
 Owns the gateway's own record shape and lifecycle — deliberately not built on
 agent_jobs.records.JobRecord (packet/workflow-profile/approvals/review-policy

@@ -1,7 +1,7 @@
-"""Agent LLM Gateway event trigger (AG12).
+"""Agent Execution Gateway event trigger (AG12).
 
-Subscribes to ``agents.llm.gateway.requested`` and normalizes it into the same
-request contract used by the direct API (agents_gateway_api.submit_llm_request)
+Subscribes to ``agents.execution.gateway.requested`` and normalizes it into the same
+request contract used by the direct API (agents_gateway_api.submit_execution_request)
 — an event-triggered request and an MCP-submitted one produce identical
 persisted records and go through the identical lifecycle event stream
 (agents_gateway_queue publishes queued/started/completed/failed/cancelled/
@@ -15,6 +15,7 @@ lazy singleton with no initialization-order dependency, so there is no hazard
 in subscribing during module import — this is the codebase's proven
 convention, not a deferred-registration workaround.
 """
+
 from __future__ import annotations
 
 import logging
@@ -22,9 +23,9 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agents.agents_event_topics import (
+    EXECUTION_REJECTED_TOPIC,
     GATEWAY_CANCEL_REQUESTED_TOPIC,
     GATEWAY_REQUESTED_TOPIC,
-    LLM_REJECTED_TOPIC,
 )
 from audiagentic.components.agents.agents_mapping import first_present
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -33,7 +34,7 @@ from audiagentic.foundation.event import get_bus
 logger = logging.getLogger(__name__)
 
 _REGISTERED = False
-# Deliberately gateway-scoped, not the generic "agents.llm.requested" — that
+# Deliberately gateway-scoped, not the generic "agents.execution.requested" — that
 # name is broad enough that an unrelated future publisher could accidentally
 # trigger real provider dispatch by publishing to what looked like a neutral
 # "an LLM request happened" marker (RV32 finding).
@@ -44,30 +45,35 @@ def _publish_rejected(reason: str, metadata: dict[str, Any]) -> None:
     there is no request-id yet, so this carries only the reason and whatever
     correlation/subject metadata the publisher supplied (RV18 finding)."""
     get_bus().publish(
-        LLM_REJECTED_TOPIC,
+        EXECUTION_REJECTED_TOPIC,
         {"request-id": None, "error": {"code": "VAL-AGW-040", "message": reason, "kind": "agents"}},
         metadata=metadata,
     )
 
 
-def _on_llm_requested(event_type: str, payload: dict[str, Any], metadata: dict[str, Any]) -> None:
-    """Normalize an agents.llm.gateway.requested event into a gateway request and submit it.
+def _on_execution_requested(event_type: str, payload: dict[str, Any], metadata: dict[str, Any]) -> None:
+    """Normalize an agents.execution.gateway.requested event into a gateway request and submit it.
 
     Defaults to async — a request event returns via lifecycle events
-    (agents.llm.completed/failed/...), not a return value. ``payload.blocking``
+    (agents.execution.completed/failed/...), not a return value. ``payload.blocking``
     opts into same-process blocking (rare: only when the publisher is willing
-    to hold the event dispatch thread for the whole request — run_llm_request
+    to hold the event dispatch thread for the whole request — run_execution_request
     via the direct API/MCP tools is the normal way to get blocking behavior).
     """
     project_root_raw = first_present(payload, "project-root", "project_root")
     if not project_root_raw:
-        logger.warning("gateway request event missing project-root; rejecting", extra={"event_type": event_type})
+        logger.warning(
+            "gateway request event missing project-root; rejecting",
+            extra={"event_type": event_type},
+        )
         _publish_rejected("payload missing required 'project-root'", metadata)
         return
 
     prompt_body = first_present(payload, "prompt-body", "prompt_body")
     if not prompt_body:
-        logger.warning("gateway request event missing prompt-body; rejecting", extra={"event_type": event_type})
+        logger.warning(
+            "gateway request event missing prompt-body; rejecting", extra={"event_type": event_type}
+        )
         _publish_rejected("payload missing required 'prompt-body'", metadata)
         return
 
@@ -79,7 +85,7 @@ def _on_llm_requested(event_type: str, payload: dict[str, Any], metadata: dict[s
     source = first_present(payload, "source") or f"event:{GATEWAY_REQUESTED_TOPIC}"
 
     try:
-        get_gateway_client().submit_llm_request(
+        get_gateway_client().submit_execution_request(
             project_root,
             agent_profile_id=agent_profile_id,
             prompt_body=prompt_body,
@@ -92,22 +98,30 @@ def _on_llm_requested(event_type: str, payload: dict[str, Any], metadata: dict[s
         )
     except AudiaGenticError as exc:
         logger.warning(
-            "gateway request event submission failed", extra={"event_type": event_type}, exc_info=True,
+            "gateway request event submission failed",
+            extra={"event_type": event_type},
+            exc_info=True,
         )
         _publish_rejected(exc.message, metadata)
     except Exception:  # noqa: BLE001
         # External boundary (Std 8): an unexpected exception here would
         # otherwise be silently swallowed by EventBus's subscriber isolation
-        # with no agents.llm.rejected ever published — the caller would just
+        # with no agents.execution.rejected ever published — the caller would just
         # see nothing happen (RV32 finding).
         logger.error(
-            "gateway request event submission raised unexpectedly", extra={"event_type": event_type}, exc_info=True,
+            "gateway request event submission raised unexpectedly",
+            extra={"event_type": event_type},
+            exc_info=True,
         )
-        _publish_rejected("unexpected error while submitting the gateway request (see server logs)", metadata)
+        _publish_rejected(
+            "unexpected error while submitting the gateway request (see server logs)", metadata
+        )
 
 
-def _on_cancel_requested(event_type: str, payload: dict[str, Any], metadata: dict[str, Any]) -> None:
-    """Cancel the gateway request named in an agents.llm.gateway.cancel-requested event.
+def _on_cancel_requested(
+    event_type: str, payload: dict[str, Any], metadata: dict[str, Any]
+) -> None:
+    """Cancel the gateway request named in an agents.execution.gateway.cancel-requested event.
 
     Owns only gateway request cancellation; the publisher (agent-jobs) owns
     the originating control event's durable audit — so this handler logs and
@@ -130,7 +144,7 @@ def _on_cancel_requested(event_type: str, payload: dict[str, Any], metadata: dic
     from audiagentic.components.agents.agents_gateway_client import get_gateway_client
 
     try:
-        get_gateway_client().cancel_llm_request(Path(project_root_raw), request_id)
+        get_gateway_client().cancel_execution_request(Path(project_root_raw), request_id)
     except AudiaGenticError:
         logger.warning(
             "gateway cancel event failed",
@@ -150,7 +164,7 @@ def register() -> None:
     global _REGISTERED
     if _REGISTERED:
         return
-    get_bus().subscribe(GATEWAY_REQUESTED_TOPIC, _on_llm_requested)
+    get_bus().subscribe(GATEWAY_REQUESTED_TOPIC, _on_execution_requested)
     get_bus().subscribe(GATEWAY_CANCEL_REQUESTED_TOPIC, _on_cancel_requested)
     _REGISTERED = True
 

@@ -101,9 +101,9 @@ def test_real_concurrent_saturation_bounds_at_max_concurrency(
         }],
     )
     try:
-        first = client.submit_llm_request(tmp_path, prompt_body="one", mode="async")
-        second = client.submit_llm_request(tmp_path, prompt_body="two", mode="async")
-        third = client.submit_llm_request(tmp_path, prompt_body="three", mode="async")
+        first = client.submit_execution_request(tmp_path, prompt_body="one", mode="async")
+        second = client.submit_execution_request(tmp_path, prompt_body="two", mode="async")
+        third = client.submit_execution_request(tmp_path, prompt_body="three", mode="async")
 
         # Both concurrency slots must fill before the rig releases anything —
         # this is the actual proof of real overlap, not a timing guess.
@@ -112,7 +112,7 @@ def test_real_concurrent_saturation_bounds_at_max_concurrency(
             timeout=10, what="two requests genuinely in-flight simultaneously",
         )
         # The third must still be queued, not dispatched, while both slots are full.
-        third_status = client.get_llm_request(tmp_path, third["request-id"])
+        third_status = client.get_execution_request(tmp_path, third["request-id"])
         assert third_status["state"] == "queued"
 
         HoldableRigHandler.hold.set()
@@ -154,8 +154,8 @@ def test_cross_project_sharing_enforces_global_limit(tmp_path: Path, rig_server)
         }],
     )
     try:
-        from_a = client.submit_llm_request(root_a, prompt_body="from project a", mode="async")
-        from_b = client.submit_llm_request(root_b, prompt_body="from project b", mode="async")
+        from_a = client.submit_execution_request(root_a, prompt_body="from project a", mode="async")
+        from_b = client.submit_execution_request(root_b, prompt_body="from project b", mode="async")
 
         # Only one slot exists globally — exactly one of the two projects'
         # requests can be running at a time, never both.
@@ -198,15 +198,15 @@ def test_queue_max_size_exceeded_is_rejected_not_silently_dropped(
         }],
     )
     try:
-        running = client.submit_llm_request(tmp_path, prompt_body="running", mode="async")
+        running = client.submit_execution_request(tmp_path, prompt_body="running", mode="async")
         wait_for(
             lambda: HoldableRigHandler.active_count == 1,
             timeout=10, what="first request occupies the sole concurrency slot",
         )
-        queued = client.submit_llm_request(tmp_path, prompt_body="queued", mode="async")
-        assert client.get_llm_request(tmp_path, queued["request-id"])["state"] == "queued"
+        queued = client.submit_execution_request(tmp_path, prompt_body="queued", mode="async")
+        assert client.get_execution_request(tmp_path, queued["request-id"])["state"] == "queued"
 
-        overflow = client.submit_llm_request(tmp_path, prompt_body="overflow", mode="async")
+        overflow = client.submit_execution_request(tmp_path, prompt_body="overflow", mode="async")
         assert overflow["state"] == "rejected", overflow
         assert overflow["error"]["code"] == "VAL-AGW-025"
 
@@ -250,13 +250,13 @@ def test_reload_racing_concurrent_load_rejects_stale_keeps_running_intact(
     proc = start_gateway_subprocess(service_root, token_path, port, gateway_profiles_config=gw_config_path)
     client = StandaloneGatewayClient(f"http://127.0.0.1:{port}", load_auth_token(token_path))
     try:
-        running = client.submit_llm_request(tmp_path, prompt_body="running", mode="async")
+        running = client.submit_execution_request(tmp_path, prompt_body="running", mode="async")
         wait_for(
             lambda: HoldableRigHandler.active_count == 1,
             timeout=10, what="request occupies the sole concurrency slot",
         )
-        queued = client.submit_llm_request(tmp_path, prompt_body="queued", mode="async")
-        assert client.get_llm_request(tmp_path, queued["request-id"])["state"] == "queued"
+        queued = client.submit_execution_request(tmp_path, prompt_body="queued", mode="async")
+        assert client.get_execution_request(tmp_path, queued["request-id"])["state"] == "queued"
 
         # Mutate the config and reload through the real HTTP service operation.
         write_gateway_profiles_config(gw_config_path, [{
@@ -298,17 +298,17 @@ def test_cancel_racing_concurrent_dispatch_does_not_disturb_others(
         }],
     )
     try:
-        first = client.submit_llm_request(tmp_path, prompt_body="keep-running-1", mode="async")
-        second = client.submit_llm_request(tmp_path, prompt_body="keep-running-2", mode="async")
-        to_cancel = client.submit_llm_request(tmp_path, prompt_body="cancel-me", mode="async")
+        first = client.submit_execution_request(tmp_path, prompt_body="keep-running-1", mode="async")
+        second = client.submit_execution_request(tmp_path, prompt_body="keep-running-2", mode="async")
+        to_cancel = client.submit_execution_request(tmp_path, prompt_body="cancel-me", mode="async")
 
         wait_for(
             lambda: HoldableRigHandler.active_count == 2,
             timeout=10, what="both concurrency slots occupied, third queued",
         )
-        assert client.get_llm_request(tmp_path, to_cancel["request-id"])["state"] == "queued"
+        assert client.get_execution_request(tmp_path, to_cancel["request-id"])["state"] == "queued"
 
-        client.cancel_llm_request(tmp_path, to_cancel["request-id"])
+        client.cancel_execution_request(tmp_path, to_cancel["request-id"])
         HoldableRigHandler.hold.set()
 
         cancelled = wait_for_record_state(

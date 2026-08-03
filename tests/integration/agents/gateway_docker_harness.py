@@ -163,7 +163,7 @@ class HoldableRigHandler(BaseHTTPRequestHandler):
     peak_active_count = 0
     lock = threading.Lock()
 
-    def log_message(self, _format: str, *_args: object) -> None:
+    def log_message(self, format: str, *_args: object) -> None:
         return
 
     def do_POST(self) -> None:  # noqa: N802
@@ -352,9 +352,9 @@ def wait_for(predicate, *, timeout: float, what: str, interval: float = 0.05) ->
 
 def service_store_root(service_root: Path) -> Path:
     """GatewayServiceHost resolves ManagedServiceStore under service_root/
-    machine/agent-llm-gateway/default — that nested path, not service_root
+    machine/agent-execution-gateway/default — that nested path, not service_root
     itself, is what dispatch threads through as the work-index root."""
-    return service_root / "machine" / "agent-llm-gateway" / "default"
+    return service_root / "machine" / "agent-execution-gateway" / "default"
 
 
 def index_entry_path(service_root: Path, request_id: str) -> Path:

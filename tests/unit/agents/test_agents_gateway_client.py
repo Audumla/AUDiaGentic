@@ -10,7 +10,7 @@ class _ApplicationStub:
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
 
-    def submit_llm_request(self, project_root: Path, **kwargs: object) -> dict[str, object]:
+    def submit_execution_request(self, project_root: Path, **kwargs: object) -> dict[str, object]:
         self.calls.append(("submit", (project_root,), kwargs))
         return {"state": "queued"}
 
@@ -19,7 +19,7 @@ def test_in_process_client_delegates_to_its_application(tmp_path: Path) -> None:
     application = _ApplicationStub()
     client = InProcessGatewayClient(application)  # type: ignore[arg-type]
 
-    assert client.submit_llm_request(tmp_path, prompt_body="hello") == {"state": "queued"}
+    assert client.submit_execution_request(tmp_path, prompt_body="hello") == {"state": "queued"}
     assert application.calls == [("submit", (tmp_path,), {"prompt_body": "hello"})]
 
 

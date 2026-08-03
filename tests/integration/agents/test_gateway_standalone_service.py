@@ -39,7 +39,7 @@ class SharedApplication:
         self.run_release = threading.Event()
         self.run_completed = threading.Event()
 
-    def submit_llm_request(self, project_root, **kwargs):
+    def submit_execution_request(self, project_root, **kwargs):
         with self.guard:
             self.next_id += 1
             request_id = f"req_{self.next_id}"
@@ -47,33 +47,33 @@ class SharedApplication:
             self.requests[request_id] = record
             return dict(record)
 
-    def get_llm_request(self, project_root, request_id):
+    def get_execution_request(self, project_root, request_id):
         return dict(self.requests[request_id])
 
-    def wait_llm_request(self, project_root, request_id, timeout_seconds=None):
+    def wait_execution_request(self, project_root, request_id, timeout_seconds=None):
         return dict(self.requests[request_id])
 
-    def cancel_llm_request(self, project_root, request_id):
+    def cancel_execution_request(self, project_root, request_id):
         with self.guard:
             self.requests[request_id]["state"] = "cancel-requested"
             return dict(self.requests[request_id])
 
-    def run_llm_request(self, project_root, **kwargs):
+    def run_execution_request(self, project_root, **kwargs):
         self.run_started.set()
         self.run_release.wait(timeout=5)
         self.run_completed.set()
         return {"request-id": "req_blocking", "state": "succeeded"}
 
-    def list_llm_requests(self, project_root, **kwargs):
+    def list_execution_requests(self, project_root, **kwargs):
         return [dict(value) for value in self.requests.values()]
 
     def gateway_overview(self, project_root):
         return {"total_requests": len(self.requests), "project-root": str(project_root)}
 
-    def list_llm_sessions(self, project_root, **kwargs):
+    def list_execution_sessions(self, project_root, **kwargs):
         return []
 
-    def close_llm_session(self, project_root, session_id):
+    def close_execution_session(self, project_root, session_id):
         return {"session-id": session_id, "state": "closed"}
 
 
@@ -140,9 +140,9 @@ def test_independent_clients_share_one_authenticated_control_plane(tmp_path: Pat
     first = StandaloneGatewayClient(host.endpoint, token)
     second = StandaloneGatewayClient(host.endpoint, token)
     try:
-        submitted = first.submit_llm_request(tmp_path, prompt_body="hello", mode="async")
-        observed = second.get_llm_request(tmp_path, submitted["request-id"])
-        cancelled = second.cancel_llm_request(tmp_path, submitted["request-id"])
+        submitted = first.submit_execution_request(tmp_path, prompt_body="hello", mode="async")
+        observed = second.get_execution_request(tmp_path, submitted["request-id"])
+        cancelled = second.cancel_execution_request(tmp_path, submitted["request-id"])
 
         assert observed["request-id"] == submitted["request-id"]
         assert cancelled["state"] == "cancel-requested"
@@ -225,7 +225,7 @@ def test_standalone_submission_wire_errors_are_canonical_client_errors(
                 "protocol-version": "gateway-service-v1",
                 "owner-epoch": lease["owner-epoch"],
                 "lease-id": lease["lease-id"],
-                "operation": "submit_llm_request",
+                "operation": "submit_execution_request",
                 "project-root": str(tmp_path),
                 "params": params,
             },
@@ -291,7 +291,7 @@ def test_client_timeout_does_not_cancel_service_owned_work(tmp_path: Path) -> No
     client = StandaloneGatewayClient(host.endpoint, load_auth_token(token_path), request_timeout=0.05)
     try:
         with pytest.raises(AudiaGenticError, match="NET-AGSV-002"):
-            client.run_llm_request(tmp_path, prompt_body="slow")
+            client.run_execution_request(tmp_path, prompt_body="slow")
         assert application.run_started.wait(timeout=3)
         application.run_release.set()
         assert application.run_completed.wait(timeout=3)
@@ -328,7 +328,7 @@ def test_real_gateway_work_survives_submitter_disconnect(tmp_path: Path, monkeyp
     submitter = StandaloneGatewayClient(host.endpoint, token)
     observer = StandaloneGatewayClient(host.endpoint, token)
     try:
-        submitted = submitter.submit_llm_request(
+        submitted = submitter.submit_execution_request(
             tmp_path, prompt_body="continue after disconnect", mode="async"
         )
         assert provider_started.wait(timeout=2)
@@ -336,7 +336,7 @@ def test_real_gateway_work_survives_submitter_disconnect(tmp_path: Path, monkeyp
         assert host.service_store.read().active_lease_count == 0
 
         provider_release.set()
-        result = observer.wait_llm_request(
+        result = observer.wait_execution_request(
             tmp_path, submitted["request-id"], timeout_seconds=5
         )
         assert result["state"] == "completed"
@@ -370,7 +370,7 @@ def test_unauthenticated_and_malformed_clients_are_rejected_without_token_leak(t
             urlopen(malformed, timeout=2)
         assert json.loads(invalid.value.read().decode("utf-8"))["error-code"] == "VAL-AGSV-007"
 
-        assert token not in (service_root / "machine" / "agent-llm-gateway" / "default" / "service.json").read_text(encoding="utf-8")
+        assert token not in (service_root / "machine" / "agent-execution-gateway" / "default" / "service.json").read_text(encoding="utf-8")
     finally:
         _stop_host(host, thread)
 
@@ -471,19 +471,19 @@ def test_service_host_startup_wires_gateway_owned_registry_from_config(
         client_a = StandaloneGatewayClient(host.endpoint, token)
         client_b = StandaloneGatewayClient(host.endpoint, token)
         try:
-            submitted_a = client_a.submit_llm_request(root_a, prompt_body="from-a", mode="async")
+            submitted_a = client_a.submit_execution_request(root_a, prompt_body="from-a", mode="async")
             assert provider_started.wait(timeout=2)
 
             # Global max_concurrency=1 for this gateway-owned profile: project
             # B's request must queue behind project A's, not run independently
             # under a project-local limit.
-            submitted_b = client_b.submit_llm_request(root_b, prompt_body="from-b", mode="async")
-            status_b = client_b.get_llm_request(root_b, submitted_b["request-id"])
+            submitted_b = client_b.submit_execution_request(root_b, prompt_body="from-b", mode="async")
+            status_b = client_b.get_execution_request(root_b, submitted_b["request-id"])
             assert status_b["state"] in ("queued", "dispatching")
 
             provider_release.set()
-            result_a = client_a.wait_llm_request(root_a, submitted_a["request-id"], timeout_seconds=5)
-            result_b = client_b.wait_llm_request(root_b, submitted_b["request-id"], timeout_seconds=5)
+            result_a = client_a.wait_execution_request(root_a, submitted_a["request-id"], timeout_seconds=5)
+            result_b = client_b.wait_execution_request(root_b, submitted_b["request-id"], timeout_seconds=5)
             assert result_a["state"] == "completed"
             assert result_b["state"] == "completed"
             assert result_a["gateway-execution-lane-key"] == result_b["gateway-execution-lane-key"]
@@ -677,7 +677,7 @@ def _make_gateway_profiles_config(path: Path, profiles: list[dict]) -> None:
 def test_reload_gateway_profiles_atomic_swap(tmp_path: Path) -> None:
     """SH13 step 3-4: reload_profile_registry atomically swaps the registry
     under a lock; on success, returns only redacted generation metadata.
-    A redacted agents.llm.gateway.profile-reloaded event is published."""
+    A redacted agents.execution.gateway.profile-reloaded event is published."""
     from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
     from audiagentic.components.agents.agents_event_topics import (
         GATEWAY_PROFILE_RELOADED_TOPIC,
@@ -899,12 +899,12 @@ def test_stale_queued_snapshot_rejected_on_reload(tmp_path: Path, monkeypatch) -
         client_b = StandaloneGatewayClient(host.endpoint, token)
         try:
             # Submit first request — it will run (max_concurrency=1)
-            submitted_a = client_a.submit_llm_request(root_a, prompt_body="running", mode="async")
+            submitted_a = client_a.submit_execution_request(root_a, prompt_body="running", mode="async")
             assert provider_started.wait(timeout=2), "first request should start running"
 
             # Submit second request — it queues behind the first
-            submitted_b = client_b.submit_llm_request(root_b, prompt_body="queued", mode="async")
-            status_b = client_b.get_llm_request(root_b, submitted_b["request-id"])
+            submitted_b = client_b.submit_execution_request(root_b, prompt_body="queued", mode="async")
+            status_b = client_b.get_execution_request(root_b, submitted_b["request-id"])
             assert status_b["state"] in ("queued", "dispatching")
 
             # Reload the gateway profiles config with changed limits
@@ -925,16 +925,16 @@ def test_stale_queued_snapshot_rejected_on_reload(tmp_path: Path, monkeypatch) -
             # proactively at reload time, so releasing A (freeing the lane's
             # only slot) is what triggers B's dispatch attempt and rejection.
             provider_release.set()
-            result_a = client_a.wait_llm_request(root_a, submitted_a["request-id"], timeout_seconds=5)
+            result_a = client_a.wait_execution_request(root_a, submitted_a["request-id"], timeout_seconds=5)
             assert result_a["state"] == "completed"
 
             # Step 7: queued stale snapshot (B) is rejected with CON-AGW-101
             # once its dispatch was attempted.
             deadline = time.monotonic() + 5
-            status_b_after = client_b.get_llm_request(root_b, submitted_b["request-id"])
+            status_b_after = client_b.get_execution_request(root_b, submitted_b["request-id"])
             while status_b_after["state"] == "queued" and time.monotonic() < deadline:
                 time.sleep(0.05)
-                status_b_after = client_b.get_llm_request(root_b, submitted_b["request-id"])
+                status_b_after = client_b.get_execution_request(root_b, submitted_b["request-id"])
             assert status_b_after["state"] == "rejected"
             assert "CON-AGW-101" in (status_b_after.get("error") or {}).get("code", "")
         finally:
@@ -1024,7 +1024,7 @@ def test_absent_shared_profile_rejected_not_fallback(tmp_path: Path) -> None:
     ])
 
     # Use the real application (not the SharedApplication test double, which
-    # stubs submit_llm_request and never touches the gateway registry) so
+    # stubs submit_execution_request and never touches the gateway registry) so
     # this actually exercises registry-backed rejection.
     host = GatewayServiceHost.create(
         service_root=tmp_path / "service-state-absent",
@@ -1039,7 +1039,7 @@ def test_absent_shared_profile_rejected_not_fallback(tmp_path: Path) -> None:
             # Requesting 'default' — not in shared registry → should fail,
             # not silently fall back to the project-local profile's limits.
             with pytest.raises(AudiaGenticError) as exc_info:
-                client.submit_llm_request(root, prompt_body="hello", mode="async")
+                client.submit_execution_request(root, prompt_body="hello", mode="async")
             assert exc_info.value.code == "RES-AGP-001"
     finally:
         _stop_host(host, thread)
@@ -1062,7 +1062,7 @@ def test_embedded_compatibility_when_no_shared_registry(tmp_path: Path) -> None:
     try:
         with StandaloneGatewayClient(host.endpoint, token) as client:
             # No shared registry — embedded mode should work
-            submitted = client.submit_llm_request(root, prompt_body="embedded", mode="async")
+            submitted = client.submit_execution_request(root, prompt_body="embedded", mode="async")
             assert "request-id" in submitted
     finally:
         _stop_host(host, thread)
@@ -1125,7 +1125,7 @@ def test_reload_concurrency_no_state_corruption(tmp_path: Path, monkeypatch) -> 
         client_b = StandaloneGatewayClient(host.endpoint, token)
         try:
             # Submit first request — it will run (max_concurrency=1), holding the slot
-            submitted_a = client_a.submit_llm_request(root_a, prompt_body="hold", mode="async")
+            submitted_a = client_a.submit_execution_request(root_a, prompt_body="hold", mode="async")
             assert provider_started.wait(timeout=2), "first request should start running"
 
             gen_v1 = profiles_mod.get_gateway_registry().resolve_snapshot("default").generation
@@ -1153,15 +1153,15 @@ def test_reload_concurrency_no_state_corruption(tmp_path: Path, monkeypatch) -> 
 
             # Submit second request during the reload — it should see a consistent
             # registry (either v1 or v2, never torn)
-            submitted_b = client_b.submit_llm_request(root_b, prompt_body="during-reload", mode="async")
+            submitted_b = client_b.submit_execution_request(root_b, prompt_body="during-reload", mode="async")
             reload_thread.join(timeout=5)
 
             assert len(reload_results) == 1
             assert reload_results[0]["success"] is True
 
             # Both requests should be in a valid state (not corrupted)
-            status_a = client_a.get_llm_request(root_a, submitted_a["request-id"])
-            status_b = client_b.get_llm_request(root_b, submitted_b["request-id"])
+            status_a = client_a.get_execution_request(root_a, submitted_a["request-id"])
+            status_b = client_b.get_execution_request(root_b, submitted_b["request-id"])
 
             # A is running (holds the slot), B is queued or running (concurrency=2 now)
             assert status_a["state"] == "running"
@@ -1174,11 +1174,11 @@ def test_reload_concurrency_no_state_corruption(tmp_path: Path, monkeypatch) -> 
 
             # Complete the running request
             provider_release.set()
-            result_a = client_a.wait_llm_request(root_a, submitted_a["request-id"], timeout_seconds=5)
+            result_a = client_a.wait_execution_request(root_a, submitted_a["request-id"], timeout_seconds=5)
             assert result_a["state"] == "completed"
 
             # B should also complete (no corruption from concurrent reload)
-            result_b = client_b.wait_llm_request(root_b, submitted_b["request-id"], timeout_seconds=5)
+            result_b = client_b.wait_execution_request(root_b, submitted_b["request-id"], timeout_seconds=5)
             assert result_b["state"] == "completed"
         finally:
             provider_release.set()
