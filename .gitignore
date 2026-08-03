@@ -14,12 +14,14 @@
 /.audiagentic/
 /.pi-subagents/
 /.claude/
+/.cline/
 /.clinerules/
 /.codex/
 /.coding-lsp/
 /.continue/
 /.gemini/
 /.goose/
+/.openhands/
 /.opencode/
 /.pi/
 /.roo/
@@ -29,6 +31,7 @@
 
 # --- Generated agent config files ---
 /.mcp.json
+/.lsp.json
 /opencode.json
 # Generated provider agent instruction files (MANAGED_BY_AUDIAGENTIC — regenerated from component configs)
 /AGENTS.md
