@@ -9,9 +9,18 @@ that removed ``WorkflowAnswer`` from ``workflow/invocation/models.py`` while
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import pkgutil
 
+import pytest
+
 import audiagentic
+
+
+pytestmark = pytest.mark.skipif(
+    importlib.util.find_spec("playwright") is None,
+    reason="playwright is not installed (install the gpt-auto extra)",
+)
 
 
 def _iter_module_names() -> list[str]:
