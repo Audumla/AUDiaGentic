@@ -8,6 +8,11 @@ import pytest
 from audiagentic.foundation.components import hooks
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
+# Status hooks are resolved by dotted path built from this module's ``__name__``.
+# Under xdist with --import-mode=importlib the module identity a worker resolves
+# depends on what it imported earlier, so these only hold in a dedicated process.
+pytestmark = pytest.mark.no_parallel
+
 
 @dataclass
 class _Descriptor:

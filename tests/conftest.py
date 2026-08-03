@@ -20,6 +20,10 @@ except ImportError:
 
 import pytest
 
+#: Number of no_parallel tests held back from a parallel run, reported at the
+#: end so a green parallel run is never mistaken for a complete one.
+_DESELECTED_SERIAL_COUNT: pytest.StashKey[int] = pytest.StashKey[int]()
+
 _ROOT = Path(__file__).resolve().parents[1]
 _SRC = _ROOT / "src"
 for _p in (str(_ROOT), str(_SRC)):
@@ -176,6 +180,30 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         if item.get_closest_marker("no_parallel") is not None
     } if xdist_active else set()
 
+    # Grouping alone does NOT isolate a no_parallel test: --dist loadgroup pins
+    # the group to one worker, but that worker still runs unrelated tests, so a
+    # test that mutates or reads process-global state can still be poisoned by
+    # (or poison) whatever lands beside it. The only reliable isolation is to
+    # keep these out of the parallel run entirely and execute them in a separate
+    # serial pass — see _run_serial_phase in tests/TESTING.md.
+    # `hasplugin` is true whenever xdist is merely installed, so it cannot tell
+    # a parallel run from a serial one. `-n` is what actually forks workers —
+    # but this hook also runs inside each worker, where `numprocesses` is unset
+    # and `workerinput` is present instead. Both must be checked or the
+    # controller deselects while the workers still collect and run the tests.
+    running_parallel = bool(getattr(config.option, "numprocesses", None)) or hasattr(
+        config, "workerinput"
+    )
+    if running_parallel and os.environ.get("AUDIAGENTIC_SERIAL_PHASE") != "1":
+        deselected = [
+            item for item in items if item.get_closest_marker("no_parallel") is not None
+        ]
+        if deselected:
+            config.hook.pytest_deselected(items=deselected)
+            items[:] = [item for item in items if item not in deselected]
+            config.stash[_DESELECTED_SERIAL_COUNT] = len(deselected)
+        serial_modules = set()
+
     for item in items:
         node = item.nodeid.replace("\\", "/")
 
@@ -197,3 +225,25 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         if not docker_ok:
             if item.get_closest_marker("mutates_host") is not None:
                 item.add_marker(skip_mutating)
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:
+    """Warn loudly when a parallel run held back the serial-only tests.
+
+    Without this, `pytest -n auto` reports all-green while silently omitting
+    every test that asserts process-global state — exactly the tests most
+    likely to catch a real regression.
+    """
+    held = config.stash.get(_DESELECTED_SERIAL_COUNT, 0)
+    if not held:
+        return
+    terminalreporter.write_sep("=", "serial-only tests NOT run", yellow=True, bold=True)
+    terminalreporter.write_line(
+        f"{held} test(s) marked no_parallel were excluded from this parallel run."
+    )
+    terminalreporter.write_line(
+        "They need process isolation. Run the serial phase to complete the suite:"
+    )
+    terminalreporter.write_line(
+        '    AUDIAGENTIC_SERIAL_PHASE=1 python -m pytest -m no_parallel <paths>'
+    )

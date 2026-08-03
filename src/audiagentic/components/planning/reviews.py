@@ -20,6 +20,7 @@ from audiagentic.components.planning import events, item_store, planning_paths
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.workflow.frontmatter import (
     build_sectioned_body,
+    parse_custom_headings,
     parse_frontmatter,
     parse_title,
 )
@@ -306,7 +307,11 @@ def update_review(project_root: Path, review_id: str, updates: dict[str, Any]) -
     """Update frontmatter fields and/or body sections of a review.
 
     Frontmatter keys: reviewed-by, reviewed-at.
-    Section keys: title, notes, findings, conclusion.
+
+    Every other key is a body section: notes/findings/conclusion are written
+    under their canonical headings, and any other key becomes a custom section
+    appended after them. Custom sections already in the file are preserved
+    with their original heading text.
     Returns {id, path}
     """
     path = item_store.require_item(project_root, review_id)
@@ -314,13 +319,22 @@ def update_review(project_root: Path, review_id: str, updates: dict[str, Any]) -
     item_store.ensure_review(fm, review_id, "VAL-PLN-023")
     title = parse_title(body) or review_id
 
-    sections = _parse_review_sections(body)
+    # Start from every heading in the file, so custom sections survive the
+    # write; then overlay the known sections, whose parser deliberately keeps
+    # the *last* occurrence when a heading is duplicated.
+    sections = item_store.parse_item_sections(body)
+    sections.pop("title", None)
+    sections.update(_parse_review_sections(body))
+    custom_headings = parse_custom_headings(body, item_store.REVIEW_SECTIONS)
 
     for key, value in updates.items():
         frontmatter_key = "reviewed-by" if key in ("reviewed_by", "reviewer_id") else key
         if frontmatter_key in ("reviewed-by", "reviewed-at", "review-of", "review_of", "id", "plan", "state"):
             fm[frontmatter_key] = value
-        elif key in item_store.REVIEW_SECTIONS:
+        elif key != "title":
+            # Any non-frontmatter key is a body section — known, custom, or
+            # newly created. An unrecognised key used to be discarded while
+            # the call still reported success.
             # Serialize non-string values (dicts, lists) into markdown.
             sections[key] = (
                 value
@@ -331,7 +345,9 @@ def update_review(project_root: Path, review_id: str, updates: dict[str, Any]) -
     if "title" in updates:
         title = updates["title"]
 
-    new_body = build_sectioned_body(title, sections, item_store.REVIEW_SECTIONS)
+    new_body = build_sectioned_body(
+        title, sections, item_store.REVIEW_SECTIONS, custom_headings
+    )
     path.write_text(item_store.render_item(fm, new_body), encoding="utf-8")
 
     result = {"id": review_id, "path": str(path.relative_to(project_root))}
