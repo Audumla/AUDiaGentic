@@ -15,7 +15,6 @@ import pytest
 
 from audiagentic.foundation.transports.acp import AcpLaunch
 
-
 pytestmark = [
     pytest.mark.requires_npm,
     pytest.mark.skipif(shutil.which("opencode") is None, reason="opencode CLI not on PATH"),

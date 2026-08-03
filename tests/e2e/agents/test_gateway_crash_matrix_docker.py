@@ -18,16 +18,15 @@ import pytest
 from tests.e2e.agents.conftest import (
     DOCKER_EXE,
     GATEWAY_CRASH_MATRIX_IMAGE,
-    requires_docker,
+    requires_container,
     requires_gateway_crash_matrix_image,
 )
 
 
-@requires_docker
+@requires_container
 @requires_gateway_crash_matrix_image
-@pytest.mark.requires_docker
+@pytest.mark.requires_container
 @pytest.mark.slow
-@pytest.mark.mutates_host
 @pytest.mark.timeout(300)
 def test_gateway_crash_matrix_recovers_correctly() -> None:
     result = subprocess.run(

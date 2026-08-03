@@ -9,4 +9,4 @@
 # host-side lane; a container cannot provide its own Docker daemon.
 set -uo pipefail
 
-exec pytest -m "not mutates_host and not opt_in and not docker and not requires_docker" -q
+exec pytest -m "not mutates_host and not requires_container and not opt_in and not docker" -q

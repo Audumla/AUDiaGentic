@@ -46,10 +46,9 @@ _LEGACY_SECTION_DEBT = {
     "PT01": frozenset(["acceptance_criteria", "standards"]),
     "PT02": frozenset(["validation", "acceptance_criteria"]),
     "RE01": frozenset(["acceptance_criteria"]),
-    "RO01": frozenset(["acceptance_criteria"]),
-    "RO02": frozenset(["acceptance_criteria"]),
-    "RO03": frozenset(["acceptance_criteria"]),
-    "RO04": frozenset(["acceptance_criteria"]),
+    # RO01-RO04 removed 2026-08-03: the role-capabilities plan was consumed into
+    # agent-sessions (RV886) and all four are superseded. Their successors
+    # AS77-AS79 carry acceptance criteria, so the debt is paid rather than moved.
     "SA01": frozenset(["acceptance_criteria"]),
     "SA03": frozenset(["acceptance_criteria"]),
     "SA04": frozenset(["acceptance_criteria"]),

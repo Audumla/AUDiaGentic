@@ -5,7 +5,7 @@ import os
 
 import pytest
 
-pytestmark = [pytest.mark.opt_in, pytest.mark.timeout(240)]
+pytestmark = [pytest.mark.opt_in, pytest.mark.requires_container, pytest.mark.timeout(240)]
 
 
 def test_recipe_provisions_and_managed_rig_loads_smoke_model(tmp_path, monkeypatch) -> None:

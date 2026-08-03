@@ -18,14 +18,14 @@ import pytest
 from tests.e2e.agents.conftest import (
     DOCKER_EXE,
     GATEWAY_PI_SMOKE_IMAGE,
-    requires_docker,
+    requires_container,
     requires_gateway_pi_smoke_image,
 )
 
 
-@requires_docker
+@requires_container
 @requires_gateway_pi_smoke_image
-@pytest.mark.requires_docker
+@pytest.mark.requires_container
 @pytest.mark.slow
 @pytest.mark.timeout(900)
 def test_gateway_pi_smoke_real_dispatch() -> None:

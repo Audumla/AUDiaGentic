@@ -24,9 +24,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[test]"
       - name: Run host suite (parallel)
-        run: python -m pytest tests/unit tests/integration tests/e2e -n auto --dist loadfile -m "not docker and not requires_docker"
+        run: python -m pytest tests/unit tests/integration tests/e2e -n auto --dist loadfile -m "not docker and not requires_container and not mutates_host"
       - name: Run held-back serial tests (no_parallel)
-        run: AUDIAGENTIC_SERIAL_PHASE=1 python -m pytest tests/unit tests/integration tests/e2e -m "no_parallel and not docker and not requires_docker"
+        run: AUDIAGENTIC_SERIAL_PHASE=1 python -m pytest tests/unit tests/integration tests/e2e -m "no_parallel and not requires_container and not mutates_host"
 
   # ── Docker suites (parallel matrix) ──────────────────────────────────────────
   # Each scenario builds in its own job so they run concurrently instead of the

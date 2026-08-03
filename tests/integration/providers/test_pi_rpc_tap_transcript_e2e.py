@@ -35,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.opt_in,
+    pytest.mark.mutates_host,
     pytest.mark.requires_npm,
     pytest.mark.timeout(900),
 ]

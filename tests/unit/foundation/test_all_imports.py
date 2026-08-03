@@ -16,7 +16,6 @@ import pytest
 
 import audiagentic
 
-
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("playwright") is None,
     reason="playwright is not installed (install the gpt-auto extra)",
