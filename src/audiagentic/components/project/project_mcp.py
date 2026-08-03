@@ -119,10 +119,12 @@ def main() -> int:
 
         os.environ["AUDIAGENTIC_REPO_ROOT"] = args.project_root
 
+    from audiagentic.runtime.harness import wire_harness_status
+    wire_harness_status()
+
     run_mcp_server(build_server(), "project")
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

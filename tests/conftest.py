@@ -163,6 +163,9 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     skip_mutating = pytest.mark.skip(
         reason="mutates_host tests are disabled; run with AUDIAGENTIC_DOCKER_TESTS=1"
     )
+    skip_container = pytest.mark.skip(
+        reason="requires_container tests are disabled; run inside the Docker test environment"
+    )
 
     # First pass: find every module that contains at least one no_parallel test.
     # Such tests share a stateful resource (e.g. a long-lived LSP subprocess held
@@ -225,6 +228,8 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         if not docker_ok:
             if item.get_closest_marker("mutates_host") is not None:
                 item.add_marker(skip_mutating)
+            if item.get_closest_marker("requires_container") is not None:
+                item.add_marker(skip_container)
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:
@@ -247,3 +252,23 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:
     terminalreporter.write_line(
         '    AUDIAGENTIC_SERIAL_PHASE=1 python -m pytest -m no_parallel <paths>'
     )
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    """Fail Docker lanes that collected tests but ran none successfully.
+
+    A marker-gated Docker command can otherwise report success when every
+    collected test is skipped. Docker lanes are intended to prove execution,
+    so an all-skipped lane must be visible as a failure.
+    """
+    if os.environ.get("AUDIAGENTIC_DOCKER_TESTS") != "1":
+        return
+    if not session.testscollected:
+        return
+    terminalreporter = session.config.pluginmanager.get_plugin("terminalreporter")
+    if terminalreporter is None:
+        return
+    passed = len(terminalreporter.stats.get("passed", []))
+    if passed == 0:
+        terminalreporter.write_sep("=", "Docker lane ran no passing tests", red=True, bold=True)
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED

@@ -42,6 +42,7 @@ from tests.integration.providers.harness import assert_install_result_ok
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.opt_in,
+    pytest.mark.mutates_host,
     pytest.mark.requires_npm,
     pytest.mark.timeout(900),
 ]
