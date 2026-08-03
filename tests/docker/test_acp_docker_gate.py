@@ -18,6 +18,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.requires_container
+
 # ── echo agent path ─────────────────────────────────────────────
 _ECHO_AGENT = str(Path(__file__).parent / "echo_agent.py")
 

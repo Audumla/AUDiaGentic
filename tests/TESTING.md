@@ -65,8 +65,8 @@ Markers express **cross-cutting concerns** independently of tier:
 
 | Marker              | When to apply                                    | Gating                                       |
 | ------------------- | ------------------------------------------------ | -------------------------------------------- |
-| `requires_docker`   | Test needs a Docker daemon (not just isolation)  | Skip unless `DOCKER_AVAILABLE=1`             |
-| `mutates_host`      | Test installs/removes packages on the real host  | Always skip locally; runs in CI Docker only  |
+| `requires_container` | Test must run inside the disposable Docker test environment | Skip outside a Docker test lane |
+| `mutates_host`      | Test installs/removes packages on the test host; implies a disposable container | Always skip locally; runs in CI Docker only  |
 | `requires_network`  | Needs outbound internet access                   | Skip unless `NETWORK_TESTS=1`                |
 | `requires_uv`       | Needs `uv` on PATH                               | Use `skipif(shutil.which("uv") is None)`     |
 | `requires_npm`      | Needs `npm` on PATH                              | Use `skipif(shutil.which("npm") is None)`    |
@@ -364,10 +364,8 @@ For tests that genuinely require Docker (system packages, real CLI lifecycle):
 6. Create in-container test script as a standalone pytest file at
    `tests/integration/<component>/test_<purpose>.py` — this is what the container CMD runs
 7. Create host-side pytest test at `tests/e2e/<component>/test_<purpose>_docker.py`
-   with `@pytest.mark.requires_docker`, `@pytest.mark.slow`, `@pytest.mark.timeout(N)`,
-   `@pytest.mark.mutates_host` (`docker` is a legacy alias for `requires_docker`,
-   kept only for backward compatibility — do not use it in new tests, and any
-   exclusion filter naming one marker must name both)
+   with `@pytest.mark.requires_container`, `@pytest.mark.slow`, `@pytest.mark.timeout(N)`,
+   and `@pytest.mark.mutates_host` when the test changes its disposable environment
 8. Add `build-<component>` and `test-<component>-docker` Make targets
 
 **Container-side scripts** use pytest — not the `section`/`check` pattern.

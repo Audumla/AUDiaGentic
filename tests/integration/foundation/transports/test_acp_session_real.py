@@ -5,15 +5,14 @@ to prove context retention and child process cleanup.
 """
 from __future__ import annotations
 
-import sys
 import importlib.util
+import sys
 from pathlib import Path
 
 import psutil
 import pytest
 
 from audiagentic.foundation.transports.acp import AcpLaunch, AcpSessionTransport
-
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("acp") is None,

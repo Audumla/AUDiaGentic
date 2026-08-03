@@ -26,14 +26,14 @@ from tests.e2e.coding_lsp.conftest import (
     DOCKER_EXE,
     LSP_IMAGE,
     PROJECT_ROOT,
-    requires_docker,
+    requires_container,
     requires_lsp_image,
 )
 
 
-@requires_docker
+@requires_container
 @requires_lsp_image
-@pytest.mark.requires_docker
+@pytest.mark.requires_container
 @pytest.mark.slow
 @pytest.mark.timeout(1800)
 def test_lsp_full_install_uninstall_cycle() -> None:
@@ -57,9 +57,9 @@ def test_lsp_full_install_uninstall_cycle() -> None:
     assert "passed" in result.stdout and "failed" not in result.stdout
 
 
-@requires_docker
+@requires_container
 @requires_lsp_image
-@pytest.mark.requires_docker
+@pytest.mark.requires_container
 @pytest.mark.timeout(30)
 def test_lsp_install_image_has_required_toolchains() -> None:
     """The LSP test image has all required toolchains (npm, uv, cargo, apt-get)."""

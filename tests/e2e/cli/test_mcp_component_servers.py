@@ -301,7 +301,8 @@ def test_project_server_lists_optional_components_not_installed(tmp_path, _proje
     components = {c["component_id"]: c for c in payload}
     assert "providers" in components
     assert components["providers"]["status"] == "not-installed"
-    assert components["providers"]["enabled"] is None
+    # Uninstalled components are explicitly inactive in the component index.
+    assert components["providers"]["enabled"] is False
 
 
 # ── providers server tests ───────────────────────────────────────────────────
