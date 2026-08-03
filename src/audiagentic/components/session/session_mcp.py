@@ -95,6 +95,9 @@ def main() -> int:
     if args.smoke_only:
         os.environ["AUDIAGENTIC_MCP_SMOKE_ONLY"] = "1"
 
+    from audiagentic.runtime.harness import wire_harness_status
+    wire_harness_status()
+
     run_mcp_server(build_server(), "session")
     return 0
 
