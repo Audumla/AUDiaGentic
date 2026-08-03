@@ -231,33 +231,6 @@ def _main(argv: list[str] | None = None) -> int:
 
         os.environ["AUDIAGENTIC_REPO_ROOT"] = str(project_root)
 
-    import atexit
-
-    from audiagentic.foundation.logging import bootstrap as _log_bootstrap
-
-    _log_bootstrap("harness", project_root=project_root)
-    from audiagentic.foundation.interaction import CliBackend, set_backend
-
-    set_backend(CliBackend())
-
-    logger.info(
-        "audiagentic started", extra={"project_root": str(project_root), "command": args.command}
-    )
-
-    def _log_exit() -> None:
-        handlers = list(logging.getLogger().handlers) + list(logger.handlers)
-        if any(getattr(getattr(handler, "stream", None), "closed", False) for handler in handlers):
-            return
-        logger.info(
-            "audiagentic exit", extra={"project_root": str(project_root), "command": args.command}
-        )
-
-    atexit.register(_log_exit)
-
-    # RU02: wire harness-status capability before any product component resolves it.
-    # Product components depend on foundation/capabilities, not runtime.harness.
-    from audiagentic.foundation.capabilities import register_harness_status
-
     def _harness_status_functions() -> dict[str, Callable]:
         from audiagentic.runtime.harness import (
             build_runtime_sync,
@@ -283,7 +256,21 @@ def _main(argv: list[str] | None = None) -> int:
             "resolve_session_info": resolve_session_info,
         }
 
-    register_harness_status(_harness_status_functions())
+    # AS59 Stage 1: process startup is composed, not constructed here. The graph
+    # builds runtime.application-host and its dependencies from composition.yaml;
+    # the host runs the same startup sequence this function used to inline.
+    # Shutdown stays on atexit so exit logging behaves as it did before.
+    import atexit
+
+    from audiagentic.runtime.bootstrap import APPLICATION_HOST, build_application_graph
+
+    graph = build_application_graph(project_root=project_root)
+    atexit.register(graph.shutdown)
+    graph.root(APPLICATION_HOST).start(
+        project_root=project_root,
+        command=args.command,
+        harness_status_functions=_harness_status_functions,
+    )
 
     # Dispatch to command handler via registry
     # SH10: gateway lifecycle sub-commands dispatch through a separate
