@@ -53,7 +53,7 @@ _MCP_CONFIG_PATHS: dict[str, str] = {
     "codex-toml":         ".codex/config.toml",
     "opencode-mcp":       ".opencode/opencode.json",
     "mcp-json-gemini":    ".gemini/settings.json",
-    "goose-yaml":         ".goose/config.yaml",
+    "goose-yaml":         "~/.config/goose/config.yaml",
     "continue-json":      ".continue/config.json",
 }
 
@@ -82,7 +82,7 @@ def setup_provider_surfaces(project_root: Path) -> None:
     _ensure_dir_and_stub(project_root / ".opencode" / "opencode.json", '{"mcp": {}}')
     _ensure_dir_and_stub(project_root / ".gemini" / "settings.json", '{"mcpServers": {}}')
     _ensure_dir_and_stub(
-        project_root / ".goose" / "config.yaml",
+        _config_path(project_root, _MCP_CONFIG_PATHS["goose-yaml"]),
         yaml.dump({"extensions": []}, default_flow_style=False),
     )
     _ensure_dir_and_stub(
@@ -109,6 +109,12 @@ def _ensure_dir_and_stub(path: Path, content: str) -> None:
         path.write_text(content, encoding="utf-8")
 
 
+def _config_path(project_root: Path, config_rel: str) -> Path:
+    """Resolve project-relative and provider-home config paths consistently."""
+    path = Path(config_rel).expanduser()
+    return path if path.is_absolute() else project_root / path
+
+
 def apply_surfaces(project_root: Path) -> None:
     """Synchronise all provider MCP configs and surface files to current state.
 
@@ -128,7 +134,7 @@ def apply_surfaces(project_root: Path) -> None:
 
 def mcp_servers_in(project_root: Path, config_path: str) -> set[str]:
     """Read an MCP config file and return the set of server names present."""
-    path = project_root / config_path
+    path = _config_path(project_root, config_path)
 
     if not path.exists():
         return set()
@@ -149,10 +155,14 @@ def mcp_servers_in(project_root: Path, config_path: str) -> set[str]:
             data: Any = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         except yaml.YAMLError:
             return set()
-        # Goose: extensions list of dicts with "name" key
+        # Goose currently stores extensions as a mapping keyed by server name;
+        # tolerate the legacy list form in fixtures and older project configs.
+        extensions = data.get("extensions", [])
+        if isinstance(extensions, dict):
+            return {str(name) for name, ext in extensions.items() if isinstance(ext, dict)}
         return {
             ext.get("name", "")
-            for ext in data.get("extensions", [])
+            for ext in extensions
             if isinstance(ext, dict) and ext.get("name")
         }
 
@@ -227,7 +237,7 @@ def _provider_mcp_config_paths(project_root: Path) -> list[str]:
     """Return relative paths for provider MCP configs that actually exist."""
     paths = []
     for config_rel in _MCP_CONFIG_PATHS.values():
-        if (project_root / config_rel).exists():
+        if _config_path(project_root, config_rel).exists():
             paths.append(config_rel)
     return paths
 
