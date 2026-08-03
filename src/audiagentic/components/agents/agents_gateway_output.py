@@ -28,6 +28,10 @@ from audiagentic.foundation.transports.agent_output import (
     AgentOutputEvent,
     OutputSink,
 )
+from audiagentic.foundation.transports.session_surface import (
+    ContentChannelId,
+    ResolvedSessionSurface,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +41,7 @@ ERR_OUTPUT_SEQUENCE_NOT_MONOTONIC = "VAL-OUTPUT-RELAY-001"
 ERR_OUTPUT_OVERSIZED_FRAGMENT = "VAL-OUTPUT-RELAY-002"
 ERR_OUTPUT_TURN_CAP_EXCEEDED = "VAL-OUTPUT-RELAY-003"
 ERR_OUTPUT_RELAY_DISABLED = "VAL-OUTPUT-RELAY-004"
+ERR_OUTPUT_CHANNEL_UNAUTHORIZED = "VAL-OUTPUT-RELAY-005"
 
 # ── Default policy constants ─────────────────────────────────────────────
 
@@ -204,12 +209,24 @@ class OutputRelay(OutputSink):
         session_id: str,
         turn_id: str,
         policy: OutputPolicy,
+        surface: ResolvedSessionSurface | None = None,
     ) -> None:
         self._project_root = project_root
         self._request_id = request_id
         self._session_id = session_id
         self._turn_id = turn_id
         self._policy = policy
+        # A supplied AS29 snapshot is authoritative.  Keep ``None`` as a
+        # compatibility mode for callers that have not yet migrated to the
+        # public preparation path; those callers retain the pre-AS31 behavior.
+        self._surface = surface
+        self._content_authorized = (
+            surface is None
+            or (
+                surface.validation.evidence.validated
+                and surface.content.has_channel(ContentChannelId.ASSISTANT_TEXT)
+            )
+        )
 
         # Sequence tracking for monotonicity enforcement
         self._last_sequence: int | None = None
@@ -285,6 +302,16 @@ class OutputRelay(OutputSink):
                 extra={"request-id": self._request_id},
             )
             return
+
+        if not self._content_authorized:
+            raise AudiaGenticError(
+                code=ERR_OUTPUT_CHANNEL_UNAUTHORIZED,
+                kind="output-relay",
+                message="resolved session surface does not authorize assistant text output",
+                details={
+                    "surface-id": self._surface.ref.surface_id if self._surface else None,
+                },
+            )
 
         # Validate sequence monotonicity (strictly increasing or None)
         self._validate_sequence(event.sequence)
@@ -500,6 +527,7 @@ def create_relay(
     session_id: str,
     turn_id: str,
     policy: OutputPolicy,
+    surface: ResolvedSessionSurface | None = None,
 ) -> OutputRelay:
     """Factory: create a new OutputRelay for a given request/turn.
 
@@ -513,6 +541,7 @@ def create_relay(
         session_id=session_id,
         turn_id=turn_id,
         policy=policy,
+        surface=surface,
     )
 
 
