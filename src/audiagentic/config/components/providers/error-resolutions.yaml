@@ -25,6 +25,8 @@ EXT-GPTAUTO-001: "ChatGPT was not ready before the login timeout. Sign in to cha
 EXT-GPTAUTO-002: "No response arrived from ChatGPT before the timeout. Check network reachability and whether the session was rate-limited or logged out, then retry."
 EXT-GPTAUTO-003: "gpt-auto browser automation failed. Check the underlying browser/driver error in the message; confirm the browser is installed and the automation profile is not in use by another process."
 EXT-CLINE-001: "Cline CLI execution failed. Check the command, arguments, and stderr output."
+EXT-PROVEXEC-901: "Session-transport preparation raised an unclassified error from the provider's launch builder. The traceback is logged at the failure site; classify the underlying failure with a registered error code so callers receive an actionable reason instead of this placeholder."
+EXT-PROVEXEC-902: "The provider's launch builder returned a value that is not an AcpLaunch, violating its own contract. Fix the builder to return AcpLaunch; the observed type is logged at the failure site."
 VAL-PROV-CODEX-LSP-001: "Unsupported value type for Codex LSP config scalar. Use string, number, bool, list, or dict."
 CFG-CDXLSP-001: "Codex config.toml (language servers section) is not valid TOML. Fix or remove the corrupted file before the next managed write; it will not be silently overwritten."
 VAL-PROV-CODEX-MCP-001: "Unsupported value type for Codex TOML scalar. Use string, number, bool, or list."

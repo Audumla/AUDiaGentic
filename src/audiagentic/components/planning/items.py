@@ -368,12 +368,17 @@ def update_item(project_root: Path, item_id: str, updates: dict[str, Any]) -> di
 
     Frontmatter keys: id, order, plan, state, validate-first, priority,
     work (S/M/L), skill (1/2/3, optional — can be set later), created-by.
-    Section keys: title, description, steps, files, validation, effort_risk, notes.
+
+    Every other key is a body section. Configured sections are written under
+    their canonical heading in the configured order; any other key becomes a
+    custom section appended after them, created if it does not yet exist.
+    Custom headings already in the file keep their original text.
     """
     path = item_store.require_item(project_root, item_id)
     fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
     item_store.ensure_not_review(fm, item_id, "VAL-PLN-020")
     sections = item_store.parse_item_sections(body)
+    custom_headings = item_store.parse_item_custom_headings(body)
 
     # Snapshot old values before mutating — needed for change-log diffing.
     old_fm = dict(fm)
@@ -383,7 +388,12 @@ def update_item(project_root: Path, item_id: str, updates: dict[str, Any]) -> di
         frontmatter_key = "created-by" if key in ("created_by", "creator_id") else key
         if frontmatter_key in item_store.FRONTMATTER_FIELDS:
             fm[frontmatter_key] = value
-        elif key in item_store.ITEM_SECTION_HEADING or key == "title" or key in sections:
+        else:
+            # Any other key is a body section: one of the configured sections,
+            # a custom section already in the file, or a new custom section
+            # being created. Previously an unrecognised key fell off the end
+            # of this chain and was discarded while the call still reported
+            # success — writing it is what callers always meant.
             # Serialize non-string values (dicts, lists) into markdown.
             sections[key] = (
                 value
@@ -399,7 +409,7 @@ def update_item(project_root: Path, item_id: str, updates: dict[str, Any]) -> di
             old_value = old_fm.get(frontmatter_key)
             if old_value != value:
                 changed_keys.append(f"{frontmatter_key}={value!r}")
-        elif key in item_store.ITEM_SECTION_HEADING or key == "title":
+        else:
             old_value = old_sections.get(key, "")
             if old_value != value:
                 changed_keys.append(f"section:{key}")
@@ -408,7 +418,7 @@ def update_item(project_root: Path, item_id: str, updates: dict[str, Any]) -> di
     if title is None:
         title = parse_title(body) or item_id
 
-    new_body = item_store.build_item_body(title, sections)
+    new_body = item_store.build_item_body(title, sections, custom_headings)
 
     # Append change log entry
     now = datetime.now(timezone.utc).isoformat()

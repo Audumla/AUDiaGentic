@@ -25,7 +25,7 @@ from tests.e2e.agents.conftest import (
 
 @requires_docker
 @requires_gateway_pi_smoke_image
-@pytest.mark.docker
+@pytest.mark.requires_docker
 @pytest.mark.slow
 @pytest.mark.timeout(900)
 def test_gateway_pi_smoke_real_dispatch() -> None:

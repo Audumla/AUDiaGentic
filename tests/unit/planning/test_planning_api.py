@@ -1092,3 +1092,77 @@ def test_multiple_plans_cleanup_only_empty_one(tmp_path):
     assert not active_beta.exists()
     assert not completed_alpha.exists()
     assert completed_beta.exists()
+
+
+# ---------------------------------------------------------------------------
+# custom body sections (AS73)
+# ---------------------------------------------------------------------------
+
+
+def test_update_item_creates_a_new_custom_section(tmp_path):
+    """An unconfigured section key used to be silently discarded while the
+    call still reported success."""
+    planning_api.create_item(tmp_path, _make_item())
+
+    planning_api.update_item(tmp_path, "TST01", {"acceptance_criteria": "- it works"})
+
+    body = (_active_dir(tmp_path) / "test-plan" / "TST01.md").read_text(encoding="utf-8")
+    assert "## Acceptance Criteria" in body
+    assert "- it works" in body
+    assert planning_api.get_item(tmp_path, "TST01")["acceptance_criteria"] == "- it works"
+
+
+def test_update_item_preserves_custom_heading_text_verbatim(tmp_path):
+    """Custom headings round-trip through a lossy slug; the original spelling
+    must survive rather than being rebuilt as 'As59 Disposition'."""
+    planning_api.create_item(tmp_path, _make_item())
+    path = _active_dir(tmp_path) / "test-plan" / "TST01.md"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "\n## AS59 Disposition\n\nkeep this\n",
+        encoding="utf-8",
+    )
+
+    for _ in range(3):
+        planning_api.update_item(tmp_path, "TST01", {"notes": "touched"})
+
+    body = path.read_text(encoding="utf-8")
+    assert "## AS59 Disposition" in body
+    assert "As59 Disposition" not in body
+    assert "keep this" in body
+
+
+def test_update_item_can_edit_an_existing_custom_section(tmp_path):
+    planning_api.create_item(tmp_path, _make_item())
+    path = _active_dir(tmp_path) / "test-plan" / "TST01.md"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "\n## Known Violations\n\nold\n",
+        encoding="utf-8",
+    )
+
+    planning_api.update_item(tmp_path, "TST01", {"known_violations": "new"})
+
+    body = path.read_text(encoding="utf-8")
+    assert "## Known Violations" in body
+    assert "new" in body
+    assert "old" not in body
+
+
+def test_update_review_preserves_custom_sections(tmp_path):
+    """update_review rebuilt the body from the three known sections only, so
+    any custom heading was deleted outright."""
+    planning_api.create_item(tmp_path, _make_item(id="ITM01"))
+    planning_api.create_review(
+        tmp_path, {"review-of": "ITM01", "title": "R", "findings": "f"}
+    )
+    review_path = _active_dir(tmp_path) / "test-plan" / "reviews" / "ITM01" / "RV01.md"
+    review_path.write_text(
+        review_path.read_text(encoding="utf-8") + "\n## Evidence Gathered\n\nkeep me\n",
+        encoding="utf-8",
+    )
+
+    planning_api.update_review(tmp_path, "RV01", {"conclusion": "done"})
+
+    body = review_path.read_text(encoding="utf-8")
+    assert "## Evidence Gathered" in body
+    assert "keep me" in body
+    assert "done" in body

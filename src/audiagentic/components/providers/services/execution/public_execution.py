@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,15 @@ from audiagentic.foundation.transports.session_surface import (
     PreparedSessionTransport,
     SessionSurfaceRef,
 )
+
+logger = logging.getLogger(__name__)
+
+#: Preparation failed with an exception that was not a classified
+#: :class:`AudiaGenticError` — the builder raised something unmodelled.
+_UNCLASSIFIED_BUILDER_FAILURE = "EXT-PROVEXEC-901"
+
+#: The builder returned a non-``AcpLaunch`` value, violating its own contract.
+_BUILDER_CONTRACT_VIOLATION = "EXT-PROVEXEC-902"
 
 
 def get_provider_execution_isolation_tier(provider_id: str) -> ProviderIsolationTier:
@@ -618,20 +628,56 @@ def prepare_provider_session_transport(
         launch_kwargs["mcp_surface"] = surface
     try:
         acp_launch = builder(project_root, **launch_kwargs)
-    except Exception:
-        # Factory error — return unsupported snapshot with transport=None.
+    except AudiaGenticError as exc:
+        # Classified failure — the builder already said exactly what is wrong.
+        # Carry the classification to the caller and log the structured
+        # details, which may contain paths and so must not ride on the
+        # snapshot.
+        logger.warning(
+            "provider %s session-transport preparation failed: %s (%s) details=%s",
+            provider_id,
+            exc.message,
+            exc.code,
+            exc.details,
+        )
         return PreparedSessionTransport(
             transport=None,
             surface=surface,
             effective_provider_ref=effective_ref,
+            unavailable_code=exc.code,
+            unavailable_message=exc.message,
+        )
+    except Exception as exc:
+        # Unclassified factory error — still degraded state, but nobody
+        # modelled this one. Log with a traceback so it can be classified.
+        logger.warning(
+            "provider %s session-transport preparation raised an unclassified error",
+            provider_id,
+            exc_info=True,
+        )
+        return PreparedSessionTransport(
+            transport=None,
+            surface=surface,
+            effective_provider_ref=effective_ref,
+            unavailable_code=_UNCLASSIFIED_BUILDER_FAILURE,
+            unavailable_message=f"{type(exc).__name__}: {exc}",
         )
 
     if not isinstance(acp_launch, AcpLaunch):
         # Neutral protocol violation — the factory must return an AcpLaunch.
+        logger.warning(
+            "provider %s launch builder returned %s, expected AcpLaunch",
+            provider_id,
+            type(acp_launch).__name__,
+        )
         return PreparedSessionTransport(
             transport=None,
             surface=surface,
             effective_provider_ref=effective_ref,
+            unavailable_code=_BUILDER_CONTRACT_VIOLATION,
+            unavailable_message=(
+                f"launch builder returned {type(acp_launch).__name__}, expected AcpLaunch"
+            ),
         )
 
     # AS41: attach a provider-local observability enrichment hook, only when
