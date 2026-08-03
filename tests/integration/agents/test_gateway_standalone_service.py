@@ -11,8 +11,6 @@ from urllib.request import Request, urlopen
 
 import pytest
 
-from audiagentic.components.agents import agents_gateway_api as gateway_api
-from audiagentic.components.agents import agents_gateway_queue
 from audiagentic.components.agents.agents_api import create_profile
 from audiagentic.components.agents.agents_gateway_client import (
     get_gateway_client,
@@ -305,7 +303,6 @@ def test_client_timeout_does_not_cancel_service_owned_work(tmp_path: Path) -> No
 
 def test_real_gateway_work_survives_submitter_disconnect(tmp_path: Path, monkeypatch) -> None:
     _make_profile(tmp_path)
-    gateway_api._QUEUE_MANAGER = agents_gateway_queue.GatewayQueueManager()
     provider_started = threading.Event()
     provider_release = threading.Event()
 
@@ -430,7 +427,6 @@ def test_service_host_startup_wires_gateway_owned_registry_from_config(
     root_b.mkdir()
     _make_profile(root_a)
     _make_profile(root_b)
-    gateway_api._QUEUE_MANAGER = agents_gateway_queue.GatewayQueueManager()
 
     config_path = tmp_path / "gateway-profiles.yaml"
     config_path.write_text(
@@ -701,7 +697,6 @@ def test_reload_gateway_profiles_atomic_swap(tmp_path: Path) -> None:
         },
     ])
 
-    gateway_api._QUEUE_MANAGER = agents_gateway_queue.GatewayQueueManager()
     host = GatewayServiceHost.create(
         service_root=tmp_path / "service-state",
         token_path=tmp_path / "reload.token",
@@ -858,7 +853,6 @@ def test_stale_queued_snapshot_rejected_on_reload(tmp_path: Path, monkeypatch) -
     root_b.mkdir()
     _make_profile(root_a)
     _make_profile(root_b)
-    gateway_api._QUEUE_MANAGER = agents_gateway_queue.GatewayQueueManager()
 
     config_path = tmp_path / "gateway-profiles.yaml"
     _make_gateway_profiles_config(config_path, [
@@ -976,7 +970,6 @@ def test_redacted_status_no_secrets_in_overview(tmp_path: Path) -> None:
         },
     ])
 
-    gateway_api._QUEUE_MANAGER = agents_gateway_queue.GatewayQueueManager()
     host = GatewayServiceHost.create(
         service_root=tmp_path / "service-state-redact",
         token_path=tmp_path / "redact.token",
@@ -1090,7 +1083,6 @@ def test_reload_concurrency_no_state_corruption(tmp_path: Path, monkeypatch) -> 
     root_b.mkdir()
     _make_profile(root_a)
     _make_profile(root_b)
-    gateway_api._QUEUE_MANAGER = agents_gateway_queue.GatewayQueueManager()
 
     config_path = tmp_path / "gateway-profiles.yaml"
     _make_gateway_profiles_config(config_path, [

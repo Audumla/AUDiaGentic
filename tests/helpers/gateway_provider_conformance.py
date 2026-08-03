@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agents import agents_gateway_api as gateway
-from audiagentic.components.agents import agents_gateway_queue
 from audiagentic.components.agents import agents_gateway_sessions as sessions_module
 from audiagentic.components.agents.agents_api import create_profile
 from audiagentic.components.providers.contracts.provider_execution import (
@@ -29,7 +28,10 @@ def provider_ids() -> tuple[str, ...]:
 
 
 def reset_gateway_queue() -> None:
-    gateway._QUEUE_MANAGER = agents_gateway_queue.GatewayQueueManager()
+    """Reset between provider scenarios so each gets an empty in-memory queue."""
+    from tests.helpers.gateway_queue_isolation import reset_gateway_queue as _reset
+
+    _reset()
 
 
 def enable_profile(
@@ -190,4 +192,3 @@ def assert_session_binding_open_flow(project_root: Path, provider_id: str, monke
         assert "provider-session-ref" not in repr(listed)
     finally:
         runtime.shutdown()
-

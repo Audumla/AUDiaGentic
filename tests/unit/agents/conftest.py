@@ -15,7 +15,7 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _fresh_gateway_queue_manager():
-    from audiagentic.components.agents import agents_gateway_api, agents_gateway_queue
+    from tests.helpers.gateway_queue_isolation import reset_gateway_queue
 
-    agents_gateway_api._QUEUE_MANAGER = agents_gateway_queue.GatewayQueueManager()
+    reset_gateway_queue()
     yield

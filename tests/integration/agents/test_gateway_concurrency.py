@@ -37,6 +37,7 @@ from tests.integration.agents.gateway_docker_harness import (
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.opt_in,
+    pytest.mark.requires_container,
     pytest.mark.timeout(180),
 ]
 
