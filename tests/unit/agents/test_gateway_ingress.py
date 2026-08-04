@@ -6,17 +6,17 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
-from audiagentic.components.agents.agents_event_topics import (
+from audiagentic.components.agents.gateway.event_topics import (
     GATEWAY_CANCEL_REQUESTED_TOPIC,
     GATEWAY_REQUESTED_TOPIC,
 )
-from audiagentic.components.agents.agents_gateway_ingress import (
+from audiagentic.components.agents.gateway.ingress import (
     drain_gateway_ingress,
     gateway_ingress_spool,
     ingress_backlog,
     publish_gateway_trigger,
 )
+
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
@@ -56,7 +56,7 @@ def _publish_request(service_root: Path, project: Path, **overrides) -> str:
 
 def test_spooled_request_admitted_with_delivery_idempotency(rig):
     app, service_root, project = rig
-    event_id = _publish_request(service_root, project, **{"agent-profile-id": "p1"})
+    event_id = _publish_request(service_root, project, **{"execution-profile-id": "p1"})
     assert ingress_backlog(service_root) == {"pending": 1, "dead-letter": 0}
 
     outcome = drain_gateway_ingress(app, service_root=service_root)
@@ -65,7 +65,7 @@ def test_spooled_request_admitted_with_delivery_idempotency(rig):
 
     submitted = app.submissions[0]
     assert submitted["prompt_body"] == "hello"
-    assert submitted["agent_profile_id"] == "p1"
+    assert submitted["execution_profile_id"] == "p1"
     assert submitted["mode"] == "async"  # spooled triggers are always async
     assert submitted["metadata"]["idempotency_key"] == f"gateway-spool:{event_id}"
     assert submitted["metadata"]["correlation_id"] == "corr-1"

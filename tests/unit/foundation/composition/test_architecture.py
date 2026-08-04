@@ -106,13 +106,26 @@ def test_the_built_graph_exposes_no_runtime_lookup() -> None:
 
 
 def test_only_the_composition_root_reads_bindings() -> None:
-    """`bindings` is composition-root wiring, not an API other code consults."""
+    """`bindings` is composition-root wiring, not an API other code consults.
+
+    Checked via AST attribute access (`config.bindings`) rather than a raw text
+    substring: `agents/gateway/session/bindings.py` is an unrelated module
+    (session binding records) whose own dotted import path legitimately
+    contains the literal substring ".bindings" -- a text search would flag it.
+    """
     readers: list[str] = []
     for path in sorted(PACKAGE_ROOT.rglob("*.py")):
         if _COMPOSITION_PKG in path.parents or _COMPOSITION_ROOT_PKG in path.parents:
             continue
         text = path.read_text(encoding="utf-8", errors="ignore")
-        if ".bindings" in text or "load_composition_config" in text:
+        if "load_composition_config" in text:
+            readers.append(str(path.relative_to(PACKAGE_ROOT)))
+            continue
+        tree = ast.parse(text, filename=str(path))
+        if any(
+            isinstance(node, ast.Attribute) and node.attr == "bindings"
+            for node in ast.walk(tree)
+        ):
             readers.append(str(path.relative_to(PACKAGE_ROOT)))
     assert readers == []
 
@@ -208,3 +221,85 @@ def test_code_references_are_rejected_by_validation_not_only_by_review(value: st
     with pytest.raises(AudiaGenticError) as exc:
         parse_composition_config({"composition": {"roots": [value]}})
     assert exc.value.code == "VAL-COMPOSE-002"
+
+
+# ---------------------------------------------------------------------------
+# AS60 step 7 / RV888: the gateway-service process's second composition root.
+# Same facility, same invariants, a different root -- Stage 1's own
+# "later roots are deliberate" case.
+# ---------------------------------------------------------------------------
+
+
+def test_the_gateway_service_host_is_the_only_caller_of_the_gateway_service_composition_root() -> (
+    None
+):
+    """One process (the gateway-service host) adopts this second root."""
+    callers: list[str] = []
+    for path in sorted(PACKAGE_ROOT.rglob("*.py")):
+        if _COMPOSITION_ROOT_PKG in path.parents:
+            continue
+        if "build_gateway_service_graph" in path.read_text(encoding="utf-8", errors="ignore"):
+            callers.append(path.relative_to(PACKAGE_ROOT).as_posix())
+    assert callers == ["components/agents/gateway/service/host.py"]
+
+
+def test_the_packaged_gateway_service_composition_config_names_no_python_paths() -> None:
+    from audiagentic.runtime.bootstrap.gateway_service_composition import (
+        _pkg_default_path as gateway_service_pkg_default_path,
+    )
+
+    config = parse_composition_config(
+        load_yaml_file(gateway_service_pkg_default_path()),
+        namespace="gateway-service-composition",
+    )
+    assert config.roots
+    for service_id, implementation_id in config.bindings.items():
+        for value in (str(service_id), str(implementation_id)):
+            assert ".py" not in value
+            assert ":" not in value
+            assert "_" not in value
+
+
+def test_the_packaged_gateway_service_config_and_contributions_agree() -> None:
+    """A binding naming something no code contributes must fail the build.
+
+    The registry factory's global install/uninstall (RV888's honest partial —
+    `gateway.api` still reads it via `get_gateway_registry()`, not
+    injection) is exercised and reversed by `graph.shutdown()` here, leaving
+    module state exactly as found.
+    """
+    from audiagentic.runtime.bootstrap.gateway_service_composition import (
+        build_gateway_service_graph,
+    )
+
+    graph = build_gateway_service_graph()
+    graph.shutdown()
+
+
+def test_the_gateway_service_composition_root_owns_the_queue_manager_lifetime() -> None:
+    """AS63 step 9/10: `gateway.api`'s queue manager is composed for this
+    process too, not just the profile registry -- build installs a fresh
+    instance and shutdown installs another fresh one, so no in-memory queue
+    state survives past the process (or test) that owned it."""
+    from audiagentic.components.agents.gateway import api as gateway_api
+    from audiagentic.runtime.bootstrap.gateway_service_composition import (
+        build_gateway_service_graph,
+    )
+
+    before = gateway_api.get_queue_manager()
+    graph = build_gateway_service_graph()
+    during = gateway_api.get_queue_manager()
+    graph.shutdown()
+    after = gateway_api.get_queue_manager()
+
+    assert during is not before
+    assert after is not during
+    assert after is not before
+
+
+def test_every_gateway_service_composition_error_code_is_registered() -> None:
+    """AS60 step 2's schema-validation error must be registered before use."""
+    resolutions = load_yaml_file(
+        PACKAGE_ROOT / "config" / "components" / "agents" / "error-resolutions.yaml"
+    )
+    assert "VAL-EXP-005" in resolutions

@@ -503,7 +503,7 @@ class TestEventObserverArchitectureBoundary:
             module_dict = vars(mod)
             for name, obj in module_dict.items():
                 mod_name = getattr(obj, "__module__", "")
-                assert not mod_name.startswith("audiagentic.components.agents.agents_gateway_api"), (
+                assert not mod_name.startswith("audiagentic.components.agents.gateway.api"), (
                     f"event_observer contains reference to agents_gateway_api via {name!r}"
                 )
 

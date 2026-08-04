@@ -20,7 +20,7 @@ files:
 mcp-servers:
   - name: ag-project-mgmt
     module: audiagentic.components.project.project_mcp
-    direct-tools: [project_status, list_components, install_component, uninstall_component, enable_component, disable_component, read_project_file, runtime_sync_contract, get_option_provenance]
+    direct-tools: [project_status, list_components, install_component, uninstall_component, enable_component, disable_component, read_project_file, list_project_instructions, get_project_instruction, create_project_instruction, update_project_instruction, delete_project_instruction, list_project_skills, get_project_skill, create_project_skill, update_project_skill, delete_project_skill, runtime_sync_contract, get_option_provenance]
     description: Project MCP server for project-level component management
     propagate: audiagentic
     instructions: >
@@ -39,6 +39,16 @@ mcp-servers:
         start with '.audiagentic/' (e.g. '.audiagentic/config/runtime/features/memory.yaml').
         Pass a directory path — or '.' for the root — to list its contents instead
         of reading a file, when you need to discover what exists before reading it.
+      list_project_instructions: List project-owned instructions rendered to enabled provider surfaces.
+      get_project_instruction: Read one project-owned instruction by stable id.
+      create_project_instruction: Create a project-owned instruction and reconcile enabled provider surfaces.
+      update_project_instruction: Update a project-owned instruction and reconcile enabled provider surfaces.
+      delete_project_instruction: Delete a project-owned instruction and reconcile enabled provider surfaces.
+      list_project_skills: List project-owned skills rendered to enabled provider skill surfaces.
+      get_project_skill: Read one project-owned skill by stable id.
+      create_project_skill: Create a project-owned skill with YAML frontmatter and reconcile enabled provider surfaces.
+      update_project_skill: Update a project-owned skill and reconcile enabled provider surfaces.
+      delete_project_skill: Delete a project-owned skill and reconcile enabled provider surfaces.
       runtime_sync_contract: Return the runtime sync contract — describes what harness
         refresh actions follow component mutations and which are automatic.
       get_option_provenance: Show where each option value came from (project config,

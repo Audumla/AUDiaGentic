@@ -1,6 +1,6 @@
 """Agent-jobs operational MCP server — read-only event-jobs overview (EDJ14).
 
-Mirrors the agents_gateway_mcp construction: one thin server on the shared
+Mirrors the gateway_mcp construction: one thin server on the shared
 foundation.mcp.component_server primitives, tools resolve the project root
 from the environment only.
 """

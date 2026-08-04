@@ -53,7 +53,7 @@ def test_describe_provider_full_composition(tmp_path: Path) -> None:
     assert registries["managed-model-endpoints"]["ok"] is True
     assert registries["managed-model-endpoints"]["count"] == 0
     # agents boundary: pointer only, no profile join
-    assert result["related_tools"] == ["agent_list_profiles"]
+    assert result["related_tools"] == ["agent_list_execution_profiles"]
     assert "profiles" not in result
 
 

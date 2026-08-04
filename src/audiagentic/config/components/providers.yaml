@@ -18,6 +18,8 @@ mcp-servers:
   - name: ag-providers-mgmt
     module: audiagentic.components.providers.providers_mcp
     direct-tools:
+      - get_reconciliation_policy
+      - set_reconciliation_policy
       - list_providers
       - get_provider_status
       - list_provider_descriptors
@@ -44,6 +46,8 @@ mcp-servers:
       Use list_providers to see all providers and their status.
       Use get_provider_status to inspect a specific provider runtime catalog.
     tool-descriptions:
+      get_reconciliation_policy: Return this project's provider reconciliation policy (mode auto/allowlist/prompt, plus allowed/decided provider lists).
+      set_reconciliation_policy: Set this project's provider reconciliation policy, controlling which detected provider CLIs get auto-enabled on launch.
       list_providers: List all known providers and their configuration or catalog status.
       get_provider_status: Return detailed status for a specific provider including catalog contents.
       list_provider_descriptors: List all registered provider descriptors and static metadata.
@@ -62,5 +66,4 @@ mcp-servers:
       model_source_update: Update a validated model source desired-state declaration without mutating provider files.
       model_source_remove: Remove a model source desired-state declaration; use model projection separately to prune owned provider entries.
       model_source_set_enabled: Enable or disable a model source without deleting its configuration.
-      describe_provider: Deep read-only interrogation of one provider - descriptor, status, execution support, model catalog and managed config, config surfaces, and ownership registries. For agent profiles use agent_list_profiles.
-
+      describe_provider: Deep read-only interrogation of one provider - descriptor, status, execution support, model catalog and managed config, config surfaces, and ownership registries. For execution profiles use agent_list_execution_profiles.

@@ -30,7 +30,7 @@ from tests.integration.agents.gateway_docker_harness import (
     stop_subprocess_gracefully,
     wait_for,
     wait_for_record_state,
-    write_agent_profile,
+    write_execution_profile,
     write_gateway_profiles_config,
 )
 
@@ -64,7 +64,7 @@ def _start_service(
     gateway_profiles: list[dict],
     name: str = "service-state",
 ) -> tuple:
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
         load_auth_token,
     )
@@ -90,7 +90,7 @@ def test_real_concurrent_saturation_bounds_at_max_concurrency(
     eventually complete."""
     _require_docker_gate()
     rig_port = rig_server.server_address[1]
-    write_agent_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", max_concurrency=1)
+    write_execution_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", max_concurrency=1)
     enable_local_openai(tmp_path, rig_port)
 
     proc, client, service_root, token_path, _ = _start_service(
@@ -143,7 +143,7 @@ def test_cross_project_sharing_enforces_global_limit(tmp_path: Path, rig_server)
     root_a.mkdir()
     root_b.mkdir()
     for root in (root_a, root_b):
-        write_agent_profile(root, provider_id="local-openai", model_id="audiagentic-rig", max_concurrency=1)
+        write_execution_profile(root, provider_id="local-openai", model_id="audiagentic-rig", max_concurrency=1)
         enable_local_openai(root, rig_port)
 
     proc, client, service_root, token_path, _ = _start_service(
@@ -187,7 +187,7 @@ def test_queue_max_size_exceeded_is_rejected_not_silently_dropped(
     disappear and does not block the requests already admitted."""
     _require_docker_gate()
     rig_port = rig_server.server_address[1]
-    write_agent_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", max_concurrency=1)
+    write_execution_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", max_concurrency=1)
     enable_local_openai(tmp_path, rig_port)
 
     proc, client, service_root, token_path, _ = _start_service(
@@ -230,7 +230,7 @@ def test_reload_racing_concurrent_load_rejects_stale_keeps_running_intact(
     running under its original snapshot."""
     _require_docker_gate()
     rig_port = rig_server.server_address[1]
-    write_agent_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", max_concurrency=1)
+    write_execution_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", max_concurrency=1)
     enable_local_openai(tmp_path, rig_port)
 
     gw_config_path = tmp_path / "gateway-profiles.yaml"
@@ -239,7 +239,7 @@ def test_reload_racing_concurrent_load_rejects_stale_keeps_running_intact(
         "params": {"max-concurrency": 1, "queue-max-size": 8},
     }])
 
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
         load_auth_token,
     )
@@ -287,7 +287,7 @@ def test_cancel_racing_concurrent_dispatch_does_not_disturb_others(
     requests terminates only that one — the others complete normally."""
     _require_docker_gate()
     rig_port = rig_server.server_address[1]
-    write_agent_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", max_concurrency=1)
+    write_execution_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", max_concurrency=1)
     enable_local_openai(tmp_path, rig_port)
 
     proc, client, service_root, token_path, _ = _start_service(

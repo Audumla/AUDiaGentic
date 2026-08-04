@@ -36,7 +36,7 @@ ALLOWED_DIRECTIVES = {
     "model",
     "model-alias",
     "profile",
-    "agent-profile-id",
+    "execution-profile-id",
     "id",
     "subject",
     "context",
@@ -314,8 +314,8 @@ def parse_prompt_launch_request(
         "existing-job-id": directives.get("job"),
         "prompt-body": body,
     }
-    if "agent-profile-id" in directives:
-        payload["agent-profile-id"] = directives["agent-profile-id"]
+    if "execution-profile-id" in directives:
+        payload["execution-profile-id"] = directives["execution-profile-id"]
     if prompt_controls:
         payload["prompt-controls"] = prompt_controls
     if review_policy is not None:

@@ -126,6 +126,78 @@ def set_provider_enabled(project_root: Path, provider_id: str, *, enabled: bool)
     )
 
 
+_VALID_RECONCILIATION_MODES = ("auto", "allowlist", "prompt")
+_DEFAULT_RECONCILIATION_POLICY: dict[str, Any] = {"mode": "auto"}
+
+
+def get_reconciliation_policy(project_root: Path) -> dict[str, Any]:
+    """Return this project's provider reconciliation policy.
+
+    Defaults to ``{"mode": "auto"}`` (today's behavior: enable whatever CLI
+    is detected) when never explicitly configured. Use
+    `is_reconciliation_policy_configured` to distinguish "never set" from
+    "explicitly set to auto".
+    """
+    payload = load_provider_config_lenient(project_root)
+    policy = payload.get("reconciliation-policy")
+    if isinstance(policy, dict) and policy.get("mode") in _VALID_RECONCILIATION_MODES:
+        return policy
+    return dict(_DEFAULT_RECONCILIATION_POLICY)
+
+
+def is_reconciliation_policy_configured(project_root: Path) -> bool:
+    """Return whether a reconciliation-policy has ever been explicitly written.
+
+    Distinct from `get_reconciliation_policy`, which always returns a usable
+    policy (defaulting to auto) even when this is False.
+    """
+    payload = load_provider_config_lenient(project_root)
+    return isinstance(payload.get("reconciliation-policy"), dict)
+
+
+def set_reconciliation_policy(
+    project_root: Path,
+    *,
+    mode: str,
+    allowed_providers: list[str] | None = None,
+    decided_providers: list[str] | None = None,
+) -> dict[str, Any]:
+    """Persist this project's provider reconciliation policy.
+
+    `allowed_providers`/`decided_providers` are only written when explicitly
+    passed, so switching back to `mode="auto"` round-trips as ``{"mode":
+    "auto"}`` with no stale lists left over from a prior allowlist/prompt mode.
+    """
+    if mode not in _VALID_RECONCILIATION_MODES:
+        raise AudiaGenticError(
+            code="VAL-PCFG-002",
+            kind="providers",
+            message="invalid reconciliation-policy mode",
+            details={"mode": mode, "allowed": list(_VALID_RECONCILIATION_MODES)},
+        )
+    path = _providers_yaml_path(project_root)
+    payload = load_yaml_file(path) if path.exists() else {}
+    if not isinstance(payload, dict) or not payload:
+        payload = {"contract-version": "v1"}
+    payload.setdefault("providers", {})
+    policy: dict[str, Any] = {"mode": mode}
+    if allowed_providers is not None:
+        policy["allowed-providers"] = sorted(set(allowed_providers))
+    if decided_providers is not None:
+        policy["decided-providers"] = sorted(set(decided_providers))
+    payload["reconciliation-policy"] = policy
+    issues = validate_provider_config(payload)
+    if issues:
+        raise AudiaGenticError(
+            code="VAL-PCFG-001",
+            kind="providers",
+            message="provider config failed validation",
+            details={"issues": issues, "path": str(path)},
+        )
+    _save_provider_config(path, payload)
+    return policy
+
+
 def load_provider_config_lenient(project_root: Path) -> dict[str, Any]:
     """Read provider config without schema validation.
 

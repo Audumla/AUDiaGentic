@@ -16,14 +16,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
     )
 
 
 def _standalone_client_from_env() -> StandaloneGatewayClient:
     """Build a StandaloneGatewayClient from environment (same env as get_gateway_client)."""
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
         load_auth_token,
     )
@@ -46,7 +46,7 @@ def cmd_gateway(args: argparse.Namespace, project_root: Path) -> int:
     del project_root
     if args.gateway_cmd != "serve":
         raise ValueError(f"unsupported gateway command: {args.gateway_cmd}")
-    from audiagentic.components.agents.agents_gateway_service_host import GatewayServiceHost
+    from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
 
     host = GatewayServiceHost.create(
         host=args.host,
@@ -124,7 +124,7 @@ def cmd_gateway_recover(args: argparse.Namespace, project_root: Path) -> int:
     dead/unprovable service; it goes straight to the store via the
     lifecycle module.
     """
-    from audiagentic.components.agents.agents_gateway_lifecycle import (
+    from audiagentic.components.agents.gateway.service.lifecycle import (
         recover_unprovable_owner,
     )
 

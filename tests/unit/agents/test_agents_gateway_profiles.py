@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
+from audiagentic.components.agents.gateway import profiles as profiles_mod
 
 
 class TestStripSecrets:
@@ -68,9 +68,9 @@ class TestAdmissionPolicyDigest:
         assert d1 != d2
 
 
-class TestGatewayProfileSnapshot:
+class TestResolvedExecutionProfile:
     def test_lane_key_derives_correctly(self):
-        snapshot = profiles_mod.GatewayProfileSnapshot(
+        snapshot = profiles_mod.ResolvedExecutionProfile(
             profile_id="test-profile",
             generation="gen_abc123",
             config_digest="sha256:def456",
@@ -158,10 +158,10 @@ class TestSnapshotFromResolvedProfile:
         assert snap.queue_max_size == 10
 
 
-class TestInMemoryGatewayRegistry:
+class TestInMemoryExecutionProfileRegistry:
 
     def test_resolve_snapshot(self):
-        reg = profiles_mod.InMemoryGatewayRegistry()
+        reg = profiles_mod.InMemoryExecutionProfileRegistry()
         reg.register("gw-profile", provider_id="local", model_id="m", max_concurrency=3)
         snap = reg.resolve_snapshot("gw-profile")
         assert snap.profile_id == "gw-profile"
@@ -172,14 +172,14 @@ class TestInMemoryGatewayRegistry:
     def test_not_found_raises(self):
         from audiagentic.foundation.contracts.errors import AudiaGenticError
 
-        reg = profiles_mod.InMemoryGatewayRegistry()
+        reg = profiles_mod.InMemoryExecutionProfileRegistry()
         with pytest.raises(AudiaGenticError) as exc_info:
             reg.resolve_snapshot("nonexistent")
-        assert exc_info.value.code == "RES-AGP-001"
+        assert exc_info.value.code == "RES-EXP-001"
 
     def test_re_register_changes_generation(self):
         """Re-registering the same profile increments version → new generation."""
-        reg = profiles_mod.InMemoryGatewayRegistry()
+        reg = profiles_mod.InMemoryExecutionProfileRegistry()
         reg.register("gw-profile", provider_id="local", model_id="m")
         snap_v1 = reg.resolve_snapshot("gw-profile")
 
@@ -191,7 +191,7 @@ class TestInMemoryGatewayRegistry:
 
     def test_validate_current_after_change(self):
         """Snapshot from old generation is stale after re-register."""
-        reg = profiles_mod.InMemoryGatewayRegistry()
+        reg = profiles_mod.InMemoryExecutionProfileRegistry()
         reg.register("gw-profile", provider_id="local", model_id="m")
         snap_v1 = reg.resolve_snapshot("gw-profile")
 
@@ -202,7 +202,7 @@ class TestInMemoryGatewayRegistry:
 
     def test_secrets_stripped_from_snapshot(self):
         """Secret params are stripped from the gateway snapshot."""
-        reg = profiles_mod.InMemoryGatewayRegistry()
+        reg = profiles_mod.InMemoryExecutionProfileRegistry()
         reg.register(
             "gw-profile",
             provider_id="local",
@@ -215,7 +215,7 @@ class TestInMemoryGatewayRegistry:
 
     def test_snapshot_from_record(self):
         """Reconstruct snapshot from persisted record fields."""
-        reg = profiles_mod.InMemoryGatewayRegistry()
+        reg = profiles_mod.InMemoryExecutionProfileRegistry()
         reg.register("test-profile", provider_id="local", model_id="m", max_concurrency=2, queue_max_size=6)
         snap = reg.resolve_snapshot("test-profile")
 
@@ -236,5 +236,5 @@ class TestInMemoryGatewayRegistry:
 
     def test_snapshot_from_record_missing_fields(self):
         """Pre-SH07 C2 record without snapshot fields returns None."""
-        record = {"agent-profile-id": "old-profile"}
+        record = {"execution-profile-id": "old-profile"}
         assert profiles_mod.snapshot_from_record(record) is None

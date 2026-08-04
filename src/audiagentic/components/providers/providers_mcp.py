@@ -30,6 +30,25 @@ def build_server() -> FastMCP:
 
     @mcp.tool()
     @log_tool_call
+    def get_reconciliation_policy() -> dict[str, Any]:
+        return providers_api.get_reconciliation_policy(project_root_from_env())
+
+    @mcp.tool()
+    @log_tool_call
+    def set_reconciliation_policy(
+        mode: str,
+        allowed_providers: list[str] | None = None,
+        decided_providers: list[str] | None = None,
+    ) -> dict[str, Any]:
+        return providers_api.set_reconciliation_policy(
+            project_root_from_env(),
+            mode=mode,
+            allowed_providers=allowed_providers,
+            decided_providers=decided_providers,
+        )
+
+    @mcp.tool()
+    @log_tool_call
     def list_providers() -> dict[str, Any]:
         return providers_api.list_providers(project_root_from_env())
 

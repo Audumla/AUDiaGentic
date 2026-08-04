@@ -56,6 +56,7 @@ VAL-MODEL-001: "Unknown model alias. Check the model-alias against configured al
 VAL-MODEL-002: "No model-id or model-alias provided. Specify one in the job request or provider config."
 IO-PCFG-001: "Failed to read provider config file. Check the path and file format."
 VAL-PCFG-001: "Provider config failed validation. Check the config fields against the schema."
+VAL-PCFG-002: "Invalid reconciliation-policy mode. Use 'auto', 'allowlist', or 'prompt'."
 VAL-PROV-SKILL-001: "Skill file is missing YAML frontmatter. Add '---' at the top with metadata."
 VAL-PROV-SKILL-002: "Prompt syntax is missing skill-surfaces config. Check the prompt syntax file."
 VAL-PROV-SKILL-003: "Skill surface config is missing renderer. Add 'renderer' to the provider config."

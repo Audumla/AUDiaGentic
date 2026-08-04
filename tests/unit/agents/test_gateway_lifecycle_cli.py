@@ -51,7 +51,7 @@ class FakeStandaloneClient:
         self.calls.append(("service_stop", {"force": force}))
         if not force:
             # Simulate busy gateway refusing graceful stop
-            from audiagentic.components.agents.agents_gateway_lifecycle import (
+            from audiagentic.components.agents.gateway.service.lifecycle import (
                 lifecycle_conflict_error,
             )
             raise lifecycle_conflict_error(
@@ -78,7 +78,7 @@ class FakeRecoverUnprovable:
     ) -> dict:
         self.calls.append({"service_root": service_root, "confirm": confirm, "reason": reason})
         if not confirm:
-            from audiagentic.components.agents.agents_gateway_lifecycle import (
+            from audiagentic.components.agents.gateway.service.lifecycle import (
                 lifecycle_validation_error,
             )
             raise lifecycle_validation_error(
@@ -118,7 +118,7 @@ class TestGatewayStatus:
 
         from audiagentic.commands.gateway import cmd_gateway_status
         with mock.patch(
-            "audiagentic.components.agents.agents_gateway_remote_client.StandaloneGatewayClient",
+            "audiagentic.components.agents.gateway.remote_client.StandaloneGatewayClient",
             return_value=fake,
         ):
             rc = cmd_gateway_status(mock.MagicMock(), tmp_path)
@@ -136,7 +136,7 @@ class TestGatewayDrain:
 
         from audiagentic.commands.gateway import cmd_gateway_drain
         with mock.patch(
-            "audiagentic.components.agents.agents_gateway_remote_client.StandaloneGatewayClient",
+            "audiagentic.components.agents.gateway.remote_client.StandaloneGatewayClient",
             return_value=fake,
         ):
             rc = cmd_gateway_drain(mock.MagicMock(), tmp_path)
@@ -154,7 +154,7 @@ class TestGatewayResume:
 
         from audiagentic.commands.gateway import cmd_gateway_resume
         with mock.patch(
-            "audiagentic.components.agents.agents_gateway_remote_client.StandaloneGatewayClient",
+            "audiagentic.components.agents.gateway.remote_client.StandaloneGatewayClient",
             return_value=fake,
         ):
             rc = cmd_gateway_resume(mock.MagicMock(), tmp_path)
@@ -174,7 +174,7 @@ class TestGatewayStop:
         from audiagentic.commands.gateway import cmd_gateway_stop
         args = mock.MagicMock(force=True)
         with mock.patch(
-            "audiagentic.components.agents.agents_gateway_remote_client.StandaloneGatewayClient",
+            "audiagentic.components.agents.gateway.remote_client.StandaloneGatewayClient",
             return_value=fake,
         ):
             rc = cmd_gateway_stop(args, tmp_path)
@@ -192,7 +192,7 @@ class TestGatewayStop:
         from audiagentic.commands.gateway import cmd_gateway_stop
         args = mock.MagicMock(force=False)
         with mock.patch(
-            "audiagentic.components.agents.agents_gateway_remote_client.StandaloneGatewayClient",
+            "audiagentic.components.agents.gateway.remote_client.StandaloneGatewayClient",
             return_value=fake,
         ):
             from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -213,7 +213,7 @@ class TestGatewayRecover:
         fake_recover = FakeRecoverUnprovable()
 
         from audiagentic.commands.gateway import cmd_gateway_recover
-        from audiagentic.components.agents import agents_gateway_lifecycle as lc_mod
+        from audiagentic.components.agents.gateway.service import lifecycle as lc_mod
 
         args = mock.MagicMock(confirm=True, reason="stale-owner")
         with mock.patch.object(lc_mod, "recover_unprovable_owner", fake_recover):
@@ -233,7 +233,7 @@ class TestGatewayRecover:
         fake_recover = FakeRecoverUnprovable()
 
         from audiagentic.commands.gateway import cmd_gateway_recover
-        from audiagentic.components.agents import agents_gateway_lifecycle as lc_mod
+        from audiagentic.components.agents.gateway.service import lifecycle as lc_mod
         from audiagentic.foundation.contracts.errors import AudiaGenticError
 
         args = mock.MagicMock(confirm=False, reason=None)
@@ -249,10 +249,10 @@ class TestGatewayRecover:
         fake_recover = FakeRecoverUnprovable()
 
         from audiagentic.commands.gateway import cmd_gateway_recover
-        from audiagentic.components.agents import agents_gateway_lifecycle as lc_mod
+        from audiagentic.components.agents.gateway.service import lifecycle as lc_mod
         args = mock.MagicMock(confirm=True, reason="test")
         with mock.patch(
-            "audiagentic.components.agents.agents_gateway_remote_client.StandaloneGatewayClient",
+            "audiagentic.components.agents.gateway.remote_client.StandaloneGatewayClient",
             side_effect=AssertionError("HTTP client created!"),
         ):
             with mock.patch.object(lc_mod, "recover_unprovable_owner", fake_recover):
@@ -268,7 +268,7 @@ class TestGatewayRecover:
         fake_recover = FakeRecoverUnprovable()
 
         from audiagentic.commands.gateway import cmd_gateway_recover
-        from audiagentic.components.agents import agents_gateway_lifecycle as lc_mod
+        from audiagentic.components.agents.gateway.service import lifecycle as lc_mod
 
         args = mock.MagicMock(confirm=True, reason="operator-confirmed unprovable owner")
         with mock.patch.object(lc_mod, "recover_unprovable_owner", fake_recover):
@@ -305,7 +305,7 @@ class TestNoLifecycleMutationInCli:
         source = cli_module_path.read_text(encoding="utf-8")
 
         # The only allowed lifecycle import is recover_unprovable_owner
-        assert "from audiagentic.components.agents.agents_gateway_lifecycle import" in source
+        assert "from audiagentic.components.agents.gateway.service.lifecycle import" in source
         # But no other lifecycle symbols should be imported
         assert "GatewayLifecycleController" not in source
         assert "gateway_quiescence_facts" not in source

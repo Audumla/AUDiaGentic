@@ -6,7 +6,11 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.contracts.output import ComponentOutputEvent, ComponentOutputSink
+from audiagentic.foundation.contracts.output import (
+    ComponentOutputEvent,
+    ComponentOutputSink,
+    emit_or_push_status,
+)
 
 from ...descriptors.registry import all_descriptors
 from ..config.provider_catalog import (
@@ -16,8 +20,7 @@ from ..config.provider_catalog import (
 
 
 def _emit(output: ComponentOutputSink | None, message: str, level: str = "info") -> None:
-    if output is not None:
-        output(ComponentOutputEvent(message=message, kind="log", level=level))
+    emit_or_push_status(output, "providers", message, level=level)
 
 _CATALOG_TIMEOUT = 10
 

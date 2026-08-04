@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.agents.agents_gateway_contention import (
+from audiagentic.components.agents.gateway.queue.contention import (
     capture_contention_sample,
     contention_summary,
 )

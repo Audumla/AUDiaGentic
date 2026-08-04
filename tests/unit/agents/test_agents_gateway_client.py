@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.agents.agents_gateway_client import InProcessGatewayClient
+from audiagentic.components.agents.gateway.client import InProcessGatewayClient
 
 
 class _ApplicationStub:
@@ -25,7 +25,7 @@ def test_in_process_client_delegates_to_its_application(tmp_path: Path) -> None:
 
 def test_inbound_adapters_depend_on_public_client_not_core_api() -> None:
     agents_dir = Path(__file__).parents[3] / "src" / "audiagentic" / "components" / "agents"
-    for name in ("agents_gateway_mcp.py", "agents_gateway_events.py"):
-        source = (agents_dir / name).read_text(encoding="utf-8")
-        assert "agents_gateway_api import" not in source
-        assert "agents_gateway_client import get_gateway_client" in source
+    for rel in ("mcp/gateway_mcp.py", "gateway/events.py"):
+        source = (agents_dir / rel).read_text(encoding="utf-8")
+        assert "gateway.api import" not in source
+        assert "gateway.client import get_gateway_client" in source

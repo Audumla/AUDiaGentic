@@ -5,7 +5,7 @@ redaction guarantees. No provider adapters or event bus imports exercised here.
 """
 from __future__ import annotations
 
-from audiagentic.components.agents.agents_terminal_quality import (
+from audiagentic.components.agents.status.terminal_quality import (
     CLASSIFIER_VERSION,
     TerminalQualityLabel,
     TerminalQualityReport,
@@ -527,7 +527,7 @@ class TestVersionAndSerialization:
             assert "code" in s and "severity" in s
 
     def test_signal_to_dict(self):
-        from audiagentic.components.agents.agents_terminal_quality import (
+        from audiagentic.components.agents.status.terminal_quality import (
             TerminalQualitySignal,
         )
         sig = TerminalQualitySignal(

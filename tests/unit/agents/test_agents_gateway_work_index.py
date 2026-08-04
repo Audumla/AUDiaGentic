@@ -6,15 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.components.agents import agents_gateway_recovery as recovery_mod
-from audiagentic.components.agents import agents_gateway_store as store
-from audiagentic.components.agents import agents_gateway_work_index as wi
+from audiagentic.components.agents.gateway import store as store
+from audiagentic.components.agents.gateway.queue import recovery as recovery_mod
+from audiagentic.components.agents.gateway.queue import work_index as wi
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 def _record(project_root: Path, prompt: str = "hello") -> dict:
     """Admit a request into the project root (without service_root)."""
-    candidate = store.build_record(agent_profile_id="default", prompt_body=prompt)
+    candidate = store.build_record(execution_profile_id="default", prompt_body=prompt)
     store.write_record(project_root, candidate)
     return candidate
 
@@ -35,7 +35,7 @@ class TestCrashWindowA_RecordButNoIndex:
         service_root = tmp_path / "service"
         project_root = tmp_path / "project"
 
-        candidate = store.build_record(agent_profile_id="default", prompt_body="test")
+        candidate = store.build_record(execution_profile_id="default", prompt_body="test")
         # Write record directly (simulating crash after write_record)
         store.write_record(project_root, candidate)
 
@@ -54,7 +54,7 @@ class TestCrashWindowA_RecordButNoIndex:
         service_root = tmp_path / "service"
         project_root = tmp_path / "project"
 
-        candidate = store.build_record(agent_profile_id="default", prompt_body="test")
+        candidate = store.build_record(execution_profile_id="default", prompt_body="test")
         store.write_record(project_root, candidate)
         # Write the index entry manually (simulating successful admission path)
         wi.write_work_index_entry(service_root, project_root, candidate["request-id"], phase="admitted")
@@ -79,7 +79,7 @@ class TestCrashWindowB_AdmittedBeforeClaim:
         service_root = tmp_path / "service"
         project_root = tmp_path / "project"
 
-        candidate = store.build_record(agent_profile_id="default", prompt_body="test")
+        candidate = store.build_record(execution_profile_id="default", prompt_body="test")
         store.write_record(project_root, candidate)
         request_id = candidate["request-id"]
         # Write the work-index entry at admission (simulating admit_record path)
@@ -109,7 +109,7 @@ class TestCrashWindowB_AdmittedBeforeClaim:
         service_root = tmp_path / "service"
         project_root = tmp_path / "project"
 
-        candidate = store.build_record(agent_profile_id="default", prompt_body="test")
+        candidate = store.build_record(execution_profile_id="default", prompt_body="test")
         store.write_record(project_root, candidate)
         request_id = candidate["request-id"]
         wi.write_work_index_entry(
@@ -137,7 +137,7 @@ class TestCrashWindowC_ClaimedBeforeStart:
         service_root = tmp_path / "service"
         project_root = tmp_path / "project"
 
-        candidate = store.build_record(agent_profile_id="default", prompt_body="test")
+        candidate = store.build_record(execution_profile_id="default", prompt_body="test")
         store.write_record(project_root, candidate)
         request_id = candidate["request-id"]
         # Simulate: admit_record wrote index entry at admission with phase "admitted"
@@ -331,7 +331,7 @@ class TestAdmissionOrdering:
         service_root = tmp_path / "service"
         project_root = tmp_path / "project"
 
-        candidate = store.build_record(agent_profile_id="default", prompt_body="test")
+        candidate = store.build_record(execution_profile_id="default", prompt_body="test")
         record, created = store.admit_record(
             project_root, candidate,
             idempotency_key="test-key-001",
@@ -352,7 +352,7 @@ class TestAdmissionOrdering:
         """When service_root is None, no index entry is written."""
         project_root = tmp_path / "project"
 
-        candidate = store.build_record(agent_profile_id="default", prompt_body="test")
+        candidate = store.build_record(execution_profile_id="default", prompt_body="test")
         record, created = store.admit_record(
             project_root, candidate,
             idempotency_key="test-key-002",
