@@ -65,6 +65,11 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
     login_timeout = provider_cfg.get("login-timeout", 30)
     typing_speed = provider_cfg.get("typing-speed", 0.02)
 
+    # Navigate to the project URL if configured
+    project_url = provider_cfg.get("chatgpt_project_url")
+    if project_url:
+        _open_chatgpt_project(project_url)
+
     # Run the async browser automation in an event loop
     output_text = _run_browser(
         prompt=prompt,
@@ -123,7 +128,11 @@ def _run_browser(
             logger.info("gpt-auto: browser launched")
 
             ready = loop.run_until_complete(
-                wait_for_chatgpt_ready(client, timeout=float(login_timeout))
+                wait_for_chatgpt_ready(
+                    client, 
+                    timeout=30.0, 
+                    login_timeout=float(login_timeout)
+                )
             )
             if not ready:
                 loop.run_until_complete(

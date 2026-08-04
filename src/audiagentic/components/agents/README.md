@@ -67,15 +67,14 @@ validated against `agent-execution-record.schema.json`.
 ### Request modes
 
 - **Async** (default, and the only mode exposed over MCP) — `agent_task_submit`
-  (primary) or `agent_execution_submit` (raw execution_profile_id, bypassing
-  Agent Definition resolution — a thin, deprecation-candidate surface expected
-  to be dropped once callers finish migrating to `agent_task_submit`, AS63
-  step 7) returns `{request-id, state: "queued"}` immediately. Poll
-  `agent_task_status(request_id)` or block later with
-  `agent_task_wait(request_id, timeout_seconds)` — identical regardless of
-  which tool submitted the request — capped at
+  (the sole MCP submission surface, AS63) returns `{request-id, state: "queued"}`
+  immediately. Poll `agent_task_status(request_id)` or block later with
+  `agent_task_wait(request_id, timeout_seconds)`, capped at
   `gateway_mcp.MCP_BLOCKING_TIMEOUT_SECONDS` (300s), since a blocking MCP tool
   call must not hold the connection past the client's own transport timeout.
+  Direct execution_profile_id submission bypassing Agent Definition
+  resolution is not exposed over MCP — use the Python API layer
+  (`AgentTaskFactory.submit_raw`/`submit_execution_request`) for that.
 - **Blocking** (Python API only, not exposed over MCP) — `submit_execution_request(...,
   mode="blocking")` / `run_execution_request(...)` / `AgentTaskFactory.submit(...,
   mode="blocking")` submit and wait for a terminal result or timeout in one call, with
@@ -84,7 +83,7 @@ validated against `agent-execution-record.schema.json`.
 - **Event-triggered** — publish `agents.execution.gateway.requested` on the foundation event bus
   (`{project-root, prompt-body, execution-profile-id?, blocking?, source?}`).
   Always async unless `payload.blocking` is explicitly set. Not for one-shot MCP-tool use —
-  use `agent_task_submit`/`agent_execution_submit` + `agent_task_wait` for that.
+  use `agent_task_submit` + `agent_task_wait` for that.
 
 ### State model
 

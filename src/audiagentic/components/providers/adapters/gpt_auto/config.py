@@ -35,8 +35,11 @@ class GptAutoConfig:
     The user must have this model available in their ChatGPT session."""
 
     # --- Timing ---
-    tab_selection_timeout: int = 5
-    """Seconds to wait for the user to focus the target ChatGPT tab."""
+    tab_selection_timeout: int = 10
+    """Seconds to wait for the target ChatGPT tab to appear/load."""
+
+    login_timeout: int = 120
+    """Maximum seconds to wait for the user to complete login if prompted."""
 
     response_wait_timeout: int = 120
     """Maximum seconds to poll for a response from ChatGPT's DOM."""

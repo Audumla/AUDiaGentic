@@ -26,3 +26,41 @@ capabilities:
       can_read_env: false
       notes: >-
         Browser automation only. No file writes, no shell, no MCP, no LSP.
+        The provider controls a Chrome/Edge browser to interact with ChatGPT.
+
+  launch:
+    mechanism:
+      recipes:
+        execution:
+          mode: stub
+          message: >-
+            gpt-auto adapter is registered; browser automation bridge is
+            the execution path (adapter.py run()), not a CLI recipe.
+
+  model-config-projection:
+    evidence:
+      note: >-
+        No model configuration — the model is determined by the user's
+        ChatGPT session. The provider does not support model selection
+        or model switching.
+      source: "src/audiagentic/components/providers/adapters/gpt_auto/config.py"
+
+  model-local-state:
+    evidence:
+      note: >-
+        ChatGPT login state is persisted in the Playwright profile directory
+        (~/.gpt-auto-profile). No API keys or credentials stored by the
+        provider itself. Session reuse across runs is supported.
+      source: "src/audiagentic/components/providers/adapters/gpt_auto/playwright_client.py"
+
+# CC53: AS27 harness-observability inventory (this provider's own facts —
+# see harness_observability_inventory.py for the domain semantics).
+harness_observability:
+  - surface_id: gpt-auto-browser
+    candidate_source: Playwright browser automation (Chrome/Edge via persistent profile)
+    evidence:
+      validated: false
+      reference: adapter.py run() entry point and dom_reader.py response polling
+    recipe: A
+    lifecycle_source: none
+    probe_anchor: adapter.py run() and dom_reader.py wait_for_response()

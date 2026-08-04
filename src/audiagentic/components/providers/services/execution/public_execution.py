@@ -6,6 +6,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.providers.contracts.mcp_launch_surface import (
+    McpLaunchIsolationTier,
+)
 from audiagentic.components.providers.contracts.provider_execution import (
     ProviderAcpLaunchResult,
     ProviderExecutionRequest,
@@ -42,6 +45,27 @@ def get_provider_execution_isolation_tier(provider_id: str) -> ProviderIsolation
             details={"provider-id": provider_id},
         )
     return descriptor.execution_isolation_tier
+
+
+def get_provider_mcp_launch_isolation_tier(provider_id: str) -> McpLaunchIsolationTier:
+    """Return the descriptor-backed provider-wide MCP launch isolation fact.
+
+    An inherent harness fact (what MCP servers a launch can be scoped to see),
+    not mutable feature state — mirrors get_provider_execution_isolation_tier
+    exactly, so a caller can discover the tier without going through
+    prepare_provider_mcp_surface's full launch-preparation path.
+    """
+    from audiagentic.components.providers.descriptors.registry import get_descriptor
+
+    descriptor = get_descriptor(provider_id)
+    if descriptor is None:
+        raise AudiaGenticError(
+            code="RES-PEXE-001",
+            kind="providers",
+            message="provider descriptor is required for execution",
+            details={"provider-id": provider_id},
+        )
+    return descriptor.mcp_launch_isolation_tier
 
 
 def get_provider_runtime_config_state(
