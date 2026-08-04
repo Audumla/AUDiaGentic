@@ -6,12 +6,13 @@ from urllib.error import URLError
 
 import pytest
 
-from audiagentic.components.agents import agents_gateway_remote_client
-from audiagentic.components.agents.agents_gateway_client import (
+from audiagentic.components.agents.gateway import remote_client as agents_gateway_remote_client
+from audiagentic.components.agents.gateway.client import (
     get_gateway_client,
     reset_gateway_client,
 )
-from audiagentic.components.agents.agents_gateway_remote_client import StandaloneGatewayClient
+from audiagentic.components.agents.gateway.remote_client import StandaloneGatewayClient
+from audiagentic.components.agents.gateway.service import bootstrap as agents_gateway_bootstrap
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
@@ -60,7 +61,6 @@ def test_unknown_gateway_mode_has_no_silent_fallback(monkeypatch) -> None:
 
 
 def test_automatic_mode_uses_gateway_bootstrap(monkeypatch) -> None:
-    from audiagentic.components.agents import agents_gateway_bootstrap
 
     marker = object()
     reset_gateway_client()

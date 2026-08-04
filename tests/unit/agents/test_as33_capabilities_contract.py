@@ -6,7 +6,7 @@ and that the helper does not infer capabilities from provider/surface identity.
 """
 from __future__ import annotations
 
-from audiagentic.components.agents import agents_gateway_session_bindings as binding_store
+from audiagentic.components.agents.gateway.session import bindings as binding_store
 
 
 class TestProjectSessionCapabilitiesAbsentWhenUnresolved:
@@ -145,7 +145,7 @@ class TestProjectSessionCapabilitiesNoInference:
         """Without a snapshot, the helper cannot and must not infer anything."""
         record = {
             "session-id": "ses_1",
-            "agent-profile-id": "profile-1",
+            "execution-profile-id": "profile-1",
             "provider-id": "local-openai",
         }
         assert binding_store.project_session_capabilities(record) is None

@@ -12,8 +12,8 @@ from typing import Any
 
 import pytest
 
-from audiagentic.components.agents import agents_gateway_session_bindings as bindings
-from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+from audiagentic.components.agents.gateway.session import bindings as bindings
+from audiagentic.components.agents.gateway.session import sessions_store as session_store
 
 
 @pytest.fixture
@@ -35,7 +35,7 @@ def _make_session_record(
     """Write a session record with a binding and return the full record."""
     record = session_store.build_session_record(
         session_id=session_id,
-        agent_profile_id="default",
+        execution_profile_id="default",
         provider_id=provider_id,
         provider_session_ref=provider_ref,
     )

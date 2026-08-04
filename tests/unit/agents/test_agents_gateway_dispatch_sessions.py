@@ -19,11 +19,11 @@ from tests.unit.agents.test_agents_gateway_sessions import (
     _Clock,
 )
 
-from audiagentic.components.agents import agents_gateway_dispatch as dispatch
-from audiagentic.components.agents import agents_gateway_session_dispatch as session_dispatch
-from audiagentic.components.agents import agents_gateway_sessions as sessions_module
-from audiagentic.components.agents import agents_gateway_store as store
-from audiagentic.components.agents.agents_gateway_sessions import SessionRuntime
+from audiagentic.components.agents.gateway import store as store
+from audiagentic.components.agents.gateway.queue import dispatch as dispatch
+from audiagentic.components.agents.gateway.session import dispatch as session_dispatch
+from audiagentic.components.agents.gateway.session import sessions as sessions_module
+from audiagentic.components.agents.gateway.session.sessions import SessionRuntime
 
 PROFILE = {
     "profile_id": "profile-1",
@@ -49,9 +49,9 @@ def rig(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
 
-    import audiagentic.components.agents.agents_api as agents_api
+    import audiagentic.components.agents.models.execution_profile_api as agents_api
 
-    monkeypatch.setattr(agents_api, "resolve_profile", lambda root, pid: dict(PROFILE))
+    monkeypatch.setattr(agents_api, "resolve_execution_profile", lambda root, pid: dict(PROFILE))
     monkeypatch.setattr(
         "audiagentic.components.providers.providers_api.get_provider_runtime_config_state",
         lambda root, provider_id: {
@@ -65,7 +65,7 @@ def rig(tmp_path, monkeypatch):
 
 
 def _running_record(tmp_path, **kwargs):
-    record = store.build_record(agent_profile_id="profile-1", prompt_body="hello", **kwargs)
+    record = store.build_record(execution_profile_id="profile-1", prompt_body="hello", **kwargs)
     store.write_record(tmp_path, record)
     claimed = store.claim_dispatch(
         tmp_path, record["request-id"], owner_epoch="service-test", expected_revision=0
@@ -149,12 +149,12 @@ def test_profile_mismatch_terminal(rig, monkeypatch):
     )
     session_id = first["session-id"]
 
-    import audiagentic.components.agents.agents_api as agents_api
+    import audiagentic.components.agents.models.execution_profile_api as agents_api
 
     other = dict(PROFILE, profile_id="profile-2")
-    monkeypatch.setattr(agents_api, "resolve_profile", lambda root, pid: other)
+    monkeypatch.setattr(agents_api, "resolve_execution_profile", lambda root, pid: other)
     record = store.build_record(
-        agent_profile_id="profile-2", prompt_body="hi", session_id=session_id
+        execution_profile_id="profile-2", prompt_body="hi", session_id=session_id
     )
     store.write_record(tmp_path, record)
     claimed = store.claim_dispatch(
@@ -199,7 +199,7 @@ def test_plain_record_does_not_touch_session_path(rig, monkeypatch):
     monkeypatch.setattr(sessions_module, "get_session_runtime", boom)
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
         lambda **kwargs: SimpleNamespace(
             result_data={"provider-id": "opencode", "model": "m1", "output": "ok"}
         ),

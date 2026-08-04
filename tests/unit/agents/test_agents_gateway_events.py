@@ -9,9 +9,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from audiagentic.components.agents import agents_gateway_events as events
-from audiagentic.components.agents import agents_gateway_store as store
-from audiagentic.components.agents.agents_api import create_profile
+from audiagentic.components.agents.gateway import events as events
+from audiagentic.components.agents.gateway import store as store
+from audiagentic.components.agents.models.execution_profile_api import (
+    create_execution_profile,
+)
 from audiagentic.foundation.event import get_bus, reset_bus
 from audiagentic.foundation.event.event_bus import DeliveryMode
 from audiagentic.foundation.features.base import ImplementationState
@@ -39,7 +41,7 @@ def _fresh_event_bus():
 
 
 def _make_profile(project_root: Path, profile_id: str, provider_id: str, **params) -> None:
-    create_profile(project_root, {
+    create_execution_profile(project_root, {
         "profile_id": profile_id,
         "provider_id": provider_id,
         "model_id": "gpt-4o",
@@ -118,7 +120,7 @@ def test_requested_event_creates_and_queues_request(tmp_path: Path, monkeypatch)
     def fake_execute_provider(*, execution_request, **_kwargs):
         return _worker_result(execution_request, "done")
 
-    monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider)
+    monkeypatch.setattr("audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn", fake_execute_provider)
 
     received, done = _collect("agents.execution.completed")
 
@@ -129,7 +131,7 @@ def test_requested_event_creates_and_queues_request(tmp_path: Path, monkeypatch)
 
     request_id = _own_request_id(tmp_path)
     event_type, payload, metadata = _wait_for_own_event(received, done, request_id)
-    assert payload["agent-profile-id"] == "default"
+    assert payload["execution-profile-id"] == "default"
     assert payload["state"] == "completed"
 
 
@@ -143,7 +145,7 @@ def test_requested_event_defaults_to_async_not_blocking(tmp_path: Path, monkeypa
         hold.wait(timeout=5)
         return _worker_result(execution_request, "done")
 
-    monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", slow_execute_provider)
+    monkeypatch.setattr("audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn", slow_execute_provider)
 
     received, done = _collect("agents.execution.completed")
 
@@ -183,7 +185,7 @@ def test_requested_event_unexpected_exception_publishes_rejected_not_swallowed(t
     def boom(*args, **kwargs):
         raise RuntimeError("something broke")
 
-    monkeypatch.setattr("audiagentic.components.agents.agents_gateway_api.submit_execution_request", boom)
+    monkeypatch.setattr("audiagentic.components.agents.gateway.api.submit_execution_request", boom)
 
     received, done = _collect("agents.execution.rejected")
     get_bus().publish("agents.execution.gateway.requested", {"project-root": str(tmp_path), "prompt-body": "hi"})
@@ -198,7 +200,7 @@ def test_requested_event_preserves_correlation_id_and_subject(tmp_path: Path, mo
     def fake_execute_provider(*, execution_request, **_kwargs):
         return _worker_result(execution_request, "done")
 
-    monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider)
+    monkeypatch.setattr("audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn", fake_execute_provider)
 
     received, done = _collect("agents.execution.completed")
 
@@ -227,7 +229,7 @@ def test_cancel_requested_event_cancels_request(tmp_path: Path, monkeypatch):
         return {"request-id": request_id, "state": "cancelled"}
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_api.cancel_execution_request", fake_cancel
+        "audiagentic.components.agents.gateway.api.cancel_execution_request", fake_cancel
     )
 
     get_bus().publish(
@@ -243,7 +245,7 @@ def test_cancel_requested_event_cancels_request(tmp_path: Path, monkeypatch):
 def test_cancel_requested_missing_request_id_ignored(tmp_path: Path, monkeypatch):
     calls = []
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_api.cancel_execution_request",
+        "audiagentic.components.agents.gateway.api.cancel_execution_request",
         lambda *a: calls.append(a),
     )
 
@@ -270,7 +272,7 @@ def test_cancel_requested_api_failure_swallowed(tmp_path: Path, monkeypatch):
         raise AudiaGenticError("RES-AGW-001", "agents", "unknown request")
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_api.cancel_execution_request", boom
+        "audiagentic.components.agents.gateway.api.cancel_execution_request", boom
     )
 
     # must not raise

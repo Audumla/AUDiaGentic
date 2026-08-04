@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import logging
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any, Protocol
 
 from audiagentic.foundation.cli_io import print_error, print_message
@@ -100,3 +102,23 @@ def clear_backend() -> None:
     """Clear the backend. Useful for test teardown."""
     global _backend
     _backend = None
+
+
+def current_backend() -> InteractionBackend | None:
+    """Return the currently active backend, or None if unset."""
+    return _backend
+
+
+@contextmanager
+def use_backend(backend: InteractionBackend) -> Iterator[None]:
+    """Set the live backend for the duration of this context, then clear it.
+
+    Formalizes the set_backend/clear_backend try-finally pair every test
+    substituting a fake backend otherwise has to hand-write. Always clears
+    on exit, including when the block raises.
+    """
+    set_backend(backend)
+    try:
+        yield
+    finally:
+        clear_backend()

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.contracts.output import ComponentOutputEvent, ComponentOutputSink
+from audiagentic.foundation.contracts.output import ComponentOutputSink
 from audiagentic.foundation.workflow.invocation import WorkflowInvocationResult
 
 from ...descriptors.base import CliInstallRecipe, ProviderDescriptor
@@ -37,17 +37,15 @@ from ..reconcile import (  # noqa: F401
     reconcile_all,
     reconcile_all_providers,
     reconcile_provider,
+    resolve_reconciliation_policy,
 )
 
 
 def _emit(output: ComponentOutputSink | None, message: str, **data: Any) -> None:
-    if output is not None:
-        output(ComponentOutputEvent(message=message, data=data))
-        return
-    from audiagentic.foundation.interaction import push_status
+    from audiagentic.foundation.contracts.output import emit_or_push_status
 
     level = str(data.pop("level", "info"))
-    push_status("providers", message, level=level, details=data)
+    emit_or_push_status(output, "providers", message, kind="progress", level=level, **data)
 
 
 def _descriptor(provider_id: str) -> ProviderDescriptor:

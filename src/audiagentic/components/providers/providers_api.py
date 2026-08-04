@@ -740,6 +740,41 @@ def operate_provider_surfaces(
     return results
 
 
+def get_reconciliation_policy(project_root: Path) -> dict[str, Any]:
+    """Return this project's provider reconciliation policy (defaults to auto)."""
+    from audiagentic.components.providers.services.config.provider_config import (
+        get_reconciliation_policy as _get,
+    )
+
+    return _get(project_root)
+
+
+def set_reconciliation_policy(
+    project_root: Path,
+    *,
+    mode: str,
+    allowed_providers: list[str] | None = None,
+    decided_providers: list[str] | None = None,
+) -> dict[str, Any]:
+    """Set this project's provider reconciliation policy.
+
+    mode='auto' enables whatever provider CLI is detected on launch (today's
+    behavior). mode='allowlist' only auto-enables providers in
+    allowed_providers. mode='prompt' is resolved interactively at launch
+    (see resolve_reconciliation_policy).
+    """
+    from audiagentic.components.providers.services.config.provider_config import (
+        set_reconciliation_policy as _set,
+    )
+
+    return _set(
+        project_root,
+        mode=mode,
+        allowed_providers=allowed_providers,
+        decided_providers=decided_providers,
+    )
+
+
 def list_providers(project_root: Path) -> dict[str, Any]:
     from audiagentic.components.providers.services.lifecycle.status import build_provider_status
 
@@ -962,7 +997,7 @@ def describe_provider(project_root: Path, provider_id: str) -> dict[str, Any]:
 
     Joins descriptor summary, status/probe, execution support, model catalog,
     managed-config surfaces, and ownership registries. Performs NO new
-    discovery, NO duplicate probes/catalog parsing, and NO agent-profile join
+    discovery, NO duplicate probes/catalog parsing, and NO execution-profile join
     (agents owns profiles — ``related_tools`` points there instead).
     """
     from audiagentic.components.providers.descriptors.registry import get_descriptor
@@ -1026,7 +1061,7 @@ def describe_provider(project_root: Path, provider_id: str) -> dict[str, Any]:
         # secrets.py scheme:locator reference strings (e.g. "env:OPENAI_API_KEY"),
         # never a resolved value.
         "vendor_key_injection": dict(descriptor.vendor_key_injection),
-        "related_tools": ["agent_list_profiles"],
+        "related_tools": ["agent_list_execution_profiles"],
     }
 
 
@@ -1647,6 +1682,8 @@ __all__ = [
     "execute_provider_review_turn",
     "list_providers",
     "get_provider_status",
+    "get_reconciliation_policy",
+    "set_reconciliation_policy",
     "list_provider_descriptors",
     "list_provider_models",
     "refresh_provider_catalog",

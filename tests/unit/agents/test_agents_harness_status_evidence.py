@@ -9,11 +9,12 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from audiagentic.components.agents.agents_harness_status_evidence import (
+from audiagentic.components.agents.status.harness_status_evidence import (
     AcceptedEvidence,
     RejectedEvidence,
     StatusEvidenceSink,
 )
+
 from audiagentic.foundation.transports.harness_status_observer import (
     StatusEvidence,
     StatusEvidenceSemanticStrength,
@@ -99,7 +100,7 @@ class TestAcceptedActivity:
     def test_timeline_append_called(self):
         """Accept triggers a redacted timeline append when project_root is set."""
         with patch(
-            "audiagentic.components.agents.agents_harness_status_evidence.session_store"
+            "audiagentic.components.agents.status.harness_status_evidence.session_store"
         ) as mock_store:
             sink = StatusEvidenceSink(
                 session_id="ses_test_1",
@@ -133,7 +134,7 @@ class TestAcceptedActivity:
             mock_bus.publish.assert_called_once()
             call_args = mock_bus.publish.call_args
             # Verify the topic is agents.turn.status.observed
-            from audiagentic.components.agents.agents_event_topics import (
+            from audiagentic.components.agents.gateway.event_topics import (
                 TURN_STATUS_OBSERVED_TOPIC,
             )
             assert call_args[0][0] == TURN_STATUS_OBSERVED_TOPIC
@@ -141,7 +142,7 @@ class TestAcceptedActivity:
     def test_no_raw_native_fields_in_timeline(self):
         """Timeline attributes contain only bounded scalar fields."""
         with patch(
-            "audiagentic.components.agents.agents_harness_status_evidence.session_store"
+            "audiagentic.components.agents.status.harness_status_evidence.session_store"
         ) as mock_store:
             sink = StatusEvidenceSink(
                 session_id="ses_test_1",
@@ -340,7 +341,7 @@ class TestExceptionIsolation:
         # the timeline/event publish path (via project_root). We patch
         # _extract_scalar_allowlist to raise an exception.
         with patch(
-            "audiagentic.components.agents.agents_harness_status_evidence._extract_scalar_allowlist",
+            "audiagentic.components.agents.status.harness_status_evidence._extract_scalar_allowlist",
             side_effect=ValueError("corrupt data"),
         ):
             sink = StatusEvidenceSink(
@@ -356,7 +357,7 @@ class TestExceptionIsolation:
     def test_timeline_failure_isolated(self):
         """Timeline append failure doesn't break accept — still returns AcceptedEvidence."""
         with patch(
-            "audiagentic.components.agents.agents_harness_status_evidence.session_store"
+            "audiagentic.components.agents.status.harness_status_evidence.session_store"
         ) as mock_store:
             mock_store.record_session_timeline.side_effect = Exception("IO error")
             sink = StatusEvidenceSink(
@@ -394,7 +395,7 @@ class TestNoProviderNativeImport:
 
     def test_no_provider_native_import_in_module(self):
         """The agents_harness_status_evidence module contains no 'Acp' import references."""
-        import audiagentic.components.agents.agents_harness_status_evidence as mod
+        import audiagentic.components.agents.status.harness_status_evidence as mod
         source = open(mod.__file__).read()
         # Check that no line contains an import of a provider-native type.
         # The docstring may reference the rule but must not import it.

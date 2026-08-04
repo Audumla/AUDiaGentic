@@ -24,15 +24,15 @@ from typing import Any
 
 import pytest
 
-from audiagentic.components.agents import agents_gateway_session_bindings as binding_store
-from audiagentic.components.agents import agents_gateway_sessions_store as session_store
-from audiagentic.components.agents.agents_gateway_session_resume import (
+from audiagentic.components.agents.gateway.session import bindings as binding_store
+from audiagentic.components.agents.gateway.session import sessions_store as session_store
+from audiagentic.components.agents.gateway.session.resume import (
     ERR_IDEMPOTENT_REPLAY_OF_FAILURE,
     ERR_SOURCE_NOT_TERMINAL,
     ERR_UNSUPPORTED_CAPABILITY,
     lookup_resume_attempt,
 )
-from audiagentic.components.agents.agents_gateway_sessions import SessionRuntime
+from audiagentic.components.agents.gateway.session.sessions import SessionRuntime
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.session_surface import PreparedSessionTransport
 
@@ -96,7 +96,7 @@ def _write_terminal_source_session(
     """Build+persist a source session record with a REAL (non-'unknown')
     binding, already terminal — the shape resume_session requires."""
     record = session_store.build_session_record(
-        agent_profile_id="profile-1",
+        execution_profile_id="profile-1",
         provider_id=_PROVIDER_ID,
         model_id="m1",
         provider_session_ref="source-provider-ref-1",

@@ -353,7 +353,7 @@ class TestAssertEventPayload:
         # Minimal required payload (as emitted when transport has no child_pid)
         assert_event_payload(
             "agents.session.opened",
-            {"session-id": "ses_1", "agent-profile-id": "profile-1", "state": "active"},
+            {"session-id": "ses_1", "execution-profile-id": "profile-1", "state": "active"},
         )
 
         # Full payload with AS17 adopted-process fields (as emitted in production)
@@ -361,7 +361,7 @@ class TestAssertEventPayload:
             "agents.session.opened",
             {
                 "session-id": "ses_1",
-                "agent-profile-id": "profile-1",
+                "execution-profile-id": "profile-1",
                 "state": "active",
                 "provider-id": "opencode",
                 "model-id": "m1",

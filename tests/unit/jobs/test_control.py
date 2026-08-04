@@ -194,5 +194,5 @@ class TestArchitectureBoundary:
         for name, obj in vars(mod).items():
             mod_name = getattr(obj, "__module__", "")
             assert not mod_name.startswith(
-                "audiagentic.components.agents.agents_gateway_api"
+                "audiagentic.components.agents.gateway.api"
             ), f"control.py contains reference to agents_gateway_api via {name!r}"

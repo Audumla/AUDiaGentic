@@ -11,6 +11,7 @@ for _p in (str(_ROOT), str(_ROOT / "src")):
 from tests.helpers import sandbox as sandbox_helper
 
 from audiagentic.foundation.lifecycle.baseline_sync import sync_managed_baseline
+from audiagentic.foundation.lifecycle.components import install_component
 from audiagentic.foundation.lifecycle.detector import detect_installed_state
 from audiagentic.foundation.lifecycle.fresh_install import apply_fresh_install
 from audiagentic.foundation.lifecycle.uninstall import apply_uninstall
@@ -38,6 +39,7 @@ def test_sync_preserves_config_and_prompt_overrides(tmp_path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "lifecycle-sync")
     try:
         apply_fresh_install(sandbox.repo)
+        install_component("providers", sandbox.repo)
 
         provider_path = sandbox.repo / ".audiagentic" / "config" / "runtime" / "providers.yaml"
         provider_path.write_text("contract-version: v1\nproviders:\n  custom: {}\n", encoding="utf-8")

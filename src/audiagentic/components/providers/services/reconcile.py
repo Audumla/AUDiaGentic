@@ -111,6 +111,23 @@ def _sync_host_extensions(
         _emit(on_progress, "Host extensions manifest sync failed (non-fatal)", level="warning")
 
 
+def _should_auto_enable(project_root: Path, provider_id: str) -> bool:
+    """Whether a detected-but-disabled provider should be auto-enabled.
+
+    `auto` (default) enables whatever CLI is detected, matching today's
+    behavior. `allowlist`/`prompt` only auto-enable providers already present
+    in `allowed-providers` — providers outside that set are left disabled
+    rather than silently enabled, until something (ON03's interactive flow,
+    or a direct `set_reconciliation_policy` call) explicitly decides them.
+    """
+    from .config.provider_config import get_reconciliation_policy
+
+    policy = get_reconciliation_policy(project_root)
+    if policy.get("mode", "auto") == "auto":
+        return True
+    return provider_id in set(policy.get("allowed-providers", []))
+
+
 def reconcile_provider(
     provider_id: str,
     *,
@@ -153,7 +170,13 @@ def reconcile_provider(
     action_taken: str
     surfaces_result: dict[str, Any] | None = None
 
-    if cli_available and not currently_enabled:
+    if cli_available and not currently_enabled and not _should_auto_enable(project_root, provider_id):
+        _emit(
+            on_progress,
+            f"Skipping {provider_id} — not in reconciliation-policy allowlist",
+        )
+        action_taken = "skipped"
+    elif cli_available and not currently_enabled:
         _emit(on_progress, f"Enabling {provider_id} and applying surfaces")
         _seed_provider_config(project_root, provider_id, descriptor, enabled=True)
         from ..providers_api import operate_provider_surface
@@ -250,14 +273,10 @@ def reconcile_all_providers(
     the VS Code GUI on some platforms.
 
     on_provider(provider_id, status) is called after each provider is reconciled.
-    status is "enabled", "disabled", or "ok".
+    status is "enabled", "disabled", "skipped" (CLI detected but excluded by the
+    reconciliation-policy allowlist), or "ok".
     """
-    descriptors = all_descriptors()
-    eligible = [
-        (pid, desc)
-        for pid, desc in sorted(descriptors.items())
-        if not (desc.cli_install and desc.cli_install.package_manager == "vscode")
-    ]
+    eligible = _eligible_provider_descriptors()
     total = float(len(eligible))
     results = []
     for i, (provider_id, _) in enumerate(eligible):
@@ -281,6 +300,103 @@ def reconcile_all_providers(
         "ok": True,
         "providers": results,
     }
+
+
+def _eligible_provider_descriptors():
+    """Same eligibility filter as reconcile_all_providers: skip VS Code extensions."""
+    return [
+        (pid, desc)
+        for pid, desc in sorted(all_descriptors().items())
+        if not (desc.cli_install and desc.cli_install.package_manager == "vscode")
+    ]
+
+
+def resolve_reconciliation_policy(project_root: Path) -> None:
+    """Interactively resolve this project's reconciliation-policy.
+
+    Meant to run before reconcile_all_providers, on every launch (not gated
+    behind the one-time provider-reconcile stamp — see ON03 plan notes):
+
+    - If never configured, asks the operator to choose auto/allowlist/prompt.
+      A non-interactive answer (no TTY, no MCP ctx — `ask()` resolves to
+      TIMED_OUT immediately) defaults to 'auto', matching pre-existing
+      behavior and never blocking a scripted launch.
+    - In allowlist/prompt mode, asks once per CLI-available provider not yet
+      in decided-providers, and persists the accumulated decision. A provider
+      left undecided this run (e.g. non-interactive) is asked again next time.
+    """
+    from audiagentic.foundation.interaction import ResponseStatus, ask
+
+    from .config.provider_config import (
+        get_reconciliation_policy,
+        is_reconciliation_policy_configured,
+        set_reconciliation_policy,
+    )
+    from .lifecycle.lifecycle import probe_provider_cli
+
+    if not is_reconciliation_policy_configured(project_root):
+        response = ask(
+            "How should audiagentic activate provider harnesses in this project?",
+            description=(
+                "auto = enable anything detected on PATH; "
+                "allowlist = choose which providers up front; "
+                "prompt = ask me whenever something new is detected"
+            ),
+            choices=("auto", "allowlist", "prompt"),
+            default_choice="auto",
+        )
+        mode = response.choice if response.status == ResponseStatus.ANSWERED else "auto"
+        if mode not in ("auto", "allowlist", "prompt"):
+            mode = "auto"
+        set_reconciliation_policy(project_root, mode=mode)
+
+    policy = get_reconciliation_policy(project_root)
+    mode = policy.get("mode", "auto")
+    if mode not in ("allowlist", "prompt"):
+        return
+
+    decided = set(policy.get("decided-providers", []))
+    allowed = set(policy.get("allowed-providers", []))
+    changed = False
+
+    for provider_id, descriptor in _eligible_provider_descriptors():
+        if provider_id in decided:
+            continue
+        probe = probe_provider_cli(descriptor)
+        if not (probe and probe.get("available")):
+            continue
+        response = ask(f"Enable {provider_id}?", choices=("yes", "no"), default_choice="no")
+        if response.status != ResponseStatus.ANSWERED:
+            continue
+        decided.add(provider_id)
+        changed = True
+        if response.choice == "yes":
+            allowed.add(provider_id)
+            # Persist the allowlist before enabling — reconcile_provider's own
+            # policy check (ON02) reads it back and must see this provider as
+            # allowed, not skip it as "not yet decided".
+            set_reconciliation_policy(
+                project_root,
+                mode=mode,
+                allowed_providers=sorted(allowed),
+                decided_providers=sorted(decided),
+            )
+            try:
+                reconcile_provider(provider_id, project_root=project_root)
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "Failed to enable %s immediately after allowlist decision",
+                    provider_id,
+                    exc_info=True,
+                )
+
+    if changed:
+        set_reconciliation_policy(
+            project_root,
+            mode=mode,
+            allowed_providers=sorted(allowed),
+            decided_providers=sorted(decided),
+        )
 
 
 def reconcile_all(project_root: Path) -> None:

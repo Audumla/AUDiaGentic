@@ -9,14 +9,16 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.components.agents import agents_gateway_api as gateway
-from audiagentic.components.agents import agents_gateway_worker as worker_module
-from audiagentic.components.agents.agents_api import create_profile
-from audiagentic.components.agents.agents_gateway_worker import (
-    execute_isolated_provider_turn,
-)
 from audiagentic.components.agents.contracts.worker_protocol import (
     WorkerExecutionIdentity,
+)
+from audiagentic.components.agents.gateway import api as gateway
+from audiagentic.components.agents.gateway.queue import worker as worker_module
+from audiagentic.components.agents.gateway.queue.worker import (
+    execute_isolated_provider_turn,
+)
+from audiagentic.components.agents.models.execution_profile_api import (
+    create_execution_profile,
 )
 from audiagentic.components.providers.providers_api import ProviderExecutionRequest
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -160,7 +162,7 @@ def test_gateway_dispatches_full_isolation_provider_in_a_worker(
     _write_qwen_probe(bin_dir)
     monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ.get("PATH", ""))
     monkeypatch.setenv("AG_SH06_SECRET_CANARY", "gateway-secret-must-not-leak")
-    create_profile(
+    create_execution_profile(
         tmp_path,
         {
             "profile_id": "qwen-worker",
@@ -274,7 +276,7 @@ def test_gateway_runs_three_profiles_in_parallel_os_processes(
     )
     profiles = ("deep-test", "lite-test", "supp-test")
     for index, profile_id in enumerate(profiles):
-        create_profile(
+        create_execution_profile(
             tmp_path,
             {
                 "profile_id": profile_id,
@@ -300,7 +302,7 @@ def test_gateway_runs_three_profiles_in_parallel_os_processes(
                 lambda pair: gateway.run_execution_request(
                     tmp_path,
                     prompt_body="return context",
-                    agent_profile_id=pair[0],
+                    execution_profile_id=pair[0],
                     component_profile=pair[1],
                     timeout_seconds=20,
                 ),

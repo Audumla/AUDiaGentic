@@ -25,7 +25,7 @@ def teardown_function() -> None:
 
 def test_interaction_request_respond_roundtrip(tmp_path: Path) -> None:
     seen = _events()
-    request_id = interaction.request(
+    request_id = interaction.request_interaction(
         "job-approval",
         "Approve job?",
         choices=("approved", "rejected"),
@@ -52,7 +52,7 @@ def test_interaction_request_respond_roundtrip(tmp_path: Path) -> None:
 
 
 def test_interaction_request_expires_lazily(tmp_path: Path) -> None:
-    request_id = interaction.request(
+    request_id = interaction.request_interaction(
         "ask",
         "Continue?",
         project_root=tmp_path,

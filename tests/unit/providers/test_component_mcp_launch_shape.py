@@ -46,7 +46,7 @@ def test_provider_component_mcp_projection_uses_audiagentic_mcp(monkeypatch, tmp
     assert name == "ag-sample"
     assert entry.command == mcp_interpreter()
     assert entry.args == ("-m", "audiagentic.launcher", "mcp", "audiagentic.components.sample.sample_mcp", "--flag")
-    assert entry.env == {}
+    assert entry.env == {"AUDIAGENTIC_REPO_ROOT": str(tmp_path.resolve())}
 
 
 def test_mcp_entry_propagates_repo_root_override(monkeypatch) -> None:
@@ -58,9 +58,10 @@ def test_mcp_entry_propagates_repo_root_override(monkeypatch) -> None:
         McpServerDeclaration(
             name="ag-sample",
             module="audiagentic.components.sample.sample_mcp",
-        )
+        ),
+        Path("X:/somewhere/repo"),
     )
-    assert entry.env == {"AUDIAGENTIC_REPO_ROOT": "X:\\somewhere\\repo"}
+    assert entry.env == {"AUDIAGENTIC_REPO_ROOT": str(Path("X:/somewhere/repo").resolve())}
 
 
 def test_provider_mcp_projection_not_gated_by_receive_lsp_mcp(monkeypatch, tmp_path: Path) -> None:
@@ -130,4 +131,4 @@ def test_harness_mcp_collector_uses_audiagentic_mcp(monkeypatch, tmp_path: Path)
     entry = servers["ag-sample"]
     assert entry.command == mcp_interpreter()
     assert entry.args == ("-m", "audiagentic.launcher", "mcp", "audiagentic.components.sample.sample_mcp", "--flag")
-    assert entry.env == {}
+    assert entry.env == {"AUDIAGENTIC_REPO_ROOT": str(tmp_path.resolve())}

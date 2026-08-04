@@ -4,7 +4,7 @@
   "required": [
     "contract-version",
     "request-id",
-    "agent-profile-id",
+    "execution-profile-id",
     "mode",
     "state",
     "created-at",
@@ -30,7 +30,7 @@
     "request-id": {
       "type": "string"
     },
-    "agent-profile-id": {
+    "execution-profile-id": {
       "type": "string"
     },
     "prompt-body": {
@@ -179,9 +179,9 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["agent-profile-id", "state", "started-at"],
+        "required": ["execution-profile-id", "state", "started-at"],
         "properties": {
-          "agent-profile-id": {"type": "string"},
+          "execution-profile-id": {"type": "string"},
           "provider-id": {"type": ["string", "null"]},
           "model-id": {"type": ["string", "null"]},
           "state": {

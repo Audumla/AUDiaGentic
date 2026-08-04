@@ -21,24 +21,20 @@ from typing import Any
 
 import pytest
 
-# ── AS30 imports ───────────────────────────────────────────────────────
-from audiagentic.components.agents import (
-    agents_gateway_session_bindings as bindings,
-)
-from audiagentic.components.agents import (
-    agents_gateway_sessions_store as session_store,
-)
-
 # ── AS31 imports ───────────────────────────────────────────────────────
-from audiagentic.components.agents.agents_gateway_output import (
+from audiagentic.components.agents.gateway.output import (
     OutputPolicy,
     append_agent_output_record,
     create_relay,
     read_request_output,
 )
 
+# ── AS30 imports ───────────────────────────────────────────────────────
+from audiagentic.components.agents.gateway.session import bindings as bindings
+from audiagentic.components.agents.gateway.session import sessions_store as session_store
+
 # ── AS19 imports ───────────────────────────────────────────────────────
-from audiagentic.components.agents.agents_harness_status_observer_ingress import (
+from audiagentic.components.agents.status.harness_status_observer_ingress import (
     MAX_REQUEST_BODY_BYTES,
     SessionObserverIngress,
 )
@@ -66,7 +62,7 @@ def _make_session_record(
     """Write a session record with a binding and return it."""
     record = session_store.build_session_record(
         session_id=session_id,
-        agent_profile_id="default",
+        execution_profile_id="default",
         provider_id=provider_id,
         provider_session_ref=provider_ref,
     )
@@ -307,13 +303,13 @@ class TestAS30SessionBindingDocker:
 import json, sys
 sys.path.insert(0, "/app/src")
 from pathlib import Path
-from audiagentic.components.agents import agents_gateway_session_bindings as bindings
-from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+from audiagentic.components.agents.gateway.session import bindings as bindings
+from audiagentic.components.agents.gateway.session import sessions_store as session_store
 
 project_root = Path("{project_root}")
 record = session_store.build_session_record(
     session_id="ses_cross_002",
-    agent_profile_id="default",
+    execution_profile_id="default",
     provider_id="test-provider",
     provider_session_ref="ref-cross",
 )
@@ -803,8 +799,8 @@ class TestConsumerPipelineFullIntegration:
 import json, sys
 sys.path.insert(0, "/app/src")
 from pathlib import Path
-from audiagentic.components.agents import agents_gateway_session_bindings as bindings
-from audiagentic.components.agents.agents_gateway_output import read_request_output
+from audiagentic.components.agents.gateway.session import bindings as bindings
+from audiagentic.components.agents.gateway.output import read_request_output
 
 project_root = Path("{project_root}")
 

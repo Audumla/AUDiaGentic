@@ -91,6 +91,86 @@ def build_server() -> FastMCP:
 
     @mcp.tool()
     @log_tool_call
+    def list_project_instructions() -> list[dict[str, Any]] | dict[str, Any]:
+        try:
+            return project_api.list_project_instructions(project_root_from_env())
+        except Exception as exc:
+            return report_error("project", "list_project_instructions", exc, logger)
+
+    @mcp.tool()
+    @log_tool_call
+    def get_project_instruction(item_id: str) -> dict[str, Any]:
+        try:
+            return project_api.get_project_instruction(project_root_from_env(), item_id)
+        except Exception as exc:
+            return report_error("project", "get_project_instruction", exc, logger)
+
+    @mcp.tool()
+    @log_tool_call
+    def create_project_instruction(item_id: str, title: str, body: str, preferred_targets: list[str] | None = None) -> dict[str, Any]:
+        try:
+            return project_api.create_project_instruction(project_root_from_env(), item_id, title, body, preferred_targets)
+        except Exception as exc:
+            return report_error("project", "create_project_instruction", exc, logger)
+
+    @mcp.tool()
+    @log_tool_call
+    def update_project_instruction(item_id: str, title: str | None = None, body: str | None = None, preferred_targets: list[str] | None = None) -> dict[str, Any]:
+        try:
+            return project_api.update_project_instruction(project_root_from_env(), item_id, title, body, preferred_targets)
+        except Exception as exc:
+            return report_error("project", "update_project_instruction", exc, logger)
+
+    @mcp.tool()
+    @log_tool_call
+    def delete_project_instruction(item_id: str) -> dict[str, Any]:
+        try:
+            return project_api.delete_project_instruction(project_root_from_env(), item_id)
+        except Exception as exc:
+            return report_error("project", "delete_project_instruction", exc, logger)
+
+    @mcp.tool()
+    @log_tool_call
+    def list_project_skills() -> list[dict[str, Any]] | dict[str, Any]:
+        try:
+            return project_api.list_project_skills(project_root_from_env())
+        except Exception as exc:
+            return report_error("project", "list_project_skills", exc, logger)
+
+    @mcp.tool()
+    @log_tool_call
+    def get_project_skill(item_id: str) -> dict[str, Any]:
+        try:
+            return project_api.get_project_skill(project_root_from_env(), item_id)
+        except Exception as exc:
+            return report_error("project", "get_project_skill", exc, logger)
+
+    @mcp.tool()
+    @log_tool_call
+    def create_project_skill(item_id: str, content: str) -> dict[str, Any]:
+        try:
+            return project_api.create_project_skill(project_root_from_env(), item_id, content)
+        except Exception as exc:
+            return report_error("project", "create_project_skill", exc, logger)
+
+    @mcp.tool()
+    @log_tool_call
+    def update_project_skill(item_id: str, content: str) -> dict[str, Any]:
+        try:
+            return project_api.update_project_skill(project_root_from_env(), item_id, content)
+        except Exception as exc:
+            return report_error("project", "update_project_skill", exc, logger)
+
+    @mcp.tool()
+    @log_tool_call
+    def delete_project_skill(item_id: str) -> dict[str, Any]:
+        try:
+            return project_api.delete_project_skill(project_root_from_env(), item_id)
+        except Exception as exc:
+            return report_error("project", "delete_project_skill", exc, logger)
+
+    @mcp.tool()
+    @log_tool_call
     def runtime_sync_contract() -> dict[str, Any]:
         try:
             return project_api.runtime_sync_contract()

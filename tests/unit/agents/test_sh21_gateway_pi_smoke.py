@@ -161,11 +161,14 @@ def gateway_pi_environment(
 @pytest.fixture
 def pi_profile_setup(project_root: Path) -> None:
     """Create a default agent profile for the pi provider and enable it."""
-    from audiagentic.components.agents.agents_api import create_profile
+    from audiagentic.components.agents.models.execution_profile_api import (
+        create_execution_profile,
+    )
+
     from audiagentic.foundation.features.base import ImplementationState
     from audiagentic.foundation.features.state import set_implementation_state
 
-    create_profile(
+    create_execution_profile(
         project_root,
         {
             "profile_id": "default",
@@ -202,9 +205,10 @@ class TestGatewayPiSmokeStdinDelivery:
         argv_file = recording_dir / "test_argv.json"
         stdin_file = recording_dir / "test_stdin.txt"
 
-        from audiagentic.components.agents.agents_gateway_worker import (
+        from audiagentic.components.agents.gateway.queue.worker import (
             execute_isolated_provider_turn,
         )
+
         from audiagentic.components.agents.contracts.worker_protocol import (
             WorkerExecutionIdentity,
         )
@@ -298,9 +302,10 @@ class TestGatewayPiSmokeStdinDelivery:
         traceback data or diagnostic leakage. The worker protocol pipe must
         carry only clean, bounded result envelopes.
         """
-        from audiagentic.components.agents.agents_gateway_worker import (
+        from audiagentic.components.agents.gateway.queue.worker import (
             execute_isolated_provider_turn,
         )
+
         from audiagentic.components.agents.contracts.worker_protocol import (
             WorkerExecutionIdentity,
         )
@@ -373,9 +378,10 @@ class TestGatewayPiSmokeCommandShape:
         recording_dir = Path(gateway_pi_environment["recording_dir"])
         argv_file = recording_dir / "test_argv.json"
 
-        from audiagentic.components.agents.agents_gateway_worker import (
+        from audiagentic.components.agents.gateway.queue.worker import (
             execute_isolated_provider_turn,
         )
+
         from audiagentic.components.agents.contracts.worker_protocol import (
             WorkerExecutionIdentity,
         )

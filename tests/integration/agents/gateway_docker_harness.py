@@ -2,11 +2,12 @@
 recipes (crash-matrix, opencode, concurrency).
 
 Modeled directly on tests/integration/providers/harness.py: every helper here
-calls AUDiaGentic's own real API (agent-profile creation, provider CLI install,
+calls AUDiaGentic's own real API (execution-profile creation, provider CLI install,
 provider config) instead of hand-writing YAML or assuming host state — the
 whole point of these Docker recipes is that they prove the real provisioning
 path works, not that a config file with the right shape happens to exist.
 """
+
 from __future__ import annotations
 
 import json
@@ -19,14 +20,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.agents.models.execution_profile_api import (
+    create_execution_profile,
+)
 from tests.integration.providers.harness import (
     assert_health_ok,
     assert_install_result_ok,
     install_provider,
     provider_ids,
 )
-
-from audiagentic.components.agents.agents_api import create_profile
 
 # ---------------------------------------------------------------------------
 # Dynamic provider discovery — never a hardcoded provider list. Mirrors
@@ -36,6 +38,7 @@ from audiagentic.components.agents.agents_api import create_profile
 # suite automatically covers new providers as they gain the relevant
 # capability instead of needing a manual list update.
 # ---------------------------------------------------------------------------
+
 
 def npm_installable_provider_ids() -> list[str]:
     """CLI-installable providers whose package manager is npm — the only
@@ -69,10 +72,11 @@ def gateway_rig_compatible_npm_provider_ids() -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Real provisioning — agent profiles, provider config, provider CLI install
+# Real provisioning — execution profiles, provider config, provider CLI install
 # ---------------------------------------------------------------------------
 
-def write_agent_profile(
+
+def write_execution_profile(
     project_root: Path,
     *,
     profile_id: str = "default",
@@ -83,9 +87,9 @@ def write_agent_profile(
     retry_count: int = 0,
     extra_params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Create a project-local agent profile through the real profile API.
+    """Create a project-local execution profile through the real profile API.
 
-    Replaces hand-written agent-profiles.yaml: create_profile validates and
+    Replaces hand-written execution-profiles.yaml: create_execution_profile validates and
     persists through the same path a real caller would use, so a schema
     drift or validation bug in profile creation is exercised, not bypassed.
     """
@@ -94,7 +98,7 @@ def write_agent_profile(
         params["queue-max-size"] = queue_max_size
     if extra_params:
         params.update(extra_params)
-    return create_profile(
+    return create_execution_profile(
         project_root,
         {
             "profile_id": profile_id,
@@ -121,7 +125,8 @@ def enable_local_openai(project_root: Path, rig_port: int) -> None:
 
     set_provider_enabled(project_root, "local-openai", enabled=True)
     patch_provider_config(
-        project_root, "local-openai",
+        project_root,
+        "local-openai",
         {
             "install-mode": "external-configured",
             "access-mode": "none",
@@ -151,6 +156,7 @@ def provision_opencode(project_root: Path) -> dict[str, Any]:
 # used to force real concurrent overlap and to observe a request sitting in
 # a known phase for as long as needed.
 # ---------------------------------------------------------------------------
+
 
 class HoldableRigHandler(BaseHTTPRequestHandler):
     """Local OpenAI-compatible endpoint that blocks in-flight requests until
@@ -183,12 +189,15 @@ class HoldableRigHandler(BaseHTTPRequestHandler):
             cls.hold.wait(timeout=30)
             length = int(self.headers.get("Content-Length", "0"))
             self.rfile.read(length)
-            body = json.dumps({
-                "id": "chatcmpl-gateway-docker", "object": "chat.completion",
-                "model": "audiagentic-rig",
-                "choices": [{"message": {"role": "assistant", "content": "RIG_OK"}}],
-                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
-            }).encode("utf-8")
+            body = json.dumps(
+                {
+                    "id": "chatcmpl-gateway-docker",
+                    "object": "chat.completion",
+                    "model": "audiagentic-rig",
+                    "choices": [{"message": {"role": "assistant", "content": "RIG_OK"}}],
+                    "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+                }
+            ).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -228,6 +237,7 @@ def stop_rig_server(server: ThreadingHTTPServer) -> None:
 # Real gateway service subprocess lifecycle
 # ---------------------------------------------------------------------------
 
+
 def free_port() -> int:
     from audiagentic.foundation.system.process import choose_free_port
 
@@ -240,7 +250,7 @@ def write_gateway_profiles_config(
 ) -> Path:
     """Write a gateway-owned profile registry config file.
 
-    Unlike agent-profiles.yaml (which has a real create_profile API), the
+    Unlike execution-profiles.yaml (which has a real create_execution_profile API), the
     gateway-owned registry has no CRUD API — agents_gateway_profiles.
     load_gateway_registry_from_config reads this file directly by design, so
     hand-authoring it is the real provisioning path, same status as any other
@@ -271,34 +281,43 @@ def start_gateway_subprocess(
     claim-to-start / terminal-to-cleanup windows) active in the child process
     only, never on the host test runner itself.
     """
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
         load_auth_token,
     )
 
     command = [
-        sys.executable, "-m",
-        "audiagentic.components.agents.agents_gateway_service_process",
-        "--port", str(port),
-        "--token-file", str(token_path),
-        "--service-root", str(service_root),
+        sys.executable,
+        "-m",
+        "audiagentic.components.agents.gateway.service.process",
+        "--port",
+        str(port),
+        "--token-file",
+        str(token_path),
+        "--service-root",
+        str(service_root),
     ]
     if gateway_profiles_config is not None:
         command += ["--gateway-profiles-config", str(gateway_profiles_config)]
     env = None
     if extra_env:
         import os as _os
+
         env = {**_os.environ, **extra_env}
     proc = subprocess.Popen(
         command,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
         env=env,
     )
 
     def _probe_ready() -> bool:
         if proc.poll() is not None:
             out = proc.stdout.read() if proc.stdout else ""
-            raise AssertionError(f"gateway subprocess exited early (code {proc.returncode}):\n{out}")
+            raise AssertionError(
+                f"gateway subprocess exited early (code {proc.returncode}):\n{out}"
+            )
         if not token_path.is_file():
             return False
         client = StandaloneGatewayClient(f"http://127.0.0.1:{port}", load_auth_token(token_path))
@@ -377,11 +396,14 @@ def read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def wait_for_index_phase(service_root: Path, request_id: str, phase: str, *, timeout: float = 10) -> None:
+def wait_for_index_phase(
+    service_root: Path, request_id: str, phase: str, *, timeout: float = 10
+) -> None:
     path = index_entry_path(service_root, request_id)
     wait_for(
         lambda: path.is_file() and read_json(path).get("phase") == phase,
-        timeout=timeout, what=f"work-index phase={phase} for {request_id}",
+        timeout=timeout,
+        what=f"work-index phase={phase} for {request_id}",
     )
 
 
@@ -391,7 +413,9 @@ def read_record(project_root: Path, request_id: str) -> dict:
     return read_json(gateway_request_path(project_root, request_id))
 
 
-def wait_for_record_state(project_root: Path, request_id: str, states: set[str], *, timeout: float = 10) -> dict:
+def wait_for_record_state(
+    project_root: Path, request_id: str, states: set[str], *, timeout: float = 10
+) -> dict:
     box: dict = {}
 
     def _check() -> bool:
