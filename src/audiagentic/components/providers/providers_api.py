@@ -50,6 +50,7 @@ from audiagentic.components.providers.contracts.managed_mcp import (
     ManagedMcpResult,
 )
 from audiagentic.components.providers.contracts.mcp_launch_surface import (
+    McpLaunchIsolationTier,
     McpLaunchServerEntry,
     McpLaunchSurfaceResult,
 )
@@ -92,6 +93,15 @@ def get_provider_execution_isolation_tier(provider_id: str) -> ProviderIsolation
     """Return the provider-wide execution isolation fact."""
     from audiagentic.components.providers.services.execution.public_execution import (
         get_provider_execution_isolation_tier as _get_tier,
+    )
+
+    return _get_tier(provider_id)
+
+
+def get_provider_mcp_launch_isolation_tier(provider_id: str) -> McpLaunchIsolationTier:
+    """Return the provider-wide MCP launch isolation fact."""
+    from audiagentic.components.providers.services.execution.public_execution import (
+        get_provider_mcp_launch_isolation_tier as _get_tier,
     )
 
     return _get_tier(provider_id)
@@ -1657,7 +1667,9 @@ __all__ = [
     "ProviderExecutionResult",
     "ProviderAcpLaunchResult",
     "ProviderIsolationTier",
+    "McpLaunchIsolationTier",
     "get_provider_execution_isolation_tier",
+    "get_provider_mcp_launch_isolation_tier",
     "get_provider_runtime_config_state",
     "execute_provider_turn",
     "prepare_provider_acp_launch",

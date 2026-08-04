@@ -123,10 +123,12 @@ class PlaywrightClient:
         target_url: str = "https://chat.openai.com",
         profile_dir: str | None = None,
         browser_path: str | None = None,
+        keep_open: bool = False,
     ) -> None:
         self._target_url = target_url
         self._profile_dir = profile_dir or "~/.gpt-auto-profile"
         self._browser_path = browser_path
+        self._keep_open = keep_open
         self._context: BrowserContext | None = None
         self._page: Page | None = None
 
@@ -163,8 +165,12 @@ class PlaywrightClient:
         logger.info("Navigating to %s", self._target_url)
         await pg.goto(self._target_url, wait_until="domcontentloaded")
 
-    async def stop(self) -> None:
-        """Close the browser and release resources."""
+    async def stop(self, force: bool = False) -> None:
+        """Close the browser and release resources. If *keep_open* is True and
+        *force* is False, the browser is left running."""
+        if self._keep_open and not force:
+            logger.info("keep_open=True — leaving browser open")
+            return
         if self._context is not None:
             logger.info("Closing Playwright context")
             await self._context.close()
@@ -177,6 +183,19 @@ class PlaywrightClient:
     def page(self) -> Page | None:
         """Currently active page (may be None before start / after stop)."""
         return self._page
+    
+    @property
+    def url(self) -> str | None:
+        """Return the current page URL, or None if no page."""
+        if self._page is None:
+            return None
+        return self._page.url
+    
+    async def get_title(self) -> str | None:
+        """Return the current page title, or None if no page."""
+        if self._page is None:
+            return None
+        return await self._page.title()
 
     @page.setter
     def page(self, value: Page) -> None:
@@ -212,6 +231,29 @@ class PlaywrightClient:
             if "chat.openai.com" in url.lower() or "openai" in url.lower():
                 return pg
         return None
+
+    # -- navigation ----------------------------------------------------------------
+
+    async def navigate(self, url: str) -> None:
+        """Navigate the current page to *url*."""
+        if self._page is None:
+            raise RuntimeError("No active page")
+        logger.info("Navigating to %s", url)
+        await self._page.goto(url, wait_until="domcontentloaded")
+
+    async def click(self, selector: str) -> None:
+        """Click the first element matching *selector*."""
+        if self._page is None:
+            raise RuntimeError("No active page")
+        await self._page.locator(selector).first.click()
+
+    async def type_input(self, text: str, selector: str) -> None:
+        """Clear and type *text* into the first input matching *selector*."""
+        if self._page is None:
+            raise RuntimeError("No active page")
+        el = self._page.locator(selector).first
+        await el.fill("")
+        await el.type(text, delay=50)
 
     # -- typing --------------------------------------------------------------------
 

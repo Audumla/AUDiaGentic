@@ -24,6 +24,27 @@ def _request(base_root: Path, **overrides) -> providers_api.ProviderExecutionReq
     return providers_api.ProviderExecutionRequest(**values)
 
 
+@pytest.mark.parametrize(
+    ("provider_id", "expected_tier"),
+    [
+        ("pi", "exact"),
+        ("opencode", "exact"),
+        ("claude", "unsupported"),
+    ],
+)
+def test_get_provider_mcp_launch_isolation_tier_reads_real_descriptor(
+    provider_id: str, expected_tier: str
+) -> None:
+    assert providers_api.get_provider_mcp_launch_isolation_tier(provider_id) == expected_tier
+
+
+def test_get_provider_mcp_launch_isolation_tier_unknown_provider_raises() -> None:
+    with pytest.raises(AudiaGenticError) as captured:
+        providers_api.get_provider_mcp_launch_isolation_tier("does-not-exist")
+
+    assert captured.value.code == "RES-PEXE-001"
+
+
 def test_execution_contract_round_trips_wire_mapping(tmp_path: Path) -> None:
     request = _request(tmp_path)
 

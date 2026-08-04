@@ -166,21 +166,19 @@ mcp-servers:
       - agent_task_gateway_overview
       - agent_task_session_list
       - agent_task_session_close
-      - agent_execution_submit
-    description: Agent Execution Gateway — agent_id-primary submission (AS63) plus status/wait/cancel, observability (list/overview), and session management, shared by every submission surface, plus the explicit raw execution_profile_id submission surface
+    description: Agent Execution Gateway — agent_id-primary submission (AS63) plus status/wait/cancel, observability (list/overview), and session management
     propagate: providers
     instructions: >
-      agent_task_submit is the primary submission surface (RV891) — pass an
+      agent_task_submit is the sole submission surface (RV891) — pass an
       agent_id (an Agent Definition: an execution profile plus a role bundled
-      under one stable ID) and it resolves the profile for you.
-      agent_execution_submit is the explicit, deliberately lower-level raw
-      surface: direct execution_profile_id submission, bypassing Agent
-      Definition resolution — a deprecation candidate expected to be dropped
-      once callers finish migrating to agent_task_submit. Every other tool
-      here is submission-agnostic: agent_task_status/wait/cancel/
-      list_requests/gateway_overview/session_list/session_close work
-      identically for a request submitted by either surface — there is only
-      one copy of each, named for the primary surface they're grouped with.
+      under one stable ID) and it resolves the profile for you. Direct
+      execution_profile_id submission bypassing Agent Definition resolution
+      is available programmatically (AgentTaskFactory.submit_raw /
+      submit_execution_request) but not exposed over MCP — MCP is a
+      deliberately restrictive layer over the fuller Python API.
+      agent_task_status/wait/cancel/list_requests/gateway_overview/
+      session_list/session_close work identically regardless of which
+      execution profile a request resolved through.
       Async-only over MCP: submit returns request-id immediately; poll
       agent_task_status or block later with agent_task_wait (capped at 300s
       server-side — a blocking MCP call cannot outlive the transport
@@ -199,16 +197,11 @@ mcp-servers:
       happening without already knowing a request-id.
     tool-descriptions:
       agent_task_submit: >
-        Submit an async request as agent_id (the primary submission surface —
-        resolves the agent's execution profile automatically). Returns
-        {request-id, state: "queued", ...}; poll with agent_task_status/
-        agent_task_wait using the returned request-id. Raises RES-AGD-001
-        if agent_id is not a configured agent definition.
-      agent_execution_submit: >
-        Submit an async request directly against an execution profile (the
-        explicit lower-level surface — prefer agent_task_submit unless you
-        need to bypass agent selection). execution-profile-id defaults to the
-        default profile if not given explicitly. Returns {request-id, state: "queued", ...}.
+        Submit an async request as agent_id (resolves the agent's execution
+        profile automatically). Returns {request-id, state: "queued", ...};
+        poll with agent_task_status/agent_task_wait using the returned
+        request-id. Raises RES-AGD-001 if agent_id is not a configured agent
+        definition.
       agent_task_status: >
         Return the current persisted record for request-id (state, output, completion,
         usage, error, attempts). Raises RES-AGW-001 if not found.
@@ -268,3 +261,41 @@ contributions:
         ## Naming
         Use `execution-profile-id` (NOT `profile-id`) in job requests to avoid
         collision with `workflow-profile` (lite/standard/strict stage pipelines).
+
+  - id: agents/role-precedence
+    owner: agents
+    title: Role selection precedence (AS61/RO01)
+    preferred-targets:
+      - skill
+      - instruction
+    content:
+      body: |
+        Today a Role is reached only through `agent_id` -> Agent Definition ->
+        `role_id` (agent_task_submit). There is no standalone `agent-role-id`
+        job-request field yet — that wiring belongs to AS78, not this
+        component. This section states the precedence/conflict rule that
+        MUST hold once one is introduced, so the rule is fixed before the
+        field exists rather than improvised after.
+
+        ## Resolution precedence at job launch (once agent-role-id exists)
+        1. Explicit `agent-role-id` in job request
+        2. Role carried by an explicit `agent-id` (Agent Definition)
+        3. Execution profile selection (`execution-profile-id` / provider-id
+           + model-id / default execution profile) is independent of role
+           selection — they compose, they do not override each other.
+        4. `workflow-profile` (lite/standard/strict stage pipelines) and
+           `component-profile` (per-process config layer) are orthogonal to
+           both and never interact with role/profile precedence.
+
+        ## Conflicts fail closed
+        A Role requirement that contradicts an explicitly selected Execution
+        Profile is an error raised before dispatch — never a silent override
+        in either direction, and never a permissive fallback. This applies
+        the moment AS78 exposes a path where the two could disagree; there is
+        no such path yet, so no conflict-checking code exists today.
+
+        ## Naming
+        `agent-role-id` must stay distinguishable from `execution-profile-id`,
+        `workflow-profile`, and `component-profile` — three distinct
+        "profile" concepts already exist in this project; a role is a fourth,
+        separate axis and must not collapse into any of them by accident.

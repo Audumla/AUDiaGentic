@@ -1,17 +1,13 @@
-"""Agent Execution Gateway operational MCP server — task-primary submit plus
-status/wait/cancel/list/overview/session, and the explicit raw submission
-surface (AS63 step 7).
+"""Agent Execution Gateway operational MCP server — agent_id-primary submit
+plus status/wait/cancel/list/overview/session (AS63).
 
-`agent_task_submit` is the primary submission tool; `agent_task_status`,
-`agent_task_wait`, `agent_task_cancel`, `agent_task_list_requests`,
-`agent_task_gateway_overview`, `agent_task_session_list`, and
-`agent_task_session_close` are submission-agnostic — they work identically
-regardless of which tool created the request, `agent_task_submit` or
-`agent_execution_submit`, so there is only one copy of each, named for the
-primary surface they're grouped with. `agent_execution_submit` is the
-explicit, deliberately lower-level raw surface: direct execution_profile_id
-submission, bypassing Agent Definition resolution — a deprecation candidate
-expected to be dropped once callers finish migrating to `agent_task_submit`.
+`agent_task_submit` is the sole submission tool. The raw, direct
+execution_profile_id submission surface (`agent_execution_submit`) was
+removed once its only real callers turned out to be its own tests and docs
+(AS63 step 7) — direct execution_profile_id submission bypassing Agent
+Definition resolution is still available programmatically via
+`AgentTaskFactory.submit_raw`/`submit_execution_request`, just not over MCP
+(MCP is a deliberately restrictive layer over the fuller Python API).
 """
 
 from __future__ import annotations
@@ -44,49 +40,6 @@ def _mcp_capped(timeout_seconds: float | None) -> float:
     """
     cap = MCP_BLOCKING_TIMEOUT_SECONDS
     return min(timeout_seconds, cap) if timeout_seconds else cap
-
-
-@mcp.tool()
-@log_tool_call
-def agent_execution_submit(
-    execution_profile_id: str | None = None,
-    prompt_body: str | None = None,
-    timeout_seconds: float | None = None,
-    source: str | None = None,
-    metadata: dict[str, Any] | None = None,
-    session_id: str | None = None,
-    session_keep_alive: bool = False,
-    session_idle_timeout_seconds: float | None = None,
-    session_max_lifetime_seconds: float | None = None,
-) -> dict[str, Any]:
-    """Submit an async request directly against an execution_profile_id,
-    bypassing Agent Definition resolution — prefer `agent_task_submit` unless
-    you need to select a provider/model directly without a configured Agent
-    Definition. Returns immediately with request-id and initial state; poll
-    with `agent_task_status`/`agent_task_wait` using the returned request-id
-    — those operations are identical regardless of which tool submitted the
-    request.
-
-    Sessions: session_keep_alive=true opens a live agent session that retains
-    conversation context after this request; continue it by passing the
-    response's session-id as session_id on later requests. Sessions self-clean
-    (idle timeout, default 15 min; max lifetime, default 4 h; pass 0 to
-    disable either bound). Turns queue FIFO per session; a processing session
-    is never reaped. Close explicitly with agent_task_session_close when a
-    block of work is done."""
-    return get_gateway_client().submit_execution_request(
-        project_root_from_env(),
-        execution_profile_id=execution_profile_id,
-        prompt_body=prompt_body,
-        mode="async",
-        timeout_seconds=timeout_seconds,
-        source=source,
-        metadata=metadata,
-        session_id=session_id,
-        session_keep_alive=session_keep_alive,
-        session_idle_timeout_seconds=session_idle_timeout_seconds,
-        session_max_lifetime_seconds=session_max_lifetime_seconds,
-    )
 
 
 @mcp.tool()
@@ -168,15 +121,15 @@ def agent_task_submit(
 ) -> dict[str, Any]:
     """Submit async work as `agent_id` (AS62's Agent Definition — an Execution
     Profile plus a Role bundled under one stable ID). Resolves the agent's
-    execution profile and dispatches the same way `agent_execution_submit`
-    does. Returns {request-id, state, ...} immediately — poll with
-    `agent_task_status`/`agent_task_wait` using the returned request-id.
-    Raises RES-AGD-001 if `agent_id` is not a configured agent definition.
+    execution profile and dispatches. Returns {request-id, state, ...}
+    immediately — poll with `agent_task_status`/`agent_task_wait` using the
+    returned request-id. Raises RES-AGD-001 if `agent_id` is not a configured
+    agent definition.
 
-    This is the primary submission surface (RV891). For direct provider/model
-    execution bypassing agent selection, use `agent_execution_submit` with
-    `execution_profile_id` instead — a thin, deprecation-candidate surface
-    expected to be dropped once callers finish migrating here."""
+    This is the sole submission surface over MCP (RV891). Direct
+    provider/model execution bypassing agent selection is available
+    programmatically via `AgentTaskFactory.submit_raw`/
+    `submit_execution_request`, not over MCP."""
     from audiagentic.components.agents.models.agent_task_api import (
         AgentTaskFactory,
     )
