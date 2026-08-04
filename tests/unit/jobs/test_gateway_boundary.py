@@ -15,11 +15,11 @@ _AGENT_JOBS_ROOT = (
 )
 
 _FORBIDDEN_MODULES = (
-    "agents_gateway_api",
-    "agents_gateway_queue",
-    "agents_gateway_store",
-    "agents_gateway_dispatch",
-    "agents_gateway_events",
+    "gateway.api",
+    "gateway.queue",
+    "gateway.store",
+    "gateway.dispatch",
+    "gateway.events",
 )
 
 
@@ -43,6 +43,10 @@ def _violations_in(path: Path) -> list[str]:
             if any(m in module for m in _FORBIDDEN_MODULES):
                 violations.append(f"{path.name}:{node.lineno} from {module} import {names}")
             elif any(any(m in a.name for m in _FORBIDDEN_MODULES) for a in node.names):
+                violations.append(f"{path.name}:{node.lineno} from {module} import {names}")
+            elif any(
+                any(m in f"{module}.{a.name}" for m in _FORBIDDEN_MODULES) for a in node.names
+            ):
                 violations.append(f"{path.name}:{node.lineno} from {module} import {names}")
         elif isinstance(node, ast.Attribute):
             if node.attr in _FORBIDDEN_MODULES:
@@ -77,7 +81,7 @@ def test_detector_catches_forbidden_import(tmp_path: Path):
     """The detector itself works: a scratch module with a forbidden import fails."""
     scratch = tmp_path / "scratch.py"
     scratch.write_text(
-        "from audiagentic.components.agents import agents_gateway_api\n",
+        "from audiagentic.components.agents.gateway import api\n",
         encoding="utf-8",
     )
     assert _violations_in(scratch), "detector failed to flag a forbidden import"

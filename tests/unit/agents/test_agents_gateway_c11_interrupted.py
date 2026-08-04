@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.agents import agents_gateway_store as store
-from audiagentic.components.agents.agents_event_topics import EXECUTION_INTERRUPTED_TOPIC
-from audiagentic.components.agents.agents_gateway_queue import (
+from audiagentic.components.agents.gateway import store as store
+from audiagentic.components.agents.gateway.event_topics import EXECUTION_INTERRUPTED_TOPIC
+from audiagentic.components.agents.gateway.queue.queue import (
     _LIFECYCLE_SUFFIX_TOPIC_MAP,
     _TERMINAL_EVENT_SUFFIXES,
     _publish_lifecycle_event,
@@ -63,7 +63,7 @@ class TestInterruptedLifecycleEventPublish:
     """C11: publishing interrupted terminal carries replay_required."""
 
     def test_interrupted_terminal_carries_replay_required(self, tmp_path):
-        record = store.build_record(agent_profile_id="default", prompt_body="test")
+        record = store.build_record(execution_profile_id="default", prompt_body="test")
         record["state"] = "interrupted"
         record["recovery"] = {"outcome": "replay-required"}
         captured = {}
@@ -78,7 +78,7 @@ class TestInterruptedLifecycleEventPublish:
             ev = captured[EXECUTION_INTERRUPTED_TOPIC]
             assert ev["state"] == "interrupted"
             assert "request-id" in ev
-            assert "agent-profile-id" in ev
+            assert "execution-profile-id" in ev
             # Terminal fields present
             assert "provider-id" in ev
             assert "model-id" in ev
@@ -91,7 +91,7 @@ class TestInterruptedLifecycleEventPublish:
 
     def test_interrupted_stale_running_has_replay_required_false(self, tmp_path):
         """Stale running recovery sets resubmit-required → replay_required=False in event."""
-        record = store.build_record(agent_profile_id="default", prompt_body="test")
+        record = store.build_record(execution_profile_id="default", prompt_body="test")
         record["state"] = "interrupted"
         record["recovery"] = {"outcome": "resubmit-required"}
         captured = {}
@@ -108,7 +108,7 @@ class TestInterruptedLifecycleEventPublish:
             get_bus().unsubscribe(handle)
 
     def test_interrupted_no_recovery_outcome_defaults_false(self, tmp_path):
-        record = store.build_record(agent_profile_id="default", prompt_body="test")
+        record = store.build_record(execution_profile_id="default", prompt_body="test")
         record["state"] = "interrupted"
         captured = {}
 
@@ -125,7 +125,7 @@ class TestInterruptedLifecycleEventPublish:
 
     def test_interrupted_redacts_no_prompt(self, tmp_path):
         """The event payload must not contain prompt body."""
-        record = store.build_record(agent_profile_id="default", prompt_body="test")
+        record = store.build_record(execution_profile_id="default", prompt_body="test")
         record["state"] = "interrupted"
         captured = {}
 
@@ -146,7 +146,7 @@ class TestInterruptedLifecycleEventPublish:
 # ---------------------------------------------------------------------------
 
 def _record(project_root: Path, prompt: str = "hello") -> dict:
-    record = store.build_record(agent_profile_id="default", prompt_body=prompt)
+    record = store.build_record(execution_profile_id="default", prompt_body=prompt)
     store.write_record(project_root, record)
     return record
 
@@ -180,7 +180,7 @@ class TestRecoveryInterruptedExactlyOnce:
 
         handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, handler)
         try:
-            from audiagentic.components.agents import agents_gateway_recovery as recovery
+            from audiagentic.components.agents.gateway.queue import recovery as recovery
 
             report = recovery.recover_gateway_requests(
                 service_root, live_owner_epoch="new-epoch"
@@ -218,7 +218,7 @@ class TestRecoveryInterruptedExactlyOnce:
 
         handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, handler)
         try:
-            from audiagentic.components.agents import agents_gateway_recovery as recovery
+            from audiagentic.components.agents.gateway.queue import recovery as recovery
 
             # First pass: transitions to interrupted, publishes event
             report1 = recovery.recover_gateway_requests(
@@ -259,7 +259,7 @@ class TestRecoveryInterruptedExactlyOnce:
 
         handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, handler)
         try:
-            from audiagentic.components.agents import agents_gateway_recovery as recovery
+            from audiagentic.components.agents.gateway.queue import recovery as recovery
 
             report = recovery.recover_gateway_requests(
                 service_root, live_owner_epoch="new-epoch"
@@ -290,7 +290,7 @@ class TestRecoveryInterruptedExactlyOnce:
 
         handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, handler)
         try:
-            from audiagentic.components.agents import agents_gateway_recovery as recovery
+            from audiagentic.components.agents.gateway.queue import recovery as recovery
 
             recovery.recover_gateway_requests(
                 service_root, live_owner_epoch="new-epoch"
@@ -330,7 +330,7 @@ class TestRecoveryInterruptedExactlyOnce:
 
         handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, handler)
         try:
-            from audiagentic.components.agents import agents_gateway_recovery as recovery
+            from audiagentic.components.agents.gateway.queue import recovery as recovery
 
             recovery.recover_gateway_requests(
                 service_root, live_owner_epoch="new-epoch"
@@ -386,7 +386,7 @@ class TestInterruptedProgressRedaction:
     """C11: public progress projection shows interrupted without leaking internals."""
 
     def test_interrupted_phase_is_terminal_in_progress(self):
-        from audiagentic.components.agents.agents_gateway_progress import (
+        from audiagentic.components.agents.gateway.queue.progress import (
             _TERMINAL_PHASES,
             _TERMINAL_STATE_TO_PHASE,
         )

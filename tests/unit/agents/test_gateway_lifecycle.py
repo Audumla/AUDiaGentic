@@ -7,12 +7,12 @@ from dataclasses import replace
 
 import pytest
 
-from audiagentic.components.agents import agents_gateway_lifecycle as lifecycle_mod
-from audiagentic.components.agents.agents_gateway_lifecycle import (
+from audiagentic.components.agents.gateway.service import lifecycle as lifecycle_mod
+from audiagentic.components.agents.gateway.service.host import GATEWAY_SERVICE_KEY
+from audiagentic.components.agents.gateway.service.lifecycle import (
     GatewayLifecycleController,
     recover_unprovable_owner,
 )
-from audiagentic.components.agents.agents_gateway_service_host import GATEWAY_SERVICE_KEY
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.system.managed_process import current_process_evidence
 from audiagentic.foundation.system.managed_service import ManagedServiceStore

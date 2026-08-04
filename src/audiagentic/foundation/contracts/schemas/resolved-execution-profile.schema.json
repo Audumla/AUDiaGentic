@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "resolved-execution-profile",
+  "type": "object",
+  "required": [
+    "profile-id",
+    "generation",
+    "config-digest",
+    "provider-id",
+    "model-id",
+    "max-concurrency",
+    "queue-max-size",
+    "execution-params",
+    "admission-policy-digest"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "profile-id": {
+      "type": "string"
+    },
+    "generation": {
+      "type": "string"
+    },
+    "config-digest": {
+      "type": "string"
+    },
+    "provider-id": {
+      "type": "string"
+    },
+    "model-id": {
+      "type": ["string", "null"]
+    },
+    "max-concurrency": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "queue-max-size": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "execution-params": {
+      "type": "object"
+    },
+    "admission-policy-digest": {
+      "type": "string"
+    }
+  }
+}

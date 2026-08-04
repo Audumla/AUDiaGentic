@@ -61,10 +61,10 @@ Choose a prefix matching the plan name (CC → code-cleanup, LSP → lsp-mcp-enh
 - standards: Applicable standards/rules
 - notes: Key design principles and additional context
 
-## Agent profile doctrine
+## Execution profile doctrine
 
-Agent profiles bind a provider to a specific model with optional execution
-parameters. They are stored in .audiagentic/config/agent-profiles.yaml.
+Execution profiles bind a provider to a specific model with optional execution
+parameters. They are stored in .audiagentic/config/execution-profiles.yaml.
 
 ## When to use
 - A job needs a predefined provider+model configuration
@@ -72,12 +72,12 @@ parameters. They are stored in .audiagentic/config/agent-profiles.yaml.
 - Multiple projects need different default model configurations
 
 ## Resolution precedence at job launch
-1. Explicit `agent-profile-id` in job request
+1. Explicit `execution-profile-id` in job request
 2. Explicit provider-id / model-id in job request
-3. Default agent profile (marked `is-default: true`)
+3. Default execution profile (marked `is-default: true`)
 
 ## Naming
-Use `agent-profile-id` (NOT `profile-id`) in job requests to avoid
+Use `execution-profile-id` (NOT `profile-id`) in job requests to avoid
 collision with `workflow-profile` (lite/standard/strict stage pipelines).
 
 ## Memory usage guidance
@@ -90,60 +90,33 @@ Use Hindsight memory when prior project context may help.
 ## Component profile doctrine
 
 Component profiles select an alternative set of component configurations
-for a single process invocation. They override the base component
-definitions with
-per-profile customizations (enabled/disabled components,
-overridden mcp-servers,
-adjusted parameters).
+for a single process invocation. They override the base component definitions
+with per-profile customizations (enabled/disabled components, overridden
+mcp-servers, and adjusted parameters).
 
 ## What component profiles are
 
 A component profile is a named configuration layer loaded via the
 `--component-profile` CLI flag or the `AUDIAGENTIC_COMPONENT_PROFILE`
 environment variable. The profile name maps to a project-scoped folder:
-`<project-root>/.audiagentic/<profile-name>/components/`. Descriptor
-YAML files in that folder layer on top of the base component definitions
-from the package's `config/components/`; a profile descriptor sharing an
-id with a base descriptor wins (last-wins overlay).
+`<project-root>/.audiagentic/<profile-name>/components/`.
 
 ## Distinction from other profile concepts
 
-Three unrelated mechanisms use the word "profile" in this codebase:
-
-- **Component profiles** — select alternative component configurations
-  for the harness. Controlled by `--component-profile` /
-  `AUDIAGENTIC_COMPONENT_PROFILE`. Stored in
-  `<project-root>/.audiagentic/<profile-name>/components/`.
-
-- **Agent profiles** — bind a provider to a specific model with optional
-  execution parameters. Used at job-launch time to resolve which model
-  invoke. Stored in `.audiagentic/config/agent-profiles.yaml`.
-Referenced via
-  `agent-profile-id` in job requests.
-
-- **Workflow profiles** — define lite/standard/strict stage pipelines
-  task execution. Controlled by `workflow-profile` in job or plan
-  configuration. Not the same as component profiles or agent profiles.
-
-Additionally, rig model profiles (controlled by
-`AUDIAGENTIC_RIG_MODEL_PROFILE` and related env vars) configure
-inference parameters and are orthogonal to all three of the above.
+Component profiles, execution profiles, workflow profiles, and rig model
+profiles are separate mechanisms. Execution profiles bind a provider to a
+model; workflow profiles select stage pipelines; rig model profiles configure
+inference parameters.
 
 ## Usage
 
 - CLI flag: `--component-profile <profile-name>`
 - Environment variable: `AUDIAGENTIC_COMPONENT_PROFILE=<profile-name>`
-- Default fallback: if neither is set, the harness loads base component
-  definitions from `src/audiagentic/config/components/` with no overlay.
 
 ## One-profile-per-process constraint
 
-A single process runs with exactly one component profile (or none). The
-profile is captured at the first component registration in the process;
-requesting a different profile later in the same process raises
-VAL-COMP-010. To switch profiles, stop the current session and restart
-with a different `--component-profile` value or updated environment
-variable.
+A single process runs with exactly one component profile (or none). To switch
+profiles, stop the current session and restart with the desired profile.
 
 ## Source control doctrine
 

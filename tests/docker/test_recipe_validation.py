@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 pytestmark = [pytest.mark.opt_in]  # Docker-only, requires clean build
 
@@ -85,9 +86,10 @@ def test_provider_descriptor_valid(pid: str) -> None:
     assert config_path.exists(), f"Provider descriptor missing: {config_path}"
 
     content = config_path.read_text(encoding="utf-8")
-    # Verify the provider declares cli_install or cli-probe
-    assert "cli_install:" in content or "cli_probe:" in content, (
-        f"Provider {pid} has no cli_install/cli_probe in descriptor"
+    descriptor = yaml.safe_load(content)
+    cli = (descriptor.get("capabilities") or {}).get("cli-install")
+    assert isinstance(cli, dict) and isinstance(cli.get("mechanism"), dict), (
+        f"Provider {pid} has no capabilities.cli-install.mechanism in descriptor"
     )
 
 
@@ -109,19 +111,29 @@ def test_harness_install_lifecycle(harness: str) -> None:
 
     home = os.environ.get("HOME", "/tmp/recipe-test-home")
     harness_dir = os.path.join(home, ".audiagentic", "harness", harness)
+    child_env = os.environ.copy()
+    child_env["AUDIAGENTIC_PROVISION_PI_RIG"] = "1"
 
     # Install harness runtime (rig backend + agent config)
     result = subprocess.run(
-        ["audiagentic", "bootstrap", "--target", harness_dir],
+        [sys.executable, "-m", "audiagentic.launcher", "bootstrap", "--target", harness_dir],
         capture_output=True,
         text=True,
         timeout=180,
+        env=child_env,
     )
     assert result.returncode == 0, f"Bootstrap failed: {result.stderr[:300]}"
 
     # Verify rig assets installed (llama-server binary)
+    from audiagentic.runtime.rig.constants import platform_binary_names, platform_dir_name
+
     expected_server = os.path.join(
-        harness_dir, "rig", "bin", "llama-server", "linux", "llama-server"
+        harness_dir,
+        "rig",
+        "bin",
+        "llama-server",
+        platform_dir_name(),
+        platform_binary_names()[0],
     )
     assert Path(expected_server).exists(), f"Expected rig server at {expected_server}"
 
@@ -138,10 +150,11 @@ def test_harness_install_lifecycle(harness: str) -> None:
 
     # Uninstall (cleanup_runtime) — preserves rig/bin and models as user-owned areas
     result = subprocess.run(
-        ["audiagentic", "cleanup", "--target", harness_dir],
+        [sys.executable, "-m", "audiagentic.launcher", "cleanup", "--target", harness_dir],
         capture_output=True,
         text=True,
         timeout=60,
+        env=child_env,
     )
     assert result.returncode == 0, f"Cleanup failed: {result.stderr[:300]}"
 
@@ -172,15 +185,16 @@ def test_provider_capability_outputs() -> None:
             continue
 
         content = config_path.read_text(encoding="utf-8")
-        # Verify the provider declares cli-install capability
-        assert "cli_install:" in content or "cli-probe:" in content, (
-            f"Provider {pid} has expectations but no cli_install/cli-probe in descriptor"
+        descriptor = yaml.safe_load(content)
+        cli = (descriptor.get("capabilities") or {}).get("cli-install")
+        assert isinstance(cli, dict) and isinstance(cli.get("mechanism"), dict), (
+            f"Provider {pid} has no capabilities.cli-install.mechanism in descriptor"
         )
 
         # Verify expected fields match (YAML uses either quoted or unquoted)
         if exp.get("cli", {}).get("executable"):
             exe = exp["cli"]["executable"]
-            assert f"executable: {exe}" in content or f'executable: "{exe}"' in content, (
+            assert cli["mechanism"].get("executable") == exe, (
                 f"Provider {pid}: expected executable {exe} not found"
             )
 

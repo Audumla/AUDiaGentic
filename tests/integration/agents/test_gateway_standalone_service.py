@@ -11,16 +11,18 @@ from urllib.request import Request, urlopen
 
 import pytest
 
-from audiagentic.components.agents.agents_api import create_profile
-from audiagentic.components.agents.agents_gateway_client import (
+from audiagentic.components.agents.gateway.client import (
     get_gateway_client,
     reset_gateway_client,
 )
-from audiagentic.components.agents.agents_gateway_remote_client import (
+from audiagentic.components.agents.gateway.remote_client import (
     StandaloneGatewayClient,
     load_auth_token,
 )
-from audiagentic.components.agents.agents_gateway_service_host import GatewayServiceHost
+from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
+from audiagentic.components.agents.models.execution_profile_api import (
+    create_execution_profile,
+)
 from audiagentic.components.providers.providers_api import ProviderExecutionResult
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.features.base import ImplementationState
@@ -121,7 +123,7 @@ def _raw_post(endpoint: str, token: str, route: str, body: dict) -> dict:
 
 
 def _make_profile(project_root: Path) -> None:
-    create_profile(project_root, {
+    create_execution_profile(project_root, {
         "profile_id": "default",
         "provider_id": "local-openai",
         "model_id": "gpt-4o",
@@ -316,7 +318,7 @@ def test_real_gateway_work_survives_submitter_disconnect(tmp_path: Path, monkeyp
         )
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", slow_provider
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn", slow_provider
     )
     host = GatewayServiceHost.create(
         service_root=tmp_path / "service-state",
@@ -401,7 +403,7 @@ def test_clean_restart_reuses_token_and_rotates_owner_epoch(tmp_path: Path) -> N
 def test_service_host_boots_with_no_gateway_registry_config_present(tmp_path: Path) -> None:
     """RV745: a fresh machine with no gateway-profiles.yaml keeps embedded-mode
     behavior — no shared registry is installed, matching prior behavior."""
-    from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
+    from audiagentic.components.agents.gateway import profiles as profiles_mod
 
     application = SharedApplication()
     host, thread, _service_root, _token_path = _start_host(tmp_path, application)
@@ -419,7 +421,7 @@ def test_service_host_startup_wires_gateway_owned_registry_from_config(
     registry from a machine-scoped config file, and two distinct project roots
     submitting the same gateway profile share its global queue limit through
     the real HTTP service, not project-local config."""
-    from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
+    from audiagentic.components.agents.gateway import profiles as profiles_mod
 
     root_a = tmp_path / "project_a"
     root_b = tmp_path / "project_b"
@@ -454,7 +456,7 @@ def test_service_host_startup_wires_gateway_owned_registry_from_config(
         )
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", slow_provider
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn", slow_provider
     )
     host = GatewayServiceHost.create(
         service_root=tmp_path / "service-state",
@@ -515,7 +517,7 @@ def test_explicit_composition_mode_selects_standalone_without_fallback(
 
 
 def test_service_process_crash_allows_deterministic_explicit_restart(tmp_path: Path) -> None:
-    from audiagentic.components.agents.agents_gateway_service_host import GATEWAY_SERVICE_KEY
+    from audiagentic.components.agents.gateway.service.host import GATEWAY_SERVICE_KEY
 
     port = choose_free_port("127.0.0.1")
     endpoint = f"http://127.0.0.1:{port}"
@@ -597,7 +599,7 @@ def test_service_process_crash_allows_deterministic_explicit_restart(tmp_path: P
 def test_spooled_trigger_is_admitted_by_running_service(tmp_path: Path) -> None:
     """A trigger published while the service is DOWN is durably admitted once
     the service starts, carrying spool-derived idempotency and correlation."""
-    from audiagentic.components.agents.agents_event_topics import GATEWAY_REQUESTED_TOPIC
+    from audiagentic.components.agents.gateway.event_topics import GATEWAY_REQUESTED_TOPIC
 
     application = SharedApplication()
     service_root = tmp_path / "services"
@@ -612,7 +614,7 @@ def test_spooled_trigger_is_admitted_by_running_service(tmp_path: Path) -> None:
             "-c",
             (
                 "import sys; from pathlib import Path\n"
-                "from audiagentic.components.agents.agents_gateway_ingress import publish_gateway_trigger\n"
+                "from audiagentic.components.agents.gateway.ingress import publish_gateway_trigger\n"
                 f"event_id = publish_gateway_trigger({GATEWAY_REQUESTED_TOPIC!r}, "
                 f"{{'project-root': {str(tmp_path / 'proj')!r}, 'prompt-body': 'spooled hello'}}, "
                 f"metadata={{'correlation_id': 'corr-spool'}}, service_root=Path({str(service_root)!r}))\n"
@@ -644,7 +646,7 @@ def test_spooled_trigger_is_admitted_by_running_service(tmp_path: Path) -> None:
 def test_idle_grace_self_shutdown_retires_record(tmp_path: Path, monkeypatch) -> None:
     """With an idle grace configured, a quiescent service with no leases
     drains and exits by itself; close() retires the record to 'stopped'."""
-    from audiagentic.components.agents.agents_gateway_service_host import GATEWAY_SERVICE_KEY
+    from audiagentic.components.agents.gateway.service.host import GATEWAY_SERVICE_KEY
 
     monkeypatch.setenv("AUDIAGENTIC_GATEWAY_IDLE_GRACE_SECONDS", "0.1")
     application = SharedApplication()
@@ -678,8 +680,8 @@ def test_reload_gateway_profiles_atomic_swap(tmp_path: Path) -> None:
     """SH13 step 3-4: reload_profile_registry atomically swaps the registry
     under a lock; on success, returns only redacted generation metadata.
     A redacted agents.execution.gateway.profile-reloaded event is published."""
-    from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
-    from audiagentic.components.agents.agents_event_topics import (
+    from audiagentic.components.agents.gateway import profiles as profiles_mod
+    from audiagentic.components.agents.gateway.event_topics import (
         GATEWAY_PROFILE_RELOADED_TOPIC,
     )
 
@@ -768,7 +770,7 @@ def test_reload_gateway_profiles_atomic_swap(tmp_path: Path) -> None:
 def test_reload_retains_previous_on_failure(tmp_path: Path) -> None:
     """SH13 step 3: if reload fails (config file missing), the previous
     registry is retained and the operation returns success=False."""
-    from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
+    from audiagentic.components.agents.gateway import profiles as profiles_mod
 
     config_path = tmp_path / "gateway-profiles.yaml"
     _make_gateway_profiles_config(config_path, [
@@ -780,7 +782,7 @@ def test_reload_retains_previous_on_failure(tmp_path: Path) -> None:
         },
     ])
 
-    registry = profiles_mod.InMemoryGatewayRegistry()
+    registry = profiles_mod.InMemoryExecutionProfileRegistry()
     registry.register("default", provider_id="local-openai", model_id="gpt-4o")
     profiles_mod.set_gateway_registry(registry)
     profiles_mod.set_gateway_registry_config_path(config_path)
@@ -806,7 +808,7 @@ def test_reload_retains_previous_on_failure(tmp_path: Path) -> None:
 def test_reload_via_service_operation(tmp_path: Path) -> None:
     """SH13 step 3-4: reload_gateway_profiles operation is callable through
     the HTTP service and returns redacted metadata."""
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
     )
 
@@ -843,7 +845,7 @@ def test_stale_queued_snapshot_rejected_on_reload(tmp_path: Path, monkeypatch) -
     """SH13 step 7-8: after a reload changes the profile generation,
     queued work with a stale snapshot is rejected with CON-AGW-101 while
     a running request keeps its original snapshot uninterrupted."""
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
     )
 
@@ -881,7 +883,7 @@ def test_stale_queued_snapshot_rejected_on_reload(tmp_path: Path, monkeypatch) -
         )
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
         slow_provider,
     )
     host = GatewayServiceHost.create(
@@ -892,7 +894,7 @@ def test_stale_queued_snapshot_rejected_on_reload(tmp_path: Path, monkeypatch) -
     thread = threading.Thread(target=host.serve_forever)
     thread.start()
     try:
-        from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
+        from audiagentic.components.agents.gateway import profiles as profiles_mod
 
         token = load_auth_token(host.token_path)
         client_a = StandaloneGatewayClient(host.endpoint, token)
@@ -948,7 +950,7 @@ def test_stale_queued_snapshot_rejected_on_reload(tmp_path: Path, monkeypatch) -
 def test_redacted_status_no_secrets_in_overview(tmp_path: Path) -> None:
     """SH13 step 9: self-review — gateway status and queue overview contain
     no secret keys or filesystem paths beyond the project root."""
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
     )
 
@@ -990,7 +992,7 @@ def test_redacted_status_no_secrets_in_overview(tmp_path: Path) -> None:
             assert "api-key" not in overview_str or overview_str.count("api-key") == 0
 
             # Reload result should also be redacted
-            from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
+            from audiagentic.components.agents.gateway import profiles as profiles_mod
             reload_result = profiles_mod.reload_profile_registry()
             assert reload_result["success"] is True
             reload_str = json.dumps(reload_result).lower()
@@ -1003,7 +1005,7 @@ def test_absent_shared_profile_rejected_not_fallback(tmp_path: Path) -> None:
     """SH13 step 5: when a shared registry is active but the requested
     profile does not exist in it, the request is rejected — no fallback to
     project-local limits."""
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
     )
 
@@ -1040,7 +1042,7 @@ def test_absent_shared_profile_rejected_not_fallback(tmp_path: Path) -> None:
             # not silently fall back to the project-local profile's limits.
             with pytest.raises(AudiaGenticError) as exc_info:
                 client.submit_execution_request(root, prompt_body="hello", mode="async")
-            assert exc_info.value.code == "RES-AGP-001"
+            assert exc_info.value.code == "RES-EXP-001"
     finally:
         _stop_host(host, thread)
 
@@ -1048,7 +1050,7 @@ def test_absent_shared_profile_rejected_not_fallback(tmp_path: Path) -> None:
 def test_embedded_compatibility_when_no_shared_registry(tmp_path: Path) -> None:
     """SH13 step 6: when no shared gateway registry is installed, embedded
     compatibility mode still works — project-local profiles are used."""
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
     )
 
@@ -1073,7 +1075,7 @@ def test_reload_concurrency_no_state_corruption(tmp_path: Path, monkeypatch) -> 
     corrupt registry state — the atomic swap under a short lock guarantees
     that a request admitted during reload sees either the old or new registry,
     never a torn or partially-updated one."""
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
     )
 
@@ -1107,7 +1109,7 @@ def test_reload_concurrency_no_state_corruption(tmp_path: Path, monkeypatch) -> 
         )
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
         slow_provider,
     )
     host = GatewayServiceHost.create(
@@ -1118,7 +1120,7 @@ def test_reload_concurrency_no_state_corruption(tmp_path: Path, monkeypatch) -> 
     thread = threading.Thread(target=host.serve_forever)
     thread.start()
     try:
-        from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
+        from audiagentic.components.agents.gateway import profiles as profiles_mod
 
         token = load_auth_token(host.token_path)
         client_a = StandaloneGatewayClient(host.endpoint, token)

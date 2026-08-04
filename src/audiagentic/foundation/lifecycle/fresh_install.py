@@ -25,11 +25,25 @@ def apply_fresh_install(project_root: Path) -> dict:
 
     ensure_project_layout(project_root)
     from audiagentic.foundation.components.base import MODE_CREATE_IF_MISSING
-    sync_report = sync_managed_baseline(project_root, lifecycle_modes={MODE_CREATE_IF_MISSING})
-
-    from audiagentic.foundation.components.base import MODE_CREATE_IF_MISSING
     from audiagentic.foundation.components.registry import all_descriptors
-    for component_id in all_descriptors():
+
+    # Fresh project install creates only project-scoped core infrastructure.
+    # Optional capabilities (including providers) require an explicit component
+    # install request; they must not appear enabled merely because a project was
+    # initialized.
+    descriptors = all_descriptors()
+    project_core = {
+        component_id
+        for component_id, descriptor in descriptors.items()
+        if descriptor.core and descriptor.scope == "project"
+    }
+    sync_report = sync_managed_baseline(
+        project_root,
+        component_ids=project_core,
+        lifecycle_modes={MODE_CREATE_IF_MISSING},
+    )
+
+    for component_id in project_core:
         kwargs: dict = {"version": DEFAULT_VERSION, "lifecycle_modes": {MODE_CREATE_IF_MISSING}}
         if component_id == COMPONENT_PROJECT:
             kwargs["installation_kind"] = "fresh"

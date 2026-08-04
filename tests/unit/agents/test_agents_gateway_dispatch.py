@@ -6,9 +6,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from audiagentic.components.agents import agents_gateway_dispatch as dispatch
-from audiagentic.components.agents import agents_gateway_store as store
-from audiagentic.components.agents.agents_api import create_profile
+from audiagentic.components.agents.gateway import store as store
+from audiagentic.components.agents.gateway.queue import dispatch as dispatch
+from audiagentic.components.agents.models.execution_profile_api import (
+    create_execution_profile,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state
@@ -19,7 +21,7 @@ def _enable_provider(project_root: Path, provider_id: str) -> None:
 
 
 def _make_profile(project_root: Path, profile_id: str, provider_id: str, model_id: str = "gpt-4o", **params) -> None:
-    create_profile(project_root, {
+    create_execution_profile(project_root, {
         "profile_id": profile_id,
         "provider_id": provider_id,
         "model_id": model_id,
@@ -28,9 +30,9 @@ def _make_profile(project_root: Path, profile_id: str, provider_id: str, model_i
     _enable_provider(project_root, provider_id)
 
 
-def _record(project_root: Path, agent_profile_id: str) -> dict:
+def _record(project_root: Path, execution_profile_id: str) -> dict:
     record = store.build_record(
-        agent_profile_id=agent_profile_id,
+        execution_profile_id=execution_profile_id,
         prompt_body="do the thing",
     )
     store.write_record(project_root, record)
@@ -85,7 +87,7 @@ def test_dispatch_success_builds_expected_packet_ctx(tmp_path: Path, monkeypatch
         captured.update(packet_ctx)
         return _worker_result({"provider-id": provider_id, "status": "ok", "model": "gpt-4o", "output": "hi", "completion": {"kind": "completion"}})
 
-    monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider)
+    monkeypatch.setattr("audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn", fake_execute_provider)
 
     # SH02: pass dispatch_prompt separately; the persisted record has prompt-body=None
     result = _dispatch(tmp_path, record)
@@ -95,7 +97,7 @@ def test_dispatch_success_builds_expected_packet_ctx(tmp_path: Path, monkeypatch
     assert result["provider-id"] == "local-openai"
     assert result["model-id"] == "gpt-4o"
     assert captured["request-id"] == record["request-id"]
-    assert captured["agent-profile-id"] == "default"
+    assert captured["execution-profile-id"] == "default"
     assert captured["provider-id"] == "local-openai"
     assert captured["prompt-body"] == "do the thing"
     assert captured["working-root"] == str(tmp_path.resolve())
@@ -123,7 +125,7 @@ def test_dispatch_uses_profile_stream_controls_and_ignores_metadata_working_root
         return _worker_result({"provider-id": provider_id, "model": "gpt-4o", "output": "ok"})
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
         fake_execute_provider,
     )
 
@@ -155,7 +157,7 @@ def test_dispatch_retries_transient_then_succeeds(tmp_path: Path, monkeypatch):
             raise AudiaGenticError(code="NET-FAKE-001", kind="providers", message="connection reset")
         return _worker_result({"provider-id": provider_id, "status": "ok", "model": "gpt-4o", "output": "recovered"})
 
-    monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", flaky_execute_provider)
+    monkeypatch.setattr("audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn", flaky_execute_provider)
 
     result = _dispatch(tmp_path, record)
 
@@ -173,7 +175,7 @@ def test_dispatch_validation_error_is_terminal(tmp_path: Path, monkeypatch):
     def fake_execute_provider(**_kwargs):
         raise AudiaGenticError(code="VAL-FAKE-001", kind="providers", message="bad request")
 
-    monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider)
+    monkeypatch.setattr("audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn", fake_execute_provider)
 
     result = _dispatch(tmp_path, record)
 
@@ -181,11 +183,11 @@ def test_dispatch_validation_error_is_terminal(tmp_path: Path, monkeypatch):
     assert result["error"]["code"] == "VAL-FAKE-001"
     # exactly one attempt — validation errors do not retry
     assert len(result["attempts"]) == 1
-    assert result["attempts"][0]["agent-profile-id"] == "primary"
+    assert result["attempts"][0]["execution-profile-id"] == "primary"
 
 
 def test_dispatch_disabled_provider_is_terminal(tmp_path: Path, monkeypatch):
-    create_profile(tmp_path, {"profile_id": "primary", "provider_id": "local-openai", "model_id": "gpt-4o"})
+    create_execution_profile(tmp_path, {"profile_id": "primary", "provider_id": "local-openai", "model_id": "gpt-4o"})
     # provider left disabled (never enabled)
     record = _record(tmp_path, "primary")
 
@@ -195,7 +197,7 @@ def test_dispatch_disabled_provider_is_terminal(tmp_path: Path, monkeypatch):
         calls["count"] += 1
         raise AudiaGenticError(code="CFG-PEXE-001", kind="providers", message="provider disabled")
 
-    monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider)
+    monkeypatch.setattr("audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn", fake_execute_provider)
 
     result = _dispatch(tmp_path, record)
 
@@ -222,7 +224,7 @@ def test_dispatch_stops_retrying_once_cancel_requested(tmp_path: Path, monkeypat
             store.mark_cancel_requested(tmp_path, record["request-id"])
         raise AudiaGenticError(code="NET-FAKE-001", kind="providers", message="down")
 
-    monkeypatch.setattr("audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", fake_execute_provider)
+    monkeypatch.setattr("audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn", fake_execute_provider)
 
     result = _dispatch(tmp_path, record)
 

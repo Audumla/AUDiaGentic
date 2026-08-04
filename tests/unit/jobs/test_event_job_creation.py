@@ -64,7 +64,7 @@ def _envelope(overrides: dict | None = None) -> dict:
 def _trigger_config(overrides: dict | None = None) -> dict:
     base = {
         "trigger-id": "trg-plan-create",
-        "agent-profile-id": "test-profile",
+        "execution-profile-id": "test-profile",
         "workflow-profile": "standard",
         "target": {"kind": "adhoc"},
     }

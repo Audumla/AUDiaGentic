@@ -1,5 +1,5 @@
 # Agent Execution Gateway request state workflow.
-# Loaded by agents_gateway_store.py through the shared foundation.workflow
+# Loaded by gateway/store/_shared.py through the shared foundation.workflow
 # transitions primitives — mirrors the pattern agent_jobs/workflows.yaml uses
 # gateway's own (unrelated) request/result data shape.
 kinds:
@@ -8,7 +8,8 @@ kinds:
     workflows:
       standard:
         initial: queued
-        values: [queued, running, completed, failed, cancelled, rejected, interrupted]
+        values:
+          [queued, running, completed, failed, cancelled, rejected, interrupted]
         transitions:
           queued: [running, cancelled, rejected, interrupted]
           running: [completed, failed, cancelled, interrupted]

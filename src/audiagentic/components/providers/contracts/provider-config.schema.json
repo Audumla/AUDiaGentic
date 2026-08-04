@@ -9,6 +9,37 @@
     "contract-version": {
       "const": "v1"
     },
+    "reconciliation-policy": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "allowlist",
+            "prompt"
+          ]
+        },
+        "allowed-providers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "decided-providers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "additionalProperties": false
+    },
     "providers": {
       "type": "object",
       "additionalProperties": {

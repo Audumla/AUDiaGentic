@@ -24,7 +24,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 try:
-    from audiagentic.components.agents import agents_terminal_quality as tq
+    from audiagentic.components.agents.status import terminal_quality as tq
 except ImportError:
     tq = None  # tests are skipped until the module exists
 

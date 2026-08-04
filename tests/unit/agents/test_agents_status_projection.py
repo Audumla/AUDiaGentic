@@ -8,13 +8,13 @@ AgentLifecycle.TERMINAL (never CANCELLED, never FAILED).
 from __future__ import annotations
 
 import pytest
-
-from audiagentic.components.agents.agents_session_lifecycle_projection import (
+from audiagentic.components.agents.status.session_lifecycle_projection import (
     SessionLifecycleDecision,
 )
-from audiagentic.components.agents.agents_status_projection import (
+from audiagentic.components.agents.status.status_projection import (
     snapshot_for_request,
 )
+
 from audiagentic.foundation.transports.agent_status import (
     AgentLifecycle,
     AgentOutcome,

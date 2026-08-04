@@ -156,7 +156,7 @@ def request_approval(project_root: Path, payload: dict[str, Any]) -> dict[str, A
     )
     if existing:
         return existing
-    interaction.request(
+    interaction.request_interaction(
         project_root=project_root,
         **_approval_to_interaction_payload(payload),
     )

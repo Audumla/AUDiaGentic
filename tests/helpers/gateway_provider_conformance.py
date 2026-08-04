@@ -5,9 +5,11 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.agents import agents_gateway_api as gateway
-from audiagentic.components.agents import agents_gateway_sessions as sessions_module
-from audiagentic.components.agents.agents_api import create_profile
+from audiagentic.components.agents.gateway import api as gateway
+from audiagentic.components.agents.gateway.session import sessions as sessions_module
+from audiagentic.components.agents.models.execution_profile_api import (
+    create_execution_profile,
+)
 from audiagentic.components.providers.contracts.provider_execution import (
     ProviderAcpLaunchResult,
     ProviderExecutionResult,
@@ -45,7 +47,7 @@ def enable_profile(
     params: dict[str, Any] = {"max-concurrency": max_concurrency}
     if queue_max_size is not None:
         params["queue-max-size"] = queue_max_size
-    create_profile(project_root, {
+    create_execution_profile(project_root, {
         "profile_id": profile_id,
         "provider_id": provider_id,
         "model_id": f"{provider_id}-model",
@@ -101,7 +103,7 @@ def assert_one_shot_state_matrix(project_root: Path, provider_id: str, monkeypat
         )
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
         controlled_provider,
     )
 

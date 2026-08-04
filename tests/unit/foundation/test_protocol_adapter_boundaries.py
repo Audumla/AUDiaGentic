@@ -63,43 +63,63 @@ def test_component_mcp_adapters_do_not_import_owning_internals() -> None:
 
 
 def test_gateway_mcp_imports_only_public_client_and_mcp_scaffolding() -> None:
-    path = COMPONENTS / "agents" / "agents_gateway_mcp.py"
+    path = COMPONENTS / "agents" / "mcp" / "gateway_mcp.py"
     forbidden = (
-        "agents_gateway_api",
-        "agents_gateway_store",
-        "agents_gateway_queue",
-        "agents_gateway_dispatch",
-        "agents_gateway_application",
+        "gateway.api",
+        "gateway.store",
+        "gateway.queue",
+        "gateway.dispatch",
+        "gateway.application",
     )
     imports = _imports(path)
     violations = [target for target in imports if any(name in target for name in forbidden)]
     assert not violations
-    assert "audiagentic.components.agents.agents_gateway_client" in imports
+    assert "audiagentic.components.agents.gateway.client" in imports
+
+
+def test_agent_task_api_imports_only_public_client_not_core_api() -> None:
+    """AS63 acceptance criteria: one agent-work path. AgentTaskFactory/AgentTask
+    (agent_task_api.py) reach the gateway only through the same public client
+    seam gateway_mcp.py uses -- never gateway.api/store/queue/dispatch/
+    application directly -- so agent_id-primary and execution_profile_id-direct
+    submission are two entry points onto one path, not two engines."""
+    path = COMPONENTS / "agents" / "models" / "agent_task_api.py"
+    forbidden = (
+        "gateway.api",
+        "gateway.store",
+        "gateway.queue",
+        "gateway.dispatch",
+        "gateway.application",
+    )
+    imports = _imports(path)
+    violations = [target for target in imports if any(name in target for name in forbidden)]
+    assert not violations
+    assert "audiagentic.components.agents.gateway.client" in imports
 
 
 def test_gateway_core_owns_no_mcp_timeout_constant() -> None:
-    source = (COMPONENTS / "agents" / "agents_gateway_api.py").read_text(encoding="utf-8")
+    source = (COMPONENTS / "agents" / "gateway" / "api.py").read_text(encoding="utf-8")
     assert "MCP_BLOCKING_TIMEOUT_SECONDS" not in source
     assert "MAX_BLOCKING_TIMEOUT_SECONDS" not in source
 
 
 def test_gateway_http_adapter_calls_only_service_application_boundary() -> None:
-    path = COMPONENTS / "agents" / "agents_gateway_http_transport.py"
+    path = COMPONENTS / "agents" / "gateway" / "service" / "http_transport.py"
     imports = _imports(path)
     forbidden = (
-        "agents_gateway_api",
-        "agents_gateway_store",
-        "agents_gateway_queue",
-        "agents_gateway_dispatch",
+        "gateway.api",
+        "gateway.store",
+        "gateway.queue",
+        "gateway.dispatch",
         "managed_service",
         "managed_process",
     )
     violations = [target for target in imports if any(name in target for name in forbidden)]
     assert not violations
-    assert "audiagentic.components.agents.agents_gateway_service_application" in imports
+    assert "audiagentic.components.agents.gateway.service.application" in imports
 
 
 def test_gateway_service_application_has_no_http_framework_dependency() -> None:
-    path = COMPONENTS / "agents" / "agents_gateway_service_application.py"
+    path = COMPONENTS / "agents" / "gateway" / "service" / "application.py"
     imports = _imports(path)
     assert not any(target.startswith(("http", "urllib", "fastapi", "flask")) for target in imports)

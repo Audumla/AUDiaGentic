@@ -39,7 +39,10 @@ def sync_component_mcp_to_providers(
             managed_id = mcp_def.managed_id or mcp_def.name
             managed_ids.add(managed_id)
             if "providers" in mcp_def.propagate and enabled:
-                desired_entries[managed_id] = (mcp_def.name, entry_from_mcp_declaration(mcp_def))
+                desired_entries[managed_id] = (
+                    mcp_def.name,
+                    entry_from_mcp_declaration(mcp_def, project_root),
+                )
         for mcp_def in descriptor.external_mcp_servers or ():
             managed_id = mcp_def.managed_id or mcp_def.name
             managed_ids.add(managed_id)

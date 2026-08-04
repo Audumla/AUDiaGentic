@@ -81,7 +81,7 @@ class TestSharedContextKeysPresent:
             job_id="job_test_001",
             project_root="/fake/root",
             project_id="my-project",
-            agent_profile_id="default-profile",
+            execution_profile_id="default-profile",
             provider_id="local-openai",
             model_id="gpt-4o",
         )
@@ -94,7 +94,7 @@ class TestSharedContextKeysPresent:
             job_id="job_test_002",
             project_root="/fake/root",
             project_id="my-project",
-            agent_profile_id="default-profile",
+            execution_profile_id="default-profile",
             provider_id="local-openai",
             model_id="gpt-4o",
         )
@@ -105,7 +105,7 @@ class TestSharedContextKeysPresent:
         ctx = build_prompt_context_from_event(
             envelope=_make_envelope(),
             job_id="job_t", project_root="/r", project_id="p",
-            agent_profile_id="ap", provider_id="prov", model_id="m",
+            execution_profile_id="ap", provider_id="prov", model_id="m",
         )
         d = to_template_dict(ctx)
         for key in self.EXPECTED_KEYS:
@@ -120,7 +120,7 @@ class TestTopLevelKeyStability:
             envelope=_make_envelope(),
             trigger_config=_make_trigger_config(),
             job_id="job_1", project_root="/r", project_id="p",
-            agent_profile_id="ap", provider_id="prov", model_id="m",
+            execution_profile_id="ap", provider_id="prov", model_id="m",
         )
         d = to_template_dict(ctx)
         expected_ordered = [
@@ -134,7 +134,7 @@ class TestTopLevelKeyStability:
         ctx = build_prompt_context_from_request(
             request=_make_request({"source": {"surface": "cli", "correlation_id": "corr-x"}}),
             job_id="job_1", project_root="/r", project_id="p",
-            agent_profile_id="ap", provider_id="prov", model_id="m",
+            execution_profile_id="ap", provider_id="prov", model_id="m",
         )
         d = to_template_dict(ctx)
         expected_ordered = [
@@ -156,7 +156,7 @@ class TestPlanningEventEnvelopeShape:
             job_id="job_ev_001",
             project_root="/proj",
             project_id="test-proj",
-            agent_profile_id="agent-01",
+            execution_profile_id="agent-01",
             provider_id="claude",
             model_id="claude-3-opus",
         )
@@ -192,7 +192,7 @@ class TestDirectLaunchContextInjection:
             job_id="job_dir_001",
             project_root="/my/proj",
             project_id="main-project",
-            agent_profile_id="profile-x",
+            execution_profile_id="profile-x",
             provider_id="openai",
             model_id="gpt-4",
         )
@@ -212,7 +212,7 @@ class TestDirectLaunchContextInjection:
         ctx = build_prompt_context_from_request(
             request=req,
             job_id="j1", project_root="/r", project_id="p",
-            agent_profile_id="ap", provider_id="prov", model_id="m",
+            execution_profile_id="ap", provider_id="prov", model_id="m",
         )
         d = to_template_dict(ctx)
         assert d["trigger"] == {}
@@ -222,7 +222,7 @@ class TestDirectLaunchContextInjection:
         ctx = build_prompt_context_from_request(
             request=req,
             job_id="j1", project_root="/r", project_id="p",
-            agent_profile_id="ap", provider_id="prov", model_id="m",
+            execution_profile_id="ap", provider_id="prov", model_id="m",
         )
         d = to_template_dict(ctx)
         assert d["event"] == {}
@@ -236,7 +236,7 @@ class TestMetadataCorrelationPropagation:
         ctx = build_prompt_context_from_event(
             envelope=env,
             job_id="j1", project_root="/r", project_id="p",
-            agent_profile_id="ap", provider_id="prov", model_id="m",
+            execution_profile_id="ap", provider_id="prov", model_id="m",
         )
         d = to_template_dict(ctx)
         assert d["correlation_id"] == "corr-abc123"
@@ -247,7 +247,7 @@ class TestMetadataCorrelationPropagation:
         ctx = build_prompt_context_from_request(
             request=req,
             job_id="j1", project_root="/r", project_id="p",
-            agent_profile_id="ap", provider_id="prov", model_id="m",
+            execution_profile_id="ap", provider_id="prov", model_id="m",
         )
         d = to_template_dict(ctx)
         assert d["correlation_id"] == "corr-def456"
@@ -258,7 +258,7 @@ class TestMetadataCorrelationPropagation:
         ctx = build_prompt_context_from_event(
             envelope=env,
             job_id="j1", project_root="/r", project_id="p",
-            agent_profile_id="ap", provider_id="prov", model_id="m",
+            execution_profile_id="ap", provider_id="prov", model_id="m",
         )
         d = to_template_dict(ctx)
         assert "subject" in d
@@ -281,7 +281,7 @@ class TestRedactionDenylist:
         ctx = build_prompt_context_from_event(
             envelope=env,
             job_id="j1", project_root="/r", project_id="p",
-            agent_profile_id="ap", provider_id="prov", model_id="m",
+            execution_profile_id="ap", provider_id="prov", model_id="m",
         )
         d = to_template_dict(ctx)
         event_payload = d["event"]["payload"]
@@ -298,7 +298,7 @@ class TestRedactionDenylist:
         ctx = build_prompt_context_from_event(
             envelope=env,
             job_id="j1", project_root="/r", project_id="p",
-            agent_profile_id="ap", provider_id="prov", model_id="m",
+            execution_profile_id="ap", provider_id="prov", model_id="m",
         )
         nested = d["event"]["payload"]["nested"] if (d := to_template_dict(ctx)) else {}
         assert "secret" not in nested
@@ -309,7 +309,7 @@ class TestRedactionDenylist:
         ctx = build_prompt_context_from_request(
             request=req,
             job_id="j1", project_root="/r", project_id="p",
-            agent_profile_id="ap", provider_id="prov", model_id="m",
+            execution_profile_id="ap", provider_id="prov", model_id="m",
         )
         d = to_template_dict(ctx)
         # The prompt-body key should not appear in any section.
@@ -324,7 +324,7 @@ class TestRedactionDenylist:
         ctx = build_prompt_context_from_event(
             envelope=env,
             job_id="j1", project_root="/r", project_id="p",
-            agent_profile_id="ap", provider_id="prov", model_id="m",
+            execution_profile_id="ap", provider_id="prov", model_id="m",
         )
         d = to_template_dict(ctx)
         assert "output" not in d["event"]["payload"]
@@ -342,7 +342,7 @@ class TestSizeLimits:
         ctx = build_prompt_context_from_event(
             envelope=env,
             job_id="j1", project_root="/r", project_id="p",
-            agent_profile_id="ap", provider_id="prov", model_id="m",
+            execution_profile_id="ap", provider_id="prov", model_id="m",
         )
         d = to_template_dict(ctx)
         # All sections are small enough.
@@ -360,7 +360,7 @@ class TestSizeLimits:
         ctx = build_prompt_context_from_event(
             envelope=env,
             job_id="j1", project_root="/r", project_id="p",
-            agent_profile_id="ap", provider_id="prov", model_id="m",
+            execution_profile_id="ap", provider_id="prov", model_id="m",
         )
         d = to_template_dict(ctx)
         event_section_bytes = len(json.dumps(d["event"]))
@@ -381,7 +381,7 @@ class TestMissingOptionalSessionData:
         ctx = build_prompt_context_from_event(
             envelope=_make_envelope(),
             job_id="j1", project_root="/r", project_id="p",
-            agent_profile_id="ap", provider_id="prov", model_id="m",
+            execution_profile_id="ap", provider_id="prov", model_id="m",
         )
         d = to_template_dict(ctx)
         assert d["session"] == {}
@@ -392,7 +392,7 @@ class TestMissingOptionalSessionData:
             envelope=_make_envelope(),
             session_data=session_input,
             job_id="j1", project_root="/r", project_id="p",
-            agent_profile_id="ap", provider_id="prov", model_id="m",
+            execution_profile_id="ap", provider_id="prov", model_id="m",
         )
         d = to_template_dict(ctx)
         assert d["session"]["user"] == "alice"
@@ -402,7 +402,7 @@ class TestMissingOptionalSessionData:
         ctx = build_prompt_context_from_request(
             request=_make_request(),
             job_id="j1", project_root="/r", project_id="p",
-            agent_profile_id="ap", provider_id="prov", model_id="m",
+            execution_profile_id="ap", provider_id="prov", model_id="m",
         )
         d = to_template_dict(ctx)
         assert d["session"] == {}
@@ -470,7 +470,7 @@ class TestTemplateDictDottedPathAccess:
             job_id="job_dp_001",
             project_root="/nested/path",
             project_id="deep-proj",
-            agent_profile_id="profile-a",
+            execution_profile_id="profile-a",
             provider_id="anthropic",
             model_id="claude-3",
         )
@@ -489,7 +489,7 @@ class TestTemplateDictDottedPathAccess:
         ctx = build_prompt_context_from_event(
             envelope=env,
             job_id="j1", project_root="/r", project_id="p",
-            agent_profile_id="ap", provider_id="prov", model_id="m",
+            execution_profile_id="ap", provider_id="prov", model_id="m",
         )
         d = to_template_dict(ctx)
         assert _resolve("correlation_id", d) == "corr-abc123"

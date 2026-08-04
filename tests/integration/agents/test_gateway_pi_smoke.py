@@ -22,11 +22,12 @@ Provisioning reuses AUDiaGentic's own real APIs throughout: install_provider_cli
 for the CLI (which also seeds the embedded rig binary + model assets when
 AUDIAGENTIC_DOCKER_TESTS / pytest is detected — see
 runtime/harness/pi/install/__init__.py:_should_provision_embedded_rig), and
-write_agent_profile / patch_provider_config for the gateway-facing config.
+write_execution_profile / patch_provider_config for the gateway-facing config.
 The only hand-authored file here is the harness's own ag.yaml (rig port/model)
 — genuine project-authored config with no creation API, the same status as
 gateway-profiles.yaml in gateway_docker_harness.py.
 """
+
 from __future__ import annotations
 
 import json
@@ -36,7 +37,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from tests.integration.agents.gateway_docker_harness import free_port, write_agent_profile
+from tests.integration.agents.gateway_docker_harness import free_port, write_execution_profile
 from tests.integration.providers.harness import assert_install_result_ok
 
 pytestmark = [
@@ -85,10 +86,11 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
     completed state via the real ``pi --print --model ...`` CLI invocation."""
     _require_docker_gate()
 
-    from audiagentic.components.agents.agents_gateway_client import (
+    from audiagentic.components.agents.gateway.client import (
         get_gateway_client,
         reset_gateway_client,
     )
+
     from audiagentic.components.providers.services.config.provider_config import (
         patch_provider_config,
     )
@@ -107,7 +109,7 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
     rig_port = free_port()
     _write_harness_config(tmp_path, rig_port)
 
-    write_agent_profile(
+    write_execution_profile(
         tmp_path,
         profile_id="pi-smoke",
         provider_id="pi",
@@ -167,7 +169,7 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
         try:
             result = client.run_execution_request(
                 tmp_path,
-                agent_profile_id="pi-smoke",
+                execution_profile_id="pi-smoke",
                 prompt_body=_PROMPT,
                 timeout_seconds=180,
             )

@@ -146,7 +146,7 @@ class SubmissionEnvelope:
     idempotency_key: str | None = None
     correlation_id: str | None = None
     source: str | None = None
-    agent_profile_id: str | None = None
+    execution_profile_id: str | None = None
     provider_id: str | None = None
     model_id: str | None = None
     component_profile: str | None = None
@@ -170,7 +170,7 @@ class SubmissionEnvelope:
             idempotency_key=value.get("idempotency_key"),
             correlation_id=value.get("correlation_id"),
             source=value.get("source"),
-            agent_profile_id=value.get("agent_profile_id"),
+            execution_profile_id=value.get("execution_profile_id"),
             provider_id=value.get("provider_id"),
             model_id=value.get("model_id"),
             component_profile=value.get("component_profile"),
@@ -188,7 +188,7 @@ class SubmissionEnvelope:
             "correlation_id": self.correlation_id,
             "source": self.source,
             "project_root": self.project_root,
-            "agent_profile_id": self.agent_profile_id,
+            "execution_profile_id": self.execution_profile_id,
             "provider_id": self.provider_id,
             "model_id": self.model_id,
             "component_profile": self.component_profile,
@@ -212,7 +212,7 @@ class SubmissionEnvelope:
         for name in (
             "correlation_id",
             "source",
-            "agent_profile_id",
+            "execution_profile_id",
             "provider_id",
             "model_id",
             "component_profile",
@@ -369,7 +369,7 @@ class ManifestIdentity:
     """Identity-bearing resolved context — the fingerprint input, nothing else."""
 
     project_root: str  # fingerprint-form canonical path; also the execution cwd
-    agent_profile_id: str
+    execution_profile_id: str
     provider_id: str
     model_id: str
     provider_isolation_tier: str
@@ -383,7 +383,7 @@ class ManifestIdentity:
                 "provider_isolation_tier must be an enumerated isolation tier",
                 {"provider_isolation_tier": self.provider_isolation_tier},
             )
-        for name in ("project_root", "agent_profile_id", "provider_id", "model_id", "agent_runtime_digest"):
+        for name in ("project_root", "execution_profile_id", "provider_id", "model_id", "agent_runtime_digest"):
             if not getattr(self, name):
                 raise _err("VAL-AGW-068", f"manifest identity field {name} is required", {"field": name})
 
@@ -391,7 +391,7 @@ class ManifestIdentity:
     def from_mapping(cls, value: Mapping[str, Any]) -> ManifestIdentity:
         return cls(
             project_root=value["project_root"],
-            agent_profile_id=value["agent_profile_id"],
+            execution_profile_id=value["execution_profile_id"],
             provider_id=value["provider_id"],
             model_id=value["model_id"],
             provider_isolation_tier=value["provider_isolation_tier"],
@@ -402,7 +402,7 @@ class ManifestIdentity:
     def to_mapping(self) -> dict[str, Any]:
         return {
             "project_root": self.project_root,
-            "agent_profile_id": self.agent_profile_id,
+            "execution_profile_id": self.execution_profile_id,
             "provider_id": self.provider_id,
             "model_id": self.model_id,
             "provider_isolation_tier": self.provider_isolation_tier,
@@ -428,7 +428,7 @@ def compute_agent_runtime_digest(
     return sha256_hex(
         canonical_json(
             {
-                "agent_profile": dict(resolved_profile),
+                "execution_profile": dict(resolved_profile),
                 "provider_config": dict(provider_config_state),
                 "component_overlay": dict(component_overlay),
             }
@@ -515,7 +515,7 @@ def build_manifest(
     request_id: str,
     resolved_at: str,
     canonical_root: CanonicalRoot,
-    agent_profile_id: str,
+    execution_profile_id: str,
     provider_id: str,
     model_id: str,
     provider_isolation_tier: str,
@@ -528,7 +528,7 @@ def build_manifest(
     """
     identity = ManifestIdentity(
         project_root=canonical_root.fingerprint,
-        agent_profile_id=agent_profile_id,
+        execution_profile_id=execution_profile_id,
         provider_id=provider_id,
         model_id=model_id,
         provider_isolation_tier=provider_isolation_tier,

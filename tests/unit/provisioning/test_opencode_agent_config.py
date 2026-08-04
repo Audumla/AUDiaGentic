@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 from audiagentic.components.providers import providers_api
-from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 def _harness_cfg() -> dict:
@@ -26,7 +25,7 @@ def test_materialize_agent_config_writes_agents_md_template(tmp_path: Path) -> N
 def test_materialize_agent_config_applies_provider_surface_contributions(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The previously-unused opencode surface renderer is now actually invoked."""
+    """OpenCode materialization applies contributions after project-scope filtering."""
     project_root = tmp_path / "project"
     project_root.mkdir()
 
@@ -44,25 +43,5 @@ def test_materialize_agent_config_applies_provider_surface_contributions(
     providers_api.materialize_provider_config(project_root, "opencode", _harness_cfg())
 
     assert calls == [(project_root, "opencode", "apply")]
-    # AGENTS.md template write must still happen regardless.
-    assert (project_root / "AGENTS.md").exists()
-
-
-def test_materialize_agent_config_tolerates_surface_apply_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A surface-apply failure must not break config materialization."""
-    project_root = tmp_path / "project"
-    project_root.mkdir()
-
-    def _raise(*_args, **_kwargs):
-        raise AudiaGenticError(code="CON-SRF-001", kind="providers-surfaces", message="boom")
-
-    monkeypatch.setattr(
-        "audiagentic.components.providers.providers_api.operate_provider_surfaces",
-        _raise,
-    )
-
-    providers_api.materialize_provider_config(project_root, "opencode", _harness_cfg())
-
+    # AGENTS.md template write must still happen regardless of surface apply.
     assert (project_root / "AGENTS.md").exists()

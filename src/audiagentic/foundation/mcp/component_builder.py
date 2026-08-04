@@ -7,7 +7,7 @@ on and whether they gate on host binary availability.
 """
 from __future__ import annotations
 
-import os
+from pathlib import Path
 
 from audiagentic.foundation.components.base import (
     ExternalMcpServerDeclaration,
@@ -17,11 +17,14 @@ from audiagentic.foundation.mcp import McpServerEntry
 from audiagentic.foundation.mcp.launch import component_mcp_launch
 
 
-def entry_from_mcp_declaration(decl: McpServerDeclaration) -> McpServerEntry:
-    """Build a McpServerEntry for a Python-module-backed MCP server declaration."""
+def entry_from_mcp_declaration(
+    decl: McpServerDeclaration,
+    project_root: Path,
+) -> McpServerEntry:
+    """Build an MCP entry scoped to the project that owns the declaration."""
     command, subcommand, args = component_mcp_launch(decl.module, extra_args=tuple(decl.args))
     env: dict[str, str] = {}
-    repo_root = os.environ.get("AUDIAGENTIC_REPO_ROOT")
+    repo_root = str(project_root.resolve())
     if repo_root:
         env["AUDIAGENTIC_REPO_ROOT"] = repo_root
     return McpServerEntry(

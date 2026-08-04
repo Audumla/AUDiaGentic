@@ -71,7 +71,6 @@ def _record_control_timeline_event(
     )
 
 
-
 def _publish_gateway_cancel_requested(
     project_root: Path,
     job: dict[str, Any],

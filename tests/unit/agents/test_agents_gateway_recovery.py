@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.components.agents import agents_gateway_api as api
-from audiagentic.components.agents import agents_gateway_recovery as recovery
-from audiagentic.components.agents import agents_gateway_store as store
+from audiagentic.components.agents.gateway import api as api
+from audiagentic.components.agents.gateway import store as store
+from audiagentic.components.agents.gateway.queue import recovery as recovery
 
 
 def test_gateway_api_does_not_expose_second_recovery_authority() -> None:
@@ -15,7 +15,7 @@ def test_gateway_api_does_not_expose_second_recovery_authority() -> None:
 
 
 def _record(project_root: Path, prompt: str = "hello") -> dict:
-    record = store.build_record(agent_profile_id="default", prompt_body=prompt)
+    record = store.build_record(execution_profile_id="default", prompt_body=prompt)
     store.write_record(project_root, record)
     return record
 

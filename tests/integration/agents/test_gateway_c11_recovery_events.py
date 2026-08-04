@@ -14,10 +14,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.agents import agents_gateway_recovery as recovery
-from audiagentic.components.agents import agents_gateway_store as store
-from audiagentic.components.agents.agents_api import create_profile
-from audiagentic.components.agents.agents_event_topics import EXECUTION_INTERRUPTED_TOPIC
+from audiagentic.components.agents.gateway import store as store
+from audiagentic.components.agents.gateway.event_topics import EXECUTION_INTERRUPTED_TOPIC
+from audiagentic.components.agents.gateway.queue import recovery as recovery
+from audiagentic.components.agents.models.execution_profile_api import (
+    create_execution_profile,
+)
 from audiagentic.foundation.event import get_bus
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state
@@ -25,7 +27,7 @@ from audiagentic.foundation.features.state import set_implementation_state
 
 def _make_profile(project_root: Path) -> None:
     """Create a default profile for the project root."""
-    create_profile(
+    create_execution_profile(
         project_root,
         {
             "profile_id": "default",
@@ -62,7 +64,7 @@ class TestC11RecoveryEventPropagation:
         _make_profile(project_root)
 
         # Create and persist a queued record via the real store
-        record = store.build_record(agent_profile_id="default", prompt_body="stale work")
+        record = store.build_record(execution_profile_id="default", prompt_body="stale work")
         store.write_record(project_root, record)
         request_id = record["request-id"]
 
@@ -110,7 +112,7 @@ class TestC11RecoveryEventPropagation:
         ev = events[0]
         assert ev["request-id"] == request_id
         assert ev["state"] == "interrupted"
-        assert ev["agent-profile-id"] == "default"
+        assert ev["execution-profile-id"] == "default"
         # Terminal payload fields present (may be None for provider-id/model-id
         # since the request was interrupted before provider dispatch)
         assert "provider-id" in ev
@@ -128,7 +130,7 @@ class TestC11RecoveryEventPropagation:
         project_root = tmp_path / "project"
         _make_profile(project_root)
 
-        record = store.build_record(agent_profile_id="default", prompt_body="stale queued")
+        record = store.build_record(execution_profile_id="default", prompt_body="stale queued")
         store.write_record(project_root, record)
         request_id = record["request-id"]
 
@@ -175,7 +177,7 @@ class TestC11RecoveryEventPropagation:
         _make_profile(project_root)
 
         # Create a fresh record with current epoch (not stale)
-        record = store.build_record(agent_profile_id="default", prompt_body="fresh")
+        record = store.build_record(execution_profile_id="default", prompt_body="fresh")
         store.write_record(project_root, record)
         store.claim_dispatch(
             project_root,
@@ -214,7 +216,7 @@ class TestC11RecoveryEventPropagation:
         project_root = tmp_path / "project"
         _make_profile(project_root)
 
-        record = store.build_record(agent_profile_id="default", prompt_body="stale")
+        record = store.build_record(execution_profile_id="default", prompt_body="stale")
         store.write_record(project_root, record)
         request_id = record["request-id"]
 

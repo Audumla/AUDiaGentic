@@ -11,10 +11,12 @@ from tests.unit.agents.test_agents_gateway_sessions import (
     _Clock,
 )
 
-from audiagentic.components.agents import agents_gateway_api as gateway
-from audiagentic.components.agents import agents_gateway_sessions as sessions_module
-from audiagentic.components.agents.agents_api import create_profile
-from audiagentic.components.agents.agents_gateway_sessions import SessionRuntime
+from audiagentic.components.agents.gateway import api as gateway
+from audiagentic.components.agents.gateway.session import sessions as sessions_module
+from audiagentic.components.agents.gateway.session.sessions import SessionRuntime
+from audiagentic.components.agents.models.execution_profile_api import (
+    create_execution_profile,
+)
 from audiagentic.components.providers.providers_api import (
     ProviderAcpLaunchResult,
     ProviderExecutionResult,
@@ -41,7 +43,7 @@ def _make_profile(
     params = {"max-concurrency": max_concurrency}
     if queue_max_size is not None:
         params["queue-max-size"] = queue_max_size
-    create_profile(project_root, {
+    create_execution_profile(project_root, {
         "profile_id": profile_id,
         "provider_id": provider_id,
         "model_id": model_id,
@@ -88,7 +90,7 @@ def test_request_state_matrix_completed_failed_timeout_cancelled_rejected(
         )
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
         controlled_provider,
     )
 
@@ -165,7 +167,7 @@ def test_running_cancel_is_detected_but_not_fabricated_as_terminal(
         )
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
         slow_provider,
     )
 
@@ -185,7 +187,7 @@ def test_running_cancel_is_detected_but_not_fabricated_as_terminal(
 
 
 def test_negative_submission_and_lookup_errors_are_explicit(tmp_path: Path) -> None:
-    with pytest.raises(AudiaGenticError, match="RES-AGP-003"):
+    with pytest.raises(AudiaGenticError, match="RES-EXP-003"):
         gateway.submit_execution_request(tmp_path, prompt_body="no default profile")
 
     _make_profile(tmp_path, enabled=False)
@@ -412,7 +414,7 @@ def test_wait_does_not_mask_terminal_state_after_timeout(
         )
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
         delayed_provider,
     )
 
@@ -446,7 +448,7 @@ def test_request_runtime_status_is_redacted_and_does_not_start_session_runtime(
         )
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
         fake_provider,
     )
     monkeypatch.setattr(
@@ -823,7 +825,7 @@ def test_as33_terminal_diagnostics_do_not_start_session_runtime(
         )
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
         fake_provider,
     )
     monkeypatch.setattr(
@@ -914,7 +916,7 @@ def test_running_session_request_has_latest_turn_event_but_no_output_yet(
 
         # No full provider-ref-key leak. The public binding may expose the
         # prefix, so assert against the actual protected full key.
-        from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+        from audiagentic.components.agents.gateway.session import sessions_store as session_store
 
         session_id = status["session-id"]
         durable_session = session_store.read_session_record(tmp_path, session_id)

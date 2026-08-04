@@ -26,10 +26,8 @@ from tests.unit.agents.test_agents_gateway_sessions import (
     _Clock,
 )
 
-from audiagentic.components.agents import (
-    agents_gateway_sessions_store as session_store,
-)
-from audiagentic.components.agents.agents_gateway_sessions import SessionRuntime
+from audiagentic.components.agents.gateway.session import sessions_store as session_store
+from audiagentic.components.agents.gateway.session.sessions import SessionRuntime
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 # ── helpers ──────────────────────────────────────────────────────
@@ -38,7 +36,7 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 def _open(runtime: SessionRuntime, project_root: Path, **kwargs) -> dict[str, Any]:
     return runtime.open_session(
         project_root,
-        agent_profile_id="profile-1",
+        execution_profile_id="profile-1",
         provider_id="opencode",
         model_id="m1",
         surface_hint=kwargs.pop("surface_hint", None),

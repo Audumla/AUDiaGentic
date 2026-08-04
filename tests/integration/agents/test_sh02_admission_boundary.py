@@ -13,11 +13,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from audiagentic.components.agents import agents_gateway_api as gateway
-from audiagentic.components.agents.agents_api import create_profile
 from audiagentic.components.agents.agents_paths import gateway_request_path
 from audiagentic.components.agents.contracts.execution_context import (
     compute_prompt_digest,
+)
+from audiagentic.components.agents.gateway import api as gateway
+from audiagentic.components.agents.models.execution_profile_api import (
+    create_execution_profile,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.features.base import ImplementationState
@@ -25,7 +27,7 @@ from audiagentic.foundation.features.state import set_implementation_state
 
 
 def _make_profile(project_root: Path, profile_id: str, provider_id: str, *, default: bool = True, **params) -> None:
-    create_profile(project_root, {
+    create_execution_profile(project_root, {
         "profile_id": profile_id,
         "provider_id": provider_id,
         "model_id": "gpt-4o",
@@ -121,7 +123,7 @@ class TestRecordRedaction:
             return _worker_result(execution_request, "ok")
 
         monkeypatch.setattr(
-            "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+            "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
             fake_execute_provider,
         )
 
@@ -181,7 +183,7 @@ class TestCredentialRejection:
             return _worker_result(execution_request, "ok")
 
         monkeypatch.setattr(
-            "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+            "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
             fake_execute_provider,
         )
 
@@ -222,7 +224,7 @@ class TestCredentialRejection:
             return _worker_result(execution_request, "done")
 
         monkeypatch.setattr(
-            "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+            "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
             fake_execute_provider,
         )
 

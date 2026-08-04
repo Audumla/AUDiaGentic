@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.agents.agents_gateway_worker import _replacement_environment
+from audiagentic.components.agents.gateway.queue.worker import _replacement_environment
 
 
 def test_replacement_environment_never_writes_into_native_pi_home(

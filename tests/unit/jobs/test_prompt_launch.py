@@ -96,9 +96,9 @@ class TestSchemaXor:
         del request["prompt-body"]
         assert validate_prompt_launch_request(request) != []
 
-    def test_agent_profile_id_and_context_accepted(self) -> None:
+    def test_execution_profile_id_and_context_accepted(self) -> None:
         request = _request(
-            {"agent-profile-id": "codex-default", "context": {"anything": {"goes": 1}}}
+            {"execution-profile-id": "codex-default", "context": {"anything": {"goes": 1}}}
         )
         assert validate_prompt_launch_request(request) == []
 

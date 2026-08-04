@@ -73,21 +73,21 @@ ALLOWLISTED_MIGRATION_DEBT: dict[str, set[str]] = {
     "AcpLaunch": set(),
     # AcpResult — return type of prompt_in_session / _prompt (slice 5+)
     "AcpResult": {
-        "agents_gateway_sessions.py",
+        "gateway/session/sessions.py",
     },
     # AcpEvent — used in turn event callback (AS18, slice 5+)
     "AcpEvent": {
-        "agents_gateway_turn_events.py",
+        "gateway/session/turn_events.py",
     },
     # AcpSessionTransport — AS28 slice 4a: no longer imported by agents code
     "AcpSessionTransport": set(),
     # on_event= — callback wired in _prompt
     "on_event=": {
-        "agents_gateway_sessions.py",
+        "gateway/session/sessions.py",
     },
     # cancel_signal= — cancel race in _prompt
     "cancel_signal=": {
-        "agents_gateway_sessions.py",
+        "gateway/session/sessions.py",
     },
     # prepare_provider_acp_launch — called in session dispatch open path
     # prepare_provider_acp_launch — AS28 slice 4a: no longer used by agents code;
@@ -101,7 +101,7 @@ ALLOWLISTED_MIGRATION_DEBT: dict[str, set[str]] = {
 
 # Raw .ext['acp'] reads are allowed only in turn_events (the projector)
 ALLOWLISTED_ACP_EXT_READS = {
-    "agents_gateway_turn_events.py",
+    "gateway/session/turn_events.py",
 }
 
 # ── helpers ──────────────────────────────────────────────────────
@@ -225,7 +225,7 @@ class TestAcpTypeImports:
         providers_api.prepare_provider_session_transport. AcpLaunch and
         AcpSessionTransport must not cross the agent-session-open boundary.
         """
-        sessions_py = _AGENTS_SRC / "agents_gateway_sessions.py"
+        sessions_py = _AGENTS_SRC / "gateway/session/sessions.py"
         imports = _get_imports(sessions_py)
         leaked_open_types = {"AcpLaunch", "AcpSessionTransport"} & imports
         assert not leaked_open_types, (

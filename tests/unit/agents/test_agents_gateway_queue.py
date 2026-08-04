@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.components.agents import agents_gateway_queue as queue_mod
-from audiagentic.components.agents import agents_gateway_store as store
 from audiagentic.components.agents.agents_paths import gateway_timeline_path
+from audiagentic.components.agents.gateway import store as store
+from audiagentic.components.agents.gateway.queue import queue as queue_mod
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.event import get_bus, reset_bus
 from audiagentic.foundation.io import load_ndjson
@@ -36,7 +36,7 @@ def _fresh_event_bus():
 
 
 def _submit(manager: queue_mod.GatewayQueueManager, tmp_path: Path, profile_id: str, params: dict, runner) -> dict:
-    record = store.build_record(agent_profile_id=profile_id, prompt_body="x")
+    record = store.build_record(execution_profile_id=profile_id, prompt_body="x")
     store.write_record(tmp_path, record)
     return manager.enqueue(tmp_path, record, params, runner)
 
@@ -99,7 +99,7 @@ def test_max_concurrency_one_serializes_requests(tmp_path: Path):
     started = threading.Event()
     runner = _blocking_runner(hold, started)
 
-    record1 = store.build_record(agent_profile_id="p1", prompt_body="a")
+    record1 = store.build_record(execution_profile_id="p1", prompt_body="a")
     store.write_record(tmp_path, record1)
     t = threading.Thread(target=manager.enqueue, args=(tmp_path, record1, {"max-concurrency": 1}, runner))
     t.start()
@@ -108,7 +108,7 @@ def test_max_concurrency_one_serializes_requests(tmp_path: Path):
     depth = manager.queue_depth("p1")
     assert depth["running"] == 1
 
-    record2 = store.build_record(agent_profile_id="p1", prompt_body="b")
+    record2 = store.build_record(execution_profile_id="p1", prompt_body="b")
     store.write_record(tmp_path, record2)
     manager.enqueue(tmp_path, record2, {"max-concurrency": 1}, runner)
     # second stays queued while first still holds
@@ -133,7 +133,7 @@ def test_max_concurrency_two_runs_two_third_waits(tmp_path: Path):
             updates={"output": "done", "finished-at": now_iso_z()},
         )
 
-    records = [store.build_record(agent_profile_id="p2", prompt_body=str(i)) for i in range(3)]
+    records = [store.build_record(execution_profile_id="p2", prompt_body=str(i)) for i in range(3)]
     for r in records:
         store.write_record(tmp_path, r)
 
@@ -191,7 +191,7 @@ def test_session_workers_share_one_profile_compute_slot(tmp_path: Path):
 
     records = [
         store.build_record(
-            agent_profile_id="session-profile",
+            execution_profile_id="session-profile",
             prompt_body=str(index),
             session_id=f"session-{index}",
         )
@@ -227,14 +227,14 @@ def test_fifo_ordering(tmp_path: Path):
             updates={"output": "done", "finished-at": now_iso_z()},
         )
 
-    first = store.build_record(agent_profile_id="p3", prompt_body="first")
+    first = store.build_record(execution_profile_id="p3", prompt_body="first")
     store.write_record(tmp_path, first)
     t1 = threading.Thread(target=manager.enqueue, args=(tmp_path, first, {"max-concurrency": 1}, runner))
     t1.start()
     time.sleep(0.05)  # ensure first claims the only slot before second/third submit
 
-    second = store.build_record(agent_profile_id="p3", prompt_body="second")
-    third = store.build_record(agent_profile_id="p3", prompt_body="third")
+    second = store.build_record(execution_profile_id="p3", prompt_body="second")
+    third = store.build_record(execution_profile_id="p3", prompt_body="third")
     store.write_record(tmp_path, second)
     store.write_record(tmp_path, third)
     manager.enqueue(tmp_path, second, {"max-concurrency": 1}, runner)
@@ -260,17 +260,17 @@ def test_queue_full_rejects(tmp_path: Path):
     hold = threading.Event()
     runner = _blocking_runner(hold)
 
-    running = store.build_record(agent_profile_id="p4", prompt_body="running")
+    running = store.build_record(execution_profile_id="p4", prompt_body="running")
     store.write_record(tmp_path, running)
     t = threading.Thread(target=manager.enqueue, args=(tmp_path, running, {"max-concurrency": 1, "queue-max-size": 1}, runner))
     t.start()
     time.sleep(0.05)
 
-    queued = store.build_record(agent_profile_id="p4", prompt_body="queued")
+    queued = store.build_record(execution_profile_id="p4", prompt_body="queued")
     store.write_record(tmp_path, queued)
     manager.enqueue(tmp_path, queued, {"max-concurrency": 1, "queue-max-size": 1}, runner)
 
-    overflow = store.build_record(agent_profile_id="p4", prompt_body="overflow")
+    overflow = store.build_record(execution_profile_id="p4", prompt_body="overflow")
     store.write_record(tmp_path, overflow)
     result = manager.enqueue(tmp_path, overflow, {"max-concurrency": 1, "queue-max-size": 1}, runner)
 
@@ -287,13 +287,13 @@ def test_cancel_queued_request(tmp_path: Path):
     hold = threading.Event()
     runner = _blocking_runner(hold)
 
-    running = store.build_record(agent_profile_id="p5", prompt_body="running")
+    running = store.build_record(execution_profile_id="p5", prompt_body="running")
     store.write_record(tmp_path, running)
     t = threading.Thread(target=manager.enqueue, args=(tmp_path, running, {"max-concurrency": 1}, runner))
     t.start()
     time.sleep(0.05)
 
-    queued = store.build_record(agent_profile_id="p5", prompt_body="queued")
+    queued = store.build_record(execution_profile_id="p5", prompt_body="queued")
     store.write_record(tmp_path, queued)
     manager.enqueue(tmp_path, queued, {"max-concurrency": 1}, runner)
 
@@ -312,7 +312,7 @@ def test_cancel_running_request_persists_cancel_requested_flag(tmp_path: Path):
     started = threading.Event()
     runner = _blocking_runner(hold, started)
 
-    record = store.build_record(agent_profile_id="p9", prompt_body="x")
+    record = store.build_record(execution_profile_id="p9", prompt_body="x")
     store.write_record(tmp_path, record)
     t = threading.Thread(target=manager.enqueue, args=(tmp_path, record, {"max-concurrency": 1}, runner))
     t.start()
@@ -338,7 +338,7 @@ def test_cancel_running_request_completion_still_wins(tmp_path: Path):
     started = threading.Event()
     runner = _blocking_runner(hold, started)
 
-    record = store.build_record(agent_profile_id="p10", prompt_body="x")
+    record = store.build_record(execution_profile_id="p10", prompt_body="x")
     store.write_record(tmp_path, record)
     t = threading.Thread(target=manager.enqueue, args=(tmp_path, record, {"max-concurrency": 1}, runner))
     t.start()
@@ -359,7 +359,7 @@ def test_wait_times_out_for_long_running(tmp_path: Path):
     hold = threading.Event()
     runner = _blocking_runner(hold)
 
-    record = store.build_record(agent_profile_id="p6", prompt_body="x")
+    record = store.build_record(execution_profile_id="p6", prompt_body="x")
     store.write_record(tmp_path, record)
     t = threading.Thread(target=manager.enqueue, args=(tmp_path, record, {"max-concurrency": 1}, runner))
     t.start()
@@ -374,7 +374,7 @@ def test_wait_times_out_for_long_running(tmp_path: Path):
 def test_cancel_after_dequeue_before_claim_is_terminal_not_stranded(tmp_path: Path, monkeypatch):
     """RV677: durable cancellation wins the queue-to-claim hand-off race."""
     manager = queue_mod.GatewayQueueManager()
-    record = store.build_record(agent_profile_id="p5-race", prompt_body="queued")
+    record = store.build_record(execution_profile_id="p5-race", prompt_body="queued")
     store.write_record(tmp_path, record)
     claim_entered = threading.Event()
     release_claim = threading.Event()
@@ -408,7 +408,7 @@ def test_cancel_after_dequeue_before_claim_is_terminal_not_stranded(tmp_path: Pa
 def test_wait_uses_bounded_full_read_fallback_for_unchanged_record(tmp_path: Path, monkeypatch):
     """RV639: an unchanged durable record must not be parsed every 50ms."""
     manager = queue_mod.GatewayQueueManager()
-    record = store.build_record(agent_profile_id="p6", prompt_body="x")
+    record = store.build_record(execution_profile_id="p6", prompt_body="x")
     store.write_record(tmp_path, record)
 
     original_read = store.read_record
@@ -442,7 +442,7 @@ def test_wait_uses_bounded_full_read_fallback_for_unchanged_record(tmp_path: Pat
 def test_wait_observes_terminal_write_from_independent_process(tmp_path: Path, monkeypatch):
     """The mtime/size hint keeps a local waiter correct for an external writer."""
     manager = queue_mod.GatewayQueueManager()
-    record = store.build_record(agent_profile_id="p6", prompt_body="x")
+    record = store.build_record(execution_profile_id="p6", prompt_body="x")
     store.write_record(tmp_path, record)
     store.transition_record(tmp_path, record["request-id"], "running")
 
@@ -467,7 +467,7 @@ def test_wait_observes_terminal_write_from_independent_process(tmp_path: Path, m
     writer_code = "\n".join((
         "import sys",
         "from pathlib import Path",
-        "from audiagentic.components.agents import agents_gateway_store as store",
+        "from audiagentic.components.agents.gateway import store as store",
         "from audiagentic.foundation.time import now_iso_z",
         "store.transition_record(Path(sys.argv[1]), sys.argv[2], 'completed', updates={'output': 'external', 'finished-at': now_iso_z()})",
     ))
@@ -498,7 +498,7 @@ def test_wait_observes_terminal_write_from_independent_process(tmp_path: Path, m
 
 def test_wait_returns_completed_result(tmp_path: Path):
     manager = queue_mod.GatewayQueueManager()
-    record = store.build_record(agent_profile_id="p7", prompt_body="x")
+    record = store.build_record(execution_profile_id="p7", prompt_body="x")
     store.write_record(tmp_path, record)
     manager.enqueue(tmp_path, record, {"max-concurrency": 1}, _immediate_runner)
     result = manager.wait(tmp_path, record["request-id"], timeout_seconds=5)
@@ -512,7 +512,7 @@ def test_wait_returns_completed_result(tmp_path: Path):
 
 def test_failing_runner_transitions_to_failed(tmp_path: Path):
     manager = queue_mod.GatewayQueueManager()
-    record = store.build_record(agent_profile_id="p8", prompt_body="x")
+    record = store.build_record(execution_profile_id="p8", prompt_body="x")
     store.write_record(tmp_path, record)
     manager.enqueue(tmp_path, record, {"max-concurrency": 1}, _failing_runner)
     result = manager.wait(tmp_path, record["request-id"], timeout_seconds=5)
@@ -533,13 +533,13 @@ def test_terminal_lifecycle_event_carries_provider_and_attempt_info(tmp_path: Pa
 
     get_bus().subscribe("agents.execution.completed", on_completed)
 
-    record = store.build_record(agent_profile_id="p11", prompt_body="x")
+    record = store.build_record(execution_profile_id="p11", prompt_body="x")
     store.write_record(tmp_path, record)
 
     def runner(project_root: Path, rec: dict) -> dict:
         store.append_attempt(
             project_root, rec["request-id"],
-            agent_profile_id="p11", provider_id="local-openai", model_id="gpt-4o",
+            execution_profile_id="p11", provider_id="local-openai", model_id="gpt-4o",
             state="completed", started_at=now_iso_z(),
         )
         return store.transition_record(
@@ -566,7 +566,7 @@ def test_lifecycle_event_publish_failure_does_not_crash_worker(tmp_path: Path, m
     monkeypatch.setattr(get_bus(), "publish", _broken_publish)
 
     manager = queue_mod.GatewayQueueManager()
-    record = store.build_record(agent_profile_id="p12", prompt_body="x")
+    record = store.build_record(execution_profile_id="p12", prompt_body="x")
     store.write_record(tmp_path, record)
     manager.enqueue(tmp_path, record, {"max-concurrency": 1}, _immediate_runner)
 
@@ -597,7 +597,7 @@ def test_snapshot_invariants_under_concurrent_modifications(tmp_path: Path):
     # Two profiles, one running request each (max-concurrency 2 so both start)
     params = {"max-concurrency": 2}
     records = [
-        store.build_record(agent_profile_id=f"pA{i}", prompt_body=str(i))
+        store.build_record(execution_profile_id=f"pA{i}", prompt_body=str(i))
         for i in range(4)
     ]
     for r in records:
@@ -670,7 +670,7 @@ class TestGatewayLifecycleSuffixMap:
         bus.publish = _track  # type: ignore[method-assign]
 
         manager = queue_mod.GatewayQueueManager()
-        record = store.build_record(agent_profile_id="p12", prompt_body="x")
+        record = store.build_record(execution_profile_id="p12", prompt_body="x")
         store.write_record(tmp_path, record)
 
         def _runner_with_unknown_suffix(project_root, rec):
@@ -704,7 +704,7 @@ def test_snapshot_invariants_idle_is_subset_of_running(tmp_path: Path):
     # Enqueue 3 requests with max_concurrency=2; first two run immediately, third is pending.
     request_ids: list[str] = []
     for i in range(3):
-        record = store.build_record(agent_profile_id="snap1", prompt_body=f"x{i}")
+        record = store.build_record(execution_profile_id="snap1", prompt_body=f"x{i}")
         store.write_record(tmp_path, record)
         manager.enqueue(tmp_path, record, {"max-concurrency": 2}, runner)
         request_ids.append(record["request-id"])
@@ -734,7 +734,7 @@ def test_snapshot_invariants_active_running_arithmetic(tmp_path: Path):
 
     profile_id = "snap2"
     for i in range(4):
-        record = store.build_record(agent_profile_id=profile_id, prompt_body=f"x{i}")
+        record = store.build_record(execution_profile_id=profile_id, prompt_body=f"x{i}")
         store.write_record(tmp_path, record)
         manager.enqueue(tmp_path, record, {"max-concurrency": 3}, runner)
 
@@ -771,7 +771,7 @@ def test_snapshot_no_impossible_slot_count(tmp_path: Path):
     params = {"max-concurrency": 2, "queue-max-size": 4}
     # Submit max_concurrency + queue_max_size = 6 requests; all admitted.
     for i in range(6):
-        record = store.build_record(agent_profile_id=profile_id, prompt_body=f"x{i}")
+        record = store.build_record(execution_profile_id=profile_id, prompt_body=f"x{i}")
         store.write_record(tmp_path, record)
         manager.enqueue(tmp_path, record, params, runner)
 
@@ -809,7 +809,7 @@ def test_snapshot_under_concurrent_completion(tmp_path: Path):
     params = {"max-concurrency": 2, "queue-max-size": 4}
     records = []
     for i in range(6):
-        record = store.build_record(agent_profile_id=profile_id, prompt_body=f"x{i}")
+        record = store.build_record(execution_profile_id=profile_id, prompt_body=f"x{i}")
         store.write_record(tmp_path, record)
         manager.enqueue(tmp_path, record, params, _slow_runner)
         records.append(record)
@@ -843,7 +843,7 @@ def test_request_slot_status_consistent_with_snapshot(tmp_path: Path):
     runner = _blocking_runner(hold)
 
     profile_id = "snap5"
-    record = store.build_record(agent_profile_id=profile_id, prompt_body="x")
+    record = store.build_record(execution_profile_id=profile_id, prompt_body="x")
     store.write_record(tmp_path, record)
     manager.enqueue(tmp_path, record, {"max-concurrency": 1}, runner)
 
@@ -895,7 +895,7 @@ def test_sh07_per_request_dispatch_isolation(tmp_path: Path):
     profile_id = "sh07-profile"
     params = {"max-concurrency": 1}
 
-    record_a = store.build_record(agent_profile_id=profile_id, prompt_body="prompt_a")
+    record_a = store.build_record(execution_profile_id=profile_id, prompt_body="prompt_a")
     store.write_record(root_a, record_a)
     # Enqueue A — it starts immediately (only slot)
     t1 = threading.Thread(
@@ -905,7 +905,7 @@ def test_sh07_per_request_dispatch_isolation(tmp_path: Path):
     t1.start()
     time.sleep(0.1)  # let A claim the slot
 
-    record_b = store.build_record(agent_profile_id=profile_id, prompt_body="prompt_b")
+    record_b = store.build_record(execution_profile_id=profile_id, prompt_body="prompt_b")
     store.write_record(root_b, record_b)
     # Enqueue B — it goes pending behind A
     manager.enqueue(root_b, record_b, params, runner)
@@ -941,7 +941,7 @@ def test_sh07_cancel_pending_entry_with_two_entries(tmp_path: Path):
     profile_id = "sh07-cancel"
     params = {"max-concurrency": 1}
 
-    record_first = store.build_record(agent_profile_id=profile_id, prompt_body="first")
+    record_first = store.build_record(execution_profile_id=profile_id, prompt_body="first")
     store.write_record(tmp_path, record_first)
 
     t1 = threading.Thread(
@@ -951,7 +951,7 @@ def test_sh07_cancel_pending_entry_with_two_entries(tmp_path: Path):
     t1.start()
     time.sleep(0.1)  # let first claim the slot
 
-    record_second = store.build_record(agent_profile_id=profile_id, prompt_body="second")
+    record_second = store.build_record(execution_profile_id=profile_id, prompt_body="second")
     store.write_record(tmp_path, record_second)
     manager.enqueue(tmp_path, record_second, params, runner)
 
@@ -979,7 +979,7 @@ def test_sh07_cancel_pending_entry_with_two_entries(tmp_path: Path):
 
 def test_sh07c2_same_params_share_one_lane(tmp_path: Path):
     """Two projects with the same non-secret params share one global lane limit."""
-    from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
+    from audiagentic.components.agents.gateway import profiles as profiles_mod
 
     # Same profile, same non-secret params → same snapshot digest → one lane
     base_params = {"max-concurrency": 2, "provider_id": "local", "model_id": "m"}
@@ -1019,12 +1019,12 @@ def test_sh07c2_same_params_share_one_lane(tmp_path: Path):
     root_b.mkdir()
 
     # Enqueue from project A — takes one of two slots
-    record_a = store.build_record(agent_profile_id="shared-profile", prompt_body="from_a")
+    record_a = store.build_record(execution_profile_id="shared-profile", prompt_body="from_a")
     store.write_record(root_a, record_a)
     manager.enqueue(root_a, record_a, base_params, runner)
 
     # Enqueue from project B — takes second slot (same lane)
-    record_b = store.build_record(agent_profile_id="shared-profile", prompt_body="from_b")
+    record_b = store.build_record(execution_profile_id="shared-profile", prompt_body="from_b")
     store.write_record(root_b, record_b)
     manager.enqueue(root_b, record_b, base_params, runner)
 
@@ -1032,7 +1032,7 @@ def test_sh07c2_same_params_share_one_lane(tmp_path: Path):
     assert started.acquire(timeout=2)
 
     # Both slots filled; a third request should go pending
-    record_c = store.build_record(agent_profile_id="shared-profile", prompt_body="from_a_2")
+    record_c = store.build_record(execution_profile_id="shared-profile", prompt_body="from_a_2")
     store.write_record(root_a, record_c)
     manager.enqueue(root_a, record_c, base_params, runner)
 
@@ -1048,7 +1048,7 @@ def test_sh07c2_same_params_share_one_lane(tmp_path: Path):
 
 def test_sh07c2_different_params_create_separate_lanes(tmp_path: Path):
     """Same profile id but different non-secret params → separate lane keys."""
-    from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
+    from audiagentic.components.agents.gateway import profiles as profiles_mod
 
     params_a = {"max-concurrency": 1, "provider_id": "local", "model_id": "m"}
     params_b = {"max-concurrency": 2, "provider_id": "local", "model_id": "m"}  # different concurrency
@@ -1075,7 +1075,7 @@ def test_sh07c2_all_queue_depths_public_ids_no_paths(tmp_path: Path):
     """all_queue_depths returns redacted lane public ids with no project paths."""
     manager = queue_mod.GatewayQueueManager()
 
-    record = store.build_record(agent_profile_id="test-profile", prompt_body="x")
+    record = store.build_record(execution_profile_id="test-profile", prompt_body="x")
     store.write_record(tmp_path, record)
     params = {"max-concurrency": 1, "provider_id": "local"}
     manager.enqueue(tmp_path, record, params, _immediate_runner)
@@ -1095,7 +1095,7 @@ def test_sh07c2_queue_depth_public_ids_no_secrets(tmp_path: Path):
     """queue_depth still works by bare profile id; all_queue_depths uses public ids."""
     manager = queue_mod.GatewayQueueManager()
 
-    record = store.build_record(agent_profile_id="prod-profile", prompt_body="x")
+    record = store.build_record(execution_profile_id="prod-profile", prompt_body="x")
     store.write_record(tmp_path, record)
     params = {"max-concurrency": 1, "provider_id": "local"}
     manager.enqueue(tmp_path, record, params, _immediate_runner)
@@ -1117,24 +1117,24 @@ def test_sh07c2_queue_depth_public_ids_no_secrets(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 def _setup_shared_registry():
-    """Install an InMemoryGatewayRegistry for shared-mode tests."""
-    from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
+    """Install an InMemoryExecutionProfileRegistry for shared-mode tests."""
+    from audiagentic.components.agents.gateway import profiles as profiles_mod
 
-    registry = profiles_mod.InMemoryGatewayRegistry()
+    registry = profiles_mod.InMemoryExecutionProfileRegistry()
     profiles_mod.set_gateway_registry(registry)
     return registry
 
 
 def _teardown_shared_registry():
     """Remove the shared gateway registry, restoring embedded mode."""
-    from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
+    from audiagentic.components.agents.gateway import profiles as profiles_mod
 
     profiles_mod.set_gateway_registry(None)
 
 
 @pytest.fixture(autouse=False)
 def shared_registry():
-    """Install and tear down a shared-mode InMemoryGatewayRegistry."""
+    """Install and tear down a shared-mode InMemoryExecutionProfileRegistry."""
     reg = _setup_shared_registry()
     yield reg
     _teardown_shared_registry()
@@ -1182,12 +1182,12 @@ def test_sh07c2_shared_mode_cross_project_lane_limit(tmp_path: Path, shared_regi
 
     # Both projects build records with the SAME registry snapshot identity.
     record_a = store.build_record(
-        agent_profile_id="shared-gw-profile", prompt_body="from_a", **snapshot_identity,
+        execution_profile_id="shared-gw-profile", prompt_body="from_a", **snapshot_identity,
     )
     store.write_record(root_a, record_a)
 
     record_b = store.build_record(
-        agent_profile_id="shared-gw-profile", prompt_body="from_b", **snapshot_identity,
+        execution_profile_id="shared-gw-profile", prompt_body="from_b", **snapshot_identity,
     )
     store.write_record(root_b, record_b)
 
@@ -1258,7 +1258,7 @@ def test_sh07c2_shared_mode_project_cannot_override_limits(tmp_path: Path, share
     records = []
     for i in range(4):
         record = store.build_record(
-            agent_profile_id="controlled-profile", prompt_body=f"x{i}",
+            execution_profile_id="controlled-profile", prompt_body=f"x{i}",
             **snapshot_identity,
         )
         store.write_record(tmp_path, record)
@@ -1288,9 +1288,9 @@ def test_sh07c2_shared_mode_project_cannot_override_limits(tmp_path: Path, share
 def test_sh07c2_stale_generation_pending_rejected(tmp_path: Path):
     """Generation changes while a request is pending: the pending old request
     rejects with CON-AGW-101; new submission uses current generation and runs."""
-    from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
+    from audiagentic.components.agents.gateway import profiles as profiles_mod
 
-    registry = profiles_mod.InMemoryGatewayRegistry()
+    registry = profiles_mod.InMemoryExecutionProfileRegistry()
     registry.register("gen-profile", provider_id="local", model_id="m", max_concurrency=1)
     snap_v1 = registry.resolve_snapshot("gen-profile")
     lane_key_v1 = snap_v1.lane_key()
@@ -1309,7 +1309,7 @@ def test_sh07c2_stale_generation_pending_rejected(tmp_path: Path):
 
         # Request A with v1 snapshot
         record_a = store.build_record(
-            agent_profile_id="gen-profile", prompt_body="v1",
+            execution_profile_id="gen-profile", prompt_body="v1",
             gateway_profile_id=snap_v1.profile_id,
             gateway_profile_generation=snap_v1.generation,
             gateway_profile_config_digest=snap_v1.config_digest,
@@ -1331,7 +1331,7 @@ def test_sh07c2_stale_generation_pending_rejected(tmp_path: Path):
 
         # Request B with v1 snapshot — goes pending
         record_b = store.build_record(
-            agent_profile_id="gen-profile", prompt_body="v1_pending",
+            execution_profile_id="gen-profile", prompt_body="v1_pending",
             gateway_profile_id=snap_v1.profile_id,
             gateway_profile_generation=snap_v1.generation,
             gateway_profile_config_digest=snap_v1.config_digest,
@@ -1345,7 +1345,7 @@ def test_sh07c2_stale_generation_pending_rejected(tmp_path: Path):
         manager.enqueue(tmp_path, record_b, {"provider_id": "local"}, runner)
 
         # Now change generation in the registry (simulates profile update).
-        # InMemoryGatewayRegistry auto-increments version → new generation.
+        # InMemoryExecutionProfileRegistry auto-increments version → new generation.
         registry.register("gen-profile", provider_id="local", model_id="m", max_concurrency=2)
         snap_v2 = registry.resolve_snapshot("gen-profile")
         assert snap_v2.generation != snap_v1.generation, "generation must change on re-register"
@@ -1363,7 +1363,7 @@ def test_sh07c2_stale_generation_pending_rejected(tmp_path: Path):
 
         # New submission with v2 can run normally
         record_c = store.build_record(
-            agent_profile_id="gen-profile", prompt_body="v2_new",
+            execution_profile_id="gen-profile", prompt_body="v2_new",
             gateway_profile_id=snap_v2.profile_id,
             gateway_profile_generation=snap_v2.generation,
             gateway_profile_config_digest=snap_v2.config_digest,
@@ -1385,9 +1385,9 @@ def test_sh07c2_stale_generation_pending_rejected(tmp_path: Path):
 def test_sh07c2_running_request_keeps_old_snapshot(tmp_path: Path):
     """Running request keeps its stored snapshot after profile generation changes.
     Only pending/queued work is rejected; running work completes under old limits."""
-    from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
+    from audiagentic.components.agents.gateway import profiles as profiles_mod
 
-    registry = profiles_mod.InMemoryGatewayRegistry()
+    registry = profiles_mod.InMemoryExecutionProfileRegistry()
     registry.register("run-profile", provider_id="local", model_id="m", max_concurrency=1)
     snap_v1 = registry.resolve_snapshot("run-profile")
     lane_key_v1 = snap_v1.lane_key()
@@ -1410,7 +1410,7 @@ def test_sh07c2_running_request_keeps_old_snapshot(tmp_path: Path):
 
         # Request A with v1 snapshot — starts running
         record_a = store.build_record(
-            agent_profile_id="run-profile", prompt_body="running_v1",
+            execution_profile_id="run-profile", prompt_body="running_v1",
             gateway_profile_id=snap_v1.profile_id,
             gateway_profile_generation=snap_v1.generation,
             gateway_profile_config_digest=snap_v1.config_digest,
@@ -1435,7 +1435,7 @@ def test_sh07c2_running_request_keeps_old_snapshot(tmp_path: Path):
         assert snap_v2.generation != snap_v1.generation, "generation must change on re-register"
 
         record_c = store.build_record(
-            agent_profile_id="run-profile", prompt_body="v2_new_lane",
+            execution_profile_id="run-profile", prompt_body="v2_new_lane",
             gateway_profile_id=snap_v2.profile_id,
             gateway_profile_generation=snap_v2.generation,
             gateway_profile_config_digest=snap_v2.config_digest,
@@ -1470,7 +1470,7 @@ def test_sh07c2_queue_overview_redacted_lanes(tmp_path: Path):
     manager = queue_mod.GatewayQueueManager()
 
     record = store.build_record(
-        agent_profile_id="overview-profile", prompt_body="x",
+        execution_profile_id="overview-profile", prompt_body="x",
         gateway_profile_id="overview-profile",
         gateway_profile_generation="gen_test123",
         gateway_profile_config_digest="sha256:abcd1234",

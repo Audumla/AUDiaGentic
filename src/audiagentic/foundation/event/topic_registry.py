@@ -15,6 +15,7 @@ File format (YAML):
 
 Registry files are optional — components without them simply have no registered topics.
 """
+
 from __future__ import annotations
 
 import logging
@@ -78,7 +79,10 @@ class TopicRegistry:
                 code="CON-EVT-010",
                 kind="event-registry",
                 message=f"topic name violates naming grammar: {topic!r}",
-                details={"topic": topic, "grammar": "dotted lowercase <domain>.<resource>.<action> with past-tense actions"},
+                details={
+                    "topic": topic,
+                    "grammar": "dotted lowercase <domain>.<resource>.<action> with past-tense actions",
+                },
             )
 
         existing = self._topics.get(topic)
@@ -107,17 +111,19 @@ def _validate_schema(data: dict[str, Any], path: Path) -> None:
 
         from jsonschema import validate  # noqa: PLC0415
     except ImportError:
-        logger.warning("jsonschema not installed; skipping events.yaml schema validation for %s", path)
+        logger.warning(
+            "jsonschema not installed; skipping events.yaml schema validation for %s", path
+        )
         return
 
-    schema_path = Path(__file__).parent.parent / "contracts" / "schemas" / "event-topics.schema.json"
+    schema_path = (
+        Path(__file__).parent.parent / "contracts" / "schemas" / "event-topics.schema.json"
+    )
     try:
         with open(schema_path) as f:
             schema = json.load(f)
     except OSError:
-        logger.warning(
-            "events.yaml schema file missing; skipping validation for %s", path
-        )
+        logger.warning("events.yaml schema file missing; skipping validation for %s", path)
         return
     try:
         validate(instance=data, schema=schema)
@@ -161,7 +167,9 @@ def load_event_topics_from_component(component_id: str, config_dir: Path) -> int
             logger.warning("Skipping non-string topic key in %s: %r", events_path, topic)
             continue
         if not isinstance(spec_data, dict):
-            logger.warning("Skipping invalid spec in %s for topic %r: expected mapping", events_path, topic)
+            logger.warning(
+                "Skipping invalid spec in %s for topic %r: expected mapping", events_path, topic
+            )
             continue
         try:
             spec = EventTopicSpec(
@@ -179,7 +187,9 @@ def load_event_topics_from_component(component_id: str, config_dir: Path) -> int
             raise
         except Exception:  # noqa: BLE001
             logger.warning(
-                "Failed to register topic %r from %s", topic, events_path,
+                "Failed to register topic %r from %s",
+                topic,
+                events_path,
                 exc_info=True,
             )
     return count
@@ -208,7 +218,8 @@ def load_all_event_topics(config_dirs: list[Path] | None = None) -> int:
                 raise
             except Exception:  # noqa: BLE001
                 logger.warning(
-                    "Failed to load event topics for %s", component_id,
+                    "Failed to load event topics for %s",
+                    component_id,
                     exc_info=True,
                 )
     global _fully_loaded
@@ -258,7 +269,4 @@ def assert_event_payload(
     if metadata is not None and spec.metadata_keys:
         missing_meta = [k for k in spec.metadata_keys if k not in metadata]
         if missing_meta:
-            raise AssertionError(
-                f"topic {topic!r} missing required metadata keys: {missing_meta}"
-            )
-
+            raise AssertionError(f"topic {topic!r} missing required metadata keys: {missing_meta}")

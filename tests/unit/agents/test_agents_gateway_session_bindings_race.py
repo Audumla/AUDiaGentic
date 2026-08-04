@@ -20,8 +20,8 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.components.agents import agents_gateway_session_bindings as bindings
-from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+from audiagentic.components.agents.gateway.session import bindings as bindings
+from audiagentic.components.agents.gateway.session import sessions_store as session_store
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.system.process import StartupLock
 
@@ -46,7 +46,7 @@ def _make_session_record(
 
     record = session_store.build_session_record(
         session_id=session_id,
-        agent_profile_id="default",
+        execution_profile_id="default",
         provider_id=provider_id,
         provider_session_ref=provider_ref,
     )

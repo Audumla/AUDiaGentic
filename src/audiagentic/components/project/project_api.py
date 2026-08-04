@@ -9,7 +9,7 @@ from audiagentic.foundation.components.registry import is_enabled, is_installed
 from audiagentic.foundation.features.registry import all_features, all_implementations
 from audiagentic.foundation.features.resolver import resolve_feature, resolve_implementation
 
-from . import project_components, project_files
+from . import project_components, project_files, project_surfaces
 
 
 def project_status(project_root: Path) -> dict[str, Any]:
@@ -49,6 +49,37 @@ def disable_component(project_root: Path, component_id: str) -> dict[str, Any]:
 def read_project_file(project_root: Path, relative_path: str) -> dict[str, Any]:
     """Read a file under the managed project `.audiagentic` tree."""
     return project_files.read_project_file(project_root, relative_path)
+
+
+def list_project_instructions(project_root: Path) -> list[dict[str, Any]]:
+    return project_surfaces.list_project_instructions(project_root)
+
+def get_project_instruction(project_root: Path, item_id: str) -> dict[str, Any]:
+    return project_surfaces.get_project_instruction(project_root, item_id)
+
+def create_project_instruction(project_root: Path, item_id: str, title: str, body: str, preferred_targets: list[str] | None = None) -> dict[str, Any]:
+    return project_surfaces.create_project_instruction(project_root, item_id, title, body, preferred_targets)
+
+def update_project_instruction(project_root: Path, item_id: str, title: str | None = None, body: str | None = None, preferred_targets: list[str] | None = None) -> dict[str, Any]:
+    return project_surfaces.update_project_instruction(project_root, item_id, title, body, preferred_targets)
+
+def delete_project_instruction(project_root: Path, item_id: str) -> dict[str, Any]:
+    return project_surfaces.delete_project_instruction(project_root, item_id)
+
+def list_project_skills(project_root: Path) -> list[dict[str, Any]]:
+    return project_surfaces.list_project_skills(project_root)
+
+def get_project_skill(project_root: Path, item_id: str) -> dict[str, Any]:
+    return project_surfaces.get_project_skill(project_root, item_id)
+
+def create_project_skill(project_root: Path, item_id: str, content: str) -> dict[str, Any]:
+    return project_surfaces.create_project_skill(project_root, item_id, content)
+
+def update_project_skill(project_root: Path, item_id: str, content: str) -> dict[str, Any]:
+    return project_surfaces.update_project_skill(project_root, item_id, content)
+
+def delete_project_skill(project_root: Path, item_id: str) -> dict[str, Any]:
+    return project_surfaces.delete_project_skill(project_root, item_id)
 
 
 def runtime_sync_contract() -> dict[str, Any]:

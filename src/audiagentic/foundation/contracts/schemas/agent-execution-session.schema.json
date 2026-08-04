@@ -4,7 +4,7 @@
   "required": [
     "contract-version",
     "session-id",
-    "agent-profile-id",
+    "execution-profile-id",
     "state",
     "binding",
     "request-ids",
@@ -20,7 +20,7 @@
     "session-id": {
       "type": "string"
     },
-    "agent-profile-id": {
+    "execution-profile-id": {
       "type": "string"
     },
     "provider-id": {
