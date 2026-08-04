@@ -16,22 +16,6 @@ def _patch_root():
     )
 
 
-def test_agent_execution_submit_delegates():
-    with _patch_root(), patch(
-        "audiagentic.components.agents.mcp.gateway_mcp.get_gateway_client"
-    ) as mock_get:
-        mock = mock_get.return_value
-        mock.submit_execution_request.return_value = {"request-id": "req_x", "state": "queued"}
-        result = agents_gateway_mcp.agent_execution_submit(execution_profile_id="p", prompt_body="hi")
-    assert result["state"] == "queued"
-    mock.submit_execution_request.assert_called_once_with(
-        _ROOT, execution_profile_id="p", prompt_body="hi", mode="async",
-        timeout_seconds=None, source=None, metadata=None,
-        session_id=None, session_keep_alive=False, session_idle_timeout_seconds=None,
-        session_max_lifetime_seconds=None,
-    )
-
-
 def test_agent_task_status_delegates():
     with _patch_root(), patch(
         "audiagentic.components.agents.mcp.gateway_mcp.get_gateway_client"
@@ -98,10 +82,9 @@ def test_agent_task_gateway_overview_delegates():
 
 def test_agent_task_submit_resolves_agent_and_delegates():
     """agent_task_submit resolves the agent definition, then submits through
-    the same client seam agent_execution_submit uses -- no separate dispatch
-    path (RV891). Returns task.status(): a delegating re-read through the
-    same client, not the raw submit response -- so both client calls are
-    mocked."""
+    the gateway client -- the sole MCP submission path (RV891). Returns
+    task.status(): a delegating re-read through the same client, not the raw
+    submit response -- so both client calls are mocked."""
     with _patch_root(), patch(
         "audiagentic.components.agents.models.agent_definition_api.get_agent_definition",
         return_value={"agent_id": "reviewer-agent", "execution_profile_id": "fast"},
