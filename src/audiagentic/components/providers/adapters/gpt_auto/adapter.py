@@ -1,8 +1,7 @@
-"""gpt-auto adapter — browser-driven ChatGPT via Playwright.
+"""gpt-auto adapter — CDP-driven ChatGPT via puppeteer-core.
 
-Called by the provider execution service.  No CLI, no MCP, no API key —
-launches a Chromium browser with persistent cookies, types the prompt into
-chat.openai.com, and reads the response from the DOM.
+Connects to an already-running Chrome/Brave browser (navigator.webdriver = false)
+to avoid bot detection.  No Playwright, no new browser launch.
 """
 
 from __future__ import annotations
@@ -23,10 +22,6 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Prompt helpers
-# ---------------------------------------------------------------------------
-
 def _build_prompt(
     packet_ctx: dict[str, Any],
     provider_cfg: dict[str, Any],
@@ -45,37 +40,56 @@ def _build_prompt(
     return "\n\n".join(parts) if parts else user_text
 
 
-# ---------------------------------------------------------------------------
-# Main entry point
-# ---------------------------------------------------------------------------
+def _resolve_project_name(working_root: str | None, provider_cfg: dict[str, Any]) -> str:
+    """Get the project name from config or git."""
+    # Explicit config override
+    if provider_cfg.get("project-name"):
+        return provider_cfg["project-name"]
+
+    # Try git remote origin
+    if working_root:
+        import subprocess
+        try:
+            result = subprocess.run(
+                ["git", "remote", "get-url", "origin"],
+                capture_output=True, text=True, timeout=5, cwd=working_root,
+            )
+            if result.returncode == 0:
+                remote = result.stdout.strip()
+                repo = Path(remote).stem
+                return repo or "AUDiaGentic"
+        except Exception:
+            pass
+
+    # Fall back to directory name
+    if working_root:
+        return Path(working_root).name or "AUDiaGentic"
+    return "AUDiaGentic"
+
 
 def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, Any]:
-    """Execute a prompt through ChatGPT via browser automation.
-
-    This is the adapter entry point called by the provider execution service.
-    """
+    """Execute a prompt through ChatGPT via CDP browser automation."""
     working_root = packet_ctx.get("working-root")
     cwd = Path(working_root) if working_root else None
 
-    prompt = _build_prompt(packet_ctx, provider_cfg)
-    logger.info("gpt-auto: executing prompt (%d chars)", len(prompt))
+    project_name = _resolve_project_name(working_root, provider_cfg)
 
-    # Read config overrides from provider_cfg
+    prompt = _build_prompt(packet_ctx, provider_cfg)
+    logger.info("gpt-auto: executing prompt (%d chars) for project '%s'", len(prompt), project_name)
+
     timeout = provider_cfg.get("response-timeout", 120)
     login_timeout = provider_cfg.get("login-timeout", 30)
-    typing_speed = provider_cfg.get("typing-speed", 0.02)
+    typing_speed = provider_cfg.get("typing-speed", 0.03)
+    cdp_url = provider_cfg.get("cdp-url", "http://127.0.0.1:9222")
+    min_delay_between_requests = provider_cfg.get("min-delay-between-requests", 5.0)
 
-    # Navigate to the project URL if configured
-    project_url = provider_cfg.get("chatgpt_project_url")
-    if project_url:
-        _open_chatgpt_project(project_url)
-
-    # Run the async browser automation in an event loop
-    output_text = _run_browser(
+    output_text, metadata = _run_browser(
         prompt=prompt,
+        project_name=project_name,
         timeout=timeout,
         login_timeout=login_timeout,
         typing_speed=typing_speed,
+        cdp_url=cdp_url,
         cwd=cwd,
     )
 
@@ -83,71 +97,104 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
         provider_id="gpt-auto",
         packet_ctx=packet_ctx,
         provider_cfg=provider_cfg,
-        command=["gpt-auto", "browser"],
+        command=["gpt-auto", "cdp"],
         stdout_text=output_text or "",
         stderr_text="",
         returncode=0 if output_text is not None else 1,
-        parsed_data={"response": output_text},
+        parsed_data={**{"response": output_text}, **metadata},
         result_source=(
             ResultSource.STDOUT_TEXT
             if output_text is not None
             else ResultSource.FALLBACK_SYNTHETIC
         ),
         output_text=output_text,
-        extra_result={"job-id": packet_ctx.get("job-id")},
+        extra_result={**{"job-id": packet_ctx.get("job-id"), "project-name": project_name}, **metadata},
     )
 
 
 def _run_browser(
     prompt: str,
+    project_name: str,
     timeout: int,
     login_timeout: int,
     typing_speed: float,
+    cdp_url: str,
     cwd: Path | None,
-) -> str | None:
-    """Run the browser automation in an event loop."""
+) -> tuple[str | None, dict[str, Any]]:
+    """Run the CDP browser automation in an event loop."""
+    from audiagentic.components.providers.adapters.gpt_auto.cdp_client import (
+        CdpClient,
+    )
     from audiagentic.components.providers.adapters.gpt_auto.dom_reader import (
         wait_for_response,
-    )
-    from audiagentic.components.providers.adapters.gpt_auto.playwright_client import (
-        PlaywrightClient,
     )
     from audiagentic.components.providers.adapters.gpt_auto.prompt_injector import (
         inject_prompt,
         wait_for_chatgpt_ready,
     )
-
-    client = PlaywrightClient(
-        target_url="https://chat.openai.com",
+    from audiagentic.components.providers.adapters.gpt_auto.workspace import (
+        ensure_workspace,
     )
+
+    client = CdpClient(cdp_url=cdp_url)
 
     try:
         loop = asyncio.new_event_loop()
         try:
             loop.run_until_complete(client.start())
-            logger.info("gpt-auto: browser launched")
+            logger.info("gpt-auto: connected to browser via CDP")
 
-            ready = loop.run_until_complete(
-                wait_for_chatgpt_ready(
-                    client, 
-                    timeout=30.0, 
-                    login_timeout=float(login_timeout)
+            # Find any ChatGPT tab
+            tab = loop.run_until_complete(client.find_tab(url_pattern="chatgpt"))
+            if not tab:
+                raise AudiaGenticError(
+                    code="EXT-GPTAUTO-010",
+                    kind="providers",
+                    message="No ChatGPT tab found — open chat.openai.com first",
+                    details={"provider-id": "gpt-auto"},
                 )
+
+            # Find workspace for the project (find_workspace navigates there if found)
+            ws = loop.run_until_complete(ensure_workspace(client, project_name))
+            if ws:
+                logger.info("gpt-auto: working in workspace '%s': %s", ws.name, ws.url)
+
+                # Always navigate to /project for a fresh chat — don't reuse existing conversations
+                current_url = loop.run_until_complete(client.get_url())
+                if "/c/" in current_url or "/project" not in current_url:
+                    # We're in an existing chat — go back to project home for a new one
+                    ws_base = current_url.split("/c/")[0] if "/c/" in current_url else None
+                    if ws_base and "/g/g-p-" in ws_base:
+                        new_chat_url = ws_base.rstrip("/") + "/project"
+                        loop.run_until_complete(client.evaluate(f'() => {{ window.location.href = "{new_chat_url}"; }}'))
+                        # Re-find tab after navigation (context destroyed)
+                        for _ in range(10):
+                            import time as _time
+                            _time.sleep(0.5)
+                            loop.run_until_complete(client.find_tab(url_pattern="chatgpt"))
+                            new_url = loop.run_until_complete(client.get_url())
+                            if "/project" in new_url:
+                                break
+                        logger.info("gpt-auto: started fresh chat at %s", new_chat_url)
+                else:
+                    # Already on /project — re-find tab after context change
+                    loop.run_until_complete(client.find_tab(url_pattern="chatgpt"))
+
+            # Wait for ChatGPT ready (ProseMirror visible)
+            ready = loop.run_until_complete(
+                wait_for_chatgpt_ready(client, timeout=30.0, login_timeout=float(login_timeout))
             )
             if not ready:
-                loop.run_until_complete(
-                    client.screenshot(path=str(cwd / "gpt-auto-not-ready.png" if cwd else "/tmp/gpt-auto-not-ready.png"))
-                )
+                debug_path = str(cwd / "gpt-auto-not-ready.png" if cwd else "/tmp/gpt-auto-not-ready.png")
+                loop.run_until_complete(client.screenshot(path=debug_path))
                 raise AudiaGenticError(
-                    code="EXT-GPTAUTO-001",
+                    code="EXT-GPTAUTO-011",
                     kind="providers",
                     message="ChatGPT not ready after login timeout",
-                    details={
-                        "provider-id": "gpt-auto",
-                        "timeout": login_timeout,
-                    },
+                    details={"provider-id": "gpt-auto", "timeout": login_timeout},
                 )
 
+            # Inject prompt into ProseMirror editor
             loop.run_until_complete(inject_prompt(client, prompt, typing_speed))
             logger.info("gpt-auto: prompt submitted")
 
@@ -156,26 +203,28 @@ def _run_browser(
                 chunks.append(text)
 
             response = loop.run_until_complete(
-                wait_for_response(
-                    client,
-                    timeout=float(timeout),
-                    interval=2.0,
-                    on_chunk=on_chunk,
-                )
+                wait_for_response(client, timeout=float(timeout), interval=2.0, on_chunk=on_chunk, prompt_text=prompt)
             )
 
-            if response is None:
+            if not response:
                 raise AudiaGenticError(
-                    code="EXT-GPTAUTO-002",
+                    code="EXT-GPTAUTO-012",
                     kind="providers",
                     message="No response received from ChatGPT before timeout",
-                    details={
-                        "provider-id": "gpt-auto",
-                        "timeout": timeout,
-                    },
+                    details={"provider-id": "gpt-auto", "timeout": timeout},
                 )
 
-            return response
+            # Capture session/conversation metadata after response (ChatGPT may have updated URL to /c/{conv-id})
+            chat_url = loop.run_until_complete(client.get_url())
+            metadata = {"chat-url": chat_url}
+            if "/c/" in chat_url:
+                conv_id = chat_url.split("/c/")[-1].rstrip("/")
+                metadata["conversation-id"] = conv_id
+            if "/g/g-p-" in chat_url:
+                ws_segment = chat_url.split("/g/g-p-")[1].split("/")[0]
+                metadata["workspace-id"] = f"ws-{ws_segment}"
+
+            return response, metadata
 
         finally:
             loop.run_until_complete(client.stop())
@@ -185,8 +234,8 @@ def _run_browser(
         raise
     except Exception as exc:
         raise AudiaGenticError(
-            code="EXT-GPTAUTO-003",
+            code="EXT-GPTAUTO-013",
             kind="providers",
-            message=f"gpt-auto browser automation failed: {exc}",
+            message=f"gpt-auto CDP automation failed: {exc}",
             details={"provider-id": "gpt-auto", "error": str(exc)},
         ) from exc

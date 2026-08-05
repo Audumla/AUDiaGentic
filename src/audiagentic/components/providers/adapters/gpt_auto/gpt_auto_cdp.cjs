@@ -1,0 +1,175 @@
+"use strict";
+
+const puppeteer = require("puppeteer-core");
+
+let browser = null;
+let page = null;
+
+function respond(id, result) {
+    process.stdout.write(JSON.stringify({ id, result }) + "\n");
+}
+
+function error(id, message) {
+    process.stdout.write(JSON.stringify({ id, error: message }) + "\n");
+}
+
+async function handle(msg) {
+    const id = msg.id;
+    try {
+        switch (msg.method) {
+            case "connect": {
+                browser = await puppeteer.connect({
+                    browserURL: msg.params.browserURL || "http://127.0.0.1:9222",
+                    defaultViewport: null,
+                });
+                respond(id, { ok: true });
+                break;
+            }
+            case "new_tab": {
+                if (!browser) return error(id, "Not connected");
+                page = await browser.newPage();
+                const url = msg.params.url || "https://chatgpt.com";
+                await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
+                respond(id, { ok: true, url: page.url() });
+                break;
+            }
+            case "find_tab": {
+                if (!browser) return error(id, "Not connected");
+                for (const p of await browser.pages()) {
+                    const url = p.url();
+                    const title = await p.title().catch(() => "");
+                    if (
+                        (msg.params.urlPattern && url.includes(msg.params.urlPattern)) ||
+                        (msg.params.titlePattern && title.includes(msg.params.titlePattern))
+                    ) {
+                        page = p;
+                        respond(id, { found: true, url, title });
+                        return;
+                    }
+                }
+                respond(id, { found: false });
+                break;
+            }
+            case "click": {
+                if (!page) return error(id, "No active page");
+                const el = await page.$(msg.params.selector);
+                if (!el) return error(id, `Element not found: ${msg.params.selector}`);
+                await el.click();
+                respond(id, { ok: true });
+                break;
+            }
+            case "type_text": {
+                if (!page) return error(id, "No active page");
+                const delay = msg.params.delay || 30;
+                for (const ch of msg.params.text) {
+                    await page.keyboard.type(ch);
+                    await new Promise((r) => setTimeout(r, delay));
+                }
+                respond(id, { ok: true });
+                break;
+            }
+            case "press_key": {
+                if (!page) return error(id, "No active page");
+                await page.keyboard.press(msg.params.key);
+                respond(id, { ok: true });
+                break;
+            }
+            case "evaluate": {
+                if (!page) return error(id, "No active page");
+                let script = msg.params.script;
+                const args = msg.params.args;
+                
+                let result;
+                try {
+                    if (args && args.length > 0) {
+                        // Puppeteer can't serialize function strings + args across CDP.
+                        // Store args on window, then evaluate. Script should access via
+                        // _cdpArgs[0], _cdpArgs[1], etc.
+                        const argJson = JSON.stringify(args);
+                        const preamble = `window._cdpArgs=${argJson};`;
+                        result = await page.evaluate(preamble + script);
+                    } else {
+                        // Wrap bare arrow functions in IIFE — puppeteer returns {} for "() => ...".
+                        if (!script.startsWith("(()") && !script.startsWith("(function")) {
+                            script = `(${script})()`;
+                        }
+                        result = await page.evaluate(script);
+                    }
+                } catch(e) {
+                    return error(id, `evaluate: ${e.message}`);
+                }
+                respond(id, { value: result });
+                break;
+            }
+            case "screenshot": {
+                if (!page) return error(id, "No active page");
+                await page.screenshot({ path: msg.params.path });
+                respond(id, { ok: true });
+                break;
+            }
+            case "click_js": {
+                if (!page) return error(id, "No active page");
+                const elHandle = await page.evaluateHandle(msg.params.js);
+                const el = elHandle.asElement();
+                if (!el) return error(id, "Element not found by JS query");
+                
+                // Try multiple click strategies for React elements
+                try {
+                    await el.click({ force: true });
+                } catch(e1) {
+                    // Fallback: dispatch native click event via CDP
+                    const rect = await page.evaluate(h => h.getBoundingClientRect(), elHandle);
+                    if (rect.width > 0 && rect.height > 0) {
+                        await page.mouse.click(
+                            Math.round(rect.x + rect.width / 2),
+                            Math.round(rect.y + rect.height / 2)
+                        );
+                    }
+                }
+                
+                respond(id, { ok: true });
+                break;
+            }
+            case "mouse_click": {
+                if (!page) return error(id, "No active page");
+                const x = msg.params.x;
+                const y = msg.params.y;
+                await page.mouse.click(x, y);
+                respond(id, { ok: true });
+                break;
+            }
+            case "get_url": {
+                if (!page) return error(id, "No active page");
+                respond(id, { url: page.url() });
+                break;
+            }
+            case "disconnect": {
+                if (browser) { browser.disconnect(); browser = null; page = null; }
+                respond(id, { ok: true });
+                break;
+            }
+            default:
+                error(id, `Unknown method: ${msg.method}`);
+        }
+    } catch (e) {
+        error(id, e.message);
+    }
+}
+
+let reqId = 0;
+process.stdin.setEncoding("utf8");
+let buf = "";
+process.stdin.on("data", (chunk) => {
+    buf += chunk;
+    let nl;
+    while ((nl = buf.indexOf("\n")) !== -1) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line) continue;
+        try { handle(JSON.parse(line)); } catch(e) { /* skip */ }
+    }
+});
+process.stdin.on("end", () => { if (browser) browser.disconnect(); process.exit(0); });
+
+// Signal ready on stderr so Python knows we're alive
+process.stderr.write("gpt-auto-cdp ready\n");
