@@ -45,7 +45,6 @@ def test_describe_provider_full_composition(tmp_path: Path) -> None:
     assert mcp_surface["configured"] is True
     assert mcp_surface["resolved_path"].endswith("opencode.json")
     assert mcp_surface["path_scope"] in {"project", "home", "absolute"}
-    # models store now declared for opencode (model_config in descriptor)
     assert surfaces["models"]["configured"] is True
     # managed registries report names/counts only
     registries = {block["registry"]: block for block in result["managed"]}

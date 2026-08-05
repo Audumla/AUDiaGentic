@@ -19,7 +19,9 @@ logger = logging.getLogger(__name__)
 def materialize_model_config_path(project_root: Path, agent_runtime: Path | None) -> Path:
     """OpenCode launches consume the project-local config document."""
     del agent_runtime
-    return project_root / ".opencode" / "config.json"
+    # Keep projection in the descriptor's native config target. A second
+    # config.json splits model ownership from OpenCode's active config.
+    return project_root / ".opencode" / "opencode.json"
 
 
 def _build_agents_md(project_root: Path) -> str:

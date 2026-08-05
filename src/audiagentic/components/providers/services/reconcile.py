@@ -403,13 +403,22 @@ def reconcile_all(project_root: Path) -> None:
     """Generic post-install hook — reconciles all providers.
 
     Called from the component lifecycle as a background thread target.
+    The first reconciliation must wait until the operator has selected a
+    reconciliation policy.  Otherwise the implicit ``auto`` default would
+    enable every detected CLI during component installation, before the
+    first-run provider selection flow can preserve the operator's choices.
     Silently ignores errors so the component install never fails due to
     provider probe failures.
     """
     from audiagentic.foundation.components.registry import is_installed
 
+    from .config.provider_config import is_reconciliation_policy_configured
+
     # Guard: component may have been uninstalled before background thread runs.
     if not is_installed("providers", project_root):
+        return
+    if not is_reconciliation_policy_configured(project_root):
+        logger.info("Deferring provider reconciliation until first-run policy is selected")
         return
     try:
         reconcile_all_providers(project_root=project_root)

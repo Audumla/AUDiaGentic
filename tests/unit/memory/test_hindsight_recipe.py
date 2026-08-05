@@ -22,6 +22,7 @@ from audiagentic.components.memory.hindsight.mcp_recipe import (
 from audiagentic.components.memory.hindsight.provision import (
     _hindsight_families,
     _resolve_family,
+    _run_recipe,
     build_hindsight_status_report,
     discover_provider_ids,
     reconcile_hindsight,
@@ -77,6 +78,61 @@ class TestFamilyPreferenceOrder:
     def test_unsupported_provider_returns_none(self):
         family = _resolve_family("nonexistent-provider-xyz")
         assert family is None
+
+
+def test_opencode_recipe_installs_official_plugin_with_typed_options(tmp_path):
+    config_path = tmp_path / ".opencode" / "opencode.json"
+    config_path.parent.mkdir()
+    config_path.write_text(
+        json.dumps(
+            {
+                "$schema": "https://opencode.ai/config.json",
+                "theme": "user-theme",
+                "plugin": ["user-plugin"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    result, managed = _run_recipe(
+        "opencode",
+        tmp_path,
+        HindsightBackendConfig(base_url="http://memory.example:8888", bank_id="project-a"),
+        "apply",
+    )
+
+    assert result is not None and result.success
+    assert managed[0]["present"] is True
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert config["$schema"] == "https://opencode.ai/config.json"
+    assert config["theme"] == "user-theme"
+    assert config["plugin"] == [
+        "user-plugin",
+        [
+            "@vectorize-io/opencode-hindsight",
+            {
+                "hindsightApiUrl": "http://memory.example:8888",
+                "bankId": "project-a",
+                "autoRecall": True,
+                "autoRetain": True,
+                "recallBudget": "mid",
+                "retainEveryNTurns": 3,
+                "debug": False,
+            },
+        ],
+    ]
+
+    pruned, _ = _run_recipe(
+        "opencode",
+        tmp_path,
+        HindsightBackendConfig(base_url="http://memory.example:8888", bank_id="project-a"),
+        "prune",
+    )
+    assert pruned is not None and pruned.success
+    assert json.loads(config_path.read_text(encoding="utf-8")) == {
+        "$schema": "https://opencode.ai/config.json",
+        "theme": "user-theme",
+        "plugin": ["user-plugin"],
+    }
 
 
 # ---------------------------------------------------------------------------
