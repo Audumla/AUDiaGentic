@@ -1,4 +1,4 @@
-"""Configuration for the gpt-auto provider."""
+"""Configuration for the gpt-auto provider (CDP connect approach)."""
 
 from __future__ import annotations
 
@@ -7,23 +7,13 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-# Known ChatGPT model identifiers (display names used in the UI)
-KNOWN_MODELS = frozenset(
-    {
-        "gpt-4o",
-        "gpt-4o-mini",
-        "gpt-4.5-preview",
-        "o3-mini",
-        "o4-mini",
-    }
-)
-
 
 @dataclass(frozen=True)
 class GptAutoConfig:
-    """Runtime configuration for the gpt-auto provider.
+    """Runtime configuration for the gpt-auto CDP provider.
 
     All settings are local — no API keys or remote connectivity required.
+    Connects to an already-running Chrome/Brave via DevTools Protocol.
     """
 
     # --- Browser / target ---
@@ -31,11 +21,14 @@ class GptAutoConfig:
     """Hostname to look for when enumerating tabs."""
 
     model_select: str | None = None
-    """If set, the model name shown in ChatGPT's model selector (e.g. 'gpt-4o').
-    The user must have this model available in their ChatGPT session."""
+    """If set, the model name shown in ChatGPT's model selector (e.g. 'gpt-4o')."""
+
+    # --- CDP connection ---
+    cdp_url: str = "http://127.0.0.1:9222"
+    """Chrome DevTools Protocol URL of the running browser."""
 
     # --- Timing ---
-    tab_selection_timeout: int = 10
+    tab_selection_timeout: int = 15
     """Seconds to wait for the target ChatGPT tab to appear/load."""
 
     login_timeout: int = 120
@@ -47,23 +40,8 @@ class GptAutoConfig:
     polling_interval: float = 2.0
     """Seconds between DOM polls while waiting for a response."""
 
-    typing_speed: float = 0.02
+    typing_speed: float = 0.03
     """Seconds between keystrokes when injecting the prompt (human-like)."""
-
-    # --- Connection ---
-    profile_dir: str | None = None
-    """Persistent profile directory for ChatGPT cookies. Defaults to ~/.gpt-auto-profile."""
-
-    browser_path: str | None = None
-    """Path to a specific Chrome/Chromium executable. Auto-detected if omitted."""
-
-    def __post_init__(self) -> None:
-        if self.model_select is not None and self.model_select not in KNOWN_MODELS:
-            logger.warning(
-                "model_select=%r not in known models %s — will still be used for display only",
-                self.model_select,
-                KNOWN_MODELS,
-            )
 
     @classmethod
     def from_dict(cls, data: dict) -> GptAutoConfig:
