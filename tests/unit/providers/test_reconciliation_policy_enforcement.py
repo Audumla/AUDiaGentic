@@ -118,3 +118,17 @@ def test_reconcile_all_providers_only_enables_allowed_providers(
     other_statuses = {pid: status for pid, status in statuses.items() if pid not in ("claude", "codex")}
     assert other_statuses, "expected other providers in the registry to exercise the skip path"
     assert all(status == "skipped" for status in other_statuses.values())
+
+
+def test_component_install_defers_reconciliation_until_initial_choice(monkeypatch, tmp_path: Path) -> None:
+    """The post-install hook must not auto-enable CLIs before first-run selection."""
+    import audiagentic.components.providers.services.reconcile as reconcile
+    import audiagentic.foundation.components.registry as registry
+
+    calls: list[Path] = []
+    monkeypatch.setattr(registry, "is_installed", lambda _component, _root: True)
+    monkeypatch.setattr(reconcile, "reconcile_all_providers", lambda **kwargs: calls.append(kwargs["project_root"]))
+
+    reconcile.reconcile_all(tmp_path)
+
+    assert calls == []

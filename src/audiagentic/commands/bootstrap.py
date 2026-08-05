@@ -76,6 +76,14 @@ def cmd_config_sync(args: argparse.Namespace, project_root: Path) -> int:
     del args
     target = global_harness_runtime()
     try:
+        # Provider-native MCP files are generated independently of the active
+        # harness.  Refresh them first so renamed/removed server modules are
+        # repaired everywhere, not only in the harness selected below.
+        from audiagentic.components.providers.services.mcp.mcp_sync import (
+            sync_all_provider_mcp_servers,
+        )
+
+        sync_all_provider_mcp_servers(project_root)
         refresh_materialized_agent_config(target, project_root=project_root)
         request_runtime_reload(project_root, reason="manual-refresh")
     except Exception as exc:  # noqa: BLE001

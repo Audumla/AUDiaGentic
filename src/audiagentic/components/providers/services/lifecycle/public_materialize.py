@@ -64,13 +64,6 @@ def materialize_provider_config(
     from audiagentic.components.providers import providers_api
     from audiagentic.foundation.cli_io import print_message
 
-    _upsert_ag_rig_source(project_root, harness_cfg)
-    from audiagentic.components.providers.services.catalog.models import (
-        build_model_projection_request,
-    )
-
-    request = build_model_projection_request(project_root, provider_id, enabled=True)
-
     from audiagentic.components.providers.services.execution.execution import (
         load_materialize_builder,
         load_materialize_model_config_path_resolver,
@@ -84,31 +77,43 @@ def materialize_provider_config(
             message=f"Provider {provider_id!r} does not declare config materialization.",
             details={"provider_id": provider_id},
         )
-    resolver = load_materialize_model_config_path_resolver(provider_id)
-    if resolver is not None:
-        from dataclasses import replace
+    # Providers with a managed model store reconcile only entries recorded in
+    # their ownership registry. Provider adapters must preserve every unowned
+    # entry in a mixed user/AUDiaGentic configuration.
+    from audiagentic.components.providers.descriptors.registry import get_descriptor
 
-        request = replace(request, config_path=str(resolver(project_root, agent_runtime)))
-
-    # Model config via model-projection family (managed)
-    try:
-        result = providers_api.manage_model_projection(
-            project_root,
-            provider_id,
-            mode="apply",
-            request=request,
+    descriptor = get_descriptor(provider_id)
+    if descriptor is not None and descriptor.model_config is not None:
+        _upsert_ag_rig_source(project_root, harness_cfg)
+        from audiagentic.components.providers.services.catalog.models import (
+            build_model_projection_request,
         )
-        if not result.ok:
-            print_message(
-                f"Warning: model-projection apply failed for {provider_id}: {result.error_code}",
+
+        request = build_model_projection_request(project_root, provider_id, enabled=True)
+        resolver = load_materialize_model_config_path_resolver(provider_id)
+        if resolver is not None:
+            from dataclasses import replace
+
+            request = replace(request, config_path=str(resolver(project_root, agent_runtime)))
+
+        try:
+            result = providers_api.manage_model_projection(
+                project_root,
+                provider_id,
+                mode="apply",
+                request=request,
             )
-    except Exception:  # noqa: BLE001 — materialize is best-effort
-        import logging
+            if not result.ok:
+                print_message(
+                    f"Warning: model-projection apply failed for {provider_id}: {result.error_code}",
+                )
+        except Exception:  # noqa: BLE001 — materialize is best-effort
+            import logging
 
-        logging.getLogger(__name__).warning(
-            f"model-projection apply failed for {provider_id}",
-            exc_info=True,
-        )
+            logging.getLogger(__name__).warning(
+                f"model-projection apply failed for {provider_id}",
+                exc_info=True,
+            )
 
     # Surface rendering + provider-specific files are a provider adapter
     # capability.  Do not centralize provider ids here: a new provider becomes
