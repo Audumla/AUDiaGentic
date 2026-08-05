@@ -333,6 +333,13 @@ class GptAutoSessionTransport:
                 await client.bring_to_front()
             except Exception:
                 logger.debug("bring_to_front failed (non-fatal)", exc_info=True)
+
+            # Capture the DOM baseline BEFORE submit — after inject the page
+            # may already show a response (especially with test fakes that set
+            # it synchronously).  The baseline must represent the pre-turn state
+            # so _is_new can detect fresh content.
+            base_count, base_text = await _get_response_state(client)
+
             await inject_prompt(
                 client,
                 request.body,
@@ -340,7 +347,10 @@ class GptAutoSessionTransport:
             )
             await _emit(TransportObservationKind.ACTIVITY, model_activity="generating")
 
-            response, cancelled = await self._poll_response(client, cfg, _is_cancelled)
+            response, cancelled = await self._poll_response(
+                client, cfg, _is_cancelled,
+                base_count=base_count, base_text=base_text,
+            )
 
             if cancelled:
                 stop_reason = "cancelled"
@@ -370,6 +380,9 @@ class GptAutoSessionTransport:
         client: Any,
         cfg: GptAutoConfig,
         is_cancelled: Callable[[], bool],
+        *,
+        base_count: int = 0,
+        base_text: str | None = None,
     ) -> tuple[str | None, bool]:
         """Poll the DOM for a response with cooperative cancellation.
 
@@ -381,19 +394,29 @@ class GptAutoSessionTransport:
         phase — a single negative reading would otherwise return a truncated
         answer.  ``is_generating`` is still used only to detect that a fresh
         response has begun.
+
+        The baseline (``base_count``, ``base_text``) should be captured before
+        submit so it represents the pre-turn state.  When omitted the method
+        captures it itself — but in that case the fake test client may have
+        already set the response, so callers should provide explicit values.
         """
-        base_count, base_text = await _get_response_state(client)
+        # Use provided baseline or capture from the DOM (backward compat).
+        if base_count == 0 and base_text is None:
+            base_count, base_text = await _get_response_state(client)
         deadline = time.monotonic() + float(
             getattr(cfg, "response_wait_timeout", 120)
         )
         interval = float(getattr(cfg, "polling_interval", 2.0))
-        stability = _RESPONSE_STABILITY_SECONDS
+        stability = float(getattr(cfg, "response_stability_seconds", _RESPONSE_STABILITY_SECONDS))
         last_text: str | None = None
         stable_since: float | None = None
 
         def _is_new(text: str | None) -> bool:
-            # baseline_length=0 semantics: any non-empty assistant text counts.
-            return bool(text)
+            # A response is "new" when it differs from the pre-prompt baseline.
+            # This prevents returning stale text on turn 2+: without this check,
+            # _is_new returns True for any non-empty text (including the previous
+            # turn's answer), so the stability window locks onto old content.
+            return text is not None and text != base_text
 
         # Wait for the response to start — either a new real assistant block
         # appears (count increases) or ChatGPT begins generating.
