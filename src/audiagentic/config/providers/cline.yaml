@@ -82,3 +82,17 @@ harness_observability:
     recipe: A
     lifecycle_source: none
     probe_anchor: session/turn/tool correlation proof
+  - surface_id: cline-sdk
+    candidate_source: "AS54 surface_matrix: Cline SDK/runtime events -- probe exact SDK mode and lifecycle schema independently of ACP/CLI"
+    evidence:
+      validated: false
+      reference: unsupported
+    recipe: A
+    lifecycle_source: none
+  - surface_id: cline-hooks
+    candidate_source: "AS54 surface_matrix: Cline hooks or JSONL CLI -- prove the exact mode supports stable session semantics and schema"
+    evidence:
+      validated: false
+      reference: unsupported
+    recipe: D
+    lifecycle_source: none
