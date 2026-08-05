@@ -26,10 +26,21 @@ def _build_prompt(
     packet_ctx: dict[str, Any],
     provider_cfg: dict[str, Any],
 ) -> str:
-    """Assemble the full prompt text from the execution packet."""
+    """Assemble the full prompt text from the execution packet.
+
+    If no user prompt was supplied and ``use-prompt-pool`` is enabled in the
+    provider config, a prompt is drawn from the rotating pool (used mainly by
+    automated testing to avoid bot detection from repeated canned prompts).
+    """
     system = packet_ctx.get("system-prompt", "")
     user_text = packet_ctx.get("prompt", "")
     modified = packet_ctx.get("modified-prompt")
+
+    if not user_text and not modified and provider_cfg.get("use-prompt-pool"):
+        from audiagentic.components.providers.adapters.gpt_auto.prompt_pool import (
+            pick_prompt,
+        )
+        user_text = pick_prompt()
 
     parts: list[str] = []
     if system:
@@ -82,6 +93,10 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
     typing_speed = provider_cfg.get("typing-speed", 0.03)
     cdp_url = provider_cfg.get("cdp-url", "http://127.0.0.1:9222")
     min_delay_between_requests = provider_cfg.get("min-delay-between-requests", 5.0)
+    humanize = provider_cfg.get("humanize", True)
+    think_min = provider_cfg.get("think-delay-min", 1.5)
+    think_max = provider_cfg.get("think-delay-max", 6.0)
+    conversation_id = provider_cfg.get("conversation-id") or packet_ctx.get("conversation-id")
 
     output_text, metadata = _run_browser(
         prompt=prompt,
@@ -90,6 +105,11 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
         login_timeout=login_timeout,
         typing_speed=typing_speed,
         cdp_url=cdp_url,
+        min_delay_between_requests=min_delay_between_requests,
+        humanize=humanize,
+        think_min=think_min,
+        think_max=think_max,
+        conversation_id=conversation_id,
         cwd=cwd,
     )
 
@@ -119,6 +139,11 @@ def _run_browser(
     login_timeout: int,
     typing_speed: float,
     cdp_url: str,
+    min_delay_between_requests: float,
+    humanize: bool,
+    think_min: float,
+    think_max: float,
+    conversation_id: str | None,
     cwd: Path | None,
 ) -> tuple[str | None, dict[str, Any]]:
     """Run the CDP browser automation in an event loop."""
@@ -154,31 +179,39 @@ def _run_browser(
                     details={"provider-id": "gpt-auto"},
                 )
 
-            # Find workspace for the project (find_workspace navigates there if found)
-            ws = loop.run_until_complete(ensure_workspace(client, project_name))
+            # Find workspace for the project (find_workspace navigates there if found).
+            # When conversation_id is given, the workspace chat URL is rebuilt so the
+            # SAME conversation continues (persistent agent sessions). Otherwise we land
+            # on /project — the project's new-chat page — for a fresh session.
+            ws = loop.run_until_complete(
+                ensure_workspace(client, project_name, conversation_id=conversation_id, project_root=cwd)
+            )
             if ws:
                 logger.info("gpt-auto: working in workspace '%s': %s", ws.name, ws.url)
-
-                # Always navigate to /project for a fresh chat — don't reuse existing conversations
-                current_url = loop.run_until_complete(client.get_url())
-                if "/c/" in current_url or "/project" not in current_url:
-                    # We're in an existing chat — go back to project home for a new one
-                    ws_base = current_url.split("/c/")[0] if "/c/" in current_url else None
-                    if ws_base and "/g/g-p-" in ws_base:
-                        new_chat_url = ws_base.rstrip("/") + "/project"
-                        loop.run_until_complete(client.evaluate(f'() => {{ window.location.href = "{new_chat_url}"; }}'))
-                        # Re-find tab after navigation (context destroyed)
-                        for _ in range(10):
-                            import time as _time
-                            _time.sleep(0.5)
-                            loop.run_until_complete(client.find_tab(url_pattern="chatgpt"))
-                            new_url = loop.run_until_complete(client.get_url())
-                            if "/project" in new_url:
-                                break
-                        logger.info("gpt-auto: started fresh chat at %s", new_chat_url)
-                else:
-                    # Already on /project — re-find tab after context change
+                if conversation_id:
+                    # Resumed an existing conversation — stay on it, don't reset to /project
                     loop.run_until_complete(client.find_tab(url_pattern="chatgpt"))
+                else:
+                    # Fresh session: ensure we're on the project new-chat page
+                    current_url = loop.run_until_complete(client.get_url())
+                    if "/c/" in current_url or "/project" not in current_url:
+                        # We're in an existing chat — go back to project home for a new one
+                        ws_base = current_url.split("/c/")[0] if "/c/" in current_url else None
+                        if ws_base and "/g/g-p-" in ws_base:
+                            new_chat_url = ws_base.rstrip("/") + "/project"
+                            loop.run_until_complete(client.evaluate(f'() => {{ window.location.href = "{new_chat_url}"; }}'))
+                            # Re-find tab after navigation (context destroyed)
+                            for _ in range(10):
+                                import time as _time
+                                _time.sleep(0.5)
+                                loop.run_until_complete(client.find_tab(url_pattern="chatgpt"))
+                                new_url = loop.run_until_complete(client.get_url())
+                                if "/project" in new_url:
+                                    break
+                            logger.info("gpt-auto: started fresh chat at %s", new_chat_url)
+                    else:
+                        # Already on /project — re-find tab after context change
+                        loop.run_until_complete(client.find_tab(url_pattern="chatgpt"))
 
             # Wait for ChatGPT ready (ProseMirror visible)
             ready = loop.run_until_complete(
@@ -194,11 +227,30 @@ def _run_browser(
                     details={"provider-id": "gpt-auto", "timeout": login_timeout},
                 )
 
-            # Inject prompt into ProseMirror editor
-            loop.run_until_complete(inject_prompt(client, prompt, typing_speed))
+            # Human-like pause between requests (reduces bot-detection flagging)
+            from audiagentic.components.providers.adapters.gpt_auto.humanize import (
+                jittered,
+            )
+            if min_delay_between_requests > 0:
+                pause = jittered(min_delay_between_requests, jitter=0.4)
+                logger.info("gpt-auto: pausing %.1fs before request", pause)
+                loop.run_until_complete(asyncio.sleep(pause))
+
+            # Inject prompt into ProseMirror editor (humanized typing + think pause)
+            loop.run_until_complete(
+                inject_prompt(
+                    client,
+                    prompt,
+                    typing_speed,
+                    humanize=humanize,
+                    think_min=think_min,
+                    think_max=think_max,
+                )
+            )
             logger.info("gpt-auto: prompt submitted")
 
             chunks: list[str] = []
+
             def on_chunk(text: str) -> None:
                 chunks.append(text)
 
@@ -223,6 +275,22 @@ def _run_browser(
             if "/g/g-p-" in chat_url:
                 ws_segment = chat_url.split("/g/g-p-")[1].split("/")[0]
                 metadata["workspace-id"] = f"ws-{ws_segment}"
+
+            # Remember the tab that holds this workspace + the conversation id so the
+            # NEXT run reuses the same tab instead of opening yet another one.
+            from audiagentic.components.providers.adapters.gpt_auto import tab_state
+            if cwd is not None:
+                tabs = loop.run_until_complete(client.list_tabs())
+                tab_id = next((t.tab_id for t in tabs if chat_url and chat_url.startswith(t.url.split("#")[0].rstrip("/"))), "")
+                if not tab_id and tabs:
+                    tab_id = tabs[-1].tab_id
+                tab_state.update_mapping(
+                    project_name,
+                    tab_id=tab_id,
+                    workspace_url=chat_url.split("/c/")[0] if "/c/" in chat_url else chat_url,
+                    conversation_id=metadata.get("conversation-id"),
+                    project_root=cwd,
+                )
 
             return response, metadata
 

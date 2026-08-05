@@ -16,6 +16,7 @@ Usage:
     python tests/gpt_auto/test_full_conversation.py
 """
 
+import argparse
 import asyncio
 import sys
 from pathlib import Path
@@ -26,30 +27,50 @@ from audiagentic.components.providers.adapters.gpt_auto.cdp_client import CdpCli
 from audiagentic.components.providers.adapters.gpt_auto.dom_reader import (
     wait_for_response,
 )
+from audiagentic.components.providers.adapters.gpt_auto.humanize import (
+    between_requests_delay,
+)
 from audiagentic.components.providers.adapters.gpt_auto.prompt_injector import (
     inject_prompt,
     wait_for_chatgpt_ready,
+)
+from audiagentic.components.providers.adapters.gpt_auto.prompt_pool import (
+    pick_plan_review_prompt,
+    pick_prompt,
 )
 from audiagentic.components.providers.adapters.gpt_auto.workspace import (
     ensure_workspace,
 )
 
-TEST_PROMPT = "What is the capital of France?"
-FOLLOWUP_PROMPT = "And what is its population?"
 PROJECT_NAME = "AUDiaGentic"
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
-async def main() -> None:
+async def main(conversation_id: str | None = None) -> None:
     client = CdpClient(cdp_url="http://127.0.0.1:9222")
 
     try:
         await client.start()
         print("[1/7] Connected to browser via CDP")
 
-        # Find workspace — this opens /projects and navigates to workspace
-        ws = await ensure_workspace(client, PROJECT_NAME)
+        tabs_before = await client.list_tabs()
+        chat_tabs_before = [t for t in tabs_before if "chatgpt.com" in t.url]
+        print(f"    ChatGPT tabs before: {len(chat_tabs_before)}")
+
+        if conversation_id:
+            print(f"    Resuming conversation: {conversation_id}")
+
+        # Find workspace — opens /projects and navigates to workspace
+        ws = await ensure_workspace(
+            client,
+            PROJECT_NAME,
+            conversation_id=conversation_id,
+            project_root=REPO_ROOT,
+        )
         if ws:
             print(f"[2/7] Workspace found: '{ws.name}' -> {ws.url}")
+            print(f"    Session ID: {ws.session_id}")
+            print(f"    Conversation ID: {ws.conversation_id}")
         else:
             print("[2/7] FAIL: Workspace not found")
             return
@@ -65,15 +86,20 @@ async def main() -> None:
             return
         print("[3/7] ChatGPT is ready")
 
-        # --- First prompt ---
-        await inject_prompt(client, TEST_PROMPT, typing_delay=0.03)
+        # --- First prompt (random plan-item review — no reuse across runs) ---
+        test_prompt = pick_plan_review_prompt()
+        followup_prompt = pick_prompt()
+        print(f"    Prompt: {test_prompt[:80]}{'...' if len(test_prompt) > 80 else ''}")
+        print(f"    Follow-up: {followup_prompt[:80]}{'...' if len(followup_prompt) > 80 else ''}")
+
+        await inject_prompt(client, test_prompt, typing_delay=0.03)
         print("[4/7] Prompt injected — waiting for response...")
 
         response1 = await wait_for_response(
             client,
             timeout=120.0,
             interval=2.0,
-            prompt_text=TEST_PROMPT,
+            prompt_text=test_prompt,
         )
 
         if not response1:
@@ -94,21 +120,26 @@ async def main() -> None:
             print(f"... ({len(response1) - 400} more chars)")
         print("-" * 60)
 
-        # Validate first response
-        if "paris" in response1.lower():
-            print("  OK: Response contains 'Paris'")
+        # Validate first response — any substantive answer
+        if len(response1) > 40:
+            print(f"  OK: Response is substantive ({len(response1)} chars)")
         else:
-            print(f"  WARN: Expected 'Paris'. Got: {response1[:200]}")
+            print(f"  WARN: Response seems short. Got: {response1[:200]}")
 
-        # --- Follow-up prompt (same chat window) ---
-        await inject_prompt(client, FOLLOWUP_PROMPT, typing_delay=0.03)
+        # --- Follow-up prompt (same chat window) with a human pause between turns ---
+        pause = between_requests_delay()
+        print(f"    Waiting {pause:.1f}s before follow-up (human-like gap)...")
+        await asyncio.sleep(pause)
+
+        await inject_prompt(client, followup_prompt, typing_delay=0.03)
         print("[6/7] Follow-up injected — waiting for response...")
 
         response2 = await wait_for_response(
             client,
             timeout=120.0,
             interval=2.0,
-            prompt_text=FOLLOWUP_PROMPT,
+            baseline_length=len(response1),
+            prompt_text=followup_prompt,
         )
 
         if not response2:
@@ -125,15 +156,24 @@ async def main() -> None:
             print(f"... ({len(response2) - 400} more chars)")
         print("-" * 60)
 
-        # Validate second response — should mention a number (population)
-        has_number = any(c.isdigit() for c in response2)
-        if has_number and ("million" in response2.lower() or "paris" in response2.lower()):
-            print("  OK: Follow-up response mentions population")
+        # Validate second response — should be substantive and different from response 1
+        if len(response2) > 40 and response2.strip() != response1.strip():
+            print(f"  OK: Follow-up response is substantive and distinct ({len(response2)} chars)")
         else:
-            print(f"  WARN: Expected population data. Got: {response2[:200]}")
+            print(f"  WARN: Follow-up response looks off. Got: {response2[:200]}")
 
         print(f"\nFinal chat URL: {final_url}")
         print(f"Final conversation ID: {final_conv_id}")
+
+        # Tab reuse validation: mapped tab should mean no new ChatGPT tab appeared
+        tabs_after = await client.list_tabs()
+        chat_tabs_after = [t for t in tabs_after if "chatgpt.com" in t.url]
+        print(f"    ChatGPT tabs after: {len(chat_tabs_after)}")
+        if len(chat_tabs_after) <= len(chat_tabs_before):
+            print("  OK: No new ChatGPT tab opened (tab reuse working)")
+        else:
+            print(f"  WARN: {len(chat_tabs_after) - len(chat_tabs_before)} new ChatGPT tab(s) opened")
+
         print("SUCCESS: Full conversation with follow-up completed")
 
     except Exception as e:
@@ -145,4 +185,11 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parser = argparse.ArgumentParser(description="gpt-auto full conversation test")
+    parser.add_argument(
+        "--conversation-id",
+        default=None,
+        help="Resume an existing conversation by ID (else start a new chat)",
+    )
+    args = parser.parse_args()
+    asyncio.run(main(conversation_id=args.conversation_id))

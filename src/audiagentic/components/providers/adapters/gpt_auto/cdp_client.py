@@ -11,7 +11,6 @@ import asyncio
 import json
 import logging
 import os
-import platform
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -30,6 +29,7 @@ class TabInfo:
     """Metadata about a browser tab."""
     url: str
     title: str
+    tab_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -110,7 +110,7 @@ class CdpClient:
     async def new_tab(self, url: str = "https://chatgpt.com") -> TabInfo:
         """Open a new tab and navigate to *url*."""
         result = await self._send("new_tab", {"url": url})
-        return TabInfo(url=result["url"], title="")
+        return TabInfo(url=result["url"], title="", tab_id=result.get("tabId", ""))
 
     async def find_tab(
         self,
@@ -124,7 +124,32 @@ class CdpClient:
         })
         if not result.get("found"):
             return None
-        return TabInfo(url=result["url"], title=result["title"])
+        return TabInfo(url=result["url"], title=result["title"], tab_id=result.get("tabId", ""))
+
+    async def list_tabs(self) -> list[TabInfo]:
+        """Return metadata for all open browser tabs."""
+        result = await self._send("list_tabs")
+        return [
+            TabInfo(url=t.get("url", ""), title=t.get("title", ""), tab_id=t.get("tabId", ""))
+            for t in result.get("tabs", [])
+        ]
+
+    async def activate_tab(self, tab_id: str) -> TabInfo | None:
+        """Activate the tab with *tab_id*; returns None if it no longer exists."""
+        result = await self._send("activate_tab", {"tabId": tab_id})
+        if not result.get("found"):
+            return None
+        return TabInfo(url=result["url"], title="", tab_id=result.get("tabId", ""))
+
+    async def bring_to_front(self) -> None:
+        """Focus the active tab in the browser window (brings it to the foreground).
+
+        Backgrounded ChatGPT tabs pause SSE streaming — responses start, emit
+        one chunk, then freeze until the tab is visible again.  Calling this
+        before submitting a prompt keeps the tab foregrounded so the stream
+        actually completes.
+        """
+        await self._send("bring_to_front", {})
 
     # -- page operations -----------------------------------------------------------
 

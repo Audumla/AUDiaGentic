@@ -10,6 +10,11 @@ import asyncio
 import logging
 from typing import Any
 
+from audiagentic.components.providers.adapters.gpt_auto.humanize import (
+    think_delay,
+    typing_delays,
+)
+
 logger = logging.getLogger(__name__)
 
 _PROSEMIRROR_SELECTOR = ".ProseMirror"
@@ -120,35 +125,49 @@ async def _wait_for_login(client: Any, login_timeout: float) -> bool:
     return False
 
 
-# JavaScript: inject text into ProseMirror editor with proper event dispatching
-# and submit by clicking the send button. Works around puppeteer CDP limitations
-# where keyboard events don't reach React/ProseMirror handlers.
-_INJECT_AND_SUBMIT_JS = """(prompt) => {
+# Clear any existing text in the ProseMirror editor and focus it.
+_CLEAR_EDITOR_JS = """() => {
+    const el = document.querySelector('.ProseMirror');
+    if (!el) return { error: 'editor not found' };
+    el.innerHTML = '';
+    el.focus();
+    return { ok: true };
+}"""
+
+# JavaScript: inject a text chunk into the ProseMirror editor with proper
+# event dispatching.  Works around puppeteer CDP limitations where keyboard
+# events don't reach React/ProseMirror handlers when connected via CDP to an
+# already-running browser.  Typing is simulated by appending word chunks with
+# human pauses between them (see inject_prompt).
+_APPEND_TEXT_JS = """(text) => {
     const el = document.querySelector('.ProseMirror');
     if (!el) return { error: 'editor not found' };
 
-    // Clear existing text
-    el.innerHTML = '';
-    el.focus();
+    const existing = el.textContent || '';
+    const next = existing + text;
 
     // Dispatch beforeinput event (React/ProseMirror listens for this)
     const inputEvent = new InputEvent('beforeinput', {
         bubbles: true, cancelable: true,
-        inputType: 'insertText', data: prompt,
+        inputType: 'insertText', data: text,
     });
     el.dispatchEvent(inputEvent);
 
     // Set the text content directly
-    el.textContent = prompt;
+    el.textContent = next;
 
     // Dispatch input event to notify React of the change
     const afterInput = new Event('input', { bubbles: true });
     el.dispatchEvent(afterInput);
 
-    // Also dispatch composition events (React may listen for these)
-    el.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
-    el.dispatchEvent(new CompositionEvent('compositionupdate', { bubbles: true, data: prompt }));
-    el.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: prompt }));
+    return { ok: true, textLength: next.length };
+}"""
+
+# Submit the current editor content by clicking the send button — try multiple
+# selectors, fall back to a keyboard Enter.
+_SUBMIT_JS = """() => {
+    const el = document.querySelector('.ProseMirror');
+    if (!el) return { error: 'editor not found' };
 
     // Click the send button to submit — try multiple selectors
     const btns = document.querySelectorAll('button, [role="button"]');
@@ -159,7 +178,7 @@ _INJECT_AND_SUBMIT_JS = """(prompt) => {
             return { submitted: true, textLength: el.innerText.length, buttonLabel: b.getAttribute('aria-label') };
         }
     }
-    
+
     // Fallback 1: look for the send button near the editor by position (bottom-right of input area)
     const editorRect = el.getBoundingClientRect();
     for (const b of btns) {
@@ -167,7 +186,7 @@ _INJECT_AND_SUBMIT_JS = """(prompt) => {
         const style = window.getComputedStyle(b);
         if (style.display === 'none' || style.visibility === 'hidden') continue;
         // Send button is typically to the right of the editor at roughly the same height
-        if (bRect.width > 0 && bRect.height > 0 && 
+        if (bRect.width > 0 && bRect.height > 0 &&
             bRect.left > editorRect.left + editorRect.width * 0.5 &&
             Math.abs(bRect.top - editorRect.bottom) < 60) {
             b.click();
@@ -188,19 +207,72 @@ async def inject_prompt(
     client: Any,
     prompt: str,
     typing_delay: float = 0.03,
+    humanize: bool = True,
+    think_min: float = 1.5,
+    think_max: float = 6.0,
+    paste_threshold: int = 300,
 ) -> None:
     """Inject *prompt* into ChatGPT's ProseMirror editor and submit.
 
     Uses JS evaluate to inject text and dispatch events directly in the page
-    context — works around puppeteer CDP limitations where click/keyboard
-    events don't reach React/ProseMirror handlers when connected via CDP to
-    an already-running browser.
+    context.  When ``humanize`` is True (default):
+
+    - Prompts at or above ``paste_threshold`` characters are pasted in one
+      shot (like Ctrl+V from a file) — fast, and humans do paste long text.
+    - Shorter prompts are typed word-by-word with jittered per-character
+      delays, looking like a real typist.
+
+    Either way a randomized "thinking" pause is taken before pressing send,
+    which looks far less scripted to ChatGPT's bot detection.
     """
     logger.info("Injecting prompt (%d chars)", len(prompt))
 
-    result = await client.evaluate(_INJECT_AND_SUBMIT_JS, prompt)
+    clear = await client.evaluate(_CLEAR_EDITOR_JS)
+    if isinstance(clear, dict) and "error" in clear:
+        raise RuntimeError(f"inject_prompt failed: {clear['error']}")
+
+    words = prompt.split()
+    if humanize and words:
+        if len(prompt) >= paste_threshold:
+            # Large prompt -> simulate a paste (single-shot, fast)
+            result = await client.evaluate(_APPEND_TEXT_JS, prompt)
+            if isinstance(result, dict) and "error" in result:
+                raise RuntimeError(f"inject_prompt failed: {result['error']}")
+            logger.info("Prompt pasted in one shot (%d chars)", len(prompt))
+        else:
+            delays = typing_delays(len(prompt))
+            # Map the per-char delay schedule onto the position of each word end
+            char_index = 0
+            for word in words:
+                if char_index > 0:
+                    # A natural gap between words (~average of the next char delay)
+                    await asyncio.sleep(delays[min(char_index, len(delays) - 1)] * 1.5)
+                result = await client.evaluate(_APPEND_TEXT_JS, word + " ")
+                if isinstance(result, dict) and "error" in result:
+                    raise RuntimeError(f"inject_prompt failed: {result['error']}")
+                char_index += len(word) + 1
+            # Final prompt minus trailing space is handled naturally by ChatGPT
+            logger.info("Prompt typed with humanized cadence (%d chars)", char_index)
+
+        # Human "thinking" pause before pressing send
+        pause = think_delay(think_min, think_max)
+        logger.info("Thinking before submit (%.1fs)", pause)
+        await asyncio.sleep(pause)
+
+        result = await client.evaluate(_SUBMIT_JS)
+        if isinstance(result, dict):
+            if "error" in result:
+                raise RuntimeError(f"inject_prompt failed: {result['error']}")
+            logger.info("Prompt submitted (%d chars)", result.get("textLength", 0))
+        return
+
+    # Non-humanized fallback: inject whole prompt, then submit
+    result = await client.evaluate(_APPEND_TEXT_JS, prompt)
     if isinstance(result, dict):
         if "error" in result:
+            raise RuntimeError(f"inject_prompt failed: {result['error']}")
+        result = await client.evaluate(_SUBMIT_JS)
+        if isinstance(result, dict) and "error" in result:
             raise RuntimeError(f"inject_prompt failed: {result['error']}")
         logger.info("Prompt injected and submitted (%d chars)", result.get("textLength", 0))
 

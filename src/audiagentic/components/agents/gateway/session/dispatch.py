@@ -26,14 +26,18 @@ logger = logging.getLogger(__name__)
 
 # ── AS28 slice 4a helpers ────────────────────────────────────────
 def _build_default_surface_hint(provider_id: str) -> Any:
-    """Build a default SurfaceHint for ACP-based provider surfaces.
+    """Build a default SurfaceHint for a provider surface.
 
-    Uses ``<provider-id>-acp`` as the surface id, matching the naming
-    convention in provider descriptors (e.g. opencode-acp).
+    Uses ``<provider-id>-acp`` as the default surface id (matching the naming
+    convention in provider descriptors, e.g. opencode-acp), except for gpt-auto,
+    whose session surface is the CDP transport (``gpt-auto-cdp``).
     """
     from audiagentic.components.providers.providers_api import SurfaceHint
 
-    return SurfaceHint(surface_id=f"{provider_id}-acp")
+    surface_id = f"{provider_id}-acp"
+    if provider_id == "gpt-auto":
+        surface_id = "gpt-auto-cdp"
+    return SurfaceHint(surface_id=surface_id)
 
 
 def _is_session_request(record: dict[str, Any]) -> bool:
