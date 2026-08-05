@@ -42,9 +42,10 @@ CONVERSATION_URL = f"{WORKSPACE_URL}/c/{CONVERSATION_ID}"
 FAST_CONFIG = GptAutoConfig(
     tab_selection_timeout=5.0,
     login_timeout=5.0,
-    response_wait_timeout=5.0,
+    response_wait_timeout=15.0,
     polling_interval=0.05,
     typing_speed=0.0,
+    response_stability_seconds=1.5,
 )
 
 
