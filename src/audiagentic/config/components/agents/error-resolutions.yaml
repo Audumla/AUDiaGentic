@@ -164,3 +164,13 @@ CFG-AGSV-003: "Set AUDIAGENTIC_GATEWAY_PORT to an integer from 1 through 65535."
 # AS19 Stage-2: harness status observer ingress error codes
 CON-AGW-OBS-001: "Session already has an active observer binding; only one observer binding per session is allowed."
 VAL-OUTPUT-RELAY-005: "Resolved session surface does not authorize the assistant-text output channel."
+# AS72: gateway-service lifecycle/application error codes (registered via
+# make_error_factory, previously unreachable — the third construction path
+# AS72's own conformance scan did not originally cover)
+CON-AGLC-001: "Drain the gateway service before stopping it, or pass force=true to override the quiescence check."
+CON-AGLC-002: "The gateway service record is already stopped; no further action needed. Check for a stale or duplicate stop request."
+CON-AGLC-003: "Use the normal service stop path instead of forced recovery — the recorded owner process is provable and alive."
+VAL-AGLC-004: "Pass confirm=true to acknowledge that recovering an unprovable-owner service record will mutate durable state."
+VAL-AGSV-021: "Provide the gateway submission 'metadata' field as a mapping (dict), not another type."
+VAL-AGSV-025: "Run this gateway service lifecycle operation against the standalone service host — it is not available in in-process/embedded mode."
+VAL-AGSV-026: "Provide the service_stop 'force' parameter as a boolean (true/false)."

@@ -23,6 +23,8 @@ PLANNING_REVIEW_DELETED = "planning.review.deleted"
 
 LEDGER_EVENT_RECORDED = "ledger.event.recorded"
 
+_registered_bus: Any | None = None
+
 
 def publish_planning_event(
     event_type: str,
@@ -86,10 +88,17 @@ def _on_ledger_event_recorded(
         if not isinstance(item_id, str):
             continue
         try:
-            require_item(project_root, item_id)
+            new_entry = f"- {event_id}"
+            item_path = require_item(project_root, item_id)
+            raw_item = item_path.read_text(encoding="utf-8")
+            if any(line.strip() == new_entry for line in raw_item.splitlines()):
+                logger.debug(
+                    "ledger event already linked to plan item",
+                    extra={"item_id": item_id, "event_id": event_id},
+                )
+                continue
             existing = planning_api.get_item(project_root, item_id)
             current_ledger = existing.get("ledger-events", "")
-            new_entry = f"- {event_id}"
             updated_ledger = (
                 current_ledger.rstrip() + "\n" + new_entry
                 if current_ledger.strip()
@@ -110,8 +119,13 @@ def _on_ledger_event_recorded(
 
 def register() -> None:
     """Register the ledger.event.recorded subscription on the event bus."""
+    global _registered_bus
     try:
-        get_bus().subscribe(LEDGER_EVENT_RECORDED, _on_ledger_event_recorded)
+        bus = get_bus()
+        if _registered_bus is bus:
+            return
+        bus.subscribe(LEDGER_EVENT_RECORDED, _on_ledger_event_recorded)
+        _registered_bus = bus
         logger.debug("subscribed to ledger.event.recorded")
     except Exception:  # noqa: BLE001
         logger.warning("failed to subscribe to ledger.event.recorded", exc_info=True)
