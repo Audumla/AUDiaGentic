@@ -43,6 +43,16 @@ class GptAutoConfig:
     typing_speed: float = 0.03
     """Seconds between keystrokes when injecting the prompt (human-like)."""
 
+    response_stability_seconds: float = 6.0
+    """Seconds of unchanged text needed before declaring a response complete.
+
+    The streaming indicator flickers during inter-chunk pauses and the
+    reasoning phase, so completion is decided by a stability window: the
+    response is only returned when its text has been unchanged for this
+    duration.  Tests may set this to a small value (e.g. 1.5) to reduce
+    wall-clock time.
+    """
+
     @classmethod
     def from_dict(cls, data: dict) -> GptAutoConfig:
         """Create config from a dictionary (e.g. provider descriptor YAML)."""
