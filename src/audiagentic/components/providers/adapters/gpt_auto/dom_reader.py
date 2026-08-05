@@ -1,7 +1,8 @@
 """DOM response extraction from ChatGPT.
 
 Polls the page for the latest assistant message and returns its text content.
-Supports optional streaming callback so callers can see partial results as they appear.
+Uses ``<p>`` elements in the main content area — not ``[data-message-author-role]``
+which is no longer present in ChatGPT's current DOM structure.
 """
 
 from __future__ import annotations
@@ -14,80 +15,71 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# JavaScript that extracts the last assistant message's text,
-# filtering out "thinking" blocks used by reasoning models.
-_GET_LAST_ASSISTANT_TEXT_JS = """
-() => {
-    const messages = document.querySelectorAll(
-        '[data-message-author-role="assistant"]'
-    );
-    if (messages.length === 0) return null;
-    
-    const lastMsg = messages[messages.length - 1];
-    
-    // Create a clone to manipulate without affecting the UI
-    const clone = lastMsg.cloneNode(true);
-    
-    // Remove "Thought" / "Thinking" sections common in reasoning models
-    // They often use specific classes or tags like <details> or specific data attributes
-    const thinkingSelectors = [
-        'details', 
-        '.thought', 
-        '[data-testid="thought-block"]',
-        '.bg-token-main-surface-secondary' // common container for thinking
-    ];
-    
-    thinkingSelectors.forEach(sel => {
-        clone.querySelectorAll(sel).forEach(el => el.remove());
+# JavaScript: extract the latest assistant response from <p> elements.
+# Filters out sidebar, navigation, and UI chrome — only main content paras.
+# Skips the user's prompt (first long paragraph) to avoid returning it as response.
+_GET_LAST_RESPONSE_TEXT_JS = """(promptText) => {
+    const ps = document.querySelectorAll('p');
+    let paras = [];
+    let foundUserMessage = false;
+
+    ps.forEach(p => {
+        const t = p.innerText.trim();
+        // Skip short text, UI chrome, sidebar
+        if (t.length < 20) return;
+        if (t.includes('ChatGPT') || t.includes('Library') || t.includes('Upgrade')) return;
+
+        // Walk up to check if we're in the main content area
+        let el = p.parentElement;
+        while (el) {
+            if (el.className && typeof el.className === 'string') {
+                if (el.className.includes('sidebar') || el.className.includes('chat-history')) return;
+            }
+            // If parent is a <main> or content area, this is ours
+            if (el.tagName === 'MAIN') break;
+            el = el.parentElement;
+        }
+
+        // Skip the user's own prompt to avoid returning it as response
+        if (promptText && t.includes(promptText.trim())) {
+            foundUserMessage = true;
+            return;
+        }
+
+        paras.push(t);
     });
-    
-    return clone.innerText.trim();
-}
-"""
 
-# JavaScript that returns the length of the filtered assistant message.
-_GET_LAST_ASSISTANT_LENGTH_JS = """
-() => {
-    const text = (() => {
-        const messages = document.querySelectorAll('[data-message-author-role="assistant"]');
-        if (messages.length === 0) return "";
-        const clone = messages[messages.length - 1].cloneNode(true);
-        ['details', '.thought', '[data-testid="thought-block"]'].forEach(sel => {
-            clone.querySelectorAll(sel).forEach(el => el.remove());
-        });
-        return clone.innerText;
-    })();
-    return text.length;
-}
-"""
+    if (paras.length === 0) return null;
+    return paras.join('\\n\\n');
+}"""
 
-# JavaScript to detect whether ChatGPT is still generating.
+# JavaScript: detect whether ChatGPT is still generating.
 _IS_GENERATING_JS = """
 () => {
-    // 1. Look for the "Stop generating" button
+    // Stop generating button visible = still generating
     if (document.querySelector('[data-testid="stop-generating"]')) return true;
 
-    // 2. Look for the "Continue generating" button (means it's paused/ready for more)
-    if (document.querySelector('[data-testid="continue-generating"]')) return false;
-
-    // 3. Check for loading/streaming indicators
+    // Loading/streaming indicators
     const loaders = document.querySelectorAll('.loading-dots, [class*="streaming"], .result-streaming');
     if (loaders.length > 0) return true;
 
-    // 4. Check for active reasoning/thinking
-    const thinking = document.querySelector('.bg-token-main-surface-secondary, details[open]');
-    if (thinking && thinking.textContent.includes('Thought')) return true;
+    // Check for a stop button near the editor — ChatGPT shows this while streaming
+    const btns = Array.from(document.querySelectorAll('button, [role="button"]'));
+    for (const b of btns) {
+        const label = (b.getAttribute('aria-label') || '').toLowerCase();
+        if (label.includes('stop')) return true;
+    }
 
     return false;
 }
 """
 
 
-async def get_assistant_text(client: Any) -> str | None:
-    """Return the filtered text of the latest assistant message, or ``None``."""
-    result = await client.evaluate(_GET_LAST_ASSISTANT_TEXT_JS)
-    if isinstance(result, str):
-        return result
+async def get_response_text(client: Any, prompt_text: str | None = None) -> str | None:
+    """Return the text of the latest assistant response, or ``None``."""
+    result = await client.evaluate(_GET_LAST_RESPONSE_TEXT_JS, prompt_text or "")
+    if isinstance(result, str) and result.strip():
+        return result.strip()
     return None
 
 
@@ -104,37 +96,38 @@ async def wait_for_response(
     on_chunk: Callable[[str], None] | None = None,
     baseline_length: int = 0,
     done_marker: str | None = None,
+    prompt_text: str | None = None,
 ) -> str | None:
     """Poll for ChatGPT's response text until it stops changing or times out.
 
     Args:
-        client: A PlaywrightClient instance with an active page.
+        client: A CdpClient instance with an active page.
         timeout: Maximum seconds to wait.
         interval: Seconds between polls.
         on_chunk: Optional callback receiving partial text as it arrives.
-        baseline_length: Length of the last known assistant message before
-            this prompt (used to detect a new response).
+        baseline_length: Length of the last known response (to detect new content).
         done_marker: If set, treats the arrival of this string as completion.
+        prompt_text: The user's prompt text — used to filter out the user message
+            from the DOM when extracting the assistant response.
 
     Returns:
-        The full text of the latest assistant message, or ``None`` on timeout.
+        The full text of the latest response, or ``None`` on timeout.
     """
     logger.info("Waiting for ChatGPT response (timeout=%.0fs)", timeout)
     deadline = time.monotonic() + timeout
     last_text: str | None = None
-    
+
     # Wait for response to start (text length > baseline)
-    start_wait_deadline = time.monotonic() + 15.0 # Wait up to 15s for generation to even begin
-    while time.monotonic() < start_wait_deadline:
-        text = await get_assistant_text(client)
+    start_deadline = time.monotonic() + 15.0
+    while time.monotonic() < start_deadline:
+        text = await get_response_text(client, prompt_text)
         if text and len(text) > baseline_length:
             break
         await asyncio.sleep(1.0)
 
     while time.monotonic() < deadline:
-        text = await get_assistant_text(client)
+        text = await get_response_text(client, prompt_text)
 
-        # Skip if no response yet or it's the same length as baseline
         if text is None or len(text) <= baseline_length:
             await asyncio.sleep(interval)
             continue
@@ -146,32 +139,29 @@ async def wait_for_response(
                 on_chunk(text)
             logger.debug("Response growing: %d chars", len(text))
 
-        # Check for done marker in the text
+        # Done marker check
         if done_marker and done_marker in text:
-            logger.info("Done marker '%s' detected", done_marker)
+            logger.info("Done marker detected")
             return text
 
         # Check if generation has stopped
         generating = await is_generating(client)
         if not generating:
-            # Wait one more short interval to be sure nothing more arrives
+            # Wait one more interval to confirm nothing more arrives
             await asyncio.sleep(1.0)
-            final_text = await get_assistant_text(client)
-            if final_text is not None and final_text == last_text:
+            final_text = await get_response_text(client, prompt_text)
+            if final_text and final_text == last_text:
                 logger.info("Response complete (%d chars)", len(final_text))
                 return final_text
-            if final_text is not None:
+            if final_text and final_text != last_text:
                 last_text = final_text
                 if on_chunk is not None:
                     on_chunk(last_text)
-        else:
-            logger.debug("Still generating...")
 
         await asyncio.sleep(interval)
 
-    # Timeout reached
     logger.warning(
-        "Response wait timed out after %.0fs — returning partial (%d chars)",
+        "Response wait timed out after %.0fs — partial (%d chars)",
         timeout,
         len(last_text) if last_text else 0,
     )
@@ -182,7 +172,7 @@ async def wait_for_generation_to_stop(
     client: Any,
     timeout: float = 30.0,
 ) -> bool:
-    """Wait for ChatGPT to finish generating (stop button disappears).
+    """Wait for ChatGPT to finish generating.
 
     Returns ``True`` if generation stopped, ``False`` on timeout.
     """

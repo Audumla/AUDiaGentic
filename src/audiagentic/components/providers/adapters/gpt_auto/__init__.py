@@ -1,4 +1,7 @@
-"""gpt-auto — browser-driven ChatGPT via Playwright.
+"""gpt-auto — browser-driven ChatGPT via puppeteer-core CDP connect.
+
+Connects to an already-running Chrome/Brave (``--remote-debugging-port``) so
+``navigator.webdriver`` stays ``false`` — no bot detection.
 
 Two interfaces:
 1. **Framework adapter** — ``adapter.run(packet_ctx, provider_cfg)`` is the
@@ -6,8 +9,8 @@ Two interfaces:
 2. **Standalone API** — ``run(prompt) -> str`` for direct use outside the
    framework.
 
-No external API connectivity required — just a ChatGPT account and Playwright
-installed.
+No external API connectivity required — just a ChatGPT account and a browser
+with remote debugging enabled.
 """
 
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
