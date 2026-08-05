@@ -16,6 +16,11 @@ def global_harness_runtime() -> Path:
     return audiagentic_home() / "harness"
 
 
+def global_provider_runtime(provider_id: str) -> Path:
+    """Return the managed runtime directory for a provider."""
+    return audiagentic_home() / "providers" / provider_id
+
+
 def global_service_runtime() -> Path:
     """Return the machine-scoped managed-service state directory."""
     return audiagentic_home() / "services"

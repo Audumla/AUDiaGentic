@@ -1,14 +1,15 @@
 # gpt-auto — provider descriptor
-# Browser-driven ChatGPT via Playwright. No CLI, no API key — launches Chrome
-# with a persistent profile, types the prompt into chat.openai.com, and reads
-# the response from the DOM.
+# Browser-driven ChatGPT via CDP connect. Connects to an already-running
+# Chrome/Brave browser (navigator.webdriver = false) to avoid bot detection.
+# No CLI, no API key — injects prompts into chatgpt.com and reads responses
+# from the DOM.
 
 provider_id: gpt-auto
 execution_isolation_tier: no-isolation
 display_name: "gpt-auto (Browser-Driven ChatGPT)"
 description: >-
-  Drives a real ChatGPT session in a Chromium browser via Playwright.
-  No API key needed — just a logged-in ChatGPT account.
+  Drives a real ChatGPT session via CDP connect to an already-running
+  Chrome/Brave browser. No API key needed — just a logged-in ChatGPT account.
 url: "https://chat.openai.com"
 prompt_aliases:
   - gpt
@@ -18,6 +19,21 @@ access_mode: none
 receive_lsp_mcp: false
 
 capabilities:
+  cli-install:
+    mechanism:
+      package_manager: "npm-runtime"
+      package_name: "puppeteer-core"
+      executable: "gpt-auto"
+      install:
+        type: callable
+        id: install
+        fn: "audiagentic.components.providers.adapters.gpt_auto.install:_install"
+      uninstall:
+        type: callable
+        id: uninstall
+        fn: "audiagentic.components.providers.adapters.gpt_auto.install:_uninstall"
+      probe_fn: "audiagentic.components.providers.adapters.gpt_auto.install:_probe"
+
   permissions:
     mechanism:
       can_write_files: false
@@ -26,7 +42,7 @@ capabilities:
       can_read_env: false
       notes: >-
         Browser automation only. No file writes, no shell, no MCP, no LSP.
-        The provider controls a Chrome/Edge browser to interact with ChatGPT.
+        The provider controls a Chrome/Brave browser via CDP to interact with ChatGPT.
 
   launch:
     mechanism:
@@ -48,19 +64,56 @@ capabilities:
   model-local-state:
     evidence:
       note: >-
-        ChatGPT login state is persisted in the Playwright profile directory
-        (~/.gpt-auto-profile). No API keys or credentials stored by the
-        provider itself. Session reuse across runs is supported.
-      source: "src/audiagentic/components/providers/adapters/gpt_auto/playwright_client.py"
+        ChatGPT login state is maintained in the running browser (Brave/Chrome)
+        with --remote-debugging-port. No API keys or credentials stored by the
+        provider itself. Session reuse across runs is supported via browser persistence.
+      source: "src/audiagentic/components/providers/adapters/gpt_auto/cdp_client.py"
 
 # CC53: AS27 harness-observability inventory (this provider's own facts —
 # see harness_observability_inventory.py for the domain semantics).
 harness_observability:
   - surface_id: gpt-auto-browser
-    candidate_source: Playwright browser automation (Chrome/Edge via persistent profile)
+    candidate_source: CDP browser automation (Chrome/Brave via --remote-debugging-port)
     evidence:
       validated: false
       reference: adapter.py run() entry point and dom_reader.py response polling
     recipe: A
     lifecycle_source: none
     probe_anchor: adapter.py run() and dom_reader.py wait_for_response()
+
+# AS29 session-surface declaration for the CDP session transport (BR04).
+# session_transport.py implements the neutral AgentSessionTransport protocol
+# over CdpClient + workspace + prompt_injector + dom_reader. Ownership is
+# external — the browser tab belongs to the user; the transport only attaches
+# and detaches CDP. resume-by-ref reloads the conversation/workspace captured
+# as the provider-session-ref at open(). Evidence (AS67) is the live probe at
+# tests/gpt_auto/test_session_transport_live.py.
+session_surfaces:
+  - surface_id: gpt-auto-cdp
+    version_constraint: ">=1.0"
+    identity_operations:
+      open: "supported"
+      attach-existing: "unsupported"
+      resume-by-ref: "supported"
+      discover: "unsupported"
+    ownership_modes:
+      - "external"
+    controls:
+      cancel-turn: "supported"
+      interrupt-turn: "unsupported"
+      steer-turn: "unsupported"
+      respond-permission: "unsupported"
+      close-session: "supported"
+    lifecycle_source: "none"
+    content_channels:
+      - channel: "assistant-text"
+        max_bytes: 65536
+        max_events: 100
+    evidence:
+      validated: true
+      reference: "tests/gpt_auto/test_session_transport_live.py"
+    platforms:
+      - platform: "windows-amd64"
+        evidence:
+          validated: true
+          reference: "tests/gpt_auto/test_session_transport_live.py"

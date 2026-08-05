@@ -30,7 +30,7 @@ async function handle(msg) {
                 page = await browser.newPage();
                 const url = msg.params.url || "https://chatgpt.com";
                 await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
-                respond(id, { ok: true, url: page.url() });
+                respond(id, { ok: true, url: page.url(), tabId: page.target()._targetId });
                 break;
             }
             case "find_tab": {
@@ -43,11 +43,47 @@ async function handle(msg) {
                         (msg.params.titlePattern && title.includes(msg.params.titlePattern))
                     ) {
                         page = p;
-                        respond(id, { found: true, url, title });
+                        respond(id, { found: true, url, title, tabId: p.target()._targetId });
                         return;
                     }
                 }
                 respond(id, { found: false });
+                break;
+            }
+            case "list_tabs": {
+                if (!browser) return error(id, "Not connected");
+                const tabs = [];
+                for (const p of await browser.pages()) {
+                    tabs.push({
+                        tabId: p.target()._targetId,
+                        url: p.url(),
+                        title: await p.title().catch(() => ""),
+                    });
+                }
+                respond(id, { tabs });
+                break;
+            }
+            case "activate_tab": {
+                if (!browser) return error(id, "Not connected");
+                for (const p of await browser.pages()) {
+                    if (p.target()._targetId === msg.params.tabId) {
+                        page = p;
+                        respond(id, { found: true, url: p.url(), tabId: p.target()._targetId });
+                        return;
+                    }
+                }
+                respond(id, { found: false });
+                break;
+            }
+            case "bring_to_front": {
+                if (!page) return error(id, "No active page");
+                // Focus the tab in the browser (Chrome foregrounds the window and
+                // tab).  Without this, a backgrounded ChatGPT tab pauses SSE
+                // streaming and the response never grows past its first chunk.
+                try { await page.bringToFront(); } catch (e) { /* best-effort */ }
+                try { await page.focus(); } catch (e) { /* best-effort */ }
+                await new Promise((r) => setTimeout(r, 250));
+                respond(id, { ok: true, url: page.url() });
                 break;
             }
             case "click": {
