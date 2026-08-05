@@ -588,6 +588,31 @@ def prepare_provider_session_transport(
             effective_provider_ref=effective_ref,
         )
 
+    # ── Supported CDP surface (gpt-auto): build the CDP transport ─────
+    # gpt-auto has no ACP launch builder; the CDP transport wraps the existing
+    # browser-automation pieces (CdpClient + workspace + prompt_injector +
+    # dom_reader). The gateway stays transport-agnostic via the same neutral
+    # AgentSessionTransport seam — no ACP launch is constructed here.
+    if provider_id == "gpt-auto" and surface_hint.surface_id == "gpt-auto-cdp":
+        from audiagentic.components.providers.adapters.gpt_auto.session_transport import (
+            build_gpt_auto_session_transport,
+        )
+
+        runtime = get_provider_runtime_config_state(project_root, provider_id)
+        provider_config = runtime["config"]
+        if not isinstance(provider_config, dict):
+            provider_config = {}
+        transport = build_gpt_auto_session_transport(
+            project_root,
+            config=provider_config,
+            resume_provider_ref=resume_provider_ref,
+        )
+        return PreparedSessionTransport(
+            transport=transport,
+            surface=surface,
+            effective_provider_ref=effective_ref,
+        )
+
     # ── Supported ACP surface: wire provider-local factory composition ──
     from audiagentic.foundation.transports.acp import AcpLaunch
 
