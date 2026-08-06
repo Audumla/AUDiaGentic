@@ -49,7 +49,7 @@ from .prompt_injector import (
     wait_for_chatgpt_ready,
 )
 from .provider import GptAutoError, _resolve_project_name
-from .tab_state import update_mapping
+from .tab_state import get_mapping, update_mapping
 from .workspace import (
     WorkspaceInfo,
     ensure_workspace,
@@ -59,14 +59,17 @@ from .workspace import (
 
 logger = logging.getLogger(__name__)
 
-# Wait budget for a fresh response to begin after submit (mirrors dom_reader).
+        # Wait budget for a fresh response to begin after submit (mirrors dom_reader).
 _START_BUDGET_SECONDS = 15.0
 
 # The streaming indicator (stop button / streaming class) flickers between
 # chunks and during the reasoning phase, so a single "not generating" reading
 # is not a reliable completion signal. Instead the response is declared
 # complete when its text has been unchanged for this full stability window.
-_RESPONSE_STABILITY_SECONDS = 6.0
+_RESPONSE_STABILITY_SECONDS = 15.0
+
+# Sentinel: caller provided an explicit baseline (which may be (0, None)).
+_UNSET = object()
 
 # Click the stop / stop-generating control. Mirrors the detection logic in
 # dom_reader._IS_GENERATING_JS so the cancel path stops what it can see.
@@ -228,12 +231,41 @@ class GptAutoSessionTransport:
     async def _resolve_workspace(
         self, client: Any, project_name: str
     ) -> WorkspaceInfo | None:
-        """Find/activate the project workspace, continuing the resume ref when set."""
+        """Find/activate the project workspace, continuing the resume ref when set.
+
+        When we have a conversation-id from a previous session, we can reconstruct
+        the full ChatGPT URL directly (workspace_base/c/conv_id) and navigate there
+        without going through the find-workspace flow.  This avoids unnecessary
+        navigation steps and keeps the transport fast on resume.
+        """
         ref = self._resume_provider_ref
         if not ref:
             return await ensure_workspace(
                 client, project_name, project_root=self._project_root
             )
+        # Conversation-id resume: reconstruct the full URL from stored mapping
+        # and navigate directly — no workspace search needed.
+        if not ref.startswith("http"):
+            conv_id = _normalise_resume_ref(ref)
+            mapped = get_mapping(project_name, self._project_root) if self._project_root is not None else get_mapping(project_name)
+            ws_base = mapped.get("workspace_url", "") if mapped else ""
+            if ws_base and conv_id:
+                chat_url = f"{ws_base}/c/{conv_id}"
+                logger.info("Resuming conversation %s at %s (direct)", conv_id, chat_url)
+                try:
+                    await client.evaluate(f'() => {{ window.location.href = "{chat_url}"; }}')
+                    for _ in range(40):
+                        await asyncio.sleep(0.5)
+                        try:
+                            url = await client.get_url()
+                        except RuntimeError:
+                            url = ""
+                        if f"/c/{conv_id}" in url:
+                            return WorkspaceInfo(name=project_name, url=url)
+                    logger.warning("Direct resume to %s timed out — falling back", chat_url)
+                except Exception:
+                    logger.debug("direct resume navigation failed", exc_info=True)
+
         if ref.startswith("http"):
             # Workspace-base (or full conversation) URL — navigate the active tab.
             try:
@@ -249,10 +281,13 @@ class GptAutoSessionTransport:
             except Exception:
                 logger.debug("direct navigation to resume ref failed", exc_info=True)
             return WorkspaceInfo(name=project_name, url=ref)
+
+        # Fallback: full workspace search (slow path)
+        conv_id = _normalise_resume_ref(ref)
         return await ensure_workspace(
             client,
             project_name,
-            conversation_id=_normalise_resume_ref(ref),
+            conversation_id=conv_id,
             project_root=self._project_root,
         )
 
@@ -347,8 +382,13 @@ class GptAutoSessionTransport:
             )
             await _emit(TransportObservationKind.ACTIVITY, model_activity="generating")
 
+            async def emit_in_progress(activity: str) -> None:
+                from audiagentic.foundation.transports.agent_session import TransportObservationKind
+
+                await _emit(TransportObservationKind.IN_PROGRESS, model_activity=activity)
+
             response, cancelled = await self._poll_response(
-                client, cfg, _is_cancelled,
+                client, cfg, _is_cancelled, emit_in_progress,
                 base_count=base_count, base_text=base_text,
             )
 
@@ -380,9 +420,10 @@ class GptAutoSessionTransport:
         client: Any,
         cfg: GptAutoConfig,
         is_cancelled: Callable[[], bool],
+        emit_in_progress: Callable[[str], Awaitable[None]],
         *,
-        base_count: int = 0,
-        base_text: str | None = None,
+        base_count: int = _UNSET,  # type: ignore[arg-type]
+        base_text: str | None = _UNSET,  # type: ignore[arg-type]
     ) -> tuple[str | None, bool]:
         """Poll the DOM for a response with cooperative cancellation.
 
@@ -399,9 +440,17 @@ class GptAutoSessionTransport:
         submit so it represents the pre-turn state.  When omitted the method
         captures it itself — but in that case the fake test client may have
         already set the response, so callers should provide explicit values.
+
+        **Timeout is a safety valve, not a state decision.** The provider
+        decides when a turn is done. The transport keeps polling until the
+        stability window passes (provider finished) or cancellation is
+        requested. If the deadline fires and the provider is still actively
+        generating, the loop continues — the timeout does not kill the turn.
+        It only becomes an error if the deadline fires AND there is no
+        generation activity and no new text (a genuine hang).
         """
         # Use provided baseline or capture from the DOM (backward compat).
-        if base_count == 0 and base_text is None:
+        if base_count is _UNSET:
             base_count, base_text = await _get_response_state(client)
         deadline = time.monotonic() + float(
             getattr(cfg, "response_wait_timeout", 120)
@@ -432,28 +481,72 @@ class GptAutoSessionTransport:
                 break
             await asyncio.sleep(1.0)
 
-        while time.monotonic() < deadline:
+        # Track whether we've passed the safety-valve deadline.  After that
+        # point, a lack of generation activity and new text becomes an error
+        # (genuine hang).  If generation is still active, we keep going — the
+        # provider decides when the turn ends, not the deadline.
+        past_deadline = False
+
+        while True:
             if is_cancelled():
                 await self._stop_generation(client)
-                break
+                return None, True
+
             count, text = await _get_response_state(client)
-            if not (count > base_count or _is_new(text)):
+            has_fresh = count > base_count or _is_new(text)
+
+            if not has_fresh:
                 # Not a fresh response (yet) — no stability can accumulate.
+                # But this is NOT a hang — ChatGPT may be thinking/browsing with
+                # the stop button visible and no text output yet.  Only declare
+                # a hang if generation has stopped AND there's still nothing.
                 stable_since = None
+                if await is_generating(client):
+                    logger.debug("gpt-auto: generating but no fresh content yet")
+                    await asyncio.sleep(interval)
+                    continue
+                # Past deadline with no text and generation stopped — genuine hang.
+                if past_deadline:
+                    return None, False
+                if not past_deadline and time.monotonic() >= deadline:
+                    past_deadline = True
+                    logger.info(
+                        "gpt-auto: response timeout reached with no fresh content — continuing for %gs more",
+                        _RESPONSE_STABILITY_SECONDS,
+                    )
                 await asyncio.sleep(interval)
                 continue
+
             if text and text != last_text:
                 last_text = text
                 stable_since = time.monotonic()
                 continue
+
             if text is None:
                 # Response block vanished/re-rendered — restart tracking.
                 last_text = None
                 stable_since = None
+                # Past deadline with no text at all — genuine hang.
+                if past_deadline:
+                    return None, False
+                # Check safety-valve deadline here too (before the check below).
+                if not past_deadline and time.monotonic() >= deadline:
+                    past_deadline = True
+                    logger.info(
+                        "gpt-auto: response timeout reached with no text — continuing for %gs more",
+                        _RESPONSE_STABILITY_SECONDS,
+                    )
                 await asyncio.sleep(interval)
                 continue
 
-            # Text is unchanged from the previous poll.
+            # Text unchanged. is_generating checks the stop button tooltip
+            # ("stop answering"), so it stays True through streaming, thinking,
+            # and browsing phases — only goes False when truly done.
+            if await is_generating(client):
+                await asyncio.sleep(interval)
+                continue
+
+            # Generating stopped — check stability for completion.
             if stable_since is None:
                 stable_since = time.monotonic()
             elif time.monotonic() - stable_since >= stability:
@@ -465,9 +558,19 @@ class GptAutoSessionTransport:
                     last_text = final_text
                     stable_since = time.monotonic()
 
-            await asyncio.sleep(interval)
+            # Check safety-valve deadline: only triggers on inactivity.
+            if not past_deadline and time.monotonic() >= deadline:
+                past_deadline = True
+                logger.info(
+                    "gpt-auto: response timeout reached (%ds), provider still active — continuing",
+                    int(deadline - (deadline - time.monotonic())),
+                )
 
-        return last_text, is_cancelled()
+            # Emit in-progress observation to signal turn is alive
+            activity = "generating" if last_text else "waiting"
+            await emit_in_progress(activity)
+
+            await asyncio.sleep(interval)
 
     async def _stop_generation(self, client: Any) -> None:
         try:

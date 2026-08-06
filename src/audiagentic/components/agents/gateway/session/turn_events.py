@@ -14,6 +14,7 @@ from typing import Any
 
 from audiagentic.components.agents.gateway.event_topics import (
     TURN_MODEL_COMPLETED_TOPIC,
+    TURN_MODEL_IN_PROGRESS_TOPIC,
     TURN_MODEL_STARTED_TOPIC,
     TURN_TOOL_COMPLETED_TOPIC,
     TURN_TOOL_STARTED_TOPIC,
@@ -84,6 +85,10 @@ class _TurnEventProjector:
                 return None
             self._model_started = True
             return TURN_MODEL_STARTED_TOPIC, {}
+        if obs.kind == TransportObservationKind.IN_PROGRESS:
+            return TURN_MODEL_IN_PROGRESS_TOPIC, {
+                "model_activity": obs.attributes.get("model_activity", "") if obs.attributes else "",
+            }
         if obs.kind == TransportObservationKind.TERMINAL:
             return TURN_MODEL_COMPLETED_TOPIC, {}
         if obs.kind == TransportObservationKind.TOOL_REQUESTED:

@@ -56,11 +56,17 @@ _GET_RESPONSE_STATE_JS = """() => {
 # static "Thinking" placeholder as the finished answer and return it early.
 _IS_GENERATING_JS = """
 () => {
-    // Stop generating button visible = still generating
+    // Stop generating button visible = still generating. This is the primary
+    // and most reliable signal — it stays visible through streaming, thinking,
+    // and browsing/tool-use phases (e.g. @github plugin). When the response
+    // completes, this element disappears or changes tooltip.
     if (document.querySelector('[data-testid="stop-generating"]')) return true;
 
     // Loading/streaming indicators — includes the reasoning phase, where the
-    // assistant block carries a result-thinking class before streaming starts
+    // assistant block carries a result-thinking class before streaming starts.
+    // The browsing/searching phase also uses result-thinking while ChatGPT is
+    // reading external content (e.g. GitHub). Without this check, stability
+    // would accumulate on stale text during browsing and return early.
     const loaders = document.querySelectorAll('.loading-dots, [class*="streaming"], .result-streaming, .result-thinking, [class*="result-thinking"]');
     if (loaders.length > 0) return true;
 
@@ -69,6 +75,24 @@ _IS_GENERATING_JS = """
     for (const b of btns) {
         const label = (b.getAttribute('aria-label') || '').toLowerCase();
         if (label.includes('stop')) return true;
+    }
+
+    // Page-level busy indicators — ChatGPT may show these during browsing/searching
+    const busySelectors = [
+        '[class*="spinner"]',
+        '[class*="loading"]',
+        '[aria-busy="true"]',
+        '[data-busy="true"]',
+        '[class*="busy"]',
+    ];
+    for (const sel of busySelectors) {
+        if (document.querySelector(sel)) return true;
+    }
+
+    // Editor not editable or disabled = ChatGPT is still working on the response.
+    const editor = document.querySelector('.ProseMirror');
+    if (editor) {
+        if (!editor.isContentEditable || editor.hasAttribute('disabled') || !editor.getAttribute('contenteditable')) return true;
     }
 
     return false;

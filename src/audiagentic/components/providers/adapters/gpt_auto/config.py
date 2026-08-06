@@ -53,7 +53,24 @@ class GptAutoConfig:
     wall-clock time.
     """
 
+    _KEY_ALIASES = {
+        "response-timeout": "response_wait_timeout",
+        "typing-speed": "typing_speed",
+        "tab-selection-timeout": "tab_selection_timeout",
+        "login-timeout": "login_timeout",
+        "response-stability-seconds": "response_stability_seconds",
+    }
+
     @classmethod
     def from_dict(cls, data: dict) -> GptAutoConfig:
-        """Create config from a dictionary (e.g. provider descriptor YAML)."""
-        return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+        """Create config from a dictionary (e.g. provider descriptor YAML).
+
+        Normalizes hyphenated keys to underscore field names via an alias map
+        so YAML conventions are respected without duplicating every key name.
+        """
+        mapped = {}
+        for k, v in data.items():
+            target = cls._KEY_ALIASES.get(k, k)
+            if target in cls.__dataclass_fields__:
+                mapped[target] = v
+        return cls(**mapped)

@@ -1542,10 +1542,34 @@ class AcpAgentSessionTransport:
         _final_summary_parts: list[str] = []
 
         # Build the neutral observation sink that maps AcpEvent → TransportObservation.
+        # Track whether model has started to emit ACTIVITY on first assistant-message,
+        # then IN_PROGRESS for subsequent ones — this allows the projector to fire
+        # TURN_MODEL_STARTED once, then repeated TURN_MODEL_IN_PROGRESS events.
+        _model_started = False
+
         async def _wrapped_sink(acp_event: AcpEvent) -> None:
-            nonlocal delivered_count
+            nonlocal delivered_count, _model_started
             try:
                 obs = _map_acp_event_to_observation(acp_event, ag_sid, turn_id)
+                # Map subsequent assistant-messages to IN_PROGRESS after first ACTIVITY
+                if acp_event.kind == "assistant-message":
+                    if not _model_started:
+                        _model_started = True
+                    else:
+                        from audiagentic.foundation.transports.agent_session import (
+                            TransportObservation,
+                            TransportObservationKind,
+                        )
+
+                        obs = TransportObservation(
+                            ag_session_id=ag_sid,
+                            turn_id=turn_id,
+                            sequence=obs.sequence,
+                            kind=TransportObservationKind.IN_PROGRESS,
+                            observed_at=obs.observed_at,
+                            correlation_quality=obs.correlation_quality,
+                            attributes={"model_activity": "generating"},
+                        )
                 result = sink(obs)
                 if asyncio.iscoroutine(result):
                     await result
