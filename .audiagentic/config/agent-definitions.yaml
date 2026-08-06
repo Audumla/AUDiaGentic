@@ -1,0 +1,21 @@
+contract-version: v1
+agent-definitions:
+- agent_id: rig-tester-agent
+  name: Rig Tester Agent
+  execution_profile_id: rig-tester
+  role_id: placeholder
+  description: First real Agent Definition, composed to exercise AgentTaskFactory
+    end-to-end against the local rig test model.
+  advertised_skills: []
+  internal: true
+  acp: false
+  a2a: false
+- agent_id: gpt-auto-agent
+  name: GPT-Auto Agent
+  execution_profile_id: gpt-auto
+  role_id: placeholder
+  description: Agent that uses ChatGPT via CDP browser automation
+  advertised_skills: []
+  internal: true
+  acp: false
+  a2a: false

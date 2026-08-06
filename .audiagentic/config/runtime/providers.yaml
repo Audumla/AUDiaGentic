@@ -1,0 +1,49 @@
+contract-version: v1
+providers:
+  aider:
+    install-mode: external-configured
+    access-mode: cli
+  antigravity:
+    install-mode: external-configured
+    access-mode: cli
+  claude:
+    install-mode: external-configured
+    access-mode: cli
+  cline:
+    install-mode: external-configured
+    access-mode: cli
+  codex:
+    install-mode: external-configured
+    access-mode: cli
+  copilot:
+    install-mode: external-configured
+    access-mode: cli
+  gemini:
+    install-mode: external-configured
+    access-mode: cli
+  opencode:
+    install-mode: external-configured
+    access-mode: cli
+  openhands:
+    install-mode: external-configured
+    access-mode: cli
+  pi:
+    install-mode: external-configured
+    access-mode: none
+  gpt-auto:
+    install-mode: external-configured
+    access-mode: none
+    chatgpt_project_url: https://chat.openai.com/projects/audiagentic
+    humanize: true
+    response-timeout: 600
+    response-stability-seconds: 15.0
+    typing-speed: 0.07
+    think-delay-min: 1.5
+    think-delay-max: 6.0
+    min-delay-between-requests: 5.0
+    use-prompt-pool: true
+  qwen:
+    install-mode: external-configured
+    access-mode: cli
+reconciliation-policy:
+  mode: auto
