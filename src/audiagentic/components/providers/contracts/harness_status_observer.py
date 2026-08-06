@@ -90,6 +90,7 @@ class HarnessStatusObserverCapability:
 
 _KIND_TO_STATUS: dict[TransportObservationKind, str] = {
     TransportObservationKind.ACTIVITY: "model-thinking",
+    TransportObservationKind.IN_PROGRESS: "in-progress",
     TransportObservationKind.TOOL_REQUESTED: "tool-calling",
     TransportObservationKind.PERMISSION_REQUESTED: "waiting-permission",
 }

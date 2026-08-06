@@ -27,6 +27,7 @@ SESSION_ORPHANED_TOPIC = "agents.session.orphaned"
 
 TURN_MODEL_STARTED_TOPIC = "agents.turn.model.started"
 TURN_MODEL_COMPLETED_TOPIC = "agents.turn.model.completed"
+TURN_MODEL_IN_PROGRESS_TOPIC = "agents.turn.model.in-progress"
 TURN_TOOL_STARTED_TOPIC = "agents.turn.tool.started"
 TURN_TOOL_COMPLETED_TOPIC = "agents.turn.tool.completed"
 

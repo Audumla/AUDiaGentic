@@ -1,0 +1,16 @@
+contract-version: v1
+profiles:
+- profile_id: rig-tester
+  provider_id: local-openai
+  model_id: audiagentic-rig
+  model_alias: null
+  params: {}
+  is_default: false
+  description: Local rig-hosted small test model (qwen3.5-2b via llama-server)
+- profile_id: gpt-auto
+  provider_id: gpt-auto
+  model_id: chatgpt
+  model_alias: null
+  params: {}
+  is_default: false
+  description: Browser-driven ChatGPT via CDP session transport
