@@ -12,6 +12,7 @@ Definition resolution is still available programmatically via
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from audiagentic.components.agents.gateway.client import get_gateway_client
@@ -24,22 +25,13 @@ from audiagentic.foundation.mcp.component_server import (
 
 mcp = mcp_server(__name__)
 
-# A blocking MCP tool call must not outlive the transport that carries it.
-# This is deliberately transport-owned; the in-process client has no cap.
-MCP_BLOCKING_TIMEOUT_SECONDS = 300.0
+# Maximum seconds for a single blocking wait call before the MCP transport
+# may kill it.  Individual waits are kept under this so the tool call never
+# outlives the transport.
+MCP_SINGLE_WAIT_CAP_SECONDS = 120.0
 
-
-def _mcp_capped(timeout_seconds: float | None) -> float:
-    """Cap a blocking wait to what the MCP transport can hold.
-
-    The client transport has its own 30-60s timeout, so an MCP tool call must
-    never block indefinitely — it returns a 'running' status instead and the
-    caller polls. This constraint belongs to the TRANSPORT, which is why it is
-    applied here and not in the core gateway API: an in-process supervisor
-    running a long implementation task has no such limit (RV511).
-    """
-    cap = MCP_BLOCKING_TIMEOUT_SECONDS
-    return min(timeout_seconds, cap) if timeout_seconds else cap
+# Terminal states from the gateway workflow (SH18).
+_TERMINAL_STATES = frozenset({"completed", "failed", "cancelled", "rejected"})
 
 
 @mcp.tool()
@@ -52,10 +44,74 @@ def agent_task_status(request_id: str) -> dict[str, Any]:
 @mcp.tool()
 @log_tool_call
 def agent_task_wait(request_id: str, timeout_seconds: float | None = None) -> dict[str, Any]:
-    """Block until a request reaches a terminal state or timeout (capped for MCP transport)."""
-    return get_gateway_client().wait_execution_request(
-        project_root_from_env(), request_id, _mcp_capped(timeout_seconds)
-    )
+    """Block until a request reaches a terminal state or timeout.
+
+    Honors the caller's timeout_seconds (capped at 300s server-side). If
+    the timeout elapses before the request is terminal, returns the current
+    status with wait-timeout=True and progress info — never an MCP error.
+    """
+    import asyncio
+
+    cap = min(timeout_seconds, 300.0) if timeout_seconds else 300.0
+    start = time.monotonic()
+    client = get_gateway_client()
+    project_root = project_root_from_env()
+
+    while True:
+        remaining = cap - (time.monotonic() - start)
+        if remaining <= 0:
+            break
+        wait_for = min(remaining, MCP_SINGLE_WAIT_CAP_SECONDS)
+        try:
+            result = client.wait_execution_request(project_root, request_id, wait_for)
+        except asyncio.TimeoutError:
+            # The transport timed out — return current status instead of error.
+            remaining = cap - (time.monotonic() - start)
+            if remaining <= 0:
+                break
+            continue
+
+        if result.get("state") in _TERMINAL_STATES:
+            return result
+
+        # Non-terminal and transport didn't timeout — caller timed out or
+        # we got a partial wait-timeout from the API.
+        if remaining <= 0:
+            break
+        # Still have time; loop for another short poll.
+
+    # Timed out — return current status with wait-timeout and progress.
+    result = client.get_execution_request(project_root, request_id)
+    result["wait-timeout"] = True
+    if "progress" not in result:
+        result["progress"] = _request_progress(result)
+    return result
+
+
+def _request_progress(record: dict[str, Any]) -> dict[str, Any]:
+    """Compute a progress snapshot for a non-terminal request."""
+    state = record.get("state", "unknown")
+    started_at = record.get("started-at")
+    running_seconds = None
+    if started_at:
+        from audiagentic.foundation.time import now_iso_z
+
+        try:
+            from datetime import datetime, timezone
+
+            started = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+            now = datetime.now(timezone.utc)
+            running_seconds = round((now - started).total_seconds(), 1)
+        except Exception:
+            pass
+
+    return {
+        "phase": "launching" if state == "queued" else "running",
+        "state": state,
+        "running-seconds": running_seconds,
+        "last-progress-at": record.get("updated-at"),
+        "stale-progress": False,
+    }
 
 
 @mcp.tool()
