@@ -283,15 +283,16 @@ class GptAutoSessionTransport:
                 logger.info("Resuming conversation %s at %s (direct)", conv_id, chat_url)
                 try:
                     await client.evaluate(f'() => {{ window.location.href = "{chat_url}"; }}')
-                    for _ in range(40):
-                        await asyncio.sleep(0.5)
-                        try:
-                            url = await client.get_url()
-                        except RuntimeError:
-                            url = ""
-                        if f"/c/{conv_id}" in url:
-                            return WorkspaceInfo(name=project_name, url=url)
-                    logger.warning("Direct resume to %s timed out — falling back", chat_url)
+                    # Event-based: waitForFunction on URL match
+                    try:
+                        await client.wait_for_function(
+                            f'() => window.location.href.includes("/c/{conv_id}")',
+                            timeout_ms=20000,
+                        )
+                        url = await client.get_url()
+                        return WorkspaceInfo(name=project_name, url=url)
+                    except Exception:
+                        logger.warning("Direct resume to %s timed out — falling back", chat_url)
                 except Exception:
                     logger.debug("direct resume navigation failed", exc_info=True)
 
@@ -299,14 +300,16 @@ class GptAutoSessionTransport:
             # Workspace-base (or full conversation) URL — navigate the active tab.
             try:
                 await client.evaluate(f'() => {{ window.location.href = "{ref}"; }}')
-                for _ in range(40):
-                    await asyncio.sleep(0.5)
-                    try:
-                        url = await client.get_url()
-                    except RuntimeError:
-                        url = ""
-                    if url.startswith(ref) or "/c/" in url:
-                        return WorkspaceInfo(name=project_name, url=url)
+                # Event-based: waitForFunction on URL match
+                try:
+                    await client.wait_for_function(
+                        f'() => window.location.href.startsWith("{ref}") || window.location.href.includes("/c/")',
+                        timeout_ms=20000,
+                    )
+                    url = await client.get_url()
+                    return WorkspaceInfo(name=project_name, url=url)
+                except Exception:
+                    pass
             except Exception:
                 logger.debug("direct navigation to resume ref failed", exc_info=True)
             return WorkspaceInfo(name=project_name, url=ref)
