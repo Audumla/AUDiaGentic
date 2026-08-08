@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class WorkspaceInfo:
     """Information about a ChatGPT workspace (project)."""
+
     name: str
     url: str
 
@@ -140,7 +141,11 @@ async def find_workspace(
     if the conversation URL is unreachable.
     """
     # 1. Try to reuse a tab already mapped to this project
-    mapped = tab_state.get_mapping(project_name, project_root) if project_root is not None else tab_state.get_mapping(project_name)
+    mapped = (
+        tab_state.get_mapping(project_name, project_root)
+        if project_root is not None
+        else tab_state.get_mapping(project_name)
+    )
     if mapped and mapped.get("tab_id"):
         resumed = await client.activate_tab(mapped["tab_id"])
         if resumed:
@@ -149,24 +154,46 @@ async def find_workspace(
             except RuntimeError:
                 current_url = ""
             # The tab is alive — navigate to the workspace (or the conversation)
-            base = workspace_base_url(current_url) if is_in_workspace(current_url) else mapped.get("workspace_url", "")
+            base = (
+                workspace_base_url(current_url)
+                if is_in_workspace(current_url)
+                else mapped.get("workspace_url", "")
+            )
             target = _resolve_target_url(base, conversation_id)
             if target and target != current_url:
-                logger.info("Reusing mapped tab %s for '%s' -> %s", resumed.tab_id, project_name, target)
+                logger.info(
+                    "Reusing mapped tab %s for '%s' -> %s", resumed.tab_id, project_name, target
+                )
                 await client.evaluate(f'() => {{ window.location.href = "{target}"; }}')
-                for _ in range(20):
-                    await asyncio.sleep(0.5)
-                    try:
-                        final_url = await client.get_url()
-                    except RuntimeError:
-                        final_url = ""
+                # Event-based: waitForFunction on workspace URL match
+                try:
+                    await client.wait_for_function(
+                        '() => window.location.href.includes("/g/g-p-")',
+                        timeout_ms=10000,
+                    )
+                    final_url = await client.get_url()
                     if is_in_workspace(final_url):
                         return WorkspaceInfo(name=project_name, url=final_url)
+                except Exception:
+                    pass
+                    # Fallback to polling (should rarely be needed)
+                    for _ in range(20):
+                        await asyncio.sleep(0.5)
+                        try:
+                            final_url = await client.get_url()
+                        except RuntimeError:
+                            final_url = ""
+                        if is_in_workspace(final_url):
+                            return WorkspaceInfo(name=project_name, url=final_url)
             else:
                 # Already on the right page
                 return WorkspaceInfo(name=project_name, url=current_url or base)
         else:
-            logger.info("Mapped tab %s for '%s' no longer exists — opening a new one", mapped["tab_id"], project_name)
+            logger.info(
+                "Mapped tab %s for '%s' no longer exists — opening a new one",
+                mapped["tab_id"],
+                project_name,
+            )
 
     # 2. Already in right workspace? Check by page title
     try:
@@ -196,18 +223,28 @@ async def find_workspace(
         logger.warning("Project '%s' not found on /projects page", project_name)
         return None
 
-    logger.info("Found project '%s' at (%d, %d)", project_name, result["centerX"], result["centerY"])
+    logger.info(
+        "Found project '%s' at (%d, %d)", project_name, result["centerX"], result["centerY"]
+    )
 
     # Click with mouse emulation (proper pointer event for React handler)
     await client.mouse_click(result["centerX"], result["centerY"])
 
     # Wait for navigation to workspace — stay on this tab, DON'T use find_tab
     # (find_tab switches back to the first ChatGPT tab and loses the navigation)
-    for _ in range(20):
-        await asyncio.sleep(0.5)
-        new_url = await client.get_url()
-        if is_in_workspace(new_url):
-            break
+    # Event-based: waitForFunction on workspace URL match
+    try:
+        await client.wait_for_function(
+            '() => window.location.href.includes("/g/g-p-")',
+            timeout_ms=10000,
+        )
+    except Exception:
+        # Fallback to polling (should rarely be needed)
+        for _ in range(20):
+            await asyncio.sleep(0.5)
+            new_url = await client.get_url()
+            if is_in_workspace(new_url):
+                break
 
     # /project IS the project's new chat page — submitting from there creates a chat
     # scoped to this project.  No need to navigate anywhere else.
@@ -219,14 +256,25 @@ async def find_workspace(
             chat_url = f"{base}/c/{conversation_id}"
             logger.info("Resuming conversation %s at %s", conversation_id, chat_url)
             await client.evaluate(f'() => {{ window.location.href = "{chat_url}"; }}')
-            for _ in range(20):
-                await asyncio.sleep(0.5)
-                try:
-                    resumed_url = await client.get_url()
-                except RuntimeError:
-                    resumed_url = ""
+            # Event-based: waitForFunction on conversation URL match
+            try:
+                await client.wait_for_function(
+                    f'() => window.location.href.includes("/c/{conversation_id}")',
+                    timeout_ms=10000,
+                )
+                resumed_url = await client.get_url()
                 if f"/c/{conversation_id}" in resumed_url:
                     return WorkspaceInfo(name=project_name, url=resumed_url)
+            except Exception:
+                # Fallback to polling
+                for _ in range(20):
+                    await asyncio.sleep(0.5)
+                    try:
+                        resumed_url = await client.get_url()
+                    except RuntimeError:
+                        resumed_url = ""
+                    if f"/c/{conversation_id}" in resumed_url:
+                        return WorkspaceInfo(name=project_name, url=resumed_url)
             logger.warning(
                 "Could not reach conversation %s — falling back to project new chat",
                 conversation_id,
@@ -262,7 +310,9 @@ async def ensure_workspace(
     """
     logger.info("Ensuring ChatGPT workspace '%s'", project_name)
 
-    ws = await find_workspace(client, project_name, conversation_id=conversation_id, project_root=project_root)
+    ws = await find_workspace(
+        client, project_name, conversation_id=conversation_id, project_root=project_root
+    )
     if ws:
         return ws
 
