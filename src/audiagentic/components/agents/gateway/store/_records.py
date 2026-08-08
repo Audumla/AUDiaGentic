@@ -114,7 +114,9 @@ def build_record(
     # remote-control sessions opt out of idle/lifetime caps); negatives
     # are invalid.
     if session_idle_timeout_seconds is not None:
-        if session_keep_alive is not True:
+        # session_keep_alive must be explicitly True for bounds to apply;
+        # None means preserve existing behavior, False means close-after-turn.
+        if not session_keep_alive:
             raise AudiaGenticError(
                 code="VAL-AGW-059",
                 kind="agents",
@@ -130,7 +132,8 @@ def build_record(
                 details={"session_idle_timeout_seconds": session_idle_timeout_seconds},
             )
     if session_max_lifetime_seconds is not None:
-        if session_keep_alive is not True:
+        # session_keep_alive must be explicitly True for bounds to apply.
+        if not session_keep_alive:
             raise AudiaGenticError(
                 code="VAL-AGW-061",
                 kind="agents",
@@ -376,6 +379,7 @@ def project_public_status(
         "session-id", "session-keep-alive", "output", "completion", "usage", "error", "attempts", "created-at",
         "updated-at", "started-at", "finished-at",
         "replay-required", "replay-reason", "replayed-by-request-id", "resumed-from-request-id",
+        "metadata",
         # SH07 C2: gateway profile snapshot identity — redacted (no secrets)
         "gateway-profile-id", "gateway-profile-generation", "gateway-profile-config-digest",
         "gateway-execution-lane-key", "resolved-provider-id", "resolved-model-id",
