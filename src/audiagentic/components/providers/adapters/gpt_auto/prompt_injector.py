@@ -75,7 +75,7 @@ async def wait_for_chatgpt_ready(
     logger.info("Checking ChatGPT login state...")
 
     page_state = await client.evaluate(_IS_LOGIN_PAGE_JS)
-    if page_state == 'login':
+    if page_state == "login":
         logger.info("Login page detected — waiting (timeout: %.0fs)", login_timeout)
         return await _wait_for_login(client, login_timeout)
 
@@ -85,44 +85,34 @@ async def wait_for_chatgpt_ready(
         return True
 
     logger.info("Waiting for chat interface (timeout: %.0fs)", timeout)
-    deadline = asyncio.get_event_loop().time() + timeout
-    while asyncio.get_event_loop().time() < deadline:
-        result = await client.evaluate(_IS_READY_JS)
-        if result:
-            logger.info("ChatGPT is ready")
-            return True
-        await asyncio.sleep(0.5)
-
-    logger.warning("ChatGPT not ready after %.1fs", timeout)
-    return False
+    try:
+        await client.wait_for_function(_IS_READY_JS, timeout_ms=int(timeout * 1000))
+        logger.info("ChatGPT is ready")
+        return True
+    except Exception:
+        logger.warning("ChatGPT not ready after %.1fs", timeout)
+        return False
 
 
 async def _wait_for_login(client: Any, login_timeout: float) -> bool:
     """Wait for user to complete login."""
-    deadline = asyncio.get_event_loop().time() + login_timeout
-    last_logged = 0.0
-
-    while asyncio.get_event_loop().time() < deadline:
-        remaining = deadline - asyncio.get_event_loop().time()
-
-        if login_timeout - remaining >= last_logged + 15:
-            logger.info("Waiting for login... %.0fs remaining", remaining)
-            last_logged = login_timeout - remaining
-
-        is_ready = await client.evaluate(_IS_READY_JS)
-        if is_ready:
-            logger.info("Login detected")
-            return True
-
+    # Log periodic status — use a short initial wait so we can show progress
+    logger.info("Waiting for login (timeout: %.0fs)", login_timeout)
+    try:
+        await client.wait_for_function(
+            _IS_READY_JS,
+            timeout_ms=int(login_timeout * 1000),
+        )
+        logger.info("Login detected")
+        return True
+    except Exception:
+        # Fallback: check if logged-in state appeared without full ready signal
         is_logged_in = await client.evaluate(_IS_LOGGED_IN_JS)
         if is_logged_in:
-            logger.info("Logged in state detected")
+            logger.info("Logged in state detected (via fallback)")
             return True
-
-        await asyncio.sleep(1.0)
-
-    logger.error("Login timeout after %.0fs", login_timeout)
-    return False
+        logger.error("Login timeout after %.0fs", login_timeout)
+        return False
 
 
 # Clear any existing text in the ProseMirror editor and focus it.
