@@ -11,7 +11,7 @@ execution parameters. Profiles are stored per-project in
 - `agents_api.py` — Pure-logic CRUD API (load, save, list, get, create, update, delete, resolve), agent_status status-hook
 - `agents_manage_mcp.py` — Management MCP server (CRUD tools, CLI-side only)
 - `agents_mcp.py` — Operational MCP server (resolve tools, provider-facing)
-- `agents_gateway_store/` — Gateway request/result record contract and persisted state (AG08), split into _shared, _admission, _records, _transitions (SH18)
+- `agents_gateway_store/` — Gateway request/result record contract and persisted state (AG08), split into _shared,_admission, _records,_transitions (SH18)
 - `agents_gateway_queue.py` — Per-profile FIFO queue, concurrency limiting, cancel, wait, lifecycle events (AG09)
 - `agents_gateway_dispatch.py` — Provider dispatch, retry, fallback (AG10)
 - `agents_gateway_session_dispatch.py` — Sessionful dispatch path extracted from dispatch.py (SH18)
@@ -66,12 +66,11 @@ validated against `agent-execution-record.schema.json`.
 
 ### Request modes
 
-- **Async** (default, and the only mode exposed over MCP) — `agent_task_submit`
+- **Async** (default, and the only mode exposed over MCP) - `agent_task_submit`
   (the sole MCP submission surface, AS63) returns `{request-id, state: "queued"}`
-  immediately. Poll `agent_task_status(request_id)` or block later with
-  `agent_task_wait(request_id, timeout_seconds)`, capped at
-  `gateway_mcp.MCP_BLOCKING_TIMEOUT_SECONDS` (300s), since a blocking MCP tool
-  call must not hold the connection past the client's own transport timeout.
+  immediately. Poll `agent_task_status(request_id)` until the request reaches
+  a terminal state. Blocking submit-and-wait remains available through the
+  underlying Python API, not as an MCP tool.
   Direct execution_profile_id submission bypassing Agent Definition
   resolution is not exposed over MCP — use the Python API layer
   (`AgentTaskFactory.submit_raw`/`submit_execution_request`) for that.
@@ -83,7 +82,7 @@ validated against `agent-execution-record.schema.json`.
 - **Event-triggered** — publish `agents.execution.gateway.requested` on the foundation event bus
   (`{project-root, prompt-body, execution-profile-id?, blocking?, source?}`).
   Always async unless `payload.blocking` is explicitly set. Not for one-shot MCP-tool use —
-  use `agent_task_submit` + `agent_task_wait` for that.
+  use `agent_task_submit` and poll `agent_task_status` for that.
 
 ### State model
 

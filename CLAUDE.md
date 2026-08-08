@@ -3,6 +3,60 @@
 <!-- ag:managed:begin -->
 _Managed by AUDiaGentic — generated from component configs. Edit the owning component and re-run surface apply; edits here are overwritten._
 
+## Implement action doctrine
+
+When the implement action is triggered: carry out the requested implementation
+work within the stated scope. Do not broaden scope beyond the requested change.
+Prefer shared helpers, repository-owned scripts, and existing patterns.
+Run verification steps (type checks, tests) when available before declaring done.
+
+## Plan action doctrine
+
+When the plan action is triggered: map the requested change into a concrete
+execution plan with discrete steps. Identify dependencies, blockers, risks,
+and review checkpoints. Do not implement — plan only.
+
+## Scope and approval policy
+
+Produce a plan only — do not create or modify tracked work artifacts, or commit to
+changes, without explicit user approval.
+
+- Do not autonomously create or modify persistent artifacts during analysis, review, or exploration work.
+- If analysis suggests new work is needed, report findings and ask for approval before proceeding.
+- Use the plan action to surface work that requires user direction.
+- Act only in response to explicit user instruction or approved workflow prompts.
+
+## Review action doctrine
+
+When the review action is triggered: perform read-focused validation and
+completeness review. Identify blockers, missing tests, contract mismatches,
+and drift from tracked docs. Do not add implementation work unless explicitly
+requested, and do not broaden review into feature-scope changes. Keep tracked
+docs and release artifacts synchronized with the job record.
+
+## Canonical workflow tags
+
+Canonical tags (route the raw tagged prompt through the repo-owned bridge):
+
+- `ag-implement` (aliases: `agi`, `i`)
+- `ag-plan` (aliases: `agp`, `p`)
+- `ag-review` (aliases: `agr`, `r`)
+
+Definitions are managed in `config/components/agent-jobs/tags/`; run `python -m audiagentic.components.providers.skill_surfaces --project-root .` after adding, removing, or renaming tags.
+
+## AUDiaGentic agent instructions
+
+This repository uses AUDiaGentic workflow jobs. The instruction blocks below 
+are generated from component sources — do not edit them directly; edit the 
+owning component config and re-run surface apply.
+
+## Prompt tag doctrine
+
+- First non-empty line is the routing tag; remaining lines are the raw prompt body.
+- Route tagged prompts through the AUDiaGentic workflow bridge — do not handle inline.
+- Keep tag semantics identical to the launch contract; do not invent aliases.
+- Preserve raw prompt text and provenance: provider-id, surface, session-id survive normalization.
+
 ## Agent ledger process
 
 After substantive implementation work, record a change event with the ag-ledger
@@ -79,6 +133,38 @@ parameters. They are stored in .audiagentic/config/execution-profiles.yaml.
 ## Naming
 Use `execution-profile-id` (NOT `profile-id`) in job requests to avoid
 collision with `workflow-profile` (lite/standard/strict stage pipelines).
+
+## Role selection precedence (AS61/RO01)
+
+Today a Role is reached only through `agent_id` -> Agent Definition ->
+`role_id` (agent_task_submit). There is no standalone `agent-role-id`
+job-request field yet — that wiring belongs to AS78, not this
+component. This section states the precedence/conflict rule that
+MUST hold once one is introduced, so the rule is fixed before the
+field exists rather than improvised after.
+
+## Resolution precedence at job launch (once agent-role-id exists)
+1. Explicit `agent-role-id` in job request
+2. Role carried by an explicit `agent-id` (Agent Definition)
+3. Execution profile selection (`execution-profile-id` / provider-id
+   + model-id / default execution profile) is independent of role
+   selection — they compose, they do not override each other.
+4. `workflow-profile` (lite/standard/strict stage pipelines) and
+   `component-profile` (per-process config layer) are orthogonal to
+   both and never interact with role/profile precedence.
+
+## Conflicts fail closed
+A Role requirement that contradicts an explicitly selected Execution
+Profile is an error raised before dispatch — never a silent override
+in either direction, and never a permissive fallback. This applies
+the moment AS78 exposes a path where the two could disagree; there is
+no such path yet, so no conflict-checking code exists today.
+
+## Naming
+`agent-role-id` must stay distinguishable from `execution-profile-id`,
+`workflow-profile`, and `component-profile` — three distinct
+"profile" concepts already exist in this project; a role is a fourth,
+separate axis and must not collapse into any of them by accident.
 
 ## Memory usage guidance
 

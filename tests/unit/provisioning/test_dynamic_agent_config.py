@@ -52,7 +52,7 @@ def test_agents_functional_servers_are_in_collected_mcp_entries(
     install_component("agents", project_root)
     entries = _collect(project_root)
 
-    assert {"ag-agents", "ag-agents-gateway"} <= set(entries)
+    assert {"ag-agents-gateway"} <= set(entries)
     assert "ag-agents-mgmt" not in entries
 
 

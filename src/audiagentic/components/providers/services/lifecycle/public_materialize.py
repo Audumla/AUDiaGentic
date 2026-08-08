@@ -62,12 +62,11 @@ def materialize_provider_config(
     install modules directly.
     """
     from audiagentic.components.providers import providers_api
-    from audiagentic.foundation.cli_io import print_message
-
     from audiagentic.components.providers.services.execution.execution import (
         load_materialize_builder,
         load_materialize_model_config_path_resolver,
     )
+    from audiagentic.foundation.cli_io import print_message
     builder = load_materialize_builder(provider_id)
     if builder is None:
         from audiagentic.foundation.contracts.errors import make_error

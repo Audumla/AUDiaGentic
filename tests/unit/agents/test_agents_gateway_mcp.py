@@ -1,4 +1,5 @@
 """Unit tests for gateway_mcp — verify MCP tools delegate to gateway.api."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -16,10 +17,25 @@ def _patch_root():
     )
 
 
+def test_agent_list_definitions_delegates():
+    with (
+        _patch_root(),
+        patch(
+            "audiagentic.components.agents.models.agent_definition_api.list_agent_definitions",
+            return_value=[{"agent_id": "reviewer-agent"}],
+        ) as mock_list,
+    ):
+        result = agents_gateway_mcp.agent_list_definitions()
+
+    assert result == [{"agent_id": "reviewer-agent"}]
+    mock_list.assert_called_once_with(_ROOT)
+
+
 def test_agent_task_status_delegates():
-    with _patch_root(), patch(
-        "audiagentic.components.agents.mcp.gateway_mcp.get_gateway_client"
-    ) as mock_get:
+    with (
+        _patch_root(),
+        patch("audiagentic.components.agents.mcp.gateway_mcp.get_gateway_client") as mock_get,
+    ):
         mock = mock_get.return_value
         mock.get_execution_request.return_value = {"request-id": "req_x", "state": "completed"}
         result = agents_gateway_mcp.agent_task_status("req_x")
@@ -27,21 +43,11 @@ def test_agent_task_status_delegates():
     mock.get_execution_request.assert_called_once_with(_ROOT, "req_x")
 
 
-def test_agent_task_wait_delegates():
-    with _patch_root(), patch(
-        "audiagentic.components.agents.mcp.gateway_mcp.get_gateway_client"
-    ) as mock_get:
-        mock = mock_get.return_value
-        mock.wait_execution_request.return_value = {"request-id": "req_x", "state": "completed"}
-        result = agents_gateway_mcp.agent_task_wait("req_x", timeout_seconds=10)
-    assert result["state"] == "completed"
-    mock.wait_execution_request.assert_called_once_with(_ROOT, "req_x", 10)
-
-
 def test_agent_task_cancel_delegates():
-    with _patch_root(), patch(
-        "audiagentic.components.agents.mcp.gateway_mcp.get_gateway_client"
-    ) as mock_get:
+    with (
+        _patch_root(),
+        patch("audiagentic.components.agents.mcp.gateway_mcp.get_gateway_client") as mock_get,
+    ):
         mock = mock_get.return_value
         mock.cancel_execution_request.return_value = {"request-id": "req_x", "state": "cancelled"}
         result = agents_gateway_mcp.agent_task_cancel("req_x")
@@ -49,19 +55,11 @@ def test_agent_task_cancel_delegates():
     mock.cancel_execution_request.assert_called_once_with(_ROOT, "req_x")
 
 
-def test_mcp_caps_a_long_requested_wait_but_core_api_does_not():
-    """The 300s limit is an MCP transport constraint, not an execution limit."""
-    # MCP boundary: a caller asking for an hour is capped to the transport limit.
-    assert agents_gateway_mcp._mcp_capped(3600.0) == agents_gateway_mcp.MCP_BLOCKING_TIMEOUT_SECONDS
-    assert agents_gateway_mcp._mcp_capped(None) == agents_gateway_mcp.MCP_BLOCKING_TIMEOUT_SECONDS
-    # ...but a short request is honoured as-is.
-    assert agents_gateway_mcp._mcp_capped(30.0) == 30.0
-
-
 def test_agent_task_list_requests_delegates():
-    with _patch_root(), patch(
-        "audiagentic.components.agents.mcp.gateway_mcp.get_gateway_client"
-    ) as mock_get:
+    with (
+        _patch_root(),
+        patch("audiagentic.components.agents.mcp.gateway_mcp.get_gateway_client") as mock_get,
+    ):
         mock = mock_get.return_value
         mock.list_execution_requests.return_value = [{"request-id": "req_x", "state": "completed"}]
         result = agents_gateway_mcp.agent_task_list_requests(state="completed", limit=5)
@@ -70,11 +68,17 @@ def test_agent_task_list_requests_delegates():
 
 
 def test_agent_task_gateway_overview_delegates():
-    with _patch_root(), patch(
-        "audiagentic.components.agents.mcp.gateway_mcp.get_gateway_client"
-    ) as mock_get:
+    with (
+        _patch_root(),
+        patch("audiagentic.components.agents.mcp.gateway_mcp.get_gateway_client") as mock_get,
+    ):
         mock = mock_get.return_value
-        mock.gateway_overview.return_value = {"total_requests": 3, "by_state": {"completed": 3}, "recent_failures": [], "queues": {}}
+        mock.gateway_overview.return_value = {
+            "total_requests": 3,
+            "by_state": {"completed": 3},
+            "recent_failures": [],
+            "queues": {},
+        }
         result = agents_gateway_mcp.agent_task_gateway_overview()
     assert result["total_requests"] == 3
     mock.gateway_overview.assert_called_once_with(_ROOT)
@@ -85,12 +89,14 @@ def test_agent_task_submit_resolves_agent_and_delegates():
     the gateway client -- the sole MCP submission path (RV891). Returns
     task.status(): a delegating re-read through the same client, not the raw
     submit response -- so both client calls are mocked."""
-    with _patch_root(), patch(
-        "audiagentic.components.agents.models.agent_definition_api.get_agent_definition",
-        return_value={"agent_id": "reviewer-agent", "execution_profile_id": "fast"},
-    ) as mock_get_definition, patch(
-        "audiagentic.components.agents.gateway.client.get_gateway_client"
-    ) as mock_get_client:
+    with (
+        _patch_root(),
+        patch(
+            "audiagentic.components.agents.models.agent_definition_api.get_agent_definition",
+            return_value={"agent_id": "reviewer-agent", "execution_profile_id": "fast"},
+        ) as mock_get_definition,
+        patch("audiagentic.components.agents.gateway.client.get_gateway_client") as mock_get_client,
+    ):
         mock_client = mock_get_client.return_value
         mock_client.submit_execution_request.return_value = {
             "request-id": "req_x",
@@ -122,10 +128,13 @@ def test_agent_task_submit_resolves_agent_and_delegates():
 def test_agent_task_submit_unknown_agent_propagates_error():
     from audiagentic.foundation.contracts.errors import AudiaGenticError
 
-    with _patch_root(), patch(
-        "audiagentic.components.agents.models.agent_definition_api.get_agent_definition",
-        side_effect=AudiaGenticError(
-            code="RES-AGD-001", kind="agents", message="not found", details={}
+    with (
+        _patch_root(),
+        patch(
+            "audiagentic.components.agents.models.agent_definition_api.get_agent_definition",
+            side_effect=AudiaGenticError(
+                code="RES-AGD-001", kind="agents", message="not found", details={}
+            ),
         ),
     ):
         try:

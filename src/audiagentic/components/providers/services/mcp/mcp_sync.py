@@ -12,7 +12,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
-def sync_all_provider_mcp_servers(project_root: Path) -> None:
+def sync_all_provider_mcp_servers(project_root: Path) -> list[dict[str, str]]:
     """Reconcile provider MCP config for all installed components.
 
     Installed+enabled components project their MCP entries; installed-but-disabled
@@ -28,6 +28,7 @@ def sync_all_provider_mcp_servers(project_root: Path) -> None:
 
     from .mcp_projection import sync_component_mcp_to_providers
 
+    errors: list[dict[str, str]] = []
     for component_id, descriptor in all_descriptors().items():
         if not descriptor.mcp_servers and not descriptor.external_mcp_servers:
             continue
@@ -36,10 +37,12 @@ def sync_all_provider_mcp_servers(project_root: Path) -> None:
         active = descriptor.core or is_enabled(component_id, project_root)
         try:
             sync_component_mcp_to_providers(component_id, project_root, enabled=active)
-        except Exception:
+        except Exception as exc:
             logger.warning(
                 "Failed to sync MCP servers for %s",
                 component_id,
                 exc_info=True,
                 extra={"component": component_id},
             )
+            errors.append({"component": component_id, "error": str(exc)})
+    return errors

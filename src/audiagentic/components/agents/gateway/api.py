@@ -50,7 +50,9 @@ def set_queue_manager(manager: queue_mod.GatewayQueueManager) -> None:
     _QUEUE_MANAGER = manager
 
 
-def _resolve_profile_for_submit(project_root: Path, execution_profile_id: str | None) -> dict[str, Any]:
+def _resolve_profile_for_submit(
+    project_root: Path, execution_profile_id: str | None
+) -> dict[str, Any]:
     from audiagentic.components.agents.models.execution_profile_api import (
         resolve_default_execution_profile,
         resolve_execution_profile,
@@ -211,20 +213,39 @@ def _runtime_fingerprint() -> dict[str, str]:
     return result
 
 
+def _attach_agent_status(result: dict[str, Any], project_root: Path) -> dict[str, Any]:
+    """Attach the versioned canonical status snapshot to a public result."""
+    from audiagentic.components.agents.status.status_projection import (
+        snapshot_for_request,
+        snapshot_to_mapping,
+    )
+
+    decision = None
+    session_id = result.get("session-id")
+    if session_id:
+        from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
+
+        runtime = peek_session_runtime()
+        if runtime is not None:
+            decision = runtime.latest_lifecycle_decision(session_id, result["request-id"])
+
+    enriched = dict(result)
+    enriched["response-version"] = _PUBLIC_RESPONSE_VERSION
+    enriched["agent-status"] = snapshot_to_mapping(snapshot_for_request(result, decision=decision))
+    return enriched
+
+
 def _enrich_terminal_result(
     result: dict[str, Any],
     project_root: Path,
 ) -> dict[str, Any]:
-    """Add terminal-quality to a copy of *result* when the state is terminal.
-
-    Returns the original *result* unchanged when non-terminal (no copy made).
-    """
+    """Add terminal quality and canonical status to terminal results."""
     if result["state"] in store.TERMINAL_STATES:
         enriched = dict(result)
         tq = _classify_terminal_quality(project_root, enriched)
         if tq is not None:
             enriched["terminal-quality"] = tq
-        return enriched
+        return _attach_agent_status(enriched, project_root)
     return result
 
 
@@ -303,6 +324,17 @@ def submit_execution_request(
     }
     envelope = SubmissionEnvelope.from_mapping(envelope_mapping)
     canonical_root = envelope.validate()
+
+    # --- 1b. Pre-generate session ID if keep-alive without continuation ---
+    # The runtime owns session ID generation; the caller never invents one.
+    # We pre-generate here so the submit response includes it immediately —
+    # dispatch will use this same ID instead of generating a new one.
+    if session_keep_alive and not session_id:
+        from audiagentic.components.agents.gateway.session import (
+            sessions_store as _session_store,
+        )
+
+        session_id = _session_store.generate_session_id()
 
     # --- 2. Resolve profile ------------------------------------------------
     # `profile` keeps project-resolved fields (model_alias has no shared-gateway
@@ -447,6 +479,9 @@ def submit_execution_request(
         runner = functools.partial(
             dispatch.dispatch_request,
             dispatch_prompt=prompt_body,  # type: ignore[arg-type]
+            preallocated_session_id=(
+                session_id if session_keep_alive and not envelope.session.session_id else None
+            ),
             manifest_id=manifest.manifest_id,
             context_fingerprint=manifest.context_fingerprint,
             component_profile=manifest.identity.component_profile,
@@ -471,9 +506,31 @@ def submit_execution_request(
     return record
 
 
+# AS56 — public response schema version.
+_PUBLIC_RESPONSE_VERSION: int = 2
+
+
 def get_execution_request(project_root: Path, request_id: str) -> dict[str, Any]:
-    """Return the current persisted state of a gateway request."""
-    return store.read_public_status(project_root, request_id)
+    """Return the public durable status plus the canonical agent-status snapshot."""
+    record = store.read_public_status(project_root, request_id)
+    decision = None
+    session_id = record.get("session-id")
+    if session_id:
+        from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
+
+        runtime = peek_session_runtime()
+        if runtime is not None:
+            decision = runtime.latest_lifecycle_decision(session_id, request_id)
+
+    from audiagentic.components.agents.status.status_projection import (
+        snapshot_for_request,
+        snapshot_to_mapping,
+    )
+
+    result = dict(record)
+    result["response-version"] = _PUBLIC_RESPONSE_VERSION
+    result["agent-status"] = snapshot_to_mapping(snapshot_for_request(record, decision=decision))
+    return result
 
 
 def request_runtime_status(project_root: Path, request_id: str) -> dict[str, Any]:
@@ -553,7 +610,7 @@ def wait_execution_request(
     result = dict(raw)
     result["wait-timeout"] = True
     result["progress"] = _request_progress(project_root, raw)
-    return result
+    return _attach_agent_status(result, project_root)
 
 
 def cancel_execution_request(project_root: Path, request_id: str) -> dict[str, Any]:

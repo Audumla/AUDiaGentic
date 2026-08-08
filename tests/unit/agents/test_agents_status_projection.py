@@ -5,16 +5,18 @@ the AS21 decision fallback path, and the conservative UNKNOWN default.
 The critical invariant: interrupted → AgentOutcome.INTERRUPTED +
 AgentLifecycle.TERMINAL (never CANCELLED, never FAILED).
 """
+
 from __future__ import annotations
 
 import pytest
+
 from audiagentic.components.agents.status.session_lifecycle_projection import (
     SessionLifecycleDecision,
 )
 from audiagentic.components.agents.status.status_projection import (
     snapshot_for_request,
+    snapshot_to_mapping,
 )
-
 from audiagentic.foundation.transports.agent_status import (
     AgentLifecycle,
     AgentOutcome,
@@ -24,6 +26,7 @@ from audiagentic.foundation.transports.agent_status import (
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _record(state: str, **kw: object) -> dict:
     """Build a minimal public-status record."""
@@ -36,6 +39,7 @@ def _record(state: str, **kw: object) -> dict:
     }
     base.update(kw)
     return base
+
 
 # ---------------------------------------------------------------------------
 # Durable terminal state — always wins over any decision
@@ -73,7 +77,17 @@ class TestCompletedRecord:
         assert snap.attempt == 3
         assert snap.observed_at == "2025-06-01T12:00:00+00:00"
 
+
 # ---------------------------------------------------------------------------
+
+
+class TestSnapshotSerialization:
+    def test_serializes_enums_and_optional_fields(self) -> None:
+        mapping = snapshot_to_mapping(snapshot_for_request(_record("completed")))
+        assert mapping["scope"] == "execution-request"
+        assert mapping["lifecycle"] == "terminal"
+        assert mapping["outcome"] == "success"
+        assert mapping["decisions"] is None
 
 
 class TestFailedRecord:
@@ -122,6 +136,7 @@ class TestInterruptedRecord:
         snap = snapshot_for_request(_record("interrupted"), decision=decision)
         assert snap.outcome == AgentOutcome.INTERRUPTED
         assert snap.decisions is None
+
 
 # ---------------------------------------------------------------------------
 # No durable terminal state — AS21 decision fallback
@@ -175,6 +190,7 @@ class TestRunningWithDecision:
         snap = snapshot_for_request(_record("running"), decision=decision)
         assert snap.lifecycle == AgentLifecycle.UNKNOWN
 
+
 # ---------------------------------------------------------------------------
 # No durable terminal state, no decision — conservative default
 # ---------------------------------------------------------------------------
@@ -191,6 +207,7 @@ class TestRunningNoDecision:
         snap = snapshot_for_request(_record("dispatching"))
         assert snap.lifecycle == AgentLifecycle.UNKNOWN
         assert snap.outcome is None
+
 
 # ---------------------------------------------------------------------------
 # Queued state — PENDING lifecycle
@@ -209,6 +226,7 @@ class TestQueuedRecord:
         rec["session-id"] = "ses-42"
         snap = snapshot_for_request(rec)
         assert snap.session_id == "ses-42"
+
 
 # ---------------------------------------------------------------------------
 # Observed-at fallback logic
@@ -229,16 +247,20 @@ class TestObservedAtFallback:
         snap = snapshot_for_request(rec)
         assert snap.observed_at == "2025-06-01T11:59:00+00:00"
 
+
 # ---------------------------------------------------------------------------
 # Scope is always EXECUTION_REQUEST
 # ---------------------------------------------------------------------------
 
 
 class TestScopeInvariant:
-    @pytest.mark.parametrize("state", ["completed", "failed", "cancelled", "interrupted", "running", "queued"])
+    @pytest.mark.parametrize(
+        "state", ["completed", "failed", "cancelled", "interrupted", "running", "queued"]
+    )
     def test_scope_always_execution_request(self, state: str) -> None:
         snap = snapshot_for_request(_record(state))
         assert snap.scope == AgentStatusScope.EXECUTION_REQUEST
+
 
 # ---------------------------------------------------------------------------
 # projected_at is always set

@@ -724,7 +724,8 @@ def test_public_status_projection_excludes_submission_secrets() -> None:
     assert "prompt-digest" not in status
     assert "context-fingerprint" not in status
     assert "idempotency-key" not in status
-    assert "metadata" not in status
+    # metadata is sanitized and returned to the caller — it is not a secret
+    assert "metadata" in status
 
 
 # ── SH21 RV769: private worker diagnostic evidence ───────────────────────

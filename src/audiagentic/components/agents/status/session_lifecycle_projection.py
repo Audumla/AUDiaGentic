@@ -8,6 +8,7 @@ MCP, or event bus dependency -- importable in isolation.
 SH07 gateway request records and agent-jobs workflow job records remain distinct
 authorities that consume the projection exactly once under their own authority.
 """
+
 from __future__ import annotations
 
 import datetime
@@ -15,7 +16,10 @@ import logging
 from collections.abc import Iterable, MutableMapping
 from dataclasses import dataclass
 from threading import Lock
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from audiagentic.foundation.transports.agent_status import AgentStatusSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -59,29 +63,37 @@ _EvidenceState = Literal[
     "rejected",
 ]
 
-_ACTIVE_KINDS: frozenset[EvidenceKind] = frozenset({
-    "turn-started",
-    "activity",
-    "tool-active",
-})
+_ACTIVE_KINDS: frozenset[EvidenceKind] = frozenset(
+    {
+        "turn-started",
+        "activity",
+        "tool-active",
+    }
+)
 
-_WAITING_KINDS: frozenset[EvidenceKind] = frozenset({
-    "waiting",
-    "permission-wait",
-})
+_WAITING_KINDS: frozenset[EvidenceKind] = frozenset(
+    {
+        "waiting",
+        "permission-wait",
+    }
+)
 
-_TERMINAL_KINDS: frozenset[EvidenceKind] = frozenset({
-    "terminal-success",
-    "terminal-cancelled",
-    "terminal-failed",
-})
+_TERMINAL_KINDS: frozenset[EvidenceKind] = frozenset(
+    {
+        "terminal-success",
+        "terminal-cancelled",
+        "terminal-failed",
+    }
+)
 
-_FAILURE_KINDS: frozenset[EvidenceKind] = frozenset({
-    "terminal-failed",
-    "transport-closed",
-    "transport-error",
-    "finalization-failed",
-})
+_FAILURE_KINDS: frozenset[EvidenceKind] = frozenset(
+    {
+        "terminal-failed",
+        "transport-closed",
+        "transport-error",
+        "finalization-failed",
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Types
@@ -95,6 +107,7 @@ class SessionLifecycleEvidence:
     No raw prompts, output text, tool arguments, protocol payloads, provider
     binding internals, or secrets.  Only bounded safe scalar values survive.
     """
+
     session_id: str
     turn_id: str
     sequence: int
@@ -112,6 +125,7 @@ class SessionLifecycleDecision:
     Scheduler code consumes these explicit flags; it does not infer policy
     from state labels alone.  ``unknown`` is always conservative.
     """
+
     coarse_state: CoarseSessionState
     accepts_new_turn: bool
     session_reusable: bool
@@ -119,6 +133,7 @@ class SessionLifecycleDecision:
     dependent_work_releasable: bool
     evidence_state: _EvidenceState
     reason: str
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -135,6 +150,7 @@ def _conservative_unknown(reason: str) -> SessionLifecycleDecision:
         evidence_state="insufficient",
         reason=reason,
     )
+
 
 # ---------------------------------------------------------------------------
 # Main projector
@@ -273,10 +289,7 @@ def project_session_lifecycle(
     # -- Rule: terminal-cancelled + finalization-committed -------------------
     if has_terminal_cancelled and has_finalization_committed:
         session_reusable = (
-            not has_any_failure
-            and has_blocking_work_cleared
-            and not has_active
-            and not has_waiting
+            not has_any_failure and has_blocking_work_cleared and not has_active and not has_waiting
         )
         return SessionLifecycleDecision(
             coarse_state="available" if session_reusable else "completing",
@@ -287,11 +300,7 @@ def project_session_lifecycle(
             evidence_state="accepted",
             reason=(
                 "terminal-cancelled + finalization-committed"
-                + (
-                    "; reusable"
-                    if session_reusable
-                    else "; not reusable: failure or blocking work"
-                )
+                + ("; reusable" if session_reusable else "; not reusable: failure or blocking work")
             ),
         )
 
@@ -361,19 +370,22 @@ def project_session_lifecycle(
     # -- Default: insufficient / unknown -------------------------------------
     return _conservative_unknown("insufficient validated evidence for a decision")
 
+
 # ---------------------------------------------------------------------------
 # Adapter from existing redacted session-turn projection
 # ---------------------------------------------------------------------------
 
-_REDACTED_KEYS = frozenset({
-    "native-topic",
-    "prompt-body",
-    "output",
-    "tool-args",
-    "provider-session-ref",
-    "provider-ref-key",
-    "binding",
-})
+_REDACTED_KEYS = frozenset(
+    {
+        "native-topic",
+        "prompt-body",
+        "output",
+        "tool-args",
+        "provider-session-ref",
+        "provider-ref-key",
+        "binding",
+    }
+)
 
 # Mapping from timeline event names to EvidenceKind.
 _EVENT_KIND_MAP: dict[str, EvidenceKind] = {
@@ -414,12 +426,14 @@ def evidence_from_latest_turn_projection(
         return None
 
     kind = _EVENT_KIND_MAP.get(event)
+    raw_sequence = projection.get("sequence")
+    sequence = raw_sequence if isinstance(raw_sequence, int) and raw_sequence >= 0 else 0
     if kind is None:
         if event.startswith("session.turn."):
             return SessionLifecycleEvidence(
                 session_id=session_id,
                 turn_id=request_id,
-                sequence=int(projection.get("sequence") or 0),
+                sequence=sequence,
                 kind="activity",
                 correlation_id=projection.get("correlation-id"),
                 timestamp=projection.get("timestamp"),
@@ -431,13 +445,14 @@ def evidence_from_latest_turn_projection(
     return SessionLifecycleEvidence(
         session_id=session_id,
         turn_id=request_id,
-        sequence=int(projection.get("sequence") or 0),
+        sequence=sequence,
         kind=kind,
         correlation_id=projection.get("correlation-id"),
         timestamp=projection.get("timestamp"),
         validation_state=default_validation_state,
         source="timeline",
     )
+
 
 # ---------------------------------------------------------------------------
 # Ephemeral keyed projection registry (AS21 consumer slice)
@@ -473,6 +488,7 @@ def _map_status_to_evidence_kind(status: str) -> EvidenceKind | None:
 @dataclass(frozen=True)
 class _EvidenceEntry:
     """Internal: one accepted evidence item with allocated sequence."""
+
     kind: EvidenceKind
     sequence: int
     source: str
@@ -498,17 +514,11 @@ class SessionEvidenceProjection:
 
     def __init__(self) -> None:
         # (session_id, request_id) → list of SessionLifecycleEvidence
-        self._registry: MutableMapping[
-            tuple[str, str], list[SessionLifecycleEvidence]
-        ] = {}
+        self._registry: MutableMapping[tuple[str, str], list[SessionLifecycleEvidence]] = {}
         # (session_id, request_id) → latest projected decision
-        self._decisions: MutableMapping[
-            tuple[str, str], SessionLifecycleDecision
-        ] = {}
+        self._decisions: MutableMapping[tuple[str, str], SessionLifecycleDecision] = {}
         # (session_id, request_id) → next sequence counter
-        self._sequence_counters: MutableMapping[
-            tuple[str, str], int
-        ] = {}
+        self._sequence_counters: MutableMapping[tuple[str, str], int] = {}
         self._lock = Lock()
 
     def accept(self, evidence: object) -> bool:
@@ -655,9 +665,7 @@ class SessionEvidenceProjection:
     def clear_for_session(self, session_id: str) -> None:
         """Clear all entries for a specific session (e.g. on session close)."""
         with self._lock:
-            keys_to_remove = [
-                k for k in self._registry if k[0] == session_id
-            ]
+            keys_to_remove = [k for k in self._registry if k[0] == session_id]
             for key in keys_to_remove:
                 self._registry.pop(key, None)
                 self._decisions.pop(key, None)
@@ -703,7 +711,7 @@ def snapshot_from_decision(
     generation: int | None = None,
     attempt: int | None = None,
     observed_at: str | None = None,
-) -> object:
+) -> AgentStatusSnapshot:
     """Map an AS21 SessionLifecycleDecision to an AS37 AgentStatusSnapshot.
 
     ``scope`` accepts an ``AgentStatusScope`` member or its string value
@@ -730,14 +738,10 @@ def snapshot_from_decision(
     if decision.coarse_state == "failed":
         outcome = AgentOutcome.FAILED
 
-    confidence_key = _EVIDENCE_STATE_TO_CONFIDENCE.get(
-        decision.evidence_state, "insufficient"
-    )
+    confidence_key = _EVIDENCE_STATE_TO_CONFIDENCE.get(decision.evidence_state, "insufficient")
     evidence_confidence = StatusEvidenceConfidence(confidence_key)
 
-    projected_at = observed_at or datetime.datetime.now(
-        tz=datetime.timezone.utc
-    ).isoformat()
+    projected_at = observed_at or datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
 
     lifecycle = AgentLifecycle(lifecycle_value)
 
