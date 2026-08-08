@@ -42,6 +42,23 @@ def load_project_config(project_root: Path) -> dict[str, Any]:
     return load_yaml_file(path)
 
 
+def _first_instance_model_id(project_root: Path, resolved: dict[str, Any]) -> str | None:
+    """AS105/AS101: resolve a profile's first instance to a concrete model-id.
+
+    This function's contract returns a single model_id; a genuinely
+    multi-instance profile only has its first instance represented here.
+    Acceptable for this legacy launch path, pending its rework (superseded
+    by the harness-native Skill launch path).
+    """
+    instances = resolved.get("instances") or []
+    if not instances:
+        return None
+    from audiagentic.components.agents.gateway.instances import resolve_instance_facts
+
+    facts = resolve_instance_facts(project_root, (instances[0],))
+    return facts[0].model_id
+
+
 def _resolve_agent_provider_model(
     project_root: Path,
     request: dict[str, Any],
@@ -78,7 +95,7 @@ def _resolve_agent_provider_model(
                     "provider_id": provider_id,
                 },
             )
-        return provider_id, resolved.get("model_id"), resolved.get("model_alias")
+        return provider_id, _first_instance_model_id(project_root, resolved), resolved.get("model_alias")
 
     if explicit_provider or explicit_model:
         return explicit_provider or "local-openai", explicit_model, explicit_alias
@@ -99,7 +116,7 @@ def _resolve_agent_provider_model(
                     "provider_id": provider_id,
                 },
             )
-        return provider_id, resolved.get("model_id"), resolved.get("model_alias")
+        return provider_id, _first_instance_model_id(project_root, resolved), resolved.get("model_alias")
     except AudiaGenticError as exc:
         if exc.code == "RES-EXP-003":
             raise AudiaGenticError(

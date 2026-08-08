@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.foundation.paths.home import audiagentic_home
 from audiagentic.foundation.paths.names import project_marker_path
 
 
@@ -29,23 +28,6 @@ _GATEWAY_ROOT = Path("runtime") / "agent-execution-gateway"
 def gateway_root(project_root: Path) -> Path:
     """Return the .audiagentic/runtime/agent-execution-gateway root for a project."""
     return project_marker_path(project_root) / _GATEWAY_ROOT
-
-
-# AS105/AS101: Compute Resource and Model Instance declarations describe
-# shared infrastructure, not one project's intent -- they live at the
-# user-global config tier (audiagentic_home()), never project-local. No
-# project_root parameter, deliberately: a project must not be able to
-# redefine the capacity of hardware it does not own (AS105's closed hazard).
-
-
-def compute_resources_path() -> Path:
-    """Return the path to the user-global compute resources YAML config file."""
-    return audiagentic_home() / "config" / "compute-resources.yaml"
-
-
-def model_instances_path() -> Path:
-    """Return the path to the user-global model instances YAML config file."""
-    return audiagentic_home() / "config" / "model-instances.yaml"
 
 
 def gateway_request_dir(project_root: Path, request_id: str) -> Path:
