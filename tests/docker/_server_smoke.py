@@ -50,9 +50,6 @@ SMOKE_CALLS: dict[str, dict[str, dict[str, object]]] = {
     "audiagentic.components.release.release_mcp": {
         "get_release_status": {},
     },
-    "audiagentic.components.agents.mcp.resolve_mcp": {
-        "agent_list_profiles": {},
-    },
 }
 
 

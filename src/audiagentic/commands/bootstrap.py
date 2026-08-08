@@ -71,23 +71,76 @@ def cmd_cleanup(args: argparse.Namespace, project_root: Path) -> int:
     return cleanup_runtime(target)
 
 
-def cmd_config_sync(args: argparse.Namespace, project_root: Path) -> int:
-    """Explicitly rebuild generated config; component lifecycle does this normally."""
-    del args
-    target = global_harness_runtime()
-    try:
-        # Provider-native MCP files are generated independently of the active
-        # harness.  Refresh them first so renamed/removed server modules are
-        # repaired everywhere, not only in the harness selected below.
-        from audiagentic.components.providers.services.mcp.mcp_sync import (
-            sync_all_provider_mcp_servers,
-        )
+def _surface_results_to_json(results: object) -> list[dict[str, object]]:
+    """Serialize generated-surface API results for CLI output."""
+    values = results if isinstance(results, list) else [results]
+    serialized: list[dict[str, object]] = []
+    for value in values:
+        converter = getattr(value, "to_mapping", None)
+        if callable(converter):
+            value = converter()
+        serialized.append(dict(value) if isinstance(value, dict) else {"result": str(value)})
+    return serialized
 
-        sync_all_provider_mcp_servers(project_root)
-        refresh_materialized_agent_config(target, project_root=project_root)
-        request_runtime_reload(project_root, reason="manual-refresh")
+
+def _config_operation(project_root: Path, *, mode: str, clean_runtime: bool) -> int:
+    """Run an ownership-aware config operation and report partial failures."""
+    target = global_harness_runtime()
+    from audiagentic.components.providers import providers_api
+    from audiagentic.components.providers.services.mcp.mcp_sync import (
+        sync_all_provider_mcp_servers,
+    )
+
+    output: dict[str, object] = {
+        "ok": True,
+        "mode": mode,
+        "project_root": str(project_root),
+        "runtime": str(target),
+        "surfaces": [],
+        "provider_configs": [],
+        "errors": [],
+    }
+    try:
+        surface_results = _surface_results_to_json(
+            providers_api.operate_provider_surfaces(project_root, mode=mode)
+        )
+        provider_errors = sync_all_provider_mcp_servers(project_root)
+        output["surfaces"] = surface_results
+        output["provider_configs"] = provider_errors
+        if clean_runtime:
+            cleanup_runtime(target)
+        else:
+            refresh_materialized_agent_config(target, project_root=project_root)
+        request_runtime_reload(project_root, reason=f"config-{mode}")
     except Exception as exc:  # noqa: BLE001
-        print_json({"ok": False, "error": str(exc)})
+        output["ok"] = False
+        output["errors"] = [str(exc)]
+        print_json(output)
         return 1
-    print_json({"ok": True, "runtime": str(target), "project_root": str(project_root)})
+
+    surface_errors = [
+        result
+        for result in surface_results
+        if not result.get("ok", False) and result.get("supported", True)
+    ]
+    if surface_errors or provider_errors:
+        output["ok"] = False
+        output["errors"] = surface_errors + provider_errors
+        print_json(output)
+        return 1
+
+    print_json(output)
     return 0
+
+
+def cmd_config_sync(args: argparse.Namespace, project_root: Path) -> int:
+    """Refresh all generated surfaces and configured provider configs."""
+    if args.config_cmd == "clean":
+        return cmd_config_clean(args, project_root)
+    return _config_operation(project_root, mode="apply", clean_runtime=False)
+
+
+def cmd_config_clean(args: argparse.Namespace, project_root: Path) -> int:
+    """Prune owned surfaces, synchronize stale provider entries, and clean runtime."""
+    del args
+    return _config_operation(project_root, mode="prune", clean_runtime=True)

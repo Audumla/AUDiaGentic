@@ -1,6 +1,7 @@
 """Unit tests for agents_gateway_api — the full submit/status/wait/cancel/run
 stack wired together (store + queue + dispatch), against a fake execute_provider
 (AG11's own validation criteria)."""
+
 from __future__ import annotations
 
 import threading
@@ -23,14 +24,19 @@ from audiagentic.foundation.io import atomic_write_json
 
 
 def _make_profile(project_root: Path, profile_id: str, provider_id: str, **params) -> None:
-    create_execution_profile(project_root, {
-        "profile_id": profile_id,
-        "provider_id": provider_id,
-        "model_id": "gpt-4o",
-        "is_default": True,
-        "params": params,
-    })
-    set_implementation_state(project_root, "providers", provider_id, ImplementationState(enabled=True))
+    create_execution_profile(
+        project_root,
+        {
+            "profile_id": profile_id,
+            "provider_id": provider_id,
+            "model_id": "gpt-4o",
+            "is_default": True,
+            "params": params,
+        },
+    )
+    set_implementation_state(
+        project_root, "providers", provider_id, ImplementationState(enabled=True)
+    )
 
 
 def _result(data: dict) -> SimpleNamespace:
@@ -43,9 +49,19 @@ def test_submit_returns_immediately_for_long_running_request(tmp_path: Path, mon
 
     def slow_execute_provider(*, identity, execution_request, timeout_seconds):
         hold.wait(timeout=5)
-        return _result({"provider-id": execution_request["provider-id"], "status": "ok", "model": "gpt-4o", "output": "done"})
+        return _result(
+            {
+                "provider-id": execution_request["provider-id"],
+                "status": "ok",
+                "model": "gpt-4o",
+                "output": "done",
+            }
+        )
 
-    monkeypatch.setattr("audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn", slow_execute_provider)
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
+        slow_execute_provider,
+    )
 
     result = gateway.submit_execution_request(tmp_path, prompt_body="hi")
     assert result["request-id"].startswith("req_")
@@ -59,22 +75,69 @@ def test_run_blocks_until_completion_and_returns_output(tmp_path: Path, monkeypa
     _make_profile(tmp_path, "default", "local-openai")
 
     def fake_execute_provider(*, identity, execution_request, timeout_seconds):
-        return _result({"provider-id": execution_request["provider-id"], "status": "ok", "model": "gpt-4o", "output": "the answer"})
+        return _result(
+            {
+                "provider-id": execution_request["provider-id"],
+                "status": "ok",
+                "model": "gpt-4o",
+                "output": "the answer",
+            }
+        )
 
-    monkeypatch.setattr("audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn", fake_execute_provider)
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
+        fake_execute_provider,
+    )
 
     result = gateway.run_execution_request(tmp_path, prompt_body="hi")
     assert result["state"] == "completed"
     assert result["output"] == "the answer"
 
 
+def test_public_status_contains_canonical_agent_status(tmp_path: Path, monkeypatch):
+    _make_profile(tmp_path, "default", "local-openai")
+
+    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+        return _result(
+            {
+                "provider-id": execution_request["provider-id"],
+                "status": "ok",
+                "model": "gpt-4o",
+                "output": "done",
+            }
+        )
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
+        fake_execute_provider,
+    )
+
+    result = gateway.run_execution_request(tmp_path, prompt_body="hi")
+    status = gateway.get_execution_request(tmp_path, result["request-id"])
+
+    assert status["response-version"] == 2
+    assert status["agent-status"]["scope"] == "execution-request"
+    assert status["agent-status"]["lifecycle"] == "terminal"
+    assert status["agent-status"]["outcome"] == "success"
+
+
 def test_active_component_profile_changes_execution_fingerprint(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
 
     def fake_execute_provider(*, identity, execution_request, timeout_seconds):
-        return _result({"provider-id": execution_request["provider-id"], "status": "ok", "model": "gpt-4o", "output": "done"})
+        return _result(
+            {
+                "provider-id": execution_request["provider-id"],
+                "status": "ok",
+                "model": "gpt-4o",
+                "output": "done",
+            }
+        )
 
-    monkeypatch.setattr("audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn", fake_execute_provider)
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
+        fake_execute_provider,
+    )
 
     monkeypatch.setenv("AUDIAGENTIC_COMPONENT_PROFILE", "benchmark-a")
     first = gateway.run_execution_request(tmp_path, prompt_body="same prompt")
@@ -94,20 +157,28 @@ def test_submit_replays_same_idempotency_key_without_second_enqueue(tmp_path: Pa
         executions.append(execution_request["packet-data"]["request-id"])
         started.set()
         hold.wait(timeout=5)
-        return _result({"provider-id": "local-openai", "status": "ok", "model": "gpt-4o", "output": "done"})
+        return _result(
+            {"provider-id": "local-openai", "status": "ok", "model": "gpt-4o", "output": "done"}
+        )
 
-    monkeypatch.setattr("audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn", slow_execute_provider)
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
+        slow_execute_provider,
+    )
     metadata = {"idempotency_key": "opaque-client-key"}
     first = gateway.submit_execution_request(tmp_path, prompt_body="same", metadata=metadata)
     assert started.wait(timeout=2)
     # The index is advisory. A stale-but-valid intent digest must be repaired
     # from the durable record before this replay is allowed through.
     key_digest = store.hash_idempotency_key("opaque-client-key")
-    atomic_write_json(gateway_idempotency_index_path(tmp_path, key_digest), {
-        "key-digest": key_digest,
-        "intent-digest": "0" * 64,
-        "request-id": first["request-id"],
-    })
+    atomic_write_json(
+        gateway_idempotency_index_path(tmp_path, key_digest),
+        {
+            "key-digest": key_digest,
+            "intent-digest": "0" * 64,
+            "request-id": first["request-id"],
+        },
+    )
     second = gateway.submit_execution_request(tmp_path, prompt_body="same", metadata=metadata)
 
     assert second["request-id"] == first["request-id"]
@@ -135,6 +206,7 @@ def test_direct_submission_rejects_malformed_wire_values_before_resolution(
     with pytest.raises(AudiaGenticError) as exc:
         gateway.submit_execution_request(tmp_path, prompt_body="hello", **kwargs)
     assert exc.value.code == "VAL-AGW-082"
+    assert exc.value.details is not None
     assert exc.value.details["field"] == field
 
 
@@ -144,9 +216,19 @@ def test_wait_returns_timeout_status_for_still_running_request(tmp_path: Path, m
 
     def slow_execute_provider(*, identity, execution_request, timeout_seconds):
         hold.wait(timeout=5)
-        return _result({"provider-id": execution_request["provider-id"], "status": "ok", "model": "gpt-4o", "output": "done"})
+        return _result(
+            {
+                "provider-id": execution_request["provider-id"],
+                "status": "ok",
+                "model": "gpt-4o",
+                "output": "done",
+            }
+        )
 
-    monkeypatch.setattr("audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn", slow_execute_provider)
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
+        slow_execute_provider,
+    )
 
     submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
     result = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=0.2)
@@ -201,7 +283,9 @@ def test_wait_timeout_progress_reflects_live_session_turn_evidence(tmp_path: Pat
     monkeypatch.setattr(
         "audiagentic.components.agents.gateway.session.sessions_store.latest_turn_projection",
         lambda project_root, session_id, request_id=None: {
-            "kind": "tool-call", "session-id": session_id, "request-id": request_id,
+            "kind": "tool-call",
+            "session-id": session_id,
+            "request-id": request_id,
             "timestamp": "2026-07-19T00:00:00+00:00",
         },
     )
@@ -211,7 +295,8 @@ def test_wait_timeout_progress_reflects_live_session_turn_evidence(tmp_path: Pat
     assert result["wait-timeout"] is True
     assert result["progress"]["phase"] == "tool-active"
     assert result["progress"]["latest-session-event"] == {
-        "kind": "tool-call", "timestamp": "2026-07-19T00:00:00+00:00",
+        "kind": "tool-call",
+        "timestamp": "2026-07-19T00:00:00+00:00",
     }
 
 
@@ -223,9 +308,19 @@ def test_cancel_queued_request_reaches_cancelled_state(tmp_path: Path, monkeypat
     def slow_execute_provider(*, identity, execution_request, timeout_seconds):
         started.set()
         hold.wait(timeout=5)
-        return _result({"provider-id": execution_request["provider-id"], "status": "ok", "model": "gpt-4o", "output": "done"})
+        return _result(
+            {
+                "provider-id": execution_request["provider-id"],
+                "status": "ok",
+                "model": "gpt-4o",
+                "output": "done",
+            }
+        )
 
-    monkeypatch.setattr("audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn", slow_execute_provider)
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
+        slow_execute_provider,
+    )
 
     # occupy the only concurrency slot
     first = gateway.submit_execution_request(tmp_path, prompt_body="first")
@@ -245,16 +340,30 @@ def test_list_execution_requests_most_recent_first_and_filterable(tmp_path: Path
     _make_profile(tmp_path, "default", "local-openai")
 
     def fake_execute_provider(*, identity, execution_request, timeout_seconds):
-        return _result({"provider-id": execution_request["provider-id"], "status": "ok", "model": "gpt-4o", "output": "done"})
+        return _result(
+            {
+                "provider-id": execution_request["provider-id"],
+                "status": "ok",
+                "model": "gpt-4o",
+                "output": "done",
+            }
+        )
 
-    monkeypatch.setattr("audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn", fake_execute_provider)
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
+        fake_execute_provider,
+    )
 
     def failing_execute_provider(**_kwargs):
         from audiagentic.foundation.contracts.errors import AudiaGenticError
+
         raise AudiaGenticError(code="VAL-FAKE-002", kind="providers", message="bad")
 
     first = gateway.run_execution_request(tmp_path, prompt_body="first")
-    monkeypatch.setattr("audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn", failing_execute_provider)
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
+        failing_execute_provider,
+    )
     second = gateway.run_execution_request(tmp_path, prompt_body="second")
 
     all_requests = gateway.list_execution_requests(tmp_path)
@@ -276,9 +385,13 @@ def test_gateway_overview_reflects_persisted_state_across_restart(tmp_path: Path
 
     def failing_execute_provider(**_kwargs):
         from audiagentic.foundation.contracts.errors import AudiaGenticError
+
         raise AudiaGenticError(code="VAL-FAKE-003", kind="providers", message="broke")
 
-    monkeypatch.setattr("audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn", failing_execute_provider)
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
+        failing_execute_provider,
+    )
     gateway.run_execution_request(tmp_path, prompt_body="hi")
 
     gateway.set_queue_manager(agents_gateway_queue.GatewayQueueManager())  # simulate restart

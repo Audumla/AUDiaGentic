@@ -6,6 +6,7 @@ terminal state always wins over an ephemeral AS21 decision.
 
 Pure function, no I/O, no gateway/store imports beyond reading a plain dict.
 """
+
 from __future__ import annotations
 
 import datetime
@@ -41,6 +42,37 @@ def _now_iso() -> str:
 # ---------------------------------------------------------------------------
 # Main adapter
 # ---------------------------------------------------------------------------
+
+
+def snapshot_to_mapping(snapshot: AgentStatusSnapshot) -> dict[str, object]:
+    """Serialize an AgentStatusSnapshot for the public gateway response."""
+    decisions = snapshot.decisions
+    return {
+        "scope": snapshot.scope.value,
+        "lifecycle": snapshot.lifecycle.value,
+        "outcome": snapshot.outcome.value if snapshot.outcome is not None else None,
+        "wait-reason": snapshot.wait_reason.value if snapshot.wait_reason is not None else None,
+        "decisions": (
+            {
+                "accepts-new-turn": decisions.accepts_new_turn,
+                "session-reusable": decisions.session_reusable,
+                "turn-terminal": decisions.turn_terminal,
+                "dependent-work-releasable": decisions.dependent_work_releasable,
+                "evidence-confidence": decisions.evidence_confidence.value,
+                "reason": decisions.reason,
+            }
+            if decisions is not None
+            else None
+        ),
+        "request-id": snapshot.request_id,
+        "session-id": snapshot.session_id,
+        "turn-id": snapshot.turn_id,
+        "generation": snapshot.generation,
+        "attempt": snapshot.attempt,
+        "observed-at": snapshot.observed_at,
+        "projected-at": snapshot.projected_at,
+    }
+
 
 def snapshot_for_request(
     record: dict,
@@ -79,7 +111,12 @@ def snapshot_for_request(
             generation=None,
             attempt=record.get("attempt-epoch"),
             observed_at=record.get("finished-at") or record.get("updated-at"),
-            projected_at=_now_iso(),
+            projected_at=(
+                record.get("finished-at")
+                or record.get("updated-at")
+                or record.get("created-at")
+                or _now_iso()
+            ),
         )
 
     # -- Case 2: no durable terminal state but an AS21 decision is available
@@ -89,6 +126,7 @@ def snapshot_for_request(
             scope=AgentStatusScope.EXECUTION_REQUEST,
             request_id=request_id,
             session_id=session_id,
+            observed_at=record.get("updated-at") or record.get("created-at"),
         )
 
     # -- Case 3a: queued state → PENDING -----------------------------------
@@ -105,7 +143,7 @@ def snapshot_for_request(
             generation=None,
             attempt=None,
             observed_at=None,
-            projected_at=_now_iso(),
+            projected_at=record.get("updated-at") or record.get("created-at") or _now_iso(),
         )
 
     # -- Case 3b: no durable terminal state, no decision → UNKNOWN ----------
@@ -121,5 +159,5 @@ def snapshot_for_request(
         generation=None,
         attempt=None,
         observed_at=None,
-        projected_at=_now_iso(),
+        projected_at=record.get("updated-at") or record.get("created-at") or _now_iso(),
     )

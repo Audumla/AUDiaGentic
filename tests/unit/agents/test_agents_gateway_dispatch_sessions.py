@@ -8,6 +8,7 @@ terminal VAL-AGW-060, and the one-shot path is untouched for plain records.
 AS28 slice 4a: injects PreparedSessionTransport via provider_prepare_fn —
 no AcpLaunch/AcpSessionTransport in the open path.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -45,7 +46,9 @@ def rig(tmp_path, monkeypatch):
         return _build_fake_prepared(transport)
 
     runtime = SessionRuntime(
-        clock=clock, reap_interval_seconds=60, provider_prepare_fn=fake_prepare,
+        clock=clock,
+        reap_interval_seconds=60,
+        provider_prepare_fn=fake_prepare,
     )
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
 
@@ -71,16 +74,20 @@ def _running_record(tmp_path, **kwargs):
         tmp_path, record["request-id"], owner_epoch="service-test", expected_revision=0
     )
     return store.start_owned_attempt(
-        tmp_path, record["request-id"], owner_epoch="service-test", worker_id="worker_test",
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-test",
+        worker_id="worker_test",
         expected_revision=claimed["revision"],
     )
 
 
-def _dispatch(tmp_path, record, *, dispatch_prompt):
+def _dispatch(tmp_path, record, *, dispatch_prompt, preallocated_session_id=None):
     return dispatch.dispatch_request(
         tmp_path,
         record,
         dispatch_prompt=dispatch_prompt,
+        preallocated_session_id=preallocated_session_id,
         manifest_id="mf_test",
         context_fingerprint="0" * 64,
         component_profile="",
@@ -103,8 +110,25 @@ def test_keep_alive_opens_session_and_completes(rig):
     # raw prompt through its in-memory argument instead.
     assert transports[0].turns == ["do the thing"]
     assert not transports[0].closed  # keep-alive: session survives the request
-    request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / record["request-id"]
+    request_dir = (
+        tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / record["request-id"]
+    )
     assert (request_dir / "runtime").is_dir()
+
+
+def test_preallocated_session_id_opens_new_session(rig):
+    runtime, transports, tmp_path = rig
+    preallocated = "ses_preallocated"
+    record = _running_record(tmp_path, session_id=preallocated, session_keep_alive=True)
+    result = _dispatch(
+        tmp_path,
+        record,
+        dispatch_prompt="hello",
+        preallocated_session_id=preallocated,
+    )
+    assert result["state"] == "completed"
+    assert result["session-id"] == preallocated
+    assert len(transports) == 1
 
 
 def test_session_id_continues_same_live_transport(rig):
@@ -138,7 +162,9 @@ def test_unsupported_provider_terminal(rig, monkeypatch):
     assert result["state"] == "failed"
     assert result["error"]["code"] == "CON-AGW-095"
     assert transports == []
-    request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / record["request-id"]
+    request_dir = (
+        tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / record["request-id"]
+    )
     assert (request_dir / "quarantine" / record["request-id"]).is_dir()
 
 
@@ -161,7 +187,10 @@ def test_profile_mismatch_terminal(rig, monkeypatch):
         tmp_path, record["request-id"], owner_epoch="service-test", expected_revision=0
     )
     running = store.start_owned_attempt(
-        tmp_path, record["request-id"], owner_epoch="service-test", worker_id="worker_test_mismatch",
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-test",
+        worker_id="worker_test_mismatch",
         expected_revision=claimed["revision"],
     )
     result = _dispatch(tmp_path, running, dispatch_prompt="hi")
@@ -204,8 +233,6 @@ def test_plain_record_does_not_touch_session_path(rig, monkeypatch):
             result_data={"provider-id": "opencode", "model": "m1", "output": "ok"}
         ),
     )
-    result = _dispatch(
-        tmp_path, _running_record(tmp_path), dispatch_prompt="do the thing"
-    )
+    result = _dispatch(tmp_path, _running_record(tmp_path), dispatch_prompt="do the thing")
     assert result["state"] == "completed", result
     assert transports == []

@@ -23,9 +23,9 @@ from audiagentic.components.providers.protocols.streaming.completion import (
     ResultSource,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.transports.agent_session import SessionPrompt
 
 from .provider import GptAutoError
-from audiagentic.foundation.transports.agent_session import SessionPrompt
 
 logger = logging.getLogger(__name__)
 
