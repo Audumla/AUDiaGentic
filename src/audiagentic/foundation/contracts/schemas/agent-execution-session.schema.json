@@ -29,6 +29,10 @@
     "model-id": {
       "type": ["string", "null"]
     },
+    "provider-metadata": {
+      "type": "object",
+      "additionalProperties": true
+    },
     "binding": {
       "type": ["object", "null"],
       "required": [

@@ -40,9 +40,9 @@ CONVERSATION_ID = "conv123"
 CONVERSATION_URL = f"{WORKSPACE_URL}/c/{CONVERSATION_ID}"
 
 FAST_CONFIG = GptAutoConfig(
-    tab_selection_timeout=5.0,
-    login_timeout=5.0,
-    response_wait_timeout=15.0,
+    tab_selection_timeout=5,
+    login_timeout=5,
+    response_wait_timeout=15,
     polling_interval=0.05,
     typing_speed=0.0,
     response_stability_seconds=1.5,
@@ -156,8 +156,8 @@ def _seed_mapping(
 async def _collect_sink(observations):
     collected = []
 
-    async def _sink(obs):
-        collected.append(obs)
+    async def _sink(observation):
+        collected.append(observation)
 
     return _sink, collected
 
@@ -177,6 +177,27 @@ async def test_open_str_is_bare_ref(tmp_path):
     assert str(result) == WORKSPACE_URL
     assert fake.started
     assert transport.is_alive()
+
+
+@pytest.mark.asyncio
+async def test_open_returns_chatgpt_project_and_chat_metadata(tmp_path):
+    _seed_mapping(
+        tmp_path,
+        workspace_url=WORKSPACE_URL,
+        conversation_id=CONVERSATION_ID,
+    )
+    transport, _fake = _make_transport(
+        tmp_path,
+        resume_provider_ref=CONVERSATION_ID,
+    )
+
+    result = await transport.open()
+
+    assert result.metadata["provider"] == "gpt-auto"
+    assert result.metadata["project-id"] == "g-p-abc-def"
+    assert result.metadata["chat-id"] == CONVERSATION_ID
+    assert result.metadata["project-url"] == WORKSPACE_URL
+    assert result.metadata["chat-url"] == CONVERSATION_URL
 
 
 @pytest.mark.asyncio
@@ -246,9 +267,7 @@ async def test_prompt_precancelled_returns_cancelled(tmp_path, monkeypatch):
     transport, fake = _make_transport(tmp_path)
     await transport.open()
 
-    monkeypatch.setattr(
-        session_transport, "inject_prompt", lambda *a, **k: _unreachable()
-    )
+    monkeypatch.setattr(session_transport, "inject_prompt", lambda *a, **k: _unreachable())
     cancel_token = asyncio.Event()
     cancel_token.set()
     sink, _ = await _collect_sink(None)
@@ -335,9 +354,7 @@ async def test_control_unsupported_actions(tmp_path):
     )
     for action, payload in cases:
         result = await transport.control(
-            SessionControlRequest(
-                ag_session_id="sess", turn_id="t", action=action, payload=payload
-            )
+            SessionControlRequest(ag_session_id="sess", turn_id="t", action=action, payload=payload)
         )
         assert result.disposition == ControlDisposition.UNSUPPORTED
 

@@ -37,15 +37,18 @@ _MAX_ID_LENGTH = 256
 _MAX_PROMPT_BODY_BYTES = 1_048_576  # 1 MiB
 _MAX_OBSERVATION_ATTRIBUTE_KEYS = 16
 _MAX_SINGLE_ATTRIBUTE_VALUE_BYTES = 4096  # 4 KiB per attribute value
-_ALLOWED_CONTROL_PAYLOAD_KEYS = frozenset({
-    "permission",        # "allow" | "deny"
-    "steer_text",        # append-only steer text
-})
+_ALLOWED_CONTROL_PAYLOAD_KEYS = frozenset(
+    {
+        "permission",  # "allow" | "deny"
+        "steer_text",  # append-only steer text
+    }
+)
 _PERMISSION_VALUES = frozenset({"allow", "deny"})
 
 # ---------------------------------------------------------------------------
 # Canonical transport observation kinds (closed set)
 # ---------------------------------------------------------------------------
+
 
 class TransportObservationKind(StrEnum):
     """Bounded neutral observation vocabulary.
@@ -76,21 +79,34 @@ class TransportObservationKind(StrEnum):
 
 _ALLOWED_ATTRIBUTE_KEYS: Mapping[TransportObservationKind, frozenset[str]] = {
     TransportObservationKind.TURN_ACCEPTED: frozenset({"reason"}),
-    TransportObservationKind.ACTIVITY: frozenset({
-        "model_activity",  # e.g. "generating", "thinking" — proven only
-    }),
-    TransportObservationKind.TOOL_REQUESTED: frozenset({
-        "tool_call_id", "tool_status",
-    }),
-    TransportObservationKind.TOOL_FINISHED: frozenset({
-        "tool_call_id", "tool_status", "reason",
-    }),
-    TransportObservationKind.PERMISSION_REQUESTED: frozenset({
-        "tool_call_id",
-    }),
-    TransportObservationKind.IN_PROGRESS: frozenset({
-        "model_activity",  # e.g. "generating", "thinking" — proven only
-    }),
+    TransportObservationKind.ACTIVITY: frozenset(
+        {
+            "model_activity",  # e.g. "generating", "thinking" — proven only
+        }
+    ),
+    TransportObservationKind.TOOL_REQUESTED: frozenset(
+        {
+            "tool_call_id",
+            "tool_status",
+        }
+    ),
+    TransportObservationKind.TOOL_FINISHED: frozenset(
+        {
+            "tool_call_id",
+            "tool_status",
+            "reason",
+        }
+    ),
+    TransportObservationKind.PERMISSION_REQUESTED: frozenset(
+        {
+            "tool_call_id",
+        }
+    ),
+    TransportObservationKind.IN_PROGRESS: frozenset(
+        {
+            "model_activity",  # e.g. "generating", "thinking" — proven only
+        }
+    ),
     TransportObservationKind.TERMINAL: frozenset({"stop_reason", "error_code"}),
     TransportObservationKind.TRANSPORT_ERROR: frozenset({"error_code", "reason"}),
     TransportObservationKind.TRANSPORT_CLOSED: frozenset({}),
@@ -104,17 +120,19 @@ _ALLOWED_ATTRIBUTE_KEYS: Mapping[TransportObservationKind, frozenset[str]] = {
 # Correlation quality  (how well does the observation tie back to our turn?)
 # ---------------------------------------------------------------------------
 
+
 class CorrelationQuality(StrEnum):
     """How strongly an observation is correlated to the originating turn."""
 
-    CORRELATED = "correlated"        # Native correlation id matches
+    CORRELATED = "correlated"  # Native correlation id matches
     REQUEST_SCOPED = "request-scoped"  # Scoped to this prompt request, no native ref
-    UNCERTAIN = "uncertain"          # Transport loss or ambiguous source
+    UNCERTAIN = "uncertain"  # Transport loss or ambiguous source
 
 
 # ---------------------------------------------------------------------------
 # Control actions and dispositions (AS28 stage 1)
 # ---------------------------------------------------------------------------
+
 
 class SessionControlAction(StrEnum):
     """Canonical session control actions the gateway may request.
@@ -152,21 +170,27 @@ def _validate_id(value: str, name: str, max_len: int = _MAX_ID_LENGTH) -> None:
     """Validate an ID string is non-empty, bounded, and contains only safe chars."""
     if not isinstance(value, str):
         raise make_error(
-            prefix="VAL", component="TRANSPORT", number=1,
+            prefix="VAL",
+            component="TRANSPORT",
+            number=1,
             kind="transport-contract-validation",
             message=f"{name} must be a string",
             details={"field": name},
         )
     if not value:
         raise make_error(
-            prefix="VAL", component="TRANSPORT", number=1,
+            prefix="VAL",
+            component="TRANSPORT",
+            number=1,
             kind="transport-contract-validation",
             message=f"{name} must not be empty",
             details={"field": name},
         )
     if len(value) > max_len:
         raise make_error(
-            prefix="VAL", component="TRANSPORT", number=5,
+            prefix="VAL",
+            component="TRANSPORT",
+            number=5,
             kind="transport-contract-validation",
             message=f"{name} exceeds maximum length of {max_len}",
             details={"field": name, "length": len(value)},
@@ -177,29 +201,40 @@ def _validate_scalar(value: Any, key: str) -> Scalar:
     """Validate and coerce a value to a scalar. Rejects callables, dicts, lists."""
     if callable(value) and not isinstance(value, (str, bool)):
         raise make_error(
-            prefix="VAL", component="TRANSPORT", number=3,
+            prefix="VAL",
+            component="TRANSPORT",
+            number=3,
             kind="transport-contract-validation",
             message=f"attribute {key!r} carries a callable value",
             details={"key": key},
         )
     if isinstance(value, (dict, list, tuple)):
         raise make_error(
-            prefix="VAL", component="TRANSPORT", number=3,
+            prefix="VAL",
+            component="TRANSPORT",
+            number=3,
             kind="transport-contract-validation",
             message=f"attribute {key!r} carries a composite value; only scalars allowed",
             details={"key": key},
         )
     if isinstance(value, (str, int, float, bool)) or value is None:
-        if isinstance(value, str) and len(value.encode("utf-8")) > _MAX_SINGLE_ATTRIBUTE_VALUE_BYTES:
+        if (
+            isinstance(value, str)
+            and len(value.encode("utf-8")) > _MAX_SINGLE_ATTRIBUTE_VALUE_BYTES
+        ):
             raise make_error(
-                prefix="VAL", component="TRANSPORT", number=5,
+                prefix="VAL",
+                component="TRANSPORT",
+                number=5,
                 kind="transport-contract-validation",
                 message=f"attribute {key!r} value exceeds {_MAX_SINGLE_ATTRIBUTE_VALUE_BYTES} bytes",
                 details={"key": key, "byte-length": len(value.encode("utf-8"))},
             )
         return value
     raise make_error(
-        prefix="VAL", component="TRANSPORT", number=3,
+        prefix="VAL",
+        component="TRANSPORT",
+        number=3,
         kind="transport-contract-validation",
         message=f"attribute {key!r} carries non-scalar type {type(value).__name__}",
         details={"key": key, "type": type(value).__name__},
@@ -207,14 +242,17 @@ def _validate_scalar(value: Any, key: str) -> Scalar:
 
 
 def _validate_allowed_keys(
-    keys: Mapping[str, Any], kind: TransportObservationKind,
+    keys: Mapping[str, Any],
+    kind: TransportObservationKind,
 ) -> None:
     """Reject attribute keys not in the allowed set for this observation kind."""
     allowed = _ALLOWED_ATTRIBUTE_KEYS.get(kind, frozenset())
     for key in keys:
         if key not in allowed:
             raise make_error(
-                prefix="VAL", component="TRANSPORT", number=2,
+                prefix="VAL",
+                component="TRANSPORT",
+                number=2,
                 kind="transport-contract-validation",
                 message=f"attribute {key!r} is not allowed for observation kind {kind.value}",
                 details={"key": key, "kind": kind.value, "allowed": sorted(allowed)},
@@ -224,6 +262,7 @@ def _validate_allowed_keys(
 # ---------------------------------------------------------------------------
 # TransportObservation  (AS28 stage 1 — bounded neutral event)
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class TransportObservation:
@@ -249,21 +288,27 @@ class TransportObservation:
             _validate_id(self.turn_id, "turn_id")
         if self.sequence is not None and (not isinstance(self.sequence, int) or self.sequence < 0):
             raise make_error(
-                prefix="VAL", component="TRANSPORT", number=3,
+                prefix="VAL",
+                component="TRANSPORT",
+                number=3,
                 kind="transport-contract-validation",
                 message="sequence must be a non-negative integer or None",
                 details={"value": self.sequence},
             )
         if not isinstance(self.observed_at, str) or not self.observed_at:
             raise make_error(
-                prefix="VAL", component="TRANSPORT", number=1,
+                prefix="VAL",
+                component="TRANSPORT",
+                number=1,
                 kind="transport-contract-validation",
                 message="observed_at must be a non-empty string (ISO-8601)",
             )
         _validate_allowed_keys(self.attributes, self.kind)
         if len(self.attributes) > _MAX_OBSERVATION_ATTRIBUTE_KEYS:
             raise make_error(
-                prefix="VAL", component="TRANSPORT", number=2,
+                prefix="VAL",
+                component="TRANSPORT",
+                number=2,
                 kind="transport-contract-validation",
                 message=f"too many attributes ({len(self.attributes)}); max {_MAX_OBSERVATION_ATTRIBUTE_KEYS}",
             )
@@ -274,6 +319,7 @@ class TransportObservation:
 # ---------------------------------------------------------------------------
 # SessionPrompt  (AS28 stage 1)
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class SessionPrompt:
@@ -291,13 +337,17 @@ class SessionPrompt:
         _validate_id(self.turn_id, "turn_id")
         if not isinstance(self.body, str):
             raise make_error(
-                prefix="VAL", component="TRANSPORT", number=1,
+                prefix="VAL",
+                component="TRANSPORT",
+                number=1,
                 kind="transport-contract-validation",
                 message="body must be a string",
             )
         if len(self.body.encode("utf-8")) > _MAX_PROMPT_BODY_BYTES:
             raise make_error(
-                prefix="VAL", component="TRANSPORT", number=5,
+                prefix="VAL",
+                component="TRANSPORT",
+                number=5,
                 kind="transport-contract-validation",
                 message=f"prompt body exceeds {_MAX_PROMPT_BODY_BYTES} bytes",
                 details={"byte-length": len(self.body.encode("utf-8"))},
@@ -307,6 +357,7 @@ class SessionPrompt:
 # ---------------------------------------------------------------------------
 # SessionOpenResult  (AS28 stage 1)
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class SessionOpenResult:
@@ -318,6 +369,7 @@ class SessionOpenResult:
     """
 
     ag_session_id: str
+    metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         _validate_id(self.ag_session_id, "ag_session_id")
@@ -326,6 +378,7 @@ class SessionOpenResult:
 # ---------------------------------------------------------------------------
 # SessionTurnResult  (AS28 stage 1)
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class SessionTurnResult:
@@ -343,26 +396,25 @@ class SessionTurnResult:
     correlation_quality: CorrelationQuality = CorrelationQuality.REQUEST_SCOPED
     error_code: str | None = None
     final_summary: str | None = None
+    metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         _validate_id(self.turn_id, "turn_id")
         if self.stop_reason is not None:
             _validate_id(self.stop_reason, "stop_reason", max_len=128)
-        if (
-            not isinstance(self.observations_delivered, int)
-            or self.observations_delivered < 0
-        ):
+        if not isinstance(self.observations_delivered, int) or self.observations_delivered < 0:
             raise make_error(
-                prefix="VAL", component="TRANSPORT", number=3,
+                prefix="VAL",
+                component="TRANSPORT",
+                number=3,
                 kind="transport-contract-validation",
                 message="observations_delivered must be a non-negative integer",
             )
-        if (
-            not isinstance(self.dropped_observations, int)
-            or self.dropped_observations < 0
-        ):
+        if not isinstance(self.dropped_observations, int) or self.dropped_observations < 0:
             raise make_error(
-                prefix="VAL", component="TRANSPORT", number=3,
+                prefix="VAL",
+                component="TRANSPORT",
+                number=3,
                 kind="transport-contract-validation",
                 message="dropped_observations must be a non-negative integer",
             )
@@ -371,6 +423,7 @@ class SessionTurnResult:
 # ---------------------------------------------------------------------------
 # SessionControlRequest  (AS28 stage 1 — canonical constrained payload)
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class SessionControlRequest:
@@ -393,14 +446,18 @@ class SessionControlRequest:
             _validate_id(self.turn_id, "turn_id")
         _validate_id(self.request_id, "request_id")
         # Check no-payload actions first — clearer error than key-not-allowed
-        _NO_PAYLOAD_ACTIONS = frozenset({
-            SessionControlAction.CANCEL_TURN,
-            SessionControlAction.INTERRUPT_TURN,
-            SessionControlAction.CLOSE_SESSION,
-        })
+        _NO_PAYLOAD_ACTIONS = frozenset(
+            {
+                SessionControlAction.CANCEL_TURN,
+                SessionControlAction.INTERRUPT_TURN,
+                SessionControlAction.CLOSE_SESSION,
+            }
+        )
         if self.action in _NO_PAYLOAD_ACTIONS and self.payload:
             raise make_error(
-                prefix="VAL", component="TRANSPORT", number=4,
+                prefix="VAL",
+                component="TRANSPORT",
+                number=4,
                 kind="transport-contract-validation",
                 message=f"{self.action.value} does not accept a payload",
                 details={"action": self.action.value},
@@ -409,10 +466,12 @@ class SessionControlRequest:
         for key in self.payload:
             if key not in _ALLOWED_CONTROL_PAYLOAD_KEYS:
                 raise make_error(
-                    prefix="VAL", component="TRANSPORT", number=4,
+                    prefix="VAL",
+                    component="TRANSPORT",
+                    number=4,
                     kind="transport-contract-validation",
                     message=f"control payload key {key!r} is not allowed; "
-                            f"allowed: {sorted(_ALLOWED_CONTROL_PAYLOAD_KEYS)}",
+                    f"allowed: {sorted(_ALLOWED_CONTROL_PAYLOAD_KEYS)}",
                     details={"key": key, "allowed-keys": sorted(_ALLOWED_CONTROL_PAYLOAD_KEYS)},
                 )
         # Validate payload values are scalars
@@ -423,13 +482,17 @@ class SessionControlRequest:
             perm = self.payload.get("permission")
             if not isinstance(perm, str):
                 raise make_error(
-                    prefix="VAL", component="TRANSPORT", number=4,
+                    prefix="VAL",
+                    component="TRANSPORT",
+                    number=4,
                     kind="transport-contract-validation",
                     message="respond-permission requires a 'permission' value of 'allow' or 'deny'",
                 )
             if perm not in _PERMISSION_VALUES:
                 raise make_error(
-                    prefix="VAL", component="TRANSPORT", number=4,
+                    prefix="VAL",
+                    component="TRANSPORT",
+                    number=4,
                     kind="transport-contract-validation",
                     message=f"respond-permission 'permission' must be one of {_PERMISSION_VALUES}, got {perm!r}",
                     details={"value": perm},
@@ -438,7 +501,9 @@ class SessionControlRequest:
             steer = self.payload.get("steer_text")
             if not isinstance(steer, str):
                 raise make_error(
-                    prefix="VAL", component="TRANSPORT", number=4,
+                    prefix="VAL",
+                    component="TRANSPORT",
+                    number=4,
                     kind="transport-contract-validation",
                     message="steer-turn requires a 'steer_text' string value",
                 )
@@ -447,6 +512,7 @@ class SessionControlRequest:
 # ---------------------------------------------------------------------------
 # SessionControlResult  (AS28 stage 1)
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class SessionControlResult:
@@ -461,6 +527,7 @@ class SessionControlResult:
 # ObservationSink  (AS28 stage 1)
 # ---------------------------------------------------------------------------
 
+
 class ObservationSink(Protocol):
     """Callable that receives bounded transport observations.
 
@@ -474,6 +541,7 @@ class ObservationSink(Protocol):
 # ---------------------------------------------------------------------------
 # AgentSessionTransport  (AS28 stage 1 — Protocol)
 # ---------------------------------------------------------------------------
+
 
 class AgentSessionTransport(Protocol):
     """Provider-neutral agent session transport interface.

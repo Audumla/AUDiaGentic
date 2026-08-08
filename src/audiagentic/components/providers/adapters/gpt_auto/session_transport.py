@@ -19,8 +19,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports.agent_session import (
@@ -59,7 +61,7 @@ from .workspace import (
 
 logger = logging.getLogger(__name__)
 
-        # Wait budget for a fresh response to begin after submit (mirrors dom_reader).
+# Wait budget for a fresh response to begin after submit (mirrors dom_reader).
 _START_BUDGET_SECONDS = 15.0
 
 # The streaming indicator (stop button / streaming class) flickers between
@@ -70,6 +72,15 @@ _RESPONSE_STABILITY_SECONDS = 15.0
 
 # Sentinel: caller provided an explicit baseline (which may be (0, None)).
 _UNSET = object()
+
+
+def _safe_float(value: Any, default: float) -> float:
+    try:
+        converted = float(value)
+    except (TypeError, ValueError):
+        return default
+    return converted if converted > 0 else default
+
 
 # Click the stop / stop-generating control. Mirrors the detection logic in
 # dom_reader._IS_GENERATING_JS so the cancel path stops what it can see.
@@ -85,6 +96,7 @@ _STOP_GENERATION_JS = """() => {
 }"""
 
 
+@dataclass(frozen=True)
 class _GptAutoOpenResult(SessionOpenResult):
     """SessionOpenResult whose ``str()`` is the bare provider session ref.
 
@@ -111,6 +123,15 @@ def _conversation_ref_from_url(url: str) -> str:
     if is_in_workspace(base):
         return base
     return url
+
+
+def _project_id_from_url(url: str) -> str | None:
+    """Extract the stable ChatGPT project identifier from a workspace URL."""
+    marker = "/g/"
+    if marker not in url:
+        return None
+    segment = url.split(marker, 1)[1].split("/", 1)[0]
+    return segment if segment.startswith("g-p-") else None
 
 
 def _normalise_resume_ref(ref: str | None) -> str | None:
@@ -159,6 +180,7 @@ class GptAutoSessionTransport:
         self._client_factory = client_factory or (lambda url: CdpClient(cdp_url=url))
         self._client: Any | None = None
         self._ag_session_id: str | None = None
+        self._session_metadata: dict[str, Any] = {}
         self._closed = False
         self._turn_active = False
         self._current_cancel: asyncio.Event | None = None
@@ -212,25 +234,30 @@ class GptAutoSessionTransport:
                 logger.debug("bring_to_front failed during open (non-fatal)", exc_info=True)
 
             ref = _conversation_ref_from_url(ws.url)
+            workspace_url = workspace_base_url(ws.url)
+            conversation_id = ws.conversation_id
+            self._session_metadata = {
+                "provider": "gpt-auto",
+                "project-id": _project_id_from_url(ws.url),
+                "project-url": workspace_url,
+                "chat-id": conversation_id,
+                "chat-url": ws.url if conversation_id else None,
+            }
             self._ag_session_id = ref
             update_mapping(
                 project_name,
                 workspace_url=workspace_base_url(ws.url),
-                conversation_id=(
-                    ref if not ref.startswith("http") and "/c/" not in ref else ""
-                ),
+                conversation_id=(ref if not ref.startswith("http") and "/c/" not in ref else ""),
                 project_root=self._project_root,
             )
             logger.info("gpt-auto session opened (provider-session-ref=%s)", ref)
-            return _GptAutoOpenResult(ag_session_id=ref)
+            return _GptAutoOpenResult(ag_session_id=ref, metadata=dict(self._session_metadata))
         except BaseException:
             self._closed = True
             await self._teardown_client()
             raise
 
-    async def _resolve_workspace(
-        self, client: Any, project_name: str
-    ) -> WorkspaceInfo | None:
+    async def _resolve_workspace(self, client: Any, project_name: str) -> WorkspaceInfo | None:
         """Find/activate the project workspace, continuing the resume ref when set.
 
         When we have a conversation-id from a previous session, we can reconstruct
@@ -240,14 +267,16 @@ class GptAutoSessionTransport:
         """
         ref = self._resume_provider_ref
         if not ref:
-            return await ensure_workspace(
-                client, project_name, project_root=self._project_root
-            )
+            return await ensure_workspace(client, project_name, project_root=self._project_root)
         # Conversation-id resume: reconstruct the full URL from stored mapping
         # and navigate directly — no workspace search needed.
         if not ref.startswith("http"):
             conv_id = _normalise_resume_ref(ref)
-            mapped = get_mapping(project_name, self._project_root) if self._project_root is not None else get_mapping(project_name)
+            mapped = (
+                get_mapping(project_name, self._project_root)
+                if self._project_root is not None
+                else get_mapping(project_name)
+            )
             ws_base = mapped.get("workspace_url", "") if mapped else ""
             if ws_base and conv_id:
                 chat_url = f"{ws_base}/c/{conv_id}"
@@ -337,10 +366,12 @@ class GptAutoSessionTransport:
             if self._current_cancel is not None and self._current_cancel.is_set():
                 return True
             if request.cancel_token is not None:
-                try:
-                    return bool(request.cancel_token.is_set())
-                except Exception:
-                    pass
+                is_set = getattr(request.cancel_token, "is_set", None)
+                if callable(is_set):
+                    try:
+                        return bool(is_set())
+                    except Exception:
+                        pass
             return False
 
         try:
@@ -388,8 +419,12 @@ class GptAutoSessionTransport:
                 await _emit(TransportObservationKind.IN_PROGRESS, model_activity=activity)
 
             response, cancelled = await self._poll_response(
-                client, cfg, _is_cancelled, emit_in_progress,
-                base_count=base_count, base_text=base_text,
+                client,
+                cfg,
+                _is_cancelled,
+                emit_in_progress,
+                base_count=base_count,
+                base_text=base_text,
             )
 
             if cancelled:
@@ -403,6 +438,21 @@ class GptAutoSessionTransport:
             if stop_reason == "error":
                 terminal_attrs["error_code"] = "gpt-auto-response-timeout"
             await _emit(TransportObservationKind.TERMINAL, **terminal_attrs)
+            try:
+                current_url = await client.get_url()
+            except Exception:
+                current_url = None
+            if current_url:
+                workspace_url = workspace_base_url(current_url)
+                conversation_id = WorkspaceInfo(name="", url=current_url).conversation_id
+                self._session_metadata.update(
+                    {
+                        "project-id": _project_id_from_url(current_url),
+                        "project-url": workspace_url,
+                        "chat-id": conversation_id,
+                        "chat-url": current_url if conversation_id else None,
+                    }
+                )
 
             return SessionTurnResult(
                 turn_id=turn_id,
@@ -410,6 +460,7 @@ class GptAutoSessionTransport:
                 observations_delivered=delivered,
                 dropped_observations=dropped,
                 final_summary=response or None,
+                metadata=dict(self._session_metadata),
             )
         finally:
             self._turn_active = False
@@ -452,11 +503,12 @@ class GptAutoSessionTransport:
         # Use provided baseline or capture from the DOM (backward compat).
         if base_count is _UNSET:
             base_count, base_text = await _get_response_state(client)
-        deadline = time.monotonic() + float(
-            getattr(cfg, "response_wait_timeout", 120)
+        deadline = time.monotonic() + _safe_float(getattr(cfg, "response_wait_timeout", 120), 120.0)
+        interval = _safe_float(getattr(cfg, "polling_interval", 2.0), 2.0)
+        stability = _safe_float(
+            getattr(cfg, "response_stability_seconds", _RESPONSE_STABILITY_SECONDS),
+            _RESPONSE_STABILITY_SECONDS,
         )
-        interval = float(getattr(cfg, "polling_interval", 2.0))
-        stability = float(getattr(cfg, "response_stability_seconds", _RESPONSE_STABILITY_SECONDS))
         last_text: str | None = None
         stable_since: float | None = None
 
@@ -563,7 +615,7 @@ class GptAutoSessionTransport:
                 past_deadline = True
                 logger.info(
                     "gpt-auto: response timeout reached (%ds), provider still active — continuing",
-                    int(deadline - (deadline - time.monotonic())),
+                    max(0.0, time.monotonic() - (deadline - time.monotonic())),
                 )
 
             # Emit in-progress observation to signal turn is alive
@@ -643,11 +695,7 @@ class GptAutoSessionTransport:
         await self._teardown_client()
 
     def is_alive(self) -> bool:
-        return (
-            not self._closed
-            and self._client is not None
-            and self._ag_session_id is not None
-        )
+        return not self._closed and self._client is not None and self._ag_session_id is not None
 
     # ── helpers ──────────────────────────────────────────────────────
 
