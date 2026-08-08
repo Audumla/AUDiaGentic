@@ -662,6 +662,7 @@ def update_owned_running_session(
     worker_id: str,
     attempt_epoch: int,
     session_id: str,
+    provider_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Attach the live session id while the current attempt is still running.
 
@@ -693,10 +694,12 @@ def update_owned_running_session(
                 "gateway request is not running",
                 {"request-id": request_id, "state": record["state"]},
             )
-        if record.get("session-id") == session_id:
+        if record.get("session-id") == session_id and provider_metadata is None:
             return record
         updated = dict(record)
         updated["session-id"] = session_id
+        if provider_metadata is not None:
+            updated["provider-metadata"] = dict(provider_metadata)
         updated["updated-at"] = now_iso_z()
         updated["revision"] = record["revision"] + 1
         write_record(project_root, updated)
@@ -767,7 +770,7 @@ def link_replay(
     """
     with _request_lock(project_root, old_request_id):
         record = _read_record_locked(project_root, old_request_id)
-        if record["state"] != "interrupted" or record.get("replay-required") != True:  # noqa: SIM401
+        if record["state"] != "interrupted" or not record.get("replay-required"):  # noqa: SIM401
             raise AudiaGenticError(
                 "CON-AGW-103",
                 "agents",

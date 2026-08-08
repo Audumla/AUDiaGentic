@@ -1,5 +1,5 @@
 """Agent Execution Gateway operational MCP server — agent_id-primary submit
-plus status/wait/cancel/list/overview/session (AS63).
+plus status/cancel/list/overview/session (AS63).
 
 `agent_task_submit` is the sole submission tool. The raw, direct
 execution_profile_id submission surface (`agent_execution_submit`) was
@@ -12,7 +12,6 @@ Definition resolution is still available programmatically via
 
 from __future__ import annotations
 
-import time
 from typing import Any
 
 from audiagentic.components.agents.gateway.client import get_gateway_client
@@ -25,13 +24,16 @@ from audiagentic.foundation.mcp.component_server import (
 
 mcp = mcp_server(__name__)
 
-# Maximum seconds for a single blocking wait call before the MCP transport
-# may kill it.  Individual waits are kept under this so the tool call never
-# outlives the transport.
-MCP_SINGLE_WAIT_CAP_SECONDS = 120.0
 
-# Terminal states from the gateway workflow (SH18).
-_TERMINAL_STATES = frozenset({"completed", "failed", "cancelled", "rejected"})
+@mcp.tool()
+@log_tool_call
+def agent_list_definitions() -> list[dict[str, Any]]:
+    """List the agent definitions available to the gateway."""
+    from audiagentic.components.agents.models.agent_definition_api import (
+        list_agent_definitions,
+    )
+
+    return list_agent_definitions(project_root_from_env())
 
 
 @mcp.tool()
@@ -39,79 +41,6 @@ _TERMINAL_STATES = frozenset({"completed", "failed", "cancelled", "rejected"})
 def agent_task_status(request_id: str) -> dict[str, Any]:
     """Return the current persisted state of a gateway request."""
     return get_gateway_client().get_execution_request(project_root_from_env(), request_id)
-
-
-@mcp.tool()
-@log_tool_call
-def agent_task_wait(request_id: str, timeout_seconds: float | None = None) -> dict[str, Any]:
-    """Block until a request reaches a terminal state or timeout.
-
-    Honors the caller's timeout_seconds (capped at 300s server-side). If
-    the timeout elapses before the request is terminal, returns the current
-    status with wait-timeout=True and progress info — never an MCP error.
-    """
-    import asyncio
-
-    cap = min(timeout_seconds, 300.0) if timeout_seconds else 300.0
-    start = time.monotonic()
-    client = get_gateway_client()
-    project_root = project_root_from_env()
-
-    while True:
-        remaining = cap - (time.monotonic() - start)
-        if remaining <= 0:
-            break
-        wait_for = min(remaining, MCP_SINGLE_WAIT_CAP_SECONDS)
-        try:
-            result = client.wait_execution_request(project_root, request_id, wait_for)
-        except asyncio.TimeoutError:
-            # The transport timed out — return current status instead of error.
-            remaining = cap - (time.monotonic() - start)
-            if remaining <= 0:
-                break
-            continue
-
-        if result.get("state") in _TERMINAL_STATES:
-            return result
-
-        # Non-terminal and transport didn't timeout — caller timed out or
-        # we got a partial wait-timeout from the API.
-        if remaining <= 0:
-            break
-        # Still have time; loop for another short poll.
-
-    # Timed out — return current status with wait-timeout and progress.
-    result = client.get_execution_request(project_root, request_id)
-    result["wait-timeout"] = True
-    if "progress" not in result:
-        result["progress"] = _request_progress(result)
-    return result
-
-
-def _request_progress(record: dict[str, Any]) -> dict[str, Any]:
-    """Compute a progress snapshot for a non-terminal request."""
-    state = record.get("state", "unknown")
-    started_at = record.get("started-at")
-    running_seconds = None
-    if started_at:
-        from audiagentic.foundation.time import now_iso_z
-
-        try:
-            from datetime import datetime, timezone
-
-            started = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
-            now = datetime.now(timezone.utc)
-            running_seconds = round((now - started).total_seconds(), 1)
-        except Exception:
-            pass
-
-    return {
-        "phase": "launching" if state == "queued" else "running",
-        "state": state,
-        "running-seconds": running_seconds,
-        "last-progress-at": record.get("updated-at"),
-        "stale-progress": False,
-    }
 
 
 @mcp.tool()
@@ -177,9 +106,18 @@ def agent_task_submit(
 ) -> dict[str, Any]:
     """Submit async work as `agent_id` (AS62's Agent Definition — an Execution
     Profile plus a Role bundled under one stable ID). Resolves the agent's
-    execution profile and dispatches. Returns {request-id, state, ...}
-    immediately — poll with `agent_task_status`/`agent_task_wait` using the
-    returned request-id. Raises RES-AGD-001 if `agent_id` is not a configured
+    execution profile and dispatches.
+
+    Response fields:
+      request-id:       unique identifier for this request
+      state:            current state ("queued")
+      session-id:       session identifier — auto-generated when session_keep_alive
+                        is true and no session_id is provided; omit when no session
+      metadata:         the sanitized metadata supplied on submit (or {})
+      provider-metadata: adapter-owned session metadata when available
+
+    Immediately — poll with `agent_task_status` using the returned request-id.
+    Raises RES-AGD-001 if `agent_id` is not a configured
     agent definition.
 
     This is the sole submission surface over MCP (RV891). Direct
@@ -201,7 +139,14 @@ def agent_task_submit(
         session_idle_timeout_seconds=session_idle_timeout_seconds,
         session_max_lifetime_seconds=session_max_lifetime_seconds,
     )
-    return task.status()
+    status = task.status()
+    return {
+        "request-id": status.get("request-id"),
+        "state": status.get("state"),
+        "session-id": status.get("session-id"),
+        "metadata": status.get("metadata") or {},
+        "provider-metadata": status.get("provider-metadata") or {},
+    }
 
 
 def main() -> None:

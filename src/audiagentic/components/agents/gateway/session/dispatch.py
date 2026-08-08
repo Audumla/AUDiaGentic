@@ -88,6 +88,7 @@ def _dispatch_session_request(
     *,
     dispatch_prompt: str,
     context_fingerprint: str | None = None,
+    preallocated_session_id: str | None = None,
 ) -> dict[str, Any]:
     """Dispatch a sessionful request through the live SessionRuntime (AS04).
 
@@ -117,7 +118,10 @@ def _dispatch_session_request(
     request_runtime = None
     request_runtime_root = gateway_request_dir(project_root, request_id) / "runtime"
     try:
-        if session_id is None:
+        is_new_session = session_id is None or (
+            preallocated_session_id is not None and session_id == preallocated_session_id
+        )
+        if is_new_session:
             # keep-alive: open a new session bound to this profile
             request_runtime_root.mkdir(parents=True, exist_ok=True)
             request_runtime = request_runtime_root
@@ -134,6 +138,7 @@ def _dispatch_session_request(
                 execution_profile_id=execution_profile_id,
                 provider_id=provider_id,
                 model_id=profile_model_id,
+                session_id=session_id,
                 surface_hint=_build_default_surface_hint(provider_id),
                 correlation_id=record.get("correlation-id"),
                 request_runtime_root=request_runtime_root,
@@ -173,9 +178,18 @@ def _dispatch_session_request(
                 worker_id=record["worker-id"],
                 attempt_epoch=record["attempt-epoch"],
                 session_id=session_id,
+                provider_metadata=session_record.get("provider-metadata"),
             )
         else:
             # continue: the session must exist and be bound to the same profile
+            if session_id is None:
+                raise AudiaGenticError(
+                    code="RES-AGW-002",
+                    kind="agents",
+                    message="gateway session id is missing",
+                    details={"request-id": request_id},
+                )
+            session_id = str(session_id)
             session_record = session_store.read_session_record(project_root, session_id)
             if session_record["execution-profile-id"] != execution_profile_id:
                 raise AudiaGenticError(
@@ -205,7 +219,7 @@ def _dispatch_session_request(
             # Update lifetime bounds when continuing with keep-alive and new
             # policy values. Bounds apply to the in-memory handle so the
             # updated policy is effective for this and future turns.
-            if record.get("session-keep-alive") is True and (
+            if record.get("session-keep-alive") and (
                 record.get("session-idle-timeout-seconds") is not None
                 or record.get("session-max-lifetime-seconds") is not None
             ):
@@ -231,6 +245,14 @@ def _dispatch_session_request(
                         },
                     ) from exc
 
+        if session_id is None:
+            raise AudiaGenticError(
+                code="RES-AGW-002",
+                kind="agents",
+                message="gateway session was not established",
+                details={"request-id": request_id},
+            )
+        session_id = str(session_id)
         _raise_if_cancelled(project_root, request_id)
         store.record_gateway_timeline(
             project_root,
@@ -280,6 +302,18 @@ def _dispatch_session_request(
             updates={"error": exc, "session-id": session_id, "finished-at": now_iso_z()},
         )
 
+    provider_metadata = dict(getattr(result, "metadata", {}) or {})
+    if provider_metadata:
+        record = store.update_owned_running_session(
+            project_root,
+            request_id,
+            owner_epoch=record["dispatch-owner-epoch"],
+            worker_id=record["worker-id"],
+            attempt_epoch=record["attempt-epoch"],
+            session_id=session_id,
+            provider_metadata=provider_metadata,
+        )
+
     if result.stop_reason == "cancelled":
         # RV680: a turn interrupted by protocol-level cancel is a cancelled
         # request, not a completed one. Preserve bounded result diagnostics so
@@ -301,13 +335,13 @@ def _dispatch_session_request(
             finished_at=now_iso_z(),
         )
         # Post-turn: close continued session if keep_alive=false and quiescent.
-        if record.get("session-id") is not None and record.get("session-keep-alive") is False:
+        if record.get("session-id") is not None and not record.get("session-keep-alive"):
             _post_turn_close_continued_session_if_quiescent(
                 project_root,
                 session_id,
                 runtime,
             )
-        if request_runtime is not None and record.get("session-keep-alive") is not True:
+        if request_runtime is not None and not record.get("session-keep-alive"):
             _cleanup_request_runtime(request_runtime)
         return _transition_owned_attempt(
             project_root,
@@ -348,13 +382,13 @@ def _dispatch_session_request(
         finished_at=now_iso_z(),
     )
     # Post-turn: close continued session if keep_alive=false and quiescent.
-    if record.get("session-id") is not None and record.get("session-keep-alive") is False:
+    if record.get("session-id") is not None and not record.get("session-keep-alive"):
         _post_turn_close_continued_session_if_quiescent(
             project_root,
             session_id,
             runtime,
         )
-    if request_runtime is not None and record.get("session-keep-alive") is not True:
+    if request_runtime is not None and not record.get("session-keep-alive"):
         _cleanup_request_runtime(request_runtime)
     return _transition_owned_attempt(
         project_root,
@@ -384,7 +418,10 @@ class _CancelledDuringDispatch(Exception):
 def _cleanup_request_runtime(runtime_root: Path) -> None:
     import shutil
 
-    shutil.rmtree(runtime_root, ignore_errors=True)
+    try:
+        shutil.rmtree(runtime_root, ignore_errors=True)
+    except OSError:
+        logger.warning("failed to clean up session request runtime", exc_info=True)
 
 
 def _quarantine_request_runtime(runtime_root: Path, quarantine_root: Path) -> Path:
@@ -393,8 +430,16 @@ def _quarantine_request_runtime(runtime_root: Path, quarantine_root: Path) -> Pa
     quarantine_root.mkdir(parents=True, exist_ok=True)
     destination = quarantine_root / runtime_root.parent.name
     if destination.exists():
-        shutil.rmtree(destination)
-    shutil.move(str(runtime_root), str(destination))
+        try:
+            shutil.rmtree(destination)
+        except OSError:
+            logger.warning("failed to remove stale session runtime quarantine", exc_info=True)
+            raise
+    try:
+        shutil.move(str(runtime_root), str(destination))
+    except OSError:
+        logger.warning("failed to quarantine session request runtime", exc_info=True)
+        raise
     return destination
 
 

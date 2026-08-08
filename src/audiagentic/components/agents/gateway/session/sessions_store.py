@@ -115,6 +115,7 @@ def build_session_record(
     provider_id: str | None = None,
     model_id: str | None = None,
     provider_session_ref: str | None = None,
+    provider_metadata: dict[str, Any] | None = None,
     idle_timeout_seconds: float | None = None,
     max_lifetime_seconds: float | None = None,
 ) -> dict[str, Any]:
@@ -146,6 +147,7 @@ def build_session_record(
         "execution-profile-id": execution_profile_id,
         "provider-id": provider_id,
         "model-id": model_id,
+        "provider-metadata": dict(provider_metadata or {}),
         "binding": binding,
         "state": "active",
         "close-reason": None,
@@ -679,6 +681,7 @@ def record_session_turn(
     project_root: Path,
     session_id: str,
     request_id: str,
+    provider_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Append a served request and bump turn-count/last-activity.
 
@@ -691,7 +694,13 @@ def record_session_turn(
         record = read_session_record(project_root, session_id)
         request_ids = list(record.get("request-ids") or [])
         if request_id in request_ids:
-            return record
+            if provider_metadata is None:
+                return record
+            updated = dict(record)
+            updated["provider-metadata"] = dict(provider_metadata)
+            updated["updated-at"] = now_iso_z()
+            write_session_record(project_root, updated)
+            return updated
         updated = dict(record)
         request_ids.append(request_id)
         updated["request-ids"] = request_ids
@@ -705,6 +714,8 @@ def record_session_turn(
             )
             updated["turn-count"] = 1
         timestamp = now_iso_z()
+        if provider_metadata is not None:
+            updated["provider-metadata"] = dict(provider_metadata)
         updated["last-activity-at"] = timestamp
         updated["updated-at"] = timestamp
         write_session_record(project_root, updated)

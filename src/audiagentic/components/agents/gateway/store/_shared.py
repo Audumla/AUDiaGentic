@@ -44,6 +44,7 @@ _MUTABLE_RESULT_FIELDS = {
     "started-at",
     "finished-at",
     "session-id",
+    "provider-metadata",
     "recovery",
     "replay-required",
     "replay-reason",

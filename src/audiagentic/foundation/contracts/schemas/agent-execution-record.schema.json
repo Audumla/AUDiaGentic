@@ -93,6 +93,10 @@
     "session-id": {
       "type": ["string", "null"]
     },
+    "provider-metadata": {
+      "type": ["object", "null"],
+      "additionalProperties": true
+    },
     "session-keep-alive": {
       "type": ["boolean", "null"]
     },
