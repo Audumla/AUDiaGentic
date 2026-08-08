@@ -109,6 +109,27 @@ class TestResolvedExecutionProfile:
         assert "\\" not in public_id
 
 
+    def test_resolved_surface_fields_default_to_none(self):
+        snapshot = profiles_mod.ResolvedExecutionProfile(
+            profile_id="p", generation="g", config_digest="d", provider_id="local",
+            model_id="m", max_concurrency=1, queue_max_size=8, execution_params={},
+            admission_policy_digest="a",
+        )
+        assert snapshot.resolved_surface_id is None
+        assert snapshot.resolved_surface_version is None
+        assert snapshot.to_mapping()["resolved-surface-id"] is None
+
+    def test_resolved_surface_fields_pass_schema_validation(self):
+        snapshot = profiles_mod.ResolvedExecutionProfile(
+            profile_id="p", generation="g", config_digest="d", provider_id="pi",
+            model_id="m", max_concurrency=1, queue_max_size=8, execution_params={},
+            admission_policy_digest="a",
+            resolved_surface_id="pi-community-acp", resolved_surface_version="1.0",
+        )
+        assert snapshot.to_mapping()["resolved-surface-id"] == "pi-community-acp"
+        assert snapshot.to_mapping()["resolved-surface-version"] == "1.0"
+
+
 class TestSnapshotFromResolvedProfile:
     def test_same_params_produce_same_generation(self):
         params = {"max-concurrency": 1, "provider_id": "local", "model_id": "m"}
@@ -156,6 +177,112 @@ class TestSnapshotFromResolvedProfile:
         assert snap.max_concurrency == 5
         # Default: max(8, max_concurrency * 2) = max(8, 10) = 10
         assert snap.queue_max_size == 10
+
+
+def _make_resolved_surface(*, validated: bool, surface_id: str = "pi-community-acp", resolved_version: str = "1.0"):
+    from audiagentic.foundation.transports.session_surface import (
+        ResolvedSessionSurface,
+        SessionIdentityCapabilities,
+        SessionSurfaceRef,
+        SurfaceValidation,
+        ValidationEvidence,
+    )
+
+    return ResolvedSessionSurface(
+        ref=SessionSurfaceRef(provider_id="pi", surface_id=surface_id, resolved_version=resolved_version),
+        identity=SessionIdentityCapabilities(),
+        validation=SurfaceValidation(
+            evidence=ValidationEvidence(validated=validated, reference="test" if validated else "")
+        ),
+    )
+
+
+class TestResolveForAdmissionSurface:
+    """AS82: surface_id resolution at the admission boundary."""
+
+    def _profile(self, project_root, *, surface_id=None):
+        from audiagentic.components.agents.models.execution_profile_api import (
+            create_execution_profile,
+        )
+
+        create_execution_profile(
+            project_root,
+            {
+                "profile_id": "with-surface",
+                "provider_id": "pi",
+                "model_id": "m",
+                **({"surface_id": surface_id} if surface_id else {}),
+            },
+        )
+
+    def test_no_surface_id_resolves_unchanged(self, tmp_path):
+        self._profile(tmp_path)
+        snapshot = profiles_mod.resolve_for_admission(tmp_path, "with-surface")
+        assert snapshot.resolved_surface_id is None
+        assert snapshot.resolved_surface_version is None
+
+    def test_validated_surface_carries_identity_into_snapshot(self, tmp_path):
+        self._profile(tmp_path, surface_id="pi-community-acp")
+        calls = []
+
+        def fake_resolver(project_root, provider_id, surface_id):
+            calls.append((project_root, provider_id, surface_id))
+            return _make_resolved_surface(validated=True, surface_id=surface_id)
+
+        snapshot = profiles_mod.resolve_for_admission(
+            tmp_path, "with-surface", surface_resolver=fake_resolver
+        )
+        assert snapshot.resolved_surface_id == "pi-community-acp"
+        assert snapshot.resolved_surface_version == "1.0"
+        assert calls == [(tmp_path, "pi", "pi-community-acp")]
+
+    def test_unvalidated_surface_raises_res_exp_004_before_dispatch(self, tmp_path):
+        from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+        self._profile(tmp_path, surface_id="unknown-surface")
+
+        def fake_resolver(project_root, provider_id, surface_id):
+            return _make_resolved_surface(validated=False, surface_id=surface_id)
+
+        with pytest.raises(AudiaGenticError) as exc_info:
+            profiles_mod.resolve_for_admission(tmp_path, "with-surface", surface_resolver=fake_resolver)
+        assert exc_info.value.code == "RES-EXP-004"
+        assert exc_info.value.kind == "agents"
+
+    def test_unvalidated_surface_never_falls_back_to_provider_default(self, tmp_path):
+        """An explicitly named surface that fails validation must raise, not
+        silently return a snapshot with no resolved surface (the provider
+        default shape) -- that would be a silent degrade."""
+        from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+        self._profile(tmp_path, surface_id="unknown-surface")
+
+        def fake_resolver(project_root, provider_id, surface_id):
+            return _make_resolved_surface(validated=False, surface_id=surface_id)
+
+        try:
+            profiles_mod.resolve_for_admission(tmp_path, "with-surface", surface_resolver=fake_resolver)
+        except AudiaGenticError:
+            pass
+        else:
+            pytest.fail("expected RES-EXP-004, got a silent fallback snapshot")
+
+    def test_resolution_launches_no_process(self, tmp_path):
+        """Resolution is a read: fake asserts it is never asked to open/prompt."""
+        self._profile(tmp_path, surface_id="pi-community-acp")
+
+        class _NoLaunchFake:
+            def __call__(self, project_root, provider_id, surface_id):
+                return _make_resolved_surface(validated=True, surface_id=surface_id)
+
+            def open(self, *a, **k):
+                raise AssertionError("resolve_for_admission must not open a session")
+
+            def prompt(self, *a, **k):
+                raise AssertionError("resolve_for_admission must not prompt")
+
+        fake = _NoLaunchFake()
+        profiles_mod.resolve_for_admission(tmp_path, "with-surface", surface_resolver=fake)
 
 
 class TestInMemoryExecutionProfileRegistry:

@@ -15,7 +15,7 @@ import json
 import logging
 import threading
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Protocol
@@ -116,6 +116,12 @@ class ResolvedExecutionProfile:
     queue_max_size: int
     execution_params: Mapping[str, Any]
     admission_policy_digest: str
+    # AS82: resolved AS29 surface identity, when the profile named one.
+    # Requested (ExecutionProfile.surface_id) vs resolved are kept distinct
+    # elsewhere -- these are the resolved identity, carried once so
+    # downstream consumers read it rather than re-resolving.
+    resolved_surface_id: str | None = None
+    resolved_surface_version: str | None = None
 
     def __post_init__(self) -> None:
         from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -141,6 +147,8 @@ class ResolvedExecutionProfile:
             "queue-max-size": self.queue_max_size,
             "execution-params": dict(self.execution_params),
             "admission-policy-digest": self.admission_policy_digest,
+            "resolved-surface-id": self.resolved_surface_id,
+            "resolved-surface-version": self.resolved_surface_version,
         }
 
     def lane_key(self) -> GatewayExecutionLaneKey:
@@ -742,8 +750,15 @@ def load_gateway_registry_from_config(path: Path) -> InMemoryExecutionProfileReg
 def resolve_for_admission(
     project_root: Path,
     execution_profile_id: str | None,
+    *,
+    surface_resolver: Any = None,
 ) -> ResolvedExecutionProfile:
     """Resolve an execution profile for admission, in one schema-validated shape.
+
+    ``surface_resolver`` is an optional ``(project_root, provider_id,
+    surface_id) -> ResolvedSessionSurface`` callable, substitutable by plain-
+    Python parameter injection (RV890) for tests. Defaults to
+    ``providers_api.resolve_session_surface`` wrapped in the identity check.
 
     Project-local resolution stays a plain function call -- it is stateless,
     so there is nothing composition needs to own. When a shared-gateway
@@ -755,6 +770,9 @@ def resolve_for_admission(
 
     Raises AudiaGenticError(RES-EXP-001) if the profile is not found in
     whichever source is authoritative for this process.
+    Raises AudiaGenticError(RES-EXP-004) if the profile names an AS29
+    surface that does not resolve or is not validated -- an explicitly
+    named surface never silently falls back to the provider default.
     """
     from audiagentic.components.agents.models.execution_profile_api import (
         resolve_default_execution_profile,
@@ -768,11 +786,42 @@ def resolve_for_admission(
 
     registry = get_gateway_registry()
     if registry is not None:
-        return registry.resolve_snapshot(profile["profile_id"])
+        snapshot = registry.resolve_snapshot(profile["profile_id"])
+    else:
+        snapshot = snapshot_from_resolved_profile(
+            profile["profile_id"],
+            profile["provider_id"],
+            profile["model_id"],
+            profile.get("params", {}),
+        )
 
-    return snapshot_from_resolved_profile(
-        profile["profile_id"],
-        profile["provider_id"],
-        profile["model_id"],
-        profile.get("params", {}),
+    surface_id = profile.get("surface_id")
+    if not surface_id:
+        return snapshot
+
+    if surface_resolver is None:
+        surface_resolver = _default_surface_resolver
+
+    resolved_surface = surface_resolver(project_root, snapshot.provider_id, surface_id)
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    if not resolved_surface.validation.evidence.validated:
+        raise AudiaGenticError(
+            code="RES-EXP-004",
+            kind="agents",
+            message="execution profile names a session surface that is not resolvable or not validated",
+            details={"provider_id": snapshot.provider_id, "surface_id": surface_id},
+        )
+    return replace(
+        snapshot,
+        resolved_surface_id=resolved_surface.ref.surface_id,
+        resolved_surface_version=resolved_surface.ref.resolved_version,
     )
+
+
+def _default_surface_resolver(project_root: Path, provider_id: str, surface_id: str) -> Any:
+    """Read-only AS29 surface resolution. Launches no process."""
+    from audiagentic.components.providers.contracts.session_surface import SurfaceHint
+    from audiagentic.components.providers.providers_api import resolve_session_surface
+
+    return resolve_session_surface(project_root, provider_id, SurfaceHint(surface_id=surface_id))

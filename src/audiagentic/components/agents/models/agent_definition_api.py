@@ -201,10 +201,13 @@ def resolve_agent_definition(
     `role_lookup` via plain-Python parameter injection (RV890) -- there is no
     composition graph involved, since resolution is stateless per-call.
 
-    AS29 surface resolution (AS62 step 3) is not performed here: ExecutionProfile
-    carries no surface_id field yet (AS60 step 5 remains deferred), so there is
-    nothing to resolve against `providers_api.resolve_session_surface`. Add it
-    once that field exists.
+    AS29 surface resolution (AS62 step 3 / AS82) happens at the admission
+    boundary (`gateway/profiles.py::resolve_for_admission`), not here -- this
+    is a definition-level preview, and resolving the surface a second time
+    here would violate the resolve-once rule that boundary exists to enforce.
+    `execution_profile["surface_id"]` (if set) is the raw, unresolved request;
+    callers that need the *resolved* identity read it from the admission
+    value, not from this preview.
 
     Raises AudiaGenticError(RES-AGD-001) if the agent definition is not found.
     Raises AudiaGenticError(RES-EXP-001) if its execution profile is not found.

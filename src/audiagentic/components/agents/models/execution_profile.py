@@ -20,6 +20,10 @@ class ExecutionProfile:
     params: dict[str, Any] = field(default_factory=dict)
     is_default: bool = False
     description: str = ""
+    # AS82: optional AS29 session surface this profile launches through.
+    # Absent means provider default -- not an error. AS29 remains the sole
+    # surface-capability authority; this field selects, it does not describe.
+    surface_id: str | None = None
 
 
 def validate_execution_profile(profile: dict[str, Any]) -> list[str]:
@@ -48,6 +52,9 @@ def validate_execution_profile(profile: dict[str, Any]) -> list[str]:
     if "description" in profile and profile["description"] is not None:
         if not isinstance(profile["description"], str):
             issues.append("description must be a string or null")
+    if "surface_id" in profile and profile["surface_id"] is not None:
+        if not isinstance(profile["surface_id"], str) or not profile["surface_id"].strip():
+            issues.append("surface_id must be a non-empty string or null")
     return issues
 
 
@@ -62,6 +69,8 @@ def execution_profile_from_dict(data: dict[str, Any]) -> ExecutionProfile:
         normalized["is_default"] = normalized.pop("is-default")
     if "model-alias" in normalized and "model_alias" not in normalized:
         normalized["model_alias"] = normalized.pop("model-alias")
+    if "surface-id" in normalized and "surface_id" not in normalized:
+        normalized["surface_id"] = normalized.pop("surface-id")
     issues = validate_execution_profile(normalized)
     if issues:
         raise AudiaGenticError(
@@ -78,6 +87,7 @@ def execution_profile_from_dict(data: dict[str, Any]) -> ExecutionProfile:
         params=dict(normalized.get("params") or {}),
         is_default=bool(normalized.get("is_default", False)),
         description=str(normalized.get("description") or "").strip(),
+        surface_id=str(normalized["surface_id"]).strip() if normalized.get("surface_id") else None,
     )
 
 

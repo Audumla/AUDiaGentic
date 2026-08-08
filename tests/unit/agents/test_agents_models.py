@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pytest
+
 from audiagentic.components.agents.models.execution_profile import (
     ExecutionProfile,
     ExecutionProfileStore,
@@ -9,7 +10,6 @@ from audiagentic.components.agents.models.execution_profile import (
     execution_profile_to_dict,
     validate_execution_profile,
 )
-
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
@@ -96,6 +96,34 @@ def test_execution_profile_from_dict_minimal():
     assert p.params == {}
     assert p.is_default is False
     assert p.description == ""
+    assert p.surface_id is None
+
+
+def test_execution_profile_from_dict_with_surface_id():
+    data = _make_profile()
+    data["surface_id"] = "pi-community-acp"
+    p = execution_profile_from_dict(data)
+    assert p.surface_id == "pi-community-acp"
+
+
+def test_execution_profile_from_dict_accepts_hyphen_surface_id():
+    data = {"profile_id": "x", "provider_id": "p", "model_id": "m", "surface-id": "pi-community-acp"}
+    p = execution_profile_from_dict(data)
+    assert p.surface_id == "pi-community-acp"
+
+
+def test_validate_execution_profile_surface_id_empty_string_invalid():
+    issues = validate_execution_profile(
+        {"profile_id": "x", "provider_id": "p", "model_id": "m", "surface_id": "  "}
+    )
+    assert "surface_id must be a non-empty string or null" in issues
+
+
+def test_validate_execution_profile_surface_id_null_is_valid():
+    issues = validate_execution_profile(
+        {"profile_id": "x", "provider_id": "p", "model_id": "m", "surface_id": None}
+    )
+    assert issues == []
 
 
 def test_execution_profile_from_dict_full():
@@ -171,7 +199,10 @@ def test_execution_profile_to_dict_includes_all_fields():
         description="desc",
     )
     d = execution_profile_to_dict(p)
-    assert set(d.keys()) == {"profile_id", "provider_id", "model_id", "model_alias", "params", "is_default", "description"}
+    assert set(d.keys()) == {
+        "profile_id", "provider_id", "model_id", "model_alias", "params",
+        "is_default", "description", "surface_id",
+    }
 
 
 # ---------------------------------------------------------------------------
