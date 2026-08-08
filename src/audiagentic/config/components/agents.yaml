@@ -48,17 +48,7 @@ mcp-servers:
       - agent_gateway_select_implementation
       - agent_gateway_get_config
       - agent_gateway_set_config
-      - agent_list_compute_resources
-      - agent_get_compute_resource
-      - agent_create_compute_resource
-      - agent_update_compute_resource
-      - agent_delete_compute_resource
-      - agent_list_model_instances
-      - agent_get_model_instance
-      - agent_create_model_instance
-      - agent_update_model_instance
-      - agent_delete_model_instance
-    description: Execution profile, role, agent definition, gateway-management (SH11), and compute-resource/model-instance (AS105/AS101) management — CRUD for provider+model bindings, behavioral role definitions, their composition into logical agents, declarative selection of the gateway management implementation, and the user-global compute taxonomy underneath execution profiles
+    description: Execution profile, role, agent definition, and gateway-management (SH11) — CRUD for provider+model bindings, behavioral role definitions, their composition into logical agents, and declarative selection of the gateway management implementation (embedded/standalone/automatic)
     propagate: audiagentic
     instructions: >
       CRUD for execution profiles (provider+model bindings), roles (small,
@@ -178,54 +168,6 @@ mcp-servers:
         parameters:
           implementation_id: "Implementation to configure"
           updates: "Partial options dict — only specified keys are validated and set"
-      agent_list_compute_resources: >
-        List all compute resources (user-global — shared infrastructure, not
-        one project's config) with kind (local-gpu/remote-host/hosted-api/unbounded).
-      agent_get_compute_resource:
-        description: Get a single compute resource by ID.
-        parameters:
-          resource_id: "Compute resource identifier to look up"
-      agent_create_compute_resource:
-        description: >
-          Create a new compute resource. User-global — describes shared
-          hardware, not this project's intent. Returns the created resource.
-        parameters:
-          resource: "Resource dict with resource_id and kind"
-      agent_update_compute_resource:
-        description: >
-          Update fields of an existing compute resource. resource_id is
-          immutable — delete and recreate to rename.
-        parameters:
-          resource_id: "Compute resource identifier to update"
-          updates: "Partial resource dict — only specified keys are modified"
-      agent_delete_compute_resource:
-        description: Delete a compute resource by ID.
-        parameters:
-          resource_id: "Compute resource identifier to delete"
-      agent_list_model_instances: >
-        List all model instances (user-global) with servable_models
-        (model -> concurrency when loaded), loaded_model, and resource_id.
-      agent_get_model_instance:
-        description: Get a single model instance by ID.
-        parameters:
-          instance_id: "Model instance identifier to look up"
-      agent_create_model_instance:
-        description: >
-          Create a new model instance — the unit of capacity underneath
-          execution profiles (AS105). User-global. Returns the created instance.
-        parameters:
-          instance: "Instance dict with instance_id, resource_id, servable_models, and optional logical_model/loaded_model"
-      agent_update_model_instance:
-        description: >
-          Update fields of an existing model instance. instance_id is
-          immutable — delete and recreate to rename.
-        parameters:
-          instance_id: "Model instance identifier to update"
-          updates: "Partial instance dict — only specified keys are modified"
-      agent_delete_model_instance:
-        description: Delete a model instance by ID.
-        parameters:
-          instance_id: "Model instance identifier to delete"
 
   - name: ag-agents-gateway
     module: audiagentic.components.agents.mcp.gateway_mcp

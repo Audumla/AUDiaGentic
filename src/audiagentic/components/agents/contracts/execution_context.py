@@ -371,7 +371,13 @@ class ManifestIdentity:
     project_root: str  # fingerprint-form canonical path; also the execution cwd
     execution_profile_id: str
     provider_id: str
-    model_id: str
+    # AS105/AS101: free-instance dispatch binds a concrete model only at
+    # dispatch time, never at admission -- so this is unknown for a
+    # multi-instance profile when the manifest is built. Not required for
+    # identity: agent_runtime_digest already covers the resolved profile's
+    # full instances set, so a None model_id here does not weaken the
+    # fingerprint's ability to detect a profile-content change.
+    model_id: str | None
     provider_isolation_tier: str
     component_profile: str  # "" = base components
     agent_runtime_digest: str
@@ -383,7 +389,7 @@ class ManifestIdentity:
                 "provider_isolation_tier must be an enumerated isolation tier",
                 {"provider_isolation_tier": self.provider_isolation_tier},
             )
-        for name in ("project_root", "execution_profile_id", "provider_id", "model_id", "agent_runtime_digest"):
+        for name in ("project_root", "execution_profile_id", "provider_id", "agent_runtime_digest"):
             if not getattr(self, name):
                 raise _err("VAL-AGW-068", f"manifest identity field {name} is required", {"field": name})
 
@@ -517,7 +523,7 @@ def build_manifest(
     canonical_root: CanonicalRoot,
     execution_profile_id: str,
     provider_id: str,
-    model_id: str,
+    model_id: str | None,
     provider_isolation_tier: str,
     agent_runtime_digest: str,
 ) -> ExecutionManifest:

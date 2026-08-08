@@ -345,7 +345,7 @@ def submit_execution_request(
 
     # AS60 step 2: one schema-validated resolver contract regardless of
     # source. When a gateway-owned registry is installed (shared mode), it is
-    # authoritative for provider/model/queue-limits — project-local profile
+    # authoritative for provider/instances — project-local profile
     # data only selects which gateway profile id to reference. The resolved
     # snapshot is persisted on the record so the queue can validate staleness
     # on reload (CON-AGW-101) without re-deriving from mutable caller params.
@@ -357,9 +357,21 @@ def submit_execution_request(
 
     resolved = profiles_mod.resolve_for_admission(project_root, execution_profile_id)
     resolved_provider_id = resolved.provider_id
-    resolved_model_id = resolved.model_id
+    resolved_instance_ids = list(resolved.instances)
     params = dict(resolved.execution_params)
     gateway_snapshot = resolved if profiles_mod.get_gateway_registry() is not None else None
+
+    # AS105/AS101: free-instance dispatch binds a concrete model only at
+    # dispatch time, never at admission. A single-instance profile (the
+    # common case, matching today's one-profile-one-model behavior) is
+    # unambiguous and can be resolved now; a genuinely multi-instance
+    # profile leaves this None until the queue binds an instance.
+    resolved_model_id: str | None = None
+    if len(resolved_instance_ids) == 1:
+        from audiagentic.components.agents.gateway.instances import resolve_instance_facts
+
+        facts = resolve_instance_facts(project_root, tuple(resolved_instance_ids))
+        resolved_model_id = facts[0].model_id
 
     # --- 3. Resolve provider isolation tier and runtime digest --------------
     isolation_tier = _resolve_provider_isolation_tier(resolved_provider_id)
@@ -430,22 +442,18 @@ def submit_execution_request(
         gateway_profile_id=gateway_snapshot.profile_id if gateway_snapshot else None,
         gateway_profile_generation=gateway_snapshot.generation if gateway_snapshot else None,
         gateway_profile_config_digest=gateway_snapshot.config_digest if gateway_snapshot else None,
-        gateway_execution_lane_key=(
-            gateway_snapshot.lane_key().public_id() if gateway_snapshot else None
-        ),
+        # AS105/AS101: GatewayExecutionLaneKey is retired -- capacity is
+        # instance-scoped, not lane-scoped. Kept in the schema (always None
+        # going forward) purely so a pre-pivot value on an old record stays
+        # readable rather than becoming a validation failure.
+        gateway_execution_lane_key=None,
         resolved_provider_id=resolved_provider_id,
         resolved_model_id=resolved_model_id,
-        resolved_queue_limits=(
-            {
-                "max-concurrency": gateway_snapshot.max_concurrency,
-                "queue-max-size": gateway_snapshot.queue_max_size,
-            }
-            if gateway_snapshot
-            else None
-        ),
-        admission_policy_digest=(
-            gateway_snapshot.admission_policy_digest if gateway_snapshot else None
-        ),
+        resolved_instance_ids=resolved_instance_ids,
+        # AS105/AS101: capacity is per-instance (model-sources.yaml), not a
+        # profile-level queue limit -- retired, always None going forward.
+        resolved_queue_limits=None,
+        admission_policy_digest=None,
     )
     record, created = store.admit_record(
         project_root,

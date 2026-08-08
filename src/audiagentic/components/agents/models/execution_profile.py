@@ -12,10 +12,16 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ExecutionProfile:
-    """A named configuration that binds a provider to a specific model."""
+    """A named configuration that binds a provider to a set of acceptable
+    model instances (AS105/AS101 v2 -- replaces the single model_id).
+
+    ``instances`` names one or more model-sources.yaml source-ids the
+    profile accepts; free-instance dispatch binds to whichever has spare
+    capacity at dispatch time, never at admission.
+    """
     profile_id: str
     provider_id: str
-    model_id: str
+    instances: tuple[str, ...]
     model_alias: str | None = None
     params: dict[str, Any] = field(default_factory=dict)
     is_default: bool = False
@@ -38,9 +44,13 @@ def validate_execution_profile(profile: dict[str, Any]) -> list[str]:
     provider = profile.get("provider_id")
     if not provider or not isinstance(provider, str):
         issues.append("provider_id is required and must be a non-empty string")
-    model = profile.get("model_id")
-    if not model or not isinstance(model, str):
-        issues.append("model_id is required and must be a non-empty string")
+    instances = profile.get("instances")
+    if (
+        not instances
+        or not isinstance(instances, (list, tuple))
+        or not all(isinstance(i, str) and i.strip() for i in instances)
+    ):
+        issues.append("instances is required and must be a non-empty list of non-empty strings")
     if "model_alias" in profile and profile["model_alias"] is not None:
         if not isinstance(profile["model_alias"], str):
             issues.append("model_alias must be a string or null")
@@ -82,7 +92,7 @@ def execution_profile_from_dict(data: dict[str, Any]) -> ExecutionProfile:
     return ExecutionProfile(
         profile_id=str(normalized["profile_id"]).strip(),
         provider_id=str(normalized["provider_id"]).strip(),
-        model_id=str(normalized["model_id"]).strip(),
+        instances=tuple(str(i).strip() for i in normalized["instances"]),
         model_alias=str(normalized["model_alias"]).strip() if normalized.get("model_alias") else None,
         params=dict(normalized.get("params") or {}),
         is_default=bool(normalized.get("is_default", False)),
@@ -93,7 +103,9 @@ def execution_profile_from_dict(data: dict[str, Any]) -> ExecutionProfile:
 
 def execution_profile_to_dict(profile: ExecutionProfile) -> dict[str, Any]:
     """Serialize an ExecutionProfile to a dict for YAML round-trip."""
-    return asdict(profile)
+    data = asdict(profile)
+    data["instances"] = list(profile.instances)
+    return data
 
 
 class ExecutionProfileStore:

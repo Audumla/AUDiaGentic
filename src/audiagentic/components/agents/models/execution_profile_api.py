@@ -22,13 +22,14 @@ from audiagentic.foundation.io import atomic_write_text, load_yaml_file, save_ya
 logger = logging.getLogger(__name__)
 
 SEED_PROFILES_YAML = """\
-# Execution profiles — bind a provider to a specific model.
+# Execution profiles — bind a provider to a set of acceptable model instances.
+# 'instances' entries are provider model-sources.yaml source ids (AS105/AS101).
 # Managed by the 'agents' component. Do not edit by hand unless you understand the schema.
-contract-version: v1
+contract-version: v2
 profiles:
   - profile_id: default
     provider_id: local-openai
-    model_id: gpt-4o
+    instances: [default]
     is_default: true
     description: Default execution profile
 """
@@ -61,12 +62,12 @@ def load_execution_profiles(project_root: Path) -> ExecutionProfileStore:
     if not data:
         return ExecutionProfileStore()
     cv = data.get("contract-version")
-    if cv and cv != "v1":
+    if cv and cv != "v2":
         raise AudiaGenticError(
             code="VAL-EXP-004",
             kind="agents",
             message="unsupported execution profiles contract version",
-            details={"contract-version": cv, "expected": "v1"},
+            details={"contract-version": cv, "expected": "v2"},
         )
     entries = data.get("profiles", [])
     if not isinstance(entries, list):
@@ -92,7 +93,7 @@ def save_execution_profiles(project_root: Path, store: ExecutionProfileStore) ->
     """
     path = execution_profiles_path(project_root)
     payload = {
-        "contract-version": "v1",
+        "contract-version": "v2",
         "profiles": store.to_dicts(),
     }
     try:
@@ -170,7 +171,7 @@ def update_execution_profile(
     store = load_execution_profiles(project_root)
     existing = store.get(profile_id)
     existing_dict = execution_profile_to_dict(existing)
-    allowed_keys = {"model_id", "model_alias", "params", "is_default", "description", "provider_id"}
+    allowed_keys = {"instances", "model_alias", "params", "is_default", "description", "provider_id"}
     merged = dict(existing_dict)
     for key, value in updates.items():
         if key in allowed_keys:
@@ -208,7 +209,7 @@ def resolve_execution_profile(project_root: Path, profile_id: str) -> dict[str, 
     return {
         "profile_id": profile.profile_id,
         "provider_id": profile.provider_id,
-        "model_id": profile.model_id,
+        "instances": list(profile.instances),
         "model_alias": profile.model_alias,
         "params": dict(profile.params),
         "surface_id": profile.surface_id,
@@ -232,7 +233,7 @@ def resolve_default_execution_profile(project_root: Path) -> dict[str, Any]:
     return {
         "profile_id": default.profile_id,
         "provider_id": default.provider_id,
-        "model_id": default.model_id,
+        "instances": list(default.instances),
         "model_alias": default.model_alias,
         "params": dict(default.params),
         "surface_id": default.surface_id,

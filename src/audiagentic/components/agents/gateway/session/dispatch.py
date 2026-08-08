@@ -131,7 +131,11 @@ def _dispatch_session_request(
             # AS28 slice 4a: pass provider context — the session runtime
             # resolves the transport via providers_api.prepare_provider_session_transport.
             # AS08: persist execution-context fingerprint on session create.
-            profile_model_id = profile.get("model_id")
+            # AS105/AS101: free-instance dispatch binds a concrete model only
+            # at dispatch time; the queue writes it onto the in-memory record
+            # before calling the runner (never re-derived from the profile,
+            # which now only names a compatible instance set).
+            profile_model_id = record.get("resolved-model-id")
             params = profile.get("params", {})
             session_record = runtime.open_session(
                 project_root,
@@ -289,7 +293,7 @@ def _dispatch_session_request(
             attempt_epoch=record["attempt-epoch"],
             execution_profile_id=execution_profile_id,
             provider_id=provider_id,
-            model_id=profile.get("model_id"),
+            model_id=record.get("resolved-model-id"),
             state="failed",
             error=exc,
             started_at=started_at,
@@ -319,7 +323,7 @@ def _dispatch_session_request(
         # request, not a completed one. Preserve bounded result diagnostics so
         # operators can still see that the turn produced terminal evidence.
         session_record = session_store.read_session_record(project_root, session_id)
-        model_id = session_record.get("model-id") or profile.get("model_id")
+        model_id = session_record.get("model-id") or record.get("resolved-model-id")
         output_text = _session_output_from_result(result)
         store.append_owned_attempt(
             project_root,
@@ -366,7 +370,7 @@ def _dispatch_session_request(
         )
 
     session_record = session_store.read_session_record(project_root, session_id)
-    model_id = session_record.get("model-id") or profile.get("model_id")
+    model_id = session_record.get("model-id") or record.get("resolved-model-id")
     output_text = _session_output_from_result(result)
     store.append_owned_attempt(
         project_root,

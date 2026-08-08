@@ -38,6 +38,12 @@ mcp-servers:
       - model_source_update
       - model_source_remove
       - model_source_set_enabled
+      - model_source_list_resolved
+      - model_source_list_global
+      - model_source_add_global
+      - model_source_update_global
+      - model_source_remove_global
+      - model_source_set_enabled_global
       - describe_provider
     description: Providers MCP server for provider management and introspection
     propagate: audiagentic
@@ -66,4 +72,10 @@ mcp-servers:
       model_source_update: Update a validated model source desired-state declaration without mutating provider files.
       model_source_remove: Remove a model source desired-state declaration; use model projection separately to prune owned provider entries.
       model_source_set_enabled: Enable or disable a model source without deleting its configuration.
+      model_source_list_resolved: List the merged view for this project - user-global shared local-endpoint sources (AS105/AS101, e.g. concurrency and resource-id for machine-wide GPUs) plus this project's own sources. What a source actually resolves to for dispatch; read-only.
+      model_source_list_global: List user-global model sources (shared local-endpoint hardware, not project-scoped) - concurrency and resource-id live here.
+      model_source_add_global: Add a user-global model source declaration (e.g. a shared local GPU endpoint) - visible to every project via model_source_list_resolved, declared once rather than copied per project.
+      model_source_update_global: Update a user-global model source declaration.
+      model_source_remove_global: Remove a user-global model source declaration.
+      model_source_set_enabled_global: Enable or disable a user-global model source without deleting its configuration.
       describe_provider: Deep read-only interrogation of one provider - descriptor, status, execution support, model catalog and managed config, config surfaces, and ownership registries. For execution profiles use agent_list_execution_profiles.

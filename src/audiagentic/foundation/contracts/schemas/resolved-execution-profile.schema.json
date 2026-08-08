@@ -7,11 +7,8 @@
     "generation",
     "config-digest",
     "provider-id",
-    "model-id",
-    "max-concurrency",
-    "queue-max-size",
-    "execution-params",
-    "admission-policy-digest"
+    "instances",
+    "execution-params"
   ],
   "additionalProperties": false,
   "properties": {
@@ -27,22 +24,14 @@
     "provider-id": {
       "type": "string"
     },
-    "model-id": {
-      "type": ["string", "null"]
-    },
-    "max-concurrency": {
-      "type": "integer",
-      "minimum": 1
-    },
-    "queue-max-size": {
-      "type": "integer",
-      "minimum": 1
+    "instances": {
+      "description": "AS105/AS101: the compatible model-sources.yaml source-id set. Free-instance dispatch binds to one of these only at dispatch time, never at admission.",
+      "type": "array",
+      "items": {"type": "string"},
+      "minItems": 1
     },
     "execution-params": {
       "type": "object"
-    },
-    "admission-policy-digest": {
-      "type": "string"
     },
     "resolved-surface-id": {
       "type": ["string", "null"]

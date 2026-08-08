@@ -1,15 +1,15 @@
-contract-version: v1
+contract-version: v2
 profiles:
 - profile_id: rig-tester
   provider_id: local-openai
-  model_id: audiagentic-rig
+  instances: [ag-rig]
   model_alias: null
   params: {}
   is_default: false
   description: Local rig-hosted small test model (qwen3.5-2b via llama-server)
 - profile_id: gpt-auto
   provider_id: gpt-auto
-  model_id: chatgpt
+  instances: [chatgpt]
   model_alias: null
   params: {}
   is_default: false

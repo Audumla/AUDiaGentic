@@ -79,23 +79,6 @@ def _config_digest(params: Mapping[str, Any]) -> str:
     return "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
 
 
-def _admission_policy_digest(
-    max_concurrency: int,
-    queue_max_size: int,
-) -> str:
-    """Deterministic digest of the admission policy (queue limits).
-
-    Two profiles with the same limits produce the same admission policy
-    digest, even if their execution params differ.
-    """
-    payload = json.dumps(
-        {"max_concurrency": max_concurrency, "queue_max_size": queue_max_size},
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return "sha256:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
-
-
 @dataclass(frozen=True)
 class ResolvedExecutionProfile:
     """Immutable snapshot of an execution profile's admission configuration.
@@ -105,17 +88,19 @@ class ResolvedExecutionProfile:
     are excluded. This is the one shape both project-local and shared-gateway
     resolution return -- schema-validated at construction so the two sources
     cannot silently drift (AS60 step 2).
+
+    AS105/AS101 v2: capacity (max_concurrency/queue_max_size) is retired --
+    it lives per-instance on providers' model-sources.yaml sources now, not
+    on the profile. ``instances`` names the compatible source-id set;
+    free-instance dispatch binds to one of them only at dispatch time.
     """
 
     profile_id: str
     generation: str
     config_digest: str
     provider_id: str
-    model_id: str | None
-    max_concurrency: int
-    queue_max_size: int
+    instances: tuple[str, ...]
     execution_params: Mapping[str, Any]
-    admission_policy_digest: str
     # AS82: resolved AS29 surface identity, when the profile named one.
     # Requested (ExecutionProfile.surface_id) vs resolved are kept distinct
     # elsewhere -- these are the resolved identity, carried once so
@@ -142,44 +127,11 @@ class ResolvedExecutionProfile:
             "generation": self.generation,
             "config-digest": self.config_digest,
             "provider-id": self.provider_id,
-            "model-id": self.model_id,
-            "max-concurrency": self.max_concurrency,
-            "queue-max-size": self.queue_max_size,
+            "instances": list(self.instances),
             "execution-params": dict(self.execution_params),
-            "admission-policy-digest": self.admission_policy_digest,
             "resolved-surface-id": self.resolved_surface_id,
             "resolved-surface-version": self.resolved_surface_version,
         }
-
-    def lane_key(self) -> GatewayExecutionLaneKey:
-        return GatewayExecutionLaneKey(
-            profile_id=self.profile_id,
-            generation=self.generation,
-            config_digest=self.config_digest,
-        )
-
-
-# ---------------------------------------------------------------------------
-# Lane key — stable identity for a queue
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class GatewayExecutionLaneKey:
-    """Stable, hashable identity for a gateway execution lane.
-
-    Two profiles that resolve to the same (profile_id, generation, config_digest)
-    share one physical queue lane — even if they come from different projects.
-    """
-
-    profile_id: str
-    generation: str
-    config_digest: str
-
-    def public_id(self) -> str:
-        """Human-readable lane identifier with no project paths or secrets."""
-        short_digest = self.config_digest.replace("sha256:", "")[:12]
-        return f"{self.profile_id}/{self.generation}/{short_digest}"
 
 
 # ---------------------------------------------------------------------------
@@ -227,10 +179,8 @@ class _ExecutionProfileDef:
     """Immutable gateway-owned profile definition stored in the registry."""
 
     provider_id: str
-    model_id: str | None
+    instances: tuple[str, ...]
     generation: str
-    max_concurrency: int = 1
-    queue_max_size: int = 8
     execution_params: Mapping[str, Any] = None  # type: ignore[assignment]
 
 
@@ -258,15 +208,13 @@ class InMemoryExecutionProfileRegistry:
         profile_id: str,
         *,
         provider_id: str,
-        model_id: str | None = None,
+        instances: tuple[str, ...],
         generation: str | None = None,
-        max_concurrency: int = 1,
-        queue_max_size: int = 8,
         execution_params: Mapping[str, Any] | None = None,
     ) -> None:
         """Register or update a gateway-owned profile definition.
 
-        ``generation`` is content-derived (a digest of provider/model/limits
+        ``generation`` is content-derived (a digest of provider/instances
         and non-secret execution params) rather than an incrementing counter:
         callers such as ``load_gateway_registry_from_config`` build a fresh
         registry instance on every reload, so a per-instance counter would
@@ -282,9 +230,7 @@ class InMemoryExecutionProfileRegistry:
                 {
                     "profile_id": profile_id,
                     "provider_id": provider_id,
-                    "model_id": model_id,
-                    "max_concurrency": max_concurrency,
-                    "queue_max_size": queue_max_size,
+                    "instances": list(instances),
                     "params_digest": _config_digest(params),
                 },
                 sort_keys=True,
@@ -294,10 +240,8 @@ class InMemoryExecutionProfileRegistry:
 
         self._profiles[profile_id] = _ExecutionProfileDef(
             provider_id=provider_id,
-            model_id=model_id,
+            instances=tuple(instances),
             generation=generation,
-            max_concurrency=max_concurrency,
-            queue_max_size=queue_max_size,
             execution_params=params,
         )
 
@@ -315,21 +259,14 @@ class InMemoryExecutionProfileRegistry:
             )
         redacted_params = _strip_secrets(defn.execution_params)
         config_digest = _config_digest(redacted_params)
-        admission_policy_digest = _admission_policy_digest(
-            defn.max_concurrency,
-            defn.queue_max_size,
-        )
 
         return ResolvedExecutionProfile(
             profile_id=profile_id,
             generation=defn.generation,
             config_digest=config_digest,
             provider_id=defn.provider_id,
-            model_id=defn.model_id,
-            max_concurrency=defn.max_concurrency,
-            queue_max_size=defn.queue_max_size,
+            instances=defn.instances,
             execution_params=MappingProxyType(dict(redacted_params)),
-            admission_policy_digest=admission_policy_digest,
         )
 
     def validate_snapshot_current(self, snapshot: ResolvedExecutionProfile) -> bool:
@@ -351,7 +288,7 @@ class InMemoryExecutionProfileRegistry:
 def snapshot_from_resolved_profile(
     profile_id: str,
     provider_id: str,
-    model_id: str | None,
+    instances: tuple[str, ...],
     params: Mapping[str, Any],
 ) -> ResolvedExecutionProfile:
     """Build a ResolvedExecutionProfile from already-resolved project profile data.
@@ -368,32 +305,15 @@ def snapshot_from_resolved_profile(
     )
     generation = "gen_" + hashlib.sha256(gen_payload.encode("utf-8")).hexdigest()[:12]
 
-    max_concurrency = 1
-    queue_max_size = 8
-    for key in ("max-concurrency", "max_concurrency"):
-        if key in params and isinstance(params[key], int) and not isinstance(params[key], bool):
-            max_concurrency = max(1, params[key])
-            break
-    for key in ("queue-max-size", "queue_max_size"):
-        if key in params and isinstance(params[key], int) and not isinstance(params[key], bool):
-            queue_max_size = max(1, params[key])
-            break
-    if not any(k in params for k in ("queue-max-size", "queue_max_size")):
-        queue_max_size = max(8, max_concurrency * 2)
-
     redacted_params = _strip_secrets(params)
-    admission_policy_digest = _admission_policy_digest(max_concurrency, queue_max_size)
 
     return ResolvedExecutionProfile(
         profile_id=profile_id,
         generation=generation,
         config_digest=config_digest,
         provider_id=provider_id,
-        model_id=model_id,
-        max_concurrency=max_concurrency,
-        queue_max_size=queue_max_size,
+        instances=tuple(instances),
         execution_params=MappingProxyType(dict(redacted_params)),
-        admission_policy_digest=admission_policy_digest,
     )
 
 
@@ -469,9 +389,7 @@ def _profile_generation_summary(registry: InMemoryExecutionProfileRegistry) -> d
                 "generation": defn.generation,
                 "config-digest": params_digest,
                 "provider-id": defn.provider_id,
-                "model-id": defn.model_id,
-                "max-concurrency": defn.max_concurrency,
-                "queue-max-size": defn.queue_max_size,
+                "instances": list(defn.instances),
             }
         )
     return {"profiles": profiles}
@@ -660,6 +578,12 @@ def snapshot_from_record(record: dict[str, Any]) -> ResolvedExecutionProfile | N
     Used by the queue manager (enqueue) to recover the admission-time snapshot
     without re-deriving it from mutable caller params.  Returns None if the
     record lacks snapshot identity fields (pre-SH07 C2 records).
+
+    AS105/AS101 decided fail-mode: a record admitted under a shared-gateway
+    snapshot (gateway-profile-id present) but written before the
+    free-instance dispatch pivot has no ``resolved-instance-ids`` to
+    reconstruct from -- raise rather than silently misparse it as an
+    empty/degenerate instance set.
     """
     profile_id = record.get("gateway-profile-id")
     generation = record.get("gateway-profile-generation")
@@ -667,23 +591,27 @@ def snapshot_from_record(record: dict[str, Any]) -> ResolvedExecutionProfile | N
     if not profile_id or not generation or not config_digest:
         return None
 
+    instance_ids = record.get("resolved-instance-ids")
+    if instance_ids is None:
+        from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+        raise AudiaGenticError(
+            code="VAL-EXP-006",
+            kind="agents",
+            message="gateway request record predates the free-instance dispatch "
+            "migration (AS105/AS101); resubmit required",
+            details={"request-id": record.get("request-id")},
+        )
+
     provider_id = record.get("resolved-provider-id", "")
-    model_id = record.get("resolved-model-id")
-    queue_limits = record.get("resolved-queue-limits") or {}
-    max_concurrency = queue_limits.get("max-concurrency", 1)
-    queue_max_size = queue_limits.get("queue-max-size", 8)
-    admission_policy_digest = record.get("admission-policy-digest", "")
 
     return ResolvedExecutionProfile(
         profile_id=profile_id,
         generation=generation,
         config_digest=config_digest,
         provider_id=provider_id,
-        model_id=model_id,
-        max_concurrency=max_concurrency,
-        queue_max_size=queue_max_size,
+        instances=tuple(instance_ids),
         execution_params=MappingProxyType({}),  # not needed for queue ops
-        admission_policy_digest=admission_policy_digest or "",
     )
 
 
@@ -698,8 +626,9 @@ def load_gateway_registry_from_config(path: Path) -> InMemoryExecutionProfileReg
     Returns None (embedded fallback) when *path* does not exist, so a fresh
     machine with no shared-gateway config keeps prior embedded-mode behavior.
     The file uses the same profile-list shape as execution-profiles.yaml but is
-    gateway-scoped (machine home config, not project-local), reinterpreting
-    each entry's ``max-concurrency``/``queue-max-size`` params as gateway-owned
+    gateway-scoped (machine home config, not project-local). AS105/AS101:
+    each entry's ``instances`` names the compatible model-sources.yaml
+    source-id set; capacity comes from those sources, not from gateway-owned
     queue limits.  Raises AudiaGenticError(IO-AGW-107) on a malformed file.
     """
     if not path.exists():
@@ -722,21 +651,18 @@ def load_gateway_registry_from_config(path: Path) -> InMemoryExecutionProfileReg
     for entry in (data or {}).get("profiles", []):
         profile_id = entry.get("profile_id") or entry.get("profile-id")
         provider_id = entry.get("provider_id") or entry.get("provider-id")
-        if not profile_id or not provider_id:
+        instances = entry.get("instances")
+        if not profile_id or not provider_id or not instances:
             logger.warning(
-                "skipping gateway profile config entry missing profile_id/provider_id",
+                "skipping gateway profile config entry missing profile_id/provider_id/instances",
                 extra={"path": str(path)},
             )
             continue
         params = entry.get("params") or {}
-        max_concurrency = params.get("max-concurrency", params.get("max_concurrency", 1))
-        queue_max_size = params.get("queue-max-size", params.get("queue_max_size", 8))
         registry.register(
             profile_id,
             provider_id=provider_id,
-            model_id=entry.get("model_id") or entry.get("model-id"),
-            max_concurrency=max_concurrency,
-            queue_max_size=queue_max_size,
+            instances=tuple(instances),
             execution_params=params,
         )
     return registry
@@ -763,7 +689,7 @@ def resolve_for_admission(
     Project-local resolution stays a plain function call -- it is stateless,
     so there is nothing composition needs to own. When a shared-gateway
     registry is installed for this process, it is authoritative for
-    provider/model/queue-limits instead; project-local data only selects
+    provider/instances instead; project-local data only selects
     which gateway profile id to reference (SH07 C2). Callers no longer need
     to know which source answered -- both return the same
     ResolvedExecutionProfile.
@@ -791,7 +717,7 @@ def resolve_for_admission(
         snapshot = snapshot_from_resolved_profile(
             profile["profile_id"],
             profile["provider_id"],
-            profile["model_id"],
+            tuple(profile["instances"]),
             profile.get("params", {}),
         )
 

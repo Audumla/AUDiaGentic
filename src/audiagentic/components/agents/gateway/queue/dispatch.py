@@ -90,11 +90,13 @@ def _raise_if_cancelled(project_root: Path, request_id: str) -> None:
         raise _CancelledDuringDispatch()
 
 
-def _extract_model_id(result: dict[str, Any], profile: dict[str, Any]) -> str | None:
+def _extract_model_id(result: dict[str, Any], bound_model_id: str | None) -> str | None:
     """Adapters are inconsistent about the result key (some return 'model',
     none currently return 'model-id', but normalize defensively) — fall back
-    to the profile's configured model_id rather than silently losing it."""
-    return result.get("model") or result.get("model-id") or profile.get("model_id")
+    to the instance free-instance dispatch actually bound rather than
+    silently losing it (AS105/AS101: there is no profile-level model_id
+    anymore, only the resolved-model-id the queue bound at dispatch time)."""
+    return result.get("model") or result.get("model-id") or bound_model_id
 
 
 def _build_packet_ctx(
@@ -170,17 +172,23 @@ def _dispatch_one_attempt(
             details={"provider-id": provider_id},
         )
 
+    # AS105/AS101: free-instance dispatch binds a concrete model only at
+    # dispatch time -- the queue writes the bound instance's model onto the
+    # in-memory record it hands to the runner (never re-derived from the
+    # profile, which now only names a compatible instance *set*).
+    bound_model_id = record.get("resolved-model-id")
+
     packet_ctx = _build_packet_ctx(
         project_root,
         record,
         profile,
-        {"model-id": profile.get("model_id")},
+        {"model-id": bound_model_id},
         dispatch_prompt=dispatch_prompt,
     )
     provider_request = providers_api.ProviderExecutionRequest(
         project_root=project_root.resolve(),
         provider_id=provider_id,
-        model_id=profile.get("model_id"),
+        model_id=bound_model_id,
         model_alias=profile.get("model_alias"),
         packet_data=packet_ctx,
         worker_id=str(record.get("worker-id") or ""),
@@ -231,6 +239,9 @@ def _try_profile_with_retries(
     profile = resolve_execution_profile(project_root, execution_profile_id)
     retry_count = resolve_retry_count(profile.get("params", {}))
     max_attempts = retry_count + 1
+    # AS105/AS101: bound at dispatch time (see _dispatch_one_attempt), never
+    # re-derived from the profile, which now only names an instance set.
+    bound_model_id = record.get("resolved-model-id")
 
     last_exc: AudiaGenticError | None = None
     for attempt_num in range(max_attempts):
@@ -244,7 +255,7 @@ def _try_profile_with_retries(
             attributes={
                 "execution-profile-id": execution_profile_id,
                 "provider-id": profile.get("provider_id"),
-                "model-id": profile.get("model_id"),
+                "model-id": bound_model_id,
                 "attempt-index": attempt_num,
                 "max-attempts": max_attempts,
                 "correlation_id": (record.get("metadata") or {}).get("correlation_id"),
@@ -271,7 +282,7 @@ def _try_profile_with_retries(
                 attempt_epoch=record["attempt-epoch"],
                 execution_profile_id=execution_profile_id,
                 provider_id=profile.get("provider_id"),
-                model_id=profile.get("model_id"),
+                model_id=bound_model_id,
                 state="failed",
                 error=exc,
                 started_at=started_at,
@@ -282,7 +293,7 @@ def _try_profile_with_retries(
             last_exc = exc
             continue
         else:
-            model_id = _extract_model_id(result, profile)
+            model_id = _extract_model_id(result, bound_model_id)
             store.append_owned_attempt(
                 project_root,
                 record["request-id"],
