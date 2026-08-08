@@ -43,6 +43,12 @@
     },
     "admission-policy-digest": {
       "type": "string"
+    },
+    "resolved-surface-id": {
+      "type": ["string", "null"]
+    },
+    "resolved-surface-version": {
+      "type": ["string", "null"]
     }
   }
 }
