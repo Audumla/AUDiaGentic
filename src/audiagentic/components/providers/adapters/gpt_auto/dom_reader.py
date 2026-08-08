@@ -100,9 +100,45 @@ _IS_GENERATING_JS = """
 """
 
 
+# ChatGPT navigates (e.g. workspace-root -> /c/{conversation-id}) right after
+# the first turn in a conversation, which detaches the execution context any
+# in-flight evaluate() call was targeting. That's expected mid-turn, not a
+# real failure -- retry a bounded few times with a short backoff rather than
+# letting a normal navigation crash the caller's polling loop.
+_DETACHED_RETRY_ATTEMPTS = 5
+_DETACHED_RETRY_DELAY_SECONDS = 0.5
+
+
+def _is_detached_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return "detached" in message or "execution context was destroyed" in message
+
+
+async def _evaluate_resilient(client: Any, script: str) -> Any:
+    """client.evaluate(), retrying a bounded number of times on a
+    navigation-detached execution context."""
+    last_exc: Exception | None = None
+    for attempt in range(_DETACHED_RETRY_ATTEMPTS):
+        try:
+            return await client.evaluate(script)
+        except RuntimeError as exc:
+            if not _is_detached_error(exc):
+                raise
+            last_exc = exc
+            logger.debug(
+                "evaluate hit a detached context (navigation in progress), retry %d/%d",
+                attempt + 1,
+                _DETACHED_RETRY_ATTEMPTS,
+            )
+            await asyncio.sleep(_DETACHED_RETRY_DELAY_SECONDS)
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("evaluate: exhausted detached-context retries with no captured error")
+
+
 async def get_response_text(client: Any) -> str | None:
     """Return the text of the latest assistant response, or ``None``."""
-    result = await client.evaluate(_GET_LAST_RESPONSE_TEXT_JS)
+    result = await _evaluate_resilient(client, _GET_LAST_RESPONSE_TEXT_JS)
     if isinstance(result, str) and result.strip():
         return result.strip()
     return None
@@ -110,7 +146,7 @@ async def get_response_text(client: Any) -> str | None:
 
 async def _get_response_state(client: Any) -> tuple[int, str | None]:
     """Return ``(assistant_block_count, last_block_text)`` for the page."""
-    result = await client.evaluate(_GET_RESPONSE_STATE_JS)
+    result = await _evaluate_resilient(client, _GET_RESPONSE_STATE_JS)
     if not isinstance(result, dict):
         return 0, None
     count = result.get("count") or 0
@@ -120,7 +156,7 @@ async def _get_response_state(client: Any) -> tuple[int, str | None]:
 
 async def is_generating(client: Any) -> bool:
     """Return whether ChatGPT appears to still be generating a response."""
-    result = await client.evaluate(_IS_GENERATING_JS)
+    result = await _evaluate_resilient(client, _IS_GENERATING_JS)
     return bool(result)
 
 
