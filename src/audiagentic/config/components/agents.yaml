@@ -7,6 +7,7 @@ description: >
   execution parameters. Profiles are stored per-project and resolved at job launch.
 depends-on:
   - project
+implementation-cardinality: exclusive
 lifecycle-observer: audiagentic.components.agents.gateway.events
 status-hook: audiagentic.components.agents.models.execution_profile_api.agent_status
 files:
@@ -42,7 +43,22 @@ mcp-servers:
       - agent_create_definition
       - agent_update_definition
       - agent_delete_definition
-    description: Execution profile, role, and agent definition management — CRUD operations for provider+model bindings, behavioral role definitions, and their composition into logical agents
+      - agent_gateway_status
+      - agent_gateway_list_implementations
+      - agent_gateway_select_implementation
+      - agent_gateway_get_config
+      - agent_gateway_set_config
+      - agent_list_compute_resources
+      - agent_get_compute_resource
+      - agent_create_compute_resource
+      - agent_update_compute_resource
+      - agent_delete_compute_resource
+      - agent_list_model_instances
+      - agent_get_model_instance
+      - agent_create_model_instance
+      - agent_update_model_instance
+      - agent_delete_model_instance
+    description: Execution profile, role, agent definition, gateway-management (SH11), and compute-resource/model-instance (AS105/AS101) management — CRUD for provider+model bindings, behavioral role definitions, their composition into logical agents, declarative selection of the gateway management implementation, and the user-global compute taxonomy underneath execution profiles
     propagate: audiagentic
     instructions: >
       CRUD for execution profiles (provider+model bindings), roles (small,
@@ -62,7 +78,9 @@ mcp-servers:
       agent_get_execution_profile:
         description: >
           Get a single execution profile by ID, returning full configuration including
-          provider_id, model_id, model_alias, params, and is-default flag.
+          provider_id, model_id, model_alias, params, surface_id (AS29 session surface
+          this profile launches through -- absent means provider default), and
+          is-default flag.
         parameters:
           profile_id: "Execution profile identifier to look up"
       agent_create_execution_profile:
@@ -132,41 +150,98 @@ mcp-servers:
         description: Delete an agent definition by ID.
         parameters:
           agent_id: "Agent definition identifier to delete"
-
-  - name: ag-agents
-    module: audiagentic.components.agents.mcp.resolve_mcp
-    direct-tools:
-      - agent_resolve_execution_profile
-      - agent_resolve_default_execution_profile
-      - agent_list_execution_profiles
-    description: Execution profile resolution — look up profiles for job execution
-    propagate: providers
-    instructions: >
-      Resolve execution profiles to provider+model at job launch.
-    tool-descriptions:
-      agent_resolve_execution_profile:
+      agent_gateway_status: >
+        Return the active gateway management implementation (embedded/standalone/automatic)
+        and whether it was explicitly selected or is only active by descriptor default.
+      agent_gateway_list_implementations: >
+        List all registered gateway management implementations with their display name,
+        description, default flag, and which one is currently active.
+      agent_gateway_select_implementation:
         description: >
-          Resolve an execution profile by ID. Returns provider_id, model_id, model_alias,
-          and params. Raises RES-EXP-001 if not found.
+          Switch the active gateway management implementation for this project
+          (SH11). Declarative alternative to the AUDIAGENTIC_GATEWAY_MODE env
+          override, which still takes precedence when set.
         parameters:
-          profile_id: "Execution profile identifier to look up"
-      agent_resolve_default_execution_profile: >
-        Resolve the profile marked as default. Raises RES-EXP-003 if no default exists.
-      agent_list_execution_profiles: >
-        List all execution profiles with summary information.
+          implementation_id: "One of: embedded, standalone, automatic"
+      agent_gateway_get_config:
+        description: >
+          Return resolved config plus the settable-option schema for a gateway
+          implementation. The schema field describes every option it accepts
+          (type, description, required, default, allowed values). Use with
+          agent_gateway_set_config.
+        parameters:
+          implementation_id: "Implementation to inspect; defaults to the active one"
+      agent_gateway_set_config:
+        description: >
+          Validate and persist config updates for a gateway implementation.
+          See agent_gateway_get_config for the option schema it accepts.
+        parameters:
+          implementation_id: "Implementation to configure"
+          updates: "Partial options dict — only specified keys are validated and set"
+      agent_list_compute_resources: >
+        List all compute resources (user-global — shared infrastructure, not
+        one project's config) with kind (local-gpu/remote-host/hosted-api/unbounded).
+      agent_get_compute_resource:
+        description: Get a single compute resource by ID.
+        parameters:
+          resource_id: "Compute resource identifier to look up"
+      agent_create_compute_resource:
+        description: >
+          Create a new compute resource. User-global — describes shared
+          hardware, not this project's intent. Returns the created resource.
+        parameters:
+          resource: "Resource dict with resource_id and kind"
+      agent_update_compute_resource:
+        description: >
+          Update fields of an existing compute resource. resource_id is
+          immutable — delete and recreate to rename.
+        parameters:
+          resource_id: "Compute resource identifier to update"
+          updates: "Partial resource dict — only specified keys are modified"
+      agent_delete_compute_resource:
+        description: Delete a compute resource by ID.
+        parameters:
+          resource_id: "Compute resource identifier to delete"
+      agent_list_model_instances: >
+        List all model instances (user-global) with servable_models
+        (model -> concurrency when loaded), loaded_model, and resource_id.
+      agent_get_model_instance:
+        description: Get a single model instance by ID.
+        parameters:
+          instance_id: "Model instance identifier to look up"
+      agent_create_model_instance:
+        description: >
+          Create a new model instance — the unit of capacity underneath
+          execution profiles (AS105). User-global. Returns the created instance.
+        parameters:
+          instance: "Instance dict with instance_id, resource_id, servable_models, and optional logical_model/loaded_model"
+      agent_update_model_instance:
+        description: >
+          Update fields of an existing model instance. instance_id is
+          immutable — delete and recreate to rename.
+        parameters:
+          instance_id: "Model instance identifier to update"
+          updates: "Partial instance dict — only specified keys are modified"
+      agent_delete_model_instance:
+        description: Delete a model instance by ID.
+        parameters:
+          instance_id: "Model instance identifier to delete"
 
   - name: ag-agents-gateway
     module: audiagentic.components.agents.mcp.gateway_mcp
     direct-tools:
+      - agent_list_definitions
       - agent_task_submit
       - agent_task_status
-      - agent_task_wait
       - agent_task_cancel
       - agent_task_list_requests
       - agent_task_gateway_overview
       - agent_task_session_list
       - agent_task_session_close
-    description: Agent Execution Gateway — agent_id-primary submission (AS63) plus status/wait/cancel, observability (list/overview), and session management
+    description: >
+      Agent Execution Gateway — read-only agent-definition discovery,
+      agent_id-primary submission (AS63) plus status/cancel,
+      observability (list/overview), and session management
     propagate: providers
     instructions: >
       agent_task_submit is the sole submission surface (RV891) — pass an
@@ -176,47 +251,56 @@ mcp-servers:
       is available programmatically (AgentTaskFactory.submit_raw /
       submit_execution_request) but not exposed over MCP — MCP is a
       deliberately restrictive layer over the fuller Python API.
-      agent_task_status/wait/cancel/list_requests/gateway_overview/
+      Submit returns a structured response with request-id, state, session-id
+      (auto-generated when session_keep_alive is true without a provided
+      session_id), and metadata. The runtime owns session ID generation —
+      the caller never invents one; it only references session-ids from
+      previous responses to continue a conversation.
+      agent_task_status/cancel/list_requests/gateway_overview/
       session_list/session_close work identically regardless of which
       execution profile a request resolved through.
       Async-only over MCP: submit returns request-id immediately; poll
-      agent_task_status or block later with agent_task_wait (capped at 300s
-      server-side — a blocking MCP call cannot outlive the transport
-      carrying it). A blocking submit-and-wait-in-one-call exists only at the
+      agent_task_status until the request reaches a terminal state. A blocking
+      submit-and-wait-in-one-call exists only at the
       underlying Python API (submit_execution_request/AgentTaskFactory.submit
       with mode="blocking"), for in-process callers with no such transport
       cap — deliberately not exposed over MCP.
-      Cancellation is best-effort: agent_task_cancel on a queued request removes it before
-      it ever runs; on a running request it only records intent (cancel-requested) —
-      the request may still complete normally, and the persisted state reflects what
-      actually happened, not the cancel intent. Propagated to providers only; the
-      AUDiaGentic CLI harness must not receive the gateway server.
-      For most execution profiles, "output" is provider CLI/session execution output, not a
-      raw chat completion — only API-style providers (e.g. local-openai) return a direct
-      completion. Use agent_task_gateway_overview or agent_task_list_requests to see what's
-      happening without already knowing a request-id.
+      Cancellation is best-effort: agent_task_cancel on a queued request
+      removes it before it ever runs; on a running request it only records
+      intent (cancel-requested) — the request may still complete normally,
+      and the persisted state reflects what actually happened, not the cancel
+      intent. Propagated to providers only; the AUDiaGentic CLI harness must
+      not receive the gateway server.
+      For most execution profiles, "output" is provider CLI/session execution
+      output, not a raw chat completion — only API-style providers (e.g.
+      local-openai) return a direct completion. Use agent_task_gateway_overview
+      or agent_task_list_requests to see what's happening without already
+      knowing a request-id.
     tool-descriptions:
+      agent_list_definitions: >
+        List all agent definitions available to the gateway, including their
+        execution-profile and role references.
       agent_task_submit: >
         Submit an async request as agent_id (resolves the agent's execution
-        profile automatically). Returns {request-id, state: "queued", ...};
-        poll with agent_task_status/agent_task_wait using the returned
-        request-id. Raises RES-AGD-001 if agent_id is not a configured agent
-        definition.
+        profile automatically). Returns structured response with:
+        {request-id, state, session-id, metadata}. When session_keep_alive
+        is true and no session_id is provided, a new session is auto-created
+        and its id returned. The runtime owns session ID generation — the
+        caller never invents one. Poll with agent_task_status using the
+        returned request-id. Once the adapter opens a session, the response
+        also includes provider-metadata when available. Raises RES-AGD-001
+        if agent_id is not a configured agent definition.
       agent_task_status: >
-        Return the current persisted record for request-id (state, output, completion,
-        usage, error, attempts). Raises RES-AGW-001 if not found.
-      agent_task_wait: >
-        Block until request-id reaches a terminal state (completed/failed/cancelled/
-        rejected) or timeout-seconds elapses (capped at 300s server-side). Returns the
-        record either way — check "state" to distinguish a real result from a timeout
-        (state will still be "running"/"queued").
+        Return the current persisted record for request-id (state, output,
+        completion, usage, error, attempts). Raises RES-AGW-001 if not found.
       agent_task_cancel: >
-        Cancel a queued request, or best-effort mark a running one. See instructions
-        for the best-effort semantics.
+        Cancel a queued request, or best-effort mark a running one. See
+        instructions for the best-effort semantics.
       agent_task_list_requests: >
         List persisted requests, most recent first. Optional state filter
-        (queued/running/completed/failed/cancelled/rejected) and limit. Reads from
-        disk, so this works even for requests from an earlier process.
+        (queued/running/completed/failed/cancelled/rejected) and limit.
+        Reads from disk, so this works even for requests from an earlier
+        process.
       agent_task_gateway_overview: >
         Operator summary: persisted request counts by state, the 5 most recent
         failures (redacted error only), and in-process per-profile queue depths.
@@ -229,7 +313,7 @@ mcp-servers:
         an already-closed or orphaned session returns its final record.
 
 # AS31 Stage-2: output relay policy
-# Defaults: disabled until surface is validated, 64KiB fragment limit, 512KB turn limit
+# Defaults: disabled until surface is validated; 64KiB fragments, 512KB turns.
 gateway:
   output:
     enabled: false
@@ -245,12 +329,14 @@ contributions:
       - instruction
     content:
       body: |
-        Execution profiles bind a provider to a specific model with optional execution
-        parameters. They are stored in .audiagentic/config/execution-profiles.yaml.
+        Execution profiles bind a provider to a specific model with optional
+        execution parameters. They are stored in .audiagentic/config/
+        execution-profiles.yaml.
 
         ## When to use
         - A job needs a predefined provider+model configuration
-        - Execution parameters (temperature, max-tokens) should be profile-driven
+        - Execution parameters (temperature, max-tokens) should be
+          profile-driven
         - Multiple projects need different default model configurations
 
         ## Resolution precedence at job launch
@@ -260,7 +346,8 @@ contributions:
 
         ## Naming
         Use `execution-profile-id` (NOT `profile-id`) in job requests to avoid
-        collision with `workflow-profile` (lite/standard/strict stage pipelines).
+        collision with `workflow-profile` (lite/standard/strict stage
+        pipelines).
 
   - id: agents/role-precedence
     owner: agents

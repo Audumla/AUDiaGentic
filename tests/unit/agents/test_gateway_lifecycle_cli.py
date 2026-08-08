@@ -384,6 +384,95 @@ class TestLauncherDispatch:
         )
         assert "unrecognized arguments" not in result.stderr
 
+    def test_shutdown_signal_handler_calls_lifecycle_request_stop_forced(self) -> None:
+        """SH10 Slice B: an OS shutdown signal goes straight to a forced stop
+        -- no interactive way to "drain first" in response to SIGTERM."""
+        from audiagentic.commands.gateway import _install_shutdown_signals
+
+        class _FakeLifecycle:
+            def __init__(self) -> None:
+                self.calls: list[dict] = []
+
+            def request_stop(self, *, force: bool = False) -> dict:
+                self.calls.append({"force": force})
+                return {"stopping": True, "forced": force}
+
+        class _FakeHost:
+            def __init__(self) -> None:
+                self.lifecycle = _FakeLifecycle()
+                self.shutdown_calls = 0
+
+            def shutdown(self) -> None:
+                self.shutdown_calls += 1
+
+        host = _FakeHost()
+        state = _install_shutdown_signals(host)
+
+        import signal as signal_module
+        handler = signal_module.getsignal(signal_module.SIGTERM)
+        handler(signal_module.SIGTERM, None)
+
+        assert host.lifecycle.calls == [{"force": True}]
+        assert host.shutdown_calls == 0
+        assert state.forced_fallback is False
+
+        signal_module.signal(signal_module.SIGTERM, signal_module.SIG_DFL)
+
+    def test_shutdown_signal_handler_falls_back_to_raw_shutdown_on_error(self) -> None:
+        """If the lifecycle-mediated stop itself fails, fall back to a raw
+        server shutdown so the process still exits rather than hanging --
+        and record that the fallback path was taken."""
+        from audiagentic.commands.gateway import _install_shutdown_signals
+
+        class _FailingLifecycle:
+            def request_stop(self, *, force: bool = False) -> dict:
+                raise RuntimeError("lifecycle store unavailable")
+
+        class _FakeHost:
+            def __init__(self) -> None:
+                self.lifecycle = _FailingLifecycle()
+                self.shutdown_calls = 0
+
+            def shutdown(self) -> None:
+                self.shutdown_calls += 1
+
+        host = _FakeHost()
+        state = _install_shutdown_signals(host)
+
+        import signal as signal_module
+        handler = signal_module.getsignal(signal_module.SIGTERM)
+        handler(signal_module.SIGTERM, None)
+
+        assert host.shutdown_calls == 1
+        assert state.forced_fallback is True
+
+        signal_module.signal(signal_module.SIGTERM, signal_module.SIG_DFL)
+
+    def test_shutdown_signal_handler_uses_raw_shutdown_when_no_lifecycle(self) -> None:
+        """Embedded/no-lifecycle hosts (idle_grace<=0) still exit cleanly on
+        a shutdown signal, via a direct server shutdown."""
+        from audiagentic.commands.gateway import _install_shutdown_signals
+
+        class _FakeHost:
+            def __init__(self) -> None:
+                self.lifecycle = None
+                self.shutdown_calls = 0
+
+            def shutdown(self) -> None:
+                self.shutdown_calls += 1
+
+        host = _FakeHost()
+        state = _install_shutdown_signals(host)
+
+        import signal as signal_module
+        handler = signal_module.getsignal(signal_module.SIGTERM)
+        handler(signal_module.SIGTERM, None)
+
+        assert host.shutdown_calls == 1
+        assert state.forced_fallback is False
+
+        signal_module.signal(signal_module.SIGTERM, signal_module.SIG_DFL)
+
     def test_gateway_serve_still_works(self, tmp_path: Path) -> None:
         """The existing 'gateway serve' must still parse and dispatch correctly."""
         import subprocess
