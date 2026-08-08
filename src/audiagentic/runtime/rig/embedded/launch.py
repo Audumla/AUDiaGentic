@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from audiagentic.foundation.system.process import candidate_ports
+from audiagentic.foundation.system.supervised_process import spawn_supervised
 from audiagentic.runtime.rig.constants import DEFAULT_HOST, DEFAULT_PORT
 from audiagentic.runtime.rig.embedded.config import (
     ModelProfile,
@@ -175,13 +176,15 @@ def start_embedded_rig(
             on_progress(f"[rig] launching {plan.profile.name} on {base_url}")
 
         with log_path.open("w", encoding="utf-8", errors="replace") as log_file:
-            process = subprocess.Popen(
+            supervised = spawn_supervised(
                 command,
                 cwd=plan.server_dir,
                 stdin=subprocess.DEVNULL,
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
+                text=False,
             )
+        process = supervised.process
         pid = process.pid
 
         try:
@@ -193,10 +196,7 @@ def start_embedded_rig(
             )
         except BaseException as exc:
             last_error = str(exc)
-            try:
-                process.kill()
-            except OSError:
-                pass
+            supervised.close()
             continue
 
         result = LaunchResult(

@@ -954,6 +954,17 @@ class AcpSessionTransport:
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.STDOUT,
                     )
+                    # Adopt the terminal process into a kill-on-close Job Object
+                    # (Windows) so it cannot outlive this shim even if hard-killed.
+                    # Bridge solution until async spawn_supervised exists.
+                    try:
+                        from audiagentic.foundation.system.supervised_process import (
+                            adopt_pid_into_kill_job,
+                        )
+
+                        adopt_pid_into_kill_job(proc.pid)
+                    except Exception:  # noqa: BLE001 — best effort, degrade gracefully
+                        pass
                 except AudiaGenticError:
                     raise
                 except Exception as exc:
