@@ -14,6 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 from audiagentic.components.agents.models.agent_definition import (
     AgentDefinition,
     AgentDefinitionStore,
@@ -33,7 +34,6 @@ from audiagentic.components.agents.models.execution_profile_api import (
     create_execution_profile,
 )
 from audiagentic.components.agents.models.role_api import create_role
-
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
@@ -164,7 +164,7 @@ def test_create_get_update_delete_definition_round_trips(tmp_path: Path):
 def test_resolve_agent_definition_with_real_dependencies(tmp_path: Path):
     (tmp_path / ".audiagentic").mkdir()
     create_execution_profile(
-        tmp_path, {"profile_id": "fast", "provider_id": "local-openai", "model_id": "gpt-4o-mini"}
+        tmp_path, {"profile_id": "fast", "provider_id": "local-openai", "instances": ["gpt-4o-mini"]}
     )
     create_role(tmp_path, {"role_id": "reviewer", "instructions": "Review."})
     create_agent_definition(tmp_path, _make_definition())
@@ -186,7 +186,7 @@ def test_resolve_agent_definition_not_found_raises_res_agd_001(tmp_path: Path):
 def test_resolve_agent_definition_missing_role_raises_res_rol_001(tmp_path: Path):
     (tmp_path / ".audiagentic").mkdir()
     create_execution_profile(
-        tmp_path, {"profile_id": "fast", "provider_id": "local-openai", "model_id": "gpt-4o-mini"}
+        tmp_path, {"profile_id": "fast", "provider_id": "local-openai", "instances": ["gpt-4o-mini"]}
     )
     create_agent_definition(tmp_path, _make_definition(role_id="missing-role"))
     with pytest.raises(AudiaGenticError) as exc_info:
@@ -203,7 +203,7 @@ def test_resolve_agent_definition_launches_no_process_creates_no_task(tmp_path: 
 
     def fake_profile_lookup(project_root, profile_id):
         calls.append(f"profile:{profile_id}")
-        return {"profile_id": profile_id, "provider_id": "fake-provider", "model_id": "fake-model"}
+        return {"profile_id": profile_id, "provider_id": "fake-provider", "instances": ["fake-model"]}
 
     def fake_role_lookup(project_root, role_id):
         calls.append(f"role:{role_id}")
@@ -230,7 +230,7 @@ def test_resolve_agent_definition_launches_no_process_creates_no_task(tmp_path: 
 def test_one_execution_profile_backs_two_agents_with_different_roles(tmp_path: Path):
     (tmp_path / ".audiagentic").mkdir()
     create_execution_profile(
-        tmp_path, {"profile_id": "shared", "provider_id": "local-openai", "model_id": "gpt-4o"}
+        tmp_path, {"profile_id": "shared", "provider_id": "local-openai", "instances": ["gpt-4o"]}
     )
     create_role(tmp_path, {"role_id": "reviewer", "instructions": "Review."})
     create_role(tmp_path, {"role_id": "implementer", "instructions": "Implement."})
@@ -258,10 +258,10 @@ def test_agent_definition_re_pointed_to_compatible_profile_keeps_stable_id(tmp_p
     not a new record with a generation/version field."""
     (tmp_path / ".audiagentic").mkdir()
     create_execution_profile(
-        tmp_path, {"profile_id": "old", "provider_id": "local-openai", "model_id": "gpt-4o-mini"}
+        tmp_path, {"profile_id": "old", "provider_id": "local-openai", "instances": ["gpt-4o-mini"]}
     )
     create_execution_profile(
-        tmp_path, {"profile_id": "new", "provider_id": "local-openai", "model_id": "gpt-4o"}
+        tmp_path, {"profile_id": "new", "provider_id": "local-openai", "instances": ["gpt-4o"]}
     )
     create_role(tmp_path, {"role_id": "reviewer", "instructions": "Review."})
     create_agent_definition(tmp_path, _make_definition(execution_profile_id="old"))
@@ -285,7 +285,7 @@ def test_publication_flags_are_stored_but_carry_no_runtime_effect(tmp_path: Path
     test_agent_definitions_architecture.py."""
     (tmp_path / ".audiagentic").mkdir()
     create_execution_profile(
-        tmp_path, {"profile_id": "fast", "provider_id": "local-openai", "model_id": "gpt-4o-mini"}
+        tmp_path, {"profile_id": "fast", "provider_id": "local-openai", "instances": ["gpt-4o-mini"]}
     )
     create_role(tmp_path, {"role_id": "reviewer", "instructions": "Review."})
     create_agent_definition(tmp_path, _make_definition(acp=True, a2a=True))

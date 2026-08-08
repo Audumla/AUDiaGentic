@@ -24,16 +24,21 @@ def _make_profile(project_root: Path, profile_id: str, provider_id: str, model_i
     create_execution_profile(project_root, {
         "profile_id": profile_id,
         "provider_id": provider_id,
-        "model_id": model_id,
+        "instances": [model_id],
         "params": params,
     })
     _enable_provider(project_root, provider_id)
 
 
-def _record(project_root: Path, execution_profile_id: str) -> dict:
+def _record(project_root: Path, execution_profile_id: str, model_id: str = "gpt-4o") -> dict:
+    # AS105/AS101: dispatch.py reads the bound model from resolved-model-id,
+    # normally injected by queue.py's _run_one at dispatch time. These tests
+    # call dispatch.dispatch_request directly, bypassing the queue, so the
+    # binding has to be supplied here instead.
     record = store.build_record(
         execution_profile_id=execution_profile_id,
         prompt_body="do the thing",
+        resolved_model_id=model_id,
     )
     store.write_record(project_root, record)
     claimed = store.claim_dispatch(
@@ -187,7 +192,7 @@ def test_dispatch_validation_error_is_terminal(tmp_path: Path, monkeypatch):
 
 
 def test_dispatch_disabled_provider_is_terminal(tmp_path: Path, monkeypatch):
-    create_execution_profile(tmp_path, {"profile_id": "primary", "provider_id": "local-openai", "model_id": "gpt-4o"})
+    create_execution_profile(tmp_path, {"profile_id": "primary", "provider_id": "local-openai", "instances": ["gpt-4o"]})
     # provider left disabled (never enabled)
     record = _record(tmp_path, "primary")
 
