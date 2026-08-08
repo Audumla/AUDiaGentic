@@ -49,3 +49,13 @@ agent-definitions:
   internal: true
   acp: false
   a2a: false
+- agent_id: gpt-auto-reviewer-agent
+  name: GPT-Auto Reviewer Agent
+  execution_profile_id: gpt-auto
+  role_id: reviewer
+  description: Real reviewer-role behavioral agent backed by ChatGPT via CDP browser
+    automation, for a second, external review perspective.
+  advertised_skills: []
+  internal: true
+  acp: false
+  a2a: false
