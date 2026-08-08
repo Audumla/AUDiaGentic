@@ -1,0 +1,25 @@
+type: implementation
+contract-version: v1
+parent: agents
+id: automatic
+display-name: Automatic
+description: >-
+  Discover-or-start the managed local shared gateway service (SH05/SH10
+  bootstrap). Target default implementation after SH11's soak evidence is
+  recorded -- not the default yet.
+default: false
+options-schema:
+  startup-timeout-seconds:
+    type: number
+    default: 30
+    description: >-
+      How long this caller waits for the managed service to become ready
+      when it is the one starting it. Project/caller-scoped: how long *this*
+      client waits, not a machine-wide service policy.
+# RV736 (A2): service-root and idle-grace-seconds are MACHINE-scope service
+# declaration, not project-scoped implementation options -- deliberately not
+# modeled here. Attaching to a live service must compare its expected
+# machine declaration against the live handshake and fail clearly on a
+# mismatch, never silently accept whichever config the first starter used.
+# That comparison, and the machine-declaration config surface itself, are
+# unbuilt -- real remaining SH11 scope, not an oversight.

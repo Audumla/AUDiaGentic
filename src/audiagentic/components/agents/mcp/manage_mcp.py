@@ -136,6 +136,146 @@ def agent_delete_definition(agent_id: str) -> dict:
     return delete_agent_definition(project_root_from_env(), agent_id)
 
 
+# SH11 Slice C: generic gateway-management implementation selection/config.
+# No implementation-specific tools (e.g. "set automatic startup timeout")
+# exist here -- get_config/set_config are the only settable surface, per
+# CREATING_A_COMPONENT.md's implementation-backed component rule.
+
+
+@mcp.tool()
+@log_tool_call
+def agent_gateway_status() -> dict:
+    from audiagentic.components.agents.gateway.management_api import gateway_status
+    return gateway_status(project_root_from_env())
+
+
+@mcp.tool()
+@log_tool_call
+def agent_gateway_list_implementations() -> dict:
+    from audiagentic.components.agents.gateway.management_api import (
+        gateway_list_implementations,
+    )
+    return gateway_list_implementations(project_root_from_env())
+
+
+@mcp.tool()
+@log_tool_call
+def agent_gateway_select_implementation(implementation_id: str) -> dict:
+    from audiagentic.components.agents.gateway.management_api import (
+        gateway_select_implementation,
+    )
+    return gateway_select_implementation(project_root_from_env(), implementation_id)
+
+
+@mcp.tool()
+@log_tool_call
+def agent_gateway_get_config(implementation_id: str | None = None) -> dict:
+    from audiagentic.components.agents.gateway.management_api import gateway_get_config
+    return gateway_get_config(project_root_from_env(), implementation_id)
+
+
+@mcp.tool()
+@log_tool_call
+def agent_gateway_set_config(implementation_id: str, updates: dict) -> dict:
+    from audiagentic.components.agents.gateway.management_api import gateway_set_config
+    return gateway_set_config(project_root_from_env(), implementation_id, updates)
+
+
+# AS105/AS101: Compute Resource and Model Instance CRUD. User-global config
+# (no project_root) -- these describe shared hardware, not one project's
+# intent. See agents_paths.compute_resources_path/model_instances_path.
+
+
+@mcp.tool()
+@log_tool_call
+def agent_list_compute_resources() -> list:
+    from audiagentic.components.agents.models.compute_resource_api import (
+        list_compute_resources,
+    )
+    return list_compute_resources()
+
+
+@mcp.tool()
+@log_tool_call
+def agent_get_compute_resource(resource_id: str) -> dict:
+    from audiagentic.components.agents.models.compute_resource_api import (
+        get_compute_resource,
+    )
+    return get_compute_resource(resource_id)
+
+
+@mcp.tool()
+@log_tool_call
+def agent_create_compute_resource(resource: dict) -> dict:
+    from audiagentic.components.agents.models.compute_resource_api import (
+        create_compute_resource,
+    )
+    return create_compute_resource(resource)
+
+
+@mcp.tool()
+@log_tool_call
+def agent_update_compute_resource(resource_id: str, updates: dict) -> dict:
+    from audiagentic.components.agents.models.compute_resource_api import (
+        update_compute_resource,
+    )
+    return update_compute_resource(resource_id, updates)
+
+
+@mcp.tool()
+@log_tool_call
+def agent_delete_compute_resource(resource_id: str) -> dict:
+    from audiagentic.components.agents.models.compute_resource_api import (
+        delete_compute_resource,
+    )
+    return delete_compute_resource(resource_id)
+
+
+@mcp.tool()
+@log_tool_call
+def agent_list_model_instances() -> list:
+    from audiagentic.components.agents.models.model_instance_api import (
+        list_model_instances,
+    )
+    return list_model_instances()
+
+
+@mcp.tool()
+@log_tool_call
+def agent_get_model_instance(instance_id: str) -> dict:
+    from audiagentic.components.agents.models.model_instance_api import (
+        get_model_instance,
+    )
+    return get_model_instance(instance_id)
+
+
+@mcp.tool()
+@log_tool_call
+def agent_create_model_instance(instance: dict) -> dict:
+    from audiagentic.components.agents.models.model_instance_api import (
+        create_model_instance,
+    )
+    return create_model_instance(instance)
+
+
+@mcp.tool()
+@log_tool_call
+def agent_update_model_instance(instance_id: str, updates: dict) -> dict:
+    from audiagentic.components.agents.models.model_instance_api import (
+        update_model_instance,
+    )
+    return update_model_instance(instance_id, updates)
+
+
+@mcp.tool()
+@log_tool_call
+def agent_delete_model_instance(instance_id: str) -> dict:
+    from audiagentic.components.agents.models.model_instance_api import (
+        delete_model_instance,
+    )
+    return delete_model_instance(instance_id)
+
+
 def main() -> None:
     run_mcp_server(mcp, "agents-manage")
 
