@@ -191,6 +191,40 @@ def build_server() -> FastMCP:
             project_root_from_env(), source_id, enabled
         )
 
+    # AS105/AS101: user-global tier -- shared local-endpoint sources
+    # (concurrency, resource-id). Machine-wide, no project_root: declared
+    # once, every project inherits it via model_source_list_resolved.
+
+    @mcp.tool()
+    @log_tool_call
+    def model_source_list_resolved() -> dict[str, Any]:
+        return providers_api.model_source_list_resolved(project_root_from_env())
+
+    @mcp.tool()
+    @log_tool_call
+    def model_source_list_global() -> dict[str, Any]:
+        return providers_api.model_source_list_global()
+
+    @mcp.tool()
+    @log_tool_call
+    def model_source_add_global(source_id: str, config: dict[str, Any]) -> dict[str, Any]:
+        return providers_api.model_source_add_global(source_id, config)
+
+    @mcp.tool()
+    @log_tool_call
+    def model_source_update_global(source_id: str, updates: dict[str, Any]) -> dict[str, Any]:
+        return providers_api.model_source_update_global(source_id, updates)
+
+    @mcp.tool()
+    @log_tool_call
+    def model_source_remove_global(source_id: str) -> dict[str, Any]:
+        return providers_api.model_source_remove_global(source_id)
+
+    @mcp.tool()
+    @log_tool_call
+    def model_source_set_enabled_global(source_id: str, enabled: bool) -> dict[str, Any]:
+        return providers_api.model_source_set_enabled_global(source_id, enabled)
+
     @mcp.tool()
     @log_tool_call
     def describe_provider(provider_id: str) -> dict[str, Any]:

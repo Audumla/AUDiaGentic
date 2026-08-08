@@ -72,6 +72,7 @@ def build_record(
     gateway_execution_lane_key: str | None = None,
     resolved_provider_id: str | None = None,
     resolved_model_id: str | None = None,
+    resolved_instance_ids: list[str] | None = None,
     resolved_queue_limits: dict[str, int] | None = None,
     admission_policy_digest: str | None = None,
 ) -> dict[str, Any]:
@@ -168,6 +169,7 @@ def build_record(
         "gateway-execution-lane-key": gateway_execution_lane_key,
         "resolved-provider-id": resolved_provider_id,
         "resolved-model-id": resolved_model_id,
+        "resolved-instance-ids": resolved_instance_ids,
         "resolved-queue-limits": resolved_queue_limits,
         "admission-policy-digest": admission_policy_digest,
         "mode": mode,
@@ -383,7 +385,7 @@ def project_public_status(
         # SH07 C2: gateway profile snapshot identity — redacted (no secrets)
         "gateway-profile-id", "gateway-profile-generation", "gateway-profile-config-digest",
         "gateway-execution-lane-key", "resolved-provider-id", "resolved-model-id",
-        "resolved-queue-limits", "admission-policy-digest",
+        "resolved-instance-ids", "resolved-queue-limits", "admission-policy-digest",
     )
     status = {field: record.get(field) for field in visible}
     status["latest-transition"] = latest_transition

@@ -69,6 +69,11 @@
     "resolved-model-id": {
       "type": ["string", "null"]
     },
+    "resolved-instance-ids": {
+      "description": "AS105/AS101: the admitted compatible model-sources.yaml source-id set (ResolvedExecutionProfile.instances at admission time). Absent on records predating the free-instance dispatch migration -- snapshot_from_record() fails closed on those rather than misparsing them.",
+      "type": ["array", "null"],
+      "items": {"type": "string"}
+    },
     "resolved-queue-limits": {
       "type": ["object", "null"],
       "properties": {
