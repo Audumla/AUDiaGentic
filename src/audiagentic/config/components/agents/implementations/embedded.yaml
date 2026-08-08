@@ -1,0 +1,20 @@
+type: implementation
+contract-version: v1
+parent: agents
+id: embedded
+display-name: Embedded
+description: >-
+  In-process gateway engine, hosted directly inside the caller. Fenced for
+  tests/dev/one-shot use; never claims sharing semantics across processes.
+  Default until automatic gateway management completes soak (SH11).
+default: true
+options-schema:
+  allow-with-live-shared-owner:
+    type: enum
+    values: [warn, refuse]
+    default: refuse
+    description: >-
+      What to do when a live, provable shared gateway owner already exists
+      for this project. Refusing is the safe default -- an embedded client
+      silently coexisting beside a shared owner is exactly the dual-ownership
+      class of bug this component boundary exists to prevent.
