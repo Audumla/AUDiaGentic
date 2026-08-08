@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 from audiagentic.components.agents.models.execution_profile_api import (
     create_execution_profile,
 )
@@ -27,7 +28,6 @@ from audiagentic.components.agents.models.role_api import (
     list_roles,
     update_role,
 )
-
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
@@ -245,10 +245,10 @@ def test_get_role_not_found_raises(tmp_path: Path):
 def test_one_role_resolves_against_two_execution_profiles(tmp_path: Path):
     (tmp_path / ".audiagentic").mkdir()
     create_execution_profile(
-        tmp_path, {"profile_id": "fast", "provider_id": "local-openai", "model_id": "gpt-4o-mini"}
+        tmp_path, {"profile_id": "fast", "provider_id": "local-openai", "instances": ["gpt-4o-mini"]}
     )
     create_execution_profile(
-        tmp_path, {"profile_id": "strong", "provider_id": "anthropic", "model_id": "claude-3"}
+        tmp_path, {"profile_id": "strong", "provider_id": "anthropic", "instances": ["claude-3"]}
     )
     role = create_role(tmp_path, _make_role(role_id="reviewer"))
 
@@ -262,7 +262,7 @@ def test_one_role_resolves_against_two_execution_profiles(tmp_path: Path):
 def test_one_execution_profile_backs_two_roles(tmp_path: Path):
     (tmp_path / ".audiagentic").mkdir()
     create_execution_profile(
-        tmp_path, {"profile_id": "shared", "provider_id": "local-openai", "model_id": "gpt-4o"}
+        tmp_path, {"profile_id": "shared", "provider_id": "local-openai", "instances": ["gpt-4o"]}
     )
     reviewer = create_role(tmp_path, _make_role(role_id="reviewer", instructions="Review."))
     implementer = create_role(

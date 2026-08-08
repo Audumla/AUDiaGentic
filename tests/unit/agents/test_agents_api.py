@@ -17,7 +17,7 @@ def _make_profile(**kwargs) -> dict:
     base = {
         "profile_id": "test-profile",
         "provider_id": "local-openai",
-        "model_id": "gpt-4o",
+        "instances": ["gpt-4o"],
     }
     base.update(kwargs)
     return base
@@ -106,7 +106,7 @@ def test_save_execution_profiles_writes_file(tmp_path):
     path = execution_profiles_path(tmp_path)
     assert path.exists()
     data = load_yaml_file(path)
-    assert data["contract-version"] == "v1"
+    assert data["contract-version"] == "v2"
     assert len(data["profiles"]) == 1
 
 
@@ -152,7 +152,7 @@ def test_get_execution_profile_returns_profile(tmp_path):
     result = agents_api.get_execution_profile(tmp_path, "test-profile")
     assert result["profile_id"] == "test-profile"
     assert result["provider_id"] == "local-openai"
-    assert result["model_id"] == "gpt-4o"
+    assert result["instances"] == ["gpt-4o"]
 
 
 def test_get_execution_profile_not_found_raises_res_agp_001(tmp_path):
@@ -169,7 +169,7 @@ def test_create_execution_profile_minimal(tmp_path):
     result = agents_api.create_execution_profile(tmp_path, _make_profile())
     assert result["profile_id"] == "test-profile"
     assert result["provider_id"] == "local-openai"
-    assert result["model_id"] == "gpt-4o"
+    assert result["instances"] == ["gpt-4o"]
 
 
 def test_create_execution_profile_persists_to_file(tmp_path):
@@ -177,7 +177,7 @@ def test_create_execution_profile_persists_to_file(tmp_path):
     path = execution_profiles_path(tmp_path)
     assert path.exists()
     data = load_yaml_file(path)
-    assert data["contract-version"] == "v1"
+    assert data["contract-version"] == "v2"
     assert len(data["profiles"]) == 1
 
 
@@ -220,10 +220,10 @@ def test_create_execution_profile_sets_default(tmp_path):
 # update_execution_profile
 # ---------------------------------------------------------------------------
 
-def test_update_execution_profile_model_id(tmp_path):
+def test_update_execution_profile_instances(tmp_path):
     agents_api.create_execution_profile(tmp_path, _make_profile())
-    result = agents_api.update_execution_profile(tmp_path, "test-profile", {"model_id": "gpt-4o-mini"})
-    assert result["model_id"] == "gpt-4o-mini"
+    result = agents_api.update_execution_profile(tmp_path, "test-profile", {"instances": ["gpt-4o-mini"]})
+    assert result["instances"] == ["gpt-4o-mini"]
 
 
 def test_update_execution_profile_model_alias(tmp_path):
@@ -261,7 +261,7 @@ def test_update_execution_profile_profile_id_immutable(tmp_path):
 
 def test_update_execution_profile_not_found_raises_res_agp_001(tmp_path):
     with pytest.raises(AudiaGenticError) as exc_info:
-        agents_api.update_execution_profile(tmp_path, "missing", {"model_id": "x"})
+        agents_api.update_execution_profile(tmp_path, "missing", {"instances": ["x"]})
     assert exc_info.value.code == "RES-EXP-001"
 
 
@@ -277,10 +277,10 @@ def test_update_execution_profile_sets_default_clears_others(tmp_path):
 
 def test_update_execution_profile_preserves_unchanged_fields(tmp_path):
     agents_api.create_execution_profile(tmp_path, _make_profile(description="original"))
-    agents_api.update_execution_profile(tmp_path, "test-profile", {"model_id": "gpt-4o-mini"})
+    agents_api.update_execution_profile(tmp_path, "test-profile", {"instances": ["gpt-4o-mini"]})
     result = agents_api.get_execution_profile(tmp_path, "test-profile")
     assert result["description"] == "original"
-    assert result["model_id"] == "gpt-4o-mini"
+    assert result["instances"] == ["gpt-4o-mini"]
 
 
 # ---------------------------------------------------------------------------
@@ -323,7 +323,7 @@ def test_resolve_execution_profile_returns_execution_data(tmp_path):
     result = agents_api.resolve_execution_profile(tmp_path, "test-profile")
     assert result["profile_id"] == "test-profile"
     assert result["provider_id"] == "local-openai"
-    assert result["model_id"] == "gpt-4o"
+    assert result["instances"] == ["gpt-4o"]
     assert result["model_alias"] == "g4o"
     assert result["params"] == {"temperature": 0.5}
 

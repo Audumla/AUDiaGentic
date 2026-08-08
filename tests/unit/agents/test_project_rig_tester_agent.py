@@ -30,7 +30,7 @@ REPO_ROOT = PACKAGE_ROOT.parent.parent
 def test_rig_tester_execution_profile_exists() -> None:
     profile = get_execution_profile(REPO_ROOT, "rig-tester")
     assert profile["provider_id"] == "local-openai"
-    assert profile["model_id"] == "audiagentic-rig"
+    assert profile["instances"] == ["ag-rig"]
 
 
 def test_placeholder_role_exists() -> None:
@@ -51,5 +51,5 @@ def test_rig_tester_agent_resolves_end_to_end() -> None:
     resolved = resolve_agent_definition(REPO_ROOT, "rig-tester-agent")
     assert resolved["agent_id"] == "rig-tester-agent"
     assert resolved["execution_profile"]["provider_id"] == "local-openai"
-    assert resolved["execution_profile"]["model_id"] == "audiagentic-rig"
+    assert resolved["execution_profile"]["instances"] == ["ag-rig"]
     assert resolved["role"]["role_id"] == "placeholder"

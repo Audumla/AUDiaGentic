@@ -1,4 +1,4 @@
-"""Unit tests for agents_gateway_profiles — snapshot, lane key, and digest helpers (SH07 C2)."""
+"""Unit tests for agents_gateway_profiles — snapshot and digest helpers (SH07 C2, AS105/AS101)."""
 from __future__ import annotations
 
 import pytest
@@ -56,127 +56,70 @@ class TestConfigDigest:
         assert digest.startswith("sha256:")
 
 
-class TestAdmissionPolicyDigest:
-    def test_deterministic(self):
-        d1 = profiles_mod._admission_policy_digest(2, 8)
-        d2 = profiles_mod._admission_policy_digest(2, 8)
-        assert d1 == d2
-
-    def test_different_limits_different_digest(self):
-        d1 = profiles_mod._admission_policy_digest(2, 8)
-        d2 = profiles_mod._admission_policy_digest(3, 8)
-        assert d1 != d2
-
-
 class TestResolvedExecutionProfile:
-    def test_lane_key_derives_correctly(self):
-        snapshot = profiles_mod.ResolvedExecutionProfile(
-            profile_id="test-profile",
-            generation="gen_abc123",
-            config_digest="sha256:def456",
-            provider_id="local",
-            model_id="m",
-            max_concurrency=1,
-            queue_max_size=8,
-            execution_params={},
-            admission_policy_digest="sha256:ghi789",
-        )
-        lane_key = snapshot.lane_key()
-        assert lane_key.profile_id == "test-profile"
-        assert lane_key.generation == "gen_abc123"
-        assert lane_key.config_digest == "sha256:def456"
-
-    def test_public_id_format(self):
-        lane_key = profiles_mod.GatewayExecutionLaneKey(
-            profile_id="my-profile",
-            generation="gen_123abc",
-            config_digest="sha256:aabbccdd",
-        )
-        public_id = lane_key.public_id()
-        assert "my-profile" in public_id
-        assert "gen_123abc" in public_id
-        assert "/" in public_id
-
-    def test_public_id_no_paths(self):
-        lane_key = profiles_mod.GatewayExecutionLaneKey(
-            profile_id="safe-profile",
-            generation="gen_xyz",
-            config_digest="sha256:111222333444",
-        )
-        public_id = lane_key.public_id()
-        assert "/" not in public_id or public_id.count("/") == 2
-        # No filesystem path separators (backslash on Windows)
-        assert "\\" not in public_id
-
-
     def test_resolved_surface_fields_default_to_none(self):
         snapshot = profiles_mod.ResolvedExecutionProfile(
             profile_id="p", generation="g", config_digest="d", provider_id="local",
-            model_id="m", max_concurrency=1, queue_max_size=8, execution_params={},
-            admission_policy_digest="a",
+            instances=("m",), execution_params={},
         )
         assert snapshot.resolved_surface_id is None
         assert snapshot.resolved_surface_version is None
         assert snapshot.to_mapping()["resolved-surface-id"] is None
+        assert snapshot.to_mapping()["instances"] == ["m"]
 
     def test_resolved_surface_fields_pass_schema_validation(self):
         snapshot = profiles_mod.ResolvedExecutionProfile(
             profile_id="p", generation="g", config_digest="d", provider_id="pi",
-            model_id="m", max_concurrency=1, queue_max_size=8, execution_params={},
-            admission_policy_digest="a",
+            instances=("m",), execution_params={},
             resolved_surface_id="pi-community-acp", resolved_surface_version="1.0",
         )
         assert snapshot.to_mapping()["resolved-surface-id"] == "pi-community-acp"
         assert snapshot.to_mapping()["resolved-surface-version"] == "1.0"
+
+    def test_multiple_instances_pass_schema_validation(self):
+        snapshot = profiles_mod.ResolvedExecutionProfile(
+            profile_id="p", generation="g", config_digest="d", provider_id="local",
+            instances=("m27b1", "m27b2"), execution_params={},
+        )
+        assert snapshot.to_mapping()["instances"] == ["m27b1", "m27b2"]
 
 
 class TestSnapshotFromResolvedProfile:
     def test_same_params_produce_same_generation(self):
         params = {"max-concurrency": 1, "provider_id": "local", "model_id": "m"}
         snap_a = profiles_mod.snapshot_from_resolved_profile(
-            profile_id="p", provider_id=params["provider_id"], model_id=params["model_id"], params=params,
+            profile_id="p", provider_id=params["provider_id"], instances=("m",), params=params,
         )
         snap_b = profiles_mod.snapshot_from_resolved_profile(
-            profile_id="p", provider_id=params["provider_id"], model_id=params["model_id"], params=dict(params),
+            profile_id="p", provider_id=params["provider_id"], instances=("m",), params=dict(params),
         )
         assert snap_a.generation == snap_b.generation
         assert snap_a.config_digest == snap_b.config_digest
 
-    def test_different_params_produce_different_lane(self):
-        base = {"provider_id": "local", "model_id": "m"}
+    def test_different_params_produce_different_generation(self):
+        base = {"provider_id": "local"}
         snap_a = profiles_mod.snapshot_from_resolved_profile(
-            profile_id="p", provider_id=base["provider_id"], model_id=base["model_id"], params={**base, "max-concurrency": 1},
+            profile_id="p", provider_id=base["provider_id"], instances=("m",), params={**base, "max-concurrency": 1},
         )
         snap_b = profiles_mod.snapshot_from_resolved_profile(
-            profile_id="p", provider_id=base["provider_id"], model_id=base["model_id"], params={**base, "max-concurrency": 2},
+            profile_id="p", provider_id=base["provider_id"], instances=("m",), params={**base, "max-concurrency": 2},
         )
-        assert snap_a.lane_key() != snap_b.lane_key()
+        assert (snap_a.generation, snap_a.config_digest) != (snap_b.generation, snap_b.config_digest)
 
     def test_secrets_not_in_execution_params(self):
         params = {"provider_id": "local", "model_id": "m", "api-key": "sk-secret"}
         snapshot = profiles_mod.snapshot_from_resolved_profile(
-            profile_id="p", provider_id=params["provider_id"], model_id=params["model_id"], params=params,
+            profile_id="p", provider_id=params["provider_id"], instances=("m",), params=params,
         )
         # execution_params is a MappingProxyType; iterate over it
         for k in snapshot.execution_params:
             assert "api-key" not in k.lower()
 
-    def test_queue_limits_from_params(self):
+    def test_instances_carried_through_unchanged(self):
         snap = profiles_mod.snapshot_from_resolved_profile(
-            profile_id="p", provider_id="local", model_id="m",
-            params={"max-concurrency": 3, "queue-max-size": 12},
+            profile_id="p", provider_id="local", instances=("m27b1", "m27b2"), params={},
         )
-        assert snap.max_concurrency == 3
-        assert snap.queue_max_size == 12
-
-    def test_default_queue_size_from_concurrency(self):
-        snap = profiles_mod.snapshot_from_resolved_profile(
-            profile_id="p", provider_id="local", model_id="m",
-            params={"max-concurrency": 5},
-        )
-        assert snap.max_concurrency == 5
-        # Default: max(8, max_concurrency * 2) = max(8, 10) = 10
-        assert snap.queue_max_size == 10
+        assert snap.instances == ("m27b1", "m27b2")
 
 
 def _make_resolved_surface(*, validated: bool, surface_id: str = "pi-community-acp", resolved_version: str = "1.0"):
@@ -210,7 +153,7 @@ class TestResolveForAdmissionSurface:
             {
                 "profile_id": "with-surface",
                 "provider_id": "pi",
-                "model_id": "m",
+                "instances": ["m"],
                 **({"surface_id": surface_id} if surface_id else {}),
             },
         )
@@ -289,12 +232,11 @@ class TestInMemoryExecutionProfileRegistry:
 
     def test_resolve_snapshot(self):
         reg = profiles_mod.InMemoryExecutionProfileRegistry()
-        reg.register("gw-profile", provider_id="local", model_id="m", max_concurrency=3)
+        reg.register("gw-profile", provider_id="local", instances=("m",))
         snap = reg.resolve_snapshot("gw-profile")
         assert snap.profile_id == "gw-profile"
         assert snap.provider_id == "local"
-        assert snap.model_id == "m"
-        assert snap.max_concurrency == 3
+        assert snap.instances == ("m",)
 
     def test_not_found_raises(self):
         from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -305,26 +247,27 @@ class TestInMemoryExecutionProfileRegistry:
         assert exc_info.value.code == "RES-EXP-001"
 
     def test_re_register_changes_generation(self):
-        """Re-registering the same profile increments version → new generation."""
+        """Re-registering the same profile with different content changes the
+        content-derived generation."""
         reg = profiles_mod.InMemoryExecutionProfileRegistry()
-        reg.register("gw-profile", provider_id="local", model_id="m")
+        reg.register("gw-profile", provider_id="local", instances=("m",))
         snap_v1 = reg.resolve_snapshot("gw-profile")
 
-        reg.register("gw-profile", provider_id="local", model_id="m", max_concurrency=2)
+        reg.register("gw-profile", provider_id="local", instances=("m27b1", "m27b2"))
         snap_v2 = reg.resolve_snapshot("gw-profile")
 
         assert snap_v1.generation != snap_v2.generation, "re-register must change generation"
-        assert snap_v2.max_concurrency == 2
+        assert snap_v2.instances == ("m27b1", "m27b2")
 
     def test_validate_current_after_change(self):
         """Snapshot from old generation is stale after re-register."""
         reg = profiles_mod.InMemoryExecutionProfileRegistry()
-        reg.register("gw-profile", provider_id="local", model_id="m")
+        reg.register("gw-profile", provider_id="local", instances=("m",))
         snap_v1 = reg.resolve_snapshot("gw-profile")
 
         assert reg.validate_snapshot_current(snap_v1) is True
 
-        reg.register("gw-profile", provider_id="local", model_id="m", max_concurrency=2)
+        reg.register("gw-profile", provider_id="local", instances=("m27b1", "m27b2"))
         assert reg.validate_snapshot_current(snap_v1) is False, "old snapshot must be stale"
 
     def test_secrets_stripped_from_snapshot(self):
@@ -333,7 +276,7 @@ class TestInMemoryExecutionProfileRegistry:
         reg.register(
             "gw-profile",
             provider_id="local",
-            model_id="m",
+            instances=("m",),
             execution_params={"api-key": "sk-secret", "temperature": 0.7},
         )
         snap = reg.resolve_snapshot("gw-profile")
@@ -343,7 +286,7 @@ class TestInMemoryExecutionProfileRegistry:
     def test_snapshot_from_record(self):
         """Reconstruct snapshot from persisted record fields."""
         reg = profiles_mod.InMemoryExecutionProfileRegistry()
-        reg.register("test-profile", provider_id="local", model_id="m", max_concurrency=2, queue_max_size=6)
+        reg.register("test-profile", provider_id="local", instances=("m27b1", "m27b2"))
         snap = reg.resolve_snapshot("test-profile")
 
         record = {
@@ -351,17 +294,34 @@ class TestInMemoryExecutionProfileRegistry:
             "gateway-profile-generation": snap.generation,
             "gateway-profile-config-digest": snap.config_digest,
             "resolved-provider-id": snap.provider_id,
-            "resolved-model-id": snap.model_id,
-            "resolved-queue-limits": {"max-concurrency": 2, "queue-max-size": 6},
-            "admission-policy-digest": snap.admission_policy_digest,
+            "resolved-instance-ids": list(snap.instances),
         }
         reconstructed = profiles_mod.snapshot_from_record(record)
         assert reconstructed is not None
         assert reconstructed.profile_id == snap.profile_id
         assert reconstructed.generation == snap.generation
-        assert reconstructed.max_concurrency == 2
+        assert reconstructed.instances == ("m27b1", "m27b2")
 
     def test_snapshot_from_record_missing_fields(self):
-        """Pre-SH07 C2 record without snapshot fields returns None."""
+        """Pre-SH07 C2 record without snapshot fields returns None (embedded mode)."""
         record = {"execution-profile-id": "old-profile"}
         assert profiles_mod.snapshot_from_record(record) is None
+
+    def test_snapshot_from_record_pre_pivot_shape_raises_val_exp_006(self):
+        """AS105/AS101 decided fail-mode: a record admitted under a
+        shared-gateway snapshot before the free-instance dispatch pivot has
+        gateway-profile-id but no resolved-instance-ids -- fail closed
+        rather than silently misparse it as an empty instance set."""
+        from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+        record = {
+            "request-id": "req_old",
+            "gateway-profile-id": "test-profile",
+            "gateway-profile-generation": "gen_old",
+            "gateway-profile-config-digest": "sha256:old",
+            "resolved-provider-id": "local",
+            "resolved-model-id": "m",
+        }
+        with pytest.raises(AudiaGenticError) as exc_info:
+            profiles_mod.snapshot_from_record(record)
+        assert exc_info.value.code == "VAL-EXP-006"

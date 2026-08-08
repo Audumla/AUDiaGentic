@@ -25,10 +25,10 @@ def test_agent_status_no_profiles(tmp_path: Path) -> None:
 
 def test_agent_status_reports_profile_count_and_default(tmp_path: Path) -> None:
     create_execution_profile(tmp_path, {
-        "profile_id": "a", "provider_id": "local-openai", "model_id": "gpt-4o", "is_default": True,
+        "profile_id": "a", "provider_id": "local-openai", "instances": ["gpt-4o"], "is_default": True,
     })
     create_execution_profile(tmp_path, {
-        "profile_id": "b", "provider_id": "codex", "model_id": "gpt-4o",
+        "profile_id": "b", "provider_id": "codex", "instances": ["gpt-4o"],
     })
     result = agent_status(tmp_path).to_dict()
     assert result["configured"] is True

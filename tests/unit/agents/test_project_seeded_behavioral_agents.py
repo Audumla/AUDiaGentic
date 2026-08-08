@@ -55,7 +55,7 @@ def test_seeded_definition_resolves_end_to_end(agent_id: str, role_id: str) -> N
     resolved = resolve_agent_definition(REPO_ROOT, agent_id)
     assert resolved["agent_id"] == agent_id
     assert resolved["execution_profile"]["provider_id"] == "local-openai"
-    assert resolved["execution_profile"]["model_id"] == "audiagentic-rig"
+    assert resolved["execution_profile"]["instances"] == ["ag-rig"]
     assert resolved["role"]["role_id"] == role_id
     assert resolved["role"]["instructions"]
 

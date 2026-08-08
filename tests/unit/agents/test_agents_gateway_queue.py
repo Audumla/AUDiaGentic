@@ -987,19 +987,21 @@ def test_sh07c2_same_params_share_one_lane(tmp_path: Path):
     snap_a = profiles_mod.snapshot_from_resolved_profile(
         profile_id="shared-profile",
         provider_id=base_params["provider_id"],
-        model_id=base_params["model_id"],
+        instances=("m",),
         params=base_params,
     )
     snap_b = profiles_mod.snapshot_from_resolved_profile(
         profile_id="shared-profile",
         provider_id=base_params["provider_id"],
-        model_id=base_params["model_id"],
+        instances=("m",),
         params=dict(base_params),  # fresh dict, same content
     )
 
     assert snap_a.config_digest == snap_b.config_digest
-    assert snap_a.lane_key() == snap_b.lane_key()
-    # Same lane key means one shared queue
+    assert (snap_a.profile_id, snap_a.generation, snap_a.config_digest) == (
+        snap_b.profile_id, snap_b.generation, snap_b.config_digest,
+    )
+    # Same lane identity means one shared queue
 
     manager = queue_mod.GatewayQueueManager()
     hold = threading.Event()
@@ -1056,19 +1058,21 @@ def test_sh07c2_different_params_create_separate_lanes(tmp_path: Path):
     snap_a = profiles_mod.snapshot_from_resolved_profile(
         profile_id="same-profile",
         provider_id=params_a["provider_id"],
-        model_id=params_a["model_id"],
+        instances=("m",),
         params=params_a,
     )
     snap_b = profiles_mod.snapshot_from_resolved_profile(
         profile_id="same-profile",
         provider_id=params_b["provider_id"],
-        model_id=params_b["model_id"],
+        instances=("m",),
         params=params_b,
     )
 
     # Different non-secret params → different config digest → separate lanes
     assert snap_a.config_digest != snap_b.config_digest
-    assert snap_a.lane_key() != snap_b.lane_key()
+    assert (snap_a.profile_id, snap_a.generation, snap_a.config_digest) != (
+        snap_b.profile_id, snap_b.generation, snap_b.config_digest,
+    )
 
 
 def test_sh07c2_all_queue_depths_public_ids_no_paths(tmp_path: Path):
@@ -1140,28 +1144,56 @@ def shared_registry():
     _teardown_shared_registry()
 
 
-def test_sh07c2_shared_mode_cross_project_lane_limit(tmp_path: Path, shared_registry):
-    """Two project roots submit same gateway profile; global max_concurrency=1
-    is enforced across both while each request sees its own project root."""
-    # Register a shared gateway profile with max_concurrency=1
-    shared_registry.register(
-        "shared-gw-profile",
-        provider_id="local",
-        model_id="m",
-        max_concurrency=1,
-    )
-    snap = shared_registry.resolve_snapshot("shared-gw-profile")
-    lane_key = snap.lane_key()
-    snapshot_identity = {
+def _snapshot_identity_kwargs(snap) -> dict:
+    """AS105/AS101: the record fields carrying a shared-registry snapshot's
+    admission-time identity. gateway_execution_lane_key/resolved_queue_limits/
+    admission_policy_digest are retired (always None going forward, per
+    queue.py's own admission wiring) -- resolved_instance_ids replaces
+    resolved_model_id as the field snapshot_from_record reconstructs from."""
+    return {
         "gateway_profile_id": snap.profile_id,
         "gateway_profile_generation": snap.generation,
         "gateway_profile_config_digest": snap.config_digest,
-        "gateway_execution_lane_key": lane_key.public_id(),
         "resolved_provider_id": snap.provider_id,
-        "resolved_model_id": snap.model_id,
-        "resolved_queue_limits": {"max-concurrency": snap.max_concurrency, "queue-max-size": snap.queue_max_size},
-        "admission_policy_digest": snap.admission_policy_digest,
+        "resolved_instance_ids": list(snap.instances),
     }
+
+
+@pytest.fixture()
+def gated_source(tmp_path, monkeypatch):
+    """AS105/AS101: declare a user-global model-sources.yaml source with
+    resource-id+concurrency=1, so a profile naming it participates in
+    free-instance dispatch instead of the legacy per-lane semaphore."""
+    from audiagentic.components.providers import providers_api
+
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("AUDIAGENTIC_HOME", str(home))
+    providers_api.model_source_add_global(
+        "gated-src",
+        {
+            "source-class": "local-endpoint",
+            "connector": "openai-compatible",
+            "base-url": "http://127.0.0.1:9/v1",
+            "model-id": "m",
+            "resource-id": "gpu-0",
+            "concurrency": 1,
+        },
+    )
+    return "gated-src"
+
+
+def test_sh07c2_shared_mode_cross_project_lane_limit(tmp_path: Path, shared_registry, gated_source):
+    """Two project roots submit same gateway profile naming a gated instance
+    with concurrency=1; that global limit is enforced across both while each
+    request sees its own project root."""
+    shared_registry.register(
+        "shared-gw-profile",
+        provider_id="local",
+        instances=(gated_source,),
+    )
+    snap = shared_registry.resolve_snapshot("shared-gw-profile")
+    snapshot_identity = _snapshot_identity_kwargs(snap)
 
     manager = queue_mod.GatewayQueueManager()
     hold = threading.Event()
@@ -1191,17 +1223,23 @@ def test_sh07c2_shared_mode_cross_project_lane_limit(tmp_path: Path, shared_regi
     )
     store.write_record(root_b, record_b)
 
-    # Enqueue from project A — takes the only slot (registry says max_concurrency=1)
+    # Enqueue from project A — takes the only slot (source concurrency=1)
     t1 = threading.Thread(
         target=manager.enqueue,
-        args=(root_a, record_a, {"max-concurrency": 99}, runner),
+        args=(root_a, record_a, {}, runner),
     )
     t1.start()
     assert started.acquire(timeout=2)
 
     # Enqueue from project B — must go pending (global limit = 1)
-    manager.enqueue(root_b, record_b, {"max-concurrency": 99}, runner)
+    manager.enqueue(root_b, record_b, {}, runner)
 
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        depth = manager.queue_depth("shared-gw-profile")
+        if depth["running"] == 1 and depth["pending"] == 1:
+            break
+        time.sleep(0.02)
     depth = manager.queue_depth("shared-gw-profile")
     assert depth["running"] == 1
     assert depth["pending"] == 1
@@ -1211,17 +1249,17 @@ def test_sh07c2_shared_mode_cross_project_lane_limit(tmp_path: Path, shared_regi
     manager.wait(root_b, record_b["request-id"], timeout_seconds=5)
 
 
-def test_sh07c2_shared_mode_project_cannot_override_limits(tmp_path: Path, shared_registry):
-    """Project-local same-name profile cannot increase/decrease shared gateway
-    queue limits; limits come from the gateway registry snapshot."""
-    # Registry says max_concurrency=2
+def test_sh07c2_shared_mode_project_cannot_override_limits(tmp_path: Path, shared_registry, gated_source):
+    """A project cannot increase a gated instance's concurrency by passing
+    its own params -- capacity comes from the model-sources.yaml source, not
+    from anything project-local."""
     shared_registry.register(
         "controlled-profile",
         provider_id="local",
-        model_id="m",
-        max_concurrency=2,
-        queue_max_size=4,
+        instances=(gated_source,),
     )
+    snap = shared_registry.resolve_snapshot("controlled-profile")
+    snapshot_identity = _snapshot_identity_kwargs(snap)
 
     manager = queue_mod.GatewayQueueManager()
     hold = threading.Event()
@@ -1238,22 +1276,9 @@ def test_sh07c2_shared_mode_project_cannot_override_limits(tmp_path: Path, share
             updates={"output": "done", "finished-at": now_iso_z()},
         )
 
-    # Build records with registry snapshot identity.
-    snap = shared_registry.resolve_snapshot("controlled-profile")
-    lane_key = snap.lane_key()
-    snapshot_identity = {
-        "gateway_profile_id": snap.profile_id,
-        "gateway_profile_generation": snap.generation,
-        "gateway_profile_config_digest": snap.config_digest,
-        "gateway_execution_lane_key": lane_key.public_id(),
-        "resolved_provider_id": snap.provider_id,
-        "resolved_model_id": snap.model_id,
-        "resolved_queue_limits": {"max-concurrency": snap.max_concurrency, "queue-max-size": snap.queue_max_size},
-        "admission_policy_digest": snap.admission_policy_digest,
-    }
-
-    # Project tries to submit with max_concurrency=10 (should be ignored)
-    params = {"max-concurrency": 10, "provider_id": "local", "model_id": "m"}
+    # Project tries to submit with max_concurrency=10 (irrelevant in gated
+    # mode -- capacity is sourced from the resource tracker, not params).
+    params = {"max-concurrency": 10, "provider_id": "local"}
 
     records = []
     for i in range(4):
@@ -1265,20 +1290,19 @@ def test_sh07c2_shared_mode_project_cannot_override_limits(tmp_path: Path, share
         manager.enqueue(tmp_path, record, params, runner)
         records.append(record)
 
-    # Registry says max_concurrency=2; only 2 should start running
+    # Source concurrency=1; only 1 should start running regardless of params.
     deadline = time.monotonic() + 2
     while time.monotonic() < deadline:
         with started_lock:
-            if started_count >= 2:
+            if started_count >= 1:
                 break
         time.sleep(0.05)
 
-    assert started_count == 2, f"expected 2 running (registry limit), got {started_count}"
+    assert started_count == 1, f"expected 1 running (source concurrency), got {started_count}"
 
     depth = manager.queue_depth("controlled-profile")
-    assert depth["max_concurrency"] == 2, f"queue max_concurrency should be registry value 2, got {depth['max_concurrency']}"
-    assert depth["running"] == 2
-    assert depth["pending"] == 2
+    assert depth["running"] == 1
+    assert depth["pending"] == 3
 
     hold.set()
     for r in records:
@@ -1291,9 +1315,8 @@ def test_sh07c2_stale_generation_pending_rejected(tmp_path: Path):
     from audiagentic.components.agents.gateway import profiles as profiles_mod
 
     registry = profiles_mod.InMemoryExecutionProfileRegistry()
-    registry.register("gen-profile", provider_id="local", model_id="m", max_concurrency=1)
+    registry.register("gen-profile", provider_id="local", instances=("m",))
     snap_v1 = registry.resolve_snapshot("gen-profile")
-    lane_key_v1 = snap_v1.lane_key()
     profiles_mod.set_gateway_registry(registry)
 
     try:
@@ -1310,14 +1333,7 @@ def test_sh07c2_stale_generation_pending_rejected(tmp_path: Path):
         # Request A with v1 snapshot
         record_a = store.build_record(
             execution_profile_id="gen-profile", prompt_body="v1",
-            gateway_profile_id=snap_v1.profile_id,
-            gateway_profile_generation=snap_v1.generation,
-            gateway_profile_config_digest=snap_v1.config_digest,
-            gateway_execution_lane_key=lane_key_v1.public_id(),
-            resolved_provider_id=snap_v1.provider_id,
-            resolved_model_id=snap_v1.model_id,
-            resolved_queue_limits={"max-concurrency": snap_v1.max_concurrency, "queue-max-size": snap_v1.queue_max_size},
-            admission_policy_digest=snap_v1.admission_policy_digest,
+            **_snapshot_identity_kwargs(snap_v1),
         )
         store.write_record(tmp_path, record_a)
 
@@ -1332,21 +1348,14 @@ def test_sh07c2_stale_generation_pending_rejected(tmp_path: Path):
         # Request B with v1 snapshot — goes pending
         record_b = store.build_record(
             execution_profile_id="gen-profile", prompt_body="v1_pending",
-            gateway_profile_id=snap_v1.profile_id,
-            gateway_profile_generation=snap_v1.generation,
-            gateway_profile_config_digest=snap_v1.config_digest,
-            gateway_execution_lane_key=lane_key_v1.public_id(),
-            resolved_provider_id=snap_v1.provider_id,
-            resolved_model_id=snap_v1.model_id,
-            resolved_queue_limits={"max-concurrency": snap_v1.max_concurrency, "queue-max-size": snap_v1.queue_max_size},
-            admission_policy_digest=snap_v1.admission_policy_digest,
+            **_snapshot_identity_kwargs(snap_v1),
         )
         store.write_record(tmp_path, record_b)
         manager.enqueue(tmp_path, record_b, {"provider_id": "local"}, runner)
 
         # Now change generation in the registry (simulates profile update).
         # InMemoryExecutionProfileRegistry auto-increments version → new generation.
-        registry.register("gen-profile", provider_id="local", model_id="m", max_concurrency=2)
+        registry.register("gen-profile", provider_id="local", instances=("m27b1", "m27b2"))
         snap_v2 = registry.resolve_snapshot("gen-profile")
         assert snap_v2.generation != snap_v1.generation, "generation must change on re-register"
 
@@ -1364,14 +1373,7 @@ def test_sh07c2_stale_generation_pending_rejected(tmp_path: Path):
         # New submission with v2 can run normally
         record_c = store.build_record(
             execution_profile_id="gen-profile", prompt_body="v2_new",
-            gateway_profile_id=snap_v2.profile_id,
-            gateway_profile_generation=snap_v2.generation,
-            gateway_profile_config_digest=snap_v2.config_digest,
-            gateway_execution_lane_key=snap_v2.lane_key().public_id(),
-            resolved_provider_id=snap_v2.provider_id,
-            resolved_model_id=snap_v2.model_id,
-            resolved_queue_limits={"max-concurrency": snap_v2.max_concurrency, "queue-max-size": snap_v2.queue_max_size},
-            admission_policy_digest=snap_v2.admission_policy_digest,
+            **_snapshot_identity_kwargs(snap_v2),
         )
         store.write_record(tmp_path, record_c)
         manager.enqueue(tmp_path, record_c, {"provider_id": "local"}, _immediate_runner)
@@ -1388,9 +1390,8 @@ def test_sh07c2_running_request_keeps_old_snapshot(tmp_path: Path):
     from audiagentic.components.agents.gateway import profiles as profiles_mod
 
     registry = profiles_mod.InMemoryExecutionProfileRegistry()
-    registry.register("run-profile", provider_id="local", model_id="m", max_concurrency=1)
+    registry.register("run-profile", provider_id="local", instances=("m",))
     snap_v1 = registry.resolve_snapshot("run-profile")
-    lane_key_v1 = snap_v1.lane_key()
     profiles_mod.set_gateway_registry(registry)
 
     try:
@@ -1401,7 +1402,7 @@ def test_sh07c2_running_request_keeps_old_snapshot(tmp_path: Path):
         def runner(project_root: Path, record: dict) -> dict:
             started.set()
             # Change generation while this request is running
-            registry.register("run-profile", provider_id="local", model_id="m", max_concurrency=2)
+            registry.register("run-profile", provider_id="local", instances=("m27b1", "m27b2"))
             hold.wait(timeout=5)
             return store.transition_record(
                 project_root, record["request-id"], "completed",
@@ -1411,14 +1412,7 @@ def test_sh07c2_running_request_keeps_old_snapshot(tmp_path: Path):
         # Request A with v1 snapshot — starts running
         record_a = store.build_record(
             execution_profile_id="run-profile", prompt_body="running_v1",
-            gateway_profile_id=snap_v1.profile_id,
-            gateway_profile_generation=snap_v1.generation,
-            gateway_profile_config_digest=snap_v1.config_digest,
-            gateway_execution_lane_key=lane_key_v1.public_id(),
-            resolved_provider_id=snap_v1.provider_id,
-            resolved_model_id=snap_v1.model_id,
-            resolved_queue_limits={"max-concurrency": snap_v1.max_concurrency, "queue-max-size": snap_v1.queue_max_size},
-            admission_policy_digest=snap_v1.admission_policy_digest,
+            **_snapshot_identity_kwargs(snap_v1),
         )
         store.write_record(tmp_path, record_a)
 
@@ -1436,14 +1430,7 @@ def test_sh07c2_running_request_keeps_old_snapshot(tmp_path: Path):
 
         record_c = store.build_record(
             execution_profile_id="run-profile", prompt_body="v2_new_lane",
-            gateway_profile_id=snap_v2.profile_id,
-            gateway_profile_generation=snap_v2.generation,
-            gateway_profile_config_digest=snap_v2.config_digest,
-            gateway_execution_lane_key=snap_v2.lane_key().public_id(),
-            resolved_provider_id=snap_v2.provider_id,
-            resolved_model_id=snap_v2.model_id,
-            resolved_queue_limits={"max-concurrency": snap_v2.max_concurrency, "queue-max-size": snap_v2.queue_max_size},
-            admission_policy_digest=snap_v2.admission_policy_digest,
+            **_snapshot_identity_kwargs(snap_v2),
         )
         store.write_record(tmp_path, record_c)
         manager.enqueue(tmp_path, record_c, {"provider_id": "local"}, _immediate_runner)
@@ -1474,11 +1461,8 @@ def test_sh07c2_queue_overview_redacted_lanes(tmp_path: Path):
         gateway_profile_id="overview-profile",
         gateway_profile_generation="gen_test123",
         gateway_profile_config_digest="sha256:abcd1234",
-        gateway_execution_lane_key="overview-profile/gen_test123/abcd1234",
         resolved_provider_id="local",
-        resolved_model_id="m",
-        resolved_queue_limits={"max-concurrency": 1, "queue-max-size": 8},
-        admission_policy_digest="sha256:policy01",
+        resolved_instance_ids=["m"],
     )
     store.write_record(tmp_path, record)
     manager.enqueue(tmp_path, record, {"provider_id": "local"}, _immediate_runner)

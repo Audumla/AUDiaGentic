@@ -29,7 +29,7 @@ def _setup_profiles(tmp_path: Path):
         {
             "profile_id": "test-profile",
             "provider_id": "anthropic",
-            "model_id": "claude-3",
+            "instances": ["claude-3"],
             "model_alias": "claude",
             "params": {"temperature": 0.5},
         },
@@ -42,7 +42,7 @@ def _setup_default_profile(tmp_path: Path):
         {
             "profile_id": "default",
             "provider_id": "local-openai",
-            "model_id": "gpt-4o",
+            "instances": ["gpt-4o"],
             "is_default": True,
         },
     )
