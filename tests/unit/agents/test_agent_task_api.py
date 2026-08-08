@@ -32,7 +32,7 @@ from audiagentic.foundation.features.state import set_implementation_state
 def _setup_agent(tmp_path: Path, *, agent_id: str = "reviewer-agent") -> None:
     (tmp_path / ".audiagentic").mkdir(exist_ok=True)
     create_execution_profile(
-        tmp_path, {"profile_id": "fast", "provider_id": "local-openai", "model_id": "gpt-4o-mini"}
+        tmp_path, {"profile_id": "fast", "provider_id": "local-openai", "instances": ["gpt-4o-mini"]}
     )
     set_implementation_state(tmp_path, "providers", "local-openai", ImplementationState(enabled=True))
     create_role(tmp_path, {"role_id": "reviewer", "instructions": "Review."})
@@ -124,7 +124,7 @@ def test_submit_forwards_kwargs_to_gateway(tmp_path: Path):
 def test_submit_raw_bypasses_agent_definition(tmp_path: Path, monkeypatch):
     (tmp_path / ".audiagentic").mkdir()
     create_execution_profile(
-        tmp_path, {"profile_id": "fast", "provider_id": "local-openai", "model_id": "gpt-4o-mini"}
+        tmp_path, {"profile_id": "fast", "provider_id": "local-openai", "instances": ["gpt-4o-mini"]}
     )
     set_implementation_state(tmp_path, "providers", "local-openai", ImplementationState(enabled=True))
     started, hold = _block_dispatch(monkeypatch)
@@ -179,7 +179,7 @@ def test_agent_task_cancel_queued_request(tmp_path: Path, monkeypatch):
         {
             "profile_id": "fast",
             "provider_id": "local-openai",
-            "model_id": "gpt-4o-mini",
+            "instances": ["gpt-4o-mini"],
             "params": {"max-concurrency": 1},
         },
     )

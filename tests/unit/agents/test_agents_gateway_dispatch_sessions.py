@@ -29,7 +29,7 @@ from audiagentic.components.agents.gateway.session.sessions import SessionRuntim
 PROFILE = {
     "profile_id": "profile-1",
     "provider_id": "opencode",
-    "model_id": "m1",
+    "instances": ["m1"],
     "model_alias": None,
     "params": {},
 }
@@ -68,6 +68,10 @@ def rig(tmp_path, monkeypatch):
 
 
 def _running_record(tmp_path, **kwargs):
+    # AS105/AS101: dispatch.py reads the bound model from resolved-model-id,
+    # normally injected by queue.py's _run_one at dispatch time. Tests here
+    # call dispatch.dispatch_request directly, bypassing the queue.
+    kwargs.setdefault("resolved_model_id", "m1")
     record = store.build_record(execution_profile_id="profile-1", prompt_body="hello", **kwargs)
     store.write_record(tmp_path, record)
     claimed = store.claim_dispatch(
