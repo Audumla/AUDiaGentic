@@ -27,6 +27,7 @@ _WORKSPACE_URL_PATTERN = r"/g/g-p-"
 @dataclass(frozen=True)
 class TabInfo:
     """Metadata about a browser tab."""
+
     url: str
     title: str
     tab_id: str = ""
@@ -35,6 +36,7 @@ class TabInfo:
 @dataclass(frozen=True)
 class WorkspaceInfo:
     """Information about a ChatGPT workspace (project)."""
+
     name: str
     url: str
 
@@ -67,6 +69,7 @@ class CdpClient:
         node = _find_node()
         env = os.environ.copy()
         from .install import node_module_path
+
         managed_node_path = str(node_module_path())
         npath = os.getenv("NODE_PATH")
         env["NODE_PATH"] = managed_node_path + (os.pathsep + npath if npath else "")
@@ -118,10 +121,13 @@ class CdpClient:
         title_pattern: str | None = None,
     ) -> TabInfo | None:
         """Find the first ChatGPT tab matching patterns."""
-        result = await self._send("find_tab", {
-            "urlPattern": url_pattern or "chatgpt",
-            "titlePattern": title_pattern or "AUDiaGentic",
-        })
+        result = await self._send(
+            "find_tab",
+            {
+                "urlPattern": url_pattern or "chatgpt",
+                "titlePattern": title_pattern or "AUDiaGentic",
+            },
+        )
         if not result.get("found"):
             return None
         return TabInfo(url=result["url"], title=result["title"], tab_id=result.get("tabId", ""))
@@ -198,10 +204,13 @@ class CdpClient:
 
     async def type_text(self, text: str, delay: float = 0.03) -> None:
         """Type *text* character-by-character (human-like)."""
-        await self._send("type_text", {
-            "text": text,
-            "delay": int(delay * 1000),
-        })
+        await self._send(
+            "type_text",
+            {
+                "text": text,
+                "delay": int(delay * 1000),
+            },
+        )
 
     async def press_key(self, key: str = "Enter") -> None:
         """Press a single key."""
@@ -219,12 +228,38 @@ class CdpClient:
         if args:
             # Wrap: set _cdpArgs on window, then call the function
             import json
+
             serialized = json.dumps(args)
-            wrapped = f"(() => {{ window._cdpArgs={serialized}; return ({script})(..._cdpArgs); }})()"
+            wrapped = (
+                f"(() => {{ window._cdpArgs={serialized}; return ({script})(..._cdpArgs); }})()"
+            )
             result = await self._send("evaluate", {"script": wrapped})
         else:
             result = await self._send("evaluate", {"script": script})
         return result.get("value")
+
+    # -- waiting -------------------------------------------------------------------
+
+    async def wait_for_function(
+        self,
+        predicate_js: str,
+        *,
+        timeout_ms: int = 30000,
+    ) -> None:
+        """Wait for *predicate_js* to return a truthy value.
+
+        Uses puppeteer's waitForFunction — event-based via CDP, no polling.
+        Raises RuntimeError on timeout.
+
+        Args:
+            predicate_js: A JavaScript expression returning a boolean,
+                e.g. ``'() => !!document.querySelector(".ProseMirror")'``
+            timeout_ms: Maximum milliseconds to wait (default 30000).
+        """
+        await self._send(
+            "wait_for_function",
+            {"predicate": predicate_js, "timeoutMs": timeout_ms},
+        )
 
     # -- utility -------------------------------------------------------------------
 
@@ -239,9 +274,7 @@ class CdpClient:
 
     # -- internal ------------------------------------------------------------------
 
-    async def _send(
-        self, method: str, params: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    async def _send(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         if not self._proc or not self._proc.stdin:
             raise RuntimeError("CDP helper not running")
 
@@ -268,6 +301,7 @@ class CdpClient:
 def _find_node() -> str:
     """Locate the node executable (synchronous)."""
     import shutil
+
     for name in ("nodejs", "node"):
         path = shutil.which(name)
         if path:
