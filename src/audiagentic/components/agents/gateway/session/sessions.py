@@ -67,6 +67,7 @@ from audiagentic.components.agents.status.harness_status_observer_ingress import
 # AS21 consumer slice: ephemeral evidence projection registry
 from audiagentic.components.agents.status.session_lifecycle_projection import (
     SessionEvidenceProjection,
+    SessionLifecycleDecision,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
@@ -299,6 +300,7 @@ class SessionRuntime:
         execution_profile_id: str,
         provider_id: str,
         model_id: str | None = None,
+        session_id: str | None = None,
         surface_hint: Any = None,
         idle_timeout_seconds: float | None = None,
         max_lifetime_seconds: float | None = None,
@@ -323,6 +325,7 @@ class SessionRuntime:
                 execution_profile_id=execution_profile_id,
                 provider_id=provider_id,
                 model_id=model_id,
+                session_id=session_id,
                 surface_hint=surface_hint,
                 # None → gateway default; an explicit 0 DISABLES the bound
                 # (needed for long-lived remote-control sessions, RV513).
@@ -472,6 +475,12 @@ class SessionRuntime:
         if self._loop is None:
             return {"available": False}
         return self._call(self._session_runtime_status(session_id), timeout=10)
+
+    def latest_lifecycle_decision(
+        self, session_id: str, request_id: str
+    ) -> SessionLifecycleDecision | None:
+        """Read the latest AS21 decision without starting or mutating the runtime."""
+        return self._evidence_projection.latest_decision_for_key(session_id, request_id)
 
     def update_session_bounds(
         self,
@@ -676,6 +685,7 @@ class SessionRuntime:
         execution_profile_id: str,
         provider_id: str,
         model_id: str | None,
+        session_id: str | None,
         surface_hint: Any,
         idle_timeout_seconds: float,
         max_lifetime_seconds: float,
@@ -717,17 +727,21 @@ class SessionRuntime:
                 },
             )
         transport = prepared.transport
-        provider_session_ref = await transport.open()
+        open_result = await transport.open()
+        provider_session_ref = str(open_result) if open_result else None
+        provider_metadata = dict(getattr(open_result, "metadata", {}) or {})
 
         record = session_store.build_session_record(
+            session_id=session_id,
             execution_profile_id=execution_profile_id,
             provider_id=provider_id,
             model_id=model_id,
-            provider_session_ref=str(provider_session_ref) if provider_session_ref else None,
+            provider_session_ref=provider_session_ref,
+            provider_metadata=provider_metadata,
             idle_timeout_seconds=idle_timeout_seconds,
             max_lifetime_seconds=max_lifetime_seconds,
         )
-        session_id = record["session-id"]
+        session_id = str(record["session-id"])
         try:
             session_store.write_session_record(project_root, record)
             binding_store.register_open_binding(project_root, record)
@@ -1359,7 +1373,12 @@ class SessionRuntime:
             finally:
                 handle.turn_lock.release()
         if request_id is not None:
-            session_store.record_session_turn(project_root, session_id, request_id)
+            session_store.record_session_turn(
+                project_root,
+                session_id,
+                request_id,
+                provider_metadata=dict(getattr(result, "metadata", {}) or {}) or None,
+            )
         # SH15: record dropped-events at turn end for richer progress summary
         turn_end_attrs: dict[str, Any] = {
             "request-id": request_id,
