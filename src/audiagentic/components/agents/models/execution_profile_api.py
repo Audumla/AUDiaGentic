@@ -211,6 +211,7 @@ def resolve_execution_profile(project_root: Path, profile_id: str) -> dict[str, 
         "model_id": profile.model_id,
         "model_alias": profile.model_alias,
         "params": dict(profile.params),
+        "surface_id": profile.surface_id,
     }
 
 
@@ -234,6 +235,7 @@ def resolve_default_execution_profile(project_root: Path) -> dict[str, Any]:
         "model_id": default.model_id,
         "model_alias": default.model_alias,
         "params": dict(default.params),
+        "surface_id": default.surface_id,
     }
 
 
