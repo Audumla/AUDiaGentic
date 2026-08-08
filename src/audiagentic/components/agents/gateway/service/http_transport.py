@@ -1,4 +1,5 @@
 """Authenticated loopback HTTP adapter for the standalone gateway service."""
+
 from __future__ import annotations
 
 import hmac
@@ -46,7 +47,7 @@ class GatewayHTTPServer(ThreadingHTTPServer):
 
 
 class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
-    server: GatewayHTTPServer
+    server: GatewayHTTPServer  # pyright: ignore[reportIncompatibleVariableOverride]
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler contract
         self._dispatch("GET")
@@ -93,14 +94,20 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
                     protocol_version=_string(body, "protocol-version"),
                 )
             else:
-                raise transport_error(4, "unknown gateway service route", method=method, path=self.path)
+                raise transport_error(
+                    4, "unknown gateway service route", method=method, path=self.path
+                )
             self._write_json(200, {"contract-version": "v1", "ok": True, "result": result})
         except AudiaGenticError as exc:
             status = 401 if exc.code == "VAL-AGSV-005" else 400
             self._write_json(status, to_error_envelope(exc))
         except Exception:  # noqa: BLE001 - isolate the protocol boundary
-            logger.exception("gateway service request failed", extra={"method": method, "path": self.path})
-            self._write_json(500, to_error_envelope(internal_error(1, "gateway service request failed")))
+            logger.exception(
+                "gateway service request failed", extra={"method": method, "path": self.path}
+            )
+            self._write_json(
+                500, to_error_envelope(internal_error(1, "gateway service request failed"))
+            )
 
     def _authenticate(self) -> None:
         expected = f"Bearer {self.server.auth_token}"
@@ -136,7 +143,9 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
             logger.debug("gateway client disconnected before response", extra={"path": self.path})
 
     def log_message(self, format: str, *args: Any) -> None:
-        logger.debug("gateway http request", extra={"client": self.client_address[0], "path": self.path})
+        logger.debug(
+            "gateway http request", extra={"client": self.client_address[0], "path": self.path}
+        )
 
 
 def _string(body: dict[str, Any], name: str) -> str:
@@ -159,7 +168,7 @@ def _number(body: dict[str, Any], name: str) -> float:
     value = body.get(name)
     if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
         raise transport_error(9, "gateway service numeric field must be positive", field=name)
-    return float(value)
+    return value * 1.0
 
 
 def _mapping(value: Any, name: str) -> dict[str, Any]:

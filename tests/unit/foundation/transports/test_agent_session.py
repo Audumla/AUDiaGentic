@@ -5,6 +5,7 @@ raw/native data rejection, bounded unknown-kind containment, control
 payload default-deny, import boundary enforcement, protocol conformance
 with a fake transport, and exported symbol completeness.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -43,13 +44,20 @@ def _assert_val_error(exc_info: pytest.ExceptionInfo[AudiaGenticError], pattern:
 
 # ── Enum membership ────────────────────────────────────────────────────────
 
+
 class TestTransportObservationKind:
     def test_closed_set_values(self):
         expected = {
-            "turn-accepted", "activity", "tool-requested",
-            "tool-finished", "permission-requested", "terminal",
-            "transport-error", "transport-closed",
+            "turn-accepted",
+            "activity",
+            "tool-requested",
+            "tool-finished",
+            "permission-requested",
+            "terminal",
+            "transport-error",
+            "transport-closed",
             "transport-unknown",  # bounded unknown / drop-safe
+            "in-progress",  # intermediate in-progress marker (AS19)
         }
         assert {k.value for k in TransportObservationKind} == expected
 
@@ -60,7 +68,15 @@ class TestTransportObservationKind:
     def test_no_raw_native_kinds(self):
         """No raw ACP/native kind values leak into the enum."""
         for kind in TransportObservationKind:
-            assert kind.value.startswith("turn-") or kind.value.startswith("activity") or kind.value.startswith("tool-") or kind.value.startswith("permission-") or kind.value.startswith("terminal") or kind.value.startswith("transport-"), f"unexpected kind value: {kind.value}"
+            assert (
+                kind.value.startswith("turn-")
+                or kind.value.startswith("activity")
+                or kind.value.startswith("tool-")
+                or kind.value.startswith("permission-")
+                or kind.value.startswith("terminal")
+                or kind.value.startswith("transport-")
+                or kind.value == "in-progress"
+            ), f"unexpected kind value: {kind.value}"
 
 
 class TestControlDisposition:
@@ -92,8 +108,11 @@ class TestSessionControlAction:
 
     def test_all_actions_present(self):
         expected = {
-            "cancel-turn", "interrupt-turn", "steer-turn",
-            "respond-permission", "close-session",
+            "cancel-turn",
+            "interrupt-turn",
+            "steer-turn",
+            "respond-permission",
+            "close-session",
         }
         assert {a.value for a in SessionControlAction} == expected
 
@@ -106,6 +125,7 @@ class TestSessionControlAction:
 
 
 # ── Frozen / immutability ──────────────────────────────────────────────────
+
 
 class TestTransportObservation:
     def test_frozen(self):
@@ -408,6 +428,7 @@ class TestRejectionOfRawNativeUnsafeAttributes:
 
 # ── SessionPrompt ───────────────────────────────────────────────────────────
 
+
 class TestSessionPrompt:
     def test_frozen(self):
         prompt = SessionPrompt(turn_id="turn-1", body="hello")
@@ -438,6 +459,7 @@ class TestSessionPrompt:
 
 # ── SessionOpenResult ──────────────────────────────────────────────────────
 
+
 class TestSessionOpenResult:
     def test_frozen(self):
         result = SessionOpenResult(ag_session_id="ag-s-1")
@@ -455,17 +477,24 @@ class TestSessionOpenResult:
 
 # ── SessionTurnResult ──────────────────────────────────────────────────────
 
+
 class TestSessionTurnResult:
     def test_frozen(self):
         result = SessionTurnResult(
-            turn_id="turn-1", stop_reason=None, observations_delivered=5, dropped_observations=0,
+            turn_id="turn-1",
+            stop_reason=None,
+            observations_delivered=5,
+            dropped_observations=0,
         )
         with pytest.raises(Exception):
             result.stop_reason = "stopped"
 
     def test_valid_minimal(self):
         result = SessionTurnResult(
-            turn_id="turn-1", stop_reason=None, observations_delivered=3, dropped_observations=0,
+            turn_id="turn-1",
+            stop_reason=None,
+            observations_delivered=3,
+            dropped_observations=0,
         )
         assert result.turn_id == "turn-1"
         assert result.observations_delivered == 3
@@ -474,20 +503,29 @@ class TestSessionTurnResult:
     def test_negative_delivered_rejected(self):
         with pytest.raises(AudiaGenticError) as exc_info:
             SessionTurnResult(
-                turn_id="turn-1", stop_reason=None, observations_delivered=-1, dropped_observations=0,
+                turn_id="turn-1",
+                stop_reason=None,
+                observations_delivered=-1,
+                dropped_observations=0,
             )
         _assert_val_error(exc_info, "non-negative integer")
 
     def test_negative_dropped_rejected(self):
         with pytest.raises(AudiaGenticError) as exc_info:
             SessionTurnResult(
-                turn_id="turn-1", stop_reason=None, observations_delivered=0, dropped_observations=-1,
+                turn_id="turn-1",
+                stop_reason=None,
+                observations_delivered=0,
+                dropped_observations=-1,
             )
         _assert_val_error(exc_info, "non-negative integer")
 
     def test_with_stop_reason(self):
         result = SessionTurnResult(
-            turn_id="turn-1", stop_reason="stop", observations_delivered=5, dropped_observations=1,
+            turn_id="turn-1",
+            stop_reason="stop",
+            observations_delivered=5,
+            dropped_observations=1,
         )
         assert result.stop_reason == "stop"
         assert result.dropped_observations == 1
@@ -495,12 +533,14 @@ class TestSessionTurnResult:
 
 # ── SessionControlRequest payload validation (default-deny) ────────────────
 
+
 class TestSessionControlRequestPayloadValidation:
     """Control payload is default-deny: only canonical keys for specific actions."""
 
     def test_cancel_turn_no_payload(self):
         req = SessionControlRequest(
-            ag_session_id="ag-s-1", turn_id=None,
+            ag_session_id="ag-s-1",
+            turn_id=None,
             action=SessionControlAction.CANCEL_TURN,
         )
         assert req.payload == {}
@@ -508,7 +548,8 @@ class TestSessionControlRequestPayloadValidation:
     def test_cancel_turn_rejects_payload(self):
         with pytest.raises(AudiaGenticError) as exc_info:
             SessionControlRequest(
-                ag_session_id="ag-s-1", turn_id=None,
+                ag_session_id="ag-s-1",
+                turn_id=None,
                 action=SessionControlAction.CANCEL_TURN,
                 payload={"extra": "value"},
             )
@@ -516,7 +557,8 @@ class TestSessionControlRequestPayloadValidation:
 
     def test_close_session_no_payload(self):
         req = SessionControlRequest(
-            ag_session_id="ag-s-1", turn_id=None,
+            ag_session_id="ag-s-1",
+            turn_id=None,
             action=SessionControlAction.CLOSE_SESSION,
         )
         assert req.payload == {}
@@ -524,7 +566,8 @@ class TestSessionControlRequestPayloadValidation:
     def test_interruption_no_payload(self):
         with pytest.raises(AudiaGenticError) as exc_info:
             SessionControlRequest(
-                ag_session_id="ag-s-1", turn_id=None,
+                ag_session_id="ag-s-1",
+                turn_id=None,
                 action=SessionControlAction.INTERRUPT_TURN,
                 payload={"native_command": "stop"},
             )
@@ -532,7 +575,8 @@ class TestSessionControlRequestPayloadValidation:
 
     def test_respond_permission_allow(self):
         req = SessionControlRequest(
-            ag_session_id="ag-s-1", turn_id=None,
+            ag_session_id="ag-s-1",
+            turn_id=None,
             action=SessionControlAction.RESPOND_PERMISSION,
             payload={"permission": "allow"},
         )
@@ -540,7 +584,8 @@ class TestSessionControlRequestPayloadValidation:
 
     def test_respond_permission_deny(self):
         req = SessionControlRequest(
-            ag_session_id="ag-s-1", turn_id=None,
+            ag_session_id="ag-s-1",
+            turn_id=None,
             action=SessionControlAction.RESPOND_PERMISSION,
             payload={"permission": "deny"},
         )
@@ -549,7 +594,8 @@ class TestSessionControlRequestPayloadValidation:
     def test_respond_permission_invalid_value(self):
         with pytest.raises(AudiaGenticError) as exc_info:
             SessionControlRequest(
-                ag_session_id="ag-s-1", turn_id=None,
+                ag_session_id="ag-s-1",
+                turn_id=None,
                 action=SessionControlAction.RESPOND_PERMISSION,
                 payload={"permission": "maybe"},
             )
@@ -558,7 +604,8 @@ class TestSessionControlRequestPayloadValidation:
     def test_respond_permission_missing_value(self):
         with pytest.raises(AudiaGenticError) as exc_info:
             SessionControlRequest(
-                ag_session_id="ag-s-1", turn_id=None,
+                ag_session_id="ag-s-1",
+                turn_id=None,
                 action=SessionControlAction.RESPOND_PERMISSION,
                 payload={},
             )
@@ -566,7 +613,8 @@ class TestSessionControlRequestPayloadValidation:
 
     def test_steer_turn_valid(self):
         req = SessionControlRequest(
-            ag_session_id="ag-s-1", turn_id=None,
+            ag_session_id="ag-s-1",
+            turn_id=None,
             action=SessionControlAction.STEER_TURN,
             payload={"steer_text": "try again with different approach"},
         )
@@ -575,7 +623,8 @@ class TestSessionControlRequestPayloadValidation:
     def test_steer_turn_missing_value(self):
         with pytest.raises(AudiaGenticError) as exc_info:
             SessionControlRequest(
-                ag_session_id="ag-s-1", turn_id=None,
+                ag_session_id="ag-s-1",
+                turn_id=None,
                 action=SessionControlAction.STEER_TURN,
                 payload={},
             )
@@ -585,7 +634,8 @@ class TestSessionControlRequestPayloadValidation:
         """Default-deny: unknown keys in control payload are rejected."""
         with pytest.raises(AudiaGenticError) as exc_info:
             SessionControlRequest(
-                ag_session_id="ag-s-1", turn_id=None,
+                ag_session_id="ag-s-1",
+                turn_id=None,
                 action=SessionControlAction.RESPOND_PERMISSION,
                 payload={"permission": "allow", "native_payload": {"raw": True}},  # type: ignore
             )
@@ -595,7 +645,8 @@ class TestSessionControlRequestPayloadValidation:
         """No native escape hatch via arbitrary payload keys."""
         with pytest.raises(AudiaGenticError) as exc_info:
             SessionControlRequest(
-                ag_session_id="ag-s-1", turn_id=None,
+                ag_session_id="ag-s-1",
+                turn_id=None,
                 action=SessionControlAction.CANCEL_TURN,
                 payload={"_native_command": "kill"},
             )
@@ -604,7 +655,8 @@ class TestSessionControlRequestPayloadValidation:
     def test_rejects_callable_payload_value(self):
         with pytest.raises(AudiaGenticError) as exc_info:
             SessionControlRequest(
-                ag_session_id="ag-s-1", turn_id=None,
+                ag_session_id="ag-s-1",
+                turn_id=None,
                 action=SessionControlAction.RESPOND_PERMISSION,
                 payload={"permission": lambda: True},  # type: ignore
             )
@@ -613,7 +665,8 @@ class TestSessionControlRequestPayloadValidation:
     def test_rejects_composite_payload_value(self):
         with pytest.raises(AudiaGenticError) as exc_info:
             SessionControlRequest(
-                ag_session_id="ag-s-1", turn_id=None,
+                ag_session_id="ag-s-1",
+                turn_id=None,
                 action=SessionControlAction.RESPOND_PERMISSION,
                 payload={"permission": ["allow"]},  # type: ignore
             )
@@ -621,7 +674,8 @@ class TestSessionControlRequestPayloadValidation:
 
     def test_frozen(self):
         req = SessionControlRequest(
-            ag_session_id="ag-s-1", turn_id=None,
+            ag_session_id="ag-s-1",
+            turn_id=None,
             action=SessionControlAction.CANCEL_TURN,
         )
         with pytest.raises(Exception):
@@ -629,6 +683,7 @@ class TestSessionControlRequestPayloadValidation:
 
 
 # ── SessionControlResult ───────────────────────────────────────────────────
+
 
 class TestSessionControlResult:
     def test_frozen(self):
@@ -643,7 +698,8 @@ class TestSessionControlResult:
 
     def test_with_error_code(self):
         result = SessionControlResult(
-            disposition=ControlDisposition.REJECTED, error_code="EXT-ACP-001",
+            disposition=ControlDisposition.REJECTED,
+            error_code="EXT-ACP-001",
         )
         assert result.disposition == ControlDisposition.REJECTED
         assert result.error_code == "EXT-ACP-001"
@@ -651,13 +707,11 @@ class TestSessionControlResult:
     def test_does_not_carry_session_state(self):
         """Result type has no field for session state — only disposition."""
         result = SessionControlResult(disposition=ControlDisposition.ACCEPTED)
-        assert not any(
-            f.name in ("session_state", "state", "is_active")
-            for f in fields(result)
-        )
+        assert not any(f.name in ("session_state", "state", "is_active") for f in fields(result))
 
 
 # ── Import boundary ────────────────────────────────────────────────────────
+
 
 class TestImportBoundary:
     """agent_session.py must not import any components.* module."""
@@ -697,6 +751,7 @@ class TestImportBoundary:
             CorrelationQuality,
             SessionControlAction,
         )
+
         assert AgentSessionTransport is not None
         assert ControlDisposition.ACCEPTED.value == "accepted"
         assert CorrelationQuality.CORRELATED.value == "correlated"
@@ -711,10 +766,12 @@ class TestImportBoundary:
         from audiagentic.foundation.transports.session_surface import (
             SessionControlAction as SCA,
         )
+
         assert SCA is SCA_agent
 
 
 # ── Protocol conformance with fake transport ───────────────────────────────
+
 
 class _FakeAgentSessionTransport:
     """Minimal fake implementation of AgentSessionTransport for protocol testing."""
@@ -791,7 +848,8 @@ class TestProtocolConformance:
     async def test_control_returns_disposition(self):
         transport = _FakeAgentSessionTransport()
         req = SessionControlRequest(
-            ag_session_id="fake-s-1", turn_id=None,
+            ag_session_id="fake-s-1",
+            turn_id=None,
             action=SessionControlAction.CANCEL_TURN,
         )
         result = await transport.control(req)
@@ -820,7 +878,8 @@ class TestProtocolConformance:
         result = await transport.prompt(prompt, sink)
         assert result.observations_delivered >= 0
         req = SessionControlRequest(
-            ag_session_id=open_result.ag_session_id, turn_id=None,
+            ag_session_id=open_result.ag_session_id,
+            turn_id=None,
             action=SessionControlAction.CANCEL_TURN,
         )
         ctrl_result = await transport.control(req)
@@ -839,6 +898,7 @@ class TestProtocolConformance:
 
 
 # ── Scalar-only / redaction discipline ─────────────────────────────────────
+
 
 class TestScalarOnlyDiscipline:
     """All foundation transport dataclasses contain no callables or native payloads."""
@@ -864,14 +924,17 @@ class TestScalarOnlyDiscipline:
 
     def test_session_turn_result_no_callables(self):
         result = SessionTurnResult(
-            turn_id="t-1", stop_reason=None,
-            observations_delivered=0, dropped_observations=0,
+            turn_id="t-1",
+            stop_reason=None,
+            observations_delivered=0,
+            dropped_observations=0,
         )
         _assert_no_callables(result)
 
     def test_session_control_request_no_callables(self):
         req = SessionControlRequest(
-            ag_session_id="ag-s-1", turn_id=None,
+            ag_session_id="ag-s-1",
+            turn_id=None,
             action=SessionControlAction.CANCEL_TURN,
         )
         _assert_no_callables(req)
@@ -884,6 +947,7 @@ class TestScalarOnlyDiscipline:
 def _inspect_source(module: Any) -> str:
     """Get source of a module as string."""
     import inspect
+
     return inspect.getsource(module)
 
 
@@ -900,6 +964,7 @@ def _assert_no_callables(obj: Any, path: str = "") -> None:
             _assert_no_callables(value, f"{path}[{i}]")
     elif callable(obj) and not isinstance(obj, (str, int, float, bool, type(None))):
         import enum
+
         if isinstance(obj, enum.Enum):
             return
         raise AssertionError(f"Unexpected callable at {path or 'root'}: {obj!r}")

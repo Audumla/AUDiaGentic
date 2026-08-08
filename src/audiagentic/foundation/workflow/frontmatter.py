@@ -11,11 +11,12 @@ import re
 from typing import Any
 
 import yaml
+from markdown_it import MarkdownIt
 
 from .interfaces import WorkflowConfig
 
 _TITLE_RE = re.compile(r"^# (.+)$", re.MULTILINE)
-_SECTION_RE = re.compile(r"^## (.+)$", re.MULTILINE)
+_MD = MarkdownIt()
 
 
 def parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
@@ -65,8 +66,48 @@ def _reconstruct_heading(key: str, first: bool = True) -> str:
     return " ".join(word.capitalize() if (first or len(word) > 3) else word for word in parts)
 
 
+def _heading_level(token: Any) -> int:
+    """Extract the numeric heading level from a markdown-it heading_open token.
+
+    Returns 1 for 'h1', 2 for 'h2', etc. Returns 0 if parsing fails.
+    """
+    tag = getattr(token, "tag", "") or ""
+    try:
+        return int(tag[1])
+    except (IndexError, ValueError):
+        return 0
+
+
+def _extract_heading_text(tokens: list, token_idx: int) -> str:
+    """Extract the text content from the inline token following a heading_open."""
+    for next_token in tokens[token_idx + 1 :]:
+        if next_token.type == "inline":
+            return "".join(
+                child.content for child in (next_token.children or []) if child.type == "text"
+            ).strip()
+        break
+    return ""
+
+
+def _lines(body: str) -> list[str]:
+    """Return body split into lines, preserving \n as the separator."""
+    return body.split("\n")
+
+
+def _section_content(lines: list[str], start_line: int, end_line: int | None) -> str:
+    """Extract section content between line numbers (0-based, inclusive start, exclusive end)."""
+    if end_line is None:
+        return "\n".join(lines[start_line:]).strip()
+    return "\n".join(lines[start_line:end_line]).strip()
+
+
 def parse_sections(body: str, heading_to_field: dict[str, str]) -> dict[str, str]:
     """Extract ``## Heading`` sections into a field->content dict.
+
+    Uses a proper markdown parser (markdown-it-py) so that:
+    - heading hierarchy is respected (h3+ content stays embedded in parent)
+    - headings inside code blocks are ignored
+    - nested sub-headings are preserved as text, not promoted to new fields
 
     ``heading_to_field`` maps document headings to result keys; unknown
     headings are included using their slugified heading text as the key.
@@ -81,14 +122,40 @@ def parse_sections(body: str, heading_to_field: dict[str, str]) -> dict[str, str
     title = parse_title(body)
     if title is not None:
         result["title"] = title
-    headings = list(_SECTION_RE.finditer(body))
-    for i, match in enumerate(headings):
-        field = heading_to_field.get(match.group(1).strip())
+
+    tokens = _MD.parse(body)
+    body_lines = _lines(body)
+
+    # Collect h2 headings as section boundaries (h3+ stays embedded in parent).
+    # Each entry: (heading_text, start_line)
+    heading_entries: list[tuple[str, int]] = []
+    for i, token in enumerate(tokens):
+        if token.type != "heading_open":
+            continue
+        level = _heading_level(token)
+        if level != 2:
+            continue
+        heading_text = _extract_heading_text(tokens, i)
+        map_start = token.map[0] if token.map else 0
+        heading_entries.append((heading_text, map_start))
+
+    # Compute content boundaries: each section runs from after its heading
+    # to the start of the next h2+ heading (or end of body).
+    for idx, (heading_text, map_start) in enumerate(heading_entries):
+        field = heading_to_field.get(heading_text)
         if field is None:
-            field = _slugify_heading(match.group(1))
-        start = match.end()
-        end = headings[i + 1].start() if i + 1 < len(headings) else len(body)
-        result[field] = body[start:end].strip()
+            field = _slugify_heading(heading_text)
+
+        # Content starts on the line after this heading.
+        content_start = map_start + 1
+
+        # Find where this section ends: next h2+ heading or end of body.
+        if idx + 1 < len(heading_entries):
+            next_map_start = heading_entries[idx + 1][1]
+            result[field] = _section_content(body_lines, content_start, next_map_start)
+        else:
+            result[field] = _section_content(body_lines, content_start, None)
+
     return result
 
 
@@ -100,11 +167,18 @@ def parse_custom_headings(body: str, heading_to_field: dict[str, str]) -> dict[s
     the file happened to contain.
     """
     result: dict[str, str] = {}
-    for match in _SECTION_RE.finditer(body):
-        heading = match.group(1).strip()
-        if heading in heading_to_field:
+    tokens = _MD.parse(body)
+    for token in tokens:
+        if token.type != "heading_open":
             continue
-        result[_slugify_heading(heading)] = heading
+        # Only consider h2+ headings (same as parse_sections).
+        level = _heading_level(token)
+        if level != 2:
+            continue
+        heading_text = _extract_heading_text(tokens, tokens.index(token))
+        if heading_text in heading_to_field:
+            continue
+        result[_slugify_heading(heading_text)] = heading_text
     return result
 
 

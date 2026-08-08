@@ -100,11 +100,21 @@ _TURN_DRAIN_SLEEP_SECONDS = 0.01
 MAX_OVERFLOW_TEXT_BYTES = 1024 * 1024  # 1 MiB
 
 # Canonical kind vocabulary (closed set; new kinds require MA18 review)
-_KIND_VOCABULARY = frozenset({
-    "assistant-message", "thought", "status", "usage",
-    "tool-call", "file-change", "terminal-output", "plan-update",
-    "permission-request", "error", "result",
-})
+_KIND_VOCABULARY = frozenset(
+    {
+        "assistant-message",
+        "thought",
+        "status",
+        "usage",
+        "tool-call",
+        "file-change",
+        "terminal-output",
+        "plan-update",
+        "permission-request",
+        "error",
+        "result",
+    }
+)
 
 # Mapping: raw ACP sessionUpdate values → canonical kind.
 # The left column must cover the REAL wire vocabulary (agent_thought_chunk,
@@ -144,6 +154,7 @@ class ProviderLaunch:
     carries no requester identity, mode, or policy, only the three fields a
     process launch needs.
     """
+
     executable: str
     args: tuple[str, ...] = ()
     environment: Mapping[str, str] = field(default_factory=dict)
@@ -197,7 +208,9 @@ class AuxiliaryObservationSource(Protocol):
     """
 
     async def poll(
-        self, ag_session_id: str, turn_id: str | None,
+        self,
+        ag_session_id: str,
+        turn_id: str | None,
     ) -> TransportObservation | None:
         """Return the next available observation, or ``None`` if none is
         currently pending. Must never block waiting for one — the transport
@@ -406,9 +419,7 @@ class _TurnPipeline:
         ext: dict[str, Any] = {"acp": acp_ext}
         ext_bytes = len(str(ext).encode("utf-8"))
 
-        _, ext_was_cut = _truncate_bytes(
-            str(ext).encode("utf-8"), MAX_PAYLOAD_BYTES
-        )
+        _, ext_was_cut = _truncate_bytes(str(ext).encode("utf-8"), MAX_PAYLOAD_BYTES)
         if ext_was_cut:
             ext["_truncated"] = True  # type: ignore[literal-required]
 
@@ -437,7 +448,11 @@ class _TurnPipeline:
         await self._emit_callback(event)
 
     async def emit_error(
-        self, session_id: str, code: str, message: str, payload_excerpt: dict[str, Any] | None = None
+        self,
+        session_id: str,
+        code: str,
+        message: str,
+        payload_excerpt: dict[str, Any] | None = None,
     ) -> None:
         """Emit a non-terminal error-kind event (malformed update)."""
         while len(self.events) >= MAX_EVENTS:
@@ -677,9 +692,7 @@ class AcpSessionTransport:
         """
         stack, connection, proc = await self._spawn_and_initialize()
         try:
-            session = await connection.new_session(
-                cwd=str(self._cwd.resolve()), mcp_servers=[]
-            )
+            session = await connection.new_session(cwd=str(self._cwd.resolve()), mcp_servers=[])
         except (Exception, asyncio.CancelledError) as exc:
             with suppress(Exception, asyncio.CancelledError):
                 await stack.aclose()
@@ -779,6 +792,7 @@ class AcpSessionTransport:
             ) -> RequestPermissionResponse:
                 """Default-deny unless policy_fn grants access."""
                 from acp import RequestPermissionResponse
+
                 turn = transport._current_turn
                 if turn is not None:
                     tc_info = {
@@ -805,7 +819,9 @@ class AcpSessionTransport:
                     return
                 try:
                     payload = _plain(update)
-                    await turn.emit(session_id, str(payload.get("sessionUpdate", "update")), payload)
+                    await turn.emit(
+                        session_id, str(payload.get("sessionUpdate", "update")), payload
+                    )
                 except Exception as exc:
                     # Malformed update: normalize to error event, continue.
                     # Do not re-serialize the update — it may be the same object
@@ -847,20 +863,26 @@ class AcpSessionTransport:
                 except Exception as exc:
                     if turn is not None:
                         await turn.emit_error(
-                            session_id, ERR_FS_OPERATION_FAILED,
+                            session_id,
+                            ERR_FS_OPERATION_FAILED,
                             f"write_text_file failed: {type(exc).__name__}",
                             {"path": path},
                         )
                     raise AudiaGenticError(
-                        code=ERR_FS_OPERATION_FAILED, kind="execution",
+                        code=ERR_FS_OPERATION_FAILED,
+                        kind="execution",
                         message="ACP write_text_file failed",
                         details={"path": path, "error-type": type(exc).__name__},
                     ) from exc
                 if turn is not None:
                     await turn.emit(
-                        session_id, "file_change",
-                        {"path": str(target), "action": "write",
-                         "bytes": len(content.encode("utf-8"))},
+                        session_id,
+                        "file_change",
+                        {
+                            "path": str(target),
+                            "action": "write",
+                            "bytes": len(content.encode("utf-8")),
+                        },
                     )
                 return WriteTextFileResponse()
 
@@ -881,26 +903,34 @@ class AcpSessionTransport:
                 except Exception as exc:
                     if turn is not None:
                         await turn.emit_error(
-                            session_id, ERR_FS_OPERATION_FAILED,
+                            session_id,
+                            ERR_FS_OPERATION_FAILED,
                             f"read_text_file failed: {type(exc).__name__}",
                             {"path": path},
                         )
                     raise AudiaGenticError(
-                        code=ERR_FS_OPERATION_FAILED, kind="execution",
+                        code=ERR_FS_OPERATION_FAILED,
+                        kind="execution",
                         message="ACP read_text_file failed",
                         details={"path": path, "error-type": type(exc).__name__},
                     ) from exc
                 if turn is not None:
                     await turn.emit(
-                        session_id, "file_change",
-                        {"path": str(target), "action": "read",
-                         "bytes": len(text.encode("utf-8"))},
+                        session_id,
+                        "file_change",
+                        {"path": str(target), "action": "read", "bytes": len(text.encode("utf-8"))},
                     )
                 return ReadTextFileResponse(content=text)
 
             async def create_terminal(
-                self, session_id, command, args=None, env=None, cwd=None,
-                output_byte_limit=None, **kwargs,
+                self,
+                session_id,
+                command,
+                args=None,
+                env=None,
+                cwd=None,
+                output_byte_limit=None,
+                **kwargs,
             ):
                 from acp import CreateTerminalResponse
 
@@ -917,8 +947,10 @@ class AcpSessionTransport:
                         if name is not None:
                             env_map[str(name)] = "" if value is None else str(value)
                     proc = await asyncio.create_subprocess_exec(
-                        command, *(args or ()),
-                        cwd=str(term_cwd), env=env_map,
+                        command,
+                        *(args or ()),
+                        cwd=str(term_cwd),
+                        env=env_map,
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.STDOUT,
                     )
@@ -927,12 +959,14 @@ class AcpSessionTransport:
                 except Exception as exc:
                     if turn is not None:
                         await turn.emit_error(
-                            session_id, ERR_TERMINAL_OPERATION_FAILED,
+                            session_id,
+                            ERR_TERMINAL_OPERATION_FAILED,
                             f"create_terminal failed: {type(exc).__name__}",
                             {"command": command},
                         )
                     raise AudiaGenticError(
-                        code=ERR_TERMINAL_OPERATION_FAILED, kind="execution",
+                        code=ERR_TERMINAL_OPERATION_FAILED,
+                        kind="execution",
                         message="ACP create_terminal failed",
                         details={"command": command, "error-type": type(exc).__name__},
                     ) from exc
@@ -944,7 +978,8 @@ class AcpSessionTransport:
                 transport._terminals[terminal_id] = handle
                 if turn is not None:
                     await turn.emit(
-                        session_id, "terminal_output",
+                        session_id,
+                        "terminal_output",
                         {"terminal_id": terminal_id, "status": "started", "command": command},
                     )
                 return CreateTerminalResponse(terminal_id=terminal_id)
@@ -955,7 +990,8 @@ class AcpSessionTransport:
                 handle = transport._terminals.get(terminal_id)
                 if handle is None:
                     raise AudiaGenticError(
-                        code=ERR_UNKNOWN_TERMINAL, kind="execution",
+                        code=ERR_UNKNOWN_TERMINAL,
+                        kind="execution",
                         message="Unknown ACP terminal id",
                         details={"terminal-id": terminal_id},
                     )
@@ -984,7 +1020,8 @@ class AcpSessionTransport:
                 handle = transport._terminals.get(terminal_id)
                 if handle is None:
                     raise AudiaGenticError(
-                        code=ERR_UNKNOWN_TERMINAL, kind="execution",
+                        code=ERR_UNKNOWN_TERMINAL,
+                        kind="execution",
                         message="Unknown ACP terminal id",
                         details={"terminal-id": terminal_id},
                     )
@@ -998,9 +1035,14 @@ class AcpSessionTransport:
                 turn = transport._current_turn
                 if turn is not None:
                     await turn.emit(
-                        session_id, "terminal_output",
-                        {"terminal_id": terminal_id, "status": "exited",
-                         "exit_code": status.exit_code, "signal": status.signal},
+                        session_id,
+                        "terminal_output",
+                        {
+                            "terminal_id": terminal_id,
+                            "status": "exited",
+                            "exit_code": status.exit_code,
+                            "signal": status.signal,
+                        },
                     )
                 return WaitForTerminalExitResponse(exit_code=status.exit_code, signal=status.signal)
 
@@ -1074,7 +1116,9 @@ class AcpSessionTransport:
             ) from exc
         return stack, connection, proc
 
-    def _finish_open(self, stack: AsyncExitStack, connection: Any, proc: Any, session_id: str) -> None:
+    def _finish_open(
+        self, stack: AsyncExitStack, connection: Any, proc: Any, session_id: str
+    ) -> None:
         """Common tail of open()/open_resumed(): adopt state once a session id is known."""
         self._stack = stack
         self._connection = connection
@@ -1168,7 +1212,10 @@ class AcpSessionTransport:
                     await turn.emit_terminal(
                         str(self._session_id),
                         "cancelled",
-                        error={"code": ERR_CHILD_EXIT, "message": "Agent process cancelled unexpectedly"},
+                        error={
+                            "code": ERR_CHILD_EXIT,
+                            "message": "Agent process cancelled unexpectedly",
+                        },
                     )
                     raise AudiaGenticError(
                         code=ERR_EXECUTION_FAILED,
@@ -1217,9 +1264,7 @@ class AcpSessionTransport:
                 details={"executable": self._launch.executable},
             )
 
-        stop_reason = (
-            str(response.stop_reason) if response.stop_reason is not None else None
-        )
+        stop_reason = str(response.stop_reason) if response.stop_reason is not None else None
         terminal = await turn.emit_terminal(str(self._session_id), stop_reason)
         return turn.build_result(str(self._session_id), stop_reason, terminal)
 
@@ -1258,9 +1303,7 @@ class AcpSessionTransport:
             # bounded WITHOUT cancellation; on timeout let it finish in the
             # background and force-kill the child ourselves below.
             aclose_task = asyncio.ensure_future(stack.aclose())
-            aclose_task.add_done_callback(
-                lambda task: task.cancelled() or task.exception()
-            )
+            aclose_task.add_done_callback(lambda task: task.cancelled() or task.exception())
             with suppress(Exception, asyncio.CancelledError):
                 await asyncio.wait({aclose_task}, timeout=CANCEL_GRACE_SECONDS)
 
@@ -1295,9 +1338,7 @@ class AcpSessionTransport:
             except Exception:  # noqa: BLE001 — hook teardown is best-effort
                 import logging
 
-                logging.getLogger(__name__).warning(
-                    "pre-spawn hook on_close failed", exc_info=True
-                )
+                logging.getLogger(__name__).warning("pre-spawn hook on_close failed", exc_info=True)
             self._hook_state = None
 
 
@@ -1476,7 +1517,10 @@ class AcpAgentSessionTransport:
         pre_spawn_hook: PreSpawnHook | None = None,
     ) -> None:
         self._inner: AcpSessionTransport = AcpSessionTransport(
-            launch, cwd=cwd, policy_fn=policy_fn, compact_events=compact_events,
+            launch,
+            cwd=cwd,
+            policy_fn=policy_fn,
+            compact_events=compact_events,
             pre_spawn_hook=pre_spawn_hook,
         )
         self._ag_session_id: str | None = None
@@ -1731,8 +1775,6 @@ async def run_acp_prompt(
     transport = AcpSessionTransport(launch, cwd=cwd, policy_fn=policy_fn)
     try:
         await transport.open()
-        return await transport.prompt(
-            prompt, on_event=on_event, cancel_signal=cancel_signal
-        )
+        return await transport.prompt(prompt, on_event=on_event, cancel_signal=cancel_signal)
     finally:
         await transport.close()
