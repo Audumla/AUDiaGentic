@@ -22,6 +22,9 @@ from audiagentic.components.providers.protocols.streaming.sinks import (
     StreamSink,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.system.supervised_process import (
+    spawn_supervised,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -232,17 +235,14 @@ def run_streaming_command(
     timeout_seconds: float | None = None,
     termination_policy: str = "warn-only",
 ) -> StreamedCommandResult:
-    process = subprocess.Popen(
+    supervised = spawn_supervised(
         command,
         cwd=str(cwd) if cwd is not None else None,
         stdin=subprocess.PIPE if input_text is not None else None,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        bufsize=1,
     )
+    process = supervised.process
 
     stdout_memory = next(
         (sink for sink in stdout_sinks if isinstance(sink, InMemorySink)), None
@@ -274,6 +274,7 @@ def run_streaming_command(
     start_time = time.monotonic()
     timed_out = False
     warning_emitted = False
+    terminated = False
 
     try:
         while True:
@@ -295,12 +296,9 @@ def run_streaming_command(
             if timeout_seconds and elapsed >= timeout_seconds:
                 timed_out = True
                 if termination_policy == "graceful-kill":
-                    process.terminate()
-                    try:
-                        process.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
-                        process.wait()
+                    # Let SupervisedProcess handle tree teardown
+                    supervised.close()
+                    terminated = True
                 elif termination_policy == "warn-only":
                     logger.warning(
                         "stream timeout reached (%.1fs) but termination-policy is warn-only; process will continue",
@@ -310,11 +308,17 @@ def run_streaming_command(
 
             time.sleep(0.1)
     finally:
+        if not terminated:
+            supervised.close()
         stdout_thread.join(timeout=2)
         stderr_thread.join(timeout=2)
 
     if timed_out and termination_policy == "graceful-kill":
         returncode = -1
+
+    # If the process is still alive after warn-only timeout, poll once more.
+    if returncode is None:
+        returncode = process.poll() or 0
 
     return StreamedCommandResult(
         returncode=returncode,

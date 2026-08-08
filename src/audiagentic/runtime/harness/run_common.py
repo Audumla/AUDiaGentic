@@ -9,6 +9,7 @@ from pathlib import Path
 
 from audiagentic.foundation.cli_io import print_message
 from audiagentic.foundation.contracts.errors import make_error
+from audiagentic.foundation.system.supervised_process import spawn_supervised
 from audiagentic.runtime.harness.context import AgentContext, new_launch_runtime_root
 
 
@@ -235,13 +236,11 @@ def run_provider_agent(
         require_models_endpoint(ctx.endpoint, timeout=15)
         timeout = float(os.environ.get("AUDIAGENTIC_AG_SMOKE_TIMEOUT") or require_smoke_timeout(ctx.harness_cfg))
         with log_path.open("w", encoding="utf-8") as handle:
-            process = subprocess.Popen(command, cwd=ctx.agent_work, env=env, stdout=handle, stderr=subprocess.STDOUT, text=True)
+            supervised = spawn_supervised(command, cwd=ctx.agent_work, env=env, stdout=handle, stderr=subprocess.STDOUT)
             try:
-                returncode = process.wait(timeout=timeout)
+                returncode = supervised.wait(timeout=timeout)
             except subprocess.TimeoutExpired:
-                from audiagentic.foundation.system.process import kill_process_tree
-
-                kill_process_tree(process.pid)
+                supervised.close()
                 handle.write(f"\nSmoke timed out after {timeout:.1f}s\n")
                 return 124
         sys.stdout.write(log_path.read_text(encoding="utf-8"))

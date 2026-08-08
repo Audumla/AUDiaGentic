@@ -3,6 +3,7 @@
 Launches a language server subprocess, frames requests with Content-Length
 headers, and dispatches responses to awaiting futures.
 """
+
 from __future__ import annotations
 
 import json
@@ -15,6 +16,10 @@ from typing import IO, Any
 
 from audiagentic.components.coding_lsp.lsp_constants import DEFAULT_TIMEOUT, METHOD_TIMEOUTS
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+from audiagentic.foundation.system.supervised_process import (
+    SupervisedProcess,
+    spawn_supervised,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +38,9 @@ _CRLF = b"\r\n"
 # EXT-LSP-009: Lost connection to language server
 
 
-def _lsp_error(code: str, message: str, *, details: dict[str, Any] | None = None) -> AudiaGenticError:
+def _lsp_error(
+    code: str, message: str, *, details: dict[str, Any] | None = None
+) -> AudiaGenticError:
     """Construct a validated LSP error using the canonical make_error factory."""
     return make_error(
         prefix="EXT",
@@ -57,7 +64,7 @@ class LspJsonRpc:
     """
 
     def __init__(self) -> None:
-        self._process: subprocess.Popen[bytes] | None = None
+        self._supervised: SupervisedProcess | None = None
         self._lock = threading.Lock()
         self._next_id = 0
         self._pending: dict[int, threading.Event] = {}
@@ -67,17 +74,20 @@ class LspJsonRpc:
         self._running = False
         self._notification_handlers: dict[str, list[Callable]] = {}
 
-    def launch_server(self, command: list[str], cwd: str | None = None, env: dict[str, str] | None = None) -> None:
+    def launch_server(
+        self, command: list[str], cwd: str | None = None, env: dict[str, str] | None = None
+    ) -> None:
         """Launch a language server subprocess with stdio."""
-        if self._process is not None and self._process.poll() is None:
+        if self._supervised is not None and self._supervised.poll() is None:
             raise _lsp_error("EXT-LSP-002", "language server already running")
-        self._process = subprocess.Popen(
+        self._supervised = spawn_supervised(
             command,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             cwd=cwd,
             env=env,
+            text=False,
         )
         self._running = True
         self._reader_thread = threading.Thread(target=self._reader_loop, daemon=True)
@@ -85,7 +95,9 @@ class LspJsonRpc:
         self._stderr_thread = threading.Thread(target=self._stderr_drain, daemon=True)
         self._stderr_thread.start()
 
-    def send_request(self, method: str, params: Any, id: int | None = None, timeout: float | None = None) -> Any:
+    def send_request(
+        self, method: str, params: Any, id: int | None = None, timeout: float | None = None
+    ) -> Any:
         """Send a JSON-RPC request and block until response.
 
         Returns the result from `result` field of response.
@@ -124,24 +136,35 @@ class LspJsonRpc:
                 with self._lock:
                     response = self._responses.pop(req_id, None)
                 if response is None:
-                    raise _lsp_error("EXT-LSP-008", f"No response for request {id}; server likely crashed")
+                    raise _lsp_error(
+                        "EXT-LSP-008", f"No response for request {id}; server likely crashed"
+                    )
                 if "error" in response:
                     err = response["error"]
                     lsp_code = err.get("code", -1)
                     lsp_message = err.get("message", "unknown")
                     should_retry = attempt <= max_retries and (
-                        (lsp_code == -32801 and "cargo metadata" in lsp_message) or
-                        (lsp_code == -32801 and "content modified" in lsp_message) or
-                        (lsp_code == -32602 and "No references found" in lsp_message)
+                        (lsp_code == -32801 and "cargo metadata" in lsp_message)
+                        or (lsp_code == -32801 and "content modified" in lsp_message)
+                        or (lsp_code == -32602 and "No references found" in lsp_message)
                     )
                     if should_retry:
-                        logger.debug("Server indexing, retrying %s (attempt %d/%d)", method, attempt, max_retries)
+                        logger.debug(
+                            "Server indexing, retrying %s (attempt %d/%d)",
+                            method,
+                            attempt,
+                            max_retries,
+                        )
                         time.sleep(1.0 * attempt)
                         continue
                     raise _lsp_error(
                         "EXT-LSP-001",
                         f"LSP error {lsp_code}: {lsp_message}",
-                        details={"lsp-code": lsp_code, "lsp-message": lsp_message, "data": err.get("data")},
+                        details={
+                            "lsp-code": lsp_code,
+                            "lsp-message": lsp_message,
+                            "data": err.get("data"),
+                        },
                     )
                 return response.get("result")
             finally:
@@ -193,7 +216,9 @@ class LspJsonRpc:
         if method == "workspace/configuration":
             params = msg.get("params", {})
             items = params.get("items", [])
-            self._reply_to_server_request(int(msg_id), [item.get("defaultItem", {}) for item in items])
+            self._reply_to_server_request(
+                int(msg_id), [item.get("defaultItem", {}) for item in items]
+            )
         elif method == "client/registerCapability":
             self._reply_to_server_request(int(msg_id), {"registrations": []})
         else:
@@ -202,34 +227,33 @@ class LspJsonRpc:
 
     def is_alive(self) -> bool:
         """Return True if the language server process is running."""
-        if self._process is None:
+        if self._supervised is None:
             return False
-        return self._process.poll() is None
+        return self._supervised.poll() is None
 
     def shutdown(self) -> None:
         """Graceful LSP shutdown: send shutdown + exit, then kill if needed."""
-        if self._process is None or self._process.poll() is not None:
+        if self._supervised is None or self._supervised.poll() is not None:
             return
         try:
             self.send_request("shutdown", None, timeout=5)
             self.send_notification("exit", None)
             self._running = False
-            self._process.wait(timeout=5)
+            self._supervised.wait(timeout=5)
         except (TimeoutError, OSError, AudiaGenticError):
             try:
                 self._running = False
-                self._process.kill()
-                self._process.wait(timeout=3)
-            except (OSError, TimeoutError):
-                pass
-        self._process = None
+            finally:
+                # SupervisedProcess.close() handles tree teardown
+                self._supervised.close()
+        self._supervised = None
 
     # ── internal ──────────────────────────────────────────────────────────
 
     def _write_message(self, obj: dict[str, Any]) -> None:
-        if self._process is None or self._process.poll() is not None:
+        if self._supervised is None or self._supervised.poll() is not None:
             raise _lsp_error("EXT-LSP-002", "Language server process is not running")
-        stdin = self._process.stdin
+        stdin = self._supervised.process.stdin
         if stdin is None:
             raise _lsp_error("EXT-LSP-002", "Language server stdin is not available")
         payload = json.dumps(obj, separators=(",", ":")).encode("utf-8")
@@ -241,8 +265,9 @@ class LspJsonRpc:
             raise _lsp_error("EXT-LSP-009", "Lost connection to language server")
 
     def _reader_loop(self) -> None:
-        if self._process is None:
+        if self._supervised is None:
             return
+        proc = self._supervised.process
         try:
             while self._running:
                 msg = self._read_message()
@@ -272,9 +297,10 @@ class LspJsonRpc:
             self._fail_all_pending()
 
     def _read_message(self) -> dict[str, Any] | None:
-        if self._process is None:
+        proc = self._supervised.process if self._supervised is not None else None
+        if proc is None:
             return None
-        stdout = self._process.stdout
+        stdout = proc.stdout
         if stdout is None:
             return None
         header = self._read_header(stdout)
@@ -309,10 +335,11 @@ class LspJsonRpc:
 
     def _stderr_drain(self) -> None:
         """Drain server stderr to debug log to prevent pipe-buffer deadlock."""
-        if self._process is None or self._process.stderr is None:
+        proc = self._supervised.process if self._supervised is not None else None
+        if proc is None or proc.stderr is None:
             return
         try:
-            for line in iter(self._process.stderr.readline, b""):
+            for line in iter(proc.stderr.readline, b""):
                 if not self._running:
                     break
                 decoded = line.decode("utf-8", errors="replace").rstrip()
@@ -341,10 +368,8 @@ class LspJsonRpc:
         return None
 
     def __del__(self) -> None:
-        if self._process is not None and self._process.poll() is None:
+        if self._supervised is not None and self._supervised.poll() is None:
             try:
-                terminate = getattr(self._process, "terminate", None)
-                if callable(terminate):
-                    terminate()
+                self._supervised.close()
             except OSError:
                 pass
