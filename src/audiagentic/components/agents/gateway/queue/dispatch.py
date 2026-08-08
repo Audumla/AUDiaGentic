@@ -322,6 +322,7 @@ def dispatch_request(
     record: dict[str, Any],
     *,
     dispatch_prompt: str,
+    preallocated_session_id: str | None = None,
     manifest_id: str,
     context_fingerprint: str,
     component_profile: str,
@@ -348,7 +349,12 @@ def dispatch_request(
     persisted record (which only carries prompt_digest).
     """
     if _is_session_request(record):
-        return _dispatch_session_request(project_root, record, dispatch_prompt=dispatch_prompt)
+        return _dispatch_session_request(
+            project_root,
+            record,
+            dispatch_prompt=dispatch_prompt,
+            preallocated_session_id=preallocated_session_id,
+        )
 
     try:
         _raise_if_cancelled(project_root, record["request-id"])
