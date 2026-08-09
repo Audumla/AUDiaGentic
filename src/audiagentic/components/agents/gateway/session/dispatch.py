@@ -33,18 +33,25 @@ _TURN_CALL_CEILING_SECONDS = 3000.0
 
 
 # ── AS28 slice 4a helpers ────────────────────────────────────────
-def _build_default_surface_hint(provider_id: str) -> Any:
-    """Build a default SurfaceHint for a provider surface.
+def _build_surface_hint(profile: dict[str, Any]) -> Any:
+    """Build the surface hint from the resolved execution profile.
 
-    Uses ``<provider-id>-acp`` as the default surface id (matching the naming
-    convention in provider descriptors, e.g. opencode-acp), except for gpt-auto,
-    whose session surface is the CDP transport (``gpt-auto-cdp``).
+    Surface identity is configuration-owned and must be explicit. Provider
+    naming conventions and generic ACP defaults are not valid resolution.
     """
     from audiagentic.components.providers.providers_api import SurfaceHint
 
-    surface_id = f"{provider_id}-acp"
-    if provider_id == "gpt-auto":
-        surface_id = "gpt-auto-cdp"
+    surface_id = profile.get("surface_id")
+    if not isinstance(surface_id, str) or not surface_id.strip():
+        raise AudiaGenticError(
+            code="RES-AGW-103",
+            kind="agents",
+            message="execution profile must declare a session surface",
+            details={
+                "execution-profile-id": profile.get("profile_id"),
+                "provider-id": profile.get("provider_id"),
+            },
+        )
     return SurfaceHint(surface_id=surface_id)
 
 
@@ -145,16 +152,27 @@ def _dispatch_session_request(
             # which now only names a compatible instance set).
             profile_model_id = record.get("resolved-model-id")
             params = profile.get("params", {})
+            # AS08/AS49: stamp the session's binding with this request's own
+            # SH02 manifest fingerprint (already computed once, correctly, at
+            # admission -- see execution_context.py's build_manifest). Reused
+            # for both fields: identity vs execution drift aren't split out
+            # anywhere else in the manifest today, so a single fingerprint
+            # that must match exactly on both continuation (AS08) and resume
+            # (AS49) is the correct, non-speculative behavior until a real
+            # need for a finer split shows up.
+            manifest_context_fingerprint = context_fingerprint or record.get("context-fingerprint")
             session_record = runtime.open_session(
                 project_root,
                 execution_profile_id=execution_profile_id,
                 provider_id=provider_id,
                 model_id=profile_model_id,
                 session_id=session_id,
-                surface_hint=_build_default_surface_hint(provider_id),
+                surface_hint=_build_surface_hint(profile),
                 correlation_id=record.get("correlation-id"),
                 request_runtime_root=request_runtime_root,
                 mcp_entries=mcp_entries,
+                identity_context_fingerprint=manifest_context_fingerprint,
+                execution_context_fingerprint=manifest_context_fingerprint,
                 # Request value wins over profile params; 0 disables the bound
                 # (RV513) — use explicit None checks so 0 survives resolution.
                 idle_timeout_seconds=(

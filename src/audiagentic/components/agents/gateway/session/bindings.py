@@ -27,7 +27,6 @@ from audiagentic.foundation.transports.session_binding import (
     SessionOwnership,
 )
 
-DEFAULT_SURFACE_ID = "acp-session"
 DEFAULT_REF_NAMESPACE = "provider-session-ref"
 DEFAULT_IDENTITY_CONTEXT = "unknown"
 DEFAULT_EXECUTION_CONTEXT = "unknown"
@@ -44,7 +43,7 @@ def provider_ref_key(
     hasher = hashlib.sha256()
     for part in (
         provider_id or "unknown-provider",
-        surface_id or DEFAULT_SURFACE_ID,
+        surface_id,
         ref_namespace or DEFAULT_REF_NAMESPACE,
         identity_context_fingerprint or DEFAULT_IDENTITY_CONTEXT,
         provider_session_ref,
@@ -74,6 +73,13 @@ def build_binding(
 ) -> dict[str, Any] | None:
     if provider_session_ref is None:
         return None
+    if not surface_id:
+        raise AudiaGenticError(
+            code="VAL-AGW-102",
+            kind="agents",
+            message="provider session binding requires a resolved surface id",
+            details={"provider-id": provider_id},
+        )
     key = provider_ref_key(
         provider_id=provider_id,
         surface_id=surface_id,
@@ -85,7 +91,7 @@ def build_binding(
         "binding-id": f"sbind_{uuid.uuid4().hex[:16]}",
         "generation": generation,
         "provider-id": provider_id,
-        "surface-id": surface_id or DEFAULT_SURFACE_ID,
+        "surface-id": surface_id,
         "surface-version": surface_version,
         "ref-namespace": ref_namespace or DEFAULT_REF_NAMESPACE,
         "provider-session-ref": provider_session_ref,
@@ -115,35 +121,12 @@ def build_migrated_v1_binding(
     """
     if provider_session_ref is None:
         return None
-    seed = hashlib.sha256()
-    for part in ("v1-migration", session_id, provider_id or "", provider_session_ref):
-        encoded = part.encode("utf-8")
-        seed.update(str(len(encoded)).encode("ascii"))
-        seed.update(b":")
-        seed.update(encoded)
-    key = provider_ref_key(
-        provider_id=provider_id,
-        surface_id=None,
-        ref_namespace=None,
-        identity_context_fingerprint=None,
-        provider_session_ref=provider_session_ref,
+    raise AudiaGenticError(
+        code="VAL-AGW-103",
+        kind="agents",
+        message="legacy session binding has no resolved surface id; migration refused",
+        details={"session-id": session_id, "provider-id": provider_id},
     )
-    return {
-        "binding-id": f"sbind_{seed.hexdigest()[:16]}",
-        "generation": 1,
-        "provider-id": provider_id,
-        "surface-id": DEFAULT_SURFACE_ID,
-        "surface-version": None,
-        "ref-namespace": DEFAULT_REF_NAMESPACE,
-        "provider-session-ref": provider_session_ref,
-        "provider-ref-key": key,
-        "relation": BindingRelation.OPENED.value,
-        "ownership": SessionOwnership.OWNED.value,
-        "predecessor-binding-id": None,
-        "identity-context-fingerprint": DEFAULT_IDENTITY_CONTEXT,
-        "execution-context-fingerprint": DEFAULT_EXECUTION_CONTEXT,
-        "created-at": created_at,
-    }
 
 
 def public_binding_projection(binding: dict[str, Any] | None) -> dict[str, Any] | None:

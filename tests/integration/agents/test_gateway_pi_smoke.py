@@ -90,7 +90,6 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
         get_gateway_client,
         reset_gateway_client,
     )
-
     from audiagentic.components.providers.services.config.provider_config import (
         patch_provider_config,
     )

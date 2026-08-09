@@ -31,20 +31,8 @@ class GptAutoConfig:
     tab_selection_timeout: int = 15
     """Seconds to wait for the target ChatGPT tab to appear/load."""
 
-    login_timeout: int = 20
-    """Grace period for a sign-in session that is still restoring.
-
-    gpt-auto attaches to a long-lived browser that is expected to be signed in
-    already; it never drives an interactive sign-in, so this is not a window
-    for a human to type credentials.
-
-    This was 120s, which was the proven cause of session opens failing at
-    exactly 120.0s (2026-08-09). The open budget is also 120s, so a single
-    spurious login detection consumed the entire budget and surfaced as an
-    opaque TimeoutError. Note the default here is what actually applies:
-    ``wait_for_chatgpt_ready``'s own signature default is bypassed whenever a
-    real config object is present, which is always true via the gateway.
-    """
+    login_timeout: int = 0
+    """Deprecated compatibility field; login waiting is disabled."""
 
     response_wait_timeout: int = 120
     """Maximum seconds to poll for a response from ChatGPT's DOM."""

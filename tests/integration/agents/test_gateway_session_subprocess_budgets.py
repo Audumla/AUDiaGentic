@@ -29,13 +29,13 @@ import threading
 from pathlib import Path
 
 import pytest
+from tests.unit.agents.test_agents_gateway_sessions import _build_fake_prepared
+
 from audiagentic.components.agents.gateway.event_topics import (
     TURN_MODEL_COMPLETED_TOPIC,
     TURN_MODEL_STARTED_TOPIC,
 )
 from audiagentic.components.agents.gateway.session.sessions import SessionRuntime
-from tests.unit.agents.test_agents_gateway_sessions import _build_fake_prepared
-
 from audiagentic.foundation.event import get_bus, reset_bus
 from audiagentic.foundation.transports import AcpLaunch
 from audiagentic.foundation.transports.acp import AcpAgentSessionTransport

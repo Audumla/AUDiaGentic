@@ -14,8 +14,12 @@ never construct or dispatch a recipe.
 from __future__ import annotations
 
 import asyncio
+import logging
+import time
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from audiagentic.components.providers.contracts.cli_lifecycle import (
     CliLifecycleMode,
@@ -1693,6 +1697,7 @@ def prepare_provider_session_transport(
     require_isolated_mcp: bool = False,
     resume_provider_ref: str | None = None,
     enable_observability_tap: bool = False,
+    resume_provider_metadata: dict[str, Any] | None = None,
 ) -> PreparedSessionTransport:
     """Prepare a session transport with resolved surface snapshot.
 
@@ -1719,18 +1724,45 @@ def prepare_provider_session_transport(
         prepare_provider_session_transport as _prepare,
     )
 
-    return _prepare(
-        project_root,
-        provider_id=provider_id,
-        surface_hint=surface_hint,
-        model_id=model_id,
-        model_alias=model_alias,
-        request_runtime_root=request_runtime_root,
-        mcp_entries=mcp_entries,
-        require_isolated_mcp=require_isolated_mcp,
-        resume_provider_ref=resume_provider_ref,
-        enable_observability_tap=enable_observability_tap,
+    started = time.monotonic()
+    logger.info(
+        "provider session transport prepare begin provider=%s model=%s surface=%s resume-ref=%s",
+        provider_id,
+        model_id,
+        getattr(surface_hint, "surface_id", None),
+        resume_provider_ref,
+        extra={"gpt-auto-phase": "provider-prepare.begin"},
     )
+    try:
+        result = _prepare(
+            project_root,
+            provider_id=provider_id,
+            surface_hint=surface_hint,
+            model_id=model_id,
+            model_alias=model_alias,
+            request_runtime_root=request_runtime_root,
+            mcp_entries=mcp_entries,
+            require_isolated_mcp=require_isolated_mcp,
+            resume_provider_ref=resume_provider_ref,
+            enable_observability_tap=enable_observability_tap,
+            resume_provider_metadata=resume_provider_metadata,
+        )
+    except Exception:
+        logger.exception(
+            "provider session transport prepare failed elapsed-ms=%.1f provider=%s",
+            (time.monotonic() - started) * 1000,
+            provider_id,
+            extra={"gpt-auto-phase": "provider-prepare.failed"},
+        )
+        raise
+    logger.info(
+        "provider session transport prepare complete elapsed-ms=%.1f provider=%s transport=%s",
+        (time.monotonic() - started) * 1000,
+        provider_id,
+        type(result.transport).__name__ if result.transport is not None else None,
+        extra={"gpt-auto-phase": "provider-prepare.complete"},
+    )
+    return result
 
 
 # ── AS19 Stage-2 Slice A: harness status observer resolution ────────

@@ -14,7 +14,6 @@ from audiagentic.components.agents.status.harness_status_evidence import (
     RejectedEvidence,
     StatusEvidenceSink,
 )
-
 from audiagentic.foundation.transports.harness_status_observer import (
     StatusEvidence,
     StatusEvidenceSemanticStrength,

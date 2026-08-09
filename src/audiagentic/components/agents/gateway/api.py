@@ -776,6 +776,56 @@ def close_execution_session(project_root: Path, session_id: str) -> dict[str, An
     return _public_session_projection(record)
 
 
+def _compute_current_context_fingerprint(
+    project_root: Path,
+    *,
+    execution_profile_id: str,
+    provider_id: str,
+    model_id: str | None,
+) -> str:
+    """Freshly compute the SH02 manifest identity fingerprint for the CURRENT
+    resolution of a profile/provider/model.
+
+    Mirrors build_manifest's admission-time computation exactly (same
+    ManifestIdentity fields, same agent_runtime_digest inputs) -- replicated
+    here because AS49 resume is a direct API call, not a queued admission,
+    so it has no manifest of its own to read this off of. component_profile
+    is "" (base components): the vast majority of callers, including every
+    current path to resume_execution_session, never select a non-default
+    component profile, and CLAUDE.md's one-profile-per-process doctrine means
+    a session's whole process lifetime shares one value anyway.
+    """
+    from audiagentic.components.agents.contracts.execution_context import (
+        ManifestIdentity,
+        canonicalize_project_root,
+        compute_agent_runtime_digest,
+        compute_context_fingerprint,
+    )
+    from audiagentic.components.providers.providers_api import (
+        get_provider_runtime_config_state,
+    )
+
+    profile = _resolve_profile_for_submit(project_root, execution_profile_id)
+    isolation_tier = _resolve_provider_isolation_tier(provider_id)
+    provider_cfg = get_provider_runtime_config_state(project_root, provider_id)
+    agent_runtime_digest = compute_agent_runtime_digest(
+        resolved_profile=profile,
+        provider_config_state=provider_cfg,
+        component_overlay={"component-profile": ""},
+    )
+    canonical_root = canonicalize_project_root(str(project_root))
+    identity = ManifestIdentity(
+        project_root=canonical_root.fingerprint,
+        execution_profile_id=execution_profile_id,
+        provider_id=provider_id,
+        model_id=model_id,
+        provider_isolation_tier=isolation_tier,
+        component_profile="",
+        agent_runtime_digest=agent_runtime_digest,
+    )
+    return compute_context_fingerprint(identity)
+
+
 def resume_execution_session(
     project_root: Path,
     source_session_id: str,
@@ -796,8 +846,30 @@ def resume_execution_session(
     execution context mismatch, provider rejection, persistence failure —
     see agents_gateway_session_resume.py) rather than silently opening a
     fresh conversation.
+
+    ``identity_context_fingerprint``/``execution_context_fingerprint``
+    default to a freshly computed SH02 manifest fingerprint for the CURRENT
+    resolution of the source session's execution profile/provider/model,
+    compared against the fingerprint stamped on the source binding when it
+    was originally opened (see dispatch.py's session-open path). Passing an
+    explicit override is for tests/diagnostics only — production callers
+    should leave both None and let this derive them from the live profile
+    resolution, exactly as the docstring on SessionRuntime.resume_session
+    always intended ("the CALLER's current SH02 context").
     """
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
     from audiagentic.components.agents.gateway.session.sessions import get_session_runtime
+
+    if identity_context_fingerprint is None or execution_context_fingerprint is None:
+        source_record = session_store.read_session_record(project_root, source_session_id)
+        fresh_fingerprint = _compute_current_context_fingerprint(
+            project_root,
+            execution_profile_id=source_record["execution-profile-id"],
+            provider_id=source_record["provider-id"],
+            model_id=model_id or source_record.get("model-id"),
+        )
+        identity_context_fingerprint = identity_context_fingerprint or fresh_fingerprint
+        execution_context_fingerprint = execution_context_fingerprint or fresh_fingerprint
 
     runtime = get_session_runtime()
     record = runtime.resume_session(

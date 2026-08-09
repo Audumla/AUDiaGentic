@@ -115,9 +115,12 @@ def build_session_record(
     provider_id: str | None = None,
     model_id: str | None = None,
     provider_session_ref: str | None = None,
+    surface_id: str | None = None,
     provider_metadata: dict[str, Any] | None = None,
     idle_timeout_seconds: float | None = None,
     max_lifetime_seconds: float | None = None,
+    identity_context_fingerprint: str | None = None,
+    execution_context_fingerprint: str | None = None,
 ) -> dict[str, Any]:
     """Build a new session record in the initial 'active' state."""
     # 0 is a valid value for both bounds: it DISABLES that bound (RV513 —
@@ -140,6 +143,9 @@ def build_session_record(
     binding = bindings.build_binding(
         provider_id=provider_id,
         provider_session_ref=provider_session_ref,
+        surface_id=surface_id,
+        identity_context_fingerprint=identity_context_fingerprint,
+        execution_context_fingerprint=execution_context_fingerprint,
     )
     payload: dict[str, Any] = {
         "contract-version": "v2",

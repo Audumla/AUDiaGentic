@@ -338,3 +338,12 @@ class PreparedSessionTransport:
     transport: Any = None
     unavailable_code: str | None = None
     unavailable_message: str | None = None
+    # Paths (relative to the request's runtime root) the provider considers
+    # its own durable session state -- e.g. pi's native session .jsonl files.
+    # A resolved surface with resume-by-ref supported should populate this so
+    # SessionRuntime's close-time cleanup can preserve exactly this state
+    # instead of deleting the whole isolated runtime root, which would make
+    # resume-by-ref impossible regardless of any other resume machinery.
+    # Empty for providers with no local durable state to preserve (e.g.
+    # gpt-auto, whose session lives in the browser, not on local disk).
+    runtime_preserve_relpaths: tuple[str, ...] = ()

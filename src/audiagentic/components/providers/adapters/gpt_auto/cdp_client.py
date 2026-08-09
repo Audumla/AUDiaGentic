@@ -314,9 +314,31 @@ class CdpClient:
                 e.g. ``'() => !!document.querySelector(".ProseMirror")'``
             timeout_ms: Maximum milliseconds to wait (default 30000).
         """
-        await self._send(
-            "wait_for_function",
-            {"predicate": predicate_js, "timeoutMs": timeout_ms},
+        started = asyncio.get_running_loop().time()
+        logger.info(
+            "CDP wait_for_function begin timeout-ms=%d predicate-chars=%d",
+            timeout_ms,
+            len(predicate_js),
+            extra={"gpt-auto-phase": "cdp.wait-for-function.begin"},
+        )
+        try:
+            await self._send(
+                "wait_for_function",
+                {"predicate": predicate_js, "timeoutMs": timeout_ms},
+            )
+        except Exception:
+            logger.exception(
+                "CDP wait_for_function failed elapsed-ms=%.1f timeout-ms=%d",
+                (asyncio.get_running_loop().time() - started) * 1000,
+                timeout_ms,
+                extra={"gpt-auto-phase": "cdp.wait-for-function.failed"},
+            )
+            raise
+        logger.info(
+            "CDP wait_for_function complete elapsed-ms=%.1f timeout-ms=%d",
+            (asyncio.get_running_loop().time() - started) * 1000,
+            timeout_ms,
+            extra={"gpt-auto-phase": "cdp.wait-for-function.complete"},
         )
 
     # -- utility -------------------------------------------------------------------
@@ -338,6 +360,14 @@ class CdpClient:
 
         msg = {"id": self._seq, "method": method, "params": params or {}}
         self._seq += 1
+        started = asyncio.get_running_loop().time()
+        logger.debug(
+            "CDP command begin id=%d method=%s params=%s",
+            msg["id"],
+            method,
+            _summarize_cdp_params(params or {}),
+            extra={"gpt-auto-phase": "cdp.command.begin", "cdp-method": method},
+        )
         self._proc.stdin.write((json.dumps(msg) + "\n").encode())
         await self._proc.stdin.drain()
 
@@ -352,8 +382,40 @@ class CdpClient:
                     continue
                 if resp.get("id") == msg["id"]:
                     if "error" in resp:
+                        logger.error(
+                            "CDP command failed id=%d method=%s elapsed-ms=%.1f error=%s",
+                            msg["id"], method,
+                            (asyncio.get_running_loop().time() - started) * 1000,
+                            resp["error"],
+                            extra={"gpt-auto-phase": "cdp.command.failed", "cdp-method": method},
+                        )
                         raise RuntimeError(f"{method}: {resp['error']}")
-                    return resp.get("result", {})
+                    result = resp.get("result", {})
+                    logger.debug(
+                        "CDP command complete id=%d method=%s elapsed-ms=%.1f result=%s",
+                        msg["id"], method,
+                        (asyncio.get_running_loop().time() - started) * 1000,
+                        _summarize_cdp_result(result),
+                        extra={"gpt-auto-phase": "cdp.command.complete", "cdp-method": method},
+                    )
+                    return result
+
+
+def _summarize_cdp_params(params: dict[str, Any]) -> dict[str, Any]:
+    """Log CDP shape and sizes without logging prompt or JavaScript bodies."""
+    summary = {}
+    for key, value in params.items():
+        if key in {"script", "predicate", "js", "text"}:
+            summary[key] = f"<{len(value)} chars>" if isinstance(value, str) else "<redacted>"
+        else:
+            summary[key] = value
+    return summary
+
+
+def _summarize_cdp_result(result: Any) -> str:
+    if isinstance(result, dict):
+        return str(sorted(result.keys()))
+    return type(result).__name__
 
 
 def _find_node() -> str:

@@ -20,14 +20,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.agents.models.execution_profile_api import (
-    create_execution_profile,
-)
 from tests.integration.providers.harness import (
     assert_health_ok,
     assert_install_result_ok,
     install_provider,
     provider_ids,
+)
+
+from audiagentic.components.agents.models.execution_profile_api import (
+    create_execution_profile,
 )
 
 # ---------------------------------------------------------------------------

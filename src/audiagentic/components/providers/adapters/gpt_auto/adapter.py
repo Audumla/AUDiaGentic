@@ -73,17 +73,25 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
     logger.info("gpt-auto: executing prompt (%d chars) for project '%s'", len(prompt), project_name)
 
     timeout = provider_cfg.get("response-timeout", 120)
-    login_timeout = provider_cfg.get("login-timeout", 30)
+    tab_selection_timeout = provider_cfg.get("tab-selection-timeout", 15)
     typing_speed = provider_cfg.get("typing-speed", 0.03)
     cdp_url = provider_cfg.get("cdp-url", "http://127.0.0.1:9222")
     min_delay_between_requests = provider_cfg.get("min-delay-between-requests", 5.0)
+    logger.info(
+        "gpt-auto adapter config project=%s prompt-chars=%d response-timeout=%ss tab-selection-timeout=%ss login-wait=disabled min-delay=%ss",
+        project_name,
+        len(prompt),
+        timeout,
+        tab_selection_timeout,
+        min_delay_between_requests,
+        extra={"gpt-auto-phase": "adapter.config"},
+    )
 
     # Build transport config — the session transport owns CDP lifecycle, workspace
     # resolution, bring_to_front, stability-window polling, and tab mapping.
     transport_cfg: dict[str, Any] = {
         "response_wait_timeout": timeout,
-        "tab_selection_timeout": login_timeout,
-        "login_timeout": login_timeout,
+        "tab_selection_timeout": tab_selection_timeout,
         "typing_speed": typing_speed,
     }
 

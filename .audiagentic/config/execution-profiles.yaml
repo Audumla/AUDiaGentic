@@ -11,6 +11,23 @@ profiles:
   provider_id: gpt-auto
   instances: [chatgpt]
   model_alias: null
+  surface_id: gpt-auto-cdp
   params: {}
   is_default: false
   description: Browser-driven ChatGPT via CDP session transport
+- profile_id: opencode-rig
+  provider_id: opencode
+  instances: [ag-rig]
+  model_alias: null
+  surface_id: opencode-acp
+  params: {}
+  is_default: false
+  description: OpenCode ACP session driven against the local embedded rig, for gateway-session-path validation against a non-browser provider
+- profile_id: pi-rig
+  provider_id: pi
+  instances: [ag-rig]
+  model_alias: null
+  surface_id: pi-community-acp
+  params: {}
+  is_default: false
+  description: Pi ACP (pi-community-acp) session driven against the local embedded rig, for gateway-session-path validation against a non-browser provider

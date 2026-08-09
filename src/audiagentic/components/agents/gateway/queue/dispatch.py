@@ -365,6 +365,7 @@ def dispatch_request(
             record,
             dispatch_prompt=dispatch_prompt,
             preallocated_session_id=preallocated_session_id,
+            context_fingerprint=context_fingerprint,
         )
 
     try:

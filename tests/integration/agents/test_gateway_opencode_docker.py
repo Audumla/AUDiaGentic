@@ -385,7 +385,6 @@ def test_gateway_rejects_unresolvable_profile_without_touching_provider(
         get_gateway_client,
         reset_gateway_client,
     )
-
     from audiagentic.foundation.contracts.errors import AudiaGenticError
 
     _provision_provider_project(tmp_path, provider_id, monkeypatch)

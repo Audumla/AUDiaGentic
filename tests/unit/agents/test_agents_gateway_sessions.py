@@ -741,7 +741,7 @@ def test_cross_process_session_turn_appends_do_not_lose_updates(tmp_path: Path) 
     assert sorted(final["request-ids"]) == sorted(f"req_{index}" for index in range(count))
 
 
-def test_v1_session_record_migrates_to_v2_binding(tmp_path):
+def test_v1_session_record_without_surface_fails_closed(tmp_path):
     import json
 
     legacy = {
@@ -775,12 +775,8 @@ def test_v1_session_record_migrates_to_v2_binding(tmp_path):
     path.parent.mkdir(parents=True)
     path.write_text(json.dumps(legacy), encoding="utf-8")
 
-    migrated = session_store.read_session_record(tmp_path, "ses_legacy")
-    assert migrated["contract-version"] == "v2"
-    assert "provider-session-ref" not in migrated
-    assert migrated["binding"]["provider-session-ref"] == "secret-ref"
-    assert migrated["binding"]["relation"] == "opened"
-    assert migrated["binding"]["ownership"] == "owned"
+    with pytest.raises(AudiaGenticError, match="has no resolved surface id"):
+        session_store.read_session_record(tmp_path, "ses_legacy")
 
 
 def test_binding_index_uses_hash_not_raw_ref(rig):
@@ -1581,6 +1577,7 @@ def test_api_close_orphaned_stale_result_is_redacted(rig, monkeypatch):
         execution_profile_id="profile-1",
         provider_id="opencode",
         provider_session_ref="orphan-ref",
+        surface_id="opencode-acp",
     )
     orphan_id = orphan_record["session-id"]
     full_key = orphan_record["binding"]["provider-ref-key"]
