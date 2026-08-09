@@ -70,6 +70,23 @@ _START_BUDGET_SECONDS = 15.0
 # complete when its text has been unchanged for this full stability window.
 _RESPONSE_STABILITY_SECONDS = 15.0
 
+# Absolute upper bound on a single turn, regardless of apparent activity.
+#
+# `response_wait_timeout` is deliberately only a safety valve: while the
+# provider still looks active the poll loop keeps going, because a slow
+# ChatGPT answer is normal and must not be killed. That leaves one hole --
+# if an activity signal is stuck true, the loop never exits. Nothing above
+# closes it either: session/dispatch.py calls prompt_in_session() without a
+# timeout, so SessionRuntime._call() ends up awaiting .result(timeout=None)
+# and blocks forever, which is how a stalled turn stayed "running"
+# indefinitely rather than failing.
+#
+# This ceiling is the last-resort bound for that case. It is deliberately far
+# larger than any legitimate response so it never truncates real work, and
+# mirrors the activity-verified watchdog policy already adopted for delegated
+# work in the gateway worker (SH22's _ABSOLUTE_SAFETY_CEILING_SECONDS).
+_ABSOLUTE_TURN_CEILING_SECONDS = 2700.0
+
 # Sentinel: caller provided an explicit baseline (which may be (0, None)).
 _UNSET = object()
 
@@ -525,7 +542,12 @@ class GptAutoSessionTransport:
         # Use provided baseline or capture from the DOM (backward compat).
         if base_count is _UNSET:
             base_count, base_text = await _get_response_state(client)
-        deadline = time.monotonic() + _safe_float(getattr(cfg, "response_wait_timeout", 120), 120.0)
+        started_at = time.monotonic()
+        deadline = started_at + _safe_float(getattr(cfg, "response_wait_timeout", 120), 120.0)
+        ceiling = started_at + _safe_float(
+            getattr(cfg, "absolute_turn_ceiling_seconds", _ABSOLUTE_TURN_CEILING_SECONDS),
+            _ABSOLUTE_TURN_CEILING_SECONDS,
+        )
         interval = _safe_float(getattr(cfg, "polling_interval", 2.0), 2.0)
         stability = _safe_float(
             getattr(cfg, "response_stability_seconds", _RESPONSE_STABILITY_SECONDS),
@@ -565,6 +587,21 @@ class GptAutoSessionTransport:
             if is_cancelled():
                 await self._stop_generation(client)
                 return None, True
+
+            # Last-resort bound. Unlike `deadline`, this fires even while the
+            # provider still looks active, because "looks active forever" is
+            # precisely the stuck-signal case this exists to escape. Returning
+            # whatever text was captured keeps a partial answer rather than
+            # discarding it, and lets the turn reach a terminal state instead
+            # of hanging with no upper bound anywhere in the stack.
+            if time.monotonic() >= ceiling:
+                logger.warning(
+                    "gpt-auto: absolute turn ceiling reached (%.0fs) — ending turn with %d chars",
+                    _ABSOLUTE_TURN_CEILING_SECONDS,
+                    len(last_text) if last_text else 0,
+                )
+                await self._stop_generation(client)
+                return last_text, False
 
             count, text = await _get_response_state(client)
             has_fresh = count > base_count or _is_new(text)
