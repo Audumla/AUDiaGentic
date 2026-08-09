@@ -422,7 +422,7 @@ def test_open_prompt_close_lifecycle(rig):
     record = _open(runtime, tmp_path)
     session_id = record["session-id"]
     assert record["state"] == "active"
-    assert record["contract-version"] == "v2"
+    assert record["contract-version"] == "v3"
     assert record["binding"]["provider-session-ref"] == "prov-ses-1"
     public_binding = binding_store.public_binding_projection(record["binding"])
     assert public_binding is not None
@@ -432,8 +432,8 @@ def test_open_prompt_close_lifecycle(rig):
     result = runtime.prompt_in_session(tmp_path, session_id, "hello", request_id="req_1")
     assert result.stop_reason == "end_turn"
     stored = session_store.read_session_record(tmp_path, session_id)
-    assert stored["turn-count"] == 1
-    assert stored["request-ids"] == ["req_1"]
+    assert stored["activity"]["turn-count"] == 1
+    assert stored["activity"]["request-ids"] == ["req_1"]
 
     closed = runtime.close_session(tmp_path, session_id)
     assert closed["state"] == "closed"
@@ -705,8 +705,8 @@ def test_session_record_validation():
     record = session_store.build_session_record(
         execution_profile_id="p", idle_timeout_seconds=0, max_lifetime_seconds=0
     )
-    assert record["idle-timeout-seconds"] == 0
-    assert record["max-lifetime-seconds"] == 0
+    assert record["policy"]["idle-timeout-seconds"] == 0
+    assert record["policy"]["max-lifetime-seconds"] == 0
 
 
 def test_cross_process_session_turn_appends_do_not_lose_updates(tmp_path: Path) -> None:
@@ -737,8 +737,8 @@ def test_cross_process_session_turn_appends_do_not_lose_updates(tmp_path: Path) 
 
     assert [process.exitcode for process in processes] == [0] * count
     final = session_store.read_session_record(tmp_path, session_id)
-    assert final["turn-count"] == count
-    assert sorted(final["request-ids"]) == sorted(f"req_{index}" for index in range(count))
+    assert final["activity"]["turn-count"] == count
+    assert sorted(final["activity"]["request-ids"]) == sorted(f"req_{index}" for index in range(count))
 
 
 def test_v1_session_record_without_surface_fails_closed(tmp_path):

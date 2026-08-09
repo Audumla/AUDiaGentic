@@ -100,6 +100,7 @@ def _write_terminal_source_session(
         provider_id=_PROVIDER_ID,
         model_id="m1",
         provider_session_ref="source-provider-ref-1",
+        surface_id=_SURFACE_ID,
         idle_timeout_seconds=900,
         max_lifetime_seconds=14_400,
     )

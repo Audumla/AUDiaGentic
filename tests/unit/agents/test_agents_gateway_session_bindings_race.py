@@ -49,6 +49,7 @@ def _make_session_record(
         execution_profile_id="default",
         provider_id=provider_id,
         provider_session_ref=provider_ref,
+        surface_id="test-surface",
     )
     # Override state if requested (build_session_record always creates "active").
     if state != "active":
