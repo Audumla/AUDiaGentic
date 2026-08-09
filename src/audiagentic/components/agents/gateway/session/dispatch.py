@@ -23,6 +23,14 @@ from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
 
+# Backstop for the blocking session-turn call. Set above the transport's own
+# absolute turn ceiling so the transport normally terminates first and can
+# return whatever partial output it captured; this only fires if the
+# transport itself fails to return, and exists so no code path can leave a
+# turn blocked with no upper bound. Deliberately not the caller's
+# timeout_seconds -- a slow provider is not a failed provider.
+_TURN_CALL_CEILING_SECONDS = 3000.0
+
 
 # ── AS28 slice 4a helpers ────────────────────────────────────────
 def _build_default_surface_hint(provider_id: str) -> Any:
@@ -271,12 +279,21 @@ def _dispatch_session_request(
                 "max-attempts": 1,
             },
         )
+        # Outer bound on the blocking call itself. The transport owns when a
+        # turn is *done* (a slow provider must not be killed just for being
+        # slow), so this is deliberately not the caller's per-request
+        # timeout_seconds -- it is a generous backstop for the case where the
+        # transport's own loop cannot terminate. Without any value here,
+        # SessionRuntime._call() awaits .result(timeout=None) and a stalled
+        # turn blocks forever, which is how a dead stream stayed "running"
+        # indefinitely instead of reaching a terminal state.
         result = runtime.prompt_in_session(
             project_root,
             session_id,
             dispatch_prompt,
             request_id=request_id,
             correlation_id=record.get("correlation-id"),
+            timeout_seconds=_TURN_CALL_CEILING_SECONDS,
         )
     except _CancelledDuringDispatch:
         if request_runtime is not None:
