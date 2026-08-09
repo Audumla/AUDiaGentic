@@ -14,6 +14,7 @@ import pytest
 
 from audiagentic.components.agents.gateway.session import bindings as bindings
 from audiagentic.components.agents.gateway.session import sessions_store as session_store
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 @pytest.fixture
@@ -179,7 +180,7 @@ class TestOrphanedBindingDetection:
         assert len(rebuilt["bindings"]) == 1
         key = bindings.provider_ref_key(
             provider_id="test-provider",
-            surface_id=None,
+            surface_id="test-surface",
             ref_namespace=None,
             identity_context_fingerprint=None,
             provider_session_ref="ref-perm",
@@ -197,7 +198,7 @@ class TestOrphanedBindingDetection:
         assert len(rebuilt["bindings"]) == 1
         key = bindings.provider_ref_key(
             provider_id="test-provider",
-            surface_id=None,
+            surface_id="test-surface",
             ref_namespace=None,
             identity_context_fingerprint=None,
             provider_session_ref="ref-active",
@@ -218,7 +219,7 @@ class TestDuplicateActiveOwnedBindings:
         # Build an index with both (bypassing the normal duplicate check).
         key = bindings.provider_ref_key(
             provider_id="test-provider",
-            surface_id=None,
+            surface_id="test-surface",
             ref_namespace=None,
             identity_context_fingerprint=None,
             provider_session_ref="ref-dup-rebuild",
@@ -377,14 +378,14 @@ class TestBindingIdentityStability:
         (None uses the default)."""
         key_with_none = bindings.provider_ref_key(
             provider_id=None,
-            surface_id=None,
+            surface_id="test-surface",
             ref_namespace=None,
             identity_context_fingerprint=None,
             provider_session_ref="ref-test",
         )
         key_with_unknown = bindings.provider_ref_key(
             provider_id="unknown-provider",
-            surface_id=None,
+            surface_id="test-surface",
             ref_namespace=None,
             identity_context_fingerprint=None,
             provider_session_ref="ref-test",
@@ -392,26 +393,31 @@ class TestBindingIdentityStability:
         # None defaults to "unknown-provider" in the hash — they should be equal.
         assert key_with_none == key_with_unknown
 
-    def test_v1_migration_produces_deterministic_binding_id(self) -> None:
-        """build_migrated_v1_binding produces identical binding-id for same inputs."""
-        b1 = bindings.build_migrated_v1_binding(
-            session_id="ses_v1_abc",
-            provider_id="prov-legacy",
-            provider_session_ref="ref-legacy-xyz",
-            created_at="2025-01-01T00:00:00Z",
+    def test_v1_migration_with_a_ref_refuses_deterministically(self) -> None:
+        """build_migrated_v1_binding fails closed, consistently, for a v1
+        record with a real provider_session_ref -- v1 predates AS29 surface
+        declarations, so there is no surface_id to migrate, and repeated
+        calls with identical inputs must raise the identical rejection
+        rather than succeeding sometimes (no randomness, no read-time
+        clock in the failure path either)."""
+        for _ in range(2):
+            with pytest.raises(AudiaGenticError, match="VAL-AGW-103"):
+                bindings.build_migrated_v1_binding(
+                    session_id="ses_v1_abc",
+                    provider_id="prov-legacy",
+                    provider_session_ref="ref-legacy-xyz",
+                    created_at="2025-01-01T00:00:00Z",
+                )
+        # No ref at all (never-opened v1 record) still returns None, not a raise.
+        assert (
+            bindings.build_migrated_v1_binding(
+                session_id="ses_v1_abc",
+                provider_id="prov-legacy",
+                provider_session_ref=None,
+                created_at="2025-01-01T00:00:00Z",
+            )
+            is None
         )
-        b2 = bindings.build_migrated_v1_binding(
-            session_id="ses_v1_abc",
-            provider_id="prov-legacy",
-            provider_session_ref="ref-legacy-xyz",
-            created_at="2025-01-01T00:00:00Z",
-        )
-
-        assert b1 is not None
-        assert b1["binding-id"] == b2["binding-id"]
-        assert b1["provider-ref-key"] == b2["provider-ref-key"]
-        # V1 migration preserves the original created_at.
-        assert b1["created-at"] == "2025-01-01T00:00:00Z"
 
 
 # ── Provider Ref Redaction Tests ───────────────────────────────────

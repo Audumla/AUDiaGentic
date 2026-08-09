@@ -133,7 +133,9 @@ class _Clock:
 
 
 def _make_runtime(*, resume_prepare=None) -> SessionRuntime:
-    def default_resume_prepare(project_root, *, provider_id, surface_hint, model_id=None, resume_provider_ref=None):
+    def default_resume_prepare(
+        project_root, *, provider_id, surface_hint, model_id=None, resume_provider_ref=None, **_ignored
+    ):
         transport = FakeAgentSessionTransport()
         if resume_provider_ref:
             transport.provider_session_ref = resume_provider_ref
@@ -173,7 +175,9 @@ class TestResumeSuccess:
         source = _write_terminal_source_session(tmp_path)
         call_count = 0
 
-        def counting_prepare(project_root, *, provider_id, surface_hint, model_id=None, resume_provider_ref=None):
+        def counting_prepare(
+            project_root, *, provider_id, surface_hint, model_id=None, resume_provider_ref=None, **_ignored
+        ):
             nonlocal call_count
             call_count += 1
             transport = FakeAgentSessionTransport()
@@ -220,7 +224,9 @@ class TestResumeRejections:
     def test_unsupported_transport_rejected_no_live_session(self, tmp_path: Path):
         source = _write_terminal_source_session(tmp_path)
 
-        def unsupported_prepare(project_root, *, provider_id, surface_hint, model_id=None, resume_provider_ref=None):
+        def unsupported_prepare(
+            project_root, *, provider_id, surface_hint, model_id=None, resume_provider_ref=None, **_ignored
+        ):
             return PreparedSessionTransport(transport=None, surface=None, effective_provider_ref=None)
 
         runtime = _make_runtime(resume_prepare=unsupported_prepare)
