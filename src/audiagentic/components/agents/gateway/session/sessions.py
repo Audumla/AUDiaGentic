@@ -132,7 +132,15 @@ DEFAULT_REAP_INTERVAL_SECONDS = 30.0
 # Max turns waiting on one session's FIFO before new prompts are rejected —
 # keeps back-pressure visible instead of building an unbounded backlog (RV513).
 DEFAULT_SESSION_QUEUE_MAX = 8
-_OPEN_TIMEOUT_SECONDS = 120.0
+# Opening a session is not uniformly cheap. Measured across 15 real gpt-auto
+# opens (2026-08-09): attaching to an already-open conversation takes 3-13s,
+# but resolving a *fresh* workspace chat -- navigating the project, waiting
+# for the composer, and settling the new conversation URL -- took 67s, 90s,
+# 113s and 245s. The previous 120s budget sat inside that spread, so ordinary
+# fresh opens failed with an opaque TimeoutError roughly as often as they
+# succeeded. Raised to cover the observed range with margin while still
+# bounding a genuinely wedged open.
+_OPEN_TIMEOUT_SECONDS = 420.0
 _CLOSE_TIMEOUT_SECONDS = 30.0
 
 
