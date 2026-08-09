@@ -1080,8 +1080,8 @@ class SessionRuntime:
                 "session-id": session_id,
                 "execution-profile-id": record["execution-profile-id"],
                 "state": "active",
-                "provider-id": record.get("provider-id"),
-                "model-id": record.get("model-id"),
+                "provider-id": session_store.session_provider_id(record),
+                "model-id": session_store.session_model_id(record),
                 # AS17: project foundation process facts into session events.
                 "child-pid": child_pid,
                 "child-creation-identity": child_creation_identity,
@@ -1210,7 +1210,7 @@ class SessionRuntime:
         # prep, not just persisted onto the new record afterward -- prepare_
         # provider_session_transport needs a real model id now to resolve the
         # provider's model selection (VAL-MODEL-002 otherwise).
-        resume_model_id = model_id or source_record.get("model-id")
+        resume_model_id = model_id or session_store.session_model_id(source_record)
 
         # AS49: reuse the ORIGINAL request's runtime root, where a provider's
         # own durable session state was preserved on close (see
@@ -1227,7 +1227,7 @@ class SessionRuntime:
         # for the whole session's life, never recomputed per turn. An
         # explicit caller-supplied request_runtime_root still wins.
         if request_runtime_root is None:
-            opening_request_ids = source_record.get("request-ids") or []
+            opening_request_ids = session_store.session_request_ids(source_record)
             if opening_request_ids:
                 from audiagentic.components.agents.agents_paths import gateway_request_dir
 
@@ -1244,7 +1244,7 @@ class SessionRuntime:
             # session's own (per-turn-refreshed) provider-metadata alongside
             # it as an opaque supplementary hint -- generic here, only
             # meaningful to whichever provider builder chooses to read it.
-            "resume_provider_metadata": source_record.get("provider-metadata"),
+            "resume_provider_metadata": session_store.session_provider_metadata(source_record),
         }
         if request_runtime_root is not None:
             prepare_kwargs["request_runtime_root"] = request_runtime_root
@@ -1361,7 +1361,7 @@ class SessionRuntime:
                     "source-session-id": source_session_id,
                     "predecessor-binding-id": source_binding["binding-id"],
                     "provider-id": provider_id,
-                    "model-id": record.get("model-id"),
+                    "model-id": session_store.session_model_id(record),
                     "correlation-id": correlation_id,
                 },
             )
@@ -1387,7 +1387,7 @@ class SessionRuntime:
                 "execution-profile-id": record["execution-profile-id"],
                 "state": "active",
                 "provider-id": provider_id,
-                "model-id": record.get("model-id"),
+                "model-id": session_store.session_model_id(record),
             },
             correlation_id=correlation_id,
         )
@@ -1660,10 +1660,10 @@ class SessionRuntime:
                 "session-id": session_id,
                 "execution-profile-id": handle.execution_profile_id,
                 "state": "active",
-                "provider-id": turn_record.get("provider-id") if turn_record else None,
-                "model-id": turn_record.get("model-id") if turn_record else None,
+                "provider-id": session_store.session_provider_id(turn_record) if turn_record else None,
+                "model-id": session_store.session_model_id(turn_record) if turn_record else None,
                 "request-id": request_id,
-                "turn-count": turn_record.get("turn-count") if turn_record else None,
+                "turn-count": session_store.session_turn_count(turn_record) if turn_record else None,
                 "stop-reason": result.stop_reason,
             },
             correlation_id=correlation_id,
@@ -1692,10 +1692,10 @@ class SessionRuntime:
                     "session-id": handle.session_id,
                     "execution-profile-id": record["execution-profile-id"],
                     "state": "failed",
-                    "provider-id": record.get("provider-id"),
-                    "model-id": record.get("model-id"),
+                    "provider-id": session_store.session_provider_id(record),
+                    "model-id": session_store.session_model_id(record),
                     "close-reason": reason,
-                    "turn-count": record.get("turn-count"),
+                    "turn-count": session_store.session_turn_count(record),
                 },
                 correlation_id=handle.correlation_id,
             )
@@ -1753,10 +1753,10 @@ class SessionRuntime:
                     "session-id": session_id,
                     "execution-profile-id": record["execution-profile-id"],
                     "state": new_state,
-                    "provider-id": record.get("provider-id"),
-                    "model-id": record.get("model-id"),
+                    "provider-id": session_store.session_provider_id(record),
+                    "model-id": session_store.session_model_id(record),
                     "close-reason": reason,
-                    "turn-count": record.get("turn-count"),
+                    "turn-count": session_store.session_turn_count(record),
                 },
                 correlation_id=handle.correlation_id if handle else None,
             )

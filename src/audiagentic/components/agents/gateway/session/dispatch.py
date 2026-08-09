@@ -208,7 +208,7 @@ def _dispatch_session_request(
                 worker_id=record["worker-id"],
                 attempt_epoch=record["attempt-epoch"],
                 session_id=session_id,
-                provider_metadata=session_record.get("provider-metadata"),
+                provider_metadata=session_store.session_provider_metadata(session_record),
             )
         else:
             # continue: the session must exist and be bound to the same profile
@@ -358,7 +358,7 @@ def _dispatch_session_request(
         # request, not a completed one. Preserve bounded result diagnostics so
         # operators can still see that the turn produced terminal evidence.
         session_record = session_store.read_session_record(project_root, session_id)
-        model_id = session_record.get("model-id") or record.get("resolved-model-id")
+        model_id = session_store.session_model_id(session_record) or record.get("resolved-model-id")
         output_text = _session_output_from_result(result)
         store.append_owned_attempt(
             project_root,
@@ -405,7 +405,7 @@ def _dispatch_session_request(
         )
 
     session_record = session_store.read_session_record(project_root, session_id)
-    model_id = session_record.get("model-id") or record.get("resolved-model-id")
+    model_id = session_store.session_model_id(session_record) or record.get("resolved-model-id")
     output_text = _session_output_from_result(result)
     store.append_owned_attempt(
         project_root,

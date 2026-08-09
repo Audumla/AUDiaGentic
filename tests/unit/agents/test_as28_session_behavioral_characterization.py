@@ -109,8 +109,8 @@ def test_acp_sequence_open_two_turns_cancel_close(
     # AS28 slice 4b-A: result is SessionTurnResult with final_summary (not AcpResult)
     assert hasattr(result1, "observations_delivered"), "SessionTurnResult carries observations"
     stored = session_store.read_session_record(tmp_path, session_id)
-    assert stored["turn-count"] == 1
-    assert stored["request-ids"] == ["req_1"]
+    assert stored["activity"]["turn-count"] == 1
+    assert stored["activity"]["request-ids"] == ["req_1"]
 
     # Step 3: second turn blocked so cancel can be tested
     gate = threading.Event()
@@ -149,8 +149,8 @@ def test_acp_sequence_open_two_turns_cancel_close(
 
     # Durable record reflects the full sequence
     stored = session_store.read_session_record(tmp_path, session_id)
-    assert stored["turn-count"] == 2
-    assert sorted(stored["request-ids"]) == ["req_1", "req_2"]
+    assert stored["activity"]["turn-count"] == 2
+    assert sorted(stored["activity"]["request-ids"]) == ["req_1", "req_2"]
 
 
 def test_acp_sequence_queue_fifo_ordering(

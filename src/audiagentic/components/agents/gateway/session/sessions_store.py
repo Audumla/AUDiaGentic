@@ -54,6 +54,56 @@ _COMPONENT_ID = "agents"
 _RESOURCE_KIND = "agent-execution-gateway-session"
 
 
+# ── v3 grouped-field accessors ──────────────────────────────────────
+# provider/timing/policy/activity are omitted entirely when empty (v3
+# schema), so every read goes through .get(..., {}) at each level rather
+# than assuming the group exists.
+
+
+def session_provider_id(record: dict[str, Any]) -> str | None:
+    return (record.get("provider") or {}).get("provider-id")
+
+
+def session_model_id(record: dict[str, Any]) -> str | None:
+    return (record.get("provider") or {}).get("model-id")
+
+
+def session_provider_metadata(record: dict[str, Any]) -> dict[str, Any]:
+    return dict((record.get("provider") or {}).get("metadata") or {})
+
+
+def session_turn_count(record: dict[str, Any]) -> int:
+    return (record.get("activity") or {}).get("turn-count") or 0
+
+
+def session_request_ids(record: dict[str, Any]) -> list[str]:
+    return list((record.get("activity") or {}).get("request-ids") or [])
+
+
+def session_created_at(record: dict[str, Any]) -> str | None:
+    return (record.get("timing") or {}).get("created-at")
+
+
+def session_updated_at(record: dict[str, Any]) -> str | None:
+    return (record.get("timing") or {}).get("updated-at")
+
+
+def session_last_activity_at(record: dict[str, Any]) -> str | None:
+    return (record.get("timing") or {}).get("last-activity-at")
+
+
+def session_closed_at(record: dict[str, Any]) -> str | None:
+    return (record.get("timing") or {}).get("closed-at")
+
+
+def session_idle_timeout_seconds(record: dict[str, Any]) -> float | None:
+    return (record.get("policy") or {}).get("idle-timeout-seconds")
+
+
+def session_max_lifetime_seconds(record: dict[str, Any]) -> float | None:
+    return (record.get("policy") or {}).get("max-lifetime-seconds")
+
+
 def record_session_timeline(
     project_root: Path,
     session_id: str,
@@ -148,25 +198,37 @@ def build_session_record(
         execution_context_fingerprint=execution_context_fingerprint,
     )
     payload: dict[str, Any] = {
-        "contract-version": "v2",
+        "contract-version": "v3",
         "session-id": session_id or generate_session_id(),
         "execution-profile-id": execution_profile_id,
-        "provider-id": provider_id,
-        "model-id": model_id,
-        "provider-metadata": dict(provider_metadata or {}),
         "binding": binding,
         "state": "active",
-        "close-reason": None,
-        "idle-timeout-seconds": idle_timeout_seconds,
-        "max-lifetime-seconds": max_lifetime_seconds,
-        "request-ids": [],
-        "turn-count": 0,
-        "error": None,
-        "created-at": timestamp,
-        "updated-at": timestamp,
-        "last-activity-at": timestamp,
-        "closed-at": None,
+        "timing": {
+            "created-at": timestamp,
+            "updated-at": timestamp,
+            "last-activity-at": timestamp,
+        },
+        "activity": {
+            "request-ids": [],
+            "turn-count": 0,
+        },
     }
+    provider: dict[str, Any] = {}
+    if provider_id is not None:
+        provider["provider-id"] = provider_id
+    if model_id is not None:
+        provider["model-id"] = model_id
+    if provider_metadata:
+        provider["metadata"] = dict(provider_metadata)
+    if provider:
+        payload["provider"] = provider
+    policy: dict[str, Any] = {}
+    if idle_timeout_seconds is not None:
+        policy["idle-timeout-seconds"] = idle_timeout_seconds
+    if max_lifetime_seconds is not None:
+        policy["max-lifetime-seconds"] = max_lifetime_seconds
+    if policy:
+        payload["policy"] = policy
     return _validate(payload, code="VAL-AGW-052")
 
 
@@ -188,8 +250,60 @@ def _migrate_v1_record(payload: dict[str, Any]) -> dict[str, Any]:
     return migrated
 
 
+def _migrate_v2_record(payload: dict[str, Any]) -> dict[str, Any]:
+    """v2 (flat) -> v3 (grouped provider/timing/policy/activity, omit-if-absent).
+
+    Pure reshaping of an already-valid v2 record: no field is dropped or
+    reinterpreted, just regrouped, and absent-valued optional fields (None,
+    empty dict/list) are omitted rather than persisted as null/{}/[] --
+    v2 always wrote every field; v3's schema only requires the ones that are
+    always meaningful.
+    """
+    if payload.get("contract-version") != "v2":
+        return payload
+    migrated: dict[str, Any] = {
+        "contract-version": "v3",
+        "session-id": payload.get("session-id"),
+        "execution-profile-id": payload.get("execution-profile-id"),
+        "binding": payload.get("binding"),
+        "state": payload.get("state"),
+        "timing": {
+            "created-at": payload.get("created-at"),
+            "updated-at": payload.get("updated-at"),
+            "last-activity-at": payload.get("last-activity-at") or payload.get("created-at"),
+        },
+        "activity": {
+            "request-ids": list(payload.get("request-ids") or []),
+            "turn-count": payload.get("turn-count") or 0,
+        },
+    }
+    if payload.get("closed-at") is not None:
+        migrated["timing"]["closed-at"] = payload["closed-at"]
+    provider: dict[str, Any] = {}
+    if payload.get("provider-id") is not None:
+        provider["provider-id"] = payload["provider-id"]
+    if payload.get("model-id") is not None:
+        provider["model-id"] = payload["model-id"]
+    if payload.get("provider-metadata"):
+        provider["metadata"] = dict(payload["provider-metadata"])
+    if provider:
+        migrated["provider"] = provider
+    policy: dict[str, Any] = {}
+    if payload.get("idle-timeout-seconds") is not None:
+        policy["idle-timeout-seconds"] = payload["idle-timeout-seconds"]
+    if payload.get("max-lifetime-seconds") is not None:
+        policy["max-lifetime-seconds"] = payload["max-lifetime-seconds"]
+    if policy:
+        migrated["policy"] = policy
+    if payload.get("close-reason") is not None:
+        migrated["close-reason"] = payload["close-reason"]
+    if payload.get("error") is not None:
+        migrated["error"] = payload["error"]
+    return migrated
+
+
 def _validate(payload: dict[str, Any], *, code: str) -> dict[str, Any]:
-    payload = _migrate_v1_record(payload)
+    payload = _migrate_v2_record(_migrate_v1_record(payload))
     issues = validate_with_schema(_SCHEMA_STEM, payload)
     if issues:
         raise AudiaGenticError(
@@ -202,7 +316,6 @@ def _validate(payload: dict[str, Any], *, code: str) -> dict[str, Any]:
 
 
 def write_session_record(project_root: Path, payload: dict[str, Any]) -> Path:
-    payload = _migrate_v1_record(payload)
     session_id = payload.get("session-id")
     if not session_id:
         raise AudiaGenticError(
@@ -211,7 +324,7 @@ def write_session_record(project_root: Path, payload: dict[str, Any]) -> Path:
             message="gateway session record missing session-id",
             details={},
         )
-    _validate(payload, code="VAL-AGW-054")
+    payload = _validate(payload, code="VAL-AGW-054")
     target = gateway_session_path(project_root, session_id)
     atomic_write_json(target, payload)
     return target
@@ -661,12 +774,27 @@ def transition_session_record(
         ensure_session_transition(record["state"], new_state)
         updated = dict(record)
         updated["state"] = new_state
-        updated["updated-at"] = now_iso_z()
-        if updates:
-            for key, value in updates.items():
-                updated[key.replace("_", "-")] = (
-                    _redact_error(value) if key in ("error",) else value
-                )
+        timing = dict(updated.get("timing") or {})
+        timing["updated-at"] = now_iso_z()
+        for key, value in (updates or {}).items():
+            key = key.replace("_", "-")
+            if key in ("closed-at", "last-activity-at"):
+                if value is None:
+                    timing.pop(key, None)
+                else:
+                    timing[key] = value
+            elif key == "close-reason":
+                if value is None:
+                    updated.pop("close-reason", None)
+                else:
+                    updated["close-reason"] = value
+            elif key == "error":
+                redacted = _redact_error(value)
+                if redacted is None:
+                    updated.pop("error", None)
+                else:
+                    updated["error"] = redacted
+        updated["timing"] = timing
         write_session_record(project_root, updated)
         record_session_timeline(
             project_root,
@@ -698,38 +826,48 @@ def record_session_turn(
     """
     with _session_lock(project_root, session_id):
         record = read_session_record(project_root, session_id)
-        request_ids = list(record.get("request-ids") or [])
+        activity = dict(record.get("activity") or {})
+        request_ids = list(activity.get("request-ids") or [])
         if request_id in request_ids:
             if provider_metadata is None:
                 return record
             updated = dict(record)
-            updated["provider-metadata"] = dict(provider_metadata)
-            updated["updated-at"] = now_iso_z()
+            provider = dict(updated.get("provider") or {})
+            provider["metadata"] = dict(provider_metadata)
+            updated["provider"] = provider
+            timing = dict(updated.get("timing") or {})
+            timing["updated-at"] = now_iso_z()
+            updated["timing"] = timing
             write_session_record(project_root, updated)
             return updated
         updated = dict(record)
         request_ids.append(request_id)
-        updated["request-ids"] = request_ids
+        activity["request-ids"] = request_ids
         try:
-            updated["turn-count"] = int(record.get("turn-count") or 0) + 1
+            activity["turn-count"] = int(activity.get("turn-count") or 0) + 1
         except (TypeError, ValueError):
             logger.warning(
                 "invalid turn-count in session record; resetting",
                 extra={"session-id": session_id},
                 exc_info=True,
             )
-            updated["turn-count"] = 1
+            activity["turn-count"] = 1
+        updated["activity"] = activity
         timestamp = now_iso_z()
         if provider_metadata is not None:
-            updated["provider-metadata"] = dict(provider_metadata)
-        updated["last-activity-at"] = timestamp
-        updated["updated-at"] = timestamp
+            provider = dict(updated.get("provider") or {})
+            provider["metadata"] = dict(provider_metadata)
+            updated["provider"] = provider
+        timing = dict(updated.get("timing") or {})
+        timing["last-activity-at"] = timestamp
+        timing["updated-at"] = timestamp
+        updated["timing"] = timing
         write_session_record(project_root, updated)
         record_session_timeline(
             project_root,
             session_id,
             "session.turn.recorded",
             state=updated["state"],
-            attributes={"request-id": request_id, "turn-count": updated["turn-count"]},
+            attributes={"request-id": request_id, "turn-count": activity["turn-count"]},
         )
         return updated

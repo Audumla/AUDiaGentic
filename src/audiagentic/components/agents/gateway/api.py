@@ -741,7 +741,7 @@ def list_execution_sessions(
     records = session_store.list_session_records(project_root)
     if state is not None:
         records = [r for r in records if r["state"] == state]
-    records.sort(key=lambda r: r["created-at"], reverse=True)
+    records.sort(key=lambda r: session_store.session_created_at(r) or "", reverse=True)
     rows = []
     for record in records:
         live = record["session-id"] in live_ids
@@ -865,8 +865,8 @@ def resume_execution_session(
         fresh_fingerprint = _compute_current_context_fingerprint(
             project_root,
             execution_profile_id=source_record["execution-profile-id"],
-            provider_id=source_record["provider-id"],
-            model_id=model_id or source_record.get("model-id"),
+            provider_id=session_store.session_provider_id(source_record),
+            model_id=model_id or session_store.session_model_id(source_record),
         )
         identity_context_fingerprint = identity_context_fingerprint or fresh_fingerprint
         execution_context_fingerprint = execution_context_fingerprint or fresh_fingerprint
@@ -892,6 +892,8 @@ def gateway_overview(project_root: Path) -> dict[str, Any]:
     only exposed in-memory queue depths, which are empty after a restart even
     though persisted state still shows what happened).
     """
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
+
     records = store.list_records(project_root)
     by_state: dict[str, int] = {}
     for record in records:
@@ -920,11 +922,11 @@ def gateway_overview(project_root: Path) -> dict[str, Any]:
                 {
                     "session-id": s["session-id"],
                     "execution-profile-id": s["execution-profile-id"],
-                    "provider-id": s.get("provider-id"),
+                    "provider-id": session_store.session_provider_id(s),
                     "state": s["state"],
                     "live": s["live"],
-                    "last-activity-at": s.get("last-activity-at"),
-                    "turn-count": s.get("turn-count", 0),
+                    "last-activity-at": session_store.session_last_activity_at(s),
+                    "turn-count": session_store.session_turn_count(s),
                 }
                 for s in sessions[:10]
             ],
