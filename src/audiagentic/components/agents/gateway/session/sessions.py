@@ -132,15 +132,7 @@ DEFAULT_REAP_INTERVAL_SECONDS = 30.0
 # Max turns waiting on one session's FIFO before new prompts are rejected —
 # keeps back-pressure visible instead of building an unbounded backlog (RV513).
 DEFAULT_SESSION_QUEUE_MAX = 8
-# Opening a session is not uniformly cheap. Measured across 15 real gpt-auto
-# opens (2026-08-09): attaching to an already-open conversation takes 3-13s,
-# but resolving a *fresh* workspace chat -- navigating the project, waiting
-# for the composer, and settling the new conversation URL -- took 67s, 90s,
-# 113s and 245s. The previous 120s budget sat inside that spread, so ordinary
-# fresh opens failed with an opaque TimeoutError roughly as often as they
-# succeeded. Raised to cover the observed range with margin while still
-# bounding a genuinely wedged open.
-_OPEN_TIMEOUT_SECONDS = 420.0
+_OPEN_TIMEOUT_SECONDS = 120.0
 _CLOSE_TIMEOUT_SECONDS = 30.0
 
 
@@ -296,8 +288,32 @@ class SessionRuntime:
             return loop
 
     def _call(self, coro: Any, timeout: float | None) -> Any:
+        """Run *coro* on the runtime loop, cancelling it if *timeout* expires.
+
+        The timeout is applied with ``asyncio.wait_for`` *inside* the loop
+        rather than via ``Future.result(timeout=...)``. The latter only stops
+        the caller waiting -- the coroutine keeps running to completion on the
+        loop.
+
+        That distinction caused real damage (observed 2026-08-09): a session
+        open declared TimeoutError at 120.0s went on to finish 11s later and
+        registered a live session nobody was waiting for, leaking both the
+        session binding and its CDP helper process. The next attempt then
+        contended with that orphan on the same provider-ref-key, so failures
+        compounded instead of being independent.
+        """
         loop = self._ensure_loop()
-        return asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=timeout)
+        if timeout is None:
+            return asyncio.run_coroutine_threadsafe(coro, loop).result()
+
+        async def _bounded() -> Any:
+            return await asyncio.wait_for(coro, timeout=timeout)
+
+        future = asyncio.run_coroutine_threadsafe(_bounded(), loop)
+        # Allow a little slack over the inner deadline so the inner
+        # cancellation is what fires, letting the coroutine unwind its own
+        # cleanup rather than being abandoned mid-flight.
+        return future.result(timeout=timeout + 15.0)
 
     # ── public sync API ──────────────────────────────────────────
 
