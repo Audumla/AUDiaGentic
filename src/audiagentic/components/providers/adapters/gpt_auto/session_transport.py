@@ -233,6 +233,17 @@ class GptAutoSessionTransport:
             except Exception:
                 logger.debug("bring_to_front failed during open (non-fatal)", exc_info=True)
 
+            # Keep the renderer streaming even once this window is occluded by
+            # whatever the user is actually working in. bring_to_front only
+            # helps at the moment it runs; without this, a response that is
+            # still streaming when the window is covered aborts after its
+            # first chunk and the turn hangs on a part-written answer.
+            try:
+                emulation = await client.keep_page_active()
+                logger.info("gpt-auto page-active emulation: %s", emulation)
+            except Exception:
+                logger.debug("keep_page_active failed during open (non-fatal)", exc_info=True)
+
             ref = _conversation_ref_from_url(ws.url)
             workspace_url = workspace_base_url(ws.url)
             conversation_id = ws.conversation_id
@@ -402,6 +413,14 @@ class GptAutoSessionTransport:
                 await client.bring_to_front()
             except Exception:
                 logger.debug("bring_to_front failed (non-fatal)", exc_info=True)
+
+            # Re-assert per turn: the first turn navigates workspace-root ->
+            # /c/{conversation-id}, and the new renderer does not inherit the
+            # emulation applied at open.
+            try:
+                await client.keep_page_active()
+            except Exception:
+                logger.debug("keep_page_active failed (non-fatal)", exc_info=True)
 
             # Capture the DOM baseline BEFORE submit — after inject the page
             # may already show a response (especially with test fakes that set

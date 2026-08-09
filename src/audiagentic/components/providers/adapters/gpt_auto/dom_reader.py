@@ -56,28 +56,52 @@ _GET_RESPONSE_STATE_JS = """() => {
 # static "Thinking" placeholder as the finished answer and return it early.
 _IS_GENERATING_JS = """
 () => {
-    // Stop generating button visible = still generating. This is the primary
-    // and most reliable signal — it stays visible through streaming, thinking,
-    // and browsing/tool-use phases (e.g. @github plugin). When the response
-    // completes, this element disappears or changes tooltip.
-    if (document.querySelector('[data-testid="stop-generating"]')) return true;
+    // An element only counts as an activity signal when it is actually
+    // rendered. Several checks below use broad substring selectors that also
+    // match hidden/zero-size scaffolding (ChatGPT ships plenty of it), and a
+    // hidden match would pin this predicate true forever -- the turn then
+    // never reaches its stability window even though the answer is complete.
+    const shown = (el) => {
+        if (!el) return false;
+        const rect = el.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return false;
+        const style = window.getComputedStyle(el);
+        return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+    };
+    const anyShown = (sel) => Array.from(document.querySelectorAll(sel)).some(shown);
+
+    // The composer's stop button is the primary and most reliable signal --
+    // it stays present through streaming, thinking, and browsing/tool-use
+    // phases (e.g. @github), and disappears when the response completes.
+    //
+    // Verified against the live DOM 2026-08-09: the button is
+    // data-testid="stop-button" (aria-label "Stop answering"). The previously
+    // checked "stop-generating" testid does not exist and never matched, so
+    // this "primary" check was silently dead and detection was relying on the
+    // locale-dependent aria-label fallback below. Both testids are accepted
+    // so a future rename degrades to the fallback rather than breaking.
+    if (anyShown('[data-testid="stop-button"], [data-testid="stop-generating"]')) return true;
 
     // Loading/streaming indicators — includes the reasoning phase, where the
     // assistant block carries a result-thinking class before streaming starts.
     // The browsing/searching phase also uses result-thinking while ChatGPT is
     // reading external content (e.g. GitHub). Without this check, stability
     // would accumulate on stale text during browsing and return early.
-    const loaders = document.querySelectorAll('.loading-dots, [class*="streaming"], .result-streaming, .result-thinking, [class*="result-thinking"]');
-    if (loaders.length > 0) return true;
+    if (anyShown('.loading-dots, [class*="streaming"], .result-streaming, .result-thinking, [class*="result-thinking"]')) return true;
 
-    // Check for a stop button near the editor — ChatGPT shows this while streaming
+    // Fallback for the stop control when its testid changes: any visible
+    // button whose label mentions stopping. Locale-dependent, so it backs up
+    // the testid check above rather than being relied on alone.
     const btns = Array.from(document.querySelectorAll('button, [role="button"]'));
     for (const b of btns) {
         const label = (b.getAttribute('aria-label') || '').toLowerCase();
-        if (label.includes('stop')) return true;
+        if (label.includes('stop') && shown(b)) return true;
     }
 
-    // Page-level busy indicators — ChatGPT may show these during browsing/searching
+    // Page-level busy indicators — ChatGPT may show these during browsing/searching.
+    // These are the broadest selectors here (e.g. [class*="loading"] also
+    // matches the "loading-shimmer-*" placeholder text), so visibility is
+    // load-bearing rather than defensive.
     const busySelectors = [
         '[class*="spinner"]',
         '[class*="loading"]',
@@ -86,7 +110,7 @@ _IS_GENERATING_JS = """
         '[class*="busy"]',
     ];
     for (const sel of busySelectors) {
-        if (document.querySelector(sel)) return true;
+        if (anyShown(sel)) return true;
     }
 
     // Editor not editable or disabled = ChatGPT is still working on the response.
