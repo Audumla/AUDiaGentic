@@ -154,8 +154,30 @@ class CdpClient:
         one chunk, then freeze until the tab is visible again.  Calling this
         before submitting a prompt keeps the tab foregrounded so the stream
         actually completes.
+
+        Prefer :meth:`keep_page_active`, which survives the window being
+        occluded *during* the response and does not steal the user's focus.
         """
         await self._send("bring_to_front", {})
+
+    async def keep_page_active(self) -> dict[str, Any]:
+        """Make the page report as focused/visible regardless of occlusion.
+
+        ``bring_to_front`` only helps at the instant it is called: if the
+        browser window is covered while the response is still streaming,
+        ChatGPT's SSE stream aborts after the first chunk and the assistant
+        block freezes part-written (observed 2026-08-09: stuck at 10
+        characters for 15+ minutes, ``streaming-animation`` still applied,
+        stop button already gone).
+
+        This applies CDP focus emulation plus an active web-lifecycle state,
+        so the renderer keeps streaming while the window sits behind the
+        user's editor — without repeatedly grabbing focus.
+
+        Returns the helper's report of which emulations applied; callers
+        should treat a partial result as best-effort rather than fatal.
+        """
+        return await self._send("keep_page_active", {})
 
     # -- page operations -----------------------------------------------------------
 
