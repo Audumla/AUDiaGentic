@@ -5,7 +5,6 @@ from concurrent.futures import ThreadPoolExecutor
 
 from audiagentic.components.agents.gateway.service.bootstrap import start_or_attach_gateway
 from audiagentic.components.agents.gateway.service.host import GATEWAY_SERVICE_KEY
-
 from audiagentic.foundation.system.managed_process import (
     observe_process,
     ownership_matches,

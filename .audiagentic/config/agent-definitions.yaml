@@ -49,6 +49,28 @@ agent-definitions:
   internal: true
   acp: false
   a2a: false
+- agent_id: opencode-rig-agent
+  name: OpenCode Rig Agent
+  execution_profile_id: opencode-rig
+  role_id: placeholder
+  description: OpenCode ACP agent bound to the local embedded rig, used to validate
+    the gateway session path against a non-browser provider (isolating the
+    gpt-auto-specific gateway MCP timeout from a shared SessionRuntime issue).
+  advertised_skills: []
+  internal: true
+  acp: false
+  a2a: false
+- agent_id: pi-rig-agent
+  name: Pi Rig Agent
+  execution_profile_id: pi-rig
+  role_id: placeholder
+  description: Pi ACP agent bound to the local embedded rig, used to validate
+    the gateway session path against a non-browser provider (isolating the
+    gpt-auto-specific gateway MCP timeout from a shared SessionRuntime issue).
+  advertised_skills: []
+  internal: true
+  acp: false
+  a2a: false
 - agent_id: gpt-auto-reviewer-agent
   name: GPT-Auto Reviewer Agent
   execution_profile_id: gpt-auto

@@ -17,6 +17,19 @@ from audiagentic.components.providers.adapters.gpt_auto.humanize import (
 
 logger = logging.getLogger(__name__)
 
+
+async def _evaluate_resilient(client: Any, script: str) -> Any:
+    """Use navigation-safe evaluation when the client provides it.
+
+    Small protocol fakes and the legacy Playwright client only expose
+    ``evaluate``; falling back keeps those callers compatible without
+    reintroducing login waits.
+    """
+    resilient = getattr(client, "evaluate_resilient", None)
+    if resilient is not None:
+        return await resilient(script)
+    return await client.evaluate(script)
+
 _PROSEMIRROR_SELECTOR = ".ProseMirror"
 
 # JavaScript: check if ChatGPT chat interface is ready (logged in + input visible)
@@ -72,65 +85,45 @@ async def wait_for_chatgpt_ready(
     Returns ``True`` if the page is ready within *timeout* seconds.
 
     **The browser is assumed to be signed in already.** gpt-auto attaches to a
-    long-lived user browser; driving an interactive sign-in is out of scope --
-    it may open a tab and navigate to the project, nothing more. A detected
-    login page is therefore surfaced as not-ready rather than waited out at
-    length, and *login_timeout* is only a brief grace period for a session
-    that is mid-restore.
-
-    That default was 120s, which mattered because this wait is blocking and
-    sits inside the 120s session-open budget: a single spurious login
-    detection consumed the entire budget and surfaced as an opaque open
-    TimeoutError, indistinguishable from a genuinely wedged browser.
+    long-lived user browser and never waits for or drives interactive sign-in.
+    ``login_timeout`` remains an ignored compatibility argument for callers
+    that still pass it; authentication is a precondition and a detected login
+    page fails immediately.
 
     Page reads use ``evaluate_resilient`` because this runs immediately after
     the workspace navigation, where racing a destroyed execution context is
     expected rather than exceptional.
     """
-    logger.info("Checking ChatGPT login state...")
+    logger.info(
+        "gpt-auto readiness check begin ready-timeout=%.1fs login-wait=disabled",
+        timeout,
+        extra={"gpt-auto-phase": "readiness.begin"},
+    )
 
-    page_state = await client.evaluate_resilient(_IS_LOGIN_PAGE_JS)
+    page_state = await _evaluate_resilient(client, _IS_LOGIN_PAGE_JS)
     if page_state == "login":
-        logger.info(
-            "Login page detected — the browser is expected to be signed in; "
-            "allowing %.0fs grace for a session still restoring",
-            login_timeout,
+        logger.error(
+            "gpt-auto readiness failed: login page detected; refusing to wait or sign in",
+            extra={"gpt-auto-phase": "readiness.login-failed"},
         )
-        return await _wait_for_login(client, login_timeout)
+        return False
 
-    is_ready = await client.evaluate_resilient(_IS_READY_JS)
+    is_ready = await _evaluate_resilient(client, _IS_READY_JS)
     if is_ready:
-        logger.info("ChatGPT is ready")
+        logger.info("gpt-auto readiness complete: composer present", extra={"gpt-auto-phase": "readiness.complete"})
         return True
 
     logger.info("Waiting for chat interface (timeout: %.0fs)", timeout)
     try:
         await client.wait_for_function(_IS_READY_JS, timeout_ms=int(timeout * 1000))
-        logger.info("ChatGPT is ready")
+        logger.info("gpt-auto readiness complete: composer appeared", extra={"gpt-auto-phase": "readiness.complete"})
         return True
     except Exception:
-        logger.warning("ChatGPT not ready after %.1fs", timeout)
-        return False
-
-
-async def _wait_for_login(client: Any, login_timeout: float) -> bool:
-    """Wait for user to complete login."""
-    # Log periodic status — use a short initial wait so we can show progress
-    logger.info("Waiting for login (timeout: %.0fs)", login_timeout)
-    try:
-        await client.wait_for_function(
-            _IS_READY_JS,
-            timeout_ms=int(login_timeout * 1000),
+        logger.warning(
+            "gpt-auto readiness failed after %.1fs: composer did not appear",
+            timeout,
+            extra={"gpt-auto-phase": "readiness.timeout"},
         )
-        logger.info("Login detected")
-        return True
-    except Exception:
-        # Fallback: check if logged-in state appeared without full ready signal
-        is_logged_in = await client.evaluate_resilient(_IS_LOGGED_IN_JS)
-        if is_logged_in:
-            logger.info("Logged in state detected (via fallback)")
-            return True
-        logger.error("Login timeout after %.0fs", login_timeout)
         return False
 
 
@@ -235,7 +228,13 @@ async def inject_prompt(
     Either way a randomized "thinking" pause is taken before pressing send,
     which looks far less scripted to ChatGPT's bot detection.
     """
-    logger.info("Injecting prompt (%d chars)", len(prompt))
+    started = asyncio.get_running_loop().time()
+    logger.info(
+        "gpt-auto inject begin prompt-chars=%d editor-wait-seconds=%.1f",
+        len(prompt),
+        editor_wait_seconds,
+        extra={"gpt-auto-phase": "inject.begin"},
+    )
 
     # The composer is verified present when the session opens, but a turn can
     # be injected much later, and ChatGPT re-renders (or navigates) in between
@@ -243,17 +242,59 @@ async def inject_prompt(
     # Failing immediately on a transient absence turned an ordinary re-render
     # into "inject_prompt failed: editor not found" and lost the whole turn, so
     # wait briefly for the editor before treating it as a real fault.
-    try:
-        await client.wait_for_function(
-            '() => !!document.querySelector(".ProseMirror")',
-            timeout_ms=int(editor_wait_seconds * 1000),
-        )
-    except Exception:
-        logger.debug("composer wait failed; attempting inject anyway", exc_info=True)
+    clear = None
+    last_clear_error = "editor not found"
+    for attempt in range(1, 6):
+        wait_started = asyncio.get_running_loop().time()
+        try:
+            await client.wait_for_function(
+                '() => !!document.querySelector(".ProseMirror")',
+                timeout_ms=int(editor_wait_seconds * 1000),
+            )
+            logger.info(
+                "gpt-auto inject editor wait complete attempt=%d elapsed-ms=%.1f",
+                attempt,
+                (asyncio.get_running_loop().time() - wait_started) * 1000,
+                extra={"gpt-auto-phase": "inject.editor-wait.complete"},
+            )
+        except Exception:
+            logger.exception(
+                "gpt-auto inject editor wait failed attempt=%d elapsed-ms=%.1f",
+                attempt,
+                (asyncio.get_running_loop().time() - wait_started) * 1000,
+                extra={"gpt-auto-phase": "inject.editor-wait.failed"},
+            )
 
-    clear = await client.evaluate_resilient(_CLEAR_EDITOR_JS)
+        clear_started = asyncio.get_running_loop().time()
+        clear = await _evaluate_resilient(client, _CLEAR_EDITOR_JS)
+        if not (isinstance(clear, dict) and "error" in clear):
+            logger.info(
+                "gpt-auto inject editor cleared attempt=%d elapsed-ms=%.1f",
+                attempt,
+                (asyncio.get_running_loop().time() - clear_started) * 1000,
+                extra={"gpt-auto-phase": "inject.clear.complete"},
+            )
+            break
+
+        last_clear_error = str(clear["error"])
+        logger.warning(
+            "gpt-auto inject clear failed attempt=%d elapsed-ms=%.1f error=%s",
+            attempt,
+            (asyncio.get_running_loop().time() - clear_started) * 1000,
+            last_clear_error,
+            extra={"gpt-auto-phase": "inject.clear.retry"},
+        )
+        if attempt < 5:
+            await asyncio.sleep(0.25 * attempt)
+
     if isinstance(clear, dict) and "error" in clear:
-        raise RuntimeError(f"inject_prompt failed: {clear['error']}")
+        logger.error(
+            "gpt-auto inject clear failed after retries error=%s total-elapsed-ms=%.1f",
+            last_clear_error,
+            (asyncio.get_running_loop().time() - started) * 1000,
+            extra={"gpt-auto-phase": "inject.clear.failed"},
+        )
+        raise RuntimeError(f"inject_prompt failed: {last_clear_error}")
 
     words = prompt.split()
     if humanize and words:
@@ -283,11 +324,18 @@ async def inject_prompt(
         logger.info("Thinking before submit (%.1fs)", pause)
         await asyncio.sleep(pause)
 
+        submit_started = asyncio.get_running_loop().time()
         result = await client.evaluate(_SUBMIT_JS)
         if isinstance(result, dict):
             if "error" in result:
                 raise RuntimeError(f"inject_prompt failed: {result['error']}")
             logger.info("Prompt submitted (%d chars)", result.get("textLength", 0))
+            logger.info(
+                "gpt-auto inject submit complete elapsed-ms=%.1f total-elapsed-ms=%.1f",
+                (asyncio.get_running_loop().time() - submit_started) * 1000,
+                (asyncio.get_running_loop().time() - started) * 1000,
+                extra={"gpt-auto-phase": "inject.submit.complete"},
+            )
         return
 
     # Non-humanized fallback: inject whole prompt, then submit

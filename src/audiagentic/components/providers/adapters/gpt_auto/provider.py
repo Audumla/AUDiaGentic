@@ -128,7 +128,6 @@ async def run(
         ready = await wait_for_chatgpt_ready(
             client,
             timeout=float(getattr(cfg, "tab_selection_timeout", 15)),
-            login_timeout=float(getattr(cfg, "login_timeout", 120)),
         )
         if not ready:
             await client.screenshot(path="/tmp/gpt-auto-not-ready.png")

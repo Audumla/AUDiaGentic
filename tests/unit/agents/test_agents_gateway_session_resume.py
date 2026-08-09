@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 from audiagentic.components.agents.gateway.session.resume import (
     ERR_EXECUTION_CONTEXT_MISMATCH,
     ERR_IDENTITY_MISMATCH,
@@ -20,7 +21,6 @@ from audiagentic.components.agents.gateway.session.resume import (
     record_resume_attempt,
     validate_resume_eligibility,
 )
-
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.session_surface import (
     ControlSupport,
