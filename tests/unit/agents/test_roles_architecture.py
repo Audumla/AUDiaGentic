@@ -6,38 +6,44 @@ a boundary violation is a defect a passing behavioural test would not notice.
 """
 from __future__ import annotations
 
+import ast
+
 from audiagentic.foundation.paths.package import PACKAGE_ROOT
 
 _ROLES_MODULE = PACKAGE_ROOT / "components" / "agents" / "models" / "role.py"
 _PROVIDERS_PKG = PACKAGE_ROOT / "components" / "providers"
 
 
-# Pre-existing, unrelated to AS61's Role type: OpenAI chat-message "role"
-# fields, a ChatGPT DOM attribute, and a model capability flag. Frozen, not
-# a permissive baseline to add to -- a new hit outside this set means AS61
-# leaked a runtime tool/MCP/permission field into providers.
-_KNOWN_UNRELATED_ROLE_HITS = frozenset({
-    "components/providers/adapters/gpt_auto/dom_reader.py",
-    "components/providers/adapters/local_openai/adapter.py",
-    "components/providers/adapters/pi/model_entry.py",
-    "components/providers/providers_api.py",
-})
+def _agents_imports(source: str) -> set[str]:
+    """Return concrete agents-package imports from Python source."""
+    imports: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            imports.update(
+                alias.name for alias in node.names if alias.name.startswith("audiagentic.components.agents")
+            )
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            if module.startswith("audiagentic.components.agents"):
+                imports.add(module)
+    return imports
 
 
-def test_no_provider_runtime_tool_mcp_or_permission_field_added_by_roles() -> None:
-    """AS61 validation: grep providers for a 'role' hit this item might have leaked in.
-
-    Not an absolute zero-hits check -- "role" already appears legitimately
-    for unrelated reasons (OpenAI chat-message roles, DOM attributes, a
-    capability flag). The check is that the set of files never grows beyond
-    the frozen, audited baseline above.
-    """
-    hits: set[str] = set()
+def test_providers_do_not_import_the_agents_role_domain() -> None:
+    """Providers remain below agents; unrelated uses of the word role are irrelevant."""
+    violations: dict[str, set[str]] = {}
     for path in sorted(_PROVIDERS_PKG.rglob("*.py")):
-        text = path.read_text(encoding="utf-8", errors="ignore")
-        if "role" in text.lower():
-            hits.add(path.relative_to(PACKAGE_ROOT).as_posix())
-    assert hits <= _KNOWN_UNRELATED_ROLE_HITS, hits - _KNOWN_UNRELATED_ROLE_HITS
+        imports = _agents_imports(path.read_text(encoding="utf-8", errors="ignore"))
+        if imports:
+            violations[path.relative_to(PACKAGE_ROOT).as_posix()] = imports
+    assert violations == {}
+
+
+def test_agents_import_scanner_targets_imports_not_incidental_text() -> None:
+    assert _agents_imports("role = 'assistant'  # audiagentic.components.agents") == set()
+    assert _agents_imports("from audiagentic.components.agents.models.role import Role") == {
+        "audiagentic.components.agents.models.role"
+    }
 
 
 def test_role_domain_code_imports_no_concrete_store_or_composition() -> None:
