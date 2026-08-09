@@ -7,15 +7,13 @@
     "execution-profile-id",
     "state",
     "binding",
-    "request-ids",
-    "turn-count",
-    "created-at",
-    "updated-at"
+    "timing",
+    "activity"
   ],
   "additionalProperties": false,
   "properties": {
     "contract-version": {
-      "enum": ["v1", "v2"]
+      "enum": ["v1", "v2", "v3"]
     },
     "session-id": {
       "type": "string"
@@ -23,15 +21,9 @@
     "execution-profile-id": {
       "type": "string"
     },
-    "provider-id": {
-      "type": ["string", "null"]
-    },
-    "model-id": {
-      "type": ["string", "null"]
-    },
-    "provider-metadata": {
-      "type": "object",
-      "additionalProperties": true
+    "state": {
+      "type": "string",
+      "enum": ["active", "closing", "closed", "expired", "failed"]
     },
     "binding": {
       "type": ["object", "null"],
@@ -72,12 +64,52 @@
         "created-at": {"type": "string"}
       }
     },
-    "state": {
-      "type": "string",
-      "enum": ["active", "closing", "closed", "expired", "failed"]
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider-id": {"type": "string"},
+        "model-id": {"type": "string"},
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "timing": {
+      "type": "object",
+      "required": ["created-at", "updated-at", "last-activity-at"],
+      "additionalProperties": false,
+      "properties": {
+        "created-at": {"type": "string"},
+        "updated-at": {"type": "string"},
+        "last-activity-at": {"type": "string"},
+        "closed-at": {"type": "string"}
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "idle-timeout-seconds": {"type": "number"},
+        "max-lifetime-seconds": {"type": "number"}
+      }
+    },
+    "activity": {
+      "type": "object",
+      "required": ["turn-count", "request-ids"],
+      "additionalProperties": false,
+      "properties": {
+        "turn-count": {"type": "integer", "minimum": 0},
+        "request-ids": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
     },
     "close-reason": {
-      "type": ["string", "null"],
+      "type": "string",
       "enum": [
         "client-request",
         "idle-timeout",
@@ -88,44 +120,18 @@
         "failed",
         "orphaned",
         "turn-timeout",
-        "turn-silence-timeout",
-        null
+        "turn-silence-timeout"
       ]
     },
-    "idle-timeout-seconds": {
-      "type": ["number", "null"]
-    },
-    "max-lifetime-seconds": {
-      "type": ["number", "null"]
-    },
-    "request-ids": {
-      "type": "array",
-      "items": {"type": "string"}
-    },
-    "turn-count": {
-      "type": "integer",
-      "minimum": 0
-    },
     "error": {
-      "type": ["object", "null"],
+      "type": "object",
+      "required": ["code", "message", "kind"],
       "properties": {
         "code": {"type": "string"},
         "message": {"type": "string"},
         "kind": {"type": "string"}
       },
       "additionalProperties": false
-    },
-    "created-at": {
-      "type": "string"
-    },
-    "updated-at": {
-      "type": "string"
-    },
-    "last-activity-at": {
-      "type": ["string", "null"]
-    },
-    "closed-at": {
-      "type": ["string", "null"]
     }
   }
 }
