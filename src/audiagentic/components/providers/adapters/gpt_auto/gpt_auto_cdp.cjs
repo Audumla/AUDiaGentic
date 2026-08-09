@@ -107,6 +107,49 @@ async function handle(msg) {
 				respond(id, { ok: true, url: page.url() });
 				break;
 			}
+			case "keep_page_active": {
+				// Make the page behave as focused+visible even when its window
+				// is occluded or backgrounded.
+				//
+				// Verified failure this fixes (2026-08-09): with the browser
+				// behind another window, ChatGPT's SSE stream aborts after the
+				// first chunk -- the assistant block freezes at ~10 characters
+				// with streaming-animation still applied and the stop button
+				// gone, indefinitely. bringToFront() before injecting is not
+				// enough because occlusion happens *during* the response.
+				//
+				// Emulation.setFocusEmulationEnabled makes the renderer report
+				// the page as focused/active, and Page.setWebLifecycleState
+				// keeps it out of the frozen/throttled lifecycle state --
+				// neither steals focus from whatever the user is actually
+				// doing, unlike bringToFront().
+				if (!page) return error(id, "No active page");
+				const applied = [];
+				const failed = [];
+				try {
+					const session = await page.createCDPSession();
+					try {
+						await session.send("Emulation.setFocusEmulationEnabled", {
+							enabled: true,
+						});
+						applied.push("focus-emulation");
+					} catch (e) {
+						failed.push("focus-emulation: " + String(e && e.message).slice(0, 120));
+					}
+					try {
+						await session.send("Page.setWebLifecycleState", {
+							state: "active",
+						});
+						applied.push("web-lifecycle-active");
+					} catch (e) {
+						failed.push("web-lifecycle: " + String(e && e.message).slice(0, 120));
+					}
+				} catch (e) {
+					failed.push("cdp-session: " + String(e && e.message).slice(0, 120));
+				}
+				respond(id, { ok: applied.length > 0, applied, failed });
+				break;
+			}
 			case "click": {
 				if (!page) return error(id, "No active page");
 				const el = await page.$(msg.params.selector);
