@@ -237,10 +237,35 @@ class GptAutoSessionTransport:
                 raise GptAutoError(
                     f"ChatGPT workspace '{project_name}' not found — create it in chatgpt.com first"
                 )
+
+            # Un-throttle the renderer as soon as a page exists, and before
+            # anything that waits on the page to do work.
+            #
+            # Position matters twice over. It must come *after*
+            # _resolve_workspace, because the CDP helper has no selected page
+            # until a tab is activated/opened -- calling it earlier fails with
+            # "No active page" and, being non-fatal, silently does nothing.
+            # It must also come *before* wait_for_chatgpt_ready, because Chrome
+            # throttles occluded renderers and that call polls the page for the
+            # composer.
+            try:
+                emulation = await client.keep_page_active()
+                logger.info("gpt-auto page-active emulation: %s", emulation)
+            except Exception:
+                # Non-fatal, but warn rather than debug: without the emulation
+                # a turn still runs, then dies mid-stream the moment the window
+                # is covered. Losing it silently is how that looked like an
+                # unexplained hang rather than a missing precondition.
+                logger.warning(
+                    "gpt-auto: keep_page_active failed at open — responses may stall "
+                    "if the browser window is occluded",
+                    exc_info=True,
+                )
+
             ready = await wait_for_chatgpt_ready(
                 client,
                 timeout=float(getattr(self._config, "tab_selection_timeout", 15)),
-                login_timeout=float(getattr(self._config, "login_timeout", 120)),
+                login_timeout=float(getattr(self._config, "login_timeout", 20)),
             )
             if not ready:
                 raise GptAutoError("ChatGPT did not become ready — is the browser logged in?")
@@ -249,17 +274,6 @@ class GptAutoSessionTransport:
                 await client.bring_to_front()
             except Exception:
                 logger.debug("bring_to_front failed during open (non-fatal)", exc_info=True)
-
-            # Keep the renderer streaming even once this window is occluded by
-            # whatever the user is actually working in. bring_to_front only
-            # helps at the moment it runs; without this, a response that is
-            # still streaming when the window is covered aborts after its
-            # first chunk and the turn hangs on a part-written answer.
-            try:
-                emulation = await client.keep_page_active()
-                logger.info("gpt-auto page-active emulation: %s", emulation)
-            except Exception:
-                logger.debug("keep_page_active failed during open (non-fatal)", exc_info=True)
 
             ref = _conversation_ref_from_url(ws.url)
             workspace_url = workspace_base_url(ws.url)

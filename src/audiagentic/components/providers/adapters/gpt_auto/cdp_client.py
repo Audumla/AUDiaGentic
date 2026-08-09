@@ -260,6 +260,42 @@ class CdpClient:
             result = await self._send("evaluate", {"script": script})
         return result.get("value")
 
+    async def evaluate_resilient(
+        self,
+        script: str,
+        *,
+        attempts: int = 5,
+        delay: float = 0.5,
+    ) -> Any:
+        """``evaluate`` that tolerates a navigation destroying the context.
+
+        ChatGPT navigates during normal operation -- workspace root to
+        ``/c/{conversation-id}`` on the first turn, and again whenever a
+        workspace is resolved. Any evaluate racing that navigation fails with
+        "Execution context was destroyed", which is expected mid-flight rather
+        than a real error. Callers that poll across a navigation boundary
+        should use this instead of :meth:`evaluate`; anything else propagates
+        unchanged.
+        """
+        last_exc: RuntimeError | None = None
+        for attempt in range(attempts):
+            try:
+                return await self.evaluate(script)
+            except RuntimeError as exc:
+                message = str(exc).lower()
+                if "detached" not in message and "execution context was destroyed" not in message:
+                    raise
+                last_exc = exc
+                logger.debug(
+                    "evaluate hit a destroyed context (navigating), retry %d/%d",
+                    attempt + 1,
+                    attempts,
+                )
+                await asyncio.sleep(delay)
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError("evaluate_resilient: retries exhausted with no captured error")
+
     # -- waiting -------------------------------------------------------------------
 
     async def wait_for_function(

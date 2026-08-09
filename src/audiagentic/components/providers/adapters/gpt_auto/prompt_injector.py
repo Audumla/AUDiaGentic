@@ -65,21 +65,40 @@ _GET_EDITOR_TEXT_JS = """
 async def wait_for_chatgpt_ready(
     client: Any,
     timeout: float = 30.0,
-    login_timeout: float = 120.0,
+    login_timeout: float = 20.0,
 ) -> bool:
     """Wait for ChatGPT to be loaded and ready for input.
 
     Returns ``True`` if the page is ready within *timeout* seconds.
-    If on login page, waits up to *login_timeout* for user to log in.
+
+    **The browser is assumed to be signed in already.** gpt-auto attaches to a
+    long-lived user browser; driving an interactive sign-in is out of scope --
+    it may open a tab and navigate to the project, nothing more. A detected
+    login page is therefore surfaced as not-ready rather than waited out at
+    length, and *login_timeout* is only a brief grace period for a session
+    that is mid-restore.
+
+    That default was 120s, which mattered because this wait is blocking and
+    sits inside the 120s session-open budget: a single spurious login
+    detection consumed the entire budget and surfaced as an opaque open
+    TimeoutError, indistinguishable from a genuinely wedged browser.
+
+    Page reads use ``evaluate_resilient`` because this runs immediately after
+    the workspace navigation, where racing a destroyed execution context is
+    expected rather than exceptional.
     """
     logger.info("Checking ChatGPT login state...")
 
-    page_state = await client.evaluate(_IS_LOGIN_PAGE_JS)
+    page_state = await client.evaluate_resilient(_IS_LOGIN_PAGE_JS)
     if page_state == "login":
-        logger.info("Login page detected — waiting (timeout: %.0fs)", login_timeout)
+        logger.info(
+            "Login page detected — the browser is expected to be signed in; "
+            "allowing %.0fs grace for a session still restoring",
+            login_timeout,
+        )
         return await _wait_for_login(client, login_timeout)
 
-    is_ready = await client.evaluate(_IS_READY_JS)
+    is_ready = await client.evaluate_resilient(_IS_READY_JS)
     if is_ready:
         logger.info("ChatGPT is ready")
         return True
@@ -107,7 +126,7 @@ async def _wait_for_login(client: Any, login_timeout: float) -> bool:
         return True
     except Exception:
         # Fallback: check if logged-in state appeared without full ready signal
-        is_logged_in = await client.evaluate(_IS_LOGGED_IN_JS)
+        is_logged_in = await client.evaluate_resilient(_IS_LOGGED_IN_JS)
         if is_logged_in:
             logger.info("Logged in state detected (via fallback)")
             return True
@@ -201,6 +220,7 @@ async def inject_prompt(
     think_min: float = 1.5,
     think_max: float = 6.0,
     paste_threshold: int = 300,
+    editor_wait_seconds: float = 20.0,
 ) -> None:
     """Inject *prompt* into ChatGPT's ProseMirror editor and submit.
 
@@ -217,7 +237,21 @@ async def inject_prompt(
     """
     logger.info("Injecting prompt (%d chars)", len(prompt))
 
-    clear = await client.evaluate(_CLEAR_EDITOR_JS)
+    # The composer is verified present when the session opens, but a turn can
+    # be injected much later, and ChatGPT re-renders (or navigates) in between
+    # -- notably workspace-root -> /c/{conversation-id} after the first turn.
+    # Failing immediately on a transient absence turned an ordinary re-render
+    # into "inject_prompt failed: editor not found" and lost the whole turn, so
+    # wait briefly for the editor before treating it as a real fault.
+    try:
+        await client.wait_for_function(
+            '() => !!document.querySelector(".ProseMirror")',
+            timeout_ms=int(editor_wait_seconds * 1000),
+        )
+    except Exception:
+        logger.debug("composer wait failed; attempting inject anyway", exc_info=True)
+
+    clear = await client.evaluate_resilient(_CLEAR_EDITOR_JS)
     if isinstance(clear, dict) and "error" in clear:
         raise RuntimeError(f"inject_prompt failed: {clear['error']}")
 
