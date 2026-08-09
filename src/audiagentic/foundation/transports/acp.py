@@ -30,6 +30,7 @@ resume-after-death here (deferred to AS10).
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
@@ -37,7 +38,7 @@ from contextlib import AsyncExitStack, suppress
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.agent_session import (
@@ -54,6 +55,11 @@ from audiagentic.foundation.transports.agent_session import (
     TransportObservation,
     TransportObservationKind,
 )
+
+if TYPE_CHECKING:
+    from acp import RequestPermissionResponse
+
+logger = logging.getLogger(__name__)
 
 # Registered error codes
 ERR_SDK_MISSING = "CFG-ACP-001"
@@ -74,6 +80,34 @@ ERR_TERMINAL_OPERATION_FAILED = "EXT-ACP-005"
 # Default output cap for a terminal with no agent-supplied output_byte_limit
 # (ACP's own MAX_TOTAL_BYTES-equivalent for a single terminal's lifetime).
 _DEFAULT_TERMINAL_OUTPUT_LIMIT = 8 * 1024 * 1024  # 8 MiB
+
+
+async def _terminate_and_reap_process(proc: Any, *, timeout: float) -> bool:
+    """Boundedly terminate and reap one owned subprocess; never raise."""
+    if getattr(proc, "returncode", None) is None:
+        with suppress(Exception):
+            proc.terminate()
+
+    wait = getattr(proc, "wait", None)
+    if wait is None:
+        return getattr(proc, "returncode", None) is not None
+
+    try:
+        await asyncio.wait_for(wait(), timeout=timeout)
+        return True
+    except (Exception, asyncio.CancelledError):  # noqa: BLE001 - close never raises
+        pass
+
+    if getattr(proc, "returncode", None) is None:
+        with suppress(Exception):
+            proc.kill()
+
+    try:
+        await asyncio.wait_for(wait(), timeout=timeout)
+        return True
+    except (Exception, asyncio.CancelledError):  # noqa: BLE001 - close never raises
+        logger.warning("owned ACP subprocess did not exit within the final reap deadline")
+        return False
 
 # Bounded delivery defaults (overridable per call)
 MAX_EVENTS = 10_000
@@ -1295,12 +1329,21 @@ class AcpSessionTransport:
         # outlive this transport — cancel their drain tasks and kill the
         # subprocess directly (release_terminal's polite path was never
         # called by the agent, so this is the only remaining guarantee).
-        for handle in list(self._terminals.values()):
+        terminal_handles = list(self._terminals.values())
+        for handle in terminal_handles:
             if handle.drain_task is not None:
                 handle.drain_task.cancel()
-            if getattr(handle.proc, "returncode", None) is None:
-                with suppress(Exception):
-                    handle.proc.kill()
+        if terminal_handles:
+            await asyncio.gather(
+                *(
+                    _terminate_and_reap_process(
+                        handle.proc,
+                        timeout=CANCEL_GRACE_SECONDS,
+                    )
+                    for handle in terminal_handles
+                ),
+                return_exceptions=True,
+            )
         self._terminals.clear()
 
         stack, proc = self._stack, self._proc
@@ -1318,16 +1361,8 @@ class AcpSessionTransport:
             with suppress(Exception, asyncio.CancelledError):
                 await asyncio.wait({aclose_task}, timeout=CANCEL_GRACE_SECONDS)
 
-        if proc is not None and getattr(proc, "returncode", None) is None:
-            with suppress(Exception):
-                proc.terminate()
-            wait = getattr(proc, "wait", None)
-            if wait is not None:
-                try:
-                    await asyncio.wait_for(wait(), timeout=CANCEL_GRACE_SECONDS)
-                except (Exception, asyncio.CancelledError, asyncio.TimeoutError):
-                    with suppress(Exception):
-                        proc.kill()
+        if proc is not None:
+            await _terminate_and_reap_process(proc, timeout=CANCEL_GRACE_SECONDS)
 
         # AS17: close the foundation adopted-child token last.
         # Windows: closing the Job Object handle triggers kill-on-close for

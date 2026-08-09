@@ -40,7 +40,6 @@ _LEGACY_SECTION_DEBT = {
     "MC03": frozenset(["acceptance_criteria", "standards"]),
     "MI08": frozenset(["acceptance_criteria"]),
     "OB01": frozenset(["acceptance_criteria", "standards"]),
-    "OU01": frozenset(["acceptance_criteria"]),
     "PI05": frozenset(["acceptance_criteria", "standards"]),
     "PR03": frozenset(["acceptance_criteria", "standards"]),
     "PT01": frozenset(["acceptance_criteria", "standards"]),
@@ -61,13 +60,6 @@ _LEGACY_SECTION_DEBT = {
     "SA11": frozenset(["acceptance_criteria"]),
     "SA12": frozenset(["acceptance_criteria"]),
     "SA19": frozenset(["acceptance_criteria"]),
-    "SH10": frozenset(["acceptance_criteria"]),
-    "SH11": frozenset(["acceptance_criteria"]),
-    "SH12": frozenset(["acceptance_criteria", "standards"]),
-    "SH16": frozenset(["acceptance_criteria", "standards"]),
-    "SH17": frozenset(["acceptance_criteria", "standards"]),
-    "SH21": frozenset(["acceptance_criteria", "standards"]),
-    "SH22": frozenset(["acceptance_criteria"]),
     # TE02 removed 2026-08-03: both sections were filled in, and the baseline
     # is exact shrink-only, so a stale entry fails the guard.
 }

@@ -48,6 +48,44 @@ class _FakeProc:
         return self.returncode if self.returncode is not None else 0
 
 
+class _KillThenReapProc:
+    """Process that ignores terminate and exits only after kill plus a second wait."""
+
+    def __init__(self) -> None:
+        self.returncode: int | None = None
+        self.wait_calls = 0
+        self.terminated = False
+        self.killed = False
+
+    def terminate(self) -> None:
+        self.terminated = True
+
+    def kill(self) -> None:
+        self.killed = True
+
+    async def wait(self) -> int:
+        self.wait_calls += 1
+        if self.wait_calls == 1:
+            raise asyncio.TimeoutError
+        assert self.killed
+        self.returncode = -9
+        return self.returncode
+
+
+@pytest.mark.asyncio
+async def test_close_waits_again_after_killing_child(tmp_path) -> None:
+    proc = _KillThenReapProc()
+    transport = AcpSessionTransport(AcpLaunch("agent"), cwd=tmp_path)
+    transport._proc = proc
+
+    await transport.close()
+
+    assert proc.terminated
+    assert proc.killed
+    assert proc.wait_calls == 2
+    assert proc.returncode == -9
+
+
 def _install_sdk(monkeypatch, *, prompt_side_effect=None, proc=None, exited=None, load_session_supported=False):
     """Install a fake acp SDK; returns (conn, proc, captured, exited-list)."""
     captured = {"client": None}
@@ -634,7 +672,5 @@ async def test_close_force_kills_terminals_the_agent_never_released(tmp_path, mo
     await transport.close()
 
     assert transport._terminals == {}
-    # close() sends kill() but doesn't block on reaping — await it here to
-    # prove the process actually died rather than merely being signaled.
-    await asyncio.wait_for(handle.proc.wait(), timeout=5)
+    # close() owns termination and reaping; no caller-side cleanup is needed.
     assert handle.proc.returncode is not None
