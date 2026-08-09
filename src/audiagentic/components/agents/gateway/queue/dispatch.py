@@ -350,6 +350,19 @@ def dispatch_request(
     Sessionful requests (session-id / session-keep-alive) route to the live
     SessionRuntime via _dispatch_session_request — no retry.
 
+    SH23: a no-isolation provider (e.g. gpt-auto — CDP-attached to one
+    already-running browser) has no safe disposable-subprocess-per-attempt
+    story, so it can never satisfy worker_host.py's full-isolation gate.
+    Rather than leaving it permanently unreachable on a plain one-shot
+    submit, route it through the same ephemeral-session pattern used above:
+    session_id stays None, session-keep-alive stays false, so
+    _dispatch_session_request opens a session, runs exactly one turn, and
+    its existing post-turn logic auto-closes it — no new session-runtime
+    code, no retry-count (matches the session path's existing "no retry on
+    a stateful conversation" behavior). full-isolation and partial-isolation
+    dispatch is completely unaffected — they still take the subprocess path
+    below and partial-isolation still fails closed there (UNS-AGW-076).
+
     Cancellation is cooperative and checked only BETWEEN attempts
     (_raise_if_cancelled) — an in-flight execute_provider call
     (a subprocess or HTTP request already underway) is never interrupted
@@ -359,7 +372,7 @@ def dispatch_request(
     SH02: dispatch_prompt is the raw prompt body, passed separately from the
     persisted record (which only carries prompt_digest).
     """
-    if _is_session_request(record):
+    if _is_session_request(record) or provider_isolation_tier == "no-isolation":
         return _dispatch_session_request(
             project_root,
             record,

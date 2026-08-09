@@ -205,7 +205,7 @@ def test_provider_capability_outputs() -> None:
 #   audiagentic-only (10): ag-agents-mgmt, ag-ledger-mgmt, ag-lsp-mgmt,
 #     ag-memory-mgmt, ag-planning-mgmt, ag-project-mgmt, ag-providers-mgmt,
 #     ag-release-mgmt, ag-sc-mgmt, ag-session-mgmt
-#   providers-only (6): ag-agents, ag-agents-gateway, ag-ledger,
+#   providers-only (5): ag-agents-gateway, ag-ledger,
 #     ag-lsp, ag-planning, ag-release-please
 #   both targets (2): git, github
 
@@ -216,7 +216,7 @@ _AUDIAGENTIC_ONLY = {
 }
 
 _PROVIDERS_ONLY = {
-    "ag-agents", "ag-agents-gateway", "ag-ledger",
+    "ag-agents-gateway", "ag-ledger",
     "ag-lsp", "ag-planning", "ag-release-please",
 }
 

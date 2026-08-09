@@ -31,6 +31,7 @@ PROFILE = {
     "provider_id": "opencode",
     "instances": ["m1"],
     "model_alias": None,
+    "surface_id": "test-surface",
     "params": {},
 }
 
@@ -86,7 +87,14 @@ def _running_record(tmp_path, **kwargs):
     )
 
 
-def _dispatch(tmp_path, record, *, dispatch_prompt, preallocated_session_id=None):
+def _dispatch(
+    tmp_path,
+    record,
+    *,
+    dispatch_prompt,
+    preallocated_session_id=None,
+    provider_isolation_tier="full-isolation",
+):
     return dispatch.dispatch_request(
         tmp_path,
         record,
@@ -95,7 +103,7 @@ def _dispatch(tmp_path, record, *, dispatch_prompt, preallocated_session_id=None
         manifest_id="mf_test",
         context_fingerprint="0" * 64,
         component_profile="",
-        provider_isolation_tier="full-isolation",
+        provider_isolation_tier=provider_isolation_tier,
         worker_timeout_seconds=10,
     )
 
@@ -240,3 +248,33 @@ def test_plain_record_does_not_touch_session_path(rig, monkeypatch):
     result = _dispatch(tmp_path, _running_record(tmp_path), dispatch_prompt="do the thing")
     assert result["state"] == "completed", result
     assert transports == []
+
+
+def test_no_isolation_plain_record_routes_through_ephemeral_session(rig, monkeypatch):
+    """SH23: a no-isolation provider has no disposable-subprocess-per-attempt
+    story (e.g. gpt-auto is CDP-attached to one already-running browser), so a
+    plain one-shot submit — no session_id, no session_keep_alive — must not
+    reach worker_host at all. It should open a session, run exactly one turn,
+    and auto-close it, exactly like a keep-alive=false continued session does.
+    """
+    runtime, transports, tmp_path = rig
+
+    def boom(**kwargs):  # worker_host must not be consulted for no-isolation
+        raise AssertionError("worker path used for a no-isolation provider")
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
+        boom,
+    )
+
+    result = _dispatch(
+        tmp_path,
+        _running_record(tmp_path),
+        dispatch_prompt="do the thing",
+        provider_isolation_tier="no-isolation",
+    )
+    assert result["state"] == "completed", result
+    assert result["session-id"] is not None
+    assert len(transports) == 1
+    assert transports[0].turns == ["do the thing"]
+    assert transports[0].closed  # not keep-alive: ephemeral session auto-closes

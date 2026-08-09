@@ -297,7 +297,7 @@ class TestCreateOpenBindingRace:
         binding1 = bindings.create_open_binding(
             session_id="ses_race_1",
             provider_id="test-provider",
-            surface_id=None,
+            surface_id="test-surface",
             provider_ref="ref-dup-create",
         )
 
@@ -313,7 +313,7 @@ class TestCreateOpenBindingRace:
         binding2 = bindings.create_open_binding(
             session_id="ses_race_2",
             provider_id="test-provider",
-            surface_id=None,
+            surface_id="test-surface",
             provider_ref="ref-dup-create",
         )
         record2 = {

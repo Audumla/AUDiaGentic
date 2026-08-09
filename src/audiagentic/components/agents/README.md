@@ -28,8 +28,8 @@ execution parameters. Profiles are stored per-project in
 ## Two-server pattern (profiles)
 
 Management (`ag-agents-mgmt`, propagate: `audiagentic`) handles admin operations.
-Operational (`ag-agents`, propagate: `audiagentic,providers`) provides resolution
-capabilities to providers during job execution.
+Operational (`ag-agents-gateway`, propagate: `providers`) exposes `agent_task_submit`
+and status/cancel/session management to provider CLIs during job execution.
 
 ## Error codes
 

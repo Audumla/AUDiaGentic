@@ -117,12 +117,14 @@ Choose a prefix matching the plan name (CC → code-cleanup, LSP → lsp-mcp-enh
 
 ## Execution profile doctrine
 
-Execution profiles bind a provider to a specific model with optional execution
-parameters. They are stored in .audiagentic/config/execution-profiles.yaml.
+Execution profiles bind a provider to a specific model with optional
+execution parameters. They are stored in .audiagentic/config/
+execution-profiles.yaml.
 
 ## When to use
 - A job needs a predefined provider+model configuration
-- Execution parameters (temperature, max-tokens) should be profile-driven
+- Execution parameters (temperature, max-tokens) should be
+  profile-driven
 - Multiple projects need different default model configurations
 
 ## Resolution precedence at job launch
@@ -132,7 +134,8 @@ parameters. They are stored in .audiagentic/config/execution-profiles.yaml.
 
 ## Naming
 Use `execution-profile-id` (NOT `profile-id`) in job requests to avoid
-collision with `workflow-profile` (lite/standard/strict stage pipelines).
+collision with `workflow-profile` (lite/standard/strict stage
+pipelines).
 
 ## Role selection precedence (AS61/RO01)
 
