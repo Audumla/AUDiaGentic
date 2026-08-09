@@ -4,12 +4,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 from audiagentic.components.agents.gateway.output import (
     OutputPolicy,
     create_relay,
     read_request_output,
 )
-
 from audiagentic.foundation.transports.agent_output import (
     AgentOutputEvent,
     AgentOutputKind,

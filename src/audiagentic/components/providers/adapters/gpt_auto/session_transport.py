@@ -185,15 +185,26 @@ class GptAutoSessionTransport:
         *,
         config: Any | None = None,
         project_name: str | None = None,
-        cdp_url: str = "http://127.0.0.1:9222",
         resume_provider_ref: str | None = None,
+        resume_metadata_hint: dict[str, Any] | None = None,
         client_factory: Callable[[str], Any] | None = None,
     ) -> None:
         self._project_root = project_root
         self._config = self._coerce_config(config)
         self._project_name = project_name
-        self._cdp_url = cdp_url
+        # cdp_url is a GptAutoConfig field (project/global config, YAML-driven)
+        # -- it was previously also a separate constructor parameter with its
+        # own hardcoded default that every caller left unset, so a configured
+        # cdp_url was silently ignored in favor of the literal default.
+        self._cdp_url = self._config.cdp_url
         self._resume_provider_ref = resume_provider_ref
+        # AS49: the source session's LATEST provider-metadata (chat-id etc),
+        # refreshed every turn (see prompt()'s AS49 comment) -- unlike
+        # resume_provider_ref, which is the binding's provider-session-ref,
+        # frozen at the ORIGINAL open() before any conversation existed (AS30
+        # forbids mutating a generation's binding in place). Opaque here by
+        # design: only _resolve_workspace interprets its shape.
+        self._resume_metadata_hint = dict(resume_metadata_hint or {})
         self._client_factory = client_factory or (lambda url: CdpClient(cdp_url=url))
         self._client: Any | None = None
         self._ag_session_id: str | None = None
@@ -211,6 +222,14 @@ class GptAutoSessionTransport:
             return GptAutoConfig.from_dict(config)
         return config
 
+    @property
+    def ag_session_id(self) -> str | None:
+        """Current provider-native session ref, set after open() and kept
+        current by prompt() once a real conversation id exists (see AS49
+        comment there) -- same property name AcpAgentSessionTransport uses,
+        so SessionRuntime can read it generically across transport kinds."""
+        return self._ag_session_id
+
     # ── AgentSessionTransport: open ──────────────────────────────────
 
     async def open(self) -> SessionOpenResult:
@@ -225,18 +244,48 @@ class GptAutoSessionTransport:
         if self._closed:
             raise GptAutoError("GptAutoSessionTransport is closed")
 
+        started = time.monotonic()
+        ready_timeout = float(getattr(self._config, "tab_selection_timeout", 15))
+        logger.info(
+            "gpt-auto open begin cdp-url=%s resume-ref=%s ready-timeout=%.1fs login-wait=disabled",
+            self._cdp_url,
+            self._resume_provider_ref,
+            ready_timeout,
+            extra={"gpt-auto-phase": "open.begin"},
+        )
         client = self._client_factory(self._cdp_url)
+        phase_started = time.monotonic()
+        logger.info("gpt-auto open phase cdp-start begin", extra={"gpt-auto-phase": "open.cdp-start.begin"})
         await client.start()
+        logger.info(
+            "gpt-auto open phase cdp-start complete elapsed-ms=%.1f",
+            (time.monotonic() - phase_started) * 1000,
+            extra={"gpt-auto-phase": "open.cdp-start.complete"},
+        )
         self._client = client
         project_name = self._project_name or _resolve_project_name(
             str(self._project_root) if self._project_root is not None else None
         )
         try:
+            phase_started = time.monotonic()
+            logger.info(
+                "gpt-auto open phase workspace begin project=%s resume-ref=%s",
+                project_name,
+                self._resume_provider_ref,
+                extra={"gpt-auto-phase": "open.workspace.begin"},
+            )
             ws = await self._resolve_workspace(client, project_name)
             if ws is None:
                 raise GptAutoError(
                     f"ChatGPT workspace '{project_name}' not found — create it in chatgpt.com first"
                 )
+            logger.info(
+                "gpt-auto open phase workspace complete elapsed-ms=%.1f url=%s conversation-id=%s",
+                (time.monotonic() - phase_started) * 1000,
+                ws.url,
+                ws.conversation_id,
+                extra={"gpt-auto-phase": "open.workspace.complete"},
+            )
 
             # Un-throttle the renderer as soon as a page exists, and before
             # anything that waits on the page to do work.
@@ -248,6 +297,8 @@ class GptAutoSessionTransport:
             # It must also come *before* wait_for_chatgpt_ready, because Chrome
             # throttles occluded renderers and that call polls the page for the
             # composer.
+            phase_started = time.monotonic()
+            logger.info("gpt-auto open phase keep-active begin", extra={"gpt-auto-phase": "open.keep-active.begin"})
             try:
                 emulation = await client.keep_page_active()
                 logger.info("gpt-auto page-active emulation: %s", emulation)
@@ -261,14 +312,29 @@ class GptAutoSessionTransport:
                     "if the browser window is occluded",
                     exc_info=True,
                 )
+            logger.info(
+                "gpt-auto open phase keep-active complete elapsed-ms=%.1f",
+                (time.monotonic() - phase_started) * 1000,
+                extra={"gpt-auto-phase": "open.keep-active.complete"},
+            )
 
+            phase_started = time.monotonic()
+            logger.info(
+                "gpt-auto open phase readiness begin ready-timeout=%.1fs login-wait=disabled",
+                ready_timeout,
+                extra={"gpt-auto-phase": "open.readiness.begin"},
+            )
             ready = await wait_for_chatgpt_ready(
                 client,
-                timeout=float(getattr(self._config, "tab_selection_timeout", 15)),
-                login_timeout=float(getattr(self._config, "login_timeout", 20)),
+                timeout=ready_timeout,
             )
             if not ready:
                 raise GptAutoError("ChatGPT did not become ready — is the browser logged in?")
+            logger.info(
+                "gpt-auto open phase readiness complete elapsed-ms=%.1f",
+                (time.monotonic() - phase_started) * 1000,
+                extra={"gpt-auto-phase": "open.readiness.complete"},
+            )
 
             try:
                 await client.bring_to_front()
@@ -293,8 +359,19 @@ class GptAutoSessionTransport:
                 project_root=self._project_root,
             )
             logger.info("gpt-auto session opened (provider-session-ref=%s)", ref)
+            logger.info(
+                "gpt-auto open complete elapsed-ms=%.1f provider-session-ref=%s",
+                (time.monotonic() - started) * 1000,
+                ref,
+                extra={"gpt-auto-phase": "open.complete"},
+            )
             return _GptAutoOpenResult(ag_session_id=ref, metadata=dict(self._session_metadata))
         except BaseException:
+            logger.exception(
+                "gpt-auto open failed elapsed-ms=%.1f",
+                (time.monotonic() - started) * 1000,
+                extra={"gpt-auto-phase": "open.failed"},
+            )
             self._closed = True
             await self._teardown_client()
             raise
@@ -310,8 +387,35 @@ class GptAutoSessionTransport:
         ref = self._resume_provider_ref
         if not ref:
             return await ensure_workspace(client, project_name, project_root=self._project_root)
-        # Conversation-id resume: reconstruct the full URL from stored mapping
-        # and navigate directly — no workspace search needed.
+        # Resume: which specific browser tab we land in is irrelevant (external
+        # tab ownership -- a session's original tab may no longer exist, or the
+        # CDP helper may not have any page selected yet, e.g. right after a
+        # fresh CdpClient start). new_tab() both guarantees an active page
+        # exists AND navigates it in one step, unlike evaluate()'ing
+        # window.location.href against a page that may not be there at all
+        # ("No active page" -- the exact failure this replaced).
+        #
+        # AS49: prefer the source session's LATEST known chat-url (refreshed
+        # every turn, see prompt()) over resume_provider_ref, which is the
+        # binding's provider-session-ref frozen at the ORIGINAL open() --
+        # necessarily workspace-only, since ChatGPT hasn't assigned a real
+        # conversation id until the first message lands. Without this, resume
+        # navigates to a fresh, empty chat in the right project instead of the
+        # actual prior conversation -- landing "close" (same project) but not
+        # actually resuming anything.
+        hinted_chat_url = self._resume_metadata_hint.get("chat-url")
+        if hinted_chat_url:
+            try:
+                tab = await client.new_tab(hinted_chat_url)
+                return WorkspaceInfo(name=project_name, url=tab.url)
+            except Exception:
+                logger.warning(
+                    "Direct resume to hinted chat-url %s failed — falling back",
+                    hinted_chat_url,
+                    exc_info=True,
+                )
+        #
+        # Conversation-id resume: reconstruct the full URL from stored mapping.
         if not ref.startswith("http"):
             conv_id = _normalise_resume_ref(ref)
             mapped = (
@@ -324,34 +428,16 @@ class GptAutoSessionTransport:
                 chat_url = f"{ws_base}/c/{conv_id}"
                 logger.info("Resuming conversation %s at %s (direct)", conv_id, chat_url)
                 try:
-                    await client.evaluate(f'() => {{ window.location.href = "{chat_url}"; }}')
-                    # Event-based: waitForFunction on URL match
-                    try:
-                        await client.wait_for_function(
-                            f'() => window.location.href.includes("/c/{conv_id}")',
-                            timeout_ms=20000,
-                        )
-                        url = await client.get_url()
-                        return WorkspaceInfo(name=project_name, url=url)
-                    except Exception:
-                        logger.warning("Direct resume to %s timed out — falling back", chat_url)
+                    tab = await client.new_tab(chat_url)
+                    return WorkspaceInfo(name=project_name, url=tab.url)
                 except Exception:
-                    logger.debug("direct resume navigation failed", exc_info=True)
+                    logger.warning("Direct resume to %s failed — falling back", chat_url, exc_info=True)
 
         if ref.startswith("http"):
-            # Workspace-base (or full conversation) URL — navigate the active tab.
+            # Workspace-base (or full conversation) URL.
             try:
-                await client.evaluate(f'() => {{ window.location.href = "{ref}"; }}')
-                # Event-based: waitForFunction on URL match
-                try:
-                    await client.wait_for_function(
-                        f'() => window.location.href.startsWith("{ref}") || window.location.href.includes("/c/")',
-                        timeout_ms=20000,
-                    )
-                    url = await client.get_url()
-                    return WorkspaceInfo(name=project_name, url=url)
-                except Exception:
-                    pass
+                tab = await client.new_tab(ref)
+                return WorkspaceInfo(name=project_name, url=tab.url)
             except Exception:
                 logger.debug("direct navigation to resume ref failed", exc_info=True)
             return WorkspaceInfo(name=project_name, url=ref)
@@ -420,6 +506,14 @@ class GptAutoSessionTransport:
             return False
 
         try:
+            prompt_started = time.monotonic()
+            logger.info(
+                "gpt-auto prompt begin turn-id=%s prompt-chars=%d response-timeout=%s",
+                turn_id,
+                len(request.body),
+                getattr(cfg, "response_wait_timeout", None),
+                extra={"gpt-auto-phase": "prompt.begin", "turn-id": turn_id},
+            )
             if _is_cancelled():
                 await _emit(
                     TransportObservationKind.TERMINAL,
@@ -459,10 +553,21 @@ class GptAutoSessionTransport:
             # so _is_new can detect fresh content.
             base_count, base_text = await _get_response_state(client)
 
+            inject_started = time.monotonic()
+            logger.info(
+                "gpt-auto prompt phase inject begin editor-wait-seconds=%s",
+                getattr(cfg, "editor_wait_seconds", 20),
+                extra={"gpt-auto-phase": "prompt.inject.begin", "turn-id": turn_id},
+            )
             await inject_prompt(
                 client,
                 request.body,
                 typing_delay=float(getattr(cfg, "typing_speed", 0.03)),
+            )
+            logger.info(
+                "gpt-auto prompt phase inject complete elapsed-ms=%.1f",
+                (time.monotonic() - inject_started) * 1000,
+                extra={"gpt-auto-phase": "prompt.inject.complete", "turn-id": turn_id},
             )
             await _emit(TransportObservationKind.ACTIVITY, model_activity="generating")
 
@@ -478,6 +583,14 @@ class GptAutoSessionTransport:
                 emit_in_progress,
                 base_count=base_count,
                 base_text=base_text,
+            )
+            logger.info(
+                "gpt-auto prompt phase response complete elapsed-ms=%.1f response-chars=%d cancelled=%s total-elapsed-ms=%.1f",
+                (time.monotonic() - inject_started) * 1000,
+                len(response or ""),
+                cancelled,
+                (time.monotonic() - prompt_started) * 1000,
+                extra={"gpt-auto-phase": "prompt.response.complete", "turn-id": turn_id},
             )
 
             if cancelled:
@@ -506,6 +619,16 @@ class GptAutoSessionTransport:
                         "chat-url": current_url if conversation_id else None,
                     }
                 )
+                # AS49: ChatGPT only assigns a real conversation id once the
+                # first message lands -- ag_session_id was necessarily bound
+                # at open() to the workspace-only ref (no conversation yet
+                # existed to point at). Refresh it now that one exists, so a
+                # later resume reconnects to THIS conversation instead of
+                # landing on a fresh, empty one in the same project (see
+                # current_provider_session_ref, read by SessionRuntime._close
+                # to keep the persisted binding in sync).
+                if conversation_id:
+                    self._ag_session_id = _conversation_ref_from_url(current_url)
 
             return SessionTurnResult(
                 turn_id=turn_id,
@@ -567,6 +690,17 @@ class GptAutoSessionTransport:
             getattr(cfg, "response_stability_seconds", _RESPONSE_STABILITY_SECONDS),
             _RESPONSE_STABILITY_SECONDS,
         )
+        logger.info(
+            "gpt-auto response poll begin base-count=%s base-text-chars=%s response-timeout=%.1fs start-budget=%.1fs absolute-ceiling=%.1fs interval=%.2fs stability=%.2fs",
+            base_count,
+            len(base_text or "") if base_text is not _UNSET else None,
+            deadline - started_at,
+            _START_BUDGET_SECONDS,
+            ceiling - started_at,
+            interval,
+            stability,
+            extra={"gpt-auto-phase": "response-poll.begin"},
+        )
         last_text: str | None = None
         stable_since: float | None = None
 
@@ -586,6 +720,13 @@ class GptAutoSessionTransport:
                 return None, True
             count, text = await _get_response_state(client)
             if count > base_count or _is_new(text):
+                logger.info(
+                    "gpt-auto response poll fresh-content detected elapsed-ms=%.1f count=%s text-chars=%s",
+                    (time.monotonic() - started_at) * 1000,
+                    count,
+                    len(text or ""),
+                    extra={"gpt-auto-phase": "response-poll.fresh"},
+                )
                 break
             if await is_generating(client):
                 break
@@ -792,6 +933,7 @@ def build_gpt_auto_session_transport(
     config: Any | None = None,
     project_name: str | None = None,
     resume_provider_ref: str | None = None,
+    resume_metadata_hint: dict[str, Any] | None = None,
 ) -> GptAutoSessionTransport:
     """Build a CDP-backed gpt-auto session transport (provider-owned factory).
 
@@ -803,6 +945,7 @@ def build_gpt_auto_session_transport(
         config=config,
         project_name=project_name,
         resume_provider_ref=resume_provider_ref,
+        resume_metadata_hint=resume_metadata_hint,
     )
 
 

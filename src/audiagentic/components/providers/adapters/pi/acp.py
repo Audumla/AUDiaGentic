@@ -86,10 +86,35 @@ def _system_pi_acp_argv() -> list[str]:
     return argv
 
 
+def _seed_isolated_models_registry(agent_root: Path) -> None:
+    """Copy the caller's managed Pi model registry into an isolated agent dir.
+
+    build_acp_launch scopes PI_CODING_AGENT_DIR to a fresh, empty per-request
+    directory (correct isolation — extensions/sessions/other mutable agent
+    state must not leak across requests). Without this, pi-acp's session/new
+    sees zero configured models and rejects with "Authentication required"
+    before ever reaching a real prompt exchange, regardless of what models
+    are actually configured. Mirrors
+    agents/gateway/queue/worker.py::_replacement_environment, which solves
+    the identical problem for the one-shot dispatch path — this is the
+    session/ACP path's counterpart, kept here (not in generic gateway code)
+    since it is pi-specific.
+    """
+    source_pi_dir = os.environ.get("PI_CODING_AGENT_DIR")
+    source_models = (
+        Path(source_pi_dir) / "models.json"
+        if source_pi_dir
+        else Path.home() / ".pi" / "agent" / "models.json"
+    )
+    if source_models.is_file():
+        shutil.copy2(source_models, agent_root / "models.json")
+
+
 def _request_environment(request_runtime_root: Path) -> dict[str, str]:
     pi_root = request_runtime_root.resolve() / "pi"
     agent_root = pi_root / "agent"
     agent_root.mkdir(parents=True, exist_ok=True)
+    _seed_isolated_models_registry(agent_root)
     environment = {
         "PI_CODING_AGENT_DIR": str(agent_root),
     }
@@ -134,6 +159,11 @@ def build_acp_launch(
     that address (`rpc_tap_transport.open_tap_listener`) *before* spawning
     this launch -- `build_acp_launch` only declares the command, it does not
     itself open the listener or start the process.
+
+    AS49: a resume passes THIS SAME session's original request_runtime_root
+    back in (SessionRuntime reuses it rather than allocating a fresh one --
+    see _resume_session), so pi-acp finds its own preserved session history
+    without any special-casing here.
     """
     argv = _system_pi_acp_argv()
     args = argv[1:] + ["--cwd", str(project_root.resolve())]

@@ -92,6 +92,7 @@ def _default_prepare_fn(
     request_runtime_root: Path | None = None,
     mcp_entries=None,
     resume_provider_ref: str | None = None,
+    resume_provider_metadata: dict[str, Any] | None = None,
 ) -> PreparedSessionTransport:
     """Default provider preparation via the public providers_api seam.
 
@@ -101,6 +102,11 @@ def _default_prepare_fn(
     instead of opening a new one. Callers must have already validated
     resume eligibility (``agents_gateway_session_resume.validate_resume_eligibility``)
     before setting this; this function does not re-check capability.
+
+    ``resume_provider_metadata``: the source session's latest provider-
+    metadata (opaque; only gpt-auto's builder currently interprets it, to
+    resume the actual conversation rather than the stale open-time ref --
+    see session_transport.py's AS49 comments).
     """
     from audiagentic.components.providers import providers_api
 
@@ -113,6 +119,7 @@ def _default_prepare_fn(
         mcp_entries=None if mcp_entries is None else tuple(mcp_entries),
         require_isolated_mcp=mcp_entries is not None,
         resume_provider_ref=resume_provider_ref,
+        resume_provider_metadata=resume_provider_metadata,
     )
 
 
@@ -136,6 +143,38 @@ _OPEN_TIMEOUT_SECONDS = 120.0
 _CLOSE_TIMEOUT_SECONDS = 30.0
 
 
+def _cleanup_preserving(path: Path, preserve: set[Path]) -> None:
+    """Delete everything under *path* except entries in *preserve* (and
+    whatever directories contain them).
+
+    Used instead of a wholesale rmtree when a provider has durable session
+    state living inside its isolated per-request runtime root (see
+    PreparedSessionTransport.runtime_preserve_relpaths) -- deleting that
+    unconditionally on close, as the old plain rmtree did, silently made
+    resume-by-ref impossible regardless of any other resume machinery, since
+    there was nothing left on disk to resume from.
+    """
+    import shutil
+
+    if not path.exists():
+        return
+    resolved = path.resolve()
+    if resolved in preserve:
+        return
+    if path.is_file() or path.is_symlink():
+        try:
+            path.unlink()
+        except OSError:
+            pass
+        return
+    contains_preserved = any(resolved != p and resolved in p.parents for p in preserve)
+    if not contains_preserved:
+        shutil.rmtree(path, ignore_errors=True)
+        return
+    for child in path.iterdir():
+        _cleanup_preserving(child, preserve)
+
+
 class _SessionHandle:
     """Loop-side state for one live session. Touched only on the loop thread."""
 
@@ -154,6 +193,7 @@ class _SessionHandle:
         correlation_id: str | None,
         surface_snapshot: Any = None,
         request_runtime_root: Path | None = None,
+        runtime_preserve_relpaths: tuple[str, ...] = (),
     ) -> None:
         self.session_id = session_id
         self.transport = transport
@@ -168,6 +208,11 @@ class _SessionHandle:
         # AS28 slice 4a: resolved surface snapshot (provider-neutral metadata)
         self.surface_snapshot = surface_snapshot
         self.request_runtime_root = request_runtime_root
+        # Runtime-root-relative paths holding the provider's own durable
+        # session state (see PreparedSessionTransport.runtime_preserve_relpaths)
+        # -- preserved by _cleanup_handle_runtime instead of being deleted with
+        # everything else, so resume-by-ref has something to seed from.
+        self.runtime_preserve_relpaths = runtime_preserve_relpaths
         # AS19 Stage-3: observer binding (tied to session lifecycle)
         self.observer_binding_id: str | None = None
         # AS19 Stage-2 Slice A: transport-observation lease from providers_api.
@@ -302,18 +347,54 @@ class SessionRuntime:
         contended with that orphan on the same provider-ref-key, so failures
         compounded instead of being independent.
         """
+        started = time.monotonic()
+        logger.info(
+            "session runtime call begin timeout=%s timeout-plus-slack=%s",
+            timeout,
+            None if timeout is None else timeout + 15.0,
+            extra={"session-runtime-phase": "call.begin"},
+        )
         loop = self._ensure_loop()
         if timeout is None:
-            return asyncio.run_coroutine_threadsafe(coro, loop).result()
+            result = asyncio.run_coroutine_threadsafe(coro, loop).result()
+            logger.info(
+                "session runtime call complete elapsed-ms=%.1f timeout=%s",
+                (time.monotonic() - started) * 1000,
+                timeout,
+                extra={"session-runtime-phase": "call.complete"},
+            )
+            return result
 
         async def _bounded() -> Any:
             return await asyncio.wait_for(coro, timeout=timeout)
 
+        logger.info(
+            "session runtime call submitted inner-wait-for timeout=%.1fs",
+            timeout,
+            extra={"session-runtime-phase": "call.submitted"},
+        )
         future = asyncio.run_coroutine_threadsafe(_bounded(), loop)
         # Allow a little slack over the inner deadline so the inner
         # cancellation is what fires, letting the coroutine unwind its own
         # cleanup rather than being abandoned mid-flight.
-        return future.result(timeout=timeout + 15.0)
+        try:
+            result = future.result(timeout=timeout + 15.0)
+        except Exception:
+            logger.exception(
+                "session runtime call failed elapsed-ms=%.1f inner-timeout=%.1fs outer-timeout=%.1fs",
+                (time.monotonic() - started) * 1000,
+                timeout,
+                timeout + 15.0,
+                extra={"session-runtime-phase": "call.failed"},
+            )
+            raise
+        logger.info(
+            "session runtime call complete elapsed-ms=%.1f inner-timeout=%.1fs",
+            (time.monotonic() - started) * 1000,
+            timeout,
+            extra={"session-runtime-phase": "call.complete"},
+        )
+        return result
 
     # ── public sync API ──────────────────────────────────────────
 
@@ -333,6 +414,8 @@ class SessionRuntime:
         correlation_id: str | None = None,
         request_runtime_root: Path | None = None,
         mcp_entries=(),
+        identity_context_fingerprint: str | None = None,
+        execution_context_fingerprint: str | None = None,
     ) -> dict[str, Any]:
         """Open a live session; returns the persisted session record.
 
@@ -343,6 +426,15 @@ class SessionRuntime:
         When the resolved surface is unsupported or the transport is None,
         raises CON-AGW-095 — no child starts, no live session exposed.
         """
+        logger.info(
+            "gateway open requested provider=%s model=%s execution-profile=%s open-timeout=%.1fs correlation-id=%s",
+            provider_id,
+            model_id,
+            execution_profile_id,
+            _OPEN_TIMEOUT_SECONDS,
+            correlation_id,
+            extra={"session-runtime-phase": "open.request"},
+        )
         return self._call(
             self._open_session(
                 project_root,
@@ -376,6 +468,8 @@ class SessionRuntime:
                 correlation_id=correlation_id,
                 request_runtime_root=request_runtime_root,
                 mcp_entries=tuple(mcp_entries),
+                identity_context_fingerprint=identity_context_fingerprint,
+                execution_context_fingerprint=execution_context_fingerprint,
             ),
             timeout=_OPEN_TIMEOUT_SECONDS,
         )
@@ -718,7 +812,17 @@ class SessionRuntime:
         correlation_id: str | None,
         request_runtime_root: Path | None,
         mcp_entries,
+        identity_context_fingerprint: str | None = None,
+        execution_context_fingerprint: str | None = None,
     ) -> dict[str, Any]:
+        started = time.monotonic()
+        logger.info(
+            "gateway open coroutine begin provider=%s model=%s profile=%s",
+            provider_id,
+            model_id,
+            execution_profile_id,
+            extra={"session-runtime-phase": "open.begin", "correlation-id": correlation_id},
+        )
         if self._shutdown:
             raise AudiaGenticError(
                 code="CON-AGW-002",
@@ -736,7 +840,20 @@ class SessionRuntime:
         if request_runtime_root is not None:
             prepare_kwargs["request_runtime_root"] = request_runtime_root
             prepare_kwargs["mcp_entries"] = tuple(mcp_entries)
+        prepare_started = time.monotonic()
+        logger.info(
+            "gateway open phase prepare-provider begin provider=%s model=%s",
+            provider_id,
+            model_id,
+            extra={"session-runtime-phase": "open.prepare.begin", "correlation-id": correlation_id},
+        )
         prepared = self._provider_prepare_fn(project_root, **prepare_kwargs)
+        logger.info(
+            "gateway open phase prepare-provider complete elapsed-ms=%.1f transport=%s",
+            (time.monotonic() - prepare_started) * 1000,
+            type(prepared.transport).__name__ if prepared.transport is not None else None,
+            extra={"session-runtime-phase": "open.prepare.complete", "correlation-id": correlation_id},
+        )
         if prepared.transport is None:
             raise AudiaGenticError(
                 code="CON-AGW-095",
@@ -751,8 +868,38 @@ class SessionRuntime:
                 },
             )
         transport = prepared.transport
-        open_result = await transport.open()
-        provider_session_ref = str(open_result) if open_result else None
+        transport_started = time.monotonic()
+        logger.info(
+            "gateway open phase transport-open begin transport=%s",
+            type(transport).__name__,
+            extra={"session-runtime-phase": "open.transport.begin", "correlation-id": correlation_id},
+        )
+        try:
+            open_result = await transport.open()
+        except BaseException:
+            logger.exception(
+                "gateway open phase transport-open failed elapsed-ms=%.1f",
+                (time.monotonic() - transport_started) * 1000,
+                extra={"session-runtime-phase": "open.transport.failed", "correlation-id": correlation_id},
+            )
+            raise
+        logger.info(
+            "gateway open phase transport-open complete elapsed-ms=%.1f provider-ref=%s",
+            (time.monotonic() - transport_started) * 1000,
+            str(open_result)[:160] if open_result else None,
+            extra={"session-runtime-phase": "open.transport.complete", "correlation-id": correlation_id},
+        )
+        # SessionOpenResult.ag_session_id is the raw provider-native session
+        # identifier (e.g. the real ACP session/new sessionId for pi/opencode,
+        # or the chat/project URL for gpt-auto) -- the value AS49 resume later
+        # feeds straight back to the provider as its resume ref. str(open_result)
+        # stringified the whole dataclass repr instead, which is not a valid
+        # provider-native ref and would break resume-by-ref.
+        provider_session_ref = (
+            getattr(open_result, "ag_session_id", None) or str(open_result)
+            if open_result
+            else None
+        )
         provider_metadata = dict(getattr(open_result, "metadata", {}) or {})
 
         record = session_store.build_session_record(
@@ -761,14 +908,29 @@ class SessionRuntime:
             provider_id=provider_id,
             model_id=model_id,
             provider_session_ref=provider_session_ref,
+            surface_id=prepared.surface.ref.surface_id,
             provider_metadata=provider_metadata,
             idle_timeout_seconds=idle_timeout_seconds,
             max_lifetime_seconds=max_lifetime_seconds,
+            identity_context_fingerprint=identity_context_fingerprint,
+            execution_context_fingerprint=execution_context_fingerprint,
         )
         session_id = str(record["session-id"])
         try:
+            bookkeeping_started = time.monotonic()
+            logger.info(
+                "gateway open phase bookkeeping begin session-id=%s",
+                session_id,
+                extra={"session-runtime-phase": "open.bookkeeping.begin", "correlation-id": correlation_id},
+            )
             session_store.write_session_record(project_root, record)
             binding_store.register_open_binding(project_root, record)
+            logger.info(
+                "gateway open phase bookkeeping complete elapsed-ms=%.1f session-id=%s",
+                (time.monotonic() - bookkeeping_started) * 1000,
+                session_id,
+                extra={"session-runtime-phase": "open.bookkeeping.complete", "correlation-id": correlation_id},
+            )
         except Exception:
             # Never leak a child because bookkeeping failed.
             await transport.close()
@@ -841,6 +1003,7 @@ class SessionRuntime:
             correlation_id=correlation_id,
             surface_snapshot=getattr(prepared, "surface", None),
             request_runtime_root=request_runtime_root,
+            runtime_preserve_relpaths=getattr(prepared, "runtime_preserve_relpaths", ()),
         )
         handle.child_pid = child_pid
         handle.child_creation_identity = child_creation_identity
@@ -929,6 +1092,12 @@ class SessionRuntime:
             "gateway session opened",
             extra={"session-id": session_id, "execution-profile-id": execution_profile_id},
         )
+        logger.info(
+            "gateway open coroutine complete elapsed-ms=%.1f session-id=%s",
+            (time.monotonic() - started) * 1000,
+            session_id,
+            extra={"session-runtime-phase": "open.complete", "correlation-id": correlation_id},
+        )
         return record
 
     async def _resume_session(
@@ -1002,13 +1171,22 @@ class SessionRuntime:
         source_binding = session_store.read_session_binding(project_root, source_session_id)
         provider_id = (source_binding or {}).get("provider-id")
         surface_id = (source_binding or {}).get("surface-id")
+        if not isinstance(surface_id, str) or not surface_id.strip():
+            exc = AudiaGenticError(
+                code="CON-AGW-104",
+                kind="agents",
+                message="session binding has no resolved surface id; cannot resume",
+                details={"session-id": source_session_id, "provider-id": provider_id},
+            )
+            _record_failure(exc)
+            raise exc
 
         from audiagentic.components.providers import providers_api
 
         surface = providers_api.resolve_session_surface(
             project_root,
             provider_id or "",
-            SurfaceHint(surface_id=surface_id or "unknown"),
+            SurfaceHint(surface_id=surface_id),
         )
 
         try:
@@ -1027,12 +1205,46 @@ class SessionRuntime:
         # validate_resume_eligibility rejects None bindings, so this is safe:
         assert source_binding is not None
 
+        # An explicit caller override wins; otherwise resume targets the same
+        # model the source session used. Must be resolved before transport
+        # prep, not just persisted onto the new record afterward -- prepare_
+        # provider_session_transport needs a real model id now to resolve the
+        # provider's model selection (VAL-MODEL-002 otherwise).
+        resume_model_id = model_id or source_record.get("model-id")
+
+        # AS49: reuse the ORIGINAL request's runtime root, where a provider's
+        # own durable session state was preserved on close (see
+        # runtime_preserve_relpaths/_cleanup_preserving) instead of deleted --
+        # resume_execution_session never establishes a request_runtime_root of
+        # its own (unlike ordinary dispatch, it isn't driven by a queued
+        # request), so without this PI_CODING_AGENT_DIR would never even be
+        # set and pi-acp would fall back to the real, unisolated ~/.pi/agent,
+        # which never has the session it's trying to resume. Reusing the same
+        # directory (rather than seeding a copy into a fresh one) is also
+        # simply correct: it's the same isolated environment continuing, not
+        # a new one. The opening request is always request-ids[0] --
+        # request_runtime_root is established once at open time and reused
+        # for the whole session's life, never recomputed per turn. An
+        # explicit caller-supplied request_runtime_root still wins.
+        if request_runtime_root is None:
+            opening_request_ids = source_record.get("request-ids") or []
+            if opening_request_ids:
+                from audiagentic.components.agents.agents_paths import gateway_request_dir
+
+                request_runtime_root = gateway_request_dir(project_root, opening_request_ids[0]) / "runtime"
+
         # ── Dispatch exactly one provider-local resume operation ──
         prepare_kwargs: dict[str, Any] = {
             "provider_id": provider_id,
-            "surface_hint": SurfaceHint(surface_id=surface_id or "unknown"),
-            "model_id": model_id,
+            "surface_hint": SurfaceHint(surface_id=surface_id),
+            "model_id": resume_model_id,
             "resume_provider_ref": source_binding["provider-session-ref"],
+            # AS30 forbids mutating a generation's binding in place, so
+            # provider-session-ref stays frozen at open-time forever; pass the
+            # session's own (per-turn-refreshed) provider-metadata alongside
+            # it as an opaque supplementary hint -- generic here, only
+            # meaningful to whichever provider builder chooses to read it.
+            "resume_provider_metadata": source_record.get("provider-metadata"),
         }
         if request_runtime_root is not None:
             prepare_kwargs["request_runtime_root"] = request_runtime_root
@@ -1048,7 +1260,7 @@ class SessionRuntime:
             raise exc
         transport = prepared.transport
         try:
-            provider_session_ref = await transport.open()
+            open_result = await transport.open()
         except Exception as exc:  # noqa: BLE001 — provider rejection, not a fallback path
             wrapped = AudiaGenticError(
                 code="EXT-AGW-118",
@@ -1058,17 +1270,32 @@ class SessionRuntime:
                     "provider-id": provider_id,
                     "surface-id": surface_id,
                     "error-type": type(exc).__name__,
+                    # AudiaGenticError from a lower layer already carries the
+                    # real reason in its own .details (see open_resumed's
+                    # error-detail/error-data) -- surface it here too instead
+                    # of flattening every resume rejection down to a bare
+                    # exception class name.
+                    "underlying-details": getattr(exc, "details", None),
                 },
             )
             _record_failure(wrapped)
             raise wrapped from exc
 
+        # See the matching comment in _open_session: extract the real
+        # provider-native ref, not a str() of the whole result object.
+        provider_session_ref = (
+            getattr(open_result, "ag_session_id", None) or str(open_result)
+            if open_result
+            else None
+        )
+
         # ── Build the new generation's record + RESUMED_FROM binding ──
         record = session_store.build_session_record(
             execution_profile_id=source_record["execution-profile-id"],
             provider_id=provider_id,
-            model_id=model_id or source_record.get("model-id"),
-            provider_session_ref=str(provider_session_ref) if provider_session_ref else None,
+            model_id=resume_model_id,
+            provider_session_ref=provider_session_ref,
+            surface_id=surface_id,
             idle_timeout_seconds=idle_timeout_seconds,
             max_lifetime_seconds=max_lifetime_seconds,
         )
@@ -1077,7 +1304,7 @@ class SessionRuntime:
             session_id=session_id,
             provider_id=provider_id,
             surface_id=surface_id,
-            provider_ref=str(provider_session_ref),
+            provider_ref=provider_session_ref,
             predecessor_binding_id=source_binding["binding-id"],
             ref_namespace=source_binding.get("ref-namespace"),
             identity_context_fingerprint=source_binding.get("identity-context-fingerprint"),
@@ -1114,6 +1341,7 @@ class SessionRuntime:
             correlation_id=correlation_id,
             surface_snapshot=surface,
             request_runtime_root=request_runtime_root,
+            runtime_preserve_relpaths=getattr(prepared, "runtime_preserve_relpaths", ()),
         )
         handle.child_pid = child_pid
         # AS19 status-observer lease / observer binding are NOT wired here —
@@ -1544,7 +1772,14 @@ class SessionRuntime:
         import shutil
 
         try:
-            shutil.rmtree(handle.request_runtime_root, ignore_errors=True)
+            if handle.runtime_preserve_relpaths:
+                preserve_abs = {
+                    (handle.request_runtime_root / relpath).resolve()
+                    for relpath in handle.runtime_preserve_relpaths
+                }
+                _cleanup_preserving(handle.request_runtime_root, preserve_abs)
+            else:
+                shutil.rmtree(handle.request_runtime_root, ignore_errors=True)
         except OSError:  # noqa: BLE001 — cleanup is best-effort
             logger.warning(
                 "failed to clean up handle runtime root",

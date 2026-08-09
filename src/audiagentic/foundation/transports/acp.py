@@ -776,6 +776,13 @@ class AcpSessionTransport:
             with suppress(Exception, asyncio.CancelledError):
                 await stack.aclose()
             self._dead = True
+            # RequestError's own message is always the generic JSON-RPC
+            # string ("Invalid params", "Internal error", ...) -- the actual
+            # reason a provider rejected the resume lives in .data, which is
+            # otherwise silently lost here, forcing anyone debugging a resume
+            # failure to go spelunking through the provider's own source.
+            error_detail = str(exc)
+            error_data = getattr(exc, "data", None)
             raise AudiaGenticError(
                 code=ERR_EXECUTION_FAILED,
                 kind="execution",
@@ -784,6 +791,8 @@ class AcpSessionTransport:
                     "executable": self._launch.executable,
                     "provider-session-ref": provider_session_ref,
                     "error-type": type(exc).__name__,
+                    "error-detail": error_detail,
+                    "error-data": error_data,
                 },
             ) from exc
         # LoadSessionResponse carries no session_id — the loaded session IS
@@ -1610,7 +1619,17 @@ class AcpAgentSessionTransport:
                 message="ACP transport opened without a session id",
             )
         self._ag_session_id = session_id
-        return SessionOpenResult(ag_session_id=session_id)
+        # Surface the raw provider-native session id in metadata too (not just
+        # as ag_session_id/provider_session_ref internally) so callers can see
+        # and independently use the underlying harness's own session identity
+        # -- e.g. to resume against it directly with the provider's own tools,
+        # long after AUDiaGentic's own session record has been closed or
+        # pruned, since the harness itself (pi, opencode, ...) keeps its own
+        # session store independently of ours.
+        return SessionOpenResult(
+            ag_session_id=session_id,
+            metadata={"provider-session-id": session_id},
+        )
 
     async def prompt(
         self,

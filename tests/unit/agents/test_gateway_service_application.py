@@ -3,11 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 from audiagentic.components.agents.gateway.service.application import (
     GatewayServiceApplication,
 )
 from audiagentic.components.agents.gateway.service.contract import PROTOCOL_VERSION
-
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.system.managed_service import ManagedServiceStore
 from audiagentic.foundation.system.managed_service_contracts import ServiceKey

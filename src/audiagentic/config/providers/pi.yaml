@@ -231,10 +231,16 @@ harness_observability:
     supported_statuses:
       - model-thinking
     probe_anchor: tests/integration/providers/test_pi_rpc_tap_transcript_e2e.py
-    # linux-amd64 only: that Docker E2E test is the one real proof of an
-    # actual model-thinking-producing prompt turn. The windows-amd64
-    # real-binary proof (test_pi_rpc_tap_real_binaries.py) only proved the
-    # session/new handshake, never a real prompt turn — claiming
-    # windows-amd64 here would overstate what was actually observed.
+    # linux-amd64: that Docker E2E test is the real proof of an actual
+    # model-thinking-producing prompt turn there.
+    # windows-amd64 (2026-08-09): test_pi_rpc_tap_real_binaries.py gained
+    # test_real_pi_acp_drives_a_full_prompt_turn_against_local_rig_on_windows,
+    # a native (non-Docker) host test — real pi-acp bridge, real pi binary,
+    # real local embedded rig, session/new -> session/prompt through to a
+    # real end_turn completion, run and passing on windows-amd64. Closes the
+    # gap the previous comment here documented (session/new handshake alone
+    # is not a prompt-turn proof); the new test is the one that actually
+    # drives a turn on this platform.
     platform_evidence:
       - linux-amd64
+      - windows-amd64

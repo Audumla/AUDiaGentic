@@ -468,6 +468,20 @@ def _observability_hook_factories() -> dict[str, Any]:
     return {"pi": PiRpcTapPreSpawnHook}
 
 
+def _runtime_preserve_relpaths_registry() -> dict[str, tuple[str, ...]]:
+    """provider_id -> runtime-root-relative paths holding the provider's own
+    durable session state, for providers that write local, resumable state
+    into the per-request isolated runtime root. Deliberately a plain dict
+    (same shape as _observability_hook_factories), not a plugin registry --
+    add entries only once a provider's actual on-disk layout is confirmed
+    (see pi/acp.py's _request_environment for pi's isolation layout).
+    Empty/absent means "nothing to preserve", not "no resume support" --
+    e.g. gpt-auto's session lives in the browser, never on local disk, so it
+    has no entry here despite supporting resume-by-ref.
+    """
+    return {"pi": ("pi/agent/sessions",)}
+
+
 def _build_transport_from_launch(
     project_root: Path,
     launch: Any,
@@ -521,6 +535,7 @@ def prepare_provider_session_transport(
     require_isolated_mcp: bool = False,
     resume_provider_ref: str | None = None,
     enable_observability_tap: bool = False,
+    resume_provider_metadata: dict[str, Any] | None = None,
 ) -> PreparedSessionTransport:
     """Resolve a session-surface snapshot and build the transport factory.
 
@@ -606,6 +621,7 @@ def prepare_provider_session_transport(
             project_root,
             config=provider_config,
             resume_provider_ref=resume_provider_ref,
+            resume_metadata_hint=resume_provider_metadata,
         )
         return PreparedSessionTransport(
             transport=transport,
@@ -667,14 +683,14 @@ def prepare_provider_session_transport(
         if "enable_rpc_tap" in inspect.signature(builder).parameters:
             launch_kwargs["enable_rpc_tap"] = True
     if mcp_entries is not None:
-        surface = prepare_provider_mcp_surface(
+        mcp_launch_surface = prepare_provider_mcp_surface(
             project_root,
             provider_id=provider_id,
             entries=tuple(mcp_entries),
             runtime_root=request_runtime_root,
             require_exact_isolation=require_isolated_mcp,
         )
-        launch_kwargs["mcp_surface"] = surface
+        launch_kwargs["mcp_surface"] = mcp_launch_surface
     try:
         acp_launch = builder(project_root, **launch_kwargs)
     except AudiaGenticError as exc:
@@ -750,6 +766,11 @@ def prepare_provider_session_transport(
         transport=transport,
         surface=surface,
         effective_provider_ref=effective_ref,
+        runtime_preserve_relpaths=(
+            _runtime_preserve_relpaths_registry().get(provider_id, ())
+            if request_runtime_root is not None
+            else ()
+        ),
     )
 
 

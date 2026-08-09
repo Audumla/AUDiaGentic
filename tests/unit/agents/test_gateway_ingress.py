@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from audiagentic.components.agents.gateway.event_topics import (
     GATEWAY_CANCEL_REQUESTED_TOPIC,
     GATEWAY_REQUESTED_TOPIC,
@@ -16,7 +17,6 @@ from audiagentic.components.agents.gateway.ingress import (
     ingress_backlog,
     publish_gateway_trigger,
 )
-
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
