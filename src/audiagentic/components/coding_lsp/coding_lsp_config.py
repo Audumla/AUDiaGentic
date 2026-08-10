@@ -5,6 +5,7 @@ runtime_resolver.py. `lsp.json` is kept as generated cache/projection data.
 Project-language detection is advisory for status/UI flows, not an implicit
 source of server config. Server availability is probed via foundation.system.probe.
 """
+
 from __future__ import annotations
 
 import json
@@ -14,12 +15,22 @@ from typing import Any
 
 from audiagentic.foundation.components.dependencies import build_dependency_probes
 from audiagentic.foundation.io import atomic_write_json
+from audiagentic.foundation.paths.names import project_runtime_dir
 
 from . import language_registry
 from .file_matching import file_matches_patterns
 from .lsp_lifecycle import ServerConfig
 
-CODING_LSP_DIR = Path(".coding-lsp")
+
+def get_coding_lsp_dir(project_root: Path | str) -> Path:
+    """Return the coding-lsp runtime cache directory.
+
+    Resolves to .audiagentic/runtime/coding-lsp/ — uses constants from
+    foundation.paths so location is centrally controlled. Replaces the
+    old hardcoded CODING_LSP_DIR = Path('.coding-lsp').
+    """
+    return project_runtime_dir(_as_path(project_root)) / "coding-lsp"
+
 
 # Language facts (server command, extensions, detection markers, dependency)
 # live in per-language YAML files loaded via `language_registry`. This module
@@ -107,17 +118,29 @@ def load_runtime_servers(path: Path | str) -> tuple[dict[str, ServerConfig], lis
         command = cfg_dict.get("command")
         if isinstance(command, str):
             command = [command]
-        if not isinstance(command, list) or not command or not all(isinstance(item, str) and item for item in command):
+        if (
+            not isinstance(command, list)
+            or not command
+            or not all(isinstance(item, str) and item for item in command)
+        ):
             errors.append(f"{name}: command must be non-empty list[str]")
             continue
 
         file_extensions = cfg_dict.get("fileExtensions", cfg_dict.get("file_extensions", []))
-        if not isinstance(file_extensions, list) or not file_extensions or not all(isinstance(item, str) and item for item in file_extensions):
+        if (
+            not isinstance(file_extensions, list)
+            or not file_extensions
+            or not all(isinstance(item, str) and item for item in file_extensions)
+        ):
             errors.append(f"{name}: file_extensions must be non-empty list[str]")
             continue
 
-        workspace_files = cfg_dict.get("workspaceConfigFiles", cfg_dict.get("workspace_config_files", []))
-        if not isinstance(workspace_files, list) or not all(isinstance(item, str) for item in workspace_files):
+        workspace_files = cfg_dict.get(
+            "workspaceConfigFiles", cfg_dict.get("workspace_config_files", [])
+        )
+        if not isinstance(workspace_files, list) or not all(
+            isinstance(item, str) for item in workspace_files
+        ):
             errors.append(f"{name}: workspace_config_files must be list[str]")
             continue
 
