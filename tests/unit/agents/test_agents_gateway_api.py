@@ -401,3 +401,41 @@ def test_gateway_overview_reflects_persisted_state_across_restart(tmp_path: Path
     assert overview["by_state"] == {"failed": 1}
     assert len(overview["recent_failures"]) == 1
     assert overview["queues"] == {}  # in-memory state is gone after "restart"
+
+
+def test_gateway_overview_diagnostics_reports_provider_load_errors(tmp_path: Path, monkeypatch):
+    """CC56: a residual provider-descriptor load error must surface through
+    the operator-facing gateway_overview diagnostics block."""
+    from audiagentic.components.providers import providers_api
+
+    monkeypatch.setattr(providers_api, "list_canonical_provider_ids", lambda: ("claude", "codex"))
+    monkeypatch.setattr(
+        providers_api,
+        "get_provider_load_errors",
+        lambda: [("broken.yaml", "Required field 'display_name' missing from descriptor")],
+    )
+
+    overview = gateway.gateway_overview(tmp_path)
+    assert overview["diagnostics"] == {
+        "providers_loaded": 2,
+        "skipped_count": 1,
+        "errors": [
+            {
+                "file": "broken.yaml",
+                "message": "Required field 'display_name' missing from descriptor",
+            }
+        ],
+    }
+
+
+def test_gateway_overview_diagnostics_omits_errors_when_nothing_skipped(
+    tmp_path: Path, monkeypatch
+):
+    """No skipped providers -> only the counts, no dangling `errors` key."""
+    from audiagentic.components.providers import providers_api
+
+    monkeypatch.setattr(providers_api, "list_canonical_provider_ids", lambda: ("claude",))
+    monkeypatch.setattr(providers_api, "get_provider_load_errors", lambda: [])
+
+    overview = gateway.gateway_overview(tmp_path)
+    assert overview["diagnostics"] == {"providers_loaded": 1, "skipped_count": 0}

@@ -1,4 +1,5 @@
 """Shared fixtures for unit/providers tests."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -8,11 +9,10 @@ import pytest
 
 @pytest.fixture()
 def claude_home(tmp_path: Path, monkeypatch) -> Path:
-    """Redirect HOME so claude's ~/.claude/mcp.json lands inside tmp_path.
+    """Redirect HOME for providers that still write to ~-scoped paths.
 
-    Claude's MCP config path is '~/.claude/mcp.json' (global Claude Code config).
-    Tests that call provider MCP functions for the claude provider must use this
-    fixture to ensure writes land in an isolated temp directory.
+    Claude moved to project-local .mcp.json (CC55), so this fixture is retained
+    only for other providers or legacy tests that need HOME redirected.
     """
     home = tmp_path / "home"
     home.mkdir()

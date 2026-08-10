@@ -8,8 +8,10 @@ The PROVIDER_SPEC declares the field map for ProviderDescriptor.
 Requester-specific fields are NOT part of this spec; they belong to their
 own owning components.
 """
+
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -69,6 +71,12 @@ from .session_surface_declarations import (
 )
 from .spec import DescriptorSpec, iter_descriptor_files, load_descriptor
 
+logger = logging.getLogger(__name__)
+
+# Module-level error collector for failed descriptor loads.
+# Populated by load_providers_from_directory(); exposed via get_load_errors().
+_load_errors: list[tuple[Path, Exception]] = []
+
 
 def _list_to_tuple(value: Any) -> tuple:
     """Convert list values from YAML to tuples."""
@@ -96,8 +104,14 @@ def _build_managed_config_spec(data: dict[str, Any]) -> ManagedConfigSpec:
     adds a required ``transports`` declaration — see
     :func:`_build_mcp_config_spec`.
     """
+    raw_path = data["config_path"]
+    # A dotted Python ref (callable path resolver) contains ':' preceded by
+    # module-path dots; literal file paths like '.cline/mcp.json' do not.
+    config_path = (
+        resolve_ref(raw_path) if isinstance(raw_path, str) and ":" in raw_path else raw_path
+    )
     return ManagedConfigSpec(
-        config_path=data["config_path"],
+        config_path=config_path,
         reader=resolve_ref(data["reader"]),
         writer=resolve_ref(data["writer"]),
         remover=resolve_ref(data["remover"]),
@@ -134,13 +148,18 @@ def _build_mcp_config_spec(data: dict[str, Any]) -> McpConfigSpec:
             code="VAL-PCAP-012",
             kind="providers",
             message=(
-                f"unknown mcp transports {unknown}; "
-                f"expected a subset of {sorted(KNOWN_TRANSPORTS)}"
+                f"unknown mcp transports {unknown}; expected a subset of {sorted(KNOWN_TRANSPORTS)}"
             ),
             details={"transports": unknown, "known": sorted(KNOWN_TRANSPORTS)},
         )
+    raw_mcp_path = data["config_path"]
+    mcp_config_path = (
+        resolve_ref(raw_mcp_path)
+        if isinstance(raw_mcp_path, str) and ":" in raw_mcp_path
+        else raw_mcp_path
+    )
     return McpConfigSpec(
-        config_path=data["config_path"],
+        config_path=mcp_config_path,
         reader=resolve_ref(data["reader"]),
         writer=resolve_ref(data["writer"]),
         remover=resolve_ref(data["remover"]),
@@ -270,7 +289,7 @@ def _build_capabilities(data: dict[str, Any]) -> tuple[Capability, ...]:
                 message=f"unknown capability kind '{kind}'",
                 details={"kind": kind},
             )
-        for item in (entry if isinstance(entry, list) else [entry]):
+        for item in entry if isinstance(entry, list) else [entry]:
             item = item or {}
             evidence_data = item.get("evidence")
             evidence = (
@@ -316,8 +335,11 @@ def _build_cli_install(data: dict[str, Any]) -> CliInstallRecipe:
             executable=executable,
             install=build_step(toolchain, "install", package, *extra),
             uninstall=build_step(toolchain, un_action, uninstall_package),
-            upgrade=(build_step(toolchain, "upgrade", package, *extra)
-                     if data.get("upgrade", False) and has_action(toolchain, "upgrade") else None),
+            upgrade=(
+                build_step(toolchain, "upgrade", package, *extra)
+                if data.get("upgrade", False) and has_action(toolchain, "upgrade")
+                else None
+            ),
             probe=list(data["probe"]) if "probe" in data else None,
             probe_fn=resolve_ref(data["probe_fn"]) if "probe_fn" in data else None,
         )
@@ -332,8 +354,11 @@ def _build_cli_install(data: dict[str, Any]) -> CliInstallRecipe:
             executable=data["executable"],
             install=build_step_from_spec(install_spec) if install_spec else None,  # type: ignore[arg-type]
             uninstall=build_step_from_spec(uninstall_spec) if uninstall_spec else None,  # type: ignore[arg-type]
-            upgrade=(build_step_from_spec(data["upgrade"])
-                     if isinstance(data.get("upgrade"), dict) else None),
+            upgrade=(
+                build_step_from_spec(data["upgrade"])
+                if isinstance(data.get("upgrade"), dict)
+                else None
+            ),
             probe=list(data["probe"]) if "probe" in data else None,
             probe_fn=resolve_ref(data["probe_fn"]) if "probe_fn" in data else None,
         )
@@ -435,10 +460,12 @@ def _build_session_surfaces(
             )
         identity_operations: dict[SessionIdentityOperation, ControlSupport] = {}
         for k_str, v_str in raw_identity_ops.items():
-            k_enum = _parse_enum(k_str, _SURFACE_IDENTITY_OP_VALUES,
-                                 _SURFACE_IDENTITY_OP_MAP, "identity_operation")
-            v_enum = _parse_enum(v_str, _CONTROL_SUPPORT_VALUES,
-                                 _CONTROL_SUPPORT_MAP, "control_support")
+            k_enum = _parse_enum(
+                k_str, _SURFACE_IDENTITY_OP_VALUES, _SURFACE_IDENTITY_OP_MAP, "identity_operation"
+            )
+            v_enum = _parse_enum(
+                v_str, _CONTROL_SUPPORT_VALUES, _CONTROL_SUPPORT_MAP, "control_support"
+            )
             identity_operations[k_enum] = v_enum
 
         # --- ownership_modes ---
@@ -450,8 +477,7 @@ def _build_session_surfaces(
                 message="ownership_modes must be a list",
             )
         ownership_modes = tuple(
-            _parse_enum(v, _OWNERSHIP_MODE_VALUES,
-                        _OWNERSHIP_MODE_MAP, "ownership_mode")
+            _parse_enum(v, _OWNERSHIP_MODE_VALUES, _OWNERSHIP_MODE_MAP, "ownership_mode")
             for v in raw_ownership
         )
 
@@ -465,7 +491,8 @@ def _build_session_surfaces(
                 ref_namespace=raw_mapping_facts.get("ref_namespace", "provider-session-ref"),
                 requires_same_project=raw_mapping_facts.get("requires_same_project", True),
                 requires_same_execution_context=raw_mapping_facts.get(
-                    "requires_same_execution_context", True),
+                    "requires_same_execution_context", True
+                ),
                 concurrent_attachments=raw_mapping_facts.get("concurrent_attachments", False),
                 attach_while_turn_active=raw_mapping_facts.get("attach_while_turn_active", False),
                 share_existing=raw_mapping_facts.get("share_existing", False),
@@ -488,22 +515,26 @@ def _build_session_surfaces(
             )
         controls: dict[SessionControlAction, ControlSupport] = {}
         for k_str, v_str in raw_controls.items():
-            k_enum = _parse_enum(k_str, _CONTROL_ACTION_VALUES,
-                                 _CONTROL_ACTION_MAP, "control_action")
-            v_enum = _parse_enum(v_str, _CONTROL_SUPPORT_VALUES,
-                                 _CONTROL_SUPPORT_MAP, "control_support")
+            k_enum = _parse_enum(
+                k_str, _CONTROL_ACTION_VALUES, _CONTROL_ACTION_MAP, "control_action"
+            )
+            v_enum = _parse_enum(
+                v_str, _CONTROL_SUPPORT_VALUES, _CONTROL_SUPPORT_MAP, "control_support"
+            )
             controls[k_enum] = v_enum
 
         # --- lifecycle fields ---
         lifecycle_source = _parse_enum(
             item.get("lifecycle_source", "none"),
             _LIFECYCLE_SOURCE_VALUES,
-            _LIFECYCLE_SOURCE_MAP, "lifecycle_source",
+            _LIFECYCLE_SOURCE_MAP,
+            "lifecycle_source",
         )
         lifecycle_installation = _parse_enum(
             item.get("lifecycle_installation", "none"),
             _LIFECYCLE_INSTALLATION_VALUES,
-            _LIFECYCLE_INSTALLATION_MAP, "lifecycle_installation",
+            _LIFECYCLE_INSTALLATION_MAP,
+            "lifecycle_installation",
         )
 
         # --- content_channels ---
@@ -523,13 +554,17 @@ def _build_session_surfaces(
                     message="content channel entry requires 'channel'",
                 )
             ch_id = _parse_enum(
-                ch["channel"], _CONTENT_CHANNEL_VALUES,
-                _CONTENT_CHANNEL_MAP, "content_channel_id",
+                ch["channel"],
+                _CONTENT_CHANNEL_VALUES,
+                _CONTENT_CHANNEL_MAP,
+                "content_channel_id",
             )
             content_channels.append(
                 ContentChannelCapability(
                     channel=ch_id,
+                    # pi-lens-ignore: ast-grep:unchecked-throwing-call-python
                     max_bytes=int(ch.get("max_bytes", 0)),
+                    # pi-lens-ignore: ast-grep:unchecked-throwing-call-python
                     max_events=int(ch.get("max_events", 0)),
                 )
             )
@@ -660,7 +695,8 @@ def _build_harness_observability(data: list[dict[str, Any]]) -> tuple[dict[str, 
         lifecycle_source = _parse_enum(
             item.get("lifecycle_source", "none"),
             _LIFECYCLE_SOURCE_VALUES,
-            _LIFECYCLE_SOURCE_MAP, "lifecycle_source",
+            _LIFECYCLE_SOURCE_MAP,
+            "lifecycle_source",
         )
         entries.append(
             {
@@ -710,6 +746,7 @@ def _construct_provider_descriptor(**values: Any) -> ProviderDescriptor:
     validate_provider_capability_facts(descriptor)
     validate_automation_capabilities(descriptor.automation_capabilities)
     from .session_surface_declarations import validate_session_surface_declarations
+
     validate_session_surface_declarations(descriptor.session_surfaces)
     return descriptor
 
@@ -731,16 +768,47 @@ PROVIDER_SPEC.add("provider_id", yaml_key="provider_id", kind="data", required=T
 PROVIDER_SPEC.add("display_name", yaml_key="display_name", kind="data", required=True)
 PROVIDER_SPEC.add("description", yaml_key="description", kind="data", default="")
 PROVIDER_SPEC.add("url", yaml_key="url", kind="data", default="")
-PROVIDER_SPEC.add("prompt_aliases", yaml_key="prompt_aliases", kind="data", default=tuple(), converter=_list_to_tuple)
-PROVIDER_SPEC.add("capabilities", yaml_key="capabilities", kind="nested", builder=_build_capabilities, default=tuple())
-PROVIDER_SPEC.add("execution_isolation_tier", yaml_key="execution_isolation_tier", kind="data", required=True)
-PROVIDER_SPEC.add("mcp_launch_isolation_tier", yaml_key="mcp_launch_isolation_tier", kind="data", default="unsupported")
+PROVIDER_SPEC.add(
+    "prompt_aliases",
+    yaml_key="prompt_aliases",
+    kind="data",
+    default=tuple(),
+    converter=_list_to_tuple,
+)
+PROVIDER_SPEC.add(
+    "capabilities",
+    yaml_key="capabilities",
+    kind="nested",
+    builder=_build_capabilities,
+    default=tuple(),
+)
+PROVIDER_SPEC.add(
+    "execution_isolation_tier", yaml_key="execution_isolation_tier", kind="data", required=True
+)
+PROVIDER_SPEC.add(
+    "mcp_launch_isolation_tier",
+    yaml_key="mcp_launch_isolation_tier",
+    kind="data",
+    default="unsupported",
+)
 PROVIDER_SPEC.add("access_mode", yaml_key="access_mode", kind="data", default="cli")
 PROVIDER_SPEC.add("receive_lsp_mcp", yaml_key="receive_lsp_mcp", kind="data", default=True)
 PROVIDER_SPEC.add("deprecated", yaml_key="deprecated", kind="data", default=False)
 PROVIDER_SPEC.add("annotations", yaml_key="annotations", kind="data", default=dict())
-PROVIDER_SPEC.add("session_surfaces", yaml_key="session_surfaces", kind="nested", builder=_build_session_surfaces, default=tuple())
-PROVIDER_SPEC.add("harness_observability", yaml_key="harness_observability", kind="nested", builder=_build_harness_observability, default=tuple())
+PROVIDER_SPEC.add(
+    "session_surfaces",
+    yaml_key="session_surfaces",
+    kind="nested",
+    builder=_build_session_surfaces,
+    default=tuple(),
+)
+PROVIDER_SPEC.add(
+    "harness_observability",
+    yaml_key="harness_observability",
+    kind="nested",
+    builder=_build_harness_observability,
+    default=tuple(),
+)
 
 
 def provider_factory(data: dict[str, Any]) -> ProviderDescriptor:
@@ -767,15 +835,29 @@ def load_provider_descriptor(path: Path) -> ProviderDescriptor:
 def load_providers_from_directory(directory: Path) -> dict[str, ProviderDescriptor]:
     """Load all provider descriptors from a YAML directory.
 
+    Invalid descriptors are skipped with WARNING-level logging; they are
+    recorded in :data:`_load_errors` and remain visible via
+    :func:`get_load_errors` for operator inspection (e.g. ``gateway_overview``).
+
     Args:
         directory: Path to directory containing provider YAML files.
 
     Returns:
-        Dict mapping provider_id to ProviderDescriptor.
+        Dict mapping provider_id to ProviderDescriptor (partial on error).
     """
     providers: dict[str, ProviderDescriptor] = {}
     for path in iter_descriptor_files(directory):
-        descriptor = load_descriptor(path, PROVIDER_SPEC)
+        try:
+            descriptor = load_descriptor(path, PROVIDER_SPEC)
+        except Exception as exc:
+            logger.warning(
+                "Skipping provider descriptor %s: %s",
+                path.name,
+                str(exc) if str(exc) else type(exc).__name__,
+                exc_info=True,
+            )
+            _load_errors.append((path, exc))
+            continue
         if descriptor.provider_id in providers:
             raise AudiaGenticError(
                 code="VAL-PCAP-006",
@@ -785,6 +867,23 @@ def load_providers_from_directory(directory: Path) -> dict[str, ProviderDescript
             )
         providers[descriptor.provider_id] = descriptor
     return providers
+
+
+def get_load_errors() -> list[tuple[Path, Exception]]:
+    """Return the list of (path, exception) tuples from failed descriptor loads.
+
+    This is a module-level snapshot — callers should not mutate the returned list.
+    Use :func:`clear_load_errors` to reset after inspection.
+
+    Returns:
+        List of (Path, Exception) pairs for skipped providers.
+    """
+    return _load_errors
+
+
+def clear_load_errors() -> None:
+    """Clear the module-level load error collector."""
+    _load_errors.clear()
 
 
 def get_providers_config_dir() -> Path:

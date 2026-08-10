@@ -5,6 +5,7 @@
 provider_id: antigravity
 execution_isolation_tier: no-isolation
 display_name: "Antigravity"
+# pi-lens-ignore: line-length
 description: "Google's Antigravity CLI and IDE. AI-first development platform with code execution and browser tools."
 url: "https://antigravity.google"
 prompt_aliases:
@@ -30,16 +31,19 @@ capabilities:
         id: uninstall
         command:
           - bash
+          # pi-lens-ignore: line-length
           - "-lc"
           - "rm -f $(which agy) 2>/dev/null; rm -rf ~/.gemini/antigravity 2>/dev/null; true"
 
+  # pi-lens-ignore: line-length
   mcp:
     mechanism:
-      config_path: "~/.gemini/antigravity/mcp_config.json"
+      config_path: "audiagentic.components.providers.adapters.antigravity.config:resolve_antigravity_mcp_config_path"
+      # pi-lens-ignore: line-length
       reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
       writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
       remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
-      transports: [stdio, http]  # json_format.py:84-87 emits {type, url, headers} when entry.is_remote
+      transports: [stdio, http] # json_format.py:84-87 emits {type, url, headers} when entry.is_remote
       format: "mcp-json"
       refresh_mode: "file-watch"
 
@@ -70,6 +74,7 @@ capabilities:
 
   launch:
     mechanism:
+      # pi-lens-ignore: line-length
       recipes:
         execution:
           mode: stub
@@ -78,8 +83,10 @@ capabilities:
 
 # CC53: AS27 harness-observability inventory (this provider's own facts —
 # see harness_observability_inventory.py for the domain semantics).
+# pi-lens-ignore: line-length
 harness_observability:
   - surface_id: antigravity-cli
+    # pi-lens-ignore: line-length
     candidate_source: hooks/plugins/status — candidate route not source-pinned
     evidence:
       validated: false

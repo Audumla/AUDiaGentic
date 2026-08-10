@@ -25,11 +25,11 @@ capabilities:
 
   mcp:
     mechanism:
-      config_path: "~/.claude/mcp.json"
+      config_path: "audiagentic.components.providers.adapters.claude.config:resolve_claude_mcp_config_path"
       reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
       writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
       remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
-      transports: [stdio, http]  # json_format.py:84-87 emits {type, url, headers} when entry.is_remote
+      transports: [stdio, http] # json_format.py:84-87 emits {type, url, headers} when entry.is_remote
       format: "mcp-json"
       refresh_mode: "file-watch"
 
