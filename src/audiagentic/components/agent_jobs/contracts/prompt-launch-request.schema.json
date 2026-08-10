@@ -79,9 +79,7 @@
     "tag": {
       "type": "string",
       "enum": [
-        "ag-plan",
-        "ag-implement",
-        "ag-review",
+        "adhoc",
         "ag-ledger",
         "ag-check-in-prep"
       ]

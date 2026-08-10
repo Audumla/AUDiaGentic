@@ -41,7 +41,7 @@ def get_prompt_syntax_defaults() -> dict[str, Any]:
             for tag_id, item in tags.items()
             if not item.is_generic_tag and not item.is_review_tag and "implement" in tag_id
         ),
-        canonical_tags[0] if canonical_tags else "ag-implement",
+        canonical_tags[0] if canonical_tags else "adhoc",
     )
     skill_surfaces = {
         provider_id: {"renderer": provider_id, "path": descriptor.skill_surface_path}
@@ -53,7 +53,7 @@ def get_prompt_syntax_defaults() -> dict[str, Any]:
         "default-profile": "shared",
         "generic-tag": generic_tag or "adhoc",
         "no-body-required-tags": [tag_id for tag_id, item in tags.items() if not item.requires_body],
-        "review-tag": review_tag or "ag-review",
+        "review-tag": review_tag or "adhoc",
         "implement-tag": implement_tag,
         "canonical-tags": canonical_tags,
         "tag-aliases": tag_aliases,
