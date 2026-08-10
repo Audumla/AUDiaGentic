@@ -10,7 +10,7 @@ import logging
 from pathlib import Path
 
 from audiagentic.components.coding_lsp.coding_lsp_config import (
-    CODING_LSP_DIR,
+    get_coding_lsp_dir,
 )
 from audiagentic.foundation.components import is_enabled
 from audiagentic.foundation.components.dependencies import (
@@ -63,8 +63,8 @@ def _format_dependency_install_offer(
 
 
 def _on_installed(project_root: Path) -> None:
-    """Create .coding-lsp/ structure without inferring runtime server config."""
-    coding_lsp_dir = project_root / CODING_LSP_DIR
+    """Create .audiagentic/runtime/coding-lsp/ structure without inferring runtime server config."""
+    coding_lsp_dir = get_coding_lsp_dir(project_root)
     coding_lsp_dir.mkdir(parents=True, exist_ok=True)
     (coding_lsp_dir / "logs").mkdir(parents=True, exist_ok=True)
 
@@ -97,6 +97,23 @@ def _on_enabled(project_root: Path) -> None:
             )
     except AudiaGenticError:
         logger.warning("Failed to sync coding-lsp provider config", exc_info=True)
+
+    # Project shared lint config (.audiagentic/config/linting/) to native
+    # tool files (ruff.toml, pyrightconfig.json, .yamllint) and VS Code's
+    # yaml-language-server settings (CC58).
+    try:
+        from .lint_projection import project_all_lint_config
+
+        lint_result = project_all_lint_config(project_root)
+        written = [
+            path
+            for result in lint_result.get("results", {}).values()
+            for path in result.get("written", [])
+        ]
+        if written:
+            logger.info("Projected shared lint config to: %s", ", ".join(written))
+    except Exception:
+        logger.warning("Failed to project shared lint config", exc_info=True)
 
     # Sync pre-commit hooks for all configured languages
     try:
@@ -245,5 +262,6 @@ def status_payload(project_root: Path | None = None) -> ComponentStatusPayload:
             ),
         },
     )
+
 
 register()

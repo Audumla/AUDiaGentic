@@ -29,6 +29,7 @@ from tests.integration.providers.harness import (
 )
 
 from audiagentic.components.coding_lsp import language_registry, lsp_api, lsp_config_api
+from audiagentic.components.coding_lsp.coding_lsp_config import get_coding_lsp_dir
 from audiagentic.components.coding_lsp.language_servers_sync import (
     prune_generic_lsp_mcp_from_providers,
     prune_language_servers_from_providers,
@@ -160,7 +161,7 @@ def provisioned_project(tmp_path_factory) -> Path:
 
 def test_components_installed(provisioned_project: Path) -> None:
     assert (provisioned_project / ".audiagentic" / "components" / "coding-lsp.yaml").exists()
-    assert (provisioned_project / ".coding-lsp" / "logs").is_dir()
+    assert (get_coding_lsp_dir(provisioned_project) / "logs").is_dir()
 
 
 @pytest.mark.parametrize("provider_id", NATIVE_LSP_PROVIDERS)
