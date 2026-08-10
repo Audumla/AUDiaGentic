@@ -1,6 +1,8 @@
 """Pure helpers that translate user-facing lifecycle verbs and modes to CliLifecycleMode."""
 from __future__ import annotations
 
+from typing import get_args
+
 from audiagentic.components.providers.contracts.cli_lifecycle import CliLifecycleMode
 
 _USER_VERB_TO_MODE = {
@@ -9,7 +11,7 @@ _USER_VERB_TO_MODE = {
     "repair": "apply",
 }
 
-_VALID_CLI_MODES: set[str] = {"plan", "apply", "prune", "status"}
+_VALID_CLI_MODES: set[str] = set(get_args(CliLifecycleMode))
 
 
 def provider_cli_mode_from_user_verb(verb: str) -> CliLifecycleMode:

@@ -17,7 +17,22 @@ import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    # Type-check-only: keeps this in sync with providers.contracts.provider_execution
+    # .ProviderIsolationTier without importing it at runtime. worker_host.py
+    # imports this module (via worker_protocol.py) at its own top level, before
+    # main()'s redirect_stdout(sys.stderr) guard — importing anything under
+    # audiagentic.components.providers there triggers the providers package's
+    # eager adapter-loading __init__.py unprotected, corrupting the worker's
+    # stdout-framed IPC protocol (CC51 finding). The runtime value set below is
+    # a deliberate, documented duplicate for that reason.
+    from audiagentic.components.providers.contracts.provider_execution import (
+        ProviderIsolationTier as IsolationTier,
+    )
+else:
+    IsolationTier = Literal["full-isolation", "partial-isolation", "no-isolation"]
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
@@ -25,7 +40,6 @@ ENVELOPE_SCHEMA_VERSION = 1
 MANIFEST_SCHEMA_VERSION = 1
 SUPPORTED_ENVELOPE_VERSIONS: tuple[int, ...] = (1,)
 
-IsolationTier = Literal["full-isolation", "partial-isolation", "no-isolation"]
 _ISOLATION_TIERS = {"full-isolation", "partial-isolation", "no-isolation"}
 _MODES = {"async", "blocking"}
 _MAX_IDEMPOTENCY_KEY_LENGTH = 512

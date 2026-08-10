@@ -1133,9 +1133,7 @@ class SessionRuntime:
             )
 
         from audiagentic.components.agents.gateway.session import resume as resume_lib
-        from audiagentic.components.providers.contracts.session_surface import (
-            SurfaceHint,
-        )
+        from audiagentic.components.providers.providers_api import SurfaceHint
 
         # ── Idempotency: replay a prior attempt for this exact control id ──
         prior = resume_lib.lookup_resume_attempt(project_root, source_session_id, control_id)

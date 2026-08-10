@@ -9,7 +9,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TextIO
+from typing import Any, Literal, TextIO, get_args
 
 from audiagentic.components.providers.protocols.streaming.base_extractor import (
     BaseEventExtractor,
@@ -27,6 +27,13 @@ from audiagentic.foundation.system.supervised_process import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Shared by sink-error-policy and control-validation-policy only — these are
+# the one pair of streaming policy fields with genuinely identical values and
+# role ("how strict should validation be"). termination-policy,
+# overflow_policy, and invalid_event_policy (sinks.py) have distinct
+# membership and stay independently spelled — see CC51.
+StreamValidationPolicy = Literal["warn", "fail", "normalize"]
 
 
 @dataclass
@@ -72,7 +79,7 @@ def _string_or_none(value: Any) -> str | None:
 
 
 def validate_stream_controls(
-    stream_controls: dict[str, Any], policy: str = "normalize"
+    stream_controls: dict[str, Any], policy: StreamValidationPolicy = "normalize"
 ) -> dict[str, Any]:
     """Validate and normalize stream controls.
 
@@ -101,7 +108,7 @@ def validate_stream_controls(
     result = copy.deepcopy(defaults)
     result.update({k: v for k, v in stream_controls.items() if v is not None})
 
-    valid_policies = {"warn", "fail", "normalize"}
+    valid_policies = set(get_args(StreamValidationPolicy))
     if result.get("sink-error-policy") not in valid_policies:
         if policy == "fail":
             raise AudiaGenticError(
