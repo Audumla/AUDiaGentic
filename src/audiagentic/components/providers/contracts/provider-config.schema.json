@@ -66,6 +66,10 @@
           "default-model": {
             "type": "string"
           },
+          "settings": {
+            "type": "object",
+            "additionalProperties": true
+          },
           "timeout-seconds": {
             "type": "integer",
             "minimum": 1

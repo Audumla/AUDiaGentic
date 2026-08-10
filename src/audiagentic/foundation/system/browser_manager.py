@@ -253,30 +253,34 @@ class BrowserConfig:
     """Configuration for the managed browser instance."""
 
     port: int = 9222
+    """TCP port for the managed browser's CDP endpoint.
+
+    Set to 0 to auto-select an available port starting from 9222.
+    The selected port is persisted in the runtime config for reuse.
+    """
     profile_dir: Path | None = None
     idle_timeout_seconds: float = 300.0
     auto_start: bool = True
     runtime_root: Path | None = None
 
-    def __post_init__(self) -> None:
-        if self.profile_dir is None:
-            root = self.runtime_root or Path.home()
-            self.profile_dir = root / ".audiagentic" / "runtime" / "gpt-auto-profile"
+    # No default profile_dir — use the browser's DEFAULT profile by default.
+    # Only set profile_dir when an isolated profile is explicitly requested.
 
 
 def _browser_command(browser_path: str, config: BrowserConfig) -> tuple[str, ...]:
-    """Build the browser launch command with CDP flags."""
-    return (
+    """Build the browser launch command with CDP flags.
+
+    Minimal flags — uses default profile so existing logins survive.
+    Only adds ``--user-data-dir`` if an isolated profile is explicitly configured.
+    """
+    cmd: list[str] = [
         browser_path,
         f"--remote-debugging-port={config.port}",
-        f"--user-data-dir={config.profile_dir}",
         "--no-first-run",
-        "--disable-background-networking",
-        "--disable-default-apps",
-        "--disable-extensions",
-        "--disable-sync",
-        "--disable-translate",
-    )
+    ]
+    if config.profile_dir is not None:
+        cmd.append(f"--user-data-dir={config.profile_dir}")
+    return tuple(cmd)
 
 
 async def _is_port_available(port: int) -> bool:
@@ -287,6 +291,39 @@ async def _is_port_available(port: int) -> bool:
             return True
     except OSError:
         return False
+
+
+async def find_available_port(start: int = 9222, max_tries: int = 50) -> int:
+    """Find the first available TCP port starting from *start*.
+
+    Returns the port number. Raises RuntimeError if none of the ports are free.
+    """
+    for port in range(start, start + max_tries):
+        if await _is_port_available(port):
+            return port
+    raise RuntimeError(
+        f"No available port found in range {start}-{start + max_tries - 1}. "
+        "Configure ``browser_port`` to a specific free port."
+    )
+
+
+async def _is_cdp_responding(port: int, timeout: float = 3.0) -> bool:
+    """Check if a CDP endpoint is already responding on *port*."""
+    import urllib.error
+    import urllib.request
+
+    url = f"http://127.0.0.1:{port}/json/version"
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            req = urllib.request.Request(url, method="GET")
+            with urllib.request.urlopen(req, timeout=1) as resp:
+                if resp.status == 200:
+                    return True
+        except (urllib.error.URLError, OSError):
+            pass
+        await asyncio.sleep(0.2)
+    return False
 
 
 async def _wait_for_browser_ready(port: int, timeout: float = 30.0) -> bool:
@@ -359,12 +396,16 @@ class BrowserManager:
             self._last_active_at = time.monotonic()
             return self._cdp_url
 
+        # Resolve port — auto-select if 0, otherwise use configured value
+        base_port = self.config.port
+        port = await find_available_port(base_port) if base_port == 0 else base_port
+
         # Port occupied — fail, don't kill existing processes
-        if not await _is_port_available(self.config.port):
+        if not await _is_port_available(port):
             raise RuntimeError(
-                f"Port {self.config.port} is already in use. "
+                f"Port {port} is already in use. "
                 "The gpt-auto provider cannot launch a browser on an occupied port. "
-                "Configure ``browser_port`` to use a different port."
+                "Configure ``browser_port`` to 0 for auto-select or use a different port."
             )
 
         # Discover browser — system default only, fails if not found

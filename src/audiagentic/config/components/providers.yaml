@@ -7,9 +7,13 @@ implementation-cardinality: multi
 post-install: audiagentic.components.providers.services.reconcile.reconcile_all
 lifecycle-observer: audiagentic.components.providers.surfaces.observer
 files:
-  - path: .audiagentic/config/runtime/providers.yaml
+  - path: .audiagentic/config/providers
     lifecycle: create-if-missing
-    description: Provider configuration — models, access mode, execution policy
+    recursive: true
+    description: One complete provider configuration file per provider
+  - path: .audiagentic/config/provider-policy.yaml
+    lifecycle: create-if-missing
+    description: Provider reconciliation policy
   - path: .audiagentic/runtime/providers
     lifecycle: runtime-only
     recursive: true

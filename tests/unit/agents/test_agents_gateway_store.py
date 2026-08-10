@@ -217,6 +217,7 @@ def test_concurrent_admission_creates_one_record_for_one_key(tmp_path: Path) -> 
     assert len(store.list_records(tmp_path)) == 1
 
 
+@pytest.mark.no_parallel
 def test_cross_process_admission_creates_one_record_for_one_key(tmp_path: Path) -> None:
     context = multiprocessing.get_context("spawn")
     processes = [
@@ -244,6 +245,7 @@ def test_cross_process_admission_creates_one_record_for_one_key(tmp_path: Path) 
     assert records[0]["idempotency-key"] == store.hash_idempotency_key("cross-process-key")
 
 
+@pytest.mark.no_parallel
 def test_cross_process_divergent_intents_have_one_winner_and_conflicts(tmp_path: Path) -> None:
     """The admission lock serializes unlike intents without duplicate records."""
     contender_count = 4
@@ -500,6 +502,7 @@ def test_concurrent_mark_cancel_requested_and_append_attempt_do_not_clobber(tmp_
     assert len(final["attempts"]) == iterations
 
 
+@pytest.mark.no_parallel
 def test_cross_process_attempt_appends_do_not_lose_updates(tmp_path: Path) -> None:
     record = store.build_record(execution_profile_id="default", prompt_body="hello")
     store.write_record(tmp_path, record)

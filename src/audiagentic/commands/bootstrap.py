@@ -71,6 +71,22 @@ def cmd_cleanup(args: argparse.Namespace, project_root: Path) -> int:
     return cleanup_runtime(target)
 
 
+def _omit_empty_values(value: object) -> object:
+    """Return CLI-safe data without null or empty optional fields."""
+    if isinstance(value, dict):
+        return {
+            key: cleaned
+            for key, item in value.items()
+            if (cleaned := _omit_empty_values(item)) is not None
+            and cleaned != ""
+            and cleaned != []
+            and cleaned != {}
+        }
+    if isinstance(value, list):
+        return [_omit_empty_values(item) for item in value]
+    return value
+
+
 def _surface_results_to_json(results: object) -> list[dict[str, object]]:
     """Serialize generated-surface API results for CLI output."""
     values = results if isinstance(results, list) else [results]
@@ -79,8 +95,60 @@ def _surface_results_to_json(results: object) -> list[dict[str, object]]:
         converter = getattr(value, "to_mapping", None)
         if callable(converter):
             value = converter()
-        serialized.append(dict(value) if isinstance(value, dict) else {"result": str(value)})
+        mapping = dict(value) if isinstance(value, dict) else {"result": str(value)}
+        cleaned = _omit_empty_values(mapping)
+        serialized.append(cleaned if isinstance(cleaned, dict) else {})
     return serialized
+
+
+def _config_summary(
+    *,
+    mode: str,
+    project_root: Path,
+    surface_results: list[dict[str, object]],
+    provider_errors: list[dict[str, object]],
+) -> dict[str, object]:
+    written = sorted({
+        path
+        for result in surface_results
+        for path in result.get("written_paths", [])
+        if isinstance(path, str)
+    })
+    removed = sorted({
+        path
+        for result in surface_results
+        for path in result.get("removed_paths", [])
+        if isinstance(path, str)
+    })
+    surface_errors = [
+        result
+        for result in surface_results
+        if not result.get("ok", False) and result.get("supported", True)
+    ]
+    errors = [*surface_errors, *provider_errors]
+    changed = bool(written or removed or any(result.get("changed") for result in surface_results))
+    summary: dict[str, object] = {
+        "ok": not errors,
+        "mode": mode,
+        "project_root": str(project_root),
+        "changed": changed,
+        "message": (
+            "Configuration refreshed."
+            if changed and mode == "apply"
+            else "Configuration is already synchronized."
+            if mode == "apply"
+            else "Configuration is already clean."
+            if not changed
+            else "Configuration cleaned."
+        ),
+    }
+    if written:
+        summary["written_paths"] = written
+    if removed:
+        summary["removed_paths"] = removed
+    if errors:
+        summary["errors"] = errors
+    return summary
 
 
 def _config_operation(project_root: Path, *, mode: str, clean_runtime: bool) -> int:
@@ -91,22 +159,12 @@ def _config_operation(project_root: Path, *, mode: str, clean_runtime: bool) -> 
         sync_all_provider_mcp_servers,
     )
 
-    output: dict[str, object] = {
-        "ok": True,
-        "mode": mode,
-        "project_root": str(project_root),
-        "runtime": str(target),
-        "surfaces": [],
-        "provider_configs": [],
-        "errors": [],
-    }
+    output: dict[str, object] = {"ok": True, "mode": mode, "project_root": str(project_root)}
     try:
         surface_results = _surface_results_to_json(
             providers_api.operate_provider_surfaces(project_root, mode=mode)
         )
         provider_errors = sync_all_provider_mcp_servers(project_root)
-        output["surfaces"] = surface_results
-        output["provider_configs"] = provider_errors
         if clean_runtime:
             cleanup_runtime(target)
         else:
@@ -115,22 +173,17 @@ def _config_operation(project_root: Path, *, mode: str, clean_runtime: bool) -> 
     except Exception as exc:  # noqa: BLE001
         output["ok"] = False
         output["errors"] = [str(exc)]
-        print_json(output)
+        print_json(_omit_empty_values(output))
         return 1
 
-    surface_errors = [
-        result
-        for result in surface_results
-        if not result.get("ok", False) and result.get("supported", True)
-    ]
-    if surface_errors or provider_errors:
-        output["ok"] = False
-        output["errors"] = surface_errors + provider_errors
-        print_json(output)
-        return 1
-
-    print_json(output)
-    return 0
+    output = _config_summary(
+        mode=mode,
+        project_root=project_root,
+        surface_results=surface_results,
+        provider_errors=provider_errors,
+    )
+    print_json(_omit_empty_values(output))
+    return 0 if output["ok"] else 1
 
 
 def cmd_config_sync(args: argparse.Namespace, project_root: Path) -> int:

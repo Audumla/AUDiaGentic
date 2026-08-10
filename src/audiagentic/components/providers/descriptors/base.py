@@ -252,7 +252,8 @@ class ProviderDescriptor:
     # When reading legacy shape, derived from flat fields in loader.
     capabilities: tuple[Capability, ...] = field(default_factory=tuple)
 
-    # access-mode written to providers.yaml when this provider is first enabled.
+    # access-mode written to the provider's project-owned settings file when
+    # this provider is first enabled.
     # "cli"  — invoked as a subprocess CLI tool
     # "env"  — accessed via environment / API key (no local binary)
     # "none" — passthrough bridge, no direct provider access

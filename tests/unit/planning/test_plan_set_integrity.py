@@ -35,7 +35,6 @@ _LEGACY_SECTION_DEBT = {
     "CC46": frozenset(["acceptance_criteria"]),
     "CC47": frozenset(["acceptance_criteria"]),
     "CC50": frozenset(["acceptance_criteria"]),
-    "CC51": frozenset(["acceptance_criteria", "standards"]),
     "LE02": frozenset(["acceptance_criteria", "standards"]),
     "MC03": frozenset(["acceptance_criteria", "standards"]),
     "MI08": frozenset(["acceptance_criteria"]),

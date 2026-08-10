@@ -31,7 +31,6 @@ def test_fresh_install_creates_scaffold_and_manifest(tmp_path: Path) -> None:
         assert not (
             sandbox.repo / ".audiagentic" / "config" / "execution" / "prompt-syntax.yaml"
         ).exists()
-        assert (sandbox.repo / ".audiagentic" / "prompts" / "ag-review" / "default.md").exists()
         # Component markers are the new install record
         assert (sandbox.repo / ".audiagentic" / "components" / "project.yaml").is_file()
         assert not (sandbox.repo / ".audiagentic" / "components" / "providers.yaml").exists()

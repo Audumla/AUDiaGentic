@@ -5,6 +5,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[3]
 SRC = ROOT / "src"
 for path in (str(ROOT), str(SRC)):
@@ -22,6 +24,8 @@ from audiagentic.components.ledger.sync import sync_current_release_ledger  # no
 from audiagentic.components.release import release_api  # noqa: E402
 
 FIXTURES = ROOT / "docs" / "examples" / "fixtures"
+
+pytestmark = pytest.mark.no_parallel
 
 
 def _load_event(event_id: str, summary: str) -> dict:

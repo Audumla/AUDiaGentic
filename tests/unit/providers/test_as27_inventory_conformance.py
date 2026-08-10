@@ -268,14 +268,14 @@ class TestTransportObservationEligibility:
         assert ("opencode", "opencode-acp") in eligible
         assert ("pi", "pi-community-acp") in eligible
 
-    def test_eligible_list_windows_empty(self):
-        """On windows-amd64, no surface is eligible — opencode-acp not validated there."""
+    def test_eligible_list_windows_includes_pi_community_acp(self):
+        """Windows has a validated Pi ACP prompt-turn proof."""
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             list_eligible_transport_observation_surfaces,
         )
 
         eligible = list_eligible_transport_observation_surfaces(platform="windows-amd64")
-        assert len(eligible) == 0
+        assert eligible == [("pi", "pi-community-acp")]
 
     def test_eligible_list_darwin_arm64_empty(self):
         """On darwin-arm64, no surface is eligible — opencode-acp not validated there."""

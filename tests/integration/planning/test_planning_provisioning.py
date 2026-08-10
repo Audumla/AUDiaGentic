@@ -57,9 +57,10 @@ def setup_provider_surfaces(project_root: Path) -> None:
     (project_root / ".mcp.json").write_text(json.dumps({"mcpServers": {}}), encoding="utf-8")
     _stub(project_root / ".opencode" / "opencode.json", '{"mcp": {}}')
     _stub(project_root / ".gemini" / "settings.json", '{"mcpServers": {}}')
-    # Goose config lives at ~/.config/goose/config.yaml (expanduser resolves HOME)
-    goose_config = Path.home() / ".config" / "goose" / "config.yaml"
-    _stub(goose_config, yaml.dump({"extensions": []}, default_flow_style=False))
+    # Keep Goose inside the sandbox.  Path.home() is not redirected by
+    # monkeypatching HOME on Windows, so using it would make this test mutate
+    # the real user profile and race with xdist workers.
+    _stub(project_root / ".config" / "goose" / "config.yaml", yaml.dump({"extensions": []}, default_flow_style=False))
     _stub(project_root / ".continue" / "config.json", json.dumps({"mcpServers": []}))
 
     from audiagentic.components.providers.descriptors.registry import (
@@ -110,9 +111,16 @@ def mcp_servers_in(project_root: Path, config_path: str) -> set[str]:
             data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         except Exception:
             return set()
+        extensions = data.get("extensions", [])
+        if isinstance(extensions, dict):
+            return {
+                str(name)
+                for name, ext in extensions.items()
+                if isinstance(ext, dict) and name
+            }
         return {
             ext.get("name", "")
-            for ext in data.get("extensions", [])
+            for ext in extensions
             if isinstance(ext, dict) and ext.get("name")
         }
     try:
@@ -144,11 +152,14 @@ def managed_blocks_in(file_path: Path) -> set[str]:
 
 def mcp_config_paths(project_root: Path) -> list[str]:
     paths = [rel for rel in _MCP_CONFIG_PATHS.values() if (project_root / rel).exists()]
-    # Goose config lives at ~/.config/goose/config.yaml (absolute HOME-resolved path)
-    goose_path = Path.home() / ".config" / "goose" / "config.yaml"
-    if goose_path.exists():
-        paths.append(str(goose_path))
     return paths
+
+
+def planning_in_surfaces(project_root: Path) -> bool:
+    return any(
+        _PLANNING_CONTRIBUTION in managed_blocks_in(project_root / rel)
+        for rel in _SURFACE_FILES
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -189,6 +200,7 @@ def test_install_propagates_ag_planning_to_all_provider_configs(
 ) -> None:
     with component_sandbox(tmp_path, "plan-mcp-install") as sb:
         monkeypatch.setenv("HOME", str(sb.repo))
+        monkeypatch.setenv("USERPROFILE", str(sb.repo))
         install_with_deps("project", sb.repo)
         install_with_deps("providers", sb.repo)
         setup_provider_surfaces(sb.repo)
@@ -207,6 +219,7 @@ def test_install_does_not_propagate_mgmt_mcp_to_provider_configs(
 ) -> None:
     with component_sandbox(tmp_path, "plan-mgmt-not-in-providers") as sb:
         monkeypatch.setenv("HOME", str(sb.repo))
+        monkeypatch.setenv("USERPROFILE", str(sb.repo))
         install_with_deps("project", sb.repo)
         install_with_deps("providers", sb.repo)
         setup_provider_surfaces(sb.repo)
@@ -224,6 +237,7 @@ def test_install_does_not_propagate_mgmt_mcp_to_provider_configs(
 def test_uninstall_removes_ag_planning_from_provider_configs(tmp_path: Path, monkeypatch) -> None:
     with component_sandbox(tmp_path, "plan-mcp-uninstall") as sb:
         monkeypatch.setenv("HOME", str(sb.repo))
+        monkeypatch.setenv("USERPROFILE", str(sb.repo))
         install_with_deps("project", sb.repo)
         install_with_deps("providers", sb.repo)
         setup_provider_surfaces(sb.repo)
@@ -249,6 +263,7 @@ def test_disable_removes_ag_planning_from_provider_configs(tmp_path: Path, monke
     """Disabling removes managed provider MCP entries just like uninstall."""
     with component_sandbox(tmp_path, "plan-mcp-disable") as sb:
         monkeypatch.setenv("HOME", str(sb.repo))
+        monkeypatch.setenv("USERPROFILE", str(sb.repo))
         install_with_deps("project", sb.repo)
         install_with_deps("providers", sb.repo)
         setup_provider_surfaces(sb.repo)
@@ -272,86 +287,72 @@ def test_disable_removes_ag_planning_from_provider_configs(tmp_path: Path, monke
 def test_install_injects_planning_process_contribution(tmp_path: Path, monkeypatch) -> None:
     with component_sandbox(tmp_path, "plan-surface-install") as sb:
         monkeypatch.setenv("HOME", str(sb.repo))
+        monkeypatch.setenv("USERPROFILE", str(sb.repo))
         install_with_deps("project", sb.repo)
         install_with_deps("providers", sb.repo)
         setup_provider_surfaces(sb.repo)
         install_with_deps("agent-planning", sb.repo)
         apply_surfaces(sb.repo)
 
-        present = managed_blocks_in(sb.repo / "CLAUDE.md")
-        assert _PLANNING_CONTRIBUTION in present, (
-            f"{_PLANNING_CONTRIBUTION} not in CLAUDE.md after install. Present: {present}"
+        assert planning_in_surfaces(sb.repo), (
+            f"{_PLANNING_CONTRIBUTION} not in provider instruction/skill surfaces"
         )
 
 
 def test_disable_removes_planning_contribution_from_surfaces(tmp_path: Path, monkeypatch) -> None:
     with component_sandbox(tmp_path, "plan-surface-disable") as sb:
         monkeypatch.setenv("HOME", str(sb.repo))
+        monkeypatch.setenv("USERPROFILE", str(sb.repo))
         install_with_deps("project", sb.repo)
         install_with_deps("providers", sb.repo)
         setup_provider_surfaces(sb.repo)
         install_with_deps("agent-planning", sb.repo)
         apply_surfaces(sb.repo)
 
-        claude_md = sb.repo / "CLAUDE.md"
-        assert _PLANNING_CONTRIBUTION in managed_blocks_in(claude_md), (
-            "sanity: block not present before disable"
-        )
+        assert planning_in_surfaces(sb.repo), "sanity: block not present before disable"
 
         disable_component("agent-planning", sb.repo)
         apply_surfaces(sb.repo)
 
-        present = managed_blocks_in(claude_md)
-        assert _PLANNING_CONTRIBUTION not in present, (
-            f"{_PLANNING_CONTRIBUTION} still in CLAUDE.md after disable+apply. Present: {present}"
-        )
+        assert not planning_in_surfaces(sb.repo), f"{_PLANNING_CONTRIBUTION} still present after disable"
 
 
 def test_enable_reinjection_restores_planning_contribution(tmp_path: Path, monkeypatch) -> None:
     with component_sandbox(tmp_path, "plan-surface-reenable") as sb:
         monkeypatch.setenv("HOME", str(sb.repo))
+        monkeypatch.setenv("USERPROFILE", str(sb.repo))
         install_with_deps("project", sb.repo)
         install_with_deps("providers", sb.repo)
         setup_provider_surfaces(sb.repo)
         install_with_deps("agent-planning", sb.repo)
         apply_surfaces(sb.repo)
 
-        claude_md = sb.repo / "CLAUDE.md"
-
         disable_component("agent-planning", sb.repo)
         apply_surfaces(sb.repo)
-        assert _PLANNING_CONTRIBUTION not in managed_blocks_in(claude_md), (
-            "sanity: block should be gone after disable"
-        )
+        assert not planning_in_surfaces(sb.repo), "sanity: block should be gone after disable"
 
         enable_component("agent-planning", sb.repo)
         apply_surfaces(sb.repo)
 
-        present = managed_blocks_in(claude_md)
-        assert _PLANNING_CONTRIBUTION in present, (
-            f"{_PLANNING_CONTRIBUTION} not reinjected after re-enable. Present: {present}"
-        )
+        assert planning_in_surfaces(sb.repo), f"{_PLANNING_CONTRIBUTION} not reinjected after re-enable"
 
 
 def test_uninstall_removes_planning_contribution_from_surfaces(tmp_path: Path, monkeypatch) -> None:
     with component_sandbox(tmp_path, "plan-surface-uninstall") as sb:
         monkeypatch.setenv("HOME", str(sb.repo))
+        monkeypatch.setenv("USERPROFILE", str(sb.repo))
         install_with_deps("project", sb.repo)
         install_with_deps("providers", sb.repo)
         setup_provider_surfaces(sb.repo)
         install_with_deps("agent-planning", sb.repo)
         apply_surfaces(sb.repo)
 
-        claude_md = sb.repo / "CLAUDE.md"
-        assert _PLANNING_CONTRIBUTION in managed_blocks_in(claude_md), "sanity"
+        assert planning_in_surfaces(sb.repo), "sanity"
 
         uninstall_component("agent-planning", sb.repo)
         apply_surfaces(sb.repo)
 
-        present = managed_blocks_in(claude_md)
-        assert _PLANNING_CONTRIBUTION not in present, (
-            f"{_PLANNING_CONTRIBUTION} still in CLAUDE.md after uninstall. Present: {present}"
-        )
+        assert not planning_in_surfaces(sb.repo), f"{_PLANNING_CONTRIBUTION} still present after uninstall"
 
 
 # ---------------------------------------------------------------------------

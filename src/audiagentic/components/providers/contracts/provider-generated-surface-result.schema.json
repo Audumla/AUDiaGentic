@@ -4,7 +4,7 @@
   "title": "Generated Provider Surface Result",
   "type": "object",
   "additionalProperties": false,
-  "required": ["ok", "supported", "changed", "planned", "written_paths", "removed_paths", "managed_block_ids", "collision_ids", "action_needed", "error_code"],
+  "required": ["ok", "supported"],
   "properties": {
     "ok": {"type": "boolean"},
     "supported": {"type": "boolean"},

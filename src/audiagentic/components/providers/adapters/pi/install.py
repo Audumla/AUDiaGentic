@@ -11,7 +11,6 @@ import json
 import shutil
 from pathlib import Path
 
-from audiagentic.foundation.cli_io import print_message
 
 
 def materialize_model_config_path(project_root: Path, agent_runtime: Path | None) -> Path:
@@ -158,7 +157,9 @@ def materialize_provider_config(
             exc_info=True,
         )
 
-    print_message(f"Materialized Pi config in {agent_dir}")
+    import logging
+
+    logging.getLogger(__name__).debug("Materialized Pi config in %s", agent_dir)
 
 
 # --------------------------------------------------------------------------- #

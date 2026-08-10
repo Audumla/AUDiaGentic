@@ -27,6 +27,7 @@ from typing import Any
 from audiagentic.foundation.system.browser_manager import (
     BrowserConfig,
     BrowserManager,
+    _is_cdp_responding,
 )
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports.agent_session import (
@@ -953,16 +954,45 @@ class GptAutoSessionTransport:
     # ── AS106: managed browser lifecycle ─────────────────────────────
 
     async def _ensure_browser_running(self) -> None:
-        """Start the managed browser if autostart enabled and not running."""
+        """Start the managed browser if autostart enabled and CDP not already responding.
+
+        Port resolution:
+        - 0 means auto-select (start from 9222, scan up)
+        - Positive int means use that specific port
+
+        Profile resolution:
+        - No --user-data-dir by default (uses browser's default profile)
+        - Only sets --user-data-dir when explicitly configured
+        """
+        base_port = getattr(self._config, "browser_port", 9222)
+        from audiagentic.foundation.system.browser_manager import find_available_port
+
+        # Resolve final port — auto-select if 0, otherwise use configured value
+        if base_port == 0:
+            port = await find_available_port(9222)
+        else:
+            port = base_port
+
+        # Check if CDP is already responding — existing browser, skip launch
+        if await _is_cdp_responding(port):
+            logger.info("gpt-auto: CDP already responding on port %d — reusing", port)
+            self._cdp_url = f"http://127.0.0.1:{port}"
+            return
+
+        # No browser running — autostart enabled?
         if not getattr(self._config, "browser_autostart", True):
-            return  # Connect to existing browser only
+            raise GptAutoError(
+                f"No browser listening on port {port}. "
+                "Configure ``browser_autostart: true`` or start a browser with --remote-debugging-port={port}."
+            )
 
         # Build BrowserManager on first use (lazy, single instance)
         if self._browser_manager is None:
-            profile = self._config.browser_profile_dir
+            # Only pass profile_dir when explicitly configured — default profile otherwise
+            profile = getattr(self._config, "browser_profile_dir", None)
             self._browser_manager = BrowserManager(
                 config=BrowserConfig(
-                    port=getattr(self._config, "browser_port", 9222),
+                    port=port,
                     profile_dir=Path(profile) if profile else None,
                     idle_timeout_seconds=getattr(
                         self._config, "browser_idle_timeout_seconds", 300.0
@@ -970,15 +1000,18 @@ class GptAutoSessionTransport:
                 )
             )
 
-        # Start browser if not already running
+        # Update CDP URL to resolved port
+        self._cdp_url = f"http://127.0.0.1:{port}"
+
+        # Start browser
         bm = self._browser_manager
         if bm is None:
             raise GptAutoError("Browser manager not initialized")
         if not bm.is_browser_running:
             self._owns_browser = True
             try:
-                await bm.start()
-                logger.info("gpt-auto: managed browser started at %s", bm.cdp_url)
+                cdp_url = await bm.start()
+                logger.info("gpt-auto: managed browser started at %s", cdp_url)
             except RuntimeError as exc:
                 raise GptAutoError(f"Managed browser failed to start: {exc}")
 

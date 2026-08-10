@@ -52,6 +52,47 @@ def _providers_yaml_path(project_root: Path) -> Path:
     return project_root / ".audiagentic" / "config" / "runtime" / "providers.yaml"
 
 
+def _policy_yaml_path(project_root: Path) -> Path:
+    return project_root / ".audiagentic" / "config" / "provider-policy.yaml"
+
+
+def _provider_settings_path(project_root: Path, provider_id: str) -> Path:
+    """Return the project-owned settings file for one provider."""
+    return project_root / ".audiagentic" / "config" / "providers" / f"{provider_id}.yaml"
+
+
+def load_provider_settings(project_root: Path, provider_id: str) -> dict[str, Any]:
+    """Load one provider's project-owned settings file."""
+    path = _provider_settings_path(project_root, provider_id)
+    if not path.exists():
+        return {}
+    payload = load_yaml_file(path)
+    if not isinstance(payload, dict):  # defensive; load_yaml_file already enforces this
+        raise AudiaGenticError(
+            code="VAL-PCFG-003",
+            kind="providers",
+            message="provider settings must be a YAML mapping",
+            details={"provider-id": provider_id, "path": str(path)},
+        )
+    return payload
+
+
+def _merge_provider_files(project_root: Path, providers: dict[str, Any]) -> dict[str, Any]:
+    """Merge one complete provider file over any legacy registry entry."""
+    directory = project_root / ".audiagentic" / "config" / "providers"
+    if not directory.is_dir():
+        return providers
+    merged = dict(providers)
+    for path in sorted(directory.glob("*.yaml")):
+        provider_id = path.stem
+        file_cfg = load_yaml_file(path)
+        base_cfg = merged.get(provider_id, {})
+        if not isinstance(base_cfg, dict):
+            base_cfg = {}
+        merged[provider_id] = {**base_cfg, **file_cfg}
+    return merged
+
+
 def _save_provider_config(path: Path, payload: dict[str, Any]) -> None:
     save_yaml_file(path, payload, sort_keys=False, atomic=True)
 
@@ -59,7 +100,7 @@ def _save_provider_config(path: Path, payload: dict[str, Any]) -> None:
 def is_provider_enabled(project_root: Path, provider_id: str) -> bool:
     """Single source of truth for provider enablement: implementation feature state.
 
-    `providers.yaml` holds only rich runtime config; whether a provider is enabled
+    Provider settings files hold launch config; whether a provider is enabled
     lives in `features.yaml` under the provider's implementation state.
     """
     return get_implementation_state(project_root, _COMPONENT_ID, provider_id).enabled
@@ -72,7 +113,7 @@ def apply_feature_enabled_state(
 ) -> dict[str, Any]:
     """Return provider_cfg with a derived `enabled` injected from feature state.
 
-    `enabled` is never persisted to providers.yaml; it is computed for in-memory
+    `enabled` is never persisted to provider settings files; it is computed in-memory
     consumers (status, health) from the implementation feature state.
     """
     return {**provider_cfg, "enabled": is_provider_enabled(project_root, provider_id)}
@@ -83,23 +124,16 @@ def patch_provider_config(
     provider_id: str,
     patch: dict[str, Any],
 ) -> dict[str, Any]:
-    """Atomically update one provider's rich config block and return the saved payload.
-
-    Creates the providers.yaml and the provider entry if they don't exist. `enabled`
-    is not a providers.yaml concern — use `set_provider_enabled` (feature state).
-    """
+    """Atomically update one provider's complete project-owned config file."""
     patch = {key: value for key, value in patch.items() if key != "enabled"}
-    path = _providers_yaml_path(project_root)
+    path = _provider_settings_path(project_root, provider_id)
     if path.exists():
         payload = load_yaml_file(path)
     else:
-        payload = {"contract-version": "v1"}
-    providers = payload.setdefault("providers", {})
-    if provider_id not in providers:
-        providers[provider_id] = {}
-    providers[provider_id].update(patch)
+        payload = {}
+    payload.update(patch)
     _save_provider_config(path, payload)
-    return payload
+    return load_provider_config(project_root)
 
 
 def set_provider_enabled(project_root: Path, provider_id: str, *, enabled: bool) -> None:
@@ -175,18 +209,16 @@ def set_reconciliation_policy(
             message="invalid reconciliation-policy mode",
             details={"mode": mode, "allowed": list(_VALID_RECONCILIATION_MODES)},
         )
-    path = _providers_yaml_path(project_root)
-    payload = load_yaml_file(path) if path.exists() else {}
-    if not isinstance(payload, dict) or not payload:
-        payload = {"contract-version": "v1"}
-    payload.setdefault("providers", {})
+    path = _policy_yaml_path(project_root)
     policy: dict[str, Any] = {"mode": mode}
     if allowed_providers is not None:
         policy["allowed-providers"] = sorted(set(allowed_providers))
     if decided_providers is not None:
         policy["decided-providers"] = sorted(set(decided_providers))
-    payload["reconciliation-policy"] = policy
-    issues = validate_provider_config(payload)
+    payload = {"contract-version": "v1", "reconciliation-policy": policy}
+    validation_payload = load_provider_config_lenient(project_root)
+    validation_payload["reconciliation-policy"] = policy
+    issues = validate_provider_config(validation_payload)
     if issues:
         raise AudiaGenticError(
             code="VAL-PCFG-001",
@@ -205,25 +237,34 @@ def load_provider_config_lenient(project_root: Path) -> dict[str, Any]:
     fallback) and must tolerate partial blocks that strict validation would reject.
     """
     path = _providers_yaml_path(project_root)
-    if not path.exists():
-        return {"contract-version": "v1", "providers": {}}
     try:
-        payload = load_yaml_file(path)
+        payload = load_yaml_file(path) if path.exists() else {"contract-version": "v1"}
+        policy_path = _policy_yaml_path(project_root)
+        if policy_path.exists():
+            policy_payload = load_yaml_file(policy_path)
+            if isinstance(policy_payload.get("reconciliation-policy"), dict):
+                payload["reconciliation-policy"] = policy_payload["reconciliation-policy"]
     except Exception:  # noqa: BLE001
         return {"contract-version": "v1", "providers": {}}
     if not isinstance(payload, dict) or not payload:
-        # Empty/comment-only file (the install marker) means no providers
-        # configured — same as a missing file, and same as the strict loader.
-        return {"contract-version": "v1", "providers": {}}
+        payload = {"contract-version": "v1"}
+    providers = payload.get("providers", {})
+    if not isinstance(providers, dict):
+        providers = {}
+    payload = dict(payload)
+    payload["providers"] = _merge_provider_files(project_root, providers)
     return payload
 
 
 def load_provider_config(project_root: Path) -> dict[str, Any]:
-    path = project_root / ".audiagentic" / "config" / "runtime" / "providers.yaml"
-    if not path.exists():
-        return {"contract-version": "v1", "providers": {}}
+    path = _providers_yaml_path(project_root)
     try:
-        payload = load_yaml_file(path)
+        payload = load_yaml_file(path) if path.exists() else {"contract-version": "v1"}
+        policy_path = _policy_yaml_path(project_root)
+        if policy_path.exists():
+            policy_payload = load_yaml_file(policy_path)
+            if isinstance(policy_payload.get("reconciliation-policy"), dict):
+                payload["reconciliation-policy"] = policy_payload["reconciliation-policy"]
     except Exception as exc:  # noqa: BLE001
         raise AudiaGenticError(
             code="IO-PCFG-001",
@@ -232,12 +273,17 @@ def load_provider_config(project_root: Path) -> dict[str, Any]:
             details={"path": str(path), "error": str(exc)},
         ) from exc
     if not isinstance(payload, dict) or not payload:
-        # An existing-but-empty file parses to an empty mapping — the install
-        # marker is a bare comment, so this is the normal freshly-installed
-        # state. It means the same as no file at all (no providers configured),
-        # so return the default rather than failing validation on a file the
-        # installer itself wrote. Matches load_provider_config_lenient.
-        return {"contract-version": "v1", "providers": {}}
+        payload = {"contract-version": "v1"}
+    providers = payload.get("providers", {})
+    if isinstance(providers, dict):
+        payload = dict(payload)
+        providers = _merge_provider_files(project_root, providers)
+        payload["providers"] = {
+            provider_id: apply_feature_enabled_state(project_root, provider_id, provider_cfg)
+            if isinstance(provider_cfg, dict)
+            else provider_cfg
+            for provider_id, provider_cfg in providers.items()
+        }
     issues = validate_provider_config(payload)
     if issues:
         raise AudiaGenticError(
@@ -246,13 +292,4 @@ def load_provider_config(project_root: Path) -> dict[str, Any]:
             message="provider config failed validation",
             details={"issues": issues, "path": str(path)},
         )
-    providers = payload.get("providers", {})
-    if isinstance(providers, dict):
-        payload = dict(payload)
-        payload["providers"] = {
-            provider_id: apply_feature_enabled_state(project_root, provider_id, provider_cfg)
-            if isinstance(provider_cfg, dict)
-            else provider_cfg
-            for provider_id, provider_cfg in providers.items()
-        }
     return payload

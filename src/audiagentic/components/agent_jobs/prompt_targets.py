@@ -12,7 +12,9 @@ DEFAULT_TARGET_KIND = "adhoc"
 
 
 def _parse_target(value: str, *, adhoc_requested: bool) -> dict[str, Any]:
-    if adhoc_requested:
+    # An adhoc tag supplies the default target kind, but an explicit typed
+    # target such as ``target=packet:PKT-1`` still has to be honored.
+    if adhoc_requested and ":" not in value:
         payload: dict[str, Any] = {"kind": "adhoc"}
         if value:
             payload["adhoc-id"] = value

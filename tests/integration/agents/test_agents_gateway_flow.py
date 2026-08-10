@@ -25,6 +25,7 @@ def _make_profile(project_root: Path, profile_id: str, provider_id: str, *, defa
     create_execution_profile(project_root, {
         "profile_id": profile_id,
         "provider_id": provider_id,
+        "instances": ["gpt-4o"],
         "model_id": "gpt-4o",
         "is_default": default,
         "params": params,
@@ -128,7 +129,7 @@ def test_disabled_provider_produces_user_facing_error(tmp_path: Path, monkeypatc
     not an obscure adapter-level exception — even though execute_provider is
     never actually called (dispatch rejects before dispatch)."""
     create_execution_profile(tmp_path, {
-        "profile_id": "default", "provider_id": "local-openai", "model_id": "gpt-4o", "is_default": True,
+        "profile_id": "default", "provider_id": "local-openai", "instances": ["gpt-4o"], "model_id": "gpt-4o", "is_default": True,
     })
     # provider deliberately left disabled
 

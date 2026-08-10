@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import stat
+import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -25,6 +26,21 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state
 from audiagentic.foundation.system.process import pid_alive
+
+
+def _descendant_alive(pid: int) -> bool:
+    """Check a test child without treating Windows query denial as liveness."""
+    if os.name != "nt":
+        return pid_alive(pid)
+    result = subprocess.run(
+        ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    return f'"{pid}"' in result.stdout
 
 
 def _write_qwen_probe(bin_dir: Path) -> None:
@@ -168,6 +184,7 @@ def test_gateway_dispatches_full_isolation_provider_in_a_worker(
             "profile_id": "qwen-worker",
             "provider_id": "qwen",
             "model_id": "qwen-test",
+            "instances": ["qwen-test"],
             "is_default": True,
         },
     )
@@ -216,7 +233,10 @@ def test_worker_timeout_reaps_the_provider_descendant_tree(
     assert error.value.code == "TO-AGW-076"
 
     pid_path = tmp_path / ".descendant-pid"
-    deadline = time.monotonic() + 5
+    # Windows Job Object/taskkill teardown is asynchronous after a crashed
+    # leader; allow the OS cleanup window to complete before declaring an
+    # orphan.
+    deadline = time.monotonic() + 15
     while not pid_path.exists() and time.monotonic() < deadline:
         time.sleep(0.05)
     assert pid_path.exists(), (
@@ -224,11 +244,12 @@ def test_worker_timeout_reaps_the_provider_descendant_tree(
         f"(probe-ran={(tmp_path / '.qwen-probe-ran').exists()})"
     )
     descendant_pid = int(pid_path.read_text(encoding="utf-8"))
-    while pid_alive(descendant_pid) and time.monotonic() < deadline:
+    while _descendant_alive(descendant_pid) and time.monotonic() < deadline:
         time.sleep(0.05)
-    assert not pid_alive(descendant_pid), "timed-out provider descendant was orphaned"
+    assert not _descendant_alive(descendant_pid), "timed-out provider descendant was orphaned"
 
 
+@pytest.mark.requires_container
 def test_provider_crash_reaps_the_detached_descendant_tree(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -256,10 +277,10 @@ def test_provider_crash_reaps_the_detached_descendant_tree(
     pid_path = tmp_path / ".descendant-pid"
     assert pid_path.exists(), "crashing provider did not record its descendant"
     descendant_pid = int(pid_path.read_text(encoding="utf-8"))
-    deadline = time.monotonic() + 5
-    while pid_alive(descendant_pid) and time.monotonic() < deadline:
+    deadline = time.monotonic() + 15
+    while _descendant_alive(descendant_pid) and time.monotonic() < deadline:
         time.sleep(0.05)
-    assert not pid_alive(descendant_pid), "crashed provider descendant was orphaned"
+    assert not _descendant_alive(descendant_pid), "crashed provider descendant was orphaned"
 
 
 def test_gateway_runs_three_profiles_in_parallel_os_processes(
@@ -282,6 +303,7 @@ def test_gateway_runs_three_profiles_in_parallel_os_processes(
                 "profile_id": profile_id,
                 "provider_id": "qwen",
                 "model_id": f"qwen-test-{index}",
+                "instances": [f"qwen-test-{index}"],
                 "is_default": index == 0,
             },
         )

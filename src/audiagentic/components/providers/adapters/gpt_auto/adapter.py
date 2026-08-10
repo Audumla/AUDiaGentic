@@ -26,6 +26,7 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.agent_session import SessionPrompt
 
 from .provider import GptAutoError
+from .config import provider_settings
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,7 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
     Thin wrapper: open → humanize pause → prompt → capture metadata → close.
     The browser tab stays open after the run; the conversation persists.
     """
+    provider_cfg = provider_settings(provider_cfg)
     working_root = packet_ctx.get("working-root")
     cwd = Path(working_root) if working_root else None
 

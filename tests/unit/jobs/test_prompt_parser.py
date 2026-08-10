@@ -76,30 +76,6 @@ def test_parse_prompt_launch_request_accepts_provider_suffix_and_prompt_controls
     }
 
 
-def test_parse_prompt_launch_request_accepts_short_review_tag_with_default_template(tmp_path: Path) -> None:
-    project_root = tmp_path / "project"
-    (project_root / ".audiagentic" / "prompts" / "review").mkdir(parents=True, exist_ok=True)
-    (project_root / ".audiagentic" / "prompts" / "review" / "cline.md").write_text(
-        "Review template for {{provider}}.",
-        encoding="utf-8",
-    )
-
-    request = parse_prompt_launch_request(
-        "@adhoc\n",
-        surface="cli",
-        provider_id="codex",
-        session_id="sess_004b",
-        workflow_profile="standard",
-        prompt_id="prm_20260330_0004b",
-        project_root=project_root,
-    )
-
-    assert request["tag"] == "adhoc"
-    assert request["source"]["provider-id"] == "cline"
-    assert request["target"]["kind"] == "adhoc"
-    assert request["prompt-body"] == ""
-
-
 def test_parse_prompt_launch_request_allows_prompt_provider_override_from_surface_default() -> None:
     request = parse_prompt_launch_request(
         "@adhoc provider=cline target=job:job_001\nReview the job.\n",

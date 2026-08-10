@@ -235,6 +235,11 @@ def _main(argv: list[str] | None = None) -> int:
 
         os.environ["AUDIAGENTIC_COMPONENT_PROFILE"] = args.component_profile
 
+    if args.command == "config":
+        import os
+
+        os.environ["AUDIAGENTIC_QUIET_STATUS"] = "1"
+
     project_root = Path(args.project).resolve() if args.project else Path.cwd()
 
     if args.project:

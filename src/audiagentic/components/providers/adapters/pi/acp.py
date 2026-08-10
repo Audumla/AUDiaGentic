@@ -144,6 +144,7 @@ def build_acp_launch(
     project_root: Path,
     *,
     model_id: str | None = None,
+    provider_config: dict | None = None,
     request_runtime_root: Path | None = None,
     mcp_surface=None,
     enable_rpc_tap: bool = False,
@@ -165,6 +166,7 @@ def build_acp_launch(
     see _resume_session), so pi-acp finds its own preserved session history
     without any special-casing here.
     """
+    del provider_config
     argv = _system_pi_acp_argv()
     args = argv[1:] + ["--cwd", str(project_root.resolve())]
     environment: dict[str, str] = {}

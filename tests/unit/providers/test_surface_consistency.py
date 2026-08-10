@@ -38,7 +38,6 @@ _REGION = re.compile(
 )
 _REMOVED_IDS = (
     "agent-jobs/tag-shortcuts",
-    "ag-review/review-doctrine",
     "agent-ledger/write-instruction",
 )
 

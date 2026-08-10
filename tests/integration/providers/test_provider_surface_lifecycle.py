@@ -507,17 +507,13 @@ def test_enable_reinjection_after_disable(
 # agent-jobs specific tests
 # --------------------------------------------------------------------------- #
 
-_AGENT_JOBS_TAG_BLOCKS = {
-    "ag-implement/doctrine",
-    "ag-plan/doctrine",
-    "ag-review/doctrine",
-}
+_AGENT_JOBS_BLOCKS = {"agent-jobs/overview"}
 
 
 def test_agent_jobs_tag_contributions_absent_when_disabled(
     tmp_path: Path,
 ) -> None:
-    """Tag doctrine blocks must not appear in CLAUDE.md when agent-jobs is disabled."""
+    """Agent-jobs instructions must not appear when the component is disabled."""
     with component_sandbox(tmp_path, "aj-disabled") as sb:
         install_with_deps("project", sb.repo)
         install_with_deps("providers", sb.repo)
@@ -529,9 +525,9 @@ def test_agent_jobs_tag_contributions_absent_when_disabled(
 
         claude_md = sb.repo / "CLAUDE.md"
         present = managed_blocks_in(claude_md)
-        unexpected = _AGENT_JOBS_TAG_BLOCKS & present
+        unexpected = _AGENT_JOBS_BLOCKS & present
         assert not unexpected, (
-            f"Tag doctrine blocks {unexpected} present in CLAUDE.md even though "
+            f"Agent-jobs blocks {unexpected} present in CLAUDE.md even though "
             "agent-jobs is disabled"
         )
 
@@ -539,7 +535,7 @@ def test_agent_jobs_tag_contributions_absent_when_disabled(
 def test_agent_jobs_tag_contributions_present_when_enabled(
     tmp_path: Path,
 ) -> None:
-    """Tag doctrine blocks appear in CLAUDE.md when agent-jobs is installed (enabled)."""
+    """Agent-jobs instructions appear when the component is enabled."""
     with component_sandbox(tmp_path, "aj-enabled") as sb:
         install_with_deps("project", sb.repo)
         install_with_deps("providers", sb.repo)
@@ -549,9 +545,9 @@ def test_agent_jobs_tag_contributions_present_when_enabled(
 
         claude_md = sb.repo / "CLAUDE.md"
         present = managed_blocks_in(claude_md)
-        missing = _AGENT_JOBS_TAG_BLOCKS - present
+        missing = _AGENT_JOBS_BLOCKS - present
         assert not missing, (
-            f"Tag doctrine blocks {missing} missing from CLAUDE.md when agent-jobs is enabled. "
+            f"Agent-jobs blocks {missing} missing from CLAUDE.md when agent-jobs is enabled. "
             f"Present: {present}"
         )
 
@@ -559,7 +555,7 @@ def test_agent_jobs_tag_contributions_present_when_enabled(
 def test_agent_jobs_tag_contributions_reappear_after_reenable(
     tmp_path: Path,
 ) -> None:
-    """Tag doctrine blocks removed on disable are reinjected after re-enable."""
+    """Agent-jobs instructions removed on disable are reinjected after re-enable."""
     with component_sandbox(tmp_path, "aj-reenable") as sb:
         install_with_deps("project", sb.repo)
         install_with_deps("providers", sb.repo)
@@ -571,24 +567,24 @@ def test_agent_jobs_tag_contributions_reappear_after_reenable(
 
         # Sanity: blocks present after install
         before = managed_blocks_in(claude_md)
-        assert _AGENT_JOBS_TAG_BLOCKS.issubset(before), (
-            f"Expected tag blocks not present before disable: {_AGENT_JOBS_TAG_BLOCKS - before}"
+        assert _AGENT_JOBS_BLOCKS.issubset(before), (
+            f"Expected agent-jobs blocks not present before disable: {_AGENT_JOBS_BLOCKS - before}"
         )
 
         # Disable → blocks gone
         disable_component("agent-jobs", sb.repo)
         apply_surfaces(sb.repo)
         after_disable = managed_blocks_in(claude_md)
-        assert not (_AGENT_JOBS_TAG_BLOCKS & after_disable), (
-            f"Tag blocks still present after disable: {_AGENT_JOBS_TAG_BLOCKS & after_disable}"
+        assert not (_AGENT_JOBS_BLOCKS & after_disable), (
+            f"Agent-jobs blocks still present after disable: {_AGENT_JOBS_BLOCKS & after_disable}"
         )
 
         # Re-enable → blocks back
         enable_component("agent-jobs", sb.repo)
         apply_surfaces(sb.repo)
         after_enable = managed_blocks_in(claude_md)
-        missing = _AGENT_JOBS_TAG_BLOCKS - after_enable
+        missing = _AGENT_JOBS_BLOCKS - after_enable
         assert not missing, (
-            f"Tag doctrine blocks {missing} not reinjected after re-enable. "
+            f"Agent-jobs blocks {missing} not reinjected after re-enable. "
             f"Present: {after_enable}"
         )

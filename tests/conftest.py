@@ -133,6 +133,20 @@ def _reset_test_registries():
 
     _reset_registration_cache()
 
+    # Surface adapter modules register their renderers at import time. The
+    # foundation registry reset above clears those entries, so repopulate the
+    # provider surface registries before the next test starts.
+    try:
+        from audiagentic.components.providers.surfaces.registry import (
+            load_contribution_renderer_registry,
+            load_renderer_registry,
+        )
+
+        load_renderer_registry()
+        load_contribution_renderer_registry()
+    except ImportError:
+        pass
+
 
 @pytest.fixture
 def fake_secret_ref(monkeypatch: pytest.MonkeyPatch):

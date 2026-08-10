@@ -51,6 +51,7 @@ def enable_profile(
         "profile_id": profile_id,
         "provider_id": provider_id,
         "model_id": f"{provider_id}-model",
+        "instances": [f"{provider_id}-model"],
         "is_default": profile_id == "default",
         "params": params,
     })

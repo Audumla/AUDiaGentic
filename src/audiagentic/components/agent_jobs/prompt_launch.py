@@ -377,7 +377,9 @@ def launch_prompt_request(
             "reason": "adhoc target disabled",
             "prompt-id": request["prompt-id"],
         }
-    if request["tag"] == review_tag:
+    # ``adhoc`` is the generic fallback when no review action is registered;
+    # it must never accidentally enter the review pipeline.
+    if review_tag != "adhoc" and request["tag"] == review_tag:
         from audiagentic.components.agent_jobs.review_launch import launch_review_request
 
         return {"status": "ok", **launch_review_request(project_root, request, now_fn=now_fn)}

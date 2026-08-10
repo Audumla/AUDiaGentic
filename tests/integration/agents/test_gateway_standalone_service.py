@@ -20,6 +20,7 @@ from audiagentic.components.agents.gateway.remote_client import (
     load_auth_token,
 )
 from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
+from audiagentic.components.agents.gateway.service.contract import PROTOCOL_VERSION
 from audiagentic.components.agents.models.execution_profile_api import (
     create_execution_profile,
 )
@@ -126,6 +127,7 @@ def _make_profile(project_root: Path) -> None:
     create_execution_profile(project_root, {
         "profile_id": "default",
         "provider_id": "local-openai",
+        "instances": ["gpt-4o"],
         "model_id": "gpt-4o",
         "is_default": True,
         "params": {},
@@ -178,7 +180,7 @@ def test_authenticated_raw_calls_cannot_bypass_protocol_or_lease_authority(
             token,
             "/v1/call",
             {
-                "protocol-version": "gateway-service-v1",
+                "protocol-version": PROTOCOL_VERSION,
                 "owner-epoch": host.owner_epoch,
                 "lease-id": "lease_missing",
                 "operation": "gateway_overview",
@@ -216,7 +218,7 @@ def test_standalone_submission_wire_errors_are_canonical_client_errors(
             {
                 "client-instance-id": "submission-validation",
                 "ttl-seconds": 60,
-                "protocol-version": "gateway-service-v1",
+                "protocol-version": PROTOCOL_VERSION,
             },
         )["result"]
         response = _raw_post(
@@ -224,7 +226,7 @@ def test_standalone_submission_wire_errors_are_canonical_client_errors(
             token,
             "/v1/call",
             {
-                "protocol-version": "gateway-service-v1",
+                "protocol-version": PROTOCOL_VERSION,
                 "owner-epoch": lease["owner-epoch"],
                 "lease-id": lease["lease-id"],
                 "operation": "submit_execution_request",
@@ -436,6 +438,7 @@ def test_service_host_startup_wires_gateway_owned_registry_from_config(
         "profiles:\n"
         "- profile_id: default\n"
         "  provider_id: local-openai\n"
+        "  instances: [gpt-4o]\n"
         "  model_id: gpt-4o\n"
         "  params:\n"
         "    max-concurrency: 1\n"
@@ -669,6 +672,13 @@ def _make_gateway_profiles_config(path: Path, profiles: list[dict]) -> None:
     """Write a gateway-profiles.yaml file."""
     import yaml
 
+    profiles = [
+        {
+            **profile,
+            "instances": profile.get("instances") or [profile.get("model_id", "gpt-4o")],
+        }
+        for profile in profiles
+    ]
     data = {"contract-version": "v1", "profiles": profiles}
     path.write_text(
         yaml.dump(data, default_flow_style=False, sort_keys=False),
@@ -741,8 +751,8 @@ def test_reload_gateway_profiles_atomic_swap(tmp_path: Path) -> None:
         # Generation must have changed (new config)
         assert gen_v2 != gen_v1
         # New limits from config
-        assert snap_v2.max_concurrency == 3
-        assert snap_v2.queue_max_size == 16
+        assert snap_v2.execution_params["max-concurrency"] == 3
+        assert snap_v2.execution_params["queue-max-size"] == 16
 
         # Step 4: old and new summaries carry only redacted metadata (no secrets)
         for summary_key in ("old-generation-summary", "new-generation-summary"):
@@ -783,7 +793,7 @@ def test_reload_retains_previous_on_failure(tmp_path: Path) -> None:
     ])
 
     registry = profiles_mod.InMemoryExecutionProfileRegistry()
-    registry.register("default", provider_id="local-openai", model_id="gpt-4o")
+    registry.register("default", provider_id="local-openai", instances=("gpt-4o",))
     profiles_mod.set_gateway_registry(registry)
     profiles_mod.set_gateway_registry_config_path(config_path)
     gen_before = registry.resolve_snapshot("default").generation

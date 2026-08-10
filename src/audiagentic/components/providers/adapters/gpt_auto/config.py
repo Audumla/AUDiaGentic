@@ -104,9 +104,22 @@ class GptAutoConfig:
         Normalizes hyphenated keys to underscore field names via an alias map
         so YAML conventions are respected without duplicating every key name.
         """
+        effective = dict(data)
+        settings = effective.pop("settings", None)
+        if isinstance(settings, dict):
+            effective.update(settings)
         mapped = {}
-        for k, v in data.items():
+        for k, v in effective.items():
             target = cls._KEY_ALIASES.get(k, k)
             if target in cls.__dataclass_fields__:
                 mapped[target] = v
         return cls(**mapped)
+
+
+def provider_settings(data: dict) -> dict:
+    """Return gpt-auto settings with its provider-owned file applied."""
+    effective = dict(data)
+    settings = effective.pop("settings", None)
+    if isinstance(settings, dict):
+        effective.update(settings)
+    return effective

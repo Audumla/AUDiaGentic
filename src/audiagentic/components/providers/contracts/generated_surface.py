@@ -61,7 +61,7 @@ class GeneratedSurfaceResult:
     error_code: str | None = None
 
     def to_mapping(self) -> dict[str, object]:
-        return {
+        mapping = {
             "ok": self.ok,
             "supported": self.supported,
             "changed": self.changed,
@@ -72,6 +72,11 @@ class GeneratedSurfaceResult:
             "collision_ids": list(self.collision_ids),
             "action_needed": self.action_needed,
             "error_code": self.error_code,
+        }
+        return {
+            key: value
+            for key, value in mapping.items()
+            if value is not None and value != "" and value != [] and value != {}
         }
 
 

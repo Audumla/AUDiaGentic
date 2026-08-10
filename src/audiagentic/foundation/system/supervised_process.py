@@ -229,9 +229,15 @@ class SupervisedProcess:
                     os.killpg(self._process_group_id, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
-            kill_process_tree(self.process.pid)
+            pid = getattr(self.process, "pid", None)
+            if isinstance(pid, int):
+                kill_process_tree(pid)
             try:
                 self.process.wait(timeout=5.0)
+            except TypeError:
+                # Small process doubles used by unit tests may expose only
+                # wait() without subprocess.Popen's timeout parameter.
+                self.process.wait()
             except subprocess.TimeoutExpired:
                 logger.warning("Supervised process did not exit after tree teardown")
         finally:

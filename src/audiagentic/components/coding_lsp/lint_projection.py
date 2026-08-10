@@ -261,7 +261,7 @@ def project_vscode_yaml_settings(project_root: Path) -> dict[str, Any]:
     if not updates:
         return {"ok": True, "written": []}
 
-    from audiagentic.components.providers.surfaces.host_settings import write_host_settings
+    from audiagentic.components.providers.providers_api import write_host_settings
 
     path = write_host_settings(project_root, updates, host_id="vscode")
     return {"ok": True, "written": [str(path)], "keys": sorted(updates.keys())}
