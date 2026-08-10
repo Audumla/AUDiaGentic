@@ -18,10 +18,28 @@ async function handle(msg) {
 	try {
 		switch (msg.method) {
 			case "connect": {
-				browser = await puppeteer.connect({
-					browserURL: msg.params.browserURL || "http://127.0.0.1:9222",
-					defaultViewport: null,
-				});
+				// browserURL makes puppeteer GET /json/version to discover the
+				// websocket URL, which Chromium 404s on a default-profile
+				// browser even though the CDP socket itself is fine. The
+				// browser writes that same websocket path to
+				// DevToolsActivePort, so fall back to it.
+				//
+				// The real connect is the probe: an HTTP pre-check in Python
+				// would race the connect that follows it (the endpoint can
+				// change or be incomplete in between).
+				try {
+					browser = await puppeteer.connect({
+						browserURL:
+							msg.params.browserURL || "http://127.0.0.1:9222",
+						defaultViewport: null,
+					});
+				} catch (err) {
+					if (!msg.params.browserWSEndpoint) throw err;
+					browser = await puppeteer.connect({
+						browserWSEndpoint: msg.params.browserWSEndpoint,
+						defaultViewport: null,
+					});
+				}
 				respond(id, { ok: true });
 				break;
 			}

@@ -19,6 +19,12 @@ logger = logging.getLogger(__name__)
 
 _CDP_SCRIPT = Path(__file__).with_name("gpt_auto_cdp.cjs")
 
+# Bounds the whole connect RPC: puppeteer.connect() has no websocket handshake
+# timeout, so an unreachable or stale endpoint would otherwise hang forever.
+_CONNECT_TIMEOUT_SECONDS = 15.0
+
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
 # ChatGPT workspace (project) URL pattern.
 # https://chatgpt.com/g/g-p-{id}-{slug}/c/{conversation-id}
 _WORKSPACE_URL_PATTERN = r"/g/g-p-"
@@ -95,8 +101,43 @@ class CdpClient:
                 if "ready" in text:
                     break
 
-        await self._send("connect", {"browserURL": self._cdp_url})
+        try:
+            async with asyncio.timeout(_CONNECT_TIMEOUT_SECONDS):
+                await self._send("connect", self._connect_params())
+        except TimeoutError:
+            # puppeteer.connect() sets no websocket handshake timeout, so a
+            # stale DevToolsActivePort endpoint hangs rather than failing.
+            # Killing the helper is the only clean cancellation: a connect()
+            # left running in it could still open a socket nobody owns.
+            await self._kill_helper()
+            raise RuntimeError(
+                f"connect: timed out after {_CONNECT_TIMEOUT_SECONDS:.0f}s ({self._cdp_url})"
+            ) from None
         logger.info("Connected to browser via CDP (%s)", self._cdp_url)
+
+    def _connect_params(self) -> dict[str, Any]:
+        """Tell the helper how to reach the browser, with a websocket fallback.
+
+        ``browserURL`` is always offered first. The helper falls back to
+        ``browserWSEndpoint`` only if that connect actually fails -- attempting
+        the connection is the probe, so there is no window for the endpoint to
+        change between checking and using it.
+        """
+        params: dict[str, Any] = {"browserURL": self._cdp_url}
+        ws_endpoint = _ws_endpoint_from_active_port_file(self._cdp_url)
+        if ws_endpoint is not None:
+            params["browserWSEndpoint"] = ws_endpoint
+        return params
+
+    async def _kill_helper(self) -> None:
+        proc, self._proc = self._proc, None
+        if proc is None:
+            return
+        try:
+            proc.kill()
+            await proc.wait()
+        except (ProcessLookupError, OSError):
+            pass
 
     async def stop(self) -> None:
         """Disconnect from browser and stop the helper."""
@@ -416,6 +457,64 @@ def _summarize_cdp_result(result: Any) -> str:
     if isinstance(result, dict):
         return str(sorted(result.keys()))
     return type(result).__name__
+
+
+def _browser_user_data_dir() -> Path | None:
+    """The single user-data directory whose ``DevToolsActivePort`` may be read.
+
+    Explicit configuration wins; otherwise the default profile of the browser
+    gpt-auto supports. Deliberately not a search across Chromium-family
+    installs: a second candidate can only ever contribute a websocket UUID
+    belonging to a different browser instance.
+    """
+    override = os.getenv("AUDIAGENTIC_GPT_AUTO_USER_DATA_DIR")
+    if override:
+        return Path(override)
+    local_app_data = os.getenv("LOCALAPPDATA")
+    if not local_app_data:
+        return None
+    return Path(local_app_data) / "BraveSoftware" / "Brave-Browser" / "User Data"
+
+
+def _ws_endpoint_from_active_port_file(cdp_url: str) -> str | None:
+    """Build a ``browserWSEndpoint`` from the browser's ``DevToolsActivePort`` file.
+
+    The file holds the debugging port on line 1 and the browser websocket path
+    on line 2. Only read for a loopback *cdp_url*: a local file says nothing
+    about a browser on another host, and its UUID is exactly the part that
+    cannot be inferred from the port.
+
+    A file matching on port can still be stale, so the caller must bound the
+    connect attempt rather than trusting the endpoint.
+    """
+    from urllib.parse import urlparse
+
+    parsed = urlparse(cdp_url)
+    host = parsed.hostname or "127.0.0.1"
+    if host not in _LOOPBACK_HOSTS:
+        return None
+    user_data_dir = _browser_user_data_dir()
+    if user_data_dir is None:
+        return None
+    try:
+        lines = (user_data_dir / "DevToolsActivePort").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    if len(lines) < 2:
+        return None
+    port, ws_path = lines[0].strip(), lines[1].strip()
+    if not port.isdigit() or not 1 <= int(port) <= 65535:
+        return None
+    if not ws_path.startswith("/devtools/browser/"):
+        return None
+    if parsed.port is not None and int(port) != parsed.port:
+        return None
+    return f"ws://{_format_host(host)}:{port}{ws_path}"
+
+
+def _format_host(host: str) -> str:
+    """Bracket an IPv6 literal so the authority parses as host + port."""
+    return f"[{host}]" if ":" in host else host
 
 
 def _find_node() -> str:
