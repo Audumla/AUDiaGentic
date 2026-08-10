@@ -17,9 +17,8 @@ from jsonschema import Draft202012Validator
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
-from ...descriptors.automation_capabilities import ProviderAutomationCapability
+from ...descriptors.automation_capabilities import AUTOMATION_MODES, ProviderAutomationCapability
 
-AUTOMATION_MODES = frozenset({"plan", "apply", "prune", "status", "upgrade-status", "upgrade"})
 _SCHEMA_PATH = Path(__file__).resolve().parents[2] / "contracts" / "provider-recipe.schema.json"
 
 RecipeHandler = Callable[[str, object, object | None], object]

@@ -19,7 +19,14 @@ from ..mcp.mcp import (
     sync_managed_provider_mcp_scope,
 )
 
-_SUPPORTED_MODES = frozenset({"apply", "prune", "status"})
+FAMILY_ID = "managed-mcp"
+
+
+def _family_declaration():
+    """Resolve the managed-mcp family declaration from config."""
+    from audiagentic.components.providers.descriptors.capability_catalogue import get_catalogue
+
+    return get_catalogue().families[FAMILY_ID]
 
 
 def _result(**updates: Any) -> ManagedMcpResult:
@@ -60,7 +67,7 @@ def manage_mcp_entries(
         or descriptor.automation_capability("managed-mcp") is None
     ):
         return _result(ok=False, supported=False, provider_id=provider_id, error_code="RES-PREC-001")
-    if mode not in _SUPPORTED_MODES:
+    if mode not in _family_declaration().supported_modes:
         return _result(ok=False, provider_id=provider_id, error_code="CON-PREC-002")
 
     desired = _desired(request)

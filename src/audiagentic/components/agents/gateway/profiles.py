@@ -747,7 +747,6 @@ def resolve_for_admission(
 
 def _default_surface_resolver(project_root: Path, provider_id: str, surface_id: str) -> Any:
     """Read-only AS29 surface resolution. Launches no process."""
-    from audiagentic.components.providers.contracts.session_surface import SurfaceHint
-    from audiagentic.components.providers.providers_api import resolve_session_surface
+    from audiagentic.components.providers.providers_api import SurfaceHint, resolve_session_surface
 
     return resolve_session_surface(project_root, provider_id, SurfaceHint(surface_id=surface_id))

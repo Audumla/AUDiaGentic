@@ -126,7 +126,10 @@ def test_agent_task_submit_resolves_agent_and_delegates():
 
 
 def test_agent_task_submit_unknown_agent_propagates_error():
+    import pytest
+
     from audiagentic.foundation.contracts.errors import AudiaGenticError
+    from audiagentic.foundation.mcp.component_server import ToolError
 
     with (
         _patch_root(),
@@ -137,9 +140,12 @@ def test_agent_task_submit_unknown_agent_propagates_error():
             ),
         ),
     ):
-        try:
+        with pytest.raises(ToolError) as excinfo:
             agents_gateway_mcp.agent_task_submit("missing-agent")
-        except AudiaGenticError as exc:
-            assert exc.code == "RES-AGD-001"
-        else:
-            raise AssertionError("expected AudiaGenticError")
+
+    # The domain error's code reaches the caller in the ToolError text, and
+    # the original AudiaGenticError is preserved as the exception cause —
+    # tool_boundary translates, it does not swallow.
+    assert "RES-AGD-001" in str(excinfo.value)
+    assert isinstance(excinfo.value.__cause__, AudiaGenticError)
+    assert excinfo.value.__cause__.code == "RES-AGD-001"

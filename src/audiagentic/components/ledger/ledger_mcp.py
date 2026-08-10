@@ -3,16 +3,16 @@ from __future__ import annotations
 
 from audiagentic.components.ledger import ledger_api
 from audiagentic.foundation.mcp.component_server import (
-    log_tool_call,
     mcp_server,
     project_root_from_env,
+    tool_boundary,
 )
 
 mcp = mcp_server(__name__)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def record_change_event(event: dict | list[dict]) -> dict:
     """Record one or more change event fragments.
 
@@ -28,7 +28,7 @@ def record_change_event(event: dict | list[dict]) -> dict:
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def get_pending_events(group_by: str = "plan-items") -> dict:
     """Return pending (unreleased) events grouped for commit decisions.
 
@@ -39,7 +39,7 @@ def get_pending_events(group_by: str = "plan-items") -> dict:
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def get_fragment(event_id: str) -> dict:
     """Retrieve a single change event by event-id.
 
@@ -50,19 +50,19 @@ def get_fragment(event_id: str) -> dict:
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def get_current_summary() -> str:
     return ledger_api.get_current_summary(project_root_from_env())
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def sync_ledger() -> dict:
     return ledger_api.sync(project_root_from_env())
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def get_audit_report() -> dict:
     return ledger_api.generate_audit(project_root_from_env())
 

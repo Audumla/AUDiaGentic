@@ -460,11 +460,12 @@ def test_get_ai_audit_logger_fallback_is_disabled(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# log_tool_call decorator
+# tool_boundary decorator (renamed from log_tool_call — CC62: now also
+# redacts and translates exceptions into ToolError, not just logging)
 # ---------------------------------------------------------------------------
 
-def test_log_tool_call_sync_logs_entry_and_exit():
-    from audiagentic.foundation.mcp.component_server import log_tool_call
+def test_tool_boundary_sync_logs_entry_and_exit():
+    from audiagentic.foundation.mcp.component_server import tool_boundary
 
     # Use _ListHandler directly — configure_logging() strips caplog's handler from root.
     handler = _ListHandler()
@@ -474,7 +475,7 @@ def test_log_tool_call_sync_logs_entry_and_exit():
 
     new_correlation_id()
 
-    @log_tool_call
+    @tool_boundary
     def my_tool(x: int) -> int:
         return x * 2
 
@@ -486,27 +487,32 @@ def test_log_tool_call_sync_logs_entry_and_exit():
     assert any("tool call done" in m for m in messages)
 
 
-def test_log_tool_call_sync_logs_error_on_exception():
-    from audiagentic.foundation.mcp.component_server import log_tool_call
+def test_tool_boundary_sync_raises_tool_error_and_logs_on_exception():
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    from audiagentic.foundation.mcp.component_server import tool_boundary
 
     handler = _ListHandler()
     tool_logger = logging.getLogger("audiagentic.foundation.mcp.component_server")
     tool_logger.addHandler(handler)
     tool_logger.setLevel(logging.DEBUG)
 
-    @log_tool_call
+    @tool_boundary
     def bad_tool() -> None:
         raise ValueError("boom")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ToolError):
         bad_tool()
 
-    assert any("tool call failed" in r.getMessage() for r in handler.records)
-    assert any(r.exc_info is not None for r in handler.records if "failed" in r.getMessage())
+    # tool_boundary no longer re-raises the original exception — it logs the
+    # full failure for operators (message "tool failed", not "tool call
+    # failed") and raises ToolError with redacted, client-safe text instead.
+    assert any("tool failed" in r.getMessage() for r in handler.records)
+    assert any(r.exc_info is not None for r in handler.records if "tool failed" in r.getMessage())
 
 
-def test_log_tool_call_async_logs_entry_and_exit():
-    from audiagentic.foundation.mcp.component_server import log_tool_call
+def test_tool_boundary_async_logs_entry_and_exit():
+    from audiagentic.foundation.mcp.component_server import tool_boundary
 
     handler = _ListHandler()
     tool_logger = logging.getLogger("audiagentic.foundation.mcp.component_server")
@@ -515,7 +521,7 @@ def test_log_tool_call_async_logs_entry_and_exit():
 
     new_correlation_id()
 
-    @log_tool_call
+    @tool_boundary
     async def async_tool(x: int) -> int:
         return x + 1
 
@@ -527,10 +533,10 @@ def test_log_tool_call_async_logs_entry_and_exit():
     assert any("tool call done" in m for m in messages)
 
 
-def test_log_tool_call_preserves_function_name():
-    from audiagentic.foundation.mcp.component_server import log_tool_call
+def test_tool_boundary_preserves_function_name():
+    from audiagentic.foundation.mcp.component_server import tool_boundary
 
-    @log_tool_call
+    @tool_boundary
     def my_named_tool() -> None:
         pass
 

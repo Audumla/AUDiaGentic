@@ -10,17 +10,17 @@ from typing import Any
 
 from audiagentic.components.agent_jobs import jobs_api
 from audiagentic.foundation.mcp.component_server import (
-    log_tool_call,
     mcp_server,
     project_root_from_env,
     run_mcp_server,
+    tool_boundary,
 )
 
 mcp = mcp_server(__name__)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def event_jobs_overview_tool() -> dict[str, Any]:
     """Operator-facing summary of event-driven jobs: per-trigger fired/
     suppressed/failed counts, event-origin job counts by state, and the 5

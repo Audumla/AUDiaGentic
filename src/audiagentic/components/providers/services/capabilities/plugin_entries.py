@@ -22,6 +22,15 @@ from audiagentic.foundation.toolchains.config.managed_config import (
 
 from ...descriptors.registry import get_descriptor
 
+FAMILY_ID = "plugin-entry"
+
+
+def _family_declaration():
+    """Resolve the plugin-entry family declaration from config."""
+    from audiagentic.components.providers.descriptors.capability_catalogue import get_catalogue
+
+    return get_catalogue().families[FAMILY_ID]
+
 
 def _plugin_ownership_registry(project_root: Path) -> ManagedFragmentRegistry:
     return ManagedFragmentRegistry(
@@ -42,7 +51,7 @@ def manage_plugin_entry(
     spec = descriptor.plugin_config if descriptor else None
     if spec is None or not descriptor.automation_capability("plugin-entry"):
         return PluginEntryResult(False, False, error_code="RES-PPLG-001")
-    if mode not in {"apply", "prune", "status"}:
+    if mode not in _family_declaration().supported_modes:
         return PluginEntryResult(False, True, error_code="CON-PPLG-002")
 
     config_path = resolve_managed_config_path(spec, project_root)

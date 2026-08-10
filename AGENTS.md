@@ -223,3 +223,5 @@ profiles, stop the current session and restart with the desired profile.
 
 Do not invoke git or GitHub APIs directly — use the MCP tools.
 <!-- ag:managed:end -->
+
+NEVER use git stash

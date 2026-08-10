@@ -5,7 +5,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
-ManagedMcpMode = Literal["apply", "prune", "status"]
+from .automation_vocabulary import ProviderReconcileMode as ManagedMcpMode
 
 
 @dataclass(frozen=True)

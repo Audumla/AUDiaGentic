@@ -10,11 +10,11 @@ from audiagentic.components.providers.contracts.lifecycle_modes import (
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
 from audiagentic.foundation.mcp.component_server import (
     FastMCP,
-    log_tool_call,
     mcp_server,
     project_root_from_env,
     run_mcp_server,
     server_instructions,
+    tool_boundary,
 )
 
 _COMPONENT_ID = "providers"
@@ -29,12 +29,12 @@ def build_server() -> FastMCP:
     mcp = mcp_server(__name__, instructions=server_instructions(decl))
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def get_reconciliation_policy() -> dict[str, Any]:
         return providers_api.get_reconciliation_policy(project_root_from_env())
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def set_reconciliation_policy(
         mode: str,
         allowed_providers: list[str] | None = None,
@@ -48,39 +48,39 @@ def build_server() -> FastMCP:
         )
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def list_providers() -> dict[str, Any]:
         return providers_api.list_providers(project_root_from_env())
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def get_provider_status(provider_id: str) -> dict[str, Any]:
         return providers_api.get_provider_status(project_root_from_env(), provider_id)
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def list_provider_descriptors() -> list[dict[str, Any]]:
         return providers_api.list_provider_descriptors()
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def list_provider_models(provider_id: str) -> dict[str, Any]:
         return providers_api.list_provider_models(project_root_from_env(), provider_id)
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     async def refresh_provider_catalog(provider_id: str) -> dict[str, Any]:
         return await providers_api.refresh_provider_catalog(
             project_root_from_env(), provider_id
         )
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     async def refresh_all_catalogs() -> dict[str, Any]:
         return await providers_api.refresh_all_catalogs(project_root_from_env())
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     async def manage_cli_lifecycle(provider_id: str, mode: str) -> dict[str, Any]:
         result = await providers_api.manage_cli_lifecycle(
             project_root_from_env(), provider_id, mode=normalize_provider_cli_mode(mode)
@@ -88,7 +88,7 @@ def build_server() -> FastMCP:
         return result.to_mapping()
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def operate_provider_surface(
         provider_id: str,
         mode: str,
@@ -119,7 +119,7 @@ def build_server() -> FastMCP:
         return result.to_mapping()
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def operate_provider_surfaces(
         mode: str,
         provider_id: str | None = None,
@@ -141,51 +141,51 @@ def build_server() -> FastMCP:
         }
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def model_source_list() -> dict[str, Any]:
         return providers_api.model_source_list(project_root_from_env())
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def list_model_inventory() -> dict[str, Any]:
         return providers_api.list_model_inventory(project_root_from_env())
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def refresh_model_source_catalog(source_id: str) -> dict[str, Any]:
         return providers_api.refresh_model_source_catalog(
             project_root_from_env(), source_id
         )
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def model_vendor_set_enabled(vendor_id: str, enabled: bool) -> dict[str, Any]:
         return providers_api.model_vendor_set_enabled(
             project_root_from_env(), vendor_id, enabled
         )
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def apply_model_sources() -> dict[str, Any]:
         return providers_api.apply_model_sources(project_root_from_env())
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def model_source_add(source_id: str, config: dict[str, Any]) -> dict[str, Any]:
         return providers_api.model_source_add(project_root_from_env(), source_id, config)
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def model_source_update(source_id: str, updates: dict[str, Any]) -> dict[str, Any]:
         return providers_api.model_source_update(project_root_from_env(), source_id, updates)
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def model_source_remove(source_id: str) -> dict[str, Any]:
         return providers_api.model_source_remove(project_root_from_env(), source_id)
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def model_source_set_enabled(source_id: str, enabled: bool) -> dict[str, Any]:
         return providers_api.model_source_set_enabled(
             project_root_from_env(), source_id, enabled
@@ -196,37 +196,37 @@ def build_server() -> FastMCP:
     # once, every project inherits it via model_source_list_resolved.
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def model_source_list_resolved() -> dict[str, Any]:
         return providers_api.model_source_list_resolved(project_root_from_env())
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def model_source_list_global() -> dict[str, Any]:
         return providers_api.model_source_list_global()
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def model_source_add_global(source_id: str, config: dict[str, Any]) -> dict[str, Any]:
         return providers_api.model_source_add_global(source_id, config)
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def model_source_update_global(source_id: str, updates: dict[str, Any]) -> dict[str, Any]:
         return providers_api.model_source_update_global(source_id, updates)
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def model_source_remove_global(source_id: str) -> dict[str, Any]:
         return providers_api.model_source_remove_global(source_id)
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def model_source_set_enabled_global(source_id: str, enabled: bool) -> dict[str, Any]:
         return providers_api.model_source_set_enabled_global(source_id, enabled)
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def describe_provider(provider_id: str) -> dict[str, Any]:
         return providers_api.describe_provider(project_root_from_env(), provider_id)
 

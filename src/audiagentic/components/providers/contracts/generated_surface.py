@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-GeneratedSurfaceMode = str  # plan | apply | prune | status
+from .automation_vocabulary import ProviderAutomationMode as GeneratedSurfaceMode
 
 
 @dataclass(frozen=True)

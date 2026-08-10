@@ -16,17 +16,17 @@ from typing import Any
 
 from audiagentic.components.agents.gateway.client import get_gateway_client
 from audiagentic.foundation.mcp.component_server import (
-    log_tool_call,
     mcp_server,
     project_root_from_env,
     run_mcp_server,
+    tool_boundary,
 )
 
 mcp = mcp_server(__name__)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def agent_list_definitions() -> list[dict[str, Any]]:
     """List the agent definitions available to the gateway."""
     from audiagentic.components.agents.models.agent_definition_api import (
@@ -37,21 +37,21 @@ def agent_list_definitions() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def agent_task_status(request_id: str) -> dict[str, Any]:
     """Return the current persisted state of a gateway request."""
     return get_gateway_client().get_execution_request(project_root_from_env(), request_id)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def agent_task_cancel(request_id: str) -> dict[str, Any]:
     """Cancel a queued request, or best-effort mark a running one cancel-requested."""
     return get_gateway_client().cancel_execution_request(project_root_from_env(), request_id)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def agent_task_list_requests(
     state: str | None = None, limit: int | None = None
 ) -> list[dict[str, Any]]:
@@ -67,7 +67,7 @@ def agent_task_list_requests(
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def agent_task_gateway_overview() -> dict[str, Any]:
     """Operator-facing summary: persisted request counts by state, the 5 most
     recent failures (with redacted error), and in-process per-profile queue depths."""
@@ -75,7 +75,7 @@ def agent_task_gateway_overview() -> dict[str, Any]:
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def agent_task_session_list(state: str | None = None) -> list[dict[str, Any]]:
     """List persisted gateway sessions, newest first. Each entry carries a
     'live' flag: true when the session's agent process is held by this gateway
@@ -84,7 +84,7 @@ def agent_task_session_list(state: str | None = None) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def agent_task_session_close(session_id: str) -> dict[str, Any]:
     """Close a live agent session (terminates its agent process). Idempotent —
     an already-closed or orphaned session returns its final record."""
@@ -92,7 +92,7 @@ def agent_task_session_close(session_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def agent_task_submit(
     agent_id: str,
     prompt_body: str | None = None,
