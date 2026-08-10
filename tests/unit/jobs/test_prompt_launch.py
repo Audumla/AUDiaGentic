@@ -19,7 +19,7 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 def _setup_project(tmp_path: Path) -> Path:
     project_root = tmp_path / "project"
     config_dir = project_root / ".audiagentic" / "config"
-    (config_dir / "runtime").mkdir(parents=True)
+    (config_dir / "providers").mkdir(parents=True)
     (config_dir / "project.yaml").write_text(
         "\n".join(
             [
@@ -31,16 +31,12 @@ def _setup_project(tmp_path: Path) -> Path:
         ),
         encoding="utf-8",
     )
-    (config_dir / "runtime" / "providers.yaml").write_text(
+    (config_dir / "providers" / "codex.yaml").write_text(
         "\n".join(
             [
-                "contract-version: v1",
-                "providers:",
-                "  codex:",
-                "    enabled: true",
-                "    install-mode: external-configured",
-                "    access-mode: cli",
-                "    default-model: gpt-5.4-mini",
+                "install-mode: external-configured",
+                "access-mode: cli",
+                "default-model: gpt-5.4-mini",
             ]
         ),
         encoding="utf-8",

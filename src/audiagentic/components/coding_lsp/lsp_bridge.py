@@ -370,6 +370,8 @@ class LspJsonRpc:
     def __del__(self) -> None:
         if self._supervised is not None and self._supervised.poll() is None:
             try:
-                self._supervised.close()
-            except OSError:
+                close = getattr(self._supervised, "close", None)
+                if callable(close):
+                    close()
+            except (OSError, TypeError):
                 pass

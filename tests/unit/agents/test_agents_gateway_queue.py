@@ -141,12 +141,19 @@ def test_max_concurrency_two_runs_two_third_waits(tmp_path: Path):
         threading.Thread(target=manager.enqueue, args=(tmp_path, r, {"max-concurrency": 2}, runner))
         for r in records
     ]
-    for t in threads:
-        t.start()
-
+    # Start the first two requests together and wait for both runners before
+    # admitting the third. Thread start order is not a scheduling guarantee;
+    # starting all three at once made the assertion about records[2] flaky.
+    threads[0].start()
+    threads[1].start()
     assert started_count.acquire(timeout=2)
     assert started_count.acquire(timeout=2)
-    time.sleep(0.1)  # let the third settle into queued state
+    threads[2].start()
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        if store.read_record(tmp_path, records[2]["request-id"])["state"] == "queued":
+            break
+        time.sleep(0.01)
     depth = manager.queue_depth("p2")
     assert depth["running"] == 2
     assert depth["pending"] == 1

@@ -29,6 +29,13 @@ class InteractionBackend(Protocol):
 class CliBackend:
     """Sync backend that uses sys.stdin/sys.stdout for interaction."""
 
+    def __init__(self, *, quiet_status: bool | None = None) -> None:
+        if quiet_status is None:
+            import os
+
+            quiet_status = os.environ.get("AUDIAGENTIC_QUIET_STATUS") == "1"
+        self.quiet_status = quiet_status
+
     def ask(self, request: AskRequest) -> AskResponse:
         if not sys.stdout.isatty():
             return AskResponse(status=ResponseStatus.TIMED_OUT)
@@ -80,6 +87,8 @@ class CliBackend:
             return AskResponse(status=ResponseStatus.TIMED_OUT)
 
     def push_status(self, msg: PushStatusMessage) -> None:
+        if self.quiet_status and msg.level in {"debug", "info"}:
+            return
         prefix = f"[{msg.component}] " if msg.component else ""
         print_error(f"{prefix}{msg.message}")
 

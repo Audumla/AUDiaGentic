@@ -76,9 +76,11 @@ class TestProviderYamlLoader:
             pytest.skip("claude.yaml not yet created")
 
         descriptor = load_provider_descriptor(claude_path)
-        assert len(descriptor.agent_files) == 3
+        assert len(descriptor.agent_files) == 2
         assert descriptor.agent_files[0].rel_path == "CLAUDE.md"
         assert descriptor.agent_files[0].managed is True
+        assert descriptor.agent_files[1].rel_path == ".claude/settings.json"
+        assert descriptor.agent_files[1].managed is False
 
     def test_claude_host_capabilities(self) -> None:
         """Claude VS Code extension is loaded correctly."""

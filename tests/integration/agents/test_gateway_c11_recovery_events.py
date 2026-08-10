@@ -33,6 +33,7 @@ def _make_profile(project_root: Path) -> None:
             "profile_id": "default",
             "provider_id": "local-openai",
             "model_id": "gpt-4o",
+            "instances": ["gpt-4o"],
             "is_default": True,
             "params": {"max-concurrency": 1},
         },

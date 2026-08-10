@@ -61,7 +61,7 @@ class ApplicationHost:
         log_bootstrap("harness", project_root=project_root)
         set_backend(self._interaction_backend)
 
-        logger.info(
+        logger.debug(
             "audiagentic started",
             extra={"project_root": str(project_root), "command": command},
         )
@@ -80,7 +80,7 @@ class ApplicationHost:
         handlers = list(logging.getLogger().handlers) + list(logger.handlers)
         if any(getattr(getattr(handler, "stream", None), "closed", False) for handler in handlers):
             return
-        logger.info(
+        logger.debug(
             "audiagentic exit",
             extra={"project_root": str(self._project_root), "command": self._command},
         )

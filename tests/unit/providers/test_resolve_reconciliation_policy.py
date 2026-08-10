@@ -5,7 +5,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from audiagentic.foundation.interaction import AskRequest, AskResponse, ResponseStatus, use_backend
+
+pytestmark = pytest.mark.no_parallel
 
 
 class _ScriptedBackend:
