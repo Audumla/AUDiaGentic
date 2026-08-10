@@ -3,9 +3,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Literal, TypeAlias
+from typing import TypeAlias
 
-PluginEntryMode = Literal["apply", "prune", "status"]
+from .automation_vocabulary import ProviderReconcileMode as PluginEntryMode
+
 PluginOptionValue: TypeAlias = str | int | float | bool | None
 
 

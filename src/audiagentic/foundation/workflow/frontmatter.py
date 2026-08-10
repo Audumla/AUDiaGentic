@@ -198,15 +198,24 @@ def build_sectioned_body(
     A slug with no entry — a section being created for the first time — falls
     back to a reconstructed heading, which is the only case where the lossy
     reconstruction is correct, because there is no original to preserve.
+
+    A custom section with blank content is dropped rather than rendered as
+    an empty heading — an unknown section only exists because some update
+    wrote content into it, and there is no dedicated delete verb for a
+    section, so writing blank content back out is how one is removed.
+    Canonical sections always render, blank or not: they are part of the
+    document's fixed structure, not accumulated state.
     """
     custom_headings = custom_headings or {}
     parts = [f"# {title}"]
     for key, heading in field_to_heading.items():
         content = sections.get(key, "")
         parts.append(f"\n## {heading}\n\n{content}")
-    # Append any unknown sections not in the heading map
+    # Append any unknown sections not in the heading map, skipping blanks.
     for key, content in sections.items():
         if key == "title" or key in field_to_heading:
+            continue
+        if not content.strip():
             continue
         heading = custom_headings.get(key) or _reconstruct_heading(key)
         parts.append(f"\n## {heading}\n\n{content}")

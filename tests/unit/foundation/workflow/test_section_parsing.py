@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from audiagentic.foundation.workflow.frontmatter import (
+    build_sectioned_body,
     parse_custom_headings,
     parse_sections,
 )
@@ -199,3 +200,52 @@ def test_parse_sections_unknown_h2_is_custom_field() -> None:
 
     result = parse_sections(body, _HEADING_MAP)
     assert result["additional_context"] == "Extra info."
+
+
+_FIELD_TO_HEADING = {v: k for k, v in _HEADING_MAP.items()}
+
+
+def test_build_sectioned_body_drops_blank_custom_section() -> None:
+    """Blanking a custom section's content removes its heading, not just its text.
+
+    There is no dedicated delete verb for a section — writing blank content
+    is how a caller removes one. If the renderer kept emitting an empty
+    heading, a custom section could accumulate forever with no way back out.
+    """
+    body = build_sectioned_body(
+        "Title",
+        {"description": "Content.", "stray_note": ""},
+        _FIELD_TO_HEADING,
+    )
+    assert "Stray Note" not in body
+    assert "stray_note" not in body
+
+
+def test_build_sectioned_body_keeps_canonical_section_when_blank() -> None:
+    """Canonical sections are fixed document structure, not accumulated state —
+    they render even with no content, unlike a blank custom section."""
+    body = build_sectioned_body(
+        "Title",
+        {"description": "Content.", "notes": ""},
+        _FIELD_TO_HEADING,
+    )
+    assert "## Notes" in body
+
+
+def test_build_sectioned_body_round_trips_a_deleted_custom_section() -> None:
+    """A custom section written once, then blanked, disappears on re-render —
+    the exact repro of the bug this fix closes: a stray section that
+    survives every subsequent update because there was no way to remove it."""
+    with_section = build_sectioned_body(
+        "Title",
+        {"description": "Content.", "old_note": "Something transient."},
+        _FIELD_TO_HEADING,
+    )
+    parsed = parse_sections(with_section, _HEADING_MAP)
+    custom = parse_custom_headings(with_section, _HEADING_MAP)
+    assert parsed["old_note"] == "Something transient."
+
+    parsed["old_note"] = ""
+    rebuilt = build_sectioned_body("Title", parsed, _FIELD_TO_HEADING, custom)
+    assert "old_note" not in parse_sections(rebuilt, _HEADING_MAP)
+    assert "Old Note" not in rebuilt

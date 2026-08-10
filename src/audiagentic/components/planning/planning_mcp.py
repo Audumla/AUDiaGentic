@@ -4,28 +4,28 @@ from __future__ import annotations
 
 from audiagentic.components.planning import planning_api
 from audiagentic.foundation.mcp.component_server import (
-    log_tool_call,
     mcp_server,
     project_root_from_env,
+    tool_boundary,
 )
 
 mcp = mcp_server(__name__)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def plan_create_item(item: dict) -> dict:
     return planning_api.create_item(project_root_from_env(), item)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def plan_list_groups(state: str | None = None, plan: str | None = None) -> list:
     return planning_api.list_items_grouped(project_root_from_env(), state, plan)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def plan_list_items(
     plan: str | None = None,
     id_prefix: str | None = None,
@@ -68,7 +68,7 @@ def plan_list_items(
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def plan_get_item(
     item_id: str,
     include_history: bool = False,
@@ -83,25 +83,25 @@ def plan_get_item(
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def plan_set_state(item_id: str, new_state: str) -> dict:
     return planning_api.set_state(project_root_from_env(), item_id, new_state)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def plan_update_item(item_id: str, updates: dict) -> dict:
     return planning_api.update_item(project_root_from_env(), item_id, updates)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def plan_delete_item(item_id: str) -> dict:
     return planning_api.delete_item(project_root_from_env(), item_id)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def plan_list_standards() -> list:
     return planning_api.list_standards(project_root_from_env())
 
@@ -112,13 +112,13 @@ def plan_list_standards() -> list:
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def plan_create_review(review: dict) -> dict:
     return planning_api.create_review(project_root_from_env(), review)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def plan_list_reviews(
     state: str | None = None,
     plan: str | None = None,
@@ -146,25 +146,25 @@ def plan_list_reviews(
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def plan_get_review(review_id: str) -> dict:
     return planning_api.get_review(project_root_from_env(), review_id)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def plan_set_review_state(review_id: str, new_state: str) -> dict:
     return planning_api.set_review_state(project_root_from_env(), review_id, new_state)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def plan_update_review(review_id: str, updates: dict) -> dict:
     return planning_api.update_review(project_root_from_env(), review_id, updates)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def plan_delete_review(review_id: str) -> dict:
     return planning_api.delete_review(project_root_from_env(), review_id)
 

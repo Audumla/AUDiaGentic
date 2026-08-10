@@ -13,6 +13,7 @@ can do, and the harness queries this declaration before resolution.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal, get_args
 
 from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.foundation.transports.agent_session import (
@@ -25,6 +26,18 @@ from audiagentic.foundation.transports.harness_status_observer import (
     StatusEvidenceSourceKind,
     StatusObserverLease,
 )
+
+# ---------------------------------------------------------------------------
+# Observer installation timing
+# ---------------------------------------------------------------------------
+
+ObserverInstallationTiming = Literal["session-open", "first-turn", "lazy"]
+"""When the observer is installed relative to session/turn lifecycle.
+
+Distinct from foundation.transports.session_surface.LifecycleInstallation,
+which describes installation *mechanism* (managed-hook/managed-plugin/...),
+not *timing*.
+"""
 
 # ---------------------------------------------------------------------------
 # Capability descriptor
@@ -46,7 +59,7 @@ class HarnessStatusObserverCapability:
 
     mechanism: StatusEvidenceSourceKind
     supported_statuses: frozenset[str]
-    lifecycle_installation: str = "session-open"  # e.g. "session-open", "first-turn", "lazy"
+    lifecycle_installation: ObserverInstallationTiming = "session-open"
 
     def __post_init__(self) -> None:
         if not isinstance(self.mechanism, StatusEvidenceSourceKind):
@@ -71,11 +84,11 @@ class HarnessStatusObserverCapability:
                     message="each supported_status must be a non-empty string",
                     details={"status": repr(status)},
                 )
-        if not isinstance(self.lifecycle_installation, str) or not self.lifecycle_installation:
+        if self.lifecycle_installation not in get_args(ObserverInstallationTiming):
             raise make_error(
                 prefix="VAL", component="PROV-OBS", number=4,
                 kind="harness-status-observer-capability",
-                message="lifecycle_installation must be a non-empty string",
+                message="lifecycle_installation must be one of session-open/first-turn/lazy",
                 details={"lifecycle_installation": repr(self.lifecycle_installation)},
             )
 

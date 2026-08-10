@@ -5,16 +5,16 @@ from typing import Any
 
 from audiagentic.components.coding_lsp import lsp_config_api
 from audiagentic.foundation.mcp.component_server import (
-    log_tool_call,
     mcp_server,
     project_root_from_env,
+    tool_boundary,
 )
 
 mcp = mcp_server(__name__)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def lsp_config_status(root: str = ".") -> dict[str, Any]:
     """Report LSP config and binary availability.
 
@@ -25,21 +25,21 @@ def lsp_config_status(root: str = ".") -> dict[str, Any]:
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def lsp_list_implementations(root: str = ".") -> dict[str, Any]:
     resolved = root if root != "." else str(project_root_from_env())
     return lsp_config_api.list_implementations(resolved)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def lsp_select_implementation(root: str = ".", implementation: str = "") -> dict[str, Any]:
     resolved = root if root != "." else str(project_root_from_env())
     return lsp_config_api.select_implementation(resolved, implementation)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def lsp_get_config(root: str = ".", implementation_id: str | None = None) -> dict[str, Any]:
     """Return resolved config plus the settable-option schema for an LSP implementation.
 
@@ -53,7 +53,7 @@ def lsp_get_config(root: str = ".", implementation_id: str | None = None) -> dic
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def lsp_set_config(root: str = ".", implementation_id: str = "", updates: dict[str, Any] | None = None) -> dict[str, Any]:
     """Validate and persist config updates for an LSP implementation.
 
@@ -64,7 +64,7 @@ def lsp_set_config(root: str = ".", implementation_id: str = "", updates: dict[s
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 async def lsp_add_language(root: str = ".", language: str = "") -> dict[str, Any]:
     """Enable a language and install its language-server dependency if missing."""
     resolved = root if root != "." else str(project_root_from_env())
@@ -72,31 +72,31 @@ async def lsp_add_language(root: str = ".", language: str = "") -> dict[str, Any
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def lsp_remove_language(root: str, language: str) -> dict[str, Any]:
     return lsp_config_api.remove_language(root, language)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def lsp_set_language_option(root: str, language: str, key: str, value: Any) -> dict[str, Any]:
     return lsp_config_api.set_language_option(root, language, key, value)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def lsp_reset_language_option(root: str, language: str, key: str) -> dict[str, Any]:
     return lsp_config_api.reset_language_option(root, language, key)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def lsp_list_languages() -> dict[str, Any]:
     return lsp_config_api.list_languages()
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 async def lsp_install_dependencies(names: list[str], root: str = ".") -> dict[str, Any]:
     """Eagerly install configured missing language-server binaries.
 
@@ -108,7 +108,7 @@ async def lsp_install_dependencies(names: list[str], root: str = ".") -> dict[st
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def lsp_list_missing() -> dict[str, Any]:
     """List configured binaries currently missing from PATH.
 
