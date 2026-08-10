@@ -273,6 +273,42 @@ def _dispatch_session_request(
             "failed",
             updates={"error": exc, "session-id": session_id, "finished-at": now_iso_z()},
         )
+    except BaseException as exc:
+        # Safety net: wrap any non-AudiaGenticError so _redact_error preserves
+        # the message (INT-AGW-098 boundary handler — prevents raw exceptions
+        # like provider-specific errors from being silently redacted).
+        logger.exception(
+            "session dispatch failed with unhandled error",
+            extra={"request-id": request_id},
+        )
+        if request_runtime is not None:
+            _quarantine_request_runtime(request_runtime, request_runtime_root.parent / "quarantine")
+        wrapped = AudiaGenticError(
+            code="INT-AGW-098",
+            kind="agents",
+            message=f"session dispatch failed: {exc}",
+            details={"original-type": type(exc).__name__},
+        )
+        store.append_owned_attempt(
+            project_root,
+            request_id,
+            owner_epoch=record["dispatch-owner-epoch"],
+            worker_id=record["worker-id"],
+            attempt_epoch=record["attempt-epoch"],
+            agent_profile_id=agent_profile_id,
+            provider_id=provider_id,
+            model_id=profile.get("model_id"),
+            state="failed",
+            error=wrapped,
+            started_at=started_at,
+            finished_at=now_iso_z(),
+        )
+        return _transition_owned_attempt(
+            project_root,
+            record,
+            "failed",
+            updates={"error": wrapped, "session-id": session_id, "finished-at": now_iso_z()},
+        )
 
     if result.stop_reason == "cancelled":
         # RV680: a turn interrupted by protocol-level cancel is a cancelled
