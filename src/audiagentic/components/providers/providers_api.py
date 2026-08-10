@@ -152,6 +152,19 @@ def list_canonical_provider_ids() -> tuple[str, ...]:
     return _list()
 
 
+def get_provider_load_errors() -> list[tuple[str, str]]:
+    """Return residual descriptor load errors as (file, error_message) pairs.
+
+    Providers whose descriptors failed to parse are skipped and logged;
+    this accessor exposes the failures for operator diagnostics.
+    The error message is truncated to 200 characters.
+    """
+    from audiagentic.components.providers.descriptors.loader import get_load_errors as _get
+
+    errors = _get()
+    return [(str(path.name), str(exc)[:200]) for path, exc in errors]
+
+
 def get_prompt_syntax_defaults() -> dict[str, Any]:
     """Return provider-owned defaults for shared prompt syntax parsing."""
     from audiagentic.components.providers.services.execution.public_prompt_operations import (

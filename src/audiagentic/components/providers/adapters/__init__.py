@@ -4,14 +4,22 @@ Importing this package discovers adapter packages via pkgutil and loads
 provider descriptors from YAML (config/providers/*.yaml). Surface imports
 (catalog, hooks, mcp_format) are preserved for callable resolution.
 """
+
 from __future__ import annotations
 
 import importlib
+import logging
 import pkgutil
 from types import ModuleType
 
-from ..descriptors.loader import get_providers_config_dir, load_providers_from_directory
+from ..descriptors.loader import (
+    get_load_errors,
+    get_providers_config_dir,
+    load_providers_from_directory,
+)
 from ..descriptors.registry import register
+
+logger = logging.getLogger(__name__)
 
 
 def _discover_adapter_packages() -> dict[str, ModuleType]:
@@ -76,6 +84,8 @@ def load_providers() -> None:
 
     Descriptors are loaded from config/providers/*.yaml. Surface modules
     (catalog, hooks, mcp_format) are imported for callable resolution.
+    Invalid descriptors are skipped and logged at WARNING level; a summary
+    is emitted if any were skipped.
     """
     # Import surface modules first (catalog.py, hooks.py, mcp_format.py)
     _ADAPTER_MODULES = _discover_adapter_packages()
@@ -88,6 +98,16 @@ def load_providers() -> None:
     for descriptor in providers.values():
         register(descriptor)
         _register_standard_surfaces(descriptor)
+
+    # Log summary of skipped providers (if any)
+    skipped = get_load_errors()
+    if skipped:
+        logger.warning(
+            "Loaded %d provider(s), skipped %d: %s",
+            len(providers),
+            len(skipped),
+            ", ".join(f"{path.name} ({type(exc).__name__})" for path, exc in skipped),
+        )
 
 
 # Load providers on import (preserves existing behavior)

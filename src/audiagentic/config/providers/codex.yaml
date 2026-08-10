@@ -32,7 +32,7 @@ capabilities:
       reader: "audiagentic.components.providers.adapters.codex.mcp_format:read_codex_toml"
       writer: "audiagentic.components.providers.adapters.codex.mcp_format:write_codex_toml"
       remover: "audiagentic.components.providers.adapters.codex.mcp_format:remove_codex_toml"
-      transports: [stdio]  # codex-toml writer emits command/args entries only
+      transports: [stdio] # codex-toml writer emits command/args entries only
       format: "codex-toml"
       refresh_mode: "restart-required"
 
@@ -46,7 +46,7 @@ capabilities:
 
   hooks:
     mechanism:
-      config_path: "~/.codex/hooks.json"
+      config_path: "audiagentic.components.providers.adapters.codex.hooks_format:resolve_codex_hooks_path"
       reader: "audiagentic.components.providers.adapters.codex.hooks_format:read_codex_hooks"
       writer: "audiagentic.components.providers.adapters.codex.hooks_format:write_codex_hooks"
       remover: "audiagentic.components.providers.adapters.codex.hooks_format:remove_codex_hook"

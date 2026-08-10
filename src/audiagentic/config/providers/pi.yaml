@@ -29,18 +29,18 @@ capabilities:
 
   mcp:
     mechanism:
-      config_path: ".mcp.json"
+      config_path: ".pi/mcp.json"
       reader: "audiagentic.foundation.mcp.json_format:read_mcp_json"
       writer: "audiagentic.foundation.mcp.json_format:write_mcp_json"
       remover: "audiagentic.foundation.mcp.json_format:remove_mcp_json"
-      transports: [stdio, http]  # json_format.py:84-87 emits {type, url, headers} when entry.is_remote
+      transports: [stdio, http] # json_format.py:84-87 emits {type, url, headers} when entry.is_remote
       format: "mcp-json"
       refresh_mode: "restart-required"
 
   models:
     mechanism:
       store:
-        config_path: "~/.pi/agent/models.json"
+        config_path: "audiagentic.components.providers.adapters.pi.model_config:resolve_pi_models_config_path"
         reader: "audiagentic.components.providers.adapters.pi.model_config:read_pi_models"
         writer: "audiagentic.components.providers.adapters.pi.model_config:write_pi_models"
         remover: "audiagentic.components.providers.adapters.pi.model_config:remove_pi_model"
@@ -187,6 +187,7 @@ session_surfaces:
         tool_version: "0.82.1"
         probe_artifact: "tests/docker/Dockerfile.pi-rpc-tap-e2e"
         evidence:
+          # pi-lens-ignore: line-length
           validated: true
           reference: "tests/integration/providers/test_pi_rpc_tap_transcript_e2e.py"
       - platform: "darwin-arm64"
@@ -209,8 +210,10 @@ harness_observability:
       reference: primary Pi route; prove schema/correlation/lifecycle/close semantics
     recipe: A
     lifecycle_source: none
+    # pi-lens-ignore: line-length
     probe_anchor: primary Pi route; prove schema/correlation/lifecycle/close semantics
   - surface_id: pi-community-acp
+    # pi-lens-ignore: line-length
     candidate_source: "community ACP adapter (optional route, never primary — pi-rpc is primary)"
     # AS41 Path A: this surface uses the same provider-neutral
     # AcpAgentSessionTransport wrapper OpenCode's opencode-acp surface does —
