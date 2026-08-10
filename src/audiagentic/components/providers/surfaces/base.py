@@ -274,12 +274,6 @@ def is_component_active(project_root: Path, component_id: str) -> bool:
     return is_installed(component_id, project_root) and is_enabled(component_id, project_root)
 
 
-def render_rules_file(*, adapter_dir: Path, filename: str = "prompt-tags.md") -> str:
-    """Render a provider's managed rules file from its template."""
-    template_text = _load_template(adapter_dir, filename, "default_prompt_tags.md")
-    return apply_managed_header(template_text)
-
-
 def strip_managed_content(existing: str) -> str:
     """Remove the managed region and any legacy per-block fences, leaving user text."""
     text = _REGION_RE.sub("\n\n", existing)

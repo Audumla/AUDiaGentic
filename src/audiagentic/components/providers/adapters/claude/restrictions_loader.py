@@ -63,7 +63,7 @@ def get_allowed_tools(action_tag: str) -> set[str]:
     """Get the allowed tools for a given action tag.
 
     Args:
-        action_tag: The canonical action tag (e.g. 'ag-review', 'ag-plan').
+        action_tag: The canonical action tag, when an action-tag component is installed.
 
     Returns:
         Set of allowed tool names. Falls back to read-only for unknown tags.

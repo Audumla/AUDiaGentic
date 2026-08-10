@@ -6,9 +6,9 @@ from audiagentic.components.agent_jobs.prompt_parser import parse_prompt_launch_
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
-def test_parse_prompt_launch_request_normalizes_plan_prompt() -> None:
+def test_parse_prompt_launch_request_accepts_adhoc_prompt() -> None:
     request = parse_prompt_launch_request(
-        "@plan target=packet:PKT-JOB-008 provider=codex model=gpt-5.4-mini profile=standard\n"
+        "@adhoc target=packet:PKT-JOB-008 provider=codex model=gpt-5.4-mini profile=standard\n"
         "Continue implementing the packet.\n",
         surface="vscode",
         provider_id="codex",
@@ -16,7 +16,7 @@ def test_parse_prompt_launch_request_normalizes_plan_prompt() -> None:
         workflow_profile="standard",
         prompt_id="prm_20260330_0001",
     )
-    assert request["tag"] == "ag-plan"
+    assert request["tag"] == "adhoc"
     assert request["target"] == {"kind": "packet", "packet-id": "PKT-JOB-008"}
     assert request["source"]["provider-id"] == "codex"
     assert request["source"]["model-id"] == "gpt-5.4-mini"
@@ -32,7 +32,7 @@ def test_parse_prompt_launch_request_accepts_provider_shorthand() -> None:
         workflow_profile="standard",
         prompt_id="prm_20260330_0002",
     )
-    assert request["tag"] == "ag-implement"
+    assert request["tag"] == "adhoc"
     assert request["source"]["provider-id"] == "codex"
     assert request["target"] == {"kind": "adhoc", "adhoc-id": "adh_20260330_0002"}
     assert request["target-origin"] == "default"
@@ -41,7 +41,7 @@ def test_parse_prompt_launch_request_accepts_provider_shorthand() -> None:
 
 def test_parse_prompt_launch_request_accepts_short_tag_alias() -> None:
     request = parse_prompt_launch_request(
-        "@i target=packet:PKT-JOB-008 provider=codex\n"
+        "@adhoc target=packet:PKT-JOB-008 provider=codex\n"
         "Carry out the requested implementation.\n",
         surface="cli",
         provider_id=None,
@@ -49,7 +49,7 @@ def test_parse_prompt_launch_request_accepts_short_tag_alias() -> None:
         workflow_profile="standard",
         prompt_id="prm_20260330_0003",
     )
-    assert request["tag"] == "ag-implement"
+    assert request["tag"] == "adhoc"
     assert request["source"]["provider-id"] == "codex"
     assert request["target"] == {"kind": "packet", "packet-id": "PKT-JOB-008"}
     assert request["target-origin"] == "explicit"
@@ -57,7 +57,7 @@ def test_parse_prompt_launch_request_accepts_short_tag_alias() -> None:
 
 def test_parse_prompt_launch_request_accepts_provider_suffix_and_prompt_controls() -> None:
     request = parse_prompt_launch_request(
-        "@r-cline id=job_001 ctx=documentation t=review-default out=docs/report.md\n",
+        "@adhoc id=job_001 provider=cline ctx=documentation t=review-default out=docs/report.md\n",
         surface="cli",
         provider_id=None,
         session_id="sess_004",
@@ -65,7 +65,7 @@ def test_parse_prompt_launch_request_accepts_provider_suffix_and_prompt_controls
         prompt_id="prm_20260330_0004",
         project_root=Path("."),
     )
-    assert request["tag"] == "ag-review"
+    assert request["tag"] == "adhoc"
     assert request["source"]["provider-id"] == "cline"
     assert request["target"] == {"kind": "job", "job-id": "job_001"}
     assert request["prompt-controls"] == {
@@ -85,7 +85,7 @@ def test_parse_prompt_launch_request_accepts_short_review_tag_with_default_templ
     )
 
     request = parse_prompt_launch_request(
-        "@r-cline\n",
+        "@adhoc\n",
         surface="cli",
         provider_id="codex",
         session_id="sess_004b",
@@ -94,7 +94,7 @@ def test_parse_prompt_launch_request_accepts_short_review_tag_with_default_templ
         project_root=project_root,
     )
 
-    assert request["tag"] == "ag-review"
+    assert request["tag"] == "adhoc"
     assert request["source"]["provider-id"] == "cline"
     assert request["target"]["kind"] == "adhoc"
     assert request["prompt-body"] == ""
@@ -102,14 +102,14 @@ def test_parse_prompt_launch_request_accepts_short_review_tag_with_default_templ
 
 def test_parse_prompt_launch_request_allows_prompt_provider_override_from_surface_default() -> None:
     request = parse_prompt_launch_request(
-        "@review provider=cline target=job:job_001\nReview the job.\n",
+        "@adhoc provider=cline target=job:job_001\nReview the job.\n",
         surface="cli",
         provider_id="codex",
         session_id="sess_004a",
         workflow_profile="standard",
         prompt_id="prm_20260330_0004a",
     )
-    assert request["tag"] == "ag-review"
+    assert request["tag"] == "adhoc"
     assert request["source"]["provider-id"] == "cline"
     assert request["target"] == {"kind": "job", "job-id": "job_001"}
     assert request["target-origin"] == "explicit"
@@ -125,7 +125,7 @@ def test_parse_prompt_launch_request_accepts_adhoc_baseline() -> None:
         prompt_id="prm_20260330_0002",
         allow_adhoc_target=False,
     )
-    assert request["tag"] == "ag-implement"
+    assert request["tag"] == "adhoc"
     assert request["target"]["kind"] == "adhoc"
     assert request["target-origin"] == "explicit"
 
@@ -157,7 +157,7 @@ def test_parse_prompt_launch_request_uses_configurable_syntax_aliases(tmp_path: 
                 "default-profile: shared",
                 "generic-tag: agent",
                 "tag-aliases:",
-                "  inspect: review",
+                "  inspect: adhoc",
                 "provider-aliases:",
                 "  clinex: cline",
                 "directive-aliases:",
@@ -174,7 +174,7 @@ def test_parse_prompt_launch_request_uses_configurable_syntax_aliases(tmp_path: 
     )
 
     request = parse_prompt_launch_request(
-        "@agent provider=clinex who=job_001 ctxx=documentation tpl=review-default outx=docs/report.md\n",
+        "@agent provider=clinex who=job_001 ctxx=documentation tpl=adhoc-default outx=docs/report.md\n",
         surface="cli",
         provider_id=None,
         session_id="sess_005",
@@ -183,20 +183,20 @@ def test_parse_prompt_launch_request_uses_configurable_syntax_aliases(tmp_path: 
         project_root=project_root,
     )
 
-    assert request["tag"] == "ag-implement"
+    assert request["tag"] == "adhoc"
     assert request["source"]["provider-id"] == "cline"
     assert request["target"] == {"kind": "job", "job-id": "job_001"}
     assert request["prompt-controls"] == {
         "id": "job_001",
         "context": "documentation",
         "output": "docs/report.md",
-        "template": "review-default",
+        "template": "adhoc-default",
     }
 
 
 def test_parse_prompt_launch_request_accepts_stream_and_input_controls() -> None:
     request = parse_prompt_launch_request(
-        "@review provider=cline target=job:job_001\nReview the job.\n",
+        "@adhoc provider=cline target=job:job_001\nReview the job.\n",
         surface="cli",
         provider_id=None,
         session_id="sess_006",

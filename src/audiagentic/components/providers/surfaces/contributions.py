@@ -130,8 +130,7 @@ def load_tag_surface_contributions(project_root: Path | None = None) -> list[Sur
 def _build_canonical_tags_body(tags: dict) -> str:
     """Build the canonical-tags summary block body from all loaded tags.
 
-    Tag-routing doctrine lives in the agent-jobs/prompt-tags block; this block is
-    just the canonical tag list plus where definitions are managed.
+    This block contains only the dynamically registered action tags.
     """
     lines = ["Canonical tags (route the raw tagged prompt through the repo-owned bridge):\n"]
     for tag_id in sorted(tags):
@@ -165,7 +164,7 @@ def build_summary_contributions(project_root: Path | None = None) -> list[Surfac
     return [
         SurfaceContribution(
             contribution_id="agent-jobs/canonical-rule",
-            owner_component="agent-jobs",  # cross-component: prompt-tags contributions are owned by agent-jobs
+            owner_component="agent-jobs",
             title="Canonical workflow tags",
             body=_build_canonical_tags_body(tags),
         ),

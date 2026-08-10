@@ -23,9 +23,41 @@ class GptAutoConfig:
     model_select: str | None = None
     """If set, the model name shown in ChatGPT's model selector (e.g. 'gpt-4o')."""
 
+    # --- Managed browser lifecycle ---
+    browser_port: int = 9222
+    """TCP port for the managed browser's CDP endpoint.
+
+    If ``browser_autostart`` is True and no browser is listening on this port,
+    the provider launches one using the system default browser.  The port must
+    be free — existing listeners are never killed.
+    """
+
+    browser_profile_dir: str | None = None
+    """Path to the browser user-data directory (isolated profile).
+
+    Defaults to ``~/.audiagentic/runtime/gpt-auto-profile`` when omitted.
+    Persists between gateway restarts so sessions survive process death.
+    """
+
+    browser_autostart: bool = True
+    """Whether the provider should launch its own browser instance.
+
+    When False the provider connects to an already-running browser on
+    ``browser_port``.  When True (default) the provider discovers the system
+    default browser, launches it with CDP flags, and manages its lifecycle.
+    """
+
+    browser_idle_timeout_seconds: float = 300.0
+    """Seconds of inactivity before the managed browser is stopped."""
+
     # --- CDP connection ---
     cdp_url: str = "http://127.0.0.1:9222"
-    """Chrome DevTools Protocol URL of the running browser."""
+    """Chrome DevTools Protocol URL of the running browser.
+
+    Deprecated when ``browser_autostart`` is True — derived from ``browser_port`` instead.
+    """
+
+    # --- Browser lifecycle aliases ---
 
     # --- Timing ---
     tab_selection_timeout: int = 15
@@ -59,6 +91,10 @@ class GptAutoConfig:
         "tab-selection-timeout": "tab_selection_timeout",
         "login-timeout": "login_timeout",
         "response-stability-seconds": "response_stability_seconds",
+        "browser-port": "browser_port",
+        "browser-profile-dir": "browser_profile_dir",
+        "browser-autostart": "browser_autostart",
+        "browser-idle-timeout-seconds": "browser_idle_timeout_seconds",
     }
 
     @classmethod

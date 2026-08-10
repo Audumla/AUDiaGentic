@@ -19,36 +19,6 @@ agent-definitions:
   internal: true
   acp: false
   a2a: false
-- agent_id: implementer-agent
-  name: Implementer Agent
-  execution_profile_id: rig-tester
-  role_id: implementer
-  description: Real behavioral Agent Definition seeded from the ag-implement tag doctrine
-    (AS83).
-  advertised_skills: []
-  internal: true
-  acp: false
-  a2a: false
-- agent_id: planner-agent
-  name: Planner Agent
-  execution_profile_id: rig-tester
-  role_id: planner
-  description: Real behavioral Agent Definition seeded from the ag-plan tag doctrine
-    (AS83).
-  advertised_skills: []
-  internal: true
-  acp: false
-  a2a: false
-- agent_id: reviewer-agent
-  name: Reviewer Agent
-  execution_profile_id: rig-tester
-  role_id: reviewer
-  description: Real behavioral Agent Definition seeded from the ag-review tag doctrine
-    (AS83).
-  advertised_skills: []
-  internal: true
-  acp: false
-  a2a: false
 - agent_id: opencode-rig-agent
   name: OpenCode Rig Agent
   execution_profile_id: opencode-rig

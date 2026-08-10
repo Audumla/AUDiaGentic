@@ -745,8 +745,14 @@ def operate_provider_surfaces(
         )
 
     renderers = load_contribution_renderer_registry()
+    from audiagentic.components.providers.descriptors.feature_mapping import KIND_SURFACE
+    from audiagentic.components.providers.services.config.feature_resolution import (
+        active_provider_ids,
+    )
+
+    active_provider_ids_for_surface = active_provider_ids(project_root, KIND_SURFACE)
     results: list[GeneratedSurfaceResult] = []
-    for pid in sorted(renderers):
+    for pid in sorted(active_provider_ids_for_surface & set(renderers)):
         try:
             single = operate_provider_surfaces(
                 project_root,

@@ -46,10 +46,6 @@ capabilities:
 
   agent-files:
     - mechanism:
-        rel_path: ".clinerules/prompt-tags.md"
-        managed: true
-        description: "Canonical prompt tag rules for Cline"
-    - mechanism:
         rel_path: ".clinerules"
         managed: false
         description: "Cline rules directory"

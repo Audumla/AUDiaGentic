@@ -212,6 +212,31 @@ async def test_resume_conversation_returns_conversation_id(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_open_captures_chat_id_from_live_url(tmp_path):
+    """open() should capture chat-id from live URL after readiness, even when
+    _resolve_workspace returned the workspace base (no conversation yet). This
+    covers the case where ChatGPT navigated to /c/{conv} during readiness.
+
+    Regression: without this, open() builds metadata from ws.url (workspace base)
+    and chat-id is None — a worker death mid-turn loses the conversation entirely."""
+    _seed_mapping(tmp_path, conversation_id=CONVERSATION_ID)
+    # Resume with bare conversation ID — _resolve_workspace navigates to full URL
+    fake = FakeCdpClient(workspace_url=PROJECT_URL)
+    transport, _ = _make_transport(
+        tmp_path,
+        fake=fake,
+        resume_provider_ref=CONVERSATION_ID,
+    )
+
+    result = await transport.open()
+
+    # Live URL after readiness is CONVERSATION_URL (set by evaluate() during resume)
+    assert result.metadata["chat-id"] == CONVERSATION_ID
+    assert result.metadata["chat-url"] == CONVERSATION_URL
+    assert str(result) == CONVERSATION_ID
+
+
+@pytest.mark.asyncio
 async def test_resume_by_workspace_base_url(tmp_path):
     _seed_mapping(tmp_path, conversation_id=CONVERSATION_ID)
     fake = FakeCdpClient(workspace_url=WORKSPACE_URL)

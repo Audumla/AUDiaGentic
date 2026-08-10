@@ -57,10 +57,6 @@ capabilities:
         managed: true
         description: "Project instructions / system prompt"
     - mechanism:
-        rel_path: ".claude/rules/prompt-tags.md"
-        managed: true
-        description: "Canonical prompt tag rules"
-    - mechanism:
         rel_path: ".claude/settings.json"
         managed: false
         description: "Claude Code user settings"

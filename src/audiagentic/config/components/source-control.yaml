@@ -6,6 +6,11 @@ description: Source control — installs and manages official git and GitHub MCP
 depends-on:
   - project
 
+files:
+  - path: .audiagentic/skills/ag-check-in-prep/skill.md
+    lifecycle: required-managed
+    description: ag-check-in-prep skill source
+
 dependencies:
   git:
     display-name: Git
@@ -106,4 +111,7 @@ contributions:
     content:
       body: |
         Do not invoke git or GitHub APIs directly — use the MCP tools.
+        Never use `git stash` — this is a shared, multi-agent working tree and a stash
+        can silently collide with another session's live edits. If work needs to be set
+        aside, split it into its own deliberate check-in group or leave it uncommitted.
 
