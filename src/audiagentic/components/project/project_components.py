@@ -125,12 +125,20 @@ def attach_harness_refresh(
     via its component-lifecycle subscription (runtime/harness/__init__.py) --
     calling refresh_harness_config_if_installed here too would just repeat
     that work a second time for every action.
+
+    When the harness_status capability is not wired (e.g. direct API call
+    outside the audiagentic process), returns the result without the
+    harness_available hint — this is a non-fatal degradation.
     """
     if not result.get("ok", True):
         return result
     from audiagentic.foundation.capabilities import get_harness_status
 
-    hs = get_harness_status()
+    try:
+        hs = get_harness_status()
+    except RuntimeError:
+        # Capability not wired — safe degradation outside the process.
+        return result
     harness_type = hs["get_harness_type"](project_root)
     harness_available = hs["harness_cli_available"](harness_type) is not None
     return {**result, "harness_available": harness_available}

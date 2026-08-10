@@ -9,16 +9,31 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
+
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 logger = logging.getLogger(__name__)
 
 
-class GptAutoError(Exception):
-    """Raised when the gpt-auto provider fails to produce a response."""
+class GptAutoError(AudiaGenticError):
+    """Raised when the gpt-auto provider fails to produce a response.
 
-    pass
+    Inherits from AudiaGenticError so errors propagate through the gateway
+    dispatch chain with proper code/message — _redact_error preserves
+    AudiaGenticError messages and discards raw exception strings.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "EXT-GPT-001",
+        kind: str = "gpt-auto",
+        details: Mapping[str, Any] | None = None,
+    ) -> None:
+        super().__init__(code=code, kind=kind, message=message, details=details)
 
 
 async def run(
