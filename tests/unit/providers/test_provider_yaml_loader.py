@@ -43,7 +43,10 @@ class TestProviderYamlLoader:
         assert descriptor.cli_install is not None
         assert descriptor.cli_install.executable == "claude"
         assert descriptor.mcp_config is not None
-        assert descriptor.mcp_config.config_path == "~/.claude/mcp.json"
+        # Project-local .mcp.json via a resolver callable, not a literal
+        # home-scoped path (CC55: Claude moved off ~/.claude/mcp.json).
+        assert callable(descriptor.mcp_config.config_path)
+        assert descriptor.mcp_config.config_path.__name__ == "resolve_claude_mcp_config_path"
         assert descriptor.mcp_config.reader is read_mcp_json
         assert descriptor.mcp_config.writer is write_mcp_json
         assert descriptor.mcp_config.remover is remove_mcp_json
@@ -371,3 +374,76 @@ class TestManagedConfigTransports:
                     if isinstance(mechanism, dict) and "remote" in mechanism:
                         offenders.append(f"{path.name}:{kind}")
         assert not offenders, f"stale `remote:` key still present in {offenders}"
+
+
+class TestLoaderResilience:
+    """CC56: one bad provider descriptor must not crash the whole loader."""
+
+    VALID_YAML = (
+        "provider_id: test-valid\n"
+        "display_name: Test Valid\n"
+        "execution_isolation_tier: no-isolation\n"
+    )
+    # Missing required `display_name` — triggers VAL-DESC-003.
+    INVALID_YAML = "provider_id: test-invalid\nexecution_isolation_tier: no-isolation\n"
+
+    def test_invalid_descriptor_is_skipped_not_fatal(self, tmp_path) -> None:
+        from audiagentic.components.providers.descriptors.loader import (
+            clear_load_errors,
+            get_load_errors,
+        )
+
+        (tmp_path / "valid.yaml").write_text(self.VALID_YAML, encoding="utf-8")
+        (tmp_path / "invalid.yaml").write_text(self.INVALID_YAML, encoding="utf-8")
+
+        clear_load_errors()
+        try:
+            providers = load_providers_from_directory(tmp_path)
+            assert "test-valid" in providers
+            assert "test-invalid" not in providers
+
+            errors = get_load_errors()
+            assert len(errors) == 1
+            path, exc = errors[0]
+            assert path.name == "invalid.yaml"
+            assert "display_name" in str(exc)
+        finally:
+            clear_load_errors()
+
+    def test_clear_load_errors_resets_the_collector(self, tmp_path) -> None:
+        from audiagentic.components.providers.descriptors.loader import (
+            clear_load_errors,
+            get_load_errors,
+        )
+
+        (tmp_path / "invalid.yaml").write_text(self.INVALID_YAML, encoding="utf-8")
+
+        clear_load_errors()
+        try:
+            load_providers_from_directory(tmp_path)
+            assert get_load_errors()
+            clear_load_errors()
+            assert get_load_errors() == []
+        finally:
+            clear_load_errors()
+
+    def test_provider_load_errors_surface_through_providers_api(self, tmp_path) -> None:
+        """The operator-facing accessor (consumed by gateway_overview) reports
+        skipped descriptors as (filename, truncated-message) pairs."""
+        from audiagentic.components.providers.descriptors.loader import (
+            clear_load_errors,
+        )
+        from audiagentic.components.providers.providers_api import (
+            get_provider_load_errors,
+        )
+
+        (tmp_path / "invalid.yaml").write_text(self.INVALID_YAML, encoding="utf-8")
+
+        clear_load_errors()
+        try:
+            load_providers_from_directory(tmp_path)
+            errors = get_provider_load_errors()
+            assert errors == [("invalid.yaml", errors[0][1])]
+            assert "display_name" in errors[0][1]
+        finally:
+            clear_load_errors()

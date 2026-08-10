@@ -911,6 +911,27 @@ def gateway_overview(project_root: Path) -> dict[str, Any]:
         )[:5]
     ]
     sessions = list_execution_sessions(project_root)
+
+    # Provider descriptor load diagnostics
+    from audiagentic.components.providers.providers_api import (
+        get_provider_load_errors,
+        list_canonical_provider_ids,
+    )
+
+    load_errors = get_provider_load_errors()
+    provider_diagnostics: dict[str, Any] = {
+        "providers_loaded": len(list_canonical_provider_ids()),
+        "skipped_count": len(load_errors),
+    }
+    if load_errors:
+        provider_diagnostics["errors"] = [
+            {
+                "file": file_name,
+                "message": error_message,
+            }
+            for file_name, error_message in load_errors
+        ]
+
     return {
         "total_requests": len(records),
         "by_state": by_state,
@@ -932,4 +953,5 @@ def gateway_overview(project_root: Path) -> dict[str, Any]:
             ],
         },
         "runtime-fingerprint": _runtime_fingerprint(),
+        "diagnostics": provider_diagnostics,
     }
