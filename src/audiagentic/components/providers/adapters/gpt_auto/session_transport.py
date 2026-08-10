@@ -24,6 +24,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.system.browser_manager import (
+    BrowserConfig,
+    BrowserManager,
+)
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports.agent_session import (
     ControlDisposition,
@@ -213,6 +217,9 @@ class GptAutoSessionTransport:
         self._turn_active = False
         self._current_cancel: asyncio.Event | None = None
         self._seq = 0
+        # Managed browser lifecycle (AS106)
+        self._browser_manager: BrowserManager | None = None
+        self._owns_browser = False  # True when we launched the browser ourselves
 
     @staticmethod
     def _coerce_config(config: Any) -> GptAutoConfig:
@@ -245,7 +252,14 @@ class GptAutoSessionTransport:
             raise GptAutoError("GptAutoSessionTransport is closed")
 
         started = time.monotonic()
-        ready_timeout = float(getattr(self._config, "tab_selection_timeout", 15))
+        ready_timeout = _safe_float(
+            getattr(self._config, "tab_selection_timeout", 15),
+            15.0,
+        )
+
+        # AS106: Start managed browser if autostart enabled and not already running
+        await self._ensure_browser_running()
+
         logger.info(
             "gpt-auto open begin cdp-url=%s resume-ref=%s ready-timeout=%.1fs login-wait=disabled",
             self._cdp_url,
@@ -255,7 +269,9 @@ class GptAutoSessionTransport:
         )
         client = self._client_factory(self._cdp_url)
         phase_started = time.monotonic()
-        logger.info("gpt-auto open phase cdp-start begin", extra={"gpt-auto-phase": "open.cdp-start.begin"})
+        logger.info(
+            "gpt-auto open phase cdp-start begin", extra={"gpt-auto-phase": "open.cdp-start.begin"}
+        )
         await client.start()
         logger.info(
             "gpt-auto open phase cdp-start complete elapsed-ms=%.1f",
@@ -298,7 +314,10 @@ class GptAutoSessionTransport:
             # throttles occluded renderers and that call polls the page for the
             # composer.
             phase_started = time.monotonic()
-            logger.info("gpt-auto open phase keep-active begin", extra={"gpt-auto-phase": "open.keep-active.begin"})
+            logger.info(
+                "gpt-auto open phase keep-active begin",
+                extra={"gpt-auto-phase": "open.keep-active.begin"},
+            )
             try:
                 emulation = await client.keep_page_active()
                 logger.info("gpt-auto page-active emulation: %s", emulation)
@@ -341,17 +360,32 @@ class GptAutoSessionTransport:
             except Exception:
                 logger.debug("bring_to_front failed during open (non-fatal)", exc_info=True)
 
-            ref = _conversation_ref_from_url(ws.url)
-            workspace_url = workspace_base_url(ws.url)
-            conversation_id = ws.conversation_id
+            # Capture the live URL after readiness — ChatGPT may have navigated
+            # to /c/{conv-id} while waiting for the composer. Using the live URL
+            # ensures we pick up an existing conversation ID even before the first
+            # prompt() call, so a worker death mid-turn still leaves a reconnectable
+            # chat-id in persisted metadata.
+            try:
+                live_url = await client.get_url()
+            except Exception:
+                live_url = ws.url
+            open_ws = WorkspaceInfo(name=project_name, url=live_url)
+            ref = _conversation_ref_from_url(open_ws.url)
+            workspace_url = workspace_base_url(open_ws.url)
+            conversation_id = open_ws.conversation_id
             self._session_metadata = {
                 "provider": "gpt-auto",
-                "project-id": _project_id_from_url(ws.url),
+                "project-id": _project_id_from_url(open_ws.url),
                 "project-url": workspace_url,
                 "chat-id": conversation_id,
-                "chat-url": ws.url if conversation_id else None,
+                "chat-url": open_ws.url if conversation_id else None,
             }
             self._ag_session_id = ref
+            if conversation_id and conversation_id != ws.conversation_id:
+                logger.info(
+                    "gpt-auto: live URL revealed chat-id %s (workspace had none)",
+                    conversation_id,
+                )
             update_mapping(
                 project_name,
                 workspace_url=workspace_base_url(ws.url),
@@ -431,7 +465,9 @@ class GptAutoSessionTransport:
                     tab = await client.new_tab(chat_url)
                     return WorkspaceInfo(name=project_name, url=tab.url)
                 except Exception:
-                    logger.warning("Direct resume to %s failed — falling back", chat_url, exc_info=True)
+                    logger.warning(
+                        "Direct resume to %s failed — falling back", chat_url, exc_info=True
+                    )
 
         if ref.startswith("http"):
             # Workspace-base (or full conversation) URL.
@@ -901,15 +937,61 @@ class GptAutoSessionTransport:
         """Shut the session down. Idempotent; never raises.
 
         Detaches the CDP helper only — the user's ChatGPT browser tab is left
-        open (external browser ownership; there is no owned child process).
+        open (external browser ownership).  If we own the managed browser
+        process, it is stopped when idle timeout expires or all sessions close.
         """
         if self._closed:
             return
         self._closed = True
         await self._teardown_client()
+        # Stop our managed browser process if we own it (AS106)
+        await self._stop_browser()
 
     def is_alive(self) -> bool:
         return not self._closed and self._client is not None and self._ag_session_id is not None
+
+    # ── AS106: managed browser lifecycle ─────────────────────────────
+
+    async def _ensure_browser_running(self) -> None:
+        """Start the managed browser if autostart enabled and not running."""
+        if not getattr(self._config, "browser_autostart", True):
+            return  # Connect to existing browser only
+
+        # Build BrowserManager on first use (lazy, single instance)
+        if self._browser_manager is None:
+            profile = self._config.browser_profile_dir
+            self._browser_manager = BrowserManager(
+                config=BrowserConfig(
+                    port=getattr(self._config, "browser_port", 9222),
+                    profile_dir=Path(profile) if profile else None,
+                    idle_timeout_seconds=getattr(
+                        self._config, "browser_idle_timeout_seconds", 300.0
+                    ),
+                )
+            )
+
+        # Start browser if not already running
+        bm = self._browser_manager
+        if bm is None:
+            raise GptAutoError("Browser manager not initialized")
+        if not bm.is_browser_running:
+            self._owns_browser = True
+            try:
+                await bm.start()
+                logger.info("gpt-auto: managed browser started at %s", bm.cdp_url)
+            except RuntimeError as exc:
+                raise GptAutoError(f"Managed browser failed to start: {exc}")
+
+    async def _stop_browser(self) -> None:
+        """Stop the managed browser if we own it."""
+        if self._browser_manager is not None and self._owns_browser:
+            try:
+                await self._browser_manager.stop()
+                logger.info("gpt-auto: managed browser stopped")
+            except Exception:
+                logger.debug("gpt-auto: managed browser stop failed (best-effort)", exc_info=True)
+            finally:
+                self._owns_browser = False
 
     # ── helpers ──────────────────────────────────────────────────────
 

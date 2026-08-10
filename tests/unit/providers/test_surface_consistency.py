@@ -45,26 +45,20 @@ _REMOVED_IDS = (
 
 # ── synthetic contributions stay slim ─────────────────────────────────────────
 
-def test_summary_contributions_are_overview_and_canonical_only() -> None:
-    # Synthetic summary builder now emits ONLY the dynamic canonical-rule block;
-    # overview moved to a config-driven contribution in agent-jobs.yaml (CC28).
+def test_summary_contributions_are_empty_without_action_tags() -> None:
     summary_ids = {c.contribution_id for c in build_summary_contributions()}
-    assert "agent-jobs/canonical-rule" in summary_ids
+    assert summary_ids == set()
     assert "agent-jobs/overview" not in summary_ids
 
-    # Full surface set (config + synthetic) still carries both overview and canonical-rule.
+    # The jobs overview remains independent of deprecated action tags.
     all_ids = {c.contribution_id for c in load_surface_contributions()}
     assert "agent-jobs/overview" in all_ids
-    assert "agent-jobs/canonical-rule" in all_ids
     assert "agent-jobs/tag-shortcuts" not in all_ids
 
 
-def test_canonical_rule_does_not_duplicate_prompt_tag_doctrine() -> None:
-    by_id = {c.contribution_id: c for c in load_surface_contributions()}
-    canonical = by_id["agent-jobs/canonical-rule"].body.lower()
-    # routing doctrine is owned by the prompt-tags block, not restated here
-    assert "keep tag semantics identical" not in canonical
-    assert "provenance" not in canonical
+def test_deprecated_prompt_tag_doctrine_is_not_projected() -> None:
+    ids = {c.contribution_id for c in load_surface_contributions()}
+    assert "agent-jobs/prompt-tags" not in ids
 
 
 def test_removed_contributions_stay_removed() -> None:

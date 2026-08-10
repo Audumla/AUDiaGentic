@@ -75,7 +75,7 @@ def test_active_tag_ids_filters_by_owner_state(monkeypatch: pytest.MonkeyPatch) 
 def test_prune_deletes_inactive_tag_skill_files(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    tag_id = "ag-implement"
+    tag_id = "legacy-action"
     skill_paths = _skill_paths_for_tag(tmp_path, tag_id)
     assert skill_paths, "expected at least one provider with a skill_surface_path"
     for path in skill_paths:
@@ -84,6 +84,10 @@ def test_prune_deletes_inactive_tag_skill_files(
 
     # Force every tag inactive (owning component disabled/uninstalled).
     monkeypatch.setattr(contributions, "active_tag_ids", lambda project_root=None: set())
+    monkeypatch.setattr(
+        "audiagentic.components.providers.tags.registry.all_tags",
+        lambda: {tag_id: object()},
+    )
 
     result = manager.prune_provider_surfaces(tmp_path)
 
@@ -99,7 +103,7 @@ def test_prune_deletes_inactive_tag_skill_files(
 def test_prune_keeps_active_tag_skill_files(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    tag_id = "ag-implement"
+    tag_id = "legacy-action"
     skill_paths = _skill_paths_for_tag(tmp_path, tag_id)
     for path in skill_paths:
         path.parent.mkdir(parents=True, exist_ok=True)

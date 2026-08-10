@@ -60,7 +60,7 @@ def _request(overrides: dict | None = None) -> dict:
             "model-id": None,
             "model-alias": None,
         },
-        "tag": "ag-implement",
+        "tag": "adhoc",
         "target": {"kind": "packet", "packet-id": "PKT-1"},
         "workflow-profile": "standard",
         "prompt-body": "Continue implementing the packet.\n",

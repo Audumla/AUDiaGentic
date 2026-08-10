@@ -42,14 +42,10 @@ def _emit(output: ComponentOutputSink | None, message: str, level: str = "info",
 def _active_feature_providers(project_root: Path, kind: str) -> set[str]:
     """Providers whose feature of `kind` resolves active (enabled-aware projection)."""
     from audiagentic.components.providers.services.config.feature_resolution import (
-        resolve_active_provider_features,
+        active_provider_ids,
     )
 
-    return {
-        resolved.provider_id
-        for resolved in resolve_active_provider_features(project_root)
-        if resolved.kind == kind
-    }
+    return active_provider_ids(project_root, kind)
 
 
 def build_provider_surface_blocks(
