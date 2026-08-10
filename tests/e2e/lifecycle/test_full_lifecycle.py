@@ -41,18 +41,22 @@ def test_sync_preserves_config_and_prompt_overrides(tmp_path) -> None:
         apply_fresh_install(sandbox.repo)
         install_component("providers", sandbox.repo)
 
-        provider_path = sandbox.repo / ".audiagentic" / "config" / "runtime" / "providers.yaml"
-        provider_path.write_text("contract-version: v1\nproviders:\n  custom: {}\n", encoding="utf-8")
+        provider_path = sandbox.repo / ".audiagentic" / "config" / "providers" / "custom.yaml"
+        provider_path.parent.mkdir(parents=True, exist_ok=True)
+        provider_path.write_text(
+            "provider-id: custom\ninstall-mode: toolchain\naccess-mode: none\nauth-ref: env:CUSTOM_KEY\n",
+            encoding="utf-8",
+        )
 
-        prompt_path = sandbox.repo / ".audiagentic" / "prompts" / "ag-review" / "default.md"
+        prompt_path = sandbox.repo / ".audiagentic" / "prompts" / "custom" / "default.md"
         prompt_path.parent.mkdir(parents=True, exist_ok=True)
         prompt_path.write_text("custom prompt override", encoding="utf-8")
 
         result = sync_managed_baseline(sandbox.repo)
 
-        assert ".audiagentic/config/runtime/providers.yaml" in result["preserved-files"]
+        assert ".audiagentic/config/providers" in result["preserved-files"]
         assert "custom" in provider_path.read_text(encoding="utf-8")
         assert prompt_path.read_text(encoding="utf-8") == "custom prompt override"
-        assert ".audiagentic/prompts/ag-review/default.md" not in result["refreshed-files"]
+        assert ".audiagentic/prompts/custom/default.md" not in result["refreshed-files"]
     finally:
         sandbox.cleanup()

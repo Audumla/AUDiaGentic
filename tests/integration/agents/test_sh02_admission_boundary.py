@@ -31,6 +31,7 @@ def _make_profile(project_root: Path, profile_id: str, provider_id: str, *, defa
         "profile_id": profile_id,
         "provider_id": provider_id,
         "model_id": "gpt-4o",
+        "instances": ["gpt-4o"],
         "is_default": default,
         "params": params,
     })

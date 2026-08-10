@@ -255,6 +255,10 @@ def prepare_provider_acp_launch(
             details={"provider-id": provider_id},
         )
     launch_kwargs = {"model_id": resolved_model_id}
+    import inspect
+
+    if "provider_config" in inspect.signature(builder).parameters:
+        launch_kwargs["provider_config"] = provider_config
     if request_runtime_root is not None:
         launch_kwargs["request_runtime_root"] = request_runtime_root
     if mcp_entries is not None:
@@ -302,14 +306,23 @@ def prepare_interactive_provider_launch(
             message="provider does not support interactive CLI launch",
             details={"provider-id": provider_id},
         )
+    runtime = get_provider_runtime_config_state(project_root, provider_id)
+    provider_config = runtime["config"] if isinstance(runtime["config"], dict) else {}
+    import inspect
+
+    builder_kwargs = {
+        "provider": provider,
+        "model": model,
+        "agent_runtime": agent_runtime,
+        "mcp_surface": mcp_surface,
+        "runner_params": runner_params,
+        "smoke": smoke,
+    }
+    if "provider_config" in inspect.signature(builder).parameters:
+        builder_kwargs["provider_config"] = provider_config
     return builder(
         project_root,
-        provider=provider,
-        model=model,
-        agent_runtime=agent_runtime,
-        mcp_surface=mcp_surface,
-        runner_params=runner_params,
-        smoke=smoke,
+        **builder_kwargs,
     )
 
 
@@ -670,6 +683,10 @@ def prepare_provider_session_transport(
 
     # Build the ACP launch via the provider adapter's build_acp_launch.
     launch_kwargs: dict[str, Any] = {"model_id": resolved_model_id}
+    import inspect
+
+    if "provider_config" in inspect.signature(builder).parameters:
+        launch_kwargs["provider_config"] = provider_config
     if request_runtime_root is not None:
         launch_kwargs["request_runtime_root"] = request_runtime_root
     # AS41: only Pi's build_acp_launch declares enable_rpc_tap today — no

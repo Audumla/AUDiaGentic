@@ -578,6 +578,20 @@ def manage_language_servers_all(
     return results
 
 
+def write_host_settings(
+    project_root: Path,
+    updates: dict[str, Any],
+    *,
+    host_id: str = "vscode",
+) -> Path:
+    """Merge provider-owned host settings through the public provider boundary."""
+    from audiagentic.components.providers.surfaces.host_settings import (
+        write_host_settings as _write,
+    )
+
+    return _write(project_root, updates, host_id=host_id)
+
+
 def manage_model_projection(
     project_root: Path,
     provider_id: str,
@@ -1951,6 +1965,7 @@ __all__ = [
     "SelfProvidedLspRequest",
     "manage_language_servers",
     "manage_language_servers_all",
+    "write_host_settings",
     "adopt_legacy_mcp_ownership",
     "manage_mcp_entries",
     "manage_mcp_entries_all",

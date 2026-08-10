@@ -46,6 +46,7 @@ FAST_CONFIG = GptAutoConfig(
     polling_interval=0.05,
     typing_speed=0.0,
     response_stability_seconds=1.5,
+    browser_autostart=False,
 )
 
 
@@ -107,7 +108,7 @@ class FakeCdpClient:
             return {"ok": True, "textLength": 10}
         if "innerHTML = ''" in s:
             return {"ok": True}
-        if "result-streaming" in s:
+        if "result-streaming" in s and "getBoundingClientRect" not in s:
             return self.generating
         if "btn.click()" in s and "stop-generating" in s:
             self.stop_clicked += 1
@@ -163,6 +164,16 @@ async def _collect_sink(observations):
 
 
 # ── open / resume ────────────────────────────────────────────────────
+
+@pytest.fixture(autouse=True)
+def _mock_cdp_responding(monkeypatch):
+    """Fake CDP browser check so unit tests don't try to launch a real browser."""
+    async def _fake_is_cdp_responding(port: int) -> bool:
+        return True
+
+    monkeypatch.setattr(
+        session_transport, "_is_cdp_responding", _fake_is_cdp_responding
+    )
 
 
 @pytest.mark.asyncio

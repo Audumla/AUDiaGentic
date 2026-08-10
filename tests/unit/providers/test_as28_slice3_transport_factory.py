@@ -671,6 +671,7 @@ class TestPreparedSessionTransportType:
             # which is exactly what this guard exists to keep off the snapshot.
             "unavailable_code",
             "unavailable_message",
+            "runtime_preserve_relpaths",
         }
 
     def test_unavailable_reason_fields_are_scalars(self):
