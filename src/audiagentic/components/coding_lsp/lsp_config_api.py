@@ -13,9 +13,9 @@ from typing import Any
 
 from audiagentic.components.coding_lsp import language_registry
 from audiagentic.components.coding_lsp.coding_lsp_config import (
-    CODING_LSP_DIR,
     available_language_specs,
     detect_project_languages,
+    get_coding_lsp_dir,
     load_runtime_servers,
     write_lsp_config,
 )
@@ -134,7 +134,7 @@ def _regenerate_lsp_cache(project_root: Path) -> None:
                 }
                 for cfg in cfgs
             ]
-    write_lsp_config(project_root / CODING_LSP_DIR / "lsp.json", payload)
+    write_lsp_config(get_coding_lsp_dir(project_root) / "lsp.json", payload)
 
 
 def set_language_option(root: str, language: str, key: str, value: Any) -> dict[str, Any]:
@@ -196,7 +196,7 @@ def missing_configured_dependencies(project_root: Path | None) -> list[str]:
 
 def config_status(root: str = ".") -> dict[str, Any]:
     project_root = resolve_project_root(root)
-    lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
+    lsp_path = get_coding_lsp_dir(project_root) / "lsp.json"
     _cache_config, config_errors, config_exists = load_runtime_servers(lsp_path)
     configured = resolve_active_runtime_servers(project_root)
     deps = _lsp_probes()
@@ -367,7 +367,7 @@ def add_language(root: str, language: str) -> dict[str, Any]:
     _set_language_feature_enabled(project_root, language, True)
     _regenerate_lsp_cache(project_root)
     _sync_to_providers(project_root)
-    lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
+    lsp_path = get_coding_lsp_dir(project_root) / "lsp.json"
     return {"ok": True, "language": language, "path": str(lsp_path)}
 
 
@@ -438,7 +438,7 @@ def remove_language(root: str, language: str) -> dict[str, Any]:
     _sync_to_providers(project_root)
     # Remove the pre-commit hook block for this language.
     _sync_hook_for_language(project_root, language, install=False)
-    lsp_path = project_root / CODING_LSP_DIR / "lsp.json"
+    lsp_path = get_coding_lsp_dir(project_root) / "lsp.json"
     return {"ok": True, "language": language, "path": str(lsp_path)}
 
 

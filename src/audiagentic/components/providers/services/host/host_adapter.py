@@ -30,6 +30,7 @@ class HostAdapter:
     extensions_manifest: str
     extensions_dir: str
     display_name: str = ""
+    settings_manifest: str = ""
     _ext_cache: list[str] | None = field(default=None, repr=False)
     _ext_probed: bool = field(default=False, repr=False)
 
@@ -38,6 +39,18 @@ class HostAdapter:
 
     def extensions_manifest_path(self, project_root: Path) -> Path:
         return project_root / self.extensions_manifest
+
+    def settings_manifest_path(self, project_root: Path) -> Path:
+        if not self.settings_manifest:
+            raise make_error(
+                prefix="CFG",
+                component="HOST",
+                number=2,
+                kind="providers",
+                message=f"host {self.host_id!r} has no settings-manifest configured",
+                details={"host-id": self.host_id},
+            )
+        return project_root / self.settings_manifest
 
     def extension_dir(self) -> Path:
         return Path(self.extensions_dir).expanduser()
@@ -84,6 +97,7 @@ def _load_hosts() -> None:
                 extensions_manifest=spec["extensions-manifest"],
                 extensions_dir=spec["extensions-dir"],
                 display_name=spec.get("display-name", host_id),
+                settings_manifest=spec.get("settings-manifest", ""),
             ),
         )
 

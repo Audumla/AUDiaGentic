@@ -5,6 +5,7 @@ from pathlib import Path
 
 from audiagentic.components.coding_lsp import lsp_config_api
 from audiagentic.components.coding_lsp.coding_lsp_config import (
+    get_coding_lsp_dir,
     read_lsp_config,
     write_lsp_config,
 )
@@ -59,7 +60,7 @@ def _configure(tmp_path: Path, *languages: str) -> None:
             lang,
             FeatureState(enabled=True),
         )
-    write_lsp_config(tmp_path / ".coding-lsp" / "lsp.json", servers)
+    write_lsp_config(get_coding_lsp_dir(tmp_path) / "lsp.json", servers)
 
 
 def test_configured_dependency_ids_only_enabled(tmp_path: Path) -> None:
@@ -141,7 +142,7 @@ def test_enable_language_installs_then_enables(tmp_path: Path, monkeypatch) -> N
     assert result["ok"] is True
     assert result["installed"] == ["pyright"]
     # Regenerated cache reflects the resolved runtime server, not just the key.
-    cache = read_lsp_config(tmp_path / ".coding-lsp" / "lsp.json")
+    cache = read_lsp_config(get_coding_lsp_dir(tmp_path) / "lsp.json")
     assert cache["python"]["command"] == ["pyright-langserver", "--stdio"]
     assert get_feature_state(tmp_path, "coding-lsp", "language", "python").enabled is True
 
@@ -166,7 +167,7 @@ def test_enable_language_rolls_back_on_install_failure(tmp_path: Path, monkeypat
     result = asyncio.run(lsp_config_api.enable_language(str(tmp_path), "python"))
     assert result["ok"] is False
     assert result["rolled_back"] is True
-    assert "python" not in read_lsp_config(tmp_path / ".coding-lsp" / "lsp.json")
+    assert "python" not in read_lsp_config(get_coding_lsp_dir(tmp_path) / "lsp.json")
     assert get_feature_state(tmp_path, "coding-lsp", "language", "python").enabled is False
 
 
@@ -180,7 +181,7 @@ def test_remove_language_disables_feature_state(tmp_path: Path, monkeypatch) -> 
     assert result["ok"] is True
     assert get_feature_state(tmp_path, "coding-lsp", "language", "python").enabled is False
     # The cache is regenerated from feature state — the disabled language is gone.
-    assert "python" not in read_lsp_config(tmp_path / ".coding-lsp" / "lsp.json")
+    assert "python" not in read_lsp_config(get_coding_lsp_dir(tmp_path) / "lsp.json")
 
 
 def test_language_option_projects_to_runtime_settings(tmp_path: Path, monkeypatch) -> None:
@@ -194,7 +195,7 @@ def test_language_option_projects_to_runtime_settings(tmp_path: Path, monkeypatc
         {"python.analysis.typeCheckingMode": "strict"},
     )
 
-    configured = read_lsp_config(tmp_path / ".coding-lsp" / "lsp.json")
+    configured = read_lsp_config(get_coding_lsp_dir(tmp_path) / "lsp.json")
     assert result["ok"] is True
     assert configured["python"]["settings"] == {"python.analysis.typeCheckingMode": "strict"}
     assert get_feature_state(tmp_path, "coding-lsp", "language", "python").options[
@@ -214,7 +215,7 @@ def test_reset_language_option_restores_base_runtime_settings(tmp_path: Path, mo
 
     result = lsp_config_api.reset_language_option(str(tmp_path), "python", "server-settings")
 
-    configured = read_lsp_config(tmp_path / ".coding-lsp" / "lsp.json")
+    configured = read_lsp_config(get_coding_lsp_dir(tmp_path) / "lsp.json")
     assert result["ok"] is True
     assert configured["python"]["settings"] == {}
     assert get_feature_state(tmp_path, "coding-lsp", "language", "python").options == {}

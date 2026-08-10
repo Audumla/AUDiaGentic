@@ -122,7 +122,7 @@ options:
     description: Enable automatic installation of pre-commit hooks for supported languages
 
 files:
-  - path: .coding-lsp/logs
+  - path: .audiagentic/runtime/coding-lsp/logs
     lifecycle: runtime-only
     recursive: true
     description: MCP server and session logs
