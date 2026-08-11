@@ -2,7 +2,7 @@
 
 Phase 1: the object-oriented `agent_id`-primary submission shape over the
 existing gateway machinery, unchanged underneath. `AgentTaskFactory` routes
-through `agents_gateway_client.get_gateway_client()` -- the same mode-aware
+through `agents_gateway_client.get_gateway_client(project_root)` -- the same mode-aware
 seam (in-process/standalone/automatic, `AUDIAGENTIC_GATEWAY_MODE`) every
 other gateway consumer (MCP tools, `agents_gateway_client`) already uses --
 rather than importing `agents_gateway_api` directly, so it works correctly
@@ -48,7 +48,9 @@ class AgentTask:
         """Return the current persisted state of this task."""
         from audiagentic.components.agents.gateway.client import get_gateway_client
 
-        return get_gateway_client().get_execution_request(self._project_root, self._request_id)
+        return get_gateway_client(self._project_root).get_execution_request(
+            self._project_root, self._request_id
+        )
 
     def result(self) -> dict[str, Any]:
         """Alias for `status()` -- same delegating read, named for call-site
@@ -59,7 +61,7 @@ class AgentTask:
         """Block until this task reaches a terminal state or the timeout elapses."""
         from audiagentic.components.agents.gateway.client import get_gateway_client
 
-        return get_gateway_client().wait_execution_request(
+        return get_gateway_client(self._project_root).wait_execution_request(
             self._project_root, self._request_id, timeout_seconds
         )
 
@@ -67,7 +69,9 @@ class AgentTask:
         """Cancel a queued task, or best-effort mark a running one cancel-requested."""
         from audiagentic.components.agents.gateway.client import get_gateway_client
 
-        return get_gateway_client().cancel_execution_request(self._project_root, self._request_id)
+        return get_gateway_client(self._project_root).cancel_execution_request(
+            self._project_root, self._request_id
+        )
 
 
 class AgentTaskFactory:
@@ -77,7 +81,7 @@ class AgentTaskFactory:
 
     Phase 1: holds only `project_root`, no injected dependencies -- the
     underlying queue/session machinery is still reached through
-    `get_gateway_client()`, unchanged. Composing this factory for real
+    `get_gateway_client(project_root)`, unchanged. Composing this factory for real
     (constructor-injected queue manager/session runtime, `_QUEUE_MANAGER`
     extracted out of its module-global form) is AS63's remaining work, not
     done here. Agent Definition resolution stays a plain function call either
@@ -99,7 +103,7 @@ class AgentTaskFactory:
         )
 
         definition = get_agent_definition(self._project_root, agent_id)
-        record = get_gateway_client().submit_execution_request(
+        record = get_gateway_client(self._project_root).submit_execution_request(
             self._project_root,
             execution_profile_id=definition["execution_profile_id"],
             prompt_body=prompt_body,
@@ -119,7 +123,7 @@ class AgentTaskFactory:
         for operator/raw use, not the primary path."""
         from audiagentic.components.agents.gateway.client import get_gateway_client
 
-        record = get_gateway_client().submit_execution_request(
+        record = get_gateway_client(self._project_root).submit_execution_request(
             self._project_root,
             execution_profile_id=execution_profile_id,
             prompt_body=prompt_body,

@@ -40,6 +40,7 @@ def test_agent_task_status_delegates():
         mock.get_execution_request.return_value = {"request-id": "req_x", "state": "completed"}
         result = agents_gateway_mcp.agent_task_status("req_x")
     assert result["state"] == "completed"
+    mock_get.assert_called_once_with(_ROOT)
     mock.get_execution_request.assert_called_once_with(_ROOT, "req_x")
 
 
@@ -52,6 +53,7 @@ def test_agent_task_cancel_delegates():
         mock.cancel_execution_request.return_value = {"request-id": "req_x", "state": "cancelled"}
         result = agents_gateway_mcp.agent_task_cancel("req_x")
     assert result["state"] == "cancelled"
+    mock_get.assert_called_once_with(_ROOT)
     mock.cancel_execution_request.assert_called_once_with(_ROOT, "req_x")
 
 
@@ -64,6 +66,7 @@ def test_agent_task_list_requests_delegates():
         mock.list_execution_requests.return_value = [{"request-id": "req_x", "state": "completed"}]
         result = agents_gateway_mcp.agent_task_list_requests(state="completed", limit=5)
     assert result == [{"request-id": "req_x", "state": "completed"}]
+    mock_get.assert_called_once_with(_ROOT)
     mock.list_execution_requests.assert_called_once_with(_ROOT, state="completed", limit=5)
 
 
@@ -81,6 +84,7 @@ def test_agent_task_gateway_overview_delegates():
         }
         result = agents_gateway_mcp.agent_task_gateway_overview()
     assert result["total_requests"] == 3
+    mock_get.assert_called_once_with(_ROOT)
     mock.gateway_overview.assert_called_once_with(_ROOT)
 
 

@@ -41,6 +41,14 @@ def test_inbound_adapters_depend_on_public_client_not_core_api() -> None:
         assert "gateway.client import get_gateway_client" in source
 
 
+def test_inbound_adapters_resolve_gateway_with_project_context() -> None:
+    """SH11: a project-selected shared implementation must not be bypassed."""
+    agents_dir = Path(__file__).parents[3] / "src" / "audiagentic" / "components" / "agents"
+    for rel in ("mcp/gateway_mcp.py", "gateway/events.py", "models/agent_task_api.py"):
+        source = (agents_dir / rel).read_text(encoding="utf-8")
+        assert "get_gateway_client()." not in source, rel
+
+
 # ── SH11 Slice B: implementation resolution precedence ───────────────────
 
 

@@ -87,7 +87,7 @@ def _on_execution_requested(
     source = first_present(payload, "source") or f"event:{GATEWAY_REQUESTED_TOPIC}"
 
     try:
-        get_gateway_client().submit_execution_request(
+        get_gateway_client(project_root).submit_execution_request(
             project_root,
             execution_profile_id=execution_profile_id,
             prompt_body=prompt_body,
@@ -146,7 +146,8 @@ def _on_cancel_requested(
     from audiagentic.components.agents.gateway.client import get_gateway_client
 
     try:
-        get_gateway_client().cancel_execution_request(Path(project_root_raw), request_id)
+        project_root = Path(project_root_raw)
+        get_gateway_client(project_root).cancel_execution_request(project_root, request_id)
     except AudiaGenticError:
         logger.warning(
             "gateway cancel event failed",
