@@ -328,6 +328,9 @@ def _dispatch(provider_id: str, project_root: Path) -> None:
     if provider_id == "roo":
         _unsupported_case(provider_id, project_root)
         return
+    if provider_id in {"crush", "gpt-auto", "kilo", "zed"}:
+        _stub_case(provider_id, project_root)
+        return
     raise AssertionError(f"unhandled provider_id {provider_id!r}")
 
 

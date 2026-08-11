@@ -7,7 +7,6 @@ import site
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
@@ -24,96 +23,28 @@ from audiagentic.components.agents.contracts.worker_protocol import (
     encode_worker_message,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.system.managed_process import (
-    process_cpu_time_seconds,
-    process_creation_identity,
-)
+from audiagentic.foundation.system.managed_process import process_creation_identity
 from audiagentic.foundation.system.supervised_process import spawn_supervised
 
-# SH22: replace a single wall-clock kill with an activity-verified watchdog.
-# `timeout_seconds` (the caller's own number) becomes a grace period, not an
-# immediate kill -- a worker still genuinely consuming CPU past it is given
-# more room, up to this absolute ceiling, matching the operational policy
-# already adopted for delegated coding/review work (SH22 step 0).
-_ABSOLUTE_SAFETY_CEILING_SECONDS = 2700.0
-_STALL_POLL_INTERVAL_SECONDS = 2.0
-# Consecutive flat-CPU polls after timeout_seconds elapses before a stall is
-# considered verified rather than a transient scheduling gap.
-_STALL_GRACE_POLLS = 2
 
-
-class _WatchdogStall(Exception):
-    """Internal signal: the watchdog verified a stall or hit the absolute
-    ceiling and is killing the child. Never crosses execute_isolated_provider_turn's
-    boundary -- translated to AudiaGenticError there."""
-
-    def __init__(self, classification: str, *, elapsed_seconds: float) -> None:
-        self.classification = classification
-        self.elapsed_seconds = elapsed_seconds
-        super().__init__(classification)
-
-
-def _wait_with_activity_watchdog(
+def _wait_for_provider_terminal(
     child: Any,
     input_text: str,
     *,
     timeout_seconds: float,
 ) -> tuple[str, str]:
-    """Wait for the child to complete without killing merely-slow-but-active
-    work at a fixed wall-clock line (SH22).
+    """Wait for the provider's terminal frame without inventing failure.
 
-    Runs the actual read/write in a background thread (communicate() already
-    handles the write-while-draining-stdout-and-stderr deadlock avoidance
-    correctly; reimplementing that by hand here would be a real bug risk for
-    no benefit) while the calling thread polls process CPU-time deltas as
-    the activity signal. A verified stall (flat CPU for `_STALL_GRACE_POLLS`
-    consecutive polls once `timeout_seconds` has elapsed) or the absolute
-    ceiling raises `_WatchdogStall`; a naturally-exiting child, however long
-    that took short of the ceiling, never does.
+    ``timeout_seconds`` remains part of the execution request for a provider
+    that has an explicit, provider-owned deadline.  It is deliberately not a
+    gateway kill timer: a remote agent can be legitimately quiet while it
+    runs a tool or awaits a remote service.  Completion/failure authority is
+    the authenticated worker terminal frame, explicit cancellation, or later
+    positively correlated death evidence — never elapsed time or local CPU.
     """
-    comm_result: dict[str, str] = {}
-    comm_error: dict[str, BaseException] = {}
-
-    def _communicate() -> None:
-        try:
-            stdout, stderr = child.communicate(input_text)
-            comm_result["stdout"] = stdout
-            comm_result["stderr"] = (stderr or "").strip()
-        except BaseException as exc:  # noqa: BLE001 - relayed to the polling loop below
-            comm_error["exc"] = exc
-
-    comm_thread = threading.Thread(target=_communicate, daemon=True)
-    comm_thread.start()
-
-    started_at = time.monotonic()
-    last_cpu_time = process_cpu_time_seconds(child.pid)
-    flat_polls = 0
-
-    while comm_thread.is_alive():
-        comm_thread.join(timeout=_STALL_POLL_INTERVAL_SECONDS)
-        if not comm_thread.is_alive():
-            break
-        elapsed = time.monotonic() - started_at
-        if elapsed >= _ABSOLUTE_SAFETY_CEILING_SECONDS:
-            raise _WatchdogStall("absolute-safety-ceiling", elapsed_seconds=elapsed)
-        if elapsed < timeout_seconds:
-            continue
-        current_cpu_time = process_cpu_time_seconds(child.pid)
-        if current_cpu_time is None:
-            # Facts became unreadable (e.g. exited between checks) -- let
-            # the next join() observe the real state rather than guess.
-            continue
-        if last_cpu_time is not None and current_cpu_time > last_cpu_time + 0.01:
-            flat_polls = 0
-        else:
-            flat_polls += 1
-        last_cpu_time = current_cpu_time
-        if flat_polls >= _STALL_GRACE_POLLS:
-            raise _WatchdogStall("verified-stall", elapsed_seconds=elapsed)
-
-    if "exc" in comm_error:
-        raise comm_error["exc"]
-    return comm_result["stdout"], comm_result["stderr"]
+    del timeout_seconds
+    stdout, stderr = child.communicate(input_text)
+    return stdout, (stderr or "").strip()
 
 _PASSTHROUGH_ENV = frozenset(
     {
@@ -271,33 +202,14 @@ def execute_isolated_provider_turn(
                     kind="agents",
                     message="isolated provider worker creation evidence is unavailable",
                 )
-            try:
-                # stderr_text is a string (spawn_supervised uses text=True);
-                # the worker writes bounded traceback data here on unexpected
-                # exceptions.
-                stdout, stderr_text = _wait_with_activity_watchdog(
-                    child,
-                    encode_worker_message(envelope) + "\n",
-                    timeout_seconds=timeout_seconds,
-                )
-            except _WatchdogStall as exc:
-                message = (
-                    "isolated provider worker exceeded its absolute safety ceiling"
-                    if exc.classification == "absolute-safety-ceiling"
-                    else "isolated provider worker exceeded its execution timeout"
-                )
-                raise AudiaGenticError(
-                    code="TO-AGW-076",
-                    kind="agents",
-                    message=message,
-                    details={
-                        "worker-id": identity.worker_id,
-                        "watchdog-classification": exc.classification,
-                        "requested-timeout-seconds": timeout_seconds,
-                        "elapsed-seconds": round(exc.elapsed_seconds, 1),
-                    },
-                ) from exc
-
+            # stderr_text is a string (spawn_supervised uses text=True);
+            # the worker writes bounded traceback data here on unexpected
+            # exceptions.
+            stdout, stderr_text = _wait_for_provider_terminal(
+                child,
+                encode_worker_message(envelope) + "\n",
+                timeout_seconds=timeout_seconds,
+            )
             frames = [line for line in stdout.splitlines() if line]
             if len(frames) != 2:
                 raise AudiaGenticError(

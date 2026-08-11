@@ -99,6 +99,27 @@ def agent_task_session_close(session_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 @tool_boundary
+def agent_task_session_resume(
+    source_session_id: str,
+    control_id: str,
+    identity_context_fingerprint: str | None = None,
+    execution_context_fingerprint: str | None = None,
+    model_id: str | None = None,
+) -> dict[str, Any]:
+    """Resume a validated durable provider conversation in a new session."""
+    project_root = project_root_from_env()
+    return get_gateway_client(project_root).resume_execution_session(
+        project_root,
+        source_session_id,
+        control_id=control_id,
+        identity_context_fingerprint=identity_context_fingerprint,
+        execution_context_fingerprint=execution_context_fingerprint,
+        model_id=model_id,
+    )
+
+
+@mcp.tool()
+@tool_boundary
 def agent_task_submit(
     agent_id: str,
     prompt_body: str | None = None,

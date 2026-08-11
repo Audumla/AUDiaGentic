@@ -48,6 +48,8 @@ mcp-servers:
       - agent_gateway_select_implementation
       - agent_gateway_get_config
       - agent_gateway_set_config
+      - agent_gateway_create_operation
+      - agent_gateway_get_operation
     description: Execution profile, role, agent definition, and gateway-management (SH11) — CRUD for provider+model bindings, behavioral role definitions, their composition into logical agents, and declarative selection of the gateway management implementation (embedded/standalone/automatic)
     propagate: audiagentic
     instructions: >
@@ -168,6 +170,21 @@ mcp-servers:
         parameters:
           implementation_id: "Implementation to configure"
           updates: "Partial options dict — only specified keys are validated and set"
+      agent_gateway_create_operation:
+        description: >
+          Create durable provider-neutral gateway operator work. The returned
+          acknowledgement only records accepted work; poll get operation for
+          completion. Scope never accepts prompts, outputs, credentials, or
+          provider-native handles.
+        parameters:
+          operation_id: "Caller idempotency identifier for this operation"
+          kind: "One of: reconcile, archive, purge"
+          scope: "Safe JSON selector mapping; reconcile requires absolute project-root"
+          correlation_id: "Optional safe correlation identifier"
+      agent_gateway_get_operation:
+        description: "Return the redacted durable state/result of gateway operator work."
+        parameters:
+          operation_id: "Gateway operator operation identifier"
 
   - name: ag-agents-gateway
     module: audiagentic.components.agents.mcp.gateway_mcp
@@ -180,6 +197,7 @@ mcp-servers:
       - agent_task_gateway_overview
       - agent_task_session_list
       - agent_task_session_close
+      - agent_task_session_resume
     description: >
       Agent Execution Gateway — read-only agent-definition discovery,
       agent_id-primary submission (AS63) plus status/cancel,
@@ -199,7 +217,7 @@ mcp-servers:
       the caller never invents one; it only references session-ids from
       previous responses to continue a conversation.
       agent_task_status/cancel/list_requests/gateway_overview/
-      session_list/session_close work identically regardless of which
+      session_list/session_close/session_resume work identically regardless of which
       execution profile a request resolved through.
       Async-only over MCP: submit returns request-id immediately; poll
       agent_task_status until the request reaches a terminal state. A blocking
@@ -253,6 +271,17 @@ mcp-servers:
       agent_task_session_close: >
         Close a live agent session (terminates its agent process). Idempotent —
         an already-closed or orphaned session returns its final record.
+      agent_task_session_resume:
+        description: >
+          Resume a validated provider conversation from a terminal source
+          session. The control id makes retries idempotent; a successor
+          session is created and the source binding remains immutable.
+        parameters:
+          source_session_id: "Terminal source session with a validated provider binding"
+          control_id: "Caller idempotency identifier for the resume request"
+          identity_context_fingerprint: "Current provider identity context fingerprint"
+          execution_context_fingerprint: "Current execution context fingerprint"
+          model_id: "Optional current model identifier"
 
 # AS31 Stage-2: output relay policy
 # Defaults: disabled until surface is validated; 64KiB fragments, 512KB turns.

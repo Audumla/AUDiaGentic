@@ -87,8 +87,9 @@ class TestDescriptorRegistry:
         assert desc.provider_id is not None
         assert desc.display_name is not None
         assert desc.access_mode in ("cli", "env", "none")
-        # cli_probe can be None for local-openai (access_mode="none")
-        if desc.access_mode == "cli":
+        # Placeholder CLI descriptors may be present for registry/catalogue
+        # purposes without a lifecycle implementation yet.
+        if desc.access_mode == "cli" and desc.cli_install is not None:
             assert desc.cli_probe is not None, f"{provider_id} should have cli_probe"
 
     @pytest.mark.parametrize("provider_id", CLI_PROVIDER_IDS)

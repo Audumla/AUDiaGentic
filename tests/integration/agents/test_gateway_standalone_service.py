@@ -19,8 +19,8 @@ from audiagentic.components.agents.gateway.remote_client import (
     StandaloneGatewayClient,
     load_auth_token,
 )
-from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
 from audiagentic.components.agents.gateway.service.contract import PROTOCOL_VERSION
+from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
 from audiagentic.components.agents.models.execution_profile_api import (
     create_execution_profile,
 )
@@ -194,6 +194,84 @@ def test_authenticated_raw_calls_cannot_bypass_protocol_or_lease_authority(
         assert application.requests == {}
     finally:
         _stop_host(host, thread)
+
+
+def test_gateway_operation_runs_durably_and_redacts_private_scope(tmp_path: Path) -> None:
+    application = SharedApplication()
+    host, thread, _service_root, token_path = _start_host(tmp_path, application)
+    client = StandaloneGatewayClient(host.endpoint, load_auth_token(token_path))
+    try:
+        created = client.create_gateway_operation(
+            tmp_path,
+            operation_id="op_standalone_reconcile_001",
+            kind="reconcile",
+            scope={"project-root": str(tmp_path)},
+            correlation_id="corr_standalone",
+        )
+        deadline = time.monotonic() + 5
+        current = created
+        while current["state"] in {"accepted", "running"} and time.monotonic() < deadline:
+            time.sleep(0.05)
+            current = client.get_gateway_operation(tmp_path, "op_standalone_reconcile_001")
+
+        assert current["state"] == "completed"
+        assert current["result"] == {
+            "blocked": 0,
+            "changed": 0,
+            "unchanged": 0,
+            "unknown-evidence": 0,
+        }
+        assert "scope" not in current
+        assert "correlation-id" not in current
+    finally:
+        client.close()
+        _stop_host(host, thread)
+
+
+@pytest.mark.parametrize(
+    ("operation_id", "kind", "scope", "error_code"),
+    [
+        ("x", "reconcile", {"project-root": "C:/workspace"}, "VAL-AGM-003"),
+        ("op_bad_kind_001", "unknown", {}, "VAL-AGSV-027"),
+        ("op_unsafe_001", "reconcile", {"prompt-body": "secret"}, "VAL-AGM-005"),
+    ],
+)
+def test_gateway_operation_rejects_invalid_or_unsafe_commands(
+    tmp_path: Path,
+    operation_id: str,
+    kind: str,
+    scope: dict,
+    error_code: str,
+) -> None:
+    application = SharedApplication()
+    host, thread, _service_root, token_path = _start_host(tmp_path, application)
+    client = StandaloneGatewayClient(host.endpoint, load_auth_token(token_path))
+    try:
+        with pytest.raises(AudiaGenticError, match=error_code):
+            client.create_gateway_operation(
+                tmp_path,
+                operation_id=operation_id,
+                kind=kind,
+                scope=scope,
+            )
+    finally:
+        client.close()
+        _stop_host(host, thread)
+
+
+def test_operator_force_stop_exits_the_host_without_handler_deadlock(tmp_path: Path) -> None:
+    application = SharedApplication()
+    host, thread, _service_root, token_path = _start_host(tmp_path, application)
+    client = StandaloneGatewayClient(host.endpoint, load_auth_token(token_path))
+    try:
+        stopped = client.service_stop(tmp_path, force=True)
+        assert stopped["stopping"] is True
+        thread.join(timeout=5)
+        assert not thread.is_alive()
+    finally:
+        client.close()
+        host.close()
+    assert host.service_store.read().state == "stopped"
 
 
 @pytest.mark.parametrize(

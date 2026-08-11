@@ -43,7 +43,7 @@ def provider_ref_key(
     hasher = hashlib.sha256()
     for part in (
         provider_id or "unknown-provider",
-        surface_id,
+        surface_id or "unknown-surface",
         ref_namespace or DEFAULT_REF_NAMESPACE,
         identity_context_fingerprint or DEFAULT_IDENTITY_CONTEXT,
         provider_session_ref,

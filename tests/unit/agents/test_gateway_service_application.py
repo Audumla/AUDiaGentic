@@ -172,3 +172,77 @@ def test_domain_calls_require_matching_protocol_and_active_lease(tmp_path: Path)
     )
     with pytest.raises(AudiaGenticError, match="CON-AGSV-018"):
         service.invoke("gateway_overview", str(tmp_path), {}, **authorization)
+
+
+def test_gateway_operations_are_closed_durable_service_operations(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    authorization = _authorization(service)
+
+    created = service.invoke(
+        "create_gateway_operation",
+        str(tmp_path),
+        {
+            "operation_id": "op_001",
+            "kind": "reconcile",
+            "scope": {"project-id": "project-a", "dry-run": True},
+            "correlation_id": "corr_1",
+        },
+        **authorization,
+    )
+    repeated = service.invoke(
+        "create_gateway_operation",
+        str(tmp_path),
+        {
+            "operation_id": "op_001",
+            "kind": "reconcile",
+            "scope": {"project-id": "project-a", "dry-run": True},
+            "correlation_id": "corr_1",
+        },
+        **authorization,
+    )
+
+    assert created["state"] == "accepted"
+    assert repeated == created
+    assert service.invoke(
+        "get_gateway_operation", str(tmp_path), {"operation_id": "op_001"}, **authorization
+    )["operation-id"] == "op_001"
+
+    with pytest.raises(AudiaGenticError, match="VAL-AGSV-027"):
+        service.invoke(
+            "create_gateway_operation",
+            str(tmp_path),
+            {"operation_id": "op_bad", "kind": "unsupported", "scope": {}},
+            **authorization,
+        )
+
+
+def test_drain_rejects_work_even_through_a_preexisting_lease(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    authorization = _authorization(service)
+    record = service._service_store.read()
+    service._service_store.transition(
+        "draining", expected_revision=record.revision, expected_epoch=record.owner_epoch
+    )
+
+    with pytest.raises(AudiaGenticError, match="CON-AGSV-029"):
+        service.invoke(
+            "submit_execution_request", str(tmp_path), {"prompt_body": "must not start"}, **authorization
+        )
+
+    assert service.invoke("gateway_overview", str(tmp_path), {}, **authorization) == {
+        "operation": "overview"
+    }
+
+
+def test_resume_refuses_while_gateway_operation_is_active(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    authorization = _authorization(service)
+    service.invoke(
+        "create_gateway_operation",
+        str(tmp_path),
+        {"operation_id": "op_002", "kind": "reconcile", "scope": {}},
+        **authorization,
+    )
+
+    with pytest.raises(AudiaGenticError, match="CON-AGSV-030"):
+        service.invoke("service_resume", str(tmp_path), {}, **authorization)

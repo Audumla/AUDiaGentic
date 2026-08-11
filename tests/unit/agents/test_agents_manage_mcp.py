@@ -118,3 +118,28 @@ def test_agent_delete_role_delegates_to_api():
         result = agents_manage_mcp.agent_delete_role("reviewer")
     assert result == {"role_id": "reviewer"}
     mock.assert_called_once_with(_ROOT, "reviewer")
+
+
+def test_gateway_operation_mcp_tools_delegate_to_management_api():
+    with _patch_root(), patch(
+        "audiagentic.components.agents.gateway.management_api.gateway_create_operation",
+        return_value={"operation-id": "op_001", "state": "accepted"},
+    ) as create, patch(
+        "audiagentic.components.agents.gateway.management_api.gateway_get_operation",
+        return_value={"operation-id": "op_001", "state": "completed"},
+    ) as get:
+        created = agents_manage_mcp.agent_gateway_create_operation(
+            "op_001", "reconcile", {"project-root": "C:/workspace"}, "corr_1"
+        )
+        current = agents_manage_mcp.agent_gateway_get_operation("op_001")
+
+    assert created["state"] == "accepted"
+    assert current["state"] == "completed"
+    create.assert_called_once_with(
+        _ROOT,
+        operation_id="op_001",
+        kind="reconcile",
+        scope={"project-root": "C:/workspace"},
+        correlation_id="corr_1",
+    )
+    get.assert_called_once_with(_ROOT, "op_001")
