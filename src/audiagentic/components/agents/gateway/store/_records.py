@@ -72,6 +72,8 @@ def build_record(
     gateway_execution_lane_key: str | None = None,
     resolved_provider_id: str | None = None,
     resolved_model_id: str | None = None,
+    resolved_source_id: str | None = None,
+    resolved_capacity_generation: str | None = None,
     resolved_instance_ids: list[str] | None = None,
     resolved_queue_limits: dict[str, int] | None = None,
     admission_policy_digest: str | None = None,
@@ -169,6 +171,15 @@ def build_record(
         "gateway-execution-lane-key": gateway_execution_lane_key,
         "resolved-provider-id": resolved_provider_id,
         "resolved-model-id": resolved_model_id,
+        # AS101: admission identifies compatible instances only. The concrete
+        # source/model binding is written atomically by
+        # bind_and_start_owned_attempt immediately before provider invocation.
+        "resolved-source-id": resolved_source_id,
+        "resolved-capacity-generation": resolved_capacity_generation,
+        "last-activity-at": None,
+        "activity-sequence": 0,
+        "activity-source": None,
+        "activity-lease-expires-at": None,
         "resolved-instance-ids": resolved_instance_ids,
         "resolved-queue-limits": resolved_queue_limits,
         "admission-policy-digest": admission_policy_digest,
@@ -292,28 +303,53 @@ import json  # noqa: E402
 
 
 def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    """Make the only supported legacy record shape explicit and forward-only."""
+    """Upgrade supported legacy record shapes to the current contract.
+
+    v3 adds durable dispatch-source identity. Existing queued/running records
+    cannot have that fact reconstructed safely, so migration deliberately
+    leaves the fields null. Recovery/AS101's scheduler owns the fail-closed
+    treatment of an already-dispatched record with no durable binding.
+    """
     migrated = dict(payload)
     migrated.setdefault("cancel-acknowledged-at", None)
     migrated.setdefault("cancel-acknowledged-by", None)
     migrated.setdefault("dispatch-service-root", None)
-    if payload.get("contract-version") != "v1":
+    contract_version = payload.get("contract-version")
+    # A briefly deployed v4 writer could have persisted the version before
+    # adding all activity fields. Treat that shape as migratable too; never
+    # strand a durable request merely because a process restarted mid-cutover.
+    if contract_version not in {"v1", "v2", "v3", _shared._CONTRACT_VERSION}:
         return _validate(migrated, code="VAL-AGW-005")
-    migrated.update({
-        "contract-version": _shared._CONTRACT_VERSION,
-        "dispatch-owner-epoch": None,
-        "dispatch-claimed-at": None,
-        "recovery": None,
-        "replay-required": None,
-        "replay-reason": None,
-        "replayed-by-request-id": None,
-        "resumed-from-request-id": None,
-    })
+    migrated["contract-version"] = _shared._CONTRACT_VERSION
+    if contract_version != _shared._CONTRACT_VERSION:
+        migrated.update({
+            "dispatch-owner-epoch": None,
+            "dispatch-claimed-at": None,
+            "recovery": None,
+            "replay-required": None,
+            "replay-reason": None,
+            "replayed-by-request-id": None,
+            "resumed-from-request-id": None,
+        })
+    else:
+        migrated.setdefault("dispatch-owner-epoch", None)
+        migrated.setdefault("dispatch-claimed-at", None)
+        migrated.setdefault("recovery", None)
+        migrated.setdefault("replay-required", None)
+        migrated.setdefault("replay-reason", None)
+        migrated.setdefault("replayed-by-request-id", None)
+        migrated.setdefault("resumed-from-request-id", None)
+    migrated.setdefault("resolved-source-id", None)
+    migrated.setdefault("resolved-capacity-generation", None)
+    migrated.setdefault("last-activity-at", None)
+    migrated.setdefault("activity-sequence", 0)
+    migrated.setdefault("activity-source", None)
+    migrated.setdefault("activity-lease-expires-at", None)
     return _validate(migrated, code="VAL-AGW-005")
 
 
 def _read_record_locked(project_root: Path, request_id: str) -> dict[str, Any]:
-    """Read and, while the request lock is held, migrate a v1 record safely."""
+    """Read and, while the request lock is held, migrate a legacy record safely."""
     payload = _read_record_payload(project_root, request_id)
     migrated = _migrate_v1_payload(payload)
     if migrated != payload:
@@ -333,12 +369,18 @@ def _read_record_locked(project_root: Path, request_id: str) -> dict[str, Any]:
 
 
 def read_record(project_root: Path, request_id: str) -> dict[str, Any]:
-    """Read a durable request, upgrading a v1 payload under its mutation lock."""
+    """Read a durable request, upgrading a legacy payload under its mutation lock."""
     payload = _read_record_payload(project_root, request_id)
     if (
-        payload.get("contract-version") != "v1"
+        payload.get("contract-version") == _shared._CONTRACT_VERSION
         and "cancel-acknowledged-at" in payload
         and "cancel-acknowledged-by" in payload
+        and "resolved-source-id" in payload
+        and "resolved-capacity-generation" in payload
+        and "last-activity-at" in payload
+        and "activity-sequence" in payload
+        and "activity-source" in payload
+        and "activity-lease-expires-at" in payload
     ):
         return _validate(payload, code="VAL-AGW-005")
     with _shared._request_lock(project_root, request_id):
@@ -385,6 +427,8 @@ def project_public_status(
         # SH07 C2: gateway profile snapshot identity — redacted (no secrets)
         "gateway-profile-id", "gateway-profile-generation", "gateway-profile-config-digest",
         "gateway-execution-lane-key", "resolved-provider-id", "resolved-model-id",
+        "resolved-source-id", "resolved-capacity-generation",
+        "last-activity-at", "activity-sequence", "activity-source", "activity-lease-expires-at",
         "resolved-instance-ids", "resolved-queue-limits", "admission-policy-digest",
     )
     status = {field: record.get(field) for field in visible}

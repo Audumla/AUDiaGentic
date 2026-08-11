@@ -21,9 +21,16 @@ import pytest
 
 from audiagentic.components.agents.agents_paths import gateway_session_binding_index_path
 from audiagentic.components.agents.gateway.session import bindings as binding_store
+from audiagentic.components.agents.gateway.session import sessions as sessions_module
 from audiagentic.components.agents.gateway.session import sessions_store as session_store
 from audiagentic.components.agents.gateway.session.sessions import SessionRuntime
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.io import load_ndjson
+from audiagentic.foundation.system.adopted_process import (
+    AdoptedChild,
+    OwnershipCheckResult,
+)
+from audiagentic.foundation.system.managed_process import ProcessEvidence
 from audiagentic.foundation.transports.agent_session import (
     CorrelationQuality,
     ProviderSessionRef,
@@ -1335,6 +1342,136 @@ def test_silence_watchdog_records_suspicion_without_failing_turn(rig):
     assert runtime.request_cancel("req_silent") is True
     worker.join(timeout=5.0)
     assert results and results[0].stop_reason == "cancelled"
+    runtime.close_session(tmp_path, session_id)
+
+
+# ── AS91: positive owned-child death reaps through the turn task ─────────
+
+
+def _owned_child() -> AdoptedChild:
+    return AdoptedChild(
+        evidence=ProcessEvidence(
+            pid=4242,
+            scope="session-child",
+            command_fingerprint="sha256:" + "a" * 64,
+            ownership_proof_kind="creation-identity",
+            owner_epoch="test-owner",
+            creation_identity="created:4242",
+        )
+    )
+
+
+def _attach_adopted_child(runtime: SessionRuntime, session_id: str, child: AdoptedChild) -> None:
+    async def attach() -> None:
+        runtime._handles[session_id].adopted_child = child  # noqa: SLF001 - runtime seam test
+
+    runtime._call(attach(), timeout=2)  # noqa: SLF001 - runtime seam test
+
+
+def test_reaper_proven_owned_child_death_cleans_through_owning_turn_once(rig, monkeypatch):
+    runtime, _clock, transports, tmp_path = rig
+    record = _open(runtime, tmp_path)
+    session_id = record["session-id"]
+    transports[0].block_event = threading.Event()
+    _attach_adopted_child(runtime, session_id, _owned_child())
+    events: list[tuple[str, dict[str, Any]]] = []
+    monkeypatch.setattr(
+        sessions_module,
+        "_publish_session_event",
+        lambda topic, payload, **_kwargs: events.append((topic, payload)),
+    )
+    import audiagentic.foundation.system.adopted_process as adopted_process
+
+    monkeypatch.setattr(
+        adopted_process,
+        "observe_child",
+        lambda _evidence: OwnershipCheckResult(
+            owned=False, alive=False, observed=None, refusal_reason="process-dead"
+        ),
+    )
+    from audiagentic.components.agents.gateway.queue import queue as queue_module
+
+    released_turns: list[str] = []
+
+    async def record_turn_done(request_id: str) -> None:
+        released_turns.append(request_id)
+
+    monkeypatch.setattr(queue_module, "notify_turn_done", record_turn_done)
+    outcome: list[BaseException] = []
+
+    def run_turn() -> None:
+        try:
+            runtime.prompt_in_session(tmp_path, session_id, "blocked", request_id="req_orphan")
+        except BaseException as exc:  # cancellation is the expected owner-task cleanup signal
+            outcome.append(exc)
+
+    worker = threading.Thread(target=run_turn)
+    worker.start()
+    assert _wait_for(
+        lambda: runtime.session_runtime_status(session_id).get("current-request-id") == "req_orphan"
+    )
+
+    runtime._call(runtime._reap_once(), timeout=2)  # noqa: SLF001 - direct deterministic sweep
+    runtime._call(runtime._reap_once(), timeout=2)  # noqa: SLF001 - prove idempotence after removal
+    worker.join(timeout=3)
+
+    assert not worker.is_alive()
+    assert outcome
+    assert released_turns == ["req_orphan"]
+    durable = session_store.read_session_record(tmp_path, session_id)
+    assert durable["state"] == "failed"
+    assert durable["close-reason"] == "orphaned"
+    orphan_events = [event for event in events if event[0] == "agents.session.orphaned"]
+    assert len(orphan_events) == 1
+    timeline = load_ndjson(session_store.gateway_session_timeline_path(tmp_path, session_id))
+    assert [entry["event"] for entry in timeline].count("session.orphaned") == 1
+    assert runtime.session_runtime_status(session_id) == {"available": False}
+
+
+def test_reaper_unknown_owned_child_evidence_does_not_clean_up_busy_turn(rig, monkeypatch):
+    runtime, _clock, transports, tmp_path = rig
+    record = _open(runtime, tmp_path)
+    session_id = record["session-id"]
+    transports[0].block_event = threading.Event()
+    _attach_adopted_child(runtime, session_id, _owned_child())
+    events: list[str] = []
+    monkeypatch.setattr(
+        sessions_module,
+        "_publish_session_event",
+        lambda topic, _payload, **_kwargs: events.append(topic),
+    )
+    import audiagentic.foundation.system.adopted_process as adopted_process
+
+    monkeypatch.setattr(
+        adopted_process,
+        "observe_child",
+        lambda _evidence: OwnershipCheckResult(
+            owned=False, alive=True, observed=None, refusal_reason="unobservable"
+        ),
+    )
+    outcome: list[BaseException] = []
+
+    def run_turn() -> None:
+        try:
+            runtime.prompt_in_session(tmp_path, session_id, "blocked", request_id="req_unknown")
+        except BaseException as exc:
+            outcome.append(exc)
+
+    worker = threading.Thread(target=run_turn)
+    worker.start()
+    assert _wait_for(
+        lambda: runtime.session_runtime_status(session_id).get("current-request-id") == "req_unknown"
+    )
+
+    runtime._call(runtime._reap_once(), timeout=2)  # noqa: SLF001 - direct deterministic sweep
+    assert worker.is_alive()
+    assert session_store.read_session_record(tmp_path, session_id)["state"] == "active"
+    assert "agents.session.orphaned" not in events
+
+    assert runtime.request_cancel("req_unknown") is True
+    worker.join(timeout=3)
+    assert not worker.is_alive()
+    assert outcome == []
     runtime.close_session(tmp_path, session_id)
 
 

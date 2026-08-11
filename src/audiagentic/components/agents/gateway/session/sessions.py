@@ -46,10 +46,12 @@ from audiagentic.components.agents.gateway.event_topics import (
     SESSION_EXPIRED_TOPIC,
     SESSION_FAILED_TOPIC,
     SESSION_OPENED_TOPIC,
+    SESSION_ORPHANED_TOPIC,
     SESSION_RESUMED_TOPIC,
     SESSION_TURN_FINISHED_TOPIC,
 )
 from audiagentic.components.agents.gateway.session import bindings as binding_store
+from audiagentic.components.agents.gateway.session import orphan as orphan_lib
 from audiagentic.components.agents.gateway.session import sessions_store as session_store
 from audiagentic.components.agents.gateway.session.turn_events import (
     _make_on_event_callback,
@@ -230,6 +232,13 @@ class _SessionHandle:
         # (RV680 silence watchdog); meaningful only while a turn is running.
         self.last_event_clock = created_clock
         self.current_request_id: str | None = None
+        # AS91: the task remains the sole owner of its finally-based lock and
+        # capacity cleanup. The reaper may only cancel this task after positive
+        # foundation process-death evidence.
+        self.owning_turn_task: asyncio.Task[Any] | None = None
+        self.turn_closing_deadline: float | None = None
+        self.orphan_cleanup_started = False
+        self.failure_started = False
         # Bounded, redacted projection of the most recent turn event this
         # handle has observed (kind/sequence/request-id/timestamp only — no
         # prompt text, tool args, output, or provider refs). Exposed via
@@ -238,6 +247,7 @@ class _SessionHandle:
         # AS17/RV681: OS facts for the transport child, captured at open.
         self.child_pid: int | None = None
         self.child_creation_identity: str | None = None
+        self.adopted_child: Any | None = None
         # Turns are strictly serialized per session; waiters queue FIFO on the
         # lock (RV513 — queue, don't reject). pending counts waiters only.
         self.turn_lock = asyncio.Lock()
@@ -713,6 +723,45 @@ class SessionRuntime:
         loop.call_soon_threadsafe(_set_local)
         return True
 
+    def control_session(
+        self,
+        session_id: str,
+        *,
+        turn_id: str | None,
+        action: SessionControlAction,
+        control_id: str,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Dispatch one closed, provider-neutral live-session control.
+
+        This is deliberately acknowledgement-only: it invokes the frozen
+        transport control seam but does not transition request/session state,
+        release capacity, or manufacture an outcome.  Those remain owned by
+        the normal evidence and terminal-transition paths.
+        """
+        if self._loop is None:
+            return {"disposition": "uncertain", "error-code": "RES-AGW-003"}
+
+        async def _control() -> dict[str, Any]:
+            handle = self._handles.get(session_id)
+            if handle is None:
+                return {"disposition": "already-terminal"}
+            request = SessionControlRequest(
+                ag_session_id=session_id,
+                turn_id=turn_id,
+                action=action,
+                request_id=control_id,
+                payload=payload or {},
+            )
+            result = await handle.transport.control(request)
+            return {
+                "disposition": result.disposition.value,
+                "correlation-quality": result.correlation_quality.value,
+                "error-code": result.error_code,
+            }
+
+        return self._call(_control(), timeout=10)
+
     # ── AS19 Stage-2: observer binding management ────────────────
 
     def create_observer_binding(
@@ -1031,6 +1080,7 @@ class SessionRuntime:
         )
         handle.child_pid = child_pid
         handle.child_creation_identity = child_creation_identity
+        handle.adopted_child = getattr(transport, "_adopted_child", None)
         # AS19 Stage-2 Slice A: resolve transport-observation lease from
         # providers_api. The lease normalizes TransportObservation values into
         # canonical StatusEvidence. Best-effort — session still opens if this
@@ -1392,6 +1442,7 @@ class SessionRuntime:
             runtime_preserve_relpaths=getattr(prepared, "runtime_preserve_relpaths", ()),
         )
         handle.child_pid = child_pid
+        handle.adopted_child = getattr(transport, "_adopted_child", None)
         # AS19 status-observer lease / observer binding are NOT wired here —
         # unlike _open_session, a resumed session does not acquire one. Not
         # in AS49's own scope (that's AS19/AS41 territory); flagged so nobody
@@ -1540,6 +1591,8 @@ class SessionRuntime:
             # reach it via protocol-level session/cancel) and an activity
             # clock the reaper can watch for in-turn silence.
             handle.current_request_id = request_id
+            handle.owning_turn_task = asyncio.current_task()
+            handle.turn_closing_deadline = None
             handle.last_event_clock = self._clock()
             # Local cancel token for explicit caller/owner cleanup (AS28 slice 4b-A).
             # The neutral control path (SessionControlAction.CANCEL_TURN) is the
@@ -1644,6 +1697,8 @@ class SessionRuntime:
             finally:
                 handle.last_activity_clock = self._clock()
                 handle.current_request_id = None
+                handle.owning_turn_task = None
+                handle.turn_closing_deadline = None
                 if request_id is not None:
                     self._turn_cancels.pop(request_id, None)
         finally:
@@ -1701,6 +1756,12 @@ class SessionRuntime:
         return result
 
     async def _fail_session(self, handle: _SessionHandle, *, reason: str) -> None:
+        # Reaper and owning turn can observe the same transport failure. The
+        # first caller owns the existing store/transport cleanup; later callers
+        # return so a terminal session/event is never duplicated.
+        if handle.failure_started:
+            return
+        handle.failure_started = True
         self._handles.pop(handle.session_id, None)
         await handle.transport.close()
         self._cleanup_handle_runtime(handle)
@@ -1852,6 +1913,62 @@ class SessionRuntime:
             if handle is None:
                 continue
             if not handle.quiescent():
+                adopted = handle.adopted_child
+                observation = None
+                if adopted is not None:
+                    try:
+                        from audiagentic.foundation.system.adopted_process import (
+                            AdoptedChild,
+                            observe_child,
+                        )
+
+                        if isinstance(adopted, AdoptedChild):
+                            observation = observe_child(adopted.evidence)
+                    except Exception:  # noqa: BLE001 — unknown remains non-actionable
+                        logger.debug(
+                            "failed to observe owned session child",
+                            extra={"session-id": session_id},
+                            exc_info=True,
+                        )
+                liveness = orphan_lib.OwnedTurnLiveness(
+                    request_id=handle.current_request_id,
+                    turn_task=handle.owning_turn_task,
+                    turn_active=handle.turn_lock.locked(),
+                    adopted_child=adopted,
+                    closing_deadline=handle.turn_closing_deadline,
+                    last_event_clock=handle.last_event_clock,
+                )
+                if orphan_lib.is_proven_owned_turn_dead(liveness, observation, now):
+                    # Set before any await so repeated sweeps cannot emit a
+                    # second orphan event or issue duplicate cleanup.
+                    if not handle.orphan_cleanup_started:
+                        handle.orphan_cleanup_started = True
+                        session_store.record_session_timeline(
+                            handle.project_root,
+                            session_id,
+                            "session.orphaned",
+                            state="active",
+                            attributes={
+                                "request-id": handle.current_request_id,
+                                "reason": "proven-owned-child-dead",
+                                "correlation-id": handle.correlation_id,
+                            },
+                        )
+                        _publish_session_event(
+                            SESSION_ORPHANED_TOPIC,
+                            {
+                                "session-id": session_id,
+                                "execution-profile-id": handle.execution_profile_id,
+                                "state": "active",
+                                "request-id": handle.current_request_id,
+                            },
+                            correlation_id=handle.correlation_id,
+                        )
+                        owning_task = handle.owning_turn_task
+                        await self._fail_session(handle, reason="orphaned")
+                        if owning_task is not None and not owning_task.done():
+                            owning_task.cancel()
+                    continue
                 # RV680/AS26: read-only inspection of busy sessions. When the
                 # profile declared an expected event cadence, prolonged
                 # in-turn silence is a configured timeout policy, not proof

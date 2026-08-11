@@ -78,6 +78,27 @@ def test_agent_task_session_resume_delegates_to_gateway_client():
     )
 
 
+def test_agent_task_session_control_delegates_to_gateway_client():
+    with (
+        _patch_root(),
+        patch("audiagentic.components.agents.mcp.gateway_mcp.get_gateway_client") as mock_get,
+    ):
+        mock = mock_get.return_value
+        mock.control_execution_session.return_value = {"disposition": "accepted"}
+        result = agents_gateway_mcp.agent_task_session_control(
+            "ses_1", "cancel-turn", "ctl_1", turn_id="req_1"
+        )
+    assert result == {"disposition": "accepted"}
+    mock.control_execution_session.assert_called_once_with(
+        _ROOT,
+        "ses_1",
+        action="cancel-turn",
+        control_id="ctl_1",
+        turn_id="req_1",
+        payload=None,
+    )
+
+
 def test_agent_task_list_requests_delegates():
     with (
         _patch_root(),

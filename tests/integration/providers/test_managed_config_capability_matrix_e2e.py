@@ -110,12 +110,13 @@ def _mcp_provider_ids() -> list[str]:
 
 
 def _mcp_corruption_params() -> list[object]:
-    """One pytest.param per mcp_config provider. Marked xfail(strict=True)
-    only if a provider's format is still (or again) known to swallow
-    corruption; skip if a provider uses a format with no registered fixture
-    row yet. Every currently-registered format is write_is_safe=True post
-    RV713-fix, so no param carries a mark today — the mechanism stays live
-    for regression protection."""
+    """One pytest.param per mcp_config provider.
+
+    Providers with an unregistered format are skipped because the matrix has
+    no safe corruption fixture for them. A format that regresses to swallowing
+    corruption is a strict xfail, while all currently registered formats are
+    expected to pass.
+    """
     params = []
     for provider_id in _mcp_provider_ids():
         fmt = get_descriptor(provider_id).mcp_config.format

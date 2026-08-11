@@ -273,8 +273,8 @@ class TestAdapterAtomicWriteContract:
     onto the target — so Path.write_text is never called on the target path itself.
     A non-atomic writer calls path.write_text() directly on the target.
 
-    These tests are marked xfail for adapters still using raw write_text — that's
-    the Block D1 migration checklist (MA04 Steps 4-7). After migration all must pass.
+    These assertions enforce the Block D1 migration checklist (MA04 Steps 4-7):
+    adapters must use an atomic writer rather than raw write_text.
     """
 
     def test_no_direct_write_text_on_target(self, adapter_row: AdapterContractRow, adapter_path: Path):

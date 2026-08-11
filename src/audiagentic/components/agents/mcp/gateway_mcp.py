@@ -99,6 +99,31 @@ def agent_task_session_close(session_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 @tool_boundary
+def agent_task_session_control(
+    session_id: str,
+    action: str,
+    control_id: str,
+    turn_id: str | None = None,
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Issue a closed generic session control and return its acknowledgement.
+
+    The acknowledgement never claims the turn/session reached a lifecycle
+    state; callers continue to observe that through request status.
+    """
+    project_root = project_root_from_env()
+    return get_gateway_client(project_root).control_execution_session(
+        project_root,
+        session_id,
+        action=action,
+        control_id=control_id,
+        turn_id=turn_id,
+        payload=payload,
+    )
+
+
+@mcp.tool()
+@tool_boundary
 def agent_task_session_resume(
     source_session_id: str,
     control_id: str,

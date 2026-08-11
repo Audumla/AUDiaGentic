@@ -776,6 +776,52 @@ def close_execution_session(project_root: Path, session_id: str) -> dict[str, An
     return _public_session_projection(record)
 
 
+def control_execution_session(
+    project_root: Path,
+    session_id: str,
+    *,
+    turn_id: str | None,
+    action: str,
+    control_id: str,
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Issue a closed generic control against a live session.
+
+    The returned disposition is only an acknowledgement from the transport;
+    it intentionally does not mutate durable execution lifecycle state.
+    """
+    from audiagentic.components.agents.gateway.session.controls import execute_once
+    from audiagentic.components.agents.gateway.session.sessions import get_session_runtime
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    from audiagentic.foundation.transports.agent_session import SessionControlAction
+
+    try:
+        control_action = SessionControlAction(action)
+    except ValueError as exc:
+        raise AudiaGenticError(
+            code="VAL-AGW-130",
+            kind="agents",
+            message="unknown gateway session control action",
+            details={"action": action},
+        ) from exc
+    result = execute_once(
+        project_root,
+        session_id=session_id,
+        turn_id=turn_id,
+        action=control_action.value,
+        control_id=control_id,
+        payload=payload or {},
+        dispatch=lambda: get_session_runtime().control_session(
+            session_id,
+            turn_id=turn_id,
+            action=control_action,
+            control_id=control_id,
+            payload=payload,
+        ),
+    )
+    return {"session-id": session_id, "action": control_action.value, **result}
+
+
 def _compute_current_context_fingerprint(
     project_root: Path,
     *,

@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, TypeAlias
+from typing import Any, TypeAlias, cast
 
 from audiagentic.components.agents.contracts._worker_protocol_validation import (
     EXECUTION_REQUEST_FIELDS,
@@ -22,6 +22,7 @@ from audiagentic.components.agents.contracts._worker_protocol_validation import 
     WorkerMessageType,
     json_object,
     protocol_error,
+    require_activity_source,
     require_canonical_root,
     require_component_profile,
     require_exact_fields,
@@ -69,13 +70,13 @@ class WorkerExecutionIdentity:
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any], *, tier_field: str) -> WorkerExecutionIdentity:
         return cls(
-            worker_id=value.get("worker-id"),
-            attempt_epoch=value.get("attempt-epoch"),
-            manifest_id=value.get("manifest-id"),
-            context_fingerprint=value.get("context-fingerprint"),
-            project_root=value.get("project-root"),
-            component_profile=value.get("component-profile"),
-            provider_isolation_tier=value.get(tier_field),
+            worker_id=cast(str, value.get("worker-id")),
+            attempt_epoch=cast(int, value.get("attempt-epoch")),
+            manifest_id=cast(str, value.get("manifest-id")),
+            context_fingerprint=cast(str, value.get("context-fingerprint")),
+            project_root=cast(str, value.get("project-root")),
+            component_profile=cast(str, value.get("component-profile")),
+            provider_isolation_tier=cast(IsolationTier, value.get(tier_field)),
         )
 
     def to_mapping(self, *, tier_field: str) -> JsonObject:
@@ -114,9 +115,9 @@ class WorkerProcessEvidence:
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> WorkerProcessEvidence:
         return cls(
-            pid=value.get("pid"),
-            process_creation_identity=value.get("process-creation-identity"),
-            working_directory=value.get("working-directory"),
+            pid=cast(int, value.get("pid")),
+            process_creation_identity=cast(str, value.get("process-creation-identity")),
+            working_directory=cast(str, value.get("working-directory")),
         )
 
     def to_mapping(self) -> JsonObject:
@@ -209,6 +210,37 @@ class WorkerHandshakeEnvelope:
 
 
 @dataclass(frozen=True)
+class WorkerActivityEnvelope:
+    """One redacted, request/attempt-fenced activity renewal frame."""
+
+    identity: WorkerExecutionIdentity
+    process: WorkerProcessEvidence
+    activity_seq: int
+    activity_source: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "activity_seq", require_positive_int(self.activity_seq, "activity-seq"))
+        object.__setattr__(self, "activity_source", require_activity_source(self.activity_source))
+
+    @classmethod
+    def from_mapping(cls, value: Mapping[str, Any]) -> WorkerActivityEnvelope:
+        _require_response_fields(value, "activity", frozenset({"activity-seq", "activity-source"}))
+        return cls(
+            identity=WorkerExecutionIdentity.from_mapping(value, tier_field="accepted-isolation-tier"),
+            process=WorkerProcessEvidence.from_mapping(value),
+            activity_seq=value["activity-seq"],
+            activity_source=value["activity-source"],
+        )
+
+    def to_mapping(self) -> JsonObject:
+        return {
+            **_response_mapping("activity", self.identity, self.process),
+            "activity-seq": self.activity_seq,
+            "activity-source": self.activity_source,
+        }
+
+
+@dataclass(frozen=True)
 class WorkerResultEnvelope:
     identity: WorkerExecutionIdentity
     process: WorkerProcessEvidence
@@ -289,7 +321,7 @@ class WorkerErrorEnvelope:
 
 
 WorkerMessage: TypeAlias = (
-    WorkerExecuteEnvelope | WorkerHandshakeEnvelope | WorkerResultEnvelope | WorkerErrorEnvelope
+    WorkerExecuteEnvelope | WorkerHandshakeEnvelope | WorkerActivityEnvelope | WorkerResultEnvelope | WorkerErrorEnvelope
 )
 
 
@@ -363,9 +395,12 @@ def decode_worker_message(frame: str) -> WorkerMessage:
     if not isinstance(value, dict):
         raise protocol_error("VAL-AGW-074", "worker protocol frame must contain a JSON object")
     message_type = value.get("message-type")
+    if not isinstance(message_type, str):
+        raise protocol_error("VAL-AGW-074", "worker protocol message type is unsupported")
     parsers = {
         "execute": WorkerExecuteEnvelope.from_mapping,
         "handshake": WorkerHandshakeEnvelope.from_mapping,
+        "activity": WorkerActivityEnvelope.from_mapping,
         "result": WorkerResultEnvelope.from_mapping,
         "error": WorkerErrorEnvelope.from_mapping,
     }
@@ -378,6 +413,7 @@ def decode_worker_message(frame: str) -> WorkerMessage:
 __all__ = [
     "WORKER_PROTOCOL_VERSION",
     "WorkerErrorEnvelope",
+    "WorkerActivityEnvelope",
     "WorkerExecuteEnvelope",
     "WorkerExecutionIdentity",
     "WorkerHandshakeEnvelope",

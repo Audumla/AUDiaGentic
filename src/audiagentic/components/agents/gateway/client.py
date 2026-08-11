@@ -47,6 +47,9 @@ class GatewayClient(Protocol):
         self, project_root: Path, **kwargs: Any
     ) -> list[dict[str, Any]]: ...
     def close_execution_session(self, project_root: Path, session_id: str) -> dict[str, Any]: ...
+    def control_execution_session(
+        self, project_root: Path, session_id: str, **kwargs: Any
+    ) -> dict[str, Any]: ...
     def resume_execution_session(
         self, project_root: Path, source_session_id: str, **kwargs: Any
     ) -> dict[str, Any]: ...
@@ -91,6 +94,11 @@ class EmbeddedGatewayClient:
 
     def close_execution_session(self, project_root: Path, session_id: str) -> dict[str, Any]:
         return self._application.close_execution_session(project_root, session_id)
+
+    def control_execution_session(
+        self, project_root: Path, session_id: str, **kwargs: Any
+    ) -> dict[str, Any]:
+        return self._application.control_execution_session(project_root, session_id, **kwargs)
 
     def resume_execution_session(
         self, project_root: Path, source_session_id: str, **kwargs: Any

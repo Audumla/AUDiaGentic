@@ -36,6 +36,7 @@ Exit code is non-zero if any executed phase fails.
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -117,10 +118,11 @@ def docker_daemon_available() -> bool:
 
 def host_phase(extra: list[str]) -> int:
     """Run all non-Docker-daemon tests in parallel as one safe command."""
-    banner("HOST suite (parallel, -n auto --dist loadgroup)")
+    banner("HOST suite (parallel, capped xdist --dist loadgroup)")
+    workers = os.environ.get("AUDIAGENTIC_XDIST_WORKERS", "8")
     cmd = [
         sys.executable, "-m", "pytest",
-        "-n", "auto", "--dist", "loadgroup",
+        "-n", workers, "--dist", "loadgroup",
         "-m", "not docker and not opt_in",  # exclude daemon-driven and explicit opt-in tests
         *extra,
     ]

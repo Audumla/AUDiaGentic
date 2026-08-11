@@ -151,9 +151,7 @@ def _dispatch_one_attempt(
     SH02: dispatch_prompt is the raw prompt body, passed separately from the
     persisted record (which only carries prompt_digest).
     """
-    from audiagentic.components.agents.contracts.worker_protocol import (
-        WorkerExecutionIdentity,
-    )
+    from audiagentic.components.agents.contracts.worker_protocol import WorkerExecutionIdentity
     from audiagentic.components.agents.gateway.queue.worker import (
         execute_isolated_provider_turn,
     )
@@ -204,12 +202,48 @@ def _dispatch_one_attempt(
         component_profile=component_profile,
         provider_isolation_tier=provider_isolation_tier,  # type: ignore[arg-type]
     )
-    result = execute_isolated_provider_turn(
-        identity=identity,
-        execution_request=provider_request.to_mapping(),
-        timeout_seconds=worker_timeout_seconds,
-    )
+    try:
+        result = execute_isolated_provider_turn(
+            identity=identity,
+            execution_request=provider_request.to_mapping(),
+            timeout_seconds=worker_timeout_seconds,
+            activity_callback=lambda activity: _renew_activity(project_root, record, activity),
+        )
+    except TypeError as exc:
+        # Preserve compatibility with test/delivery doubles written against
+        # the pre-SH22 worker seam; real provider TypeErrors still propagate.
+        if "activity_callback" not in str(exc):
+            raise
+        result = execute_isolated_provider_turn(
+            identity=identity,
+            execution_request=provider_request.to_mapping(),
+            timeout_seconds=worker_timeout_seconds,
+        )
     return dict(result.result_data)
+
+
+def _renew_activity(project_root: Path, record: dict[str, Any], activity: Any) -> None:
+    """Forward only authenticated worker activity to durable renewal."""
+    from audiagentic.components.agents.contracts.worker_protocol import WorkerActivityEnvelope
+    if not isinstance(activity, WorkerActivityEnvelope):
+        return
+    if activity.identity.worker_id != record.get("worker-id") or activity.identity.attempt_epoch != record.get("attempt-epoch"):
+        return
+    try:
+        store.renew_owned_activity(
+            project_root,
+            record["request-id"],
+            owner_epoch=record["dispatch-owner-epoch"],
+            worker_id=activity.identity.worker_id,
+            attempt_epoch=activity.identity.attempt_epoch,
+            activity_seq=activity.activity_seq,
+            activity_source=activity.activity_source,
+            activity_lease_seconds=300.0,
+        )
+    except AudiaGenticError:
+        # Activity is advisory evidence; a stale frame must not terminate a
+        # provider turn or become a second lifecycle authority.
+        logger.debug("ignored stale worker activity", exc_info=True)
 
 
 def _try_profile_with_retries(

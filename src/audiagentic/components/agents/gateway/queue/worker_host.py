@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 import traceback
 from contextlib import redirect_stdout
 from pathlib import Path
 
 from audiagentic.components.agents.contracts.worker_protocol import (
+    WorkerActivityEnvelope,
     WorkerErrorEnvelope,
     WorkerExecuteEnvelope,
     WorkerHandshakeEnvelope,
@@ -23,11 +25,16 @@ _MAX_FRAME_CHARS = 8 * 1024 * 1024
 # Bounded diagnostic payload: enough for a useful traceback, small enough to
 # prevent an OOM attack via unbounded error reporting.
 _MAX_DIAGNOSTIC_BYTES = 64 * 1024
+_PROTOCOL_OUT = sys.stdout
+
+
+_WRITE_LOCK = threading.Lock()
 
 
 def _write(message: object) -> None:
-    sys.stdout.write(encode_worker_message(message) + "\n")  # type: ignore[arg-type]
-    sys.stdout.flush()
+    with _WRITE_LOCK:
+        _PROTOCOL_OUT.write(encode_worker_message(message) + "\n")  # type: ignore[arg-type]
+        _PROTOCOL_OUT.flush()
 
 
 def _safe_error(
@@ -121,27 +128,43 @@ def main() -> int:
                 details={"provider-isolation-tier": identity.provider_isolation_tier},
             )
 
+        heartbeat_stop = threading.Event()
+        heartbeat_thread: threading.Thread | None = None
+        sequence = 0
+        def emit_activity() -> None:
+            nonlocal sequence
+            while not heartbeat_stop.wait(5.0):
+                sequence += 1
+                _write(WorkerActivityEnvelope(identity, evidence, sequence, "worker-heartbeat"))
+
+        heartbeat_thread = threading.Thread(target=emit_activity, name="worker-activity", daemon=True)
+        heartbeat_thread.start()
         # The pipe is a protocol-only channel. Provider libraries occasionally
         # print progress directly. Import and execute them with stdout pointed
         # at the discarded stderr channel so ConsoleSink's import-time default
         # cannot corrupt the framed response either.
-        with redirect_stdout(sys.stderr):
+        try:
+            with redirect_stdout(sys.stderr):
             # Import only after root/profile initialization. Providers owns
             # config/model/secret resolution and adapter invocation behind its
             # public boundary.
-            from audiagentic.components.providers import providers_api
+                from audiagentic.components.providers import providers_api
 
-            provider_request = providers_api.ProviderExecutionRequest.from_mapping(
-                request.execution_request
+                provider_request = providers_api.ProviderExecutionRequest.from_mapping(
+                    request.execution_request
+                )
+                result = providers_api.execute_provider_turn(provider_request)
+            _write(
+                WorkerResultEnvelope(
+                    identity=identity,
+                    process=evidence,
+                    execution_result=result.to_mapping(),
+                )
             )
-            result = providers_api.execute_provider_turn(provider_request)
-        _write(
-            WorkerResultEnvelope(
-                identity=identity,
-                process=evidence,
-                execution_result=result.to_mapping(),
-            )
-        )
+        finally:
+            heartbeat_stop.set()
+            if heartbeat_thread is not None:
+                heartbeat_thread.join(timeout=1)
         return 0
     except AudiaGenticError as exc:
         if request is not None and evidence is not None:

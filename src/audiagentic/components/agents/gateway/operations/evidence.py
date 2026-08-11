@@ -32,6 +32,27 @@ class GatewayWorkEvidenceReader:
         state = record.get("state")
         if state in TERMINAL_STATES:
             return None
+        # Evidence is supplied by a provider-neutral, request-bound observer;
+        # timeouts, silence, missing handles and arbitrary recovery metadata
+        # are intentionally not interpreted here.
+        raw = record.get("reconciliation-evidence")
+        if isinstance(raw, Mapping):
+            classification = raw.get("classification")
+            if classification == "live":
+                return EvidenceFinding(WorkEvidence.LIVE, "positive-owner-liveness-evidence")
+            if classification == "proven-dead":
+                worker_id = raw.get("worker-id")
+                attempt_epoch = raw.get("attempt-epoch")
+                if (
+                    isinstance(worker_id, str)
+                    and worker_id
+                    and isinstance(attempt_epoch, int)
+                    and attempt_epoch > 0
+                    and worker_id == record.get("worker-id")
+                    and attempt_epoch == record.get("attempt-epoch")
+                ):
+                    return EvidenceFinding(WorkEvidence.PROVEN_DEAD, "fenced-owner-death-evidence")
+                return EvidenceFinding(WorkEvidence.UNKNOWN, "owner-fence-mismatch")
         return EvidenceFinding(
             WorkEvidence.UNKNOWN,
             "no-positive-owner-death-evidence",

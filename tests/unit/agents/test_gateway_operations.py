@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,11 @@ from audiagentic.components.agents.gateway.operations import (
     ManagementOperationPump,
     ManagementOperationStore,
 )
+from audiagentic.components.agents.gateway.operations.archive import (
+    GatewayArchiveExecutor,
+    GatewayPurgeExecutor,
+)
+from audiagentic.components.agents.gateway.operations.evidence import GatewayWorkEvidenceReader
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
@@ -134,4 +140,71 @@ def test_reconcile_is_read_only_without_positive_death_evidence(tmp_path: Path) 
 
     result = executor.execute({"scope": {"project-root": str(tmp_path)}})
 
-    assert result == {"changed": 0, "unchanged": 1, "blocked": 2, "unknown-evidence": 2}
+    assert result == {"changed": 0, "unchanged": 1, "blocked": 2, "unknown-evidence": 2, "live": 0}
+
+
+def test_evidence_requires_matching_owner_fence_and_never_uses_silence() -> None:
+    reader = GatewayWorkEvidenceReader()
+    base = {"state": "running", "worker-id": "w1", "attempt-epoch": 2}
+
+    assert reader.assess({**base, "silence-seconds": 999}).evidence.value == "unknown"
+    assert reader.assess({**base, "reconciliation-evidence": {"classification": "live"}}).evidence.value == "live"
+    assert reader.assess({
+        **base,
+        "reconciliation-evidence": {
+            "classification": "proven-dead", "worker-id": "w2", "attempt-epoch": 2
+        },
+    }).evidence.value == "unknown"
+    assert reader.assess({
+        **base,
+        "reconciliation-evidence": {
+            "classification": "proven-dead", "worker-id": "w1", "attempt-epoch": 2
+        },
+    }).evidence.value == "proven-dead"
+
+
+class _ArchiveRequests:
+    def __init__(self, record: dict) -> None:
+        self.record = record
+
+    def get_execution_request(self, _root: Path, _request_id: str) -> dict:
+        return dict(self.record)
+
+    def list_execution_requests(self, _root: Path, **_kwargs: object) -> list[dict]:
+        return [dict(self.record)]
+
+
+def test_archive_is_integrity_manifest_and_purge_fails_closed_without_policy(tmp_path: Path) -> None:
+    request_id = "req_archive_1"
+    request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id
+    request_dir.mkdir(parents=True)
+    (request_dir / "record.json").write_text('{"state":"completed"}', encoding="utf-8")
+    fake = _ArchiveRequests({"state": "completed"})
+
+    archived = GatewayArchiveExecutor(fake).execute({"scope": {"project-root": str(tmp_path), "request-ids": [request_id]}})
+    assert archived == {"changed": 1, "blocked": 0}
+    manifest = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / "archive" / request_id / "archive-manifest.json"
+    assert manifest.is_file()
+    blocked = GatewayPurgeExecutor(fake).execute({"scope": {"project-root": str(tmp_path), "request-ids": [request_id], "retention-policy": {}}})
+    assert blocked["reason"] == "RETENTION_POLICY_UNAVAILABLE"
+    assert request_dir.exists()
+
+
+def test_purge_revalidates_policy_and_manifest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    policy_path = tmp_path / "machine-policy.json"
+    policy_path.write_text('{"policy-id":"p1","purge-enabled":true,"minimum-archive-age-seconds":0.01,"max-batch-size":2}', encoding="utf-8")
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    request_id = "req_archive_2"
+    request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id
+    request_dir.mkdir(parents=True)
+    (request_dir / "record.json").write_text('{"state":"completed"}', encoding="utf-8")
+    fake = _ArchiveRequests({"state": "completed"})
+    GatewayArchiveExecutor(fake).execute({"scope": {"project-root": str(tmp_path), "request-ids": [request_id]}})
+    time.sleep(0.02)
+    from audiagentic.components.agents.gateway.operations.retention_policy import (
+        load_retention_policy,
+    )
+    snapshot = load_retention_policy().snapshot
+    result = GatewayPurgeExecutor(fake).execute({"scope": {"project-root": str(tmp_path), "request-ids": [request_id], "retention-policy": snapshot}})
+    assert result == {"changed": 1, "blocked": 0}
+    assert not request_dir.exists()

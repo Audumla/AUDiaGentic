@@ -21,11 +21,17 @@
     ,"dispatch-claimed-at"
     ,"dispatch-service-root"
     ,"recovery"
+    ,"resolved-source-id"
+    ,"resolved-capacity-generation"
+    ,"last-activity-at"
+    ,"activity-sequence"
+    ,"activity-source"
+    ,"activity-lease-expires-at"
   ],
   "additionalProperties": false,
   "properties": {
     "contract-version": {
-      "const": "v2"
+      "const": "v4"
     },
     "request-id": {
       "type": "string"
@@ -67,6 +73,29 @@
       "type": ["string", "null"]
     },
     "resolved-model-id": {
+      "type": ["string", "null"]
+    },
+    "resolved-source-id": {
+      "description": "AS101: concrete model-sources source selected by the scheduler. It remains null while queued and is atomically written with the owned transition to running before provider invocation.",
+      "type": ["string", "null"]
+    },
+    "resolved-capacity-generation": {
+      "description": "AS101: capacity snapshot generation from which resolved-source-id was reserved.",
+      "type": ["string", "null"]
+    },
+    "last-activity-at": {
+      "description": "SH22 gateway-received timestamp of last accepted request/attempt-bound activity; never worker-supplied time.",
+      "type": ["string", "null"]
+    },
+    "activity-sequence": {
+      "description": "SH22 last accepted strictly increasing worker activity sequence for the current attempt.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "activity-source": {
+      "type": ["string", "null"]
+    },
+    "activity-lease-expires-at": {
       "type": ["string", "null"]
     },
     "resolved-instance-ids": {

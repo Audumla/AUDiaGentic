@@ -11,6 +11,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 from audiagentic.components.agents.contracts.worker_protocol import (
     WorkerErrorEnvelope,
     WorkerExecuteEnvelope,
@@ -18,6 +20,8 @@ from audiagentic.components.agents.contracts.worker_protocol import (
     decode_worker_message,
     encode_worker_message,
 )
+
+pytestmark = pytest.mark.no_parallel
 
 FINGERPRINT = "a" * 64
 
@@ -390,9 +394,13 @@ class TestWorkerExceptionDiagnostics:
 
         stdout_buf = io.StringIO()
         stderr_buf = io.StringIO()
+        from audiagentic.components.agents.gateway.queue import worker_host
+
+        old_protocol_out = worker_host._PROTOCOL_OUT
         old_stdout = sys.stdout
         old_stderr = sys.stderr
         try:
+            worker_host._PROTOCOL_OUT = stdout_buf
             sys.stdout = stdout_buf
             sys.stderr = stderr_buf
 
@@ -409,6 +417,7 @@ class TestWorkerExceptionDiagnostics:
                 )
             )
         finally:
+            worker_host._PROTOCOL_OUT = old_protocol_out
             sys.stdout = old_stdout
             sys.stderr = old_stderr
 
@@ -815,8 +824,12 @@ class TestWorkerHostFailureRedaction:
 
         stdout_buf = io.StringIO()
         stderr_buf = io.StringIO()
+        from audiagentic.components.agents.gateway.queue import worker_host
+
+        old_protocol_out = worker_host._PROTOCOL_OUT
         old_stdout, old_stderr = sys.stdout, sys.stderr
         try:
+            worker_host._PROTOCOL_OUT = stdout_buf
             sys.stdout = stdout_buf
             sys.stderr = stderr_buf
 
@@ -832,6 +845,7 @@ class TestWorkerHostFailureRedaction:
                 )
             )
         finally:
+            worker_host._PROTOCOL_OUT = old_protocol_out
             sys.stdout = old_stdout
             sys.stderr = old_stderr
 

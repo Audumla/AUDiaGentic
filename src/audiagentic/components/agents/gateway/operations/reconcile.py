@@ -9,6 +9,7 @@ from typing import Any, Protocol
 from audiagentic.components.agents.gateway.store import TERMINAL_STATES
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
+from .contracts import WorkEvidence
 from .evidence import GatewayWorkEvidenceReader
 
 
@@ -45,6 +46,7 @@ class GatewayReconcileExecutor:
         unchanged = 0
         blocked = 0
         unknown = 0
+        live = 0
         for record in records:
             if record.get("state") in TERMINAL_STATES:
                 unchanged += 1
@@ -53,9 +55,15 @@ class GatewayReconcileExecutor:
             # The only current nonterminal finding is UNKNOWN.  This explicit
             # branch is the safety boundary: no age/timeout/silence heuristic
             # is permitted to mutate a request here.
-            if finding is None or finding.evidence.value != "proven-dead":
+            if finding is None or finding.evidence is WorkEvidence.UNKNOWN:
                 blocked += 1
                 unknown += 1
+                continue
+            if finding.evidence is WorkEvidence.LIVE:
+                # LIVE is a known non-destructive disposition, not an
+                # evidence failure and never a reason to retain as UNKNOWN.
+                unchanged += 1
+                live += 1
                 continue
             raise AssertionError("positive-death effects require a later owning transition adapter")
         return {
@@ -63,6 +71,7 @@ class GatewayReconcileExecutor:
             "unchanged": unchanged,
             "blocked": blocked,
             "unknown-evidence": unknown,
+            "live": live,
         }
 
 

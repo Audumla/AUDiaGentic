@@ -20,6 +20,7 @@ from audiagentic.components.agents.gateway.queue.work_index import (
     write_work_index_entry,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.system.managed_service_contracts import add_seconds
 from audiagentic.foundation.time import now_iso_z
 
 from . import _shared
@@ -654,6 +655,66 @@ def append_owned_attempt(
     )
 
 
+def renew_owned_activity(
+    project_root: Path,
+    request_id: str,
+    *,
+    owner_epoch: str,
+    worker_id: str,
+    attempt_epoch: int,
+    activity_seq: int,
+    activity_source: str,
+    activity_lease_seconds: float,
+) -> dict[str, Any]:
+    """Persist one accepted activity renewal under current attempt fencing.
+
+    Gateway receipt time is authoritative; worker clocks and provider payloads
+    never enter the record. Duplicate/out-of-order sequence numbers are an
+    idempotent no-op, while an owner/worker/attempt mismatch fails closed.
+    """
+    _require_owned_identity(owner_epoch, worker_id, attempt_epoch)
+    if isinstance(activity_seq, bool) or not isinstance(activity_seq, int) or activity_seq <= 0:
+        raise AudiaGenticError("VAL-AGW-088", "agents", "activity sequence must be positive", {})
+    if not isinstance(activity_source, str) or not activity_source:
+        raise AudiaGenticError("VAL-AGW-088", "agents", "activity source is required", {})
+    if isinstance(activity_lease_seconds, bool) or activity_lease_seconds <= 0:
+        raise AudiaGenticError("VAL-AGW-088", "agents", "activity lease seconds must be positive", {})
+    with _request_lock(project_root, request_id):
+        record = _read_record_locked(project_root, request_id)
+        _check_expected_identity(
+            record,
+            expected_revision=None,
+            expected_dispatch_owner_epoch=owner_epoch,
+            expected_worker_id=worker_id,
+            expected_attempt_epoch=attempt_epoch,
+        )
+        if record["state"] != "running":
+            raise AudiaGenticError("CON-AGW-088", "agents", "gateway request is not running", {})
+        if activity_seq <= int(record.get("activity-sequence") or 0):
+            return record
+        received_at = now_iso_z()
+        updated = dict(record)
+        updated.update(
+            {
+                "last-activity-at": received_at,
+                "activity-sequence": activity_seq,
+                "activity-source": activity_source,
+                "activity-lease-expires-at": add_seconds(received_at, activity_lease_seconds),
+                "updated-at": received_at,
+                "revision": record["revision"] + 1,
+            }
+        )
+        write_record(project_root, updated)
+        record_gateway_timeline(
+            project_root,
+            request_id,
+            "activity.renewed",
+            state="running",
+            attributes={"activity-sequence": activity_seq, "activity-source": activity_source},
+        )
+        return updated
+
+
 def update_owned_running_session(
     project_root: Path,
     request_id: str,
@@ -754,6 +815,80 @@ def transition_owned_terminal(
             )
     clear_active_work(service_root_for_cleanup, request_id)
     return updated
+
+
+def bind_and_start_owned_attempt(
+    project_root: Path,
+    request_id: str,
+    *,
+    owner_epoch: str,
+    worker_id: str,
+    expected_revision: int,
+    resolved_source_id: str,
+    resolved_model_id: str,
+    resolved_capacity_generation: str | None = None,
+) -> dict[str, Any]:
+    """Atomically bind an owned queued request to a source and start it.
+
+    A scheduler must reserve capacity before calling this function, then pass
+    the exact selected source/model. The same request lock verifies ownership
+    and revision, records that durable binding, and changes state to running;
+    therefore no provider invocation can observe an unpersisted placement.
+    On a fencing failure no binding is written, so the caller can release its
+    reservation safely.
+    """
+    if not owner_epoch or not worker_id:
+        raise AudiaGenticError(
+            "VAL-AGW-070", "agents", "owner epoch and worker_id are required", {}
+        )
+    if not resolved_source_id or not resolved_model_id:
+        raise AudiaGenticError(
+            "VAL-AGW-086",
+            "agents",
+            "resolved source id and model id are required before dispatch",
+            {},
+        )
+    with _request_lock(project_root, request_id):
+        record = _read_record_locked(project_root, request_id)
+        _check_expected_identity(
+            record,
+            expected_revision=expected_revision,
+            expected_dispatch_owner_epoch=owner_epoch,
+            expected_worker_id=None,
+            expected_attempt_epoch=None,
+        )
+        ensure_transition(record["state"], "running")
+        timestamp = now_iso_z()
+        updated = dict(record)
+        updated.update(
+            {
+                "state": "running",
+                "worker-id": worker_id,
+                "attempt-epoch": record["attempt-epoch"] + 1,
+                "resolved-source-id": resolved_source_id,
+                "resolved-model-id": resolved_model_id,
+                "resolved-capacity-generation": resolved_capacity_generation,
+                "started-at": timestamp,
+                "updated-at": timestamp,
+                "revision": record["revision"] + 1,
+            }
+        )
+        write_record(project_root, updated)
+        record_gateway_timeline(
+            project_root,
+            request_id,
+            "dispatch.bound-and-started",
+            state="running",
+            attributes={
+                "dispatch-owner-epoch": owner_epoch,
+                "worker-id": worker_id,
+                "attempt-epoch": updated["attempt-epoch"],
+                "resolved-source-id": resolved_source_id,
+                "resolved-model-id": resolved_model_id,
+                "resolved-capacity-generation": resolved_capacity_generation,
+            },
+        )
+        return updated
 
 
 def link_replay(

@@ -104,6 +104,16 @@ def gateway_session_resume_lock_path(project_root: Path, session_id: str) -> Pat
     return gateway_session_dir(project_root, session_id) / "resume-idempotency.lock"
 
 
+def gateway_session_control_idempotency_path(project_root: Path, session_id: str) -> Path:
+    """Return the durable generic-control idempotency record for a session."""
+    return gateway_session_dir(project_root, session_id) / "control-idempotency.json"
+
+
+def gateway_session_control_lock_path(project_root: Path, session_id: str) -> Path:
+    """Return the lock guarding a session's generic-control idempotency record."""
+    return gateway_session_dir(project_root, session_id) / "control-idempotency.lock"
+
+
 # ── AS31 Stage-2: output event paths ───────────────────────────────────────
 
 _OUTPUT_DIR = Path("output")

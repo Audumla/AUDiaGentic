@@ -12,7 +12,6 @@ tests/
 ├── unit/           Fast, isolated — no subprocess, no real I/O, no network
 ├── integration/    Real I/O — filesystem (tmp_path), subprocess, local services
 ├── e2e/            Full user-facing path — real CLI, Docker, external systems
-├── deferred/       Tests for planned/unbuilt modules — never collected in CI
 ├── dev/            Local developer checks against checkout state — never in CI
 ├── helpers/        Shared utilities — no test_ prefix, never collected
 └── fixtures/       Static data files (JSON, YAML, etc.)
@@ -37,7 +36,6 @@ Tiers describe **what is under test**, not how it runs or how fast it is.
 | `unit`        | A single function or class in isolation            | No real I/O — mock or monkeypatch all boundaries   |
 | `integration` | A module or subsystem against real dependencies    | Uses `tmp_path`; may call subprocesses; no network |
 | `e2e`         | A complete user-visible workflow end-to-end        | Real CLI, real network, may need Docker            |
-| `deferred`    | Code not yet written (placeholder/spec tests)      | Never collected; tracked separately                |
 | `dev`         | State of the local checkout (migrations, fixtures) | Never collected in CI                              |
 
 **Tier is orthogonal to execution environment.** An integration test that uses

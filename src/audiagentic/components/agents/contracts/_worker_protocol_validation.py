@@ -20,7 +20,7 @@ from audiagentic.foundation.contracts.errors import (
 
 WORKER_PROTOCOL_VERSION = "gateway-worker-v1"
 
-WorkerMessageType = Literal["execute", "handshake", "result", "error"]
+WorkerMessageType = Literal["execute", "handshake", "activity", "result", "error"]
 JsonObject: TypeAlias = dict[str, Any]
 
 ISOLATION_TIERS = frozenset(("full-isolation", "partial-isolation", "no-isolation"))
@@ -102,6 +102,14 @@ def require_positive_int(value: Any, field_name: str) -> int:
             "VAL-AGW-074", "worker protocol field must be a positive integer", field=field_name
         )
     return value
+
+
+def require_activity_source(value: Any) -> str:
+    """Allow a bounded provider-neutral activity category, never payload."""
+    source = require_string(value, "activity-source")
+    if not re.fullmatch(r"[a-z][a-z0-9-]{0,63}", source):
+        raise protocol_error("VAL-AGW-074", "worker activity source is invalid")
+    return source
 
 
 def require_fingerprint(value: Any) -> str:
@@ -212,6 +220,7 @@ __all__ = [
     "protocol_error",
     "require_canonical_root",
     "require_component_profile",
+    "require_activity_source",
     "require_exact_fields",
     "require_fingerprint",
     "require_isolation_tier",
