@@ -31,6 +31,7 @@ CAPABILITIES = (
     "requests.cancel",
     "sessions.list",
     "sessions.close",
+    "sessions.control.v1",
     "sessions.resume-by-ref",
     "client-leases.v1",
     "service-lifecycle.v1",
@@ -203,6 +204,19 @@ class GatewayServiceApplication:
         if operation == "close_execution_session":
             return self._application.close_execution_session(
                 root, _required(arguments, "session_id")
+            )
+        if operation == "control_execution_session":
+            _reject_unknown(arguments, {"session_id", "turn_id", "action", "control_id", "payload"})
+            payload = arguments.get("payload")
+            if payload is not None and not isinstance(payload, dict):
+                raise service_validation_error(31, "session control payload must be an object")
+            return self._application.control_execution_session(
+                root,
+                _required(arguments, "session_id"),
+                turn_id=_optional_string(arguments, "turn_id"),
+                action=_required(arguments, "action"),
+                control_id=_required(arguments, "control_id"),
+                payload=payload,
             )
         if operation == "resume_execution_session":
             _reject_unknown(

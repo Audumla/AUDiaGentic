@@ -107,6 +107,7 @@ def _reset_test_registries():
     except ImportError:
         pass
 
+
     # Reset the coding-lsp language_registry so its lazy loader re-populates
     # from (now-cleared) feature registry on next access.
     try:
@@ -146,6 +147,25 @@ def _reset_test_registries():
         load_contribution_renderer_registry()
     except ImportError:
         pass
+
+
+@pytest.fixture(autouse=True)
+def _restore_event_bus_after_closed_tests():
+    """Keep tests that close the singleton event bus from poisoning later tests.
+
+    The production bus is intentionally process-scoped, while unit tests may
+    exercise shutdown directly. A closed singleton cannot publish lifecycle
+    status for an otherwise unrelated test, especially when xdist reuses a
+    worker, so replace it at the test boundary when needed.
+    """
+    from audiagentic.foundation.event.event_bus import get_bus, reset_bus
+
+    bus = get_bus()
+    if getattr(bus, "_closed", False):
+        reset_bus()
+    yield
+    if getattr(get_bus(), "_closed", False):
+        reset_bus()
 
 
 @pytest.fixture

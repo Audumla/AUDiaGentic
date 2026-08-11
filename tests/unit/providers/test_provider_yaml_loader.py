@@ -31,8 +31,7 @@ class TestProviderYamlLoader:
         """Load claude.yaml and verify all fields."""
         config_dir = get_providers_config_dir()
         claude_path = config_dir / "claude.yaml"
-        if not claude_path.exists():
-            pytest.skip("claude.yaml not yet created")
+        assert claude_path.exists(), f"missing provider descriptor: {claude_path}"
 
         descriptor = load_provider_descriptor(claude_path)
         assert isinstance(descriptor, ProviderDescriptor)
@@ -59,8 +58,7 @@ class TestProviderYamlLoader:
         """Claude permissions match expected values."""
         config_dir = get_providers_config_dir()
         claude_path = config_dir / "claude.yaml"
-        if not claude_path.exists():
-            pytest.skip("claude.yaml not yet created")
+        assert claude_path.exists(), f"missing provider descriptor: {claude_path}"
 
         descriptor = load_provider_descriptor(claude_path)
         assert descriptor.permissions.can_write_files is True
@@ -72,8 +70,7 @@ class TestProviderYamlLoader:
         """Claude agent files are loaded correctly."""
         config_dir = get_providers_config_dir()
         claude_path = config_dir / "claude.yaml"
-        if not claude_path.exists():
-            pytest.skip("claude.yaml not yet created")
+        assert claude_path.exists(), f"missing provider descriptor: {claude_path}"
 
         descriptor = load_provider_descriptor(claude_path)
         assert len(descriptor.agent_files) == 2
@@ -86,8 +83,7 @@ class TestProviderYamlLoader:
         """Claude VS Code extension is loaded correctly."""
         config_dir = get_providers_config_dir()
         claude_path = config_dir / "claude.yaml"
-        if not claude_path.exists():
-            pytest.skip("claude.yaml not yet created")
+        assert claude_path.exists(), f"missing provider descriptor: {claude_path}"
 
         descriptor = load_provider_descriptor(claude_path)
         assert len(descriptor.host_capabilities) == 1
@@ -98,8 +94,7 @@ class TestProviderYamlLoader:
         """Claude fetch_catalog_fn resolves to callable."""
         config_dir = get_providers_config_dir()
         claude_path = config_dir / "claude.yaml"
-        if not claude_path.exists():
-            pytest.skip("claude.yaml not yet created")
+        assert claude_path.exists(), f"missing provider descriptor: {claude_path}"
 
         descriptor = load_provider_descriptor(claude_path)
         assert descriptor.fetch_catalog_fn is not None
@@ -109,8 +104,7 @@ class TestProviderYamlLoader:
         """Load pi.yaml and verify callable install/uninstall."""
         config_dir = get_providers_config_dir()
         pi_path = config_dir / "pi.yaml"
-        if not pi_path.exists():
-            pytest.skip("pi.yaml not yet created")
+        assert pi_path.exists(), f"missing provider descriptor: {pi_path}"
 
         descriptor = load_provider_descriptor(pi_path)
         assert descriptor.provider_id == "pi"
@@ -124,8 +118,7 @@ class TestProviderYamlLoader:
         """Pi install/uninstall steps are callable."""
         config_dir = get_providers_config_dir()
         pi_path = config_dir / "pi.yaml"
-        if not pi_path.exists():
-            pytest.skip("pi.yaml not yet created")
+        assert pi_path.exists(), f"missing provider descriptor: {pi_path}"
 
         descriptor = load_provider_descriptor(pi_path)
         from audiagentic.foundation.steps import CallableStep

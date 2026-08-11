@@ -214,6 +214,18 @@ class StandaloneGatewayClient:
             self._call("close_execution_session", project_root, {"session_id": session_id}),
         )
 
+    def control_execution_session(
+        self, project_root: Path, session_id: str, **kwargs: Any
+    ) -> dict[str, Any]:
+        return cast(
+            dict[str, Any],
+            self._call(
+                "control_execution_session",
+                project_root,
+                {"session_id": session_id, **kwargs},
+            ),
+        )
+
     def resume_execution_session(
         self, project_root: Path, source_session_id: str, **kwargs: Any
     ) -> dict[str, Any]:

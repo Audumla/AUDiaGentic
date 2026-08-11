@@ -885,25 +885,28 @@ class GatewayQueueManager:
             if claimed["state"] != "queued":
                 return
             _test_stall_claim_to_start()
-            record = store.start_owned_attempt(
-                project_root,
-                request_id,
-                owner_epoch=owner_epoch,
-                worker_id=f"worker_{uuid.uuid4().hex[:16]}",
-                expected_revision=claimed["revision"],
-            )
-            if bound is not None:
-                # AS105/AS101: free-instance dispatch bound this request to a
-                # concrete source only now, at dispatch time -- inject it into
-                # the in-memory record the runner receives (dispatch.py reads
-                # resolved-model-id rather than re-deriving it from the
-                # profile, which only names a compatible instance set). Not
-                # persisted through this path -- the durable record keeps its
-                # admission-time resolved-model-id (None for a genuinely
-                # multi-instance profile); the runner's own terminal
-                # transition persists the actual dispatched provider-id/
-                # model-id via the existing mutable result fields.
-                record = {**record, "resolved-model-id": bound[2]}
+            worker_id = f"worker_{uuid.uuid4().hex[:16]}"
+            if bound is not None and bound[2] is not None:
+                # A capacity reservation is not enough: persist the exact
+                # source/model under the same owner/revision fence that starts
+                # execution, before the provider runner can observe it.
+                record = store.bind_and_start_owned_attempt(
+                    project_root,
+                    request_id,
+                    owner_epoch=owner_epoch,
+                    worker_id=worker_id,
+                    expected_revision=claimed["revision"],
+                    resolved_source_id=bound[0],
+                    resolved_model_id=bound[2],
+                )
+            else:
+                record = store.start_owned_attempt(
+                    project_root,
+                    request_id,
+                    owner_epoch=owner_epoch,
+                    worker_id=worker_id,
+                    expected_revision=claimed["revision"],
+                )
             logger.info(
                 "gateway request running",
                 extra={"request-id": request_id, "execution-profile-id": execution_profile_id},
