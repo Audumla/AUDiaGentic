@@ -57,13 +57,15 @@ class GatewayServiceHost:
         self._service_root = service_root
         self._ingress_stop = threading.Event()
         self._ingress_thread: threading.Thread | None = None
+        self._operations_stop = threading.Event()
+        self._operations_thread: threading.Thread | None = None
         # AS60 step 7 / RV888: this process's own composition root. Shutdown
         # uninstalls the shared-gateway execution-profile registry.
         self._composition_graph = composition_graph
 
     @property
     def endpoint(self) -> str:
-        host: str = self.server.server_address[0]
+        host = str(self.server.server_address[0])
         port: int = self.server.server_address[1]
         return f"http://{host}:{port}"
 
@@ -146,10 +148,19 @@ class GatewayServiceHost:
             GatewayLifecycleController,
         )
 
+        # ``BaseServer.shutdown`` blocks until ``serve_forever`` unwinds.  A
+        # lifecycle request arrives on an HTTP handler thread, so invoke it
+        # from a separate helper thread; calling it inline deadlocks the
+        # handler and leaves the durable service record stuck in draining.
+        def _shutdown_from_lifecycle() -> None:
+            threading.Thread(
+                target=server.shutdown, name="gateway-server-shutdown", daemon=True
+            ).start()
+
         lifecycle = GatewayLifecycleController(
             store,
             record.owner_epoch,
-            server.shutdown,
+            _shutdown_from_lifecycle,
             service_root=service_root,
         )
         service_application._lifecycle = lifecycle
@@ -178,6 +189,7 @@ class GatewayServiceHost:
         if not self._externally_managed:
             self.service_store.heartbeat({"ready": True}, expected_epoch=self.owner_epoch)
         self._start_ingress_poller()
+        self._start_operations_poller()
         if self.lifecycle is not None:
             self.lifecycle.start()  # type: ignore[attr-defined]
         try:
@@ -213,8 +225,38 @@ class GatewayServiceHost:
         if self._ingress_thread is not None:
             self._ingress_thread.join(timeout=5.0)
             self._ingress_thread = None
+        self._operations_stop.set()
+        if self._operations_thread is not None:
+            self._operations_thread.join(timeout=5.0)
+            self._operations_thread = None
         if self.lifecycle is not None:
             self.lifecycle.stop()  # type: ignore[attr-defined]
+
+    def _start_operations_poller(self, interval_seconds: float = 1.0) -> None:
+        """Run durable gateway operations from the one service authority."""
+        if self._application is None or self._operations_thread is not None:
+            return
+        from audiagentic.components.agents.gateway.operations import (
+            GatewayOperationExecutor,
+            ManagementOperationPump,
+            ManagementOperationStore,
+        )
+
+        pump = ManagementOperationPump(
+            ManagementOperationStore(self.service_store.root),
+            GatewayOperationExecutor(self._application),
+        )
+
+        def _poll() -> None:
+            while not self._operations_stop.wait(interval_seconds):
+                pump.run_once(owner_epoch=self.owner_epoch)
+
+        # Startup scan makes notifier loss and host restart harmless.
+        pump.run_once(owner_epoch=self.owner_epoch)
+        self._operations_thread = threading.Thread(
+            target=_poll, name="gateway-operations-poller", daemon=True
+        )
+        self._operations_thread.start()
 
     def close(self) -> None:
         if self._closed:

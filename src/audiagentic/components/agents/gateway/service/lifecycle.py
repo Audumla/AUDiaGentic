@@ -61,12 +61,24 @@ def gateway_quiescence_facts(service_root: Path | None = None) -> dict[str, Any]
     runtime = peek_session_runtime()
     live_sessions = len(runtime.live_session_ids()) if runtime is not None else 0
     backlog = ingress_backlog(service_root)
+    active_operations = 0
+    if service_root is not None:
+        from audiagentic.components.agents.gateway.operations import ManagementOperationStore
+
+        active_operations = ManagementOperationStore(service_root).active_count()
     return {
         "pending-requests": pending,
         "running-requests": running,
         "live-sessions": live_sessions,
         "ingress-pending": backlog["pending"],
-        "quiescent": pending == 0 and running == 0 and live_sessions == 0 and backlog["pending"] == 0,
+        "active-gateway-operations": active_operations,
+        "quiescent": (
+            pending == 0
+            and running == 0
+            and live_sessions == 0
+            and backlog["pending"] == 0
+            and active_operations == 0
+        ),
     }
 
 
@@ -162,6 +174,8 @@ class GatewayLifecycleController:
                 expected_revision=record.revision,
                 expected_epoch=self._owner_epoch,
             )
+        if force:
+            self._store.revoke_active_leases(expected_epoch=self._owner_epoch)
         self._exit_reason = "operator-force-stop" if force else "operator-stop"
         self._stop_event.set()
         self._shutdown_server()

@@ -181,6 +181,35 @@ def agent_gateway_set_config(implementation_id: str, updates: dict) -> dict:
     return gateway_set_config(project_root_from_env(), implementation_id, updates)
 
 
+@mcp.tool()
+@tool_boundary
+def agent_gateway_create_operation(
+    operation_id: str,
+    kind: str,
+    scope: dict,
+    correlation_id: str | None = None,
+) -> dict:
+    """Create durable gateway operator work; the service executes it asynchronously."""
+    from audiagentic.components.agents.gateway.management_api import gateway_create_operation
+
+    return gateway_create_operation(
+        project_root_from_env(),
+        operation_id=operation_id,
+        kind=kind,
+        scope=scope,
+        correlation_id=correlation_id,
+    )
+
+
+@mcp.tool()
+@tool_boundary
+def agent_gateway_get_operation(operation_id: str) -> dict:
+    """Read durable gateway operator work status without exposing private scope."""
+    from audiagentic.components.agents.gateway.management_api import gateway_get_operation
+
+    return gateway_get_operation(project_root_from_env(), operation_id)
+
+
 def main() -> None:
     run_mcp_server(mcp, "agents-manage")
 

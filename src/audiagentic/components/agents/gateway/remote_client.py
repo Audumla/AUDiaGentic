@@ -124,6 +124,10 @@ class StandaloneGatewayClient:
                     "owner-epoch": epoch,
                     "protocol-version": PROTOCOL_VERSION,
                 },
+                # A service may already be leaving after an authorised stop;
+                # release is best effort and must never hold process teardown
+                # behind the normal request timeout.
+                timeout=1.0,
             )
         except AudiaGenticError:
             pass
@@ -237,6 +241,33 @@ class StandaloneGatewayClient:
     def service_stop(self, project_root: Path, *, force: bool = False) -> dict[str, Any]:
         return cast(dict[str, Any], self._call("service_stop", project_root, {"force": force}))
 
+    # Gateway operator operations have a deliberately separate client
+    # surface; they are not part of the activity GatewayClient protocol.
+
+    def create_gateway_operation(
+        self,
+        project_root: Path,
+        *,
+        operation_id: str,
+        kind: str,
+        scope: dict[str, Any],
+        correlation_id: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {
+            "operation_id": operation_id,
+            "kind": kind,
+            "scope": scope,
+        }
+        if correlation_id is not None:
+            params["correlation_id"] = correlation_id
+        return cast(dict[str, Any], self._call("create_gateway_operation", project_root, params))
+
+    def get_gateway_operation(self, project_root: Path, operation_id: str) -> dict[str, Any]:
+        return cast(
+            dict[str, Any],
+            self._call("get_gateway_operation", project_root, {"operation_id": operation_id}),
+        )
+
     def _call(
         self,
         operation: str,
@@ -335,6 +366,7 @@ class StandaloneGatewayClient:
             },
         )
         attempts = 2 if retry_network else 1
+        payload: dict[str, Any] | None = None
         for attempt in range(attempts):
             try:
                 request_timeout = (
@@ -360,7 +392,7 @@ class StandaloneGatewayClient:
                     2, "gateway service is unavailable", endpoint=self._endpoint
                 ) from exc
             try:
-                payload: dict[str, Any] | None = json.loads(raw_payload.decode("utf-8"))
+                payload = json.loads(raw_payload.decode("utf-8"))
             except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                 raise client_network_error(3, "gateway service returned invalid JSON") from exc
             break

@@ -132,9 +132,11 @@ def _default_prepare_fn(
 # session-max-lifetime-seconds before calling open_session).
 DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS = 900.0  # 15 min without a turn
 DEFAULT_SESSION_MAX_LIFETIME_SECONDS = 14_400.0  # 4 h; 0 disables the cap
-# RV680: a session turn with no deadline wedges the profile's compute slot
-# forever when the harness hangs. Generous default; 0 disables the bound.
-DEFAULT_TURN_TIMEOUT_SECONDS = 3_600.0
+# A session turn can legitimately pause while a provider runs tools or awaits
+# a remote service. Elapsed time is observation policy, not terminal evidence;
+# explicit cancellation, provider terminal state, or positively correlated
+# owner-death evidence controls the lifecycle.
+DEFAULT_TURN_TIMEOUT_SECONDS = 0.0
 # In-turn event-silence watchdog: 0 (default) disables. Silence is a configured
 # policy timeout for profiles that declare an expected event cadence; it is not
 # proof of process death or orphaning.
@@ -1539,7 +1541,7 @@ class SessionRuntime:
             # clock the reaper can watch for in-turn silence.
             handle.current_request_id = request_id
             handle.last_event_clock = self._clock()
-            # Local cancel token for timeout/owner cleanup (AS28 slice 4b-A).
+            # Local cancel token for explicit caller/owner cleanup (AS28 slice 4b-A).
             # The neutral control path (SessionControlAction.CANCEL_TURN) is the
             # protocol-level contract; this local event remains for the fallback
             # cancel path when callers cannot resolve session_id.
@@ -1631,28 +1633,10 @@ class SessionRuntime:
             )
             try:
                 # Call the neutral seam: AgentSessionTransport.prompt().
-                prompt_coro = handle.transport.prompt(session_prompt, _observation_sink)
-                if handle.turn_timeout_seconds:
-                    # RV680: bound the turn so a wedged harness cannot hold the
-                    # profile compute slot forever. Timeout is terminal for the
-                    # session — the child's protocol state is unknowable after
-                    # an abandoned turn.
-                    result = await asyncio.wait_for(
-                        prompt_coro, timeout=handle.turn_timeout_seconds
-                    )
-                else:
-                    result = await prompt_coro
-            except TimeoutError:
-                await self._fail_session(handle, reason="turn-timeout")
-                raise AudiaGenticError(
-                    code="TO-AGW-090",
-                    kind="agents",
-                    message="session turn exceeded its deadline",
-                    details={
-                        "session-id": session_id,
-                        "turn-timeout-seconds": handle.turn_timeout_seconds,
-                    },
-                ) from None
+                # A configured timeout is retained as a provider/profile
+                # observation setting, but never converted to a local kill.
+                # The neutral transport decides any provider-owned deadline.
+                result = await handle.transport.prompt(session_prompt, _observation_sink)
             except Exception:
                 # Transport marks itself dead on turn failure; reflect it durably.
                 await self._fail_session(handle, reason="failed")
@@ -1900,9 +1884,9 @@ class SessionRuntime:
                         )
                     except Exception:  # noqa: BLE001 — reaper must not die
                         logger.debug("failed to record stall timeline", exc_info=True)
-                    # Closing the transport aborts the in-flight prompt; its
-                    # exception path owns the durable failure + slot release.
-                    await self._fail_session(handle, reason="turn-silence-timeout")
+                    # Silence is a diagnostic suspicion only. Tool calls and
+                    # remote provider waits need not produce local events, so
+                    # it cannot terminate a session or release a slot.
                 continue
             if not handle.transport.is_alive():
                 await self._fail_session(handle, reason="failed")

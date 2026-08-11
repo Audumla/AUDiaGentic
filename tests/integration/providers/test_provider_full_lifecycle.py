@@ -52,6 +52,10 @@ from audiagentic.foundation.lifecycle.components import (
     enable_component,
     install_component,
 )
+from audiagentic.foundation.toolchains.config.managed_config import (
+    ManagedConfigSpec,
+    resolve_managed_config_path,
+)
 
 pytestmark = [
     pytest.mark.mutates_host,
@@ -121,10 +125,7 @@ _INSTRUCTION_PROVIDERS = {
 
 def _resolve_mcp_path(spec: ManagedConfigSpec, project_root: Path) -> Path:
     """Resolve MCP config path, handling callable config_path."""
-    cp = spec.config_path
-    if callable(cp):
-        return cp(project_root)
-    return project_root / cp
+    return resolve_managed_config_path(spec, project_root)
 
 
 def _mcp_config_exists(project_root: Path, provider_id: str) -> bool:
@@ -237,6 +238,11 @@ class TestProviderInstallUninstall:
             if desc.mcp_config is not None
             else None
         )
+        # Some providers use a home-scoped config (for example Goose) and do
+        # not create an empty file when there are no managed MCP entries.
+        # Capture the actual production-resolved state so the disable/re-enable
+        # assertions do not require a file that the provider never owned.
+        mcp_was_present = mcp_path is not None and mcp_path.exists()
         settings_path = (
             project_root / ".audiagentic" / "config" / "providers" / f"{provider_id}.yaml"
         )
@@ -258,7 +264,7 @@ class TestProviderInstallUninstall:
             f"{provider_id}: disable must not uninstall the CLI"
         )
         assert not settings_path.exists(), f"{provider_id}: provider settings survived disable"
-        if mcp_path is not None:
+        if mcp_was_present:
             assert not mcp_path.exists(), f"{provider_id}: empty MCP config survived disable"
         assert all(not path.exists() for path in managed_surface_paths), (
             f"{provider_id}: managed surface survived disable"
@@ -270,7 +276,7 @@ class TestProviderInstallUninstall:
         sync_all_provider_mcp_servers(project_root)
         apply_provider_surfaces(project_root, provider_id=provider_id)
         assert settings_path.exists(), f"{provider_id}: settings were not rebuilt"
-        if mcp_path is not None:
+        if mcp_was_present:
             assert mcp_path.exists(), f"{provider_id}: MCP config was not rebuilt"
         assert all(path.exists() for path in managed_surface_paths), (
             f"{provider_id}: managed surface was not rebuilt"
@@ -279,7 +285,7 @@ class TestProviderInstallUninstall:
         set_provider_enabled(project_root, provider_id, enabled=False)
         assert not is_provider_enabled(project_root, provider_id)
         assert not settings_path.exists()
-        if mcp_path is not None:
+        if mcp_was_present:
             assert not mcp_path.exists()
         assert all(not path.exists() for path in managed_surface_paths)
 
