@@ -203,3 +203,27 @@ def gateway_get_operation(project_root: Path, operation_id: str) -> dict[str, An
         return client.get_gateway_operation(project_root, operation_id)
     finally:
         client.close()
+
+
+def gateway_get_retention_policy(project_root: Path) -> dict[str, Any]:
+    """Return the redacted machine retention policy for operator inspection.
+
+    The policy resolver is deliberately machine-scoped; this projection exposes
+    only effect-relevant values and never the policy path or any project data.
+    ``project_root`` is accepted for management-surface parity but is not used
+    to resolve policy, preventing project configuration from weakening it.
+    """
+    del project_root
+    from audiagentic.components.agents.gateway.operations.retention_policy import (
+        load_retention_policy,
+    )
+
+    policy = load_retention_policy()
+    return {
+        "available": policy.available,
+        "purge-enabled": policy.enabled,
+        "minimum-archive-age-seconds": policy.minimum_archive_age_seconds,
+        "max-batch-size": policy.max_batch_size,
+        "policy-id": policy.policy_id,
+        "policy-digest": policy.digest,
+    }

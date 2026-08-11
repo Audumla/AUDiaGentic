@@ -21,12 +21,27 @@ class GatewayRequestReader(Protocol):
         ...
 
 
+class GatewayRequestTerminalizer(Protocol):
+    """Existing request-store authority used for proven-dead effects."""
+
+    def terminalize_proven_dead(
+        self, project_root: Path, record: Mapping[str, Any], reason: str
+    ) -> Mapping[str, Any]:
+        ...
+
+
 class GatewayReconcileExecutor:
     """Conservative reconcile that changes nothing without positive evidence."""
 
-    def __init__(self, requests: GatewayRequestReader, evidence: GatewayWorkEvidenceReader | None = None) -> None:
+    def __init__(
+        self,
+        requests: GatewayRequestReader,
+        evidence: GatewayWorkEvidenceReader | None = None,
+        terminalizer: GatewayRequestTerminalizer | None = None,
+    ) -> None:
         self._requests = requests
         self._evidence = evidence or GatewayWorkEvidenceReader()
+        self._terminalizer = terminalizer
 
     def execute(self, operation: Mapping[str, Any]) -> Mapping[str, Any]:
         scope = operation.get("scope")
@@ -43,6 +58,7 @@ class GatewayReconcileExecutor:
                 "VAL-AGM-008", "agents", "reconcile project-root must be absolute", {}
             )
         records = self._requests.list_execution_requests(root)
+        changed = 0
         unchanged = 0
         blocked = 0
         unknown = 0
@@ -65,9 +81,21 @@ class GatewayReconcileExecutor:
                 unchanged += 1
                 live += 1
                 continue
-            raise AssertionError("positive-death effects require a later owning transition adapter")
+            if self._terminalizer is None:
+                blocked += 1
+                continue
+            try:
+                self._terminalizer.terminalize_proven_dead(
+                    root, record, finding.reason
+                )
+            except AudiaGenticError:
+                # A lost owner fence is safe evidence that this census cannot
+                # authorize mutation. Leave the target for a later reconcile.
+                blocked += 1
+                continue
+            changed += 1
         return {
-            "changed": 0,
+            "changed": changed,
             "unchanged": unchanged,
             "blocked": blocked,
             "unknown-evidence": unknown,
@@ -75,4 +103,4 @@ class GatewayReconcileExecutor:
         }
 
 
-__all__ = ["GatewayReconcileExecutor", "GatewayRequestReader"]
+__all__ = ["GatewayReconcileExecutor", "GatewayRequestReader", "GatewayRequestTerminalizer"]

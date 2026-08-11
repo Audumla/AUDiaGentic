@@ -72,7 +72,6 @@ PACKAGING = Img("audia-packaging:latest", "Dockerfile.packaging", note="clean-ro
 
 # Recipe / mutating images — isolated, run real install recipes.
 RECIPE_IMAGES = [
-    Img("audia-provider-cli-test:latest", "Dockerfile.provider-cli-test", note="provider CLI provisioning recipe"),
     Img("audia-provider-cli-comprehensive:latest", "Dockerfile.provider-cli-comprehensive", note="provider CLI comprehensive recipe"),
     Img("audiagentic-provider-lifecycle-e2e:latest", "Dockerfile.provider-lifecycle-e2e", note="provider full lifecycle recipe"),
     Img("audia-provider-lsp-e2e:latest", "Dockerfile.provider-lsp-e2e", note="provider LSP install recipe"),

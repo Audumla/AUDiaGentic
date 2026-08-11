@@ -394,7 +394,6 @@ The historical per-scenario image sprawl is collapsed only where safe (see
 | `audia-test-base`                  | `Dockerfile.test-base`              | Minimal shared infrastructure; no provider/LSP/editor state |
 | `audiagentic-test`                 | `Dockerfile.test`                   | **Clean, non-mutating whole suite** (`run_suite.sh`)       |
 | `audia-packaging`                  | `Dockerfile.packaging`              | Clean-room wheel: install + server-smoke + release e2e     |
-| `audia-provider-cli-test`          | `Dockerfile.provider-cli-test`      | Provider CLI provisioning recipe (isolated)                |
 | `audia-provider-cli-comprehensive` | `Dockerfile.provider-cli-comprehensive` | Provider CLI comprehensive recipe (isolated)          |
 | `audiagentic-provider-lifecycle-e2e` | `Dockerfile.provider-lifecycle-e2e` | Provider full lifecycle + Hindsight recipe (isolated)   |
 | `audia-provider-lsp-e2e`           | `Dockerfile.provider-lsp-e2e`       | Provider LSP install recipe (isolated)                     |

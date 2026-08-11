@@ -1,5 +1,6 @@
 from .backend import (
     AgentWorkQueue,
+    AgentWorkQueueAdmin,
     ClaimedWork,
     ClaimToken,
     ConsumerIdentity,
@@ -8,8 +9,9 @@ from .backend import (
     PublishReceipt,
     QueueHealth,
 )
+from .backend_factory import create_work_queue
 
 __all__ = [
-    "AgentWorkQueue", "ClaimToken", "ClaimedWork", "ConsumerIdentity",
-    "InMemoryAgentWorkQueue", "NackDisposition", "PublishReceipt", "QueueHealth",
+    "AgentWorkQueue", "AgentWorkQueueAdmin", "ClaimToken", "ClaimedWork", "ConsumerIdentity",
+    "InMemoryAgentWorkQueue", "NackDisposition", "PublishReceipt", "QueueHealth", "create_work_queue",
 ]

@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agents.agents_paths import (
+    gateway_retention_lock_path,
     gateway_session_path,
     gateway_session_timeline_path,
     gateway_sessions_root,
@@ -481,7 +482,8 @@ def install_initial_provider_binding(
         # Register first so a retry repairs either side of a partial caller
         # failure without ever permitting a conflicting provider reference.
         bindings.register_open_binding(project_root, record)
-        atomic_write_json(gateway_session_path(project_root, session_id), record)
+        with StartupLock(gateway_retention_lock_path(project_root)):
+            atomic_write_json(gateway_session_path(project_root, session_id), record)
         return record
 
 

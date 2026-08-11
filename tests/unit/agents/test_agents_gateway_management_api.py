@@ -11,6 +11,7 @@ import pytest
 
 from audiagentic.components.agents.gateway.management_api import (
     gateway_get_config,
+    gateway_get_retention_policy,
     gateway_list_implementations,
     gateway_select_implementation,
     gateway_set_config,
@@ -120,3 +121,26 @@ def test_set_config_never_adds_implementation_specific_tools() -> None:
     ]
     hits = [p for p in forbidden_patterns if p in source]
     assert not hits, f"implementation-specific management tool(s) found: {hits}"
+
+
+def test_retention_policy_projection_is_machine_owned_and_redacted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    policy_path = tmp_path / "machine-retention.json"
+    policy_path.write_text(
+        '{"policy-id":"ops","purge-enabled":true,'
+        '"minimum-archive-age-seconds":3600,"max-batch-size":7,'
+        '"secret-path":"must-not-leak"}',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+
+    projection = gateway_get_retention_policy(tmp_path / "project")
+
+    assert projection["available"] is True
+    assert projection["purge-enabled"] is True
+    assert projection["minimum-archive-age-seconds"] == 3600.0
+    assert projection["max-batch-size"] == 7
+    assert projection["policy-id"] == "ops"
+    assert "secret-path" not in projection
+    assert str(policy_path) not in str(projection)
