@@ -8,12 +8,13 @@ import subprocess
 import sys
 import tempfile
 import time
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agents.contracts.worker_protocol import (
+    WorkerActivityEnvelope,
     WorkerErrorEnvelope,
     WorkerExecuteEnvelope,
     WorkerExecutionIdentity,
@@ -32,6 +33,7 @@ def _wait_for_provider_terminal(
     input_text: str,
     *,
     timeout_seconds: float,
+    on_activity: Callable[[WorkerActivityEnvelope], None] | None = None,
 ) -> tuple[str, str]:
     """Wait for the provider's terminal frame without inventing failure.
 
@@ -43,6 +45,34 @@ def _wait_for_provider_terminal(
     positively correlated death evidence — never elapsed time or local CPU.
     """
     del timeout_seconds
+    # Real supervised children expose streams; consume frames incrementally so
+    # activity renewals reach the durable store while a provider is waiting.
+    if getattr(child, "stdout", None) is not None and getattr(child, "stdin", None) is not None:
+        child.stdin.write(input_text)
+        child.stdin.flush()
+        child.stdin.close()
+        stderr_lines: list[str] = []
+        import threading
+        stderr_thread = threading.Thread(
+            target=lambda: stderr_lines.append(child.stderr.read() or ""), daemon=True
+        )
+        stderr_thread.start()
+        frames: list[str] = []
+        for line in iter(child.stdout.readline, ""):
+            line = line.strip()
+            if not line:
+                continue
+            frames.append(line)
+            if on_activity is not None:
+                try:
+                    decoded = decode_worker_message(line)
+                    if isinstance(decoded, WorkerActivityEnvelope):
+                        on_activity(decoded)
+                except Exception:  # noqa: BLE001 - malformed activity cannot end a turn
+                    continue
+        child.wait()
+        stderr_thread.join(timeout=2)
+        return "\n".join(frames), "".join(stderr_lines).strip()
     stdout, stderr = child.communicate(input_text)
     return stdout, (stderr or "").strip()
 
@@ -139,6 +169,7 @@ def execute_isolated_provider_turn(
     identity: WorkerExecutionIdentity,
     execution_request: Mapping[str, Any],
     timeout_seconds: float,
+    activity_callback: Callable[[WorkerActivityEnvelope], None] | None = None,
 ) -> Any:
     """Execute one MA17 provider request in a disposable owned process."""
     envelope = WorkerExecuteEnvelope(
@@ -209,9 +240,10 @@ def execute_isolated_provider_turn(
                 child,
                 encode_worker_message(envelope) + "\n",
                 timeout_seconds=timeout_seconds,
+                on_activity=activity_callback,
             )
             frames = [line for line in stdout.splitlines() if line]
-            if len(frames) != 2:
+            if len(frames) < 2:
                 raise AudiaGenticError(
                     code="INT-AGW-077",
                     kind="agents",
@@ -223,7 +255,16 @@ def execute_isolated_provider_turn(
                     },
                 )
             handshake = decode_worker_message(frames[0])
-            terminal = decode_worker_message(frames[1])
+            for activity_frame in frames[1:-1]:
+                activity = decode_worker_message(activity_frame)
+                if not isinstance(activity, WorkerActivityEnvelope):
+                    raise AudiaGenticError(
+                        code="CON-AGW-075",
+                        kind="agents",
+                        message="isolated provider worker emitted a non-terminal frame",
+                        details={},
+                    )
+            terminal = decode_worker_message(frames[-1])
             if not isinstance(handshake, WorkerHandshakeEnvelope):
                 raise AudiaGenticError(
                     code="CON-AGW-075",

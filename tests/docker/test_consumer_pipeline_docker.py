@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -20,6 +21,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
+pytestmark = pytest.mark.skipif(
+    os.environ.get("AUDIAGENTIC_DOCKER_TESTS") != "1",
+    reason="consumer pipeline tests require the Docker test harness",
+)
 
 # ── AS31 imports ───────────────────────────────────────────────────────
 from audiagentic.components.agents.gateway.output import (
@@ -58,6 +64,7 @@ def _make_session_record(
     provider_ref: str,
     state: str = "active",
     provider_id: str | None = "test-provider",
+    surface_id: str = "test-surface",
 ) -> dict[str, Any]:
     """Write a session record with a binding and return it."""
     record = session_store.build_session_record(
@@ -65,6 +72,7 @@ def _make_session_record(
         execution_profile_id="default",
         provider_id=provider_id,
         provider_session_ref=provider_ref,
+        surface_id=surface_id,
     )
     if state != "active":
         record["state"] = state
@@ -156,6 +164,7 @@ class TestAS19ObserverIngressDocker:
         # Need a running event loop for callback delivery.
         loop = asyncio.new_event_loop()
         try:
+            asyncio.set_event_loop(loop)
             ingress.deliver_observation(
                 binding_id=binding_id,
                 token=token,
@@ -166,6 +175,7 @@ class TestAS19ObserverIngressDocker:
             # Give the task a moment to run.
             loop.run_until_complete(asyncio.sleep(0.1))
         finally:
+            asyncio.set_event_loop(None)
             loop.close()
 
         assert len(observations_received) == 1
@@ -275,7 +285,7 @@ class TestAS30SessionBindingDocker:
         assert payload["contract-version"] == "v1"
         ref_key = bindings.provider_ref_key(
             provider_id="test-provider",
-            surface_id=None,
+            surface_id="test-surface",
             ref_namespace=None,
             identity_context_fingerprint=None,
             provider_session_ref="ref-alpha",
@@ -396,7 +406,7 @@ except Exception as e:
         rebuilt = bindings.rebuild_index(project_root)
         ref_key = bindings.provider_ref_key(
             provider_id="test-provider",
-            surface_id=None,
+            surface_id="test-surface",
             ref_namespace=None,
             identity_context_fingerprint=None,
             provider_session_ref="ref-dup-rebuild",
@@ -419,7 +429,7 @@ except Exception as e:
         payload = json.loads(index_path.read_text(encoding="utf-8"))
         ref_key = bindings.provider_ref_key(
             provider_id="test-provider",
-            surface_id=None,
+            surface_id="test-surface",
             ref_namespace=None,
             identity_context_fingerprint=None,
             provider_session_ref="ref-retire",
@@ -746,7 +756,7 @@ class TestConsumerPipelineFullIntegration:
         payload = json.loads(index_path.read_text(encoding="utf-8"))
         ref_key = bindings.provider_ref_key(
             provider_id="test-provider",
-            surface_id=None,
+            surface_id="test-surface",
             ref_namespace=None,
             identity_context_fingerprint=None,
             provider_session_ref=provider_ref,

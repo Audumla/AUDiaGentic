@@ -6,6 +6,7 @@ become an alternate request lifecycle or queue authority.
 """
 
 from .application import GatewayOperationsApplication
+from .archive import GatewayArchiveExecutor, GatewayPurgeExecutor
 from .contracts import ManagementCommand, ManagementOperationKind
 from .evidence import EvidenceFinding, GatewayWorkEvidenceReader
 from .executor import GatewayOperationExecutor
@@ -13,6 +14,7 @@ from .notifier import ManagementWorkNotifier, NoopManagementWorkNotifier
 from .operation_store import ManagementOperationStore
 from .pump import ManagementOperationPump
 from .reconcile import GatewayReconcileExecutor
+from .retention_policy import RetentionPolicy, load_retention_policy
 
 __all__ = [
     "EvidenceFinding",
@@ -20,6 +22,10 @@ __all__ = [
     "GatewayOperationsApplication",
     "GatewayReconcileExecutor",
     "GatewayWorkEvidenceReader",
+    "GatewayArchiveExecutor",
+    "GatewayPurgeExecutor",
+    "RetentionPolicy",
+    "load_retention_policy",
     "ManagementCommand",
     "ManagementOperationKind",
     "ManagementOperationPump",

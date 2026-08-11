@@ -197,6 +197,7 @@ mcp-servers:
       - agent_task_gateway_overview
       - agent_task_session_list
       - agent_task_session_close
+      - agent_task_session_control
       - agent_task_session_resume
     description: >
       Agent Execution Gateway — read-only agent-definition discovery,
@@ -217,7 +218,7 @@ mcp-servers:
       the caller never invents one; it only references session-ids from
       previous responses to continue a conversation.
       agent_task_status/cancel/list_requests/gateway_overview/
-      session_list/session_close/session_resume work identically regardless of which
+      session_list/session_close/session_control/session_resume work identically regardless of which
       execution profile a request resolved through.
       Async-only over MCP: submit returns request-id immediately; poll
       agent_task_status until the request reaches a terminal state. A blocking
@@ -271,6 +272,17 @@ mcp-servers:
       agent_task_session_close: >
         Close a live agent session (terminates its agent process). Idempotent —
         an already-closed or orphaned session returns its final record.
+      agent_task_session_control:
+        description: >
+          Issue one closed generic action against a live session. The response
+          is an acknowledgement only; it does not claim that a turn stopped or
+          a session became terminal. Poll request status for lifecycle truth.
+        parameters:
+          session_id: "Gateway session identifier"
+          action: "cancel-turn, interrupt-turn, respond-permission, or close-session"
+          control_id: "Caller idempotency identifier for this control request"
+          turn_id: "Optional active turn/request identifier"
+          payload: "Closed action-specific payload; no provider-native fields"
       agent_task_session_resume:
         description: >
           Resume a validated provider conversation from a terminal source

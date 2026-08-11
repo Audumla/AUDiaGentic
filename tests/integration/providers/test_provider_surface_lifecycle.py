@@ -11,17 +11,13 @@ from __future__ import annotations
 import json
 import os
 import re
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 import pytest
 import tomllib
 import yaml
-
-pytestmark = pytest.mark.skipif(
-    os.environ.get("AUDIAGENTIC_DOCKER_TESTS") != "1",
-    reason="provider surface lifecycle tests require Docker isolation",
-)
 from tests.integration.lifecycle.harness import (
     component_sandbox,
     disable_component,
@@ -31,6 +27,16 @@ from tests.integration.lifecycle.harness import (
 )
 
 from audiagentic.foundation.components.registry import all_descriptors
+
+pytestmark = [
+    pytest.mark.skipif(
+        os.environ.get("AUDIAGENTIC_DOCKER_TESTS") != "1",
+        reason="provider surface lifecycle tests require Docker isolation",
+    ),
+    # Goose's config is HOME-relative; xdist workers in one container share
+    # HOME, so this lifecycle module must run in the serial phase.
+    pytest.mark.no_parallel,
+]
 
 # --------------------------------------------------------------------------- #
 # Component registration
@@ -59,7 +65,9 @@ _MCP_CONFIG_PATHS: dict[str, str] = {
 
 # Components under test for parametrized tests
 _PROPAGATION_COMPONENTS = ["agent-ledger", "agent-planning", "coding-lsp", "source-control"]
-_SURFACE_COMPONENTS = ["agent-ledger", "agent-planning", "source-control", "coding-lsp"]
+# Keep this list capability-based: coding-lsp has no provider surface
+# contribution, so it belongs only in the MCP propagation tests above.
+_SURFACE_COMPONENTS = ["agent-ledger", "agent-planning", "source-control"]
 
 
 # --------------------------------------------------------------------------- #
@@ -269,6 +277,26 @@ def _provider_mcp_config_paths(project_root: Path) -> list[str]:
     return paths
 
 
+@contextmanager
+def _installed_component_sandbox(
+    tmp_path: Path, name: str, component_id: str
+):
+    """Create the common provider lifecycle fixture once per test.
+
+    Each lifecycle assertion still receives a fresh sandbox because it mutates
+    install/enable state, but the repeated project/provider/component setup is
+    centralized here. Tests that need a different component (agent-jobs) keep
+    their own setup below.
+    """
+    with component_sandbox(tmp_path, name) as sb:
+        install_with_deps("project", sb.repo)
+        install_with_deps("providers", sb.repo)
+        setup_provider_surfaces(sb.repo)
+        install_with_deps(component_id, sb.repo)
+        apply_surfaces(sb.repo)
+        yield sb
+
+
 # --------------------------------------------------------------------------- #
 # MCP server propagation tests
 # --------------------------------------------------------------------------- #
@@ -279,15 +307,9 @@ def test_install_propagates_mcp_servers_to_providers(
 ) -> None:
     """After install, all provider-propagated MCP servers appear in every provider config."""
     expected_servers = _provider_mcp_server_names(component_id)
-    if not expected_servers:
-        pytest.skip(f"{component_id} has no provider-propagated MCP servers")
+    assert expected_servers, f"{component_id} is not an MCP propagation component"
 
-    with component_sandbox(tmp_path, f"mcp-install-{component_id}") as sb:
-        install_with_deps("project", sb.repo)
-        install_with_deps("providers", sb.repo)
-        setup_provider_surfaces(sb.repo)
-        install_with_deps(component_id, sb.repo)
-        apply_surfaces(sb.repo)
+    with _installed_component_sandbox(tmp_path, f"mcp-install-{component_id}", component_id) as sb:
 
         for config_rel in _provider_mcp_config_paths(sb.repo):
             present = mcp_servers_in(sb.repo, config_rel)
@@ -304,15 +326,9 @@ def test_uninstall_removes_mcp_servers_from_providers(
 ) -> None:
     """After uninstall, the component's MCP servers are removed from all provider configs."""
     expected_servers = _provider_mcp_server_names(component_id)
-    if not expected_servers:
-        pytest.skip(f"{component_id} has no provider-propagated MCP servers")
+    assert expected_servers, f"{component_id} is not an MCP propagation component"
 
-    with component_sandbox(tmp_path, f"mcp-uninstall-{component_id}") as sb:
-        install_with_deps("project", sb.repo)
-        install_with_deps("providers", sb.repo)
-        setup_provider_surfaces(sb.repo)
-        install_with_deps(component_id, sb.repo)
-        apply_surfaces(sb.repo)
+    with _installed_component_sandbox(tmp_path, f"mcp-uninstall-{component_id}", component_id) as sb:
 
         # Verify they were installed first
         for config_rel in _provider_mcp_config_paths(sb.repo):
@@ -344,15 +360,9 @@ def test_disable_removes_provider_mcp_servers(
     uninstall diverge on that, not on MCP propagation.
     """
     expected_servers = _provider_mcp_server_names(component_id)
-    if not expected_servers:
-        pytest.skip(f"{component_id} has no provider-propagated MCP servers")
+    assert expected_servers, f"{component_id} is not an MCP propagation component"
 
-    with component_sandbox(tmp_path, f"mcp-disable-{component_id}") as sb:
-        install_with_deps("project", sb.repo)
-        install_with_deps("providers", sb.repo)
-        setup_provider_surfaces(sb.repo)
-        install_with_deps(component_id, sb.repo)
-        apply_surfaces(sb.repo)
+    with _installed_component_sandbox(tmp_path, f"mcp-disable-{component_id}", component_id) as sb:
 
         disable_component(component_id, sb.repo)
         # disable fires lifecycle.component.mcp.sync synchronously; no explicit
@@ -371,15 +381,9 @@ def test_enable_reinjects_provider_mcp_servers_after_disable(
 ) -> None:
     """MCP servers pruned on disable reappear after enable, without reinstall."""
     expected_servers = _provider_mcp_server_names(component_id)
-    if not expected_servers:
-        pytest.skip(f"{component_id} has no provider-propagated MCP servers")
+    assert expected_servers, f"{component_id} is not an MCP propagation component"
 
-    with component_sandbox(tmp_path, f"mcp-reenable-{component_id}") as sb:
-        install_with_deps("project", sb.repo)
-        install_with_deps("providers", sb.repo)
-        setup_provider_surfaces(sb.repo)
-        install_with_deps(component_id, sb.repo)
-        apply_surfaces(sb.repo)
+    with _installed_component_sandbox(tmp_path, f"mcp-reenable-{component_id}", component_id) as sb:
 
         disable_component(component_id, sb.repo)
         for config_rel in _provider_mcp_config_paths(sb.repo):
@@ -408,15 +412,9 @@ def test_install_injects_contribution_blocks(
 ) -> None:
     """After install, CLAUDE.md contains managed blocks owned by component_id."""
     expected_blocks = _component_contribution_block_ids(component_id)
-    if not expected_blocks:
-        pytest.skip(f"{component_id} has no surface contribution blocks")
+    assert expected_blocks, f"{component_id} is not a surface contribution component"
 
-    with component_sandbox(tmp_path, f"surface-install-{component_id}") as sb:
-        install_with_deps("project", sb.repo)
-        install_with_deps("providers", sb.repo)
-        setup_provider_surfaces(sb.repo)
-        install_with_deps(component_id, sb.repo)
-        apply_surfaces(sb.repo)
+    with _installed_component_sandbox(tmp_path, f"surface-install-{component_id}", component_id) as sb:
 
         claude_md = sb.repo / "CLAUDE.md"
         present = managed_blocks_in(claude_md)
@@ -433,15 +431,9 @@ def test_uninstall_removes_contribution_blocks(
 ) -> None:
     """After uninstall, the component's managed blocks are gone from CLAUDE.md."""
     expected_blocks = _component_contribution_block_ids(component_id)
-    if not expected_blocks:
-        pytest.skip(f"{component_id} has no surface contribution blocks")
+    assert expected_blocks, f"{component_id} is not a surface contribution component"
 
-    with component_sandbox(tmp_path, f"surface-uninstall-{component_id}") as sb:
-        install_with_deps("project", sb.repo)
-        install_with_deps("providers", sb.repo)
-        setup_provider_surfaces(sb.repo)
-        install_with_deps(component_id, sb.repo)
-        apply_surfaces(sb.repo)
+    with _installed_component_sandbox(tmp_path, f"surface-uninstall-{component_id}", component_id) as sb:
 
         # Sanity: blocks should be present before uninstall
         claude_md = sb.repo / "CLAUDE.md"
@@ -466,15 +458,9 @@ def test_disable_removes_contribution_blocks(
 ) -> None:
     """After disable + apply_surfaces, the component's managed blocks are pruned."""
     expected_blocks = _component_contribution_block_ids(component_id)
-    if not expected_blocks:
-        pytest.skip(f"{component_id} has no surface contribution blocks")
+    assert expected_blocks, f"{component_id} is not a surface contribution component"
 
-    with component_sandbox(tmp_path, f"surface-disable-{component_id}") as sb:
-        install_with_deps("project", sb.repo)
-        install_with_deps("providers", sb.repo)
-        setup_provider_surfaces(sb.repo)
-        install_with_deps(component_id, sb.repo)
-        apply_surfaces(sb.repo)
+    with _installed_component_sandbox(tmp_path, f"surface-disable-{component_id}", component_id) as sb:
 
         claude_md = sb.repo / "CLAUDE.md"
         before = managed_blocks_in(claude_md)
@@ -498,15 +484,9 @@ def test_enable_reinjection_after_disable(
 ) -> None:
     """Blocks removed on disable reappear after enable + apply_surfaces."""
     expected_blocks = _component_contribution_block_ids(component_id)
-    if not expected_blocks:
-        pytest.skip(f"{component_id} has no surface contribution blocks")
+    assert expected_blocks, f"{component_id} is not a surface contribution component"
 
-    with component_sandbox(tmp_path, f"surface-reenable-{component_id}") as sb:
-        install_with_deps("project", sb.repo)
-        install_with_deps("providers", sb.repo)
-        setup_provider_surfaces(sb.repo)
-        install_with_deps(component_id, sb.repo)
-        apply_surfaces(sb.repo)
+    with _installed_component_sandbox(tmp_path, f"surface-reenable-{component_id}", component_id) as sb:
 
         claude_md = sb.repo / "CLAUDE.md"
 

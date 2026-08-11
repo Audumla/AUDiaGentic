@@ -334,10 +334,6 @@ class TestPiArtifactRecipe:
         )
         assert result is not None and result.success
 
-    @pytest.mark.skip(
-        reason="Requires pi provider installed to execute prune recipe end-to-end; "
-        "mocking execute_recipe_mode would skip the actual config-remove steps"
-    )
     def test_recipe_prune_removes_managed_keys_preserves_foreign(self, tmp_path, monkeypatch):
         from audiagentic.components.memory.hindsight import provision
 

@@ -8,6 +8,7 @@ from typing import Any
 from audiagentic.components.agents.gateway.application import GatewayApplication
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
+from .archive import GatewayArchiveExecutor, GatewayPurgeExecutor
 from .contracts import ManagementOperationKind
 from .reconcile import GatewayReconcileExecutor
 
@@ -22,6 +23,8 @@ class GatewayOperationExecutor:
 
     def __init__(self, application: GatewayApplication) -> None:
         self._reconcile = GatewayReconcileExecutor(application)
+        self._archive = GatewayArchiveExecutor(application)
+        self._purge = GatewayPurgeExecutor(application)
 
     def execute(self, operation: Mapping[str, Any]) -> Mapping[str, Any]:
         try:
@@ -32,12 +35,11 @@ class GatewayOperationExecutor:
             ) from exc
         if kind is ManagementOperationKind.RECONCILE:
             return self._reconcile.execute(operation)
-        # Archive/purge cannot silently become an unsafe generic file action.
-        # Their policy/retention executors are wired only when their explicit
-        # safety gates are present.
-        raise AudiaGenticError(
-            "UNS-AGM-001", "agents", "gateway operation has no enabled executor", {"kind": kind}
-        )
+        if kind is ManagementOperationKind.ARCHIVE:
+            return self._archive.execute(operation)
+        if kind is ManagementOperationKind.PURGE:
+            return self._purge.execute(operation)
+        raise AudiaGenticError("UNS-AGM-001", "agents", "gateway operation has no enabled executor", {"kind": kind})
 
 
 __all__ = ["GatewayOperationExecutor"]

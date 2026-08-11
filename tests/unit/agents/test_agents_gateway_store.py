@@ -592,12 +592,11 @@ def test_terminal_states() -> None:
 
 def test_read_migrates_v1_record_under_request_lock(tmp_path: Path) -> None:
     legacy = store.build_record(execution_profile_id="default", prompt_body="secret")
+    store.write_record(tmp_path, legacy)
     legacy["contract-version"] = "v1"
     legacy.pop("dispatch-owner-epoch")
     legacy.pop("dispatch-claimed-at")
     legacy.pop("recovery")
-    store.write_record(tmp_path, {**legacy, "contract-version": "v2", "dispatch-owner-epoch": None,
-                                  "dispatch-claimed-at": None, "recovery": None})
     path = gateway_request_path(tmp_path, legacy["request-id"])
     raw = json.loads(path.read_text(encoding="utf-8"))
     raw["contract-version"] = "v1"
@@ -608,11 +607,150 @@ def test_read_migrates_v1_record_under_request_lock(tmp_path: Path) -> None:
 
     migrated = store.read_record(tmp_path, legacy["request-id"])
 
-    assert migrated["contract-version"] == "v2"
+    assert migrated["contract-version"] == "v4"
     assert migrated["dispatch-owner-epoch"] is None
     assert migrated["recovery"] is None
-    assert json.loads(path.read_text(encoding="utf-8"))["contract-version"] == "v2"
+    assert migrated["resolved-source-id"] is None
+    assert migrated["resolved-capacity-generation"] is None
+    assert migrated["activity-sequence"] == 0
+    assert migrated["last-activity-at"] is None
+    assert json.loads(path.read_text(encoding="utf-8"))["contract-version"] == "v4"
     assert load_ndjson(gateway_timeline_path(tmp_path, legacy["request-id"]))[-1]["event"] == "record.migrated"
+
+
+def test_read_repairs_partial_v4_activity_cutover(tmp_path: Path) -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    path = gateway_request_path(tmp_path, record["request-id"])
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["contract-version"] = "v4"
+    for field in ("last-activity-at", "activity-sequence", "activity-source", "activity-lease-expires-at"):
+        raw.pop(field, None)
+    atomic_write_json(path, raw)
+    repaired = store.read_record(tmp_path, record["request-id"])
+    assert repaired["contract-version"] == "v4"
+    assert repaired["activity-sequence"] == 0
+    assert repaired["activity-source"] is None
+
+
+def test_bind_and_start_owned_attempt_persists_placement_atomically(tmp_path: Path) -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(
+        tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0
+    )
+
+    running = store.bind_and_start_owned_attempt(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        expected_revision=claimed["revision"],
+        resolved_source_id="gpu-a-chatgpt",
+        resolved_model_id="chatgpt",
+        resolved_capacity_generation="capacity-7",
+    )
+
+    assert running["state"] == "running"
+    assert running["resolved-source-id"] == "gpu-a-chatgpt"
+    assert running["resolved-model-id"] == "chatgpt"
+    assert running["resolved-capacity-generation"] == "capacity-7"
+    persisted = store.read_record(tmp_path, record["request-id"])
+    assert persisted["resolved-source-id"] == "gpu-a-chatgpt"
+    assert persisted["resolved-model-id"] == "chatgpt"
+    timeline = load_ndjson(gateway_timeline_path(tmp_path, record["request-id"]))
+    assert timeline[-1]["event"] == "dispatch.bound-and-started"
+
+
+def test_bind_and_start_owned_attempt_fence_failure_writes_no_binding(tmp_path: Path) -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(
+        tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0
+    )
+
+    with pytest.raises(AudiaGenticError, match="CON-AGW-071"):
+        store.bind_and_start_owned_attempt(
+            tmp_path,
+            record["request-id"],
+            owner_epoch="service-a",
+            worker_id="worker-a",
+            expected_revision=claimed["revision"] + 1,
+            resolved_source_id="gpu-a-chatgpt",
+            resolved_model_id="chatgpt",
+        )
+
+    persisted = store.read_record(tmp_path, record["request-id"])
+    assert persisted["state"] == "queued"
+    assert persisted["resolved-source-id"] is None
+    assert persisted["resolved-model-id"] is None
+
+
+def test_owned_activity_renewal_persists_gateway_receipt_and_rejects_replay(tmp_path: Path) -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(
+        tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0
+    )
+    running = store.start_owned_attempt(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        expected_revision=claimed["revision"],
+    )
+    renewed = store.renew_owned_activity(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        attempt_epoch=running["attempt-epoch"],
+        activity_seq=1,
+        activity_source="worker-heartbeat",
+        activity_lease_seconds=30,
+    )
+    assert renewed["activity-sequence"] == 1
+    assert renewed["activity-source"] == "worker-heartbeat"
+    assert renewed["last-activity-at"] is not None
+    assert renewed["activity-lease-expires-at"] is not None
+    replay = store.renew_owned_activity(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        attempt_epoch=running["attempt-epoch"],
+        activity_seq=1,
+        activity_source="worker-heartbeat",
+        activity_lease_seconds=30,
+    )
+    assert replay["revision"] == renewed["revision"]
+    assert replay["last-activity-at"] == renewed["last-activity-at"]
+
+
+def test_owned_activity_renewal_rejects_wrong_attempt_fence(tmp_path: Path) -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(
+        tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0
+    )
+    running = store.start_owned_attempt(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        expected_revision=claimed["revision"],
+    )
+    with pytest.raises(AudiaGenticError, match="CON-AGW-073"):
+        store.renew_owned_activity(
+            tmp_path,
+            record["request-id"],
+            owner_epoch="service-a",
+            worker_id="worker-a",
+            attempt_epoch=running["attempt-epoch"] + 1,
+            activity_seq=1,
+            activity_source="worker-heartbeat",
+            activity_lease_seconds=30,
+        )
 
 
 def test_owned_dispatch_fences_reject_stale_owner_worker_and_attempt(tmp_path: Path) -> None:

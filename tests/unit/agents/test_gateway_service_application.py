@@ -41,6 +41,9 @@ class Application:
     def close_execution_session(self, project_root, session_id):
         return {"operation": "close", "session-id": session_id}
 
+    def control_execution_session(self, project_root, session_id, **kwargs):
+        return {"operation": "control", "session-id": session_id, **kwargs}
+
     def resume_execution_session(self, project_root, source_session_id, **kwargs):
         return {"operation": "resume", "source-session-id": source_session_id, **kwargs}
 
@@ -107,6 +110,21 @@ def test_closed_operation_router_calls_public_application(tmp_path: Path) -> Non
         "identity_context_fingerprint": None,
         "execution_context_fingerprint": None,
         "model_id": None,
+    }
+
+    controlled = service.invoke(
+        "control_execution_session",
+        str(tmp_path),
+        {"session_id": "ses_1", "turn_id": "req_1", "action": "cancel-turn", "control_id": "ctl_1"},
+        **authorization,
+    )
+    assert controlled == {
+        "operation": "control",
+        "session-id": "ses_1",
+        "turn_id": "req_1",
+        "action": "cancel-turn",
+        "control_id": "ctl_1",
+        "payload": None,
     }
 
 
