@@ -23,13 +23,7 @@ from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
 
-# Backstop for the blocking session-turn call. Set above the transport's own
-# absolute turn ceiling so the transport normally terminates first and can
-# return whatever partial output it captured; this only fires if the
-# transport itself fails to return, and exists so no code path can leave a
-# turn blocked with no upper bound. Deliberately not the caller's
-# timeout_seconds -- a slow provider is not a failed provider.
-_TURN_CALL_CEILING_SECONDS = 3000.0
+_TURN_CALL_GRACE_SECONDS = 15.0
 
 
 # ── AS28 slice 4a helpers ────────────────────────────────────────
@@ -116,7 +110,10 @@ def _dispatch_session_request(
     from audiagentic.components.agents.agents_paths import gateway_request_dir
     from audiagentic.components.agents.gateway.session import bindings as binding_store
     from audiagentic.components.agents.gateway.session import sessions_store as session_store
-    from audiagentic.components.agents.gateway.session.sessions import get_session_runtime
+    from audiagentic.components.agents.gateway.session.sessions import (
+        DEFAULT_TURN_TIMEOUT_SECONDS,
+        get_session_runtime,
+    )
     from audiagentic.components.agents.models.execution_profile_api import (
         resolve_execution_profile,
     )
@@ -127,6 +124,7 @@ def _dispatch_session_request(
 
     profile = resolve_execution_profile(project_root, execution_profile_id)
     provider_id = profile["provider_id"]
+    params = profile.get("params", {})
 
     session_id = record.get("session-id")
     started_at = now_iso_z()
@@ -151,7 +149,6 @@ def _dispatch_session_request(
             # before calling the runner (never re-derived from the profile,
             # which now only names a compatible instance set).
             profile_model_id = record.get("resolved-model-id")
-            params = profile.get("params", {})
             # AS08/AS49: stamp the session's binding with this request's own
             # SH02 manifest fingerprint (already computed once, correctly, at
             # admission -- see execution_context.py's build_manifest). Reused
@@ -297,21 +294,27 @@ def _dispatch_session_request(
                 "max-attempts": 1,
             },
         )
-        # Outer bound on the blocking call itself. The transport owns when a
-        # turn is *done* (a slow provider must not be killed just for being
-        # slow), so this is deliberately not the caller's per-request
-        # timeout_seconds -- it is a generous backstop for the case where the
-        # transport's own loop cannot terminate. Without any value here,
-        # SessionRuntime._call() awaits .result(timeout=None) and a stalled
-        # turn blocks forever, which is how a dead stream stayed "running"
-        # indefinitely instead of reaching a terminal state.
+        # The synchronous caller backstop derives from the session's durable
+        # turn policy. A fixed ceiling can pre-empt a provider whose configured
+        # response policy deliberately permits longer work. Zero disables both
+        # the runtime deadline and this outer backstop.
+        configured_turn_timeout = first_present(
+            params, "session-turn-timeout-seconds", "session_turn_timeout_seconds"
+        )
+        if configured_turn_timeout is None:
+            configured_turn_timeout = DEFAULT_TURN_TIMEOUT_SECONDS
+        call_timeout = (
+            float(configured_turn_timeout) + _TURN_CALL_GRACE_SECONDS
+            if configured_turn_timeout
+            else None
+        )
         result = runtime.prompt_in_session(
             project_root,
             session_id,
             dispatch_prompt,
             request_id=request_id,
             correlation_id=record.get("correlation-id"),
-            timeout_seconds=_TURN_CALL_CEILING_SECONDS,
+            timeout_seconds=call_timeout,
         )
     except _CancelledDuringDispatch:
         if request_runtime is not None:
@@ -466,8 +469,13 @@ def _cleanup_request_runtime(runtime_root: Path) -> None:
 def _quarantine_request_runtime(runtime_root: Path, quarantine_root: Path) -> Path:
     import shutil
 
-    quarantine_root.mkdir(parents=True, exist_ok=True)
     destination = quarantine_root / runtime_root.parent.name
+    # Some session transports do not materialize a request runtime. A provider
+    # failure must retain its own error instead of being replaced by a cleanup
+    # FileNotFoundError for an optional directory.
+    if not runtime_root.exists():
+        return destination
+    quarantine_root.mkdir(parents=True, exist_ok=True)
     if destination.exists():
         try:
             shutil.rmtree(destination)

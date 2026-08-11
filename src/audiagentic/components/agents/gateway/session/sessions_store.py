@@ -430,6 +430,61 @@ def read_session_binding(project_root: Path, session_id: str) -> dict[str, Any] 
     return binding
 
 
+def install_initial_provider_binding(
+    project_root: Path,
+    session_id: str,
+    *,
+    provider_id: str,
+    surface_id: str,
+    provider_session_ref: str,
+    identity_context_fingerprint: str | None = None,
+    execution_context_fingerprint: str | None = None,
+    metadata: dict[str, str | int | float | bool | None] | None = None,
+) -> dict[str, Any]:
+    """Install a session's first provider-native binding exactly once.
+
+    Repeating the same reference is idempotent and may refresh bounded scalar
+    provider metadata. A different reference is a generation conflict and is
+    never written in place.
+    """
+    with _session_lock(project_root, session_id):
+        record = read_session_record(project_root, session_id)
+        current = record.get("binding")
+        if isinstance(current, dict):
+            if current.get("provider-session-ref") != provider_session_ref:
+                raise AudiaGenticError(
+                    code="CON-AGW-120",
+                    kind="agents",
+                    message="provider session binding is immutable within a session generation",
+                    details={"session-id": session_id},
+                )
+        else:
+            provider = record.get("provider")
+            if not isinstance(provider, dict):
+                provider = {}
+                record["provider"] = provider
+            current = bindings.build_binding(
+                provider_id=provider_id,
+                provider_session_ref=provider_session_ref,
+                surface_id=surface_id,
+                identity_context_fingerprint=identity_context_fingerprint,
+                execution_context_fingerprint=execution_context_fingerprint,
+            )
+            record["binding"] = current
+
+        if metadata:
+            provider = record.setdefault("provider", {})
+            existing = provider.setdefault("metadata", {})
+            existing.update(metadata)
+        record.setdefault("timing", {})["updated-at"] = now_iso_z()
+        _validate(record, code="VAL-AGW-120")
+        # Register first so a retry repairs either side of a partial caller
+        # failure without ever permitting a conflicting provider reference.
+        bindings.register_open_binding(project_root, record)
+        atomic_write_json(gateway_session_path(project_root, session_id), record)
+        return record
+
+
 def list_session_records(project_root: Path) -> list[dict[str, Any]]:
     root = gateway_sessions_root(project_root)
     if not root.exists():

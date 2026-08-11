@@ -169,6 +169,7 @@ VAL-SURF-001: "The provider surface declaration is invalid. Check its identifier
 VAL-SURF-002: "The provider surface does not satisfy the requested operation. Use a surface with the required validated capability."
 VAL-SURF-003: "The provider surface configuration is incomplete. Add the required transport and lifecycle fields."
 VAL-SURF-004: "The provider surface cannot be materialized from its declaration. Check the surface configuration and managed paths."
+VAL-GPTAUTO-001: "Fix .audiagentic/config/providers/gpt-auto.yaml to match the strict v1 browser, CDP, chat, and turn settings contract."
 # Test-only error codes for dispatch/queue unit tests
 EXT-FAKE-001: "Test external failure used in agent dispatch and queue tests"
 EXT-FAKE-500: "Test external failure used in gateway e2e state tests"

@@ -50,8 +50,8 @@ capabilities:
         execution:
           mode: stub
           message: >-
-            gpt-auto adapter is registered; browser automation bridge is
-            the execution path (adapter.py run()), not a CLI recipe.
+            gpt-auto runs only through the Gateway session transport and its
+            shared browser runtime, not a disposable CLI recipe.
 
   model-config-projection:
     evidence:
@@ -67,26 +67,25 @@ capabilities:
         ChatGPT login state is maintained in the running browser (Brave/Chrome)
         with --remote-debugging-port. No API keys or credentials stored by the
         provider itself. Session reuse across runs is supported via browser persistence.
-      source: "src/audiagentic/components/providers/adapters/gpt_auto/cdp_client.py"
+      source: "src/audiagentic/components/providers/adapters/gpt_auto/runtime.py"
 
 # CC53: AS27 harness-observability inventory (this provider's own facts —
 # see harness_observability_inventory.py for the domain semantics).
 harness_observability:
   - surface_id: gpt-auto-browser
-    candidate_source: CDP browser automation (Chrome/Brave via --remote-debugging-port)
+    candidate_source: shared Puppeteer/CDP browser runtime
     evidence:
-      validated: false
-      reference: adapter.py run() entry point and dom_reader.py response polling
+      validated: true
+      reference: tests/gpt_auto/test_session_transport_live.py
     recipe: A
-    lifecycle_source: none
-    probe_anchor: adapter.py run() and dom_reader.py wait_for_response()
+    lifecycle_source: transport
+    probe_anchor: runtime.py ensure_available() and turn.py GptAutoTurn.run()
 
 # AS29 session-surface declaration for the CDP session transport (BR04).
 # session_transport.py implements the neutral AgentSessionTransport protocol
-# over CdpClient + workspace + prompt_injector + dom_reader. Ownership is
-# external — the browser tab belongs to the user; the transport only attaches
-# and detaches CDP. resume-by-ref reloads the conversation/workspace captured
-# as the provider-session-ref at open(). Evidence (AS67) is the live probe at
+# over a shared provider runtime, PersistentChat and explicit GptAutoTurn.
+# Gateway owns durable session identity; browser pages remain volatile.
+# Resume-by-ref opens the exact durable ChatGPT conversation. Evidence is at
 # tests/gpt_auto/test_session_transport_live.py.
 session_surfaces:
   - surface_id: gpt-auto-cdp

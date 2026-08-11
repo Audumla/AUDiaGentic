@@ -140,25 +140,6 @@ def test_opencode_recipe_installs_official_plugin_with_typed_options(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-class TestCodexHookEntries:
-    """Codex hook entries point at the recipe-fetched scripts, one per event."""
-
-    @pytest.mark.skip(reason="_build_codex_hook_entries removed in current provision flow")
-    def test_build_codex_hook_entries(self):
-        from audiagentic.components.memory.hindsight.provision import (
-            _build_codex_hook_entries,  # noqa: F401
-        )
-
-        entries = _build_codex_hook_entries()
-        assert {e.event for e in entries} == {"SessionStart", "UserPromptSubmit", "Stop"}
-        assert {e.managed_id for e in entries} == {
-            "hindsight/sessionstart",
-            "hindsight/userpromptsubmit",
-            "hindsight/stop",
-        }
-        assert all("scripts" in e.command for e in entries)
-
-
 # ---------------------------------------------------------------------------
 # Reconcile orchestration — family-based, no registry
 # ---------------------------------------------------------------------------

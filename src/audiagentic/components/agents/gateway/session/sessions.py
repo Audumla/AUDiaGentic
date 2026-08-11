@@ -39,7 +39,7 @@ import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from audiagentic.components.agents.gateway.event_topics import (
     SESSION_CLOSED_TOPIC,
@@ -87,6 +87,8 @@ def _default_prepare_fn(
     project_root: Path,
     *,
     provider_id: str,
+    ag_session_id: str,
+    binding_sink: Any,
     surface_hint: Any,
     model_id: str | None = None,
     request_runtime_root: Path | None = None,
@@ -113,6 +115,8 @@ def _default_prepare_fn(
     return providers_api.prepare_provider_session_transport(
         project_root,
         provider_id=provider_id,
+        ag_session_id=ag_session_id,
+        binding_sink=binding_sink,
         surface_hint=surface_hint,
         model_id=model_id,
         request_runtime_root=request_runtime_root,
@@ -488,7 +492,7 @@ class SessionRuntime:
         return self._call(
             self._prompt(
                 project_root,
-                session_id,
+                cast(str, session_id),
                 prompt,
                 request_id=request_id,
                 correlation_id=correlation_id,
@@ -830,10 +834,26 @@ class SessionRuntime:
                 message="session runtime has been shut down",
                 details={},
             )
+        session_id = session_id or session_store.generate_session_id()
+        allocated_session_id = session_id
+
+        async def binding_sink(update: Any) -> None:
+            session_store.install_initial_provider_binding(
+                project_root,
+                allocated_session_id,
+                provider_id=provider_id,
+                surface_id=surface_hint.surface_id,
+                provider_session_ref=update.provider_session_ref.value,
+                metadata=dict(update.metadata),
+                identity_context_fingerprint=identity_context_fingerprint,
+                execution_context_fingerprint=execution_context_fingerprint,
+            )
         # AS28 slice 4a: resolve provider-neutral transport via the public
         # prepare seam. No AcpLaunch / AcpSessionTransport construction here.
         prepare_kwargs = {
             "provider_id": provider_id,
+            "ag_session_id": session_id,
+            "binding_sink": binding_sink,
             "surface_hint": surface_hint,
             "model_id": model_id,
         }
@@ -884,20 +904,22 @@ class SessionRuntime:
             )
             raise
         logger.info(
-            "gateway open phase transport-open complete elapsed-ms=%.1f provider-ref=%s",
+            "gateway open phase transport-open complete elapsed-ms=%.1f provider-ref-present=%s",
             (time.monotonic() - transport_started) * 1000,
-            str(open_result)[:160] if open_result else None,
+            bool(getattr(open_result, "provider_session_ref", None)),
             extra={"session-runtime-phase": "open.transport.complete", "correlation-id": correlation_id},
         )
-        # SessionOpenResult.ag_session_id is the raw provider-native session
-        # identifier (e.g. the real ACP session/new sessionId for pi/opencode,
-        # or the chat/project URL for gpt-auto) -- the value AS49 resume later
-        # feeds straight back to the provider as its resume ref. str(open_result)
-        # stringified the whole dataclass repr instead, which is not a valid
-        # provider-native ref and would break resume-by-ref.
+        if open_result.ag_session_id != session_id:
+            await transport.close()
+            raise AudiaGenticError(
+                code="CON-AGW-121",
+                kind="agents",
+                message="provider transport returned a different gateway session id",
+                details={"session-id": session_id, "provider-id": provider_id},
+            )
         provider_session_ref = (
-            getattr(open_result, "ag_session_id", None) or str(open_result)
-            if open_result
+            open_result.provider_session_ref.value
+            if open_result.provider_session_ref is not None
             else None
         )
         provider_metadata = dict(getattr(open_result, "metadata", {}) or {})
@@ -1209,6 +1231,18 @@ class SessionRuntime:
         # provider_session_transport needs a real model id now to resolve the
         # provider's model selection (VAL-MODEL-002 otherwise).
         resume_model_id = model_id or session_store.session_model_id(source_record)
+        successor_session_id = session_store.generate_session_id()
+
+        async def resume_binding_sink(update: Any) -> None:
+            # Immediate-identity transports (ACP and established gpt-auto)
+            # return their ref from open(); this sink exists for the neutral
+            # preparation contract but is not legal before the record exists.
+            raise AudiaGenticError(
+                code="CON-AGW-122",
+                kind="agents",
+                message="resumed transport attempted delayed initial binding during open",
+                details={"session-id": successor_session_id},
+            )
 
         # AS49: reuse the ORIGINAL request's runtime root, where a provider's
         # own durable session state was preserved on close (see
@@ -1234,6 +1268,8 @@ class SessionRuntime:
         # ── Dispatch exactly one provider-local resume operation ──
         prepare_kwargs: dict[str, Any] = {
             "provider_id": provider_id,
+            "ag_session_id": successor_session_id,
+            "binding_sink": resume_binding_sink,
             "surface_hint": SurfaceHint(surface_id=surface_id),
             "model_id": resume_model_id,
             "resume_provider_ref": source_binding["provider-session-ref"],
@@ -1279,16 +1315,27 @@ class SessionRuntime:
             _record_failure(wrapped)
             raise wrapped from exc
 
-        # See the matching comment in _open_session: extract the real
-        # provider-native ref, not a str() of the whole result object.
-        provider_session_ref = (
-            getattr(open_result, "ag_session_id", None) or str(open_result)
-            if open_result
-            else None
-        )
+        if open_result.ag_session_id != successor_session_id:
+            await transport.close()
+            raise AudiaGenticError(
+                code="CON-AGW-121",
+                kind="agents",
+                message="resumed transport returned a different gateway session id",
+                details={"session-id": successor_session_id},
+            )
+        if open_result.provider_session_ref is None:
+            await transport.close()
+            raise AudiaGenticError(
+                code="CON-AGW-123",
+                kind="agents",
+                message="resumed transport did not prove its provider session identity",
+                details={"session-id": successor_session_id},
+            )
+        provider_session_ref = open_result.provider_session_ref.value
 
         # ── Build the new generation's record + RESUMED_FROM binding ──
         record = session_store.build_session_record(
+            session_id=successor_session_id,
             execution_profile_id=source_record["execution-profile-id"],
             provider_id=provider_id,
             model_id=resume_model_id,
@@ -1296,6 +1343,7 @@ class SessionRuntime:
             surface_id=surface_id,
             idle_timeout_seconds=idle_timeout_seconds,
             max_lifetime_seconds=max_lifetime_seconds,
+            provider_metadata=dict(open_result.metadata),
         )
         session_id = record["session-id"]
         record["binding"] = binding_store.resume_binding(

@@ -124,11 +124,11 @@ def _do_prune(
     descriptor: Any,
     project_root: Path,
 ) -> CliLifecycleResult:
-    """Prune: uninstall CLI and prune owned state."""
+    """Prune project-owned provider state while leaving the CLI installed."""
     from ..lifecycle.lifecycle import (
         probe_provider_cli,
-        uninstall_provider_cli,
     )
+    from ..lifecycle.project_purge import purge_provider_project
 
     probe = probe_provider_cli(descriptor)
     if not probe or not probe.get("available"):
@@ -139,13 +139,13 @@ def _do_prune(
             state="uninstalled",
         )
 
-    result = uninstall_provider_cli(provider_id, project_root=project_root)
-    if result.get("status") in {"uninstalled", "skipped"}:
+    result = purge_provider_project(project_root, provider_id)
+    if result.get("ok"):
         return CliLifecycleResult(
             ok=True,
             supported=True,
             changed=True,
-            state="uninstalled",
+            state="installed",
         )
 
     return CliLifecycleResult(
