@@ -25,6 +25,7 @@ CAPABILITIES = (
     "requests.cancel",
     "sessions.list",
     "sessions.close",
+    "sessions.resume-by-ref",
     "client-leases.v1",
     "service-lifecycle.v1",
     "gateway-profiles.reload",  # SH13 step 3-4
@@ -184,6 +185,29 @@ class GatewayServiceApplication:
         if operation == "close_execution_session":
             return self._application.close_execution_session(
                 root, _required(arguments, "session_id")
+            )
+        if operation == "resume_execution_session":
+            _reject_unknown(
+                arguments,
+                {
+                    "source_session_id",
+                    "control_id",
+                    "identity_context_fingerprint",
+                    "execution_context_fingerprint",
+                    "model_id",
+                },
+            )
+            return self._application.resume_execution_session(
+                root,
+                _required(arguments, "source_session_id"),
+                control_id=_required(arguments, "control_id"),
+                identity_context_fingerprint=_optional_string(
+                    arguments, "identity_context_fingerprint"
+                ),
+                execution_context_fingerprint=_optional_string(
+                    arguments, "execution_context_fingerprint"
+                ),
+                model_id=_optional_string(arguments, "model_id"),
             )
         if operation == "service_status":
             return self._lifecycle_controller().status()

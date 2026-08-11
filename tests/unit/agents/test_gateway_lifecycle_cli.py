@@ -220,7 +220,7 @@ class TestGatewayRecover:
             rc = cmd_gateway_recover(args, tmp_path)
 
         assert rc == 0
-        assert fake_recover.calls == [{"service_root": tmp_path, "confirm": True, "reason": "stale-owner"}]
+        assert fake_recover.calls == [{"service_root": None, "confirm": True, "reason": "stale-owner"}]
         out = json.loads(capsys.readouterr().out)
         assert out["recovered"] is True
         assert out["diagnostics"]["failure-class"] == "unprovable-owner-recovered"

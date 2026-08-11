@@ -40,14 +40,16 @@ def agent_list_definitions() -> list[dict[str, Any]]:
 @tool_boundary
 def agent_task_status(request_id: str) -> dict[str, Any]:
     """Return the current persisted state of a gateway request."""
-    return get_gateway_client().get_execution_request(project_root_from_env(), request_id)
+    project_root = project_root_from_env()
+    return get_gateway_client(project_root).get_execution_request(project_root, request_id)
 
 
 @mcp.tool()
 @tool_boundary
 def agent_task_cancel(request_id: str) -> dict[str, Any]:
     """Cancel a queued request, or best-effort mark a running one cancel-requested."""
-    return get_gateway_client().cancel_execution_request(project_root_from_env(), request_id)
+    project_root = project_root_from_env()
+    return get_gateway_client(project_root).cancel_execution_request(project_root, request_id)
 
 
 @mcp.tool()
@@ -61,8 +63,9 @@ def agent_task_list_requests(
     rejected). Reads from disk, so this works even for requests from an
     earlier process — unlike queue depths, which are in-memory only.
     """
-    return get_gateway_client().list_execution_requests(
-        project_root_from_env(), state=state, limit=limit
+    project_root = project_root_from_env()
+    return get_gateway_client(project_root).list_execution_requests(
+        project_root, state=state, limit=limit
     )
 
 
@@ -71,7 +74,8 @@ def agent_task_list_requests(
 def agent_task_gateway_overview() -> dict[str, Any]:
     """Operator-facing summary: persisted request counts by state, the 5 most
     recent failures (with redacted error), and in-process per-profile queue depths."""
-    return get_gateway_client().gateway_overview(project_root_from_env())
+    project_root = project_root_from_env()
+    return get_gateway_client(project_root).gateway_overview(project_root)
 
 
 @mcp.tool()
@@ -80,7 +84,8 @@ def agent_task_session_list(state: str | None = None) -> list[dict[str, Any]]:
     """List persisted gateway sessions, newest first. Each entry carries a
     'live' flag: true when the session's agent process is held by this gateway
     process (only live sessions can accept new turns)."""
-    return get_gateway_client().list_execution_sessions(project_root_from_env(), state=state)
+    project_root = project_root_from_env()
+    return get_gateway_client(project_root).list_execution_sessions(project_root, state=state)
 
 
 @mcp.tool()
@@ -88,7 +93,8 @@ def agent_task_session_list(state: str | None = None) -> list[dict[str, Any]]:
 def agent_task_session_close(session_id: str) -> dict[str, Any]:
     """Close a live agent session (terminates its agent process). Idempotent —
     an already-closed or orphaned session returns its final record."""
-    return get_gateway_client().close_execution_session(project_root_from_env(), session_id)
+    project_root = project_root_from_env()
+    return get_gateway_client(project_root).close_execution_session(project_root, session_id)
 
 
 @mcp.tool()

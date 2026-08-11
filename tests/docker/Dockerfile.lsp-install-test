@@ -5,14 +5,18 @@ ENV AUDIAGENTIC_REAL_PROVIDER_CLI_TESTS=1
 ENV AUDIAGENTIC_REPO_ROOT=/app
 ENV HOME=/tmp/audiagentic-test-home
 ENV AUDIAGENTIC_HOME=/tmp/audiagentic-test-home/.audiagentic
-ENV PATH="/root/.cargo/bin:/usr/local/go/bin:${PATH}"
+ENV PATH="/tmp/audiagentic-test-home/.cargo/bin:/tmp/audiagentic-test-home/.local/bin:/tmp/audiagentic-test-home/go/bin:/go/bin:/root/.cargo/bin:/usr/local/go/bin:${PATH}"
 
 WORKDIR /app
 
 # Compiler prerequisites only; AUDiaGentic installs the language servers.
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     | sh -s -- -y --default-toolchain stable --profile minimal \
-    && curl -fsSL https://go.dev/dl/go1.23.4.linux-amd64.tar.gz | tar -C /usr/local -xzf -
+    && curl -fsSL https://go.dev/dl/go1.23.4.linux-amd64.tar.gz | tar -C /usr/local -xzf - \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends gh \
+    && npm uninstall -g typescript-language-server typescript || true \
+    && rm -rf /var/lib/apt/lists/*
 
 # Source is baked in (COPY), not bind-mounted: a -v $PWD:/app mount of the host
 # filesystem deadlocks on Windows Docker Desktop. .dockerignore curates the context.
