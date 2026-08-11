@@ -48,7 +48,7 @@ ALL_PROVIDER_IDS = sorted(all_descriptors())
 CLI_PROVIDER_IDS = sorted(
     provider_id
     for provider_id, descriptor in all_descriptors().items()
-    if descriptor.access_mode == "cli"
+    if descriptor.access_mode == "cli" and descriptor.cli_install is not None
 )
 
 

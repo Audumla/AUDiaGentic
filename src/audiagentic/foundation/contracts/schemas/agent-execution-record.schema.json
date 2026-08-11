@@ -98,6 +98,13 @@
     "activity-lease-expires-at": {
       "type": ["string", "null"]
     },
+    "watchdog-state": {
+      "type": ["string", "null"],
+      "enum": ["not-started", "active", "unknown", "intervention", "terminal", null]
+    },
+    "watchdog-reason": {
+      "type": ["string", "null"]
+    },
     "resolved-instance-ids": {
       "description": "AS105/AS101: the admitted compatible model-sources.yaml source-id set (ResolvedExecutionProfile.instances at admission time). Absent on records predating the free-instance dispatch migration -- snapshot_from_record() fails closed on those rather than misparsing them.",
       "type": ["array", "null"],

@@ -210,6 +210,17 @@ def agent_gateway_get_operation(operation_id: str) -> dict:
     return gateway_get_operation(project_root_from_env(), operation_id)
 
 
+@mcp.tool()
+@tool_boundary
+def agent_gateway_get_retention_policy() -> dict:
+    """Read the redacted machine-owned archive retention policy."""
+    from audiagentic.components.agents.gateway.management_api import (
+        gateway_get_retention_policy,
+    )
+
+    return gateway_get_retention_policy(project_root_from_env())
+
+
 def main() -> None:
     run_mcp_server(mcp, "agents-manage")
 

@@ -700,6 +700,8 @@ def renew_owned_activity(
                 "activity-sequence": activity_seq,
                 "activity-source": activity_source,
                 "activity-lease-expires-at": add_seconds(received_at, activity_lease_seconds),
+                "watchdog-state": "active",
+                "watchdog-reason": "verified-activity-renewed",
                 "updated-at": received_at,
                 "revision": record["revision"] + 1,
             }
@@ -868,6 +870,8 @@ def bind_and_start_owned_attempt(
                 "resolved-source-id": resolved_source_id,
                 "resolved-model-id": resolved_model_id,
                 "resolved-capacity-generation": resolved_capacity_generation,
+                "watchdog-state": "active",
+                "watchdog-reason": "awaiting-verified-activity",
                 "started-at": timestamp,
                 "updated-at": timestamp,
                 "revision": record["revision"] + 1,

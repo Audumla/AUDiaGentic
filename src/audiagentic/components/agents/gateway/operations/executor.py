@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from audiagentic.components.agents.gateway import store
 from audiagentic.components.agents.gateway.application import GatewayApplication
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
@@ -22,7 +23,7 @@ class GatewayOperationExecutor:
     """
 
     def __init__(self, application: GatewayApplication) -> None:
-        self._reconcile = GatewayReconcileExecutor(application)
+        self._reconcile = GatewayReconcileExecutor(application, terminalizer=_RequestTerminalizer())
         self._archive = GatewayArchiveExecutor(application)
         self._purge = GatewayPurgeExecutor(application)
 
@@ -40,6 +41,29 @@ class GatewayOperationExecutor:
         if kind is ManagementOperationKind.PURGE:
             return self._purge.execute(operation)
         raise AudiaGenticError("UNS-AGM-001", "agents", "gateway operation has no enabled executor", {"kind": kind})
+
+
+class _RequestTerminalizer:
+    """Adapter to the existing fenced recovery transition authority."""
+
+    def terminalize_proven_dead(self, project_root, record, reason):
+        owner_epoch = record.get("dispatch-owner-epoch")
+        if not isinstance(owner_epoch, str) or not owner_epoch:
+            raise AudiaGenticError("CON-AGM-010", "agents", "proven-dead request has no owner fence", {})
+        return store.transition_recovered_terminal(
+            project_root,
+            str(record["request-id"]),
+            "failed",
+            error={
+                "code": "INT-AGW-077",
+                "message": "request owner was proven dead during gateway reconciliation",
+                "kind": "agents",
+                "details": {"evidence-reason": reason},
+            },
+            stale_epoch=owner_epoch,
+            replay_required=False,
+            replay_reason="proven-dead-reconciliation",
+        )
 
 
 __all__ = ["GatewayOperationExecutor"]

@@ -50,10 +50,6 @@ jobs:
             dockerfile: Dockerfile.packaging
             tag: audia-packaging
             base: false
-          - name: provider-cli
-            dockerfile: Dockerfile.provider-cli-test
-            tag: audia-provider-cli-test
-            base: true
           - name: provider-cli-comprehensive
             dockerfile: Dockerfile.provider-cli-comprehensive
             tag: audia-provider-cli-comprehensive
