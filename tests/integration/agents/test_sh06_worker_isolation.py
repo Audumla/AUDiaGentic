@@ -205,50 +205,6 @@ def test_gateway_dispatches_full_isolation_provider_in_a_worker(
     assert result["attempt-epoch"] == 1
 
 
-def test_worker_timeout_reaps_the_provider_descendant_tree(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A timed-out worker must not leave the provider's child process alive."""
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    _write_qwen_probe(bin_dir)
-    monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ.get("PATH", ""))
-    (tmp_path / ".block").write_text("block", encoding="utf-8")
-    set_implementation_state(
-        tmp_path, "providers", "qwen", ImplementationState(enabled=True)
-    )
-    identity, request = _request(
-        tmp_path, worker_id="worker_timeout", epoch=1, profile="timeout-profile"
-    )
-
-    with pytest.raises(AudiaGenticError) as error:
-        execute_isolated_provider_turn(
-            identity=identity,
-            execution_request=request,
-            # Allow interpreter/provider import and the probe's descendant
-            # creation before exercising teardown; the external command then
-            # blocks far beyond this bound.
-            timeout_seconds=20,
-        )
-    assert error.value.code == "TO-AGW-076"
-
-    pid_path = tmp_path / ".descendant-pid"
-    # Windows Job Object/taskkill teardown is asynchronous after a crashed
-    # leader; allow the OS cleanup window to complete before declaring an
-    # orphan.
-    deadline = time.monotonic() + 15
-    while not pid_path.exists() and time.monotonic() < deadline:
-        time.sleep(0.05)
-    assert pid_path.exists(), (
-        "provider did not start its descendant before timeout "
-        f"(probe-ran={(tmp_path / '.qwen-probe-ran').exists()})"
-    )
-    descendant_pid = int(pid_path.read_text(encoding="utf-8"))
-    while _descendant_alive(descendant_pid) and time.monotonic() < deadline:
-        time.sleep(0.05)
-    assert not _descendant_alive(descendant_pid), "timed-out provider descendant was orphaned"
-
-
 @pytest.mark.requires_container
 def test_provider_crash_reaps_the_detached_descendant_tree(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

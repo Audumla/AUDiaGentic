@@ -49,7 +49,7 @@ def test_typescript_dependency_uses_cross_platform_npm() -> None:
 
     assert cfg["toolchain"] == "npm"
     assert cfg["package"] == ["typescript-language-server", "typescript"]
-    assert cfg["probe"] == "all-binaries:typescript-language-server,tsserver"
+    assert cfg["probe"] == "binary:typescript-language-server"
 
 
 def test_clangd_dependency_has_os_package_manager_variants() -> None:

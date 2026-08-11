@@ -37,3 +37,21 @@ kinds:
           failed: []
         state-sets:
           terminal: [closed, expired, failed]
+  # SH24: durable gateway operation.  This deliberately models
+  # only the operation lifecycle; request/session lifecycle, evidence and
+  # per-target results remain separate contracts.
+  gateway-operation:
+    default-workflow: standard
+    workflows:
+      standard:
+        initial: accepted
+        values: [accepted, running, completed, failed]
+        transitions:
+          accepted: [running, failed]
+          running: [accepted, completed, failed]
+          completed: []
+          failed: []
+        state-sets:
+          dispatchable: [accepted]
+          active: [accepted, running]
+          terminal: [completed, failed]

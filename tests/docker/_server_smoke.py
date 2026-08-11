@@ -66,6 +66,12 @@ def _declared_servers() -> list[tuple[str, str]]:
 
 
 async def get_mcp(mod: str):
+    if mod == "audiagentic.components.session.session_mcp":
+        # The smoke harness imports/builds the server directly instead of
+        # invoking its __main__ composition root.
+        from audiagentic.runtime.harness import wire_harness_status
+
+        wire_harness_status()
     m = importlib.import_module(mod)
     return m.build_server() if hasattr(m, "build_server") else m.mcp
 

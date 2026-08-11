@@ -168,3 +168,38 @@ def gateway_set_config(
         "config": options,
         "updated_keys": list(updates.keys()),
     }
+
+
+def gateway_create_operation(
+    project_root: Path,
+    *,
+    operation_id: str,
+    kind: str,
+    scope: dict[str, Any],
+    correlation_id: str | None = None,
+) -> dict[str, Any]:
+    """Create a durable operator operation through the standalone authority."""
+    from audiagentic.components.agents.gateway.service.bootstrap import start_or_attach_gateway
+
+    client = start_or_attach_gateway()
+    try:
+        return client.create_gateway_operation(
+            project_root,
+            operation_id=operation_id,
+            kind=kind,
+            scope=scope,
+            correlation_id=correlation_id,
+        )
+    finally:
+        client.close()
+
+
+def gateway_get_operation(project_root: Path, operation_id: str) -> dict[str, Any]:
+    """Read the public projection of a durable gateway operation."""
+    from audiagentic.components.agents.gateway.service.bootstrap import start_or_attach_gateway
+
+    client = start_or_attach_gateway()
+    try:
+        return client.get_gateway_operation(project_root, operation_id)
+    finally:
+        client.close()

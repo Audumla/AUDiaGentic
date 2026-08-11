@@ -865,7 +865,7 @@ def resume_execution_session(
         fresh_fingerprint = _compute_current_context_fingerprint(
             project_root,
             execution_profile_id=source_record["execution-profile-id"],
-            provider_id=session_store.session_provider_id(source_record),
+            provider_id=session_store.session_provider_id(source_record) or "unknown-provider",
             model_id=model_id or session_store.session_model_id(source_record),
         )
         identity_context_fingerprint = identity_context_fingerprint or fresh_fingerprint

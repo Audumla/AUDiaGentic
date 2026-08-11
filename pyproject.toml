@@ -73,6 +73,7 @@ where = ["src"]
   "config/components/**/*.yml",
   "config/components/**/*.json",
   "config/components/release/.github/workflows/*.yml",
+  "config/providers/*.yaml",
   # Package-default configs
   "config/provisioning/harness/*.yaml",
   "config/provisioning/rig/*.yaml",

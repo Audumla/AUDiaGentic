@@ -516,16 +516,24 @@ def manage_mcp_entries_all(
     the managed-mcp capability return ``supported=False``.
     """
     from audiagentic.components.providers.descriptors.registry import all_descriptors
+    from audiagentic.components.providers.services.config.provider_config import (
+        is_provider_enabled,
+    )
 
     results: list[ManagedMcpResult] = []
     for descriptor in all_descriptors().values():
         if descriptor.mcp_config is None:
             continue
+        enabled = is_provider_enabled(project_root, descriptor.provider_id)
+        effective_request = request if enabled else ManagedMcpRequest(
+            ownership_scope=request.ownership_scope,
+            entries=(),
+        )
         result = manage_mcp_entries(
             project_root,
             descriptor.provider_id,
-            mode=mode,
-            request=request,
+            mode=mode if enabled else "prune",
+            request=effective_request,
         )
         results.append(result)
     return results

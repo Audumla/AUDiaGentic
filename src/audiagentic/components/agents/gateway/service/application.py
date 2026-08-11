@@ -8,6 +8,12 @@ from typing import Any
 
 from audiagentic.components.agents.contracts.execution_context import SubmissionEnvelope
 from audiagentic.components.agents.gateway.application import GatewayApplication
+from audiagentic.components.agents.gateway.operations import (
+    GatewayOperationsApplication,
+    ManagementCommand,
+    ManagementOperationKind,
+    ManagementOperationStore,
+)
 from audiagentic.components.agents.gateway.service.contract import (
     MAX_LEASE_TTL_SECONDS,
     PROTOCOL_VERSION,
@@ -29,6 +35,7 @@ CAPABILITIES = (
     "client-leases.v1",
     "service-lifecycle.v1",
     "gateway-profiles.reload",  # SH13 step 3-4
+    "gateway-operations.v1",  # SH24: typed operator-operation authority
 )
 
 
@@ -47,6 +54,11 @@ class GatewayServiceApplication:
         # SH10: host-injected GatewayLifecycleController exposing the operator
         # status/drain/resume/stop surface; absent for bare in-process hosting.
         self._lifecycle = lifecycle
+        # A distinct durable authority for gateway operator operations.  It
+        # deliberately does not own request/session state or the work queue.
+        self._operations = GatewayOperationsApplication(
+            ManagementOperationStore(service_store.root)
+        )
 
     def health(self) -> dict[str, Any]:
         record = self._service_store.read()
@@ -138,6 +150,12 @@ class GatewayServiceApplication:
             raise service_conflict_error(18, "gateway client lease is stale or inactive") from exc
         root = _canonical_root(project_root)
         arguments = dict(params or {})
+        if operation in _WORK_PRODUCING_OPERATIONS and self._service_is_draining():
+            raise service_conflict_error(
+                29,
+                "gateway is draining and will not admit new agent execution work",
+                operation=operation,
+            )
         if operation == "submit_execution_request":
             submitted = _validated_submission_arguments(root, arguments)
             return self._application.submit_execution_request(
@@ -209,11 +227,20 @@ class GatewayServiceApplication:
                 ),
                 model_id=_optional_string(arguments, "model_id"),
             )
+        if operation == "create_gateway_operation":
+            return self._create_gateway_operation(arguments)
+        if operation == "get_gateway_operation":
+            _reject_unknown(arguments, {"operation_id"})
+            return self._operations.get_operation(_required(arguments, "operation_id"))
         if operation == "service_status":
             return self._lifecycle_controller().status()
         if operation == "service_drain":
             return self._lifecycle_controller().request_drain()
         if operation == "service_resume":
+            if self._operations_active():
+                raise service_conflict_error(
+                    30, "gateway has active operator operations and cannot resume admission"
+                )
             return self._lifecycle_controller().request_resume()
         # SH13 step 3-4: reload gateway profile registry atomically; publish
         # only redacted generation metadata on success.
@@ -244,6 +271,33 @@ class GatewayServiceApplication:
                 25, "service lifecycle operations require the standalone service host"
             )
         return self._lifecycle
+
+    def _service_is_draining(self) -> bool:
+        return self._service_store.read().state == "draining"
+
+    def _operations_active(self) -> bool:
+        return self._operations.has_active_operations()
+
+    def _create_gateway_operation(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Translate the closed service payload to the gateway-operations API."""
+        _reject_unknown(arguments, {"operation_id", "kind", "scope", "correlation_id"})
+        raw_kind = _required(arguments, "kind")
+        try:
+            kind = ManagementOperationKind(raw_kind)
+        except ValueError as exc:
+            raise service_validation_error(27, "gateway operation kind is invalid") from exc
+        scope = arguments.get("scope")
+        if not isinstance(scope, dict):
+            raise service_validation_error(28, "gateway operation scope must be a mapping")
+        correlation_id = _optional_string(arguments, "correlation_id")
+        return self._operations.create_operation(
+            ManagementCommand(
+                operation_id=_required(arguments, "operation_id"),
+                kind=kind,
+                scope=scope,
+                correlation_id=correlation_id,
+            )
+        )
 
 
 def _required(arguments: dict[str, Any], name: str) -> Any:
@@ -361,6 +415,11 @@ def _canonical_root(value: str) -> Path:
     if os.path.normcase(str(root)) != os.path.normcase(str(canonical)):
         raise service_validation_error(20, "gateway project root must be canonical")
     return canonical
+
+
+_WORK_PRODUCING_OPERATIONS = frozenset(
+    {"submit_execution_request", "run_execution_request", "resume_execution_session"}
+)
 
 
 __all__ = ["CAPABILITIES", "GatewayServiceApplication", "PROTOCOL_VERSION"]

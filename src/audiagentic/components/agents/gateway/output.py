@@ -682,6 +682,8 @@ def _get_output_policy_from_config(project_root: Path) -> OutputPolicy:
 
     # Fallback: read package-level default from component config
     try:
+        from audiagentic.foundation.io import load_yaml_file
+
         pkg_config_path = (
             Path(__file__).parent.parent.parent.parent
             / "config"

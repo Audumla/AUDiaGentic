@@ -35,6 +35,24 @@ def read_text_with_retry(path: Path, *, encoding: str = "utf-8") -> str:
     raise AssertionError("bounded read retry loop exhausted")
 
 
+def read_json_with_retry(path: Path, *, encoding: str = "utf-8") -> Any:
+    """Read a JSON document through transient cross-process replacement races.
+
+    Windows may expose a very short invalid/partial read while another process
+    replaces a durable service record. A reader must not turn that transport
+    race into a false service-health failure; persistent malformed JSON still
+    raises after the bounded retry budget.
+    """
+    for attempt in range(_REPLACE_RETRY_ATTEMPTS):
+        try:
+            return json.loads(read_text_with_retry(path, encoding=encoding))
+        except json.JSONDecodeError:
+            if attempt == _REPLACE_RETRY_ATTEMPTS - 1:
+                raise
+            time.sleep(_REPLACE_RETRY_DELAY_SECONDS)
+    raise AssertionError("bounded JSON read retry loop exhausted")
+
+
 def _ensure_dict(data: Any) -> dict[str, Any]:
     """Return data if it's a dict, otherwise return an empty dict."""
     return data if isinstance(data, dict) else {}

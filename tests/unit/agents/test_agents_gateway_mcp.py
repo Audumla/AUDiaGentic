@@ -57,6 +57,27 @@ def test_agent_task_cancel_delegates():
     mock.cancel_execution_request.assert_called_once_with(_ROOT, "req_x")
 
 
+def test_agent_task_session_resume_delegates_to_gateway_client():
+    with (
+        _patch_root(),
+        patch("audiagentic.components.agents.mcp.gateway_mcp.get_gateway_client") as mock_get,
+    ):
+        mock = mock_get.return_value
+        mock.resume_execution_session.return_value = {"session-id": "ses_new", "state": "active"}
+        result = agents_gateway_mcp.agent_task_session_resume(
+            "ses_old", "ctl_001", "identity", "execution", "chatgpt"
+        )
+    assert result["session-id"] == "ses_new"
+    mock.resume_execution_session.assert_called_once_with(
+        _ROOT,
+        "ses_old",
+        control_id="ctl_001",
+        identity_context_fingerprint="identity",
+        execution_context_fingerprint="execution",
+        model_id="chatgpt",
+    )
+
+
 def test_agent_task_list_requests_delegates():
     with (
         _patch_root(),

@@ -1262,22 +1262,27 @@ def test_turn_event_publish_failure_does_not_break_prompt(rig, monkeypatch):
 # ── RV680: turn deadline, protocol cancel, silence watchdog ─────────
 
 
-def test_turn_deadline_fails_session(rig):
-    """A turn that exceeds session-turn-timeout-seconds fails the session
-    with TO-AGW-090 instead of blocking the worker forever."""
+def test_turn_deadline_is_not_terminal_evidence(rig):
+    """Elapsed time does not fail a session; explicit cancel remains available."""
     runtime, clock, transports, tmp_path = rig
     record = _open(runtime, tmp_path, turn_timeout_seconds=0.2)
     session_id = record["session-id"]
     transports[0].block_event = threading.Event()  # never set — the turn hangs
 
-    with pytest.raises(AudiaGenticError) as excinfo:
-        runtime.prompt_in_session(tmp_path, session_id, "hang forever")
-    assert excinfo.value.code == "TO-AGW-090"
-
-    stored = session_store.read_session_record(tmp_path, session_id)
-    assert stored["state"] == "failed"
-    assert stored["close-reason"] == "turn-timeout"
-    assert runtime.live_session_ids() == []
+    result: list = []
+    worker = threading.Thread(
+        target=lambda: result.append(
+            runtime.prompt_in_session(tmp_path, session_id, "long tool call", request_id="req_deadline")
+        )
+    )
+    worker.start()
+    assert _wait_for(worker.is_alive)
+    time.sleep(0.3)
+    assert worker.is_alive()
+    assert runtime.request_cancel("req_deadline") is True
+    worker.join(timeout=5)
+    assert result and result[0].stop_reason == "cancelled"
+    runtime.close_session(tmp_path, session_id)
 
 
 def test_request_cancel_interrupts_running_turn(rig):
@@ -1308,29 +1313,29 @@ def test_request_cancel_interrupts_running_turn(rig):
     runtime.close_session(tmp_path, session_id)
 
 
-def test_silence_watchdog_fails_silent_turn_as_policy_timeout(rig):
-    """With an explicit silence bound, a turn producing no transport events
-    hits a configured policy timeout and the reaper fails the session."""
+def test_silence_watchdog_records_suspicion_without_failing_turn(rig):
+    """Silence can be monitored, but remote/tool waits are not failures."""
     runtime, clock, transports, tmp_path = rig
     record = _open(runtime, tmp_path, turn_silence_timeout_seconds=5.0, turn_timeout_seconds=0)
     session_id = record["session-id"]
     transports[0].block_event = threading.Event()  # silent, endless turn
 
+    results: list = []
+
     def _turn():
-        with pytest.raises(AudiaGenticError):
-            runtime.prompt_in_session(tmp_path, session_id, "silent turn")
+        results.append(runtime.prompt_in_session(tmp_path, session_id, "silent turn", request_id="req_silent"))
 
     worker = threading.Thread(target=_turn)
     worker.start()
     assert _wait_for(lambda: worker.is_alive())
     time.sleep(0.1)  # turn is now inside the transport block loop
     clock.now += 60.0  # exceed the 5s silence bound on the injected clock
-    assert _wait_for(lambda: session_id not in runtime.live_session_ids(), timeout=5.0)
-    # The reaper closed the transport; the aborted in-flight turn raises.
+    time.sleep(0.1)
+    assert session_id in runtime.live_session_ids()
+    assert runtime.request_cancel("req_silent") is True
     worker.join(timeout=5.0)
-    stored = session_store.read_session_record(tmp_path, session_id)
-    assert stored["state"] == "failed"
-    assert stored["close-reason"] == "turn-silence-timeout"
+    assert results and results[0].stop_reason == "cancelled"
+    runtime.close_session(tmp_path, session_id)
 
 
 # AS34: stale persisted active session diagnostics.
