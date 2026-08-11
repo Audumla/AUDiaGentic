@@ -64,8 +64,9 @@ def characterization_rig(tmp_path: Path):
     clock = _Clock()
     transports: list[FakeAgentSessionTransport] = []
 
-    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None):
+    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
         transports.append(transport)
         return _build_fake_prepared(transport)
 
@@ -203,8 +204,9 @@ def test_acp_sequence_queue_full_rejects(
     clock = _Clock()
     transports: list[FakeAgentSessionTransport] = []
 
-    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None):
+    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
         transports.append(transport)
         return _build_fake_prepared(transport)
 

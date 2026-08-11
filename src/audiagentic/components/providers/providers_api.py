@@ -1722,6 +1722,8 @@ def prepare_provider_session_transport(
     project_root: Path,
     *,
     provider_id: str,
+    ag_session_id: str,
+    binding_sink: Any,
     surface_hint: SurfaceHint,
     model_id: str | None = None,
     model_alias: str | None = None,
@@ -1770,6 +1772,8 @@ def prepare_provider_session_transport(
         result = _prepare(
             project_root,
             provider_id=provider_id,
+            ag_session_id=ag_session_id,
+            binding_sink=binding_sink,
             surface_hint=surface_hint,
             model_id=model_id,
             model_alias=model_alias,

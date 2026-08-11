@@ -1,4 +1,5 @@
 """Managed npm runtime for the gpt-auto provider."""
+
 from __future__ import annotations
 
 import shutil
@@ -26,7 +27,9 @@ def _install(project_root=None):
     target.mkdir(parents=True, exist_ok=True)
     return subprocess.run(
         [_npm(), "install", "--prefix", str(target), "--no-save", PACKAGE],
-        capture_output=True, text=True, check=False,
+        capture_output=True,
+        text=True,
+        check=False,
     )
 
 
@@ -36,7 +39,9 @@ def _uninstall(project_root=None):
         return subprocess.CompletedProcess(["npm", "uninstall"], 0, "", "")
     return subprocess.run(
         [_npm(), "uninstall", "--prefix", str(target), PACKAGE],
-        capture_output=True, text=True, check=False,
+        capture_output=True,
+        text=True,
+        check=False,
     )
 
 

@@ -12,7 +12,11 @@ profiles:
   instances: [chatgpt]
   model_alias: null
   surface_id: gpt-auto-cdp
-  params: {}
+  params:
+    session-turn-timeout-seconds: 3900
+    session-turn-silence-timeout-seconds: 0
+    session-idle-timeout-seconds: 0
+    session-max-lifetime-seconds: 0
   is_default: false
   description: Browser-driven ChatGPT via CDP session transport
 - profile_id: opencode-rig

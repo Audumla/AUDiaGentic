@@ -31,6 +31,7 @@ def test_provider_component_mcp_projection_uses_audiagentic_mcp(monkeypatch, tmp
 
     monkeypatch.setattr(mcp_projection, "get_descriptor", lambda component_id: descriptor)
     monkeypatch.setattr(mcp_projection, "all_descriptors", lambda: {"fake": provider})
+    monkeypatch.setattr(mcp_projection, "is_provider_enabled", lambda root, provider_id: True)
 
     def _fake_sync(*, provider_id, project_root, desired_entries, managed_ids):
         captured["desired_entries"] = desired_entries
@@ -86,6 +87,7 @@ def test_provider_mcp_projection_not_gated_by_receive_lsp_mcp(monkeypatch, tmp_p
 
     monkeypatch.setattr(mcp_projection, "get_descriptor", lambda component_id: descriptor)
     monkeypatch.setattr(mcp_projection, "all_descriptors", lambda: {"fake": provider})
+    monkeypatch.setattr(mcp_projection, "is_provider_enabled", lambda root, provider_id: True)
 
     def _fake_sync(*, provider_id, project_root, desired_entries, managed_ids):
         captured["provider_id"] = provider_id
@@ -101,6 +103,136 @@ def test_provider_mcp_projection_not_gated_by_receive_lsp_mcp(monkeypatch, tmp_p
         "receive_lsp_mcp only gates the LSP-specific ag-lsp server (lsp_projection.py)."
     )
     assert "sample/ag-sample" in captured["desired_entries"]
+
+
+def test_provider_mcp_projection_skips_disabled_providers(monkeypatch, tmp_path: Path) -> None:
+    descriptor = ComponentDescriptor(
+        component_id="sample",
+        display_name="Sample",
+        description="",
+        detection_marker=".sample",
+        mcp_servers=(
+            McpServerDeclaration(
+                name="ag-sample",
+                module="audiagentic.components.sample.sample_mcp",
+                managed_id="sample/ag-sample",
+                propagate="providers",
+            ),
+        ),
+    )
+    enabled_provider = type("Provider", (), {"provider_id": "enabled", "mcp_config": object()})()
+    disabled_provider = type("Provider", (), {"provider_id": "disabled", "mcp_config": object()})()
+    projected: list[str] = []
+
+    monkeypatch.setattr(mcp_projection, "get_descriptor", lambda component_id: descriptor)
+    monkeypatch.setattr(
+        mcp_projection,
+        "all_descriptors",
+        lambda: {"enabled": enabled_provider, "disabled": disabled_provider},
+    )
+    monkeypatch.setattr(
+        mcp_projection,
+        "is_provider_enabled",
+        lambda root, provider_id: provider_id == "enabled",
+    )
+    monkeypatch.setattr(mcp_projection, "load_managed_mcp_registry", lambda root: {})
+    monkeypatch.setattr(
+        mcp_projection,
+        "sync_managed_provider_mcp_subset",
+        lambda **kwargs: projected.append(kwargs["provider_id"]) or {"ok": True},
+    )
+
+    mcp_projection.sync_component_mcp_to_providers("sample", tmp_path, enabled=True)
+
+    assert projected == ["enabled"]
+
+
+def test_disabled_component_cleanup_still_visits_disabled_providers(
+    monkeypatch, tmp_path: Path
+) -> None:
+    descriptor = ComponentDescriptor(
+        component_id="sample",
+        display_name="Sample",
+        description="",
+        detection_marker=".sample",
+        mcp_servers=(
+            McpServerDeclaration(
+                name="ag-sample",
+                module="audiagentic.components.sample.sample_mcp",
+                managed_id="sample/ag-sample",
+                propagate="providers",
+            ),
+        ),
+    )
+    providers = {
+        "enabled": type("Provider", (), {"provider_id": "enabled", "mcp_config": object()})(),
+        "disabled": type("Provider", (), {"provider_id": "disabled", "mcp_config": object()})(),
+    }
+    projected: list[tuple[str, dict]] = []
+
+    monkeypatch.setattr(mcp_projection, "get_descriptor", lambda component_id: descriptor)
+    monkeypatch.setattr(mcp_projection, "all_descriptors", lambda: providers)
+    monkeypatch.setattr(mcp_projection, "is_provider_enabled", lambda root, provider_id: False)
+    monkeypatch.setattr(
+        mcp_projection,
+        "load_managed_mcp_registry",
+        lambda root: {"enabled": {"sample/ag-sample": "ag-sample"}},
+    )
+    monkeypatch.setattr(
+        mcp_projection,
+        "sync_managed_provider_mcp_subset",
+        lambda **kwargs: projected.append((kwargs["provider_id"], kwargs["desired_entries"]))
+        or {"ok": True},
+    )
+
+    mcp_projection.sync_component_mcp_to_providers("sample", tmp_path, enabled=False)
+
+    assert [provider_id for provider_id, _ in projected] == ["enabled", "disabled"]
+    assert all(not desired for _, desired in projected)
+
+
+def test_disabled_provider_with_stale_entries_is_pruned_during_active_sync(
+    monkeypatch, tmp_path: Path
+) -> None:
+    descriptor = ComponentDescriptor(
+        component_id="sample",
+        display_name="Sample",
+        description="",
+        detection_marker=".sample",
+        mcp_servers=(
+            McpServerDeclaration(
+                name="ag-sample",
+                module="audiagentic.components.sample.sample_mcp",
+                managed_id="sample/ag-sample",
+                propagate="providers",
+            ),
+        ),
+    )
+    providers = {
+        "disabled": type("Provider", (), {"provider_id": "disabled", "mcp_config": object()})(),
+    }
+    calls: list[dict] = []
+
+    monkeypatch.setattr(mcp_projection, "get_descriptor", lambda component_id: descriptor)
+    monkeypatch.setattr(mcp_projection, "all_descriptors", lambda: providers)
+    monkeypatch.setattr(mcp_projection, "is_provider_enabled", lambda root, provider_id: False)
+    monkeypatch.setattr(
+        mcp_projection,
+        "load_managed_mcp_registry",
+        lambda root: {"disabled": {"sample/ag-sample": "ag-sample"}},
+    )
+    monkeypatch.setattr(
+        mcp_projection,
+        "sync_managed_provider_mcp_subset",
+        lambda **kwargs: calls.append(kwargs) or {"ok": True},
+    )
+
+    mcp_projection.sync_component_mcp_to_providers("sample", tmp_path, enabled=True)
+
+    assert len(calls) == 1
+    assert calls[0]["provider_id"] == "disabled"
+    assert calls[0]["desired_entries"] == {}
+    assert calls[0]["managed_ids"] == {"sample/ag-sample"}
 
 
 def test_harness_mcp_collector_uses_audiagentic_mcp(monkeypatch, tmp_path: Path) -> None:

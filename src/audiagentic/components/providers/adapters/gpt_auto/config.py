@@ -1,125 +1,340 @@
-"""Configuration for the gpt-auto provider (CDP connect approach)."""
+"""Strict project-owned configuration for the gpt-auto provider runtime."""
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
+from enum import StrEnum
+from pathlib import Path
+from typing import Any, NoReturn
+from urllib.parse import urlparse
 
-logger = logging.getLogger(__name__)
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.workflow import EvidencePolicy
+
+
+class ExistingBrowserPolicy(StrEnum):
+    FAIL = "fail"
+    RESTART = "restart"
+
+
+@dataclass(frozen=True)
+class BrowserConfig:
+    executable: Path
+    remote_debugging_port: int
+    existing_browser_policy: ExistingBrowserPolicy
+    shutdown_timeout_seconds: float
+    force_kill: bool
+    dedicated_window: bool
+
+
+@dataclass(frozen=True)
+class CdpConfig:
+    connect_timeout_seconds: float
+    protocol_timeout_seconds: float
+    recovery_timeout_seconds: float
+    devtools_active_port_file: Path | None
+
+
+@dataclass(frozen=True)
+class ChatConfig:
+    ready_timeout_seconds: float
+    navigation_timeout_seconds: float
+
+
+@dataclass(frozen=True)
+class TurnConfig:
+    submission_timeout_seconds: float
+    response_start_timeout_seconds: float
+    response_stall_timeout_seconds: float
+    response_timeout_seconds: float
+    poll_interval_seconds: float
+    response_stability_seconds: float
+
+
+class DomSignalScope(StrEnum):
+    DOCUMENT = "document"
+    LATEST_ASSISTANT_TURN = "latest-assistant-turn"
+
+
+@dataclass(frozen=True)
+class DomSignalConfig:
+    name: str
+    scope: DomSignalScope
+    selectors: tuple[str, ...]
+    visible: bool
+    text_contains_any: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class TurnWorkflowConfig:
+    dom_signals: tuple[DomSignalConfig, ...]
+    evidence_policies: tuple[tuple[str, EvidencePolicy], ...]
+
+    def policy(self, name: str) -> EvidencePolicy:
+        for policy_name, policy in self.evidence_policies:
+            if policy_name == name:
+                return policy
+        raise KeyError(name)
+
+    def bridge_signals(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "name": signal.name,
+                "scope": signal.scope.value,
+                "selectors": list(signal.selectors),
+                "visible": signal.visible,
+                "textContainsAny": list(signal.text_contains_any),
+            }
+            for signal in self.dom_signals
+        ]
 
 
 @dataclass(frozen=True)
 class GptAutoConfig:
-    """Runtime configuration for the gpt-auto CDP provider.
+    contract_version: str
+    project_url: str
+    browser: BrowserConfig
+    cdp: CdpConfig
+    chat: ChatConfig
+    turn: TurnConfig
+    workflow: TurnWorkflowConfig
 
-    All settings are local — no API keys or remote connectivity required.
-    Connects to an already-running Chrome/Brave via DevTools Protocol.
-    """
-
-    # --- Browser / target ---
-    target_url: str = "chat.openai.com"
-    """Hostname to look for when enumerating tabs."""
-
-    model_select: str | None = None
-    """If set, the model name shown in ChatGPT's model selector (e.g. 'gpt-4o')."""
-
-    # --- Managed browser lifecycle ---
-    browser_port: int = 9222
-    """TCP port for the managed browser's CDP endpoint.
-
-    If ``browser_autostart`` is True and no browser is listening on this port,
-    the provider launches one using the system default browser.  The port must
-    be free — existing listeners are never killed.
-    """
-
-    browser_profile_dir: str | None = None
-    """Path to the browser user-data directory (isolated profile).
-
-    Defaults to ``~/.audiagentic/runtime/gpt-auto-profile`` when omitted.
-    Persists between gateway restarts so sessions survive process death.
-    """
-
-    browser_autostart: bool = True
-    """Whether the provider should launch its own browser instance.
-
-    When False the provider connects to an already-running browser on
-    ``browser_port``.  When True (default) the provider discovers the system
-    default browser, launches it with CDP flags, and manages its lifecycle.
-    """
-
-    browser_idle_timeout_seconds: float = 300.0
-    """Seconds of inactivity before the managed browser is stopped."""
-
-    # --- CDP connection ---
-    cdp_url: str = "http://127.0.0.1:9222"
-    """Chrome DevTools Protocol URL of the running browser.
-
-    Deprecated when ``browser_autostart`` is True — derived from ``browser_port`` instead.
-    """
-
-    # --- Browser lifecycle aliases ---
-
-    # --- Timing ---
-    tab_selection_timeout: int = 15
-    """Seconds to wait for the target ChatGPT tab to appear/load."""
-
-    login_timeout: int = 0
-    """Deprecated compatibility field; login waiting is disabled."""
-
-    response_wait_timeout: int = 120
-    """Maximum seconds to poll for a response from ChatGPT's DOM."""
-
-    polling_interval: float = 2.0
-    """Seconds between DOM polls while waiting for a response."""
-
-    typing_speed: float = 0.03
-    """Seconds between keystrokes when injecting the prompt (human-like)."""
-
-    response_stability_seconds: float = 6.0
-    """Seconds of unchanged text needed before declaring a response complete.
-
-    The streaming indicator flickers during inter-chunk pauses and the
-    reasoning phase, so completion is decided by a stability window: the
-    response is only returned when its text has been unchanged for this
-    duration.  Tests may set this to a small value (e.g. 1.5) to reduce
-    wall-clock time.
-    """
-
-    _KEY_ALIASES = {
-        "response-timeout": "response_wait_timeout",
-        "typing-speed": "typing_speed",
-        "tab-selection-timeout": "tab_selection_timeout",
-        "login-timeout": "login_timeout",
-        "response-stability-seconds": "response_stability_seconds",
-        "browser-port": "browser_port",
-        "browser-profile-dir": "browser_profile_dir",
-        "browser-autostart": "browser_autostart",
-        "browser-idle-timeout-seconds": "browser_idle_timeout_seconds",
-    }
+    @property
+    def cdp_url(self) -> str:
+        return f"http://127.0.0.1:{self.browser.remote_debugging_port}"
 
     @classmethod
-    def from_dict(cls, data: dict) -> GptAutoConfig:
-        """Create config from a dictionary (e.g. provider descriptor YAML).
+    def from_dict(cls, data: dict[str, Any]) -> GptAutoConfig:
+        settings = data.get("settings", data)
+        if not isinstance(settings, dict):
+            _invalid("settings must be a mapping")
+        _exact_keys(
+            settings,
+            {"contract-version", "project-url", "browser", "cdp", "chat", "turn", "workflow"},
+            "settings",
+        )
+        if settings.get("contract-version") != "v1":
+            _invalid("contract-version must be v1")
+        project_url = _chatgpt_url(settings.get("project-url"))
 
-        Normalizes hyphenated keys to underscore field names via an alias map
-        so YAML conventions are respected without duplicating every key name.
-        """
-        effective = dict(data)
-        settings = effective.pop("settings", None)
-        if isinstance(settings, dict):
-            effective.update(settings)
-        mapped = {}
-        for k, v in effective.items():
-            target = cls._KEY_ALIASES.get(k, k)
-            if target in cls.__dataclass_fields__:
-                mapped[target] = v
-        return cls(**mapped)
+        browser_data = _mapping(settings, "browser")
+        _exact_keys(
+            browser_data,
+            {
+                "executable",
+                "remote-debugging-port",
+                "existing-browser-policy",
+                "shutdown-timeout-seconds",
+                "force-kill",
+                "dedicated-window",
+            },
+            "browser",
+        )
+        executable = Path(_string(browser_data, "executable"))
+        if not executable.is_file():
+            _invalid("browser.executable must name an existing file")
+        port = _integer(browser_data, "remote-debugging-port")
+        if not 1 <= port <= 65535:
+            _invalid("browser.remote-debugging-port must be between 1 and 65535")
+        try:
+            policy = ExistingBrowserPolicy(_string(browser_data, "existing-browser-policy"))
+        except ValueError:
+            _invalid("browser.existing-browser-policy is invalid")
+        browser = BrowserConfig(
+            executable=executable,
+            remote_debugging_port=port,
+            existing_browser_policy=policy,
+            shutdown_timeout_seconds=_positive(browser_data, "shutdown-timeout-seconds"),
+            force_kill=_boolean(browser_data, "force-kill"),
+            dedicated_window=_boolean(browser_data, "dedicated-window"),
+        )
+
+        cdp_data = _mapping(settings, "cdp")
+        _exact_keys(
+            cdp_data,
+            {
+                "connect-timeout-seconds",
+                "protocol-timeout-seconds",
+                "recovery-timeout-seconds",
+                "devtools-active-port-file",
+            },
+            "cdp",
+        )
+        active_port = cdp_data.get("devtools-active-port-file")
+        if active_port is not None and (
+            not isinstance(active_port, str) or not active_port or "\x00" in active_port
+        ):
+            _invalid("cdp.devtools-active-port-file must be null or a valid path string")
+        cdp = CdpConfig(
+            connect_timeout_seconds=_positive(cdp_data, "connect-timeout-seconds"),
+            protocol_timeout_seconds=_positive(cdp_data, "protocol-timeout-seconds"),
+            recovery_timeout_seconds=_positive(cdp_data, "recovery-timeout-seconds"),
+            devtools_active_port_file=Path(active_port) if active_port else None,
+        )
+
+        chat_data = _mapping(settings, "chat")
+        _exact_keys(chat_data, {"ready-timeout-seconds", "navigation-timeout-seconds"}, "chat")
+        chat = ChatConfig(
+            ready_timeout_seconds=_positive(chat_data, "ready-timeout-seconds"),
+            navigation_timeout_seconds=_positive(chat_data, "navigation-timeout-seconds"),
+        )
+
+        turn_data = _mapping(settings, "turn")
+        _exact_keys(
+            turn_data,
+            {
+                "submission-timeout-seconds",
+                "response-start-timeout-seconds",
+                "response-stall-timeout-seconds",
+                "response-timeout-seconds",
+                "poll-interval-seconds",
+                "response-stability-seconds",
+            },
+            "turn",
+        )
+        turn = TurnConfig(
+            submission_timeout_seconds=_positive(turn_data, "submission-timeout-seconds"),
+            response_start_timeout_seconds=_non_negative(
+                turn_data, "response-start-timeout-seconds"
+            ),
+            response_stall_timeout_seconds=_non_negative(
+                turn_data, "response-stall-timeout-seconds"
+            ),
+            response_timeout_seconds=_non_negative(turn_data, "response-timeout-seconds"),
+            poll_interval_seconds=_positive(turn_data, "poll-interval-seconds"),
+            response_stability_seconds=_positive(turn_data, "response-stability-seconds"),
+        )
+        workflow = _workflow_config(_mapping(settings, "workflow"))
+        return cls("v1", project_url, browser, cdp, chat, turn, workflow)
 
 
-def provider_settings(data: dict) -> dict:
-    """Return gpt-auto settings with its provider-owned file applied."""
-    effective = dict(data)
-    settings = effective.pop("settings", None)
-    if isinstance(settings, dict):
-        effective.update(settings)
-    return effective
+def provider_settings(data: dict[str, Any]) -> dict[str, Any]:
+    """Return the one project-owned settings mapping without aliases."""
+    settings = data.get("settings", data)
+    if not isinstance(settings, dict):
+        _invalid("settings must be a mapping")
+    return dict(settings)
+
+
+def _invalid(message: str) -> NoReturn:
+    raise AudiaGenticError(code="VAL-GPTAUTO-001", kind="providers", message=message, details={})
+
+
+def _exact_keys(data: dict[str, Any], expected: set[str], section: str) -> None:
+    unknown = set(data) - expected
+    missing = expected - set(data)
+    if unknown or missing:
+        _invalid(f"{section} has unknown or missing keys")
+
+
+def _mapping(data: dict[str, Any], key: str) -> dict[str, Any]:
+    value = data.get(key)
+    if not isinstance(value, dict):
+        _invalid(f"{key} must be a mapping")
+    return value
+
+
+def _string(data: dict[str, Any], key: str) -> str:
+    value = data.get(key)
+    if not isinstance(value, str) or not value:
+        _invalid(f"{key} must be a non-empty string")
+    return value
+
+
+def _integer(data: dict[str, Any], key: str) -> int:
+    value = data.get(key)
+    if isinstance(value, bool) or not isinstance(value, int):
+        _invalid(f"{key} must be an integer")
+    return value
+
+
+def _boolean(data: dict[str, Any], key: str) -> bool:
+    value = data.get(key)
+    if not isinstance(value, bool):
+        _invalid(f"{key} must be a boolean")
+    return value
+
+
+def _positive(data: dict[str, Any], key: str) -> float:
+    value = data.get(key)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        _invalid(f"{key} must be positive")
+    return float(value)
+
+
+def _non_negative(data: dict[str, Any], key: str) -> float:
+    value = data.get(key)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        _invalid(f"{key} must be non-negative")
+    return float(value)
+
+
+def _workflow_config(data: dict[str, Any]) -> TurnWorkflowConfig:
+    _exact_keys(data, {"dom-signals", "evidence-policies"}, "workflow")
+    signal_data = _mapping(data, "dom-signals")
+    signals: list[DomSignalConfig] = []
+    for name, raw in signal_data.items():
+        if not isinstance(name, str) or not name or not isinstance(raw, dict):
+            _invalid("workflow.dom-signals must map names to signal definitions")
+        allowed = {"scope", "selectors", "visible", "text-contains-any"}
+        if set(raw) - allowed or {"scope", "selectors", "visible"} - set(raw):
+            _invalid(f"workflow.dom-signals.{name} has unknown or missing keys")
+        try:
+            scope = DomSignalScope(_string(raw, "scope"))
+        except ValueError:
+            _invalid(f"workflow.dom-signals.{name}.scope is invalid")
+        selectors = raw.get("selectors")
+        if not isinstance(selectors, list) or not selectors or any(
+            not isinstance(selector, str) or not selector for selector in selectors
+        ):
+            _invalid(f"workflow.dom-signals.{name}.selectors must be non-empty strings")
+        text_contains = raw.get("text-contains-any", [])
+        if not isinstance(text_contains, list) or any(
+            not isinstance(fragment, str) or not fragment for fragment in text_contains
+        ):
+            _invalid(f"workflow.dom-signals.{name}.text-contains-any must be strings")
+        signals.append(
+            DomSignalConfig(
+                name,
+                scope,
+                tuple(selectors),
+                _boolean(raw, "visible"),
+                tuple(text_contains),
+            )
+        )
+
+    policy_data = _mapping(data, "evidence-policies")
+    required = {"response-started", "response-active", "response-complete", "response-failed"}
+    if set(policy_data) != required:
+        _invalid("workflow.evidence-policies has unknown or missing policies")
+    known_facts = {signal.name for signal in signals} | {
+        "assistant-fresh",
+        "text-present",
+        "text-changed",
+        "composer-present",
+        "composer-editable",
+        "composer-unavailable",
+    }
+    policies: list[tuple[str, EvidencePolicy]] = []
+    for name, raw in policy_data.items():
+        if not isinstance(raw, dict):
+            _invalid(f"workflow.evidence-policies.{name} must be a mapping")
+        try:
+            policy = EvidencePolicy.from_mapping(raw)
+        except ValueError as exc:
+            _invalid(f"workflow.evidence-policies.{name}: {exc}")
+        referenced = policy.all_of | policy.any_of | policy.none_of
+        unknown = referenced - known_facts
+        if unknown:
+            _invalid(f"workflow.evidence-policies.{name} references unknown facts")
+        policies.append((name, policy))
+    return TurnWorkflowConfig(tuple(signals), tuple(policies))
+
+
+def _chatgpt_url(value: Any) -> str:
+    if not isinstance(value, str):
+        _invalid("project-url must be a ChatGPT URL")
+    parsed = urlparse(value)
+    if parsed.scheme != "https" or parsed.hostname not in {"chatgpt.com", "chat.openai.com"}:
+        _invalid("project-url must be a ChatGPT URL")
+    return value.rstrip("/")

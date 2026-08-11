@@ -69,10 +69,11 @@ def test_real_subprocess_flood_evicts_bounded_and_publishes_turn_events(tmp_path
     get_bus().subscribe(TURN_MODEL_STARTED_TOPIC, on_model_started)
     get_bus().subscribe(TURN_MODEL_COMPLETED_TOPIC, on_model_completed)
 
-    def prepare_real_subprocess(project_root, *, provider_id, surface_hint, model_id=None, **_kwargs):
+    def prepare_real_subprocess(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         transport = AcpAgentSessionTransport(
             AcpLaunch(executable=sys.executable, args=(_FAKE_AGENT,)),
             cwd=project_root,
+            ag_session_id=kwargs["ag_session_id"],
         )
         return _build_fake_prepared(transport)
 

@@ -26,6 +26,8 @@ from audiagentic.components.agents.gateway.session.sessions import SessionRuntim
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.agent_session import (
     CorrelationQuality,
+    ProviderSessionRef,
+    SessionOpenResult,
     SessionTurnResult,
 )
 from audiagentic.foundation.transports.session_surface import (
@@ -52,11 +54,15 @@ class FakeAgentSessionTransport:
         # AS18: optional on_event emitter for intra-turn events
         self.on_event_emitter: Any = None  # callable((on_event, session_id) -> None)
         self.provider_session_ref = "prov-ses-1"
+        self.ag_session_id = "ag-s-fake"
 
-    async def open(self) -> str:
+    async def open(self) -> SessionOpenResult:
         self.opened = True
         self.alive = True
-        return self.provider_session_ref
+        return SessionOpenResult(
+            ag_session_id=self.ag_session_id,
+            provider_session_ref=ProviderSessionRef(value=self.provider_session_ref),
+        )
 
     def is_alive(self) -> bool:
         return self.alive and not self.closed
@@ -210,10 +216,11 @@ def rig(tmp_path):
     transports: list[FakeAgentSessionTransport] = []
     counter = 0
 
-    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None):
+    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         nonlocal counter
         counter += 1
         transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
         transport.provider_session_ref = f"prov-ses-{counter}"
         transports.append(transport)
         return _build_fake_prepared(transport)
@@ -255,7 +262,7 @@ def test_unsupported_surface_raises_no_child(tmp_path):
     raises CON-AGW-095 — no child starts, no live session exposed."""
     clock = _Clock()
 
-    def unsupported_prepare(project_root, *, provider_id, surface_hint, model_id=None):
+    def unsupported_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         return PreparedSessionTransport(
             transport=None,
             surface=_build_fake_surface(),
@@ -291,7 +298,7 @@ def test_provider_prepare_called_once_with_explicit_context(tmp_path):
     clock = _Clock()
     call_args: list[dict[str, Any]] = []
 
-    def tracking_prepare(project_root, *, provider_id, surface_hint, model_id=None):
+    def tracking_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         call_args.append(
             {
                 "project_root": str(project_root),
@@ -301,6 +308,7 @@ def test_provider_prepare_called_once_with_explicit_context(tmp_path):
             }
         )
         transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
         return _build_fake_prepared(transport)
 
     runtime = SessionRuntime(
@@ -339,8 +347,9 @@ def test_open_passes_exact_snapshot_and_transport(tmp_path):
     transports: list[FakeAgentSessionTransport] = []
     expected_surface = _build_fake_surface()
 
-    def prepare_with_surface(project_root, *, provider_id, surface_hint, model_id=None):
+    def prepare_with_surface(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
         transports.append(transport)
         return PreparedSessionTransport(
             transport=transport,
@@ -386,8 +395,9 @@ def test_open_failure_cleans_partial_runtime(tmp_path):
     clock = _Clock()
     transports: list[FakeAgentSessionTransport] = []
 
-    def prepare_fn(project_root, *, provider_id, surface_hint, model_id=None):
+    def prepare_fn(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
         transports.append(transport)
         return _build_fake_prepared(transport)
 
@@ -542,8 +552,9 @@ def test_turn_queue_full_rejects(rig, tmp_path):
     clock = _Clock()
     transports: list[FakeAgentSessionTransport] = []
 
-    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None):
+    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
         transports.append(transport)
         return _build_fake_prepared(transport)
 
@@ -791,8 +802,9 @@ def test_duplicate_owned_binding_rolls_back_transport(tmp_path):
     clock = _Clock()
     transports: list[FakeAgentSessionTransport] = []
 
-    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None):
+    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
         transport.provider_session_ref = "same-ref"
         transports.append(transport)
         return _build_fake_prepared(transport)
@@ -813,8 +825,9 @@ def test_closed_owned_binding_allows_later_same_ref(tmp_path):
     clock = _Clock()
     transports: list[FakeAgentSessionTransport] = []
 
-    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None):
+    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
         transport.provider_session_ref = "same-ref"
         transports.append(transport)
         return _build_fake_prepared(transport)

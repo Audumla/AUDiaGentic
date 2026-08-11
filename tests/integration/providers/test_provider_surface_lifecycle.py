@@ -128,10 +128,37 @@ def apply_surfaces(project_root: Path) -> None:
     )
 
     sync_all_provider_mcp_servers(project_root)
-    prune_provider_surfaces(project_root)
     apply_provider_surfaces(project_root)
+    prune_provider_surfaces(project_root)
 
 
+def test_disabling_provider_preserves_claude_shared_mcp_config(tmp_path: Path) -> None:
+    """Disabling another provider must not clobber Claude's shared .mcp.json."""
+    from audiagentic.components.providers.descriptors.registry import all_descriptors
+    from audiagentic.components.providers.services.config.provider_config import (
+        set_provider_enabled,
+    )
+
+    with component_sandbox(tmp_path, "shared-claude-mcp-isolation") as sb:
+        install_with_deps("project", sb.repo)
+        install_with_deps("providers", sb.repo)
+        setup_provider_surfaces(sb.repo)
+        install_with_deps("agent-planning", sb.repo)
+        apply_surfaces(sb.repo)
+
+        claude_config = sb.repo / ".mcp.json"
+        before = json.loads(claude_config.read_text(encoding="utf-8"))
+        assert before.get("mcpServers"), "Claude shared MCP config was not projected"
+
+        provider_ids = set(all_descriptors())
+        for provider_id in ("codex", "cline", "roo"):
+            if provider_id not in provider_ids:
+                continue
+            set_provider_enabled(sb.repo, provider_id, enabled=False)
+            after = json.loads(claude_config.read_text(encoding="utf-8"))
+            assert after == before, (
+                f"disabling {provider_id} changed Claude's shared .mcp.json"
+            )
 def mcp_servers_in(project_root: Path, config_path: str) -> set[str]:
     """Read an MCP config file and return the set of server names present."""
     path = _config_path(project_root, config_path)

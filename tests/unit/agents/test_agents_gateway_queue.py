@@ -149,12 +149,16 @@ def test_max_concurrency_two_runs_two_third_waits(tmp_path: Path):
     assert started_count.acquire(timeout=2)
     assert started_count.acquire(timeout=2)
     threads[2].start()
-    deadline = time.monotonic() + 2
+    # Admission resolves the persisted snapshot and instance facts before it
+    # reaches the queue. That setup is materially slower in a clean Docker
+    # container than in the warm host process.
+    deadline = time.monotonic() + 10
+    depth = manager.queue_depth("p2")
     while time.monotonic() < deadline:
-        if store.read_record(tmp_path, records[2]["request-id"])["state"] == "queued":
+        depth = manager.queue_depth("p2")
+        if depth["running"] == 2 and depth["pending"] == 1:
             break
         time.sleep(0.01)
-    depth = manager.queue_depth("p2")
     assert depth["running"] == 2
     assert depth["pending"] == 1
     assert store.read_record(tmp_path, records[2]["request-id"])["state"] == "queued"

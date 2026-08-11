@@ -221,6 +221,7 @@ def sync_managed_config(
     :func:`reload_managed_config` only when something actually changed.
     """
     config_path = resolve_managed_config_path(spec, project_root)
+    config_existed = config_path.exists()
     store = FragmentStore(read=spec.reader, write=spec.writer, remove=spec.remover)
     outcome = reconcile_fragments(
         store,
@@ -240,6 +241,20 @@ def sync_managed_config(
         removed=outcome.removed,
         collisions=outcome.collisions,
     )
+    if not config_existed and config_path.exists() and outcome.ok:
+        # Record whole-file ownership only when AUDiaGentic had to create the
+        # provider config. Existing files may contain user-owned content.
+        from .artifact_registry import ArtifactRegistry
+
+        try:
+            relative_config_path = config_path.relative_to(project_root)
+        except ValueError:
+            relative_config_path = None
+        if relative_config_path is not None:
+            ArtifactRegistry(project_root).register(
+                f"managed-config/{owner_scope}/{spec.format}",
+                files=[relative_config_path],
+            )
     result.reload = (
         reload_managed_config(spec, project_root, display_name=owner_scope)
         if outcome.changed

@@ -32,7 +32,11 @@ from audiagentic.components.providers.services.config.provider_config import (
 )
 from audiagentic.components.providers.services.lifecycle.lifecycle import (
     install_provider_cli,
+    reconcile_provider,
     uninstall_provider_cli,
+)
+from audiagentic.components.providers.services.mcp.mcp_sync import (
+    sync_all_provider_mcp_servers,
 )
 from audiagentic.components.providers.services.mcp.mcp import (
     add_provider_mcp_server,
@@ -206,6 +210,80 @@ class TestProviderInstallUninstall:
             assert shutil.which(desc.cli_install.executable) is None, (
                 f"{desc.cli_install.executable} still on PATH after uninstall"
             )
+
+    @pytest.mark.parametrize("provider_id", sorted(_DOCKER_INSTALLABLE))
+    @pytest.mark.timeout(600)
+    def test_disable_purges_project_and_reenable_rebuilds_it(
+        self, provider_id: str, tmp_path: Path
+    ) -> None:
+        """Disable purges project artifacts; re-enable rebuilds descriptor surfaces."""
+        desc = _desc(provider_id)
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        (project_root / ".audiagentic").mkdir(parents=True, exist_ok=True)
+
+        install_component("providers", project_root)
+        install_component("agent-planning", project_root)
+        enable_component("agent-planning", project_root)
+        install_result = install_provider_cli(provider_id, timeout=600, project_root=project_root)
+        assert install_result["status"] in {"installed", "already-installed"}, install_result
+        enable_result = reconcile_provider(provider_id, project_root=project_root)
+        assert enable_result["status"] in {"enabled", "ok"}, enable_result
+        sync_all_provider_mcp_servers(project_root)
+        apply_provider_surfaces(project_root, provider_id=provider_id)
+
+        mcp_path = (
+            _resolve_mcp_path(desc.mcp_config, project_root)
+            if desc.mcp_config is not None
+            else None
+        )
+        settings_path = (
+            project_root / ".audiagentic" / "config" / "providers" / f"{provider_id}.yaml"
+        )
+        managed_surface_paths = [
+            project_root / agent_file.rel_path
+            for agent_file in desc.agent_files
+            if agent_file.managed
+        ]
+        for path in managed_surface_paths:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("", encoding="utf-8")
+        assert is_provider_enabled(project_root, provider_id)
+
+        set_provider_enabled(project_root, provider_id, enabled=False)
+
+        assert not is_provider_enabled(project_root, provider_id)
+        assert desc.cli_install is not None
+        assert shutil.which(desc.cli_install.executable) is not None, (
+            f"{provider_id}: disable must not uninstall the CLI"
+        )
+        assert not settings_path.exists(), f"{provider_id}: provider settings survived disable"
+        if mcp_path is not None:
+            assert not mcp_path.exists(), f"{provider_id}: empty MCP config survived disable"
+        assert all(not path.exists() for path in managed_surface_paths), (
+            f"{provider_id}: managed surface survived disable"
+        )
+
+        result = reconcile_provider(provider_id, project_root=project_root)
+        assert result["status"] in {"enabled", "ok"}, result
+        assert is_provider_enabled(project_root, provider_id)
+        sync_all_provider_mcp_servers(project_root)
+        apply_provider_surfaces(project_root, provider_id=provider_id)
+        assert settings_path.exists(), f"{provider_id}: settings were not rebuilt"
+        if mcp_path is not None:
+            assert mcp_path.exists(), f"{provider_id}: MCP config was not rebuilt"
+        assert all(path.exists() for path in managed_surface_paths), (
+            f"{provider_id}: managed surface was not rebuilt"
+        )
+
+        set_provider_enabled(project_root, provider_id, enabled=False)
+        assert not is_provider_enabled(project_root, provider_id)
+        assert not settings_path.exists()
+        if mcp_path is not None:
+            assert not mcp_path.exists()
+        assert all(not path.exists() for path in managed_surface_paths)
+
+        uninstall_provider_cli(provider_id, timeout=600, project_root=project_root)
 
     @pytest.mark.parametrize("provider_id", sorted(_DOCKER_INSTALLABLE))
     def test_provider_agent_files_created(self, provider_id: str, tmp_path: Path) -> None:

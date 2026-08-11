@@ -63,22 +63,6 @@ class TestFoundationToolchainsBoundaries:
             violations
         )
 
-    def test_no_mcp_specific_helpers_in_config_patcher(self, toolchains_dir):
-        """ConfigPatcher must not have add_mcp_entry or remove_mcp_entry methods."""
-        import pytest
-
-        config_patcher = toolchains_dir / "config_patcher.py"
-        if not config_patcher.exists():
-            pytest.skip("config_patcher.py no longer exists")
-        with open(config_patcher, encoding="utf-8") as f:
-            source = f.read()
-        assert "add_mcp_entry" not in source, (
-            "ConfigPatcher still has add_mcp_entry — move to providers/services/mcp.py"
-        )
-        assert "remove_mcp_entry" not in source, (
-            "ConfigPatcher still has remove_mcp_entry — move to providers/services/mcp.py"
-        )
-
     def test_no_mcp_hooks_plugins_in_docstring(self, toolchains_dir):
         """recipe_contract.py docstring must not name MCP/hooks/plugins as foundation concepts."""
         recipe_contract = toolchains_dir / "recipe_contract.py"

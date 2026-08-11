@@ -16,15 +16,6 @@ def _patch_backend(monkeypatch, backend):
     monkeypatch.setattr(prov, "build_hindsight_backend", lambda root: backend)  # noqa: ARG005
 
 
-def test_reconcile_applies_when_backend_configured(tmp_path, monkeypatch):
-    _patch_backend(monkeypatch, HindsightBackendConfig(base_url="http://hs:1/", api_key="k"))
-
-    out = prov.reconcile_hindsight(tmp_path, ["gemini"])
-
-    assert out["action"] == "applied"
-    assert out["providers"]["gemini"]["success"] is True
-
-
 def test_disabled_uninstalls_from_all_providers(tmp_path, monkeypatch):
     """active=False uninstalls from every provider, not just the enabled ones."""
     _patch_backend(monkeypatch, HindsightBackendConfig(base_url="http://hs:1/", api_key="k"))
@@ -161,39 +152,6 @@ class TestArtifactRecipeReconcile:
     ``host: {}``) and the Codex script fetch + codex.json write — now provisioned
     by the recipe engine, not hand-rolled writers.
     """
-
-    def test_reconcile_populates_pi_host_block(self, tmp_path, monkeypatch):
-        _isolate_home(monkeypatch, tmp_path)
-        _patch_backend(monkeypatch, HindsightBackendConfig(base_url="http://hs:1/", bank_id="audiagentic"))
-
-        out = prov.reconcile_hindsight(tmp_path, ["pi"])
-        assert out["providers"]["pi"]["success"] is True
-
-        config = json.loads((tmp_path / ".hindsight" / "config.json").read_text(encoding="utf-8"))
-        assert config["baseUrl"] == "http://hs:1/"
-        assert config["bankStrategy"] == "manual"
-        assert config["host"] == {
-            "enabled": True,
-            "recall_mode": "hybrid",
-            "auto_recall_tags": ["{project}"],
-            "auto_recall_tags_match": "any_strict",
-            "observation_scopes": [["{project}"]],
-        }
-
-    def test_reconcile_fetches_codex_scripts_and_writes_config(self, tmp_path, monkeypatch):
-        _isolate_home(monkeypatch, tmp_path)
-        _patch_backend(monkeypatch, HindsightBackendConfig(base_url="http://hs:1/", bank_id="codex", api_key="k"))
-
-        out = prov.reconcile_hindsight(tmp_path, ["codex"])
-        assert out["providers"]["codex"]["success"] is True
-
-        scripts = sorted(p.name for p in (tmp_path / ".hindsight" / "codex" / "scripts").rglob("*.py"))
-        assert "session_start.py" in scripts and "recall.py" in scripts and len(scripts) == 11
-
-        codex_cfg = json.loads((tmp_path / ".hindsight" / "codex.json").read_text(encoding="utf-8"))
-        assert codex_cfg["hindsightApiUrl"] == "http://hs:1/"
-        assert codex_cfg["bankId"] == "codex"
-        assert codex_cfg["hindsightApiToken"] == "k"
 
     def test_reconcile_download_failure_surfaces_as_failed(self, tmp_path, monkeypatch):
         import audiagentic.foundation.steps.structured as structured

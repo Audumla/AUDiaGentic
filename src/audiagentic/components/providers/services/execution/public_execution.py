@@ -499,6 +499,7 @@ def _build_transport_from_launch(
     project_root: Path,
     launch: Any,
     *,
+    ag_session_id: str,
     resume_provider_ref: str | None = None,
     pre_spawn_hook: Any = None,
 ) -> Any:
@@ -531,6 +532,7 @@ def _build_transport_from_launch(
     return AcpAgentSessionTransport(
         launch,
         cwd=project_root,
+        ag_session_id=ag_session_id,
         resume_provider_ref=resume_provider_ref,
         pre_spawn_hook=pre_spawn_hook,
     )
@@ -540,6 +542,8 @@ def prepare_provider_session_transport(
     project_root: Path,
     *,
     provider_id: str,
+    ag_session_id: str,
+    binding_sink: Any,
     surface_hint: SurfaceHint,
     model_id: str | None = None,
     model_alias: str | None = None,
@@ -617,10 +621,9 @@ def prepare_provider_session_transport(
         )
 
     # ── Supported CDP surface (gpt-auto): build the CDP transport ─────
-    # gpt-auto has no ACP launch builder; the CDP transport wraps the existing
-    # browser-automation pieces (CdpClient + workspace + prompt_injector +
-    # dom_reader). The gateway stays transport-agnostic via the same neutral
-    # AgentSessionTransport seam — no ACP launch is constructed here.
+    # gpt-auto has no ACP launch builder. Its thin transport resolves a shared
+    # provider runtime plus one PersistentChat through the same neutral
+    # AgentSessionTransport seam — no browser type crosses this boundary.
     if provider_id == "gpt-auto" and surface_hint.surface_id == "gpt-auto-cdp":
         from audiagentic.components.providers.adapters.gpt_auto.session_transport import (
             build_gpt_auto_session_transport,
@@ -633,6 +636,8 @@ def prepare_provider_session_transport(
         transport = build_gpt_auto_session_transport(
             project_root,
             config=provider_config,
+            ag_session_id=ag_session_id,
+            binding_sink=binding_sink,
             resume_provider_ref=resume_provider_ref,
             resume_metadata_hint=resume_provider_metadata,
         )
@@ -775,6 +780,7 @@ def prepare_provider_session_transport(
     # Wrap in private AcpAgentSessionTransport (AS28 slice 2 adapter).
     transport = _build_transport_from_launch(
         project_root, acp_launch,
+        ag_session_id=ag_session_id,
         resume_provider_ref=resume_provider_ref,
         pre_spawn_hook=pre_spawn_hook,
     )
