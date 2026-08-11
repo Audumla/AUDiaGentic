@@ -180,6 +180,8 @@ def build_record(
         "activity-sequence": 0,
         "activity-source": None,
         "activity-lease-expires-at": None,
+        "watchdog-state": "not-started",
+        "watchdog-reason": None,
         "resolved-instance-ids": resolved_instance_ids,
         "resolved-queue-limits": resolved_queue_limits,
         "admission-policy-digest": admission_policy_digest,
@@ -345,6 +347,8 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     migrated.setdefault("activity-sequence", 0)
     migrated.setdefault("activity-source", None)
     migrated.setdefault("activity-lease-expires-at", None)
+    migrated.setdefault("watchdog-state", "not-started")
+    migrated.setdefault("watchdog-reason", None)
     return _validate(migrated, code="VAL-AGW-005")
 
 
@@ -429,6 +433,7 @@ def project_public_status(
         "gateway-execution-lane-key", "resolved-provider-id", "resolved-model-id",
         "resolved-source-id", "resolved-capacity-generation",
         "last-activity-at", "activity-sequence", "activity-source", "activity-lease-expires-at",
+        "watchdog-state", "watchdog-reason",
         "resolved-instance-ids", "resolved-queue-limits", "admission-policy-digest",
     )
     status = {field: record.get(field) for field in visible}

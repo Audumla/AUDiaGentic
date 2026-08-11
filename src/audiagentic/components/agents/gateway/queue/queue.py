@@ -16,7 +16,6 @@ import logging
 import threading
 import time
 import uuid
-from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,6 +35,11 @@ from audiagentic.components.agents.gateway.event_topics import (
 )
 from audiagentic.components.agents.gateway.instances import InstanceFacts
 from audiagentic.components.agents.gateway.mapping import first_present
+from audiagentic.components.agents.gateway.queue.capacity import (
+    CapacityReservation,
+    SourceCapacityAuthority,
+)
+from audiagentic.components.agents.gateway.queue.pending import PendingAuthority
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
 
@@ -302,107 +306,11 @@ def _lane_public_id(lane_key_tuple: tuple[str, str, str]) -> str:
     return f"{profile_id}/{generation}/{short_digest}"
 
 
-def _instances_are_gated(instance_facts: tuple[InstanceFacts, ...]) -> bool:
-    """AS105/AS101: a profile is either fully gated (every instance declares
-    resource-id+concurrency on its model-sources.yaml source, participating
-    in shared free-instance dispatch) or fully ungated (none do, keeping
-    today's per-profile params.max-concurrency semaphore behavior exactly).
-
-    A mixed set is rejected -- it has no well-defined dispatch semantics --
-    rather than silently picking one interpretation.
-    """
-    gated = [f for f in instance_facts if f.resource_id is not None]
-    if not gated:
-        return False
-    if len(gated) != len(instance_facts):
-        raise AudiaGenticError(
-            code="VAL-AGW-024",
-            kind="agents",
-            message="execution profile instances must be either all gated "
-            "(resource-id+concurrency declared) or all ungated -- mixed sets "
-            "are not supported",
-            details={
-                "instances": [f.source_id for f in instance_facts],
-                "gated": [f.source_id for f in gated],
-            },
-        )
-    for facts in gated:
-        if facts.concurrency is None:
-            raise AudiaGenticError(
-                code="VAL-AGW-024",
-                kind="agents",
-                message="a gated instance (resource-id set) must also declare concurrency",
-                details={"source-id": facts.source_id, "resource-id": facts.resource_id},
-            )
-    return True
-
-
 # AS105/AS101 drain-before-swap: once a request for a different source
 # sharing a gated resource has waited this long, stop admitting more of the
 # currently-active source so in_flight can drain to zero and the resource
 # can swap. Bounded anti-starvation guard, not a general scheduler.
 _STARVATION_THRESHOLD_SECONDS = 30.0
-
-
-class _ResourceCapacityTracker:
-    """Tracks capacity across every model-sources.yaml source sharing one
-    resource-id (AS105/AS101 free-instance dispatch).
-
-    A resource runs at most one source's model at a time when a swap would
-    be required: a different source may only start once in_flight for the
-    currently-active source has drained to zero (drain-before-swap), unless
-    the bounded anti-starvation guard has kicked in.
-    """
-
-    def __init__(self) -> None:
-        self.lock = threading.Lock()
-        self.active_source_id: str | None = None
-        self.in_flight: dict[str, int] = {}
-        self.waiting_since: dict[str, float] = {}
-
-    def try_acquire(self, source_id: str, concurrency: int) -> bool:
-        now = time.monotonic()
-        with self.lock:
-            if self.active_source_id in (None, source_id):
-                blocked_by_starvation = any(
-                    sid != source_id and now - since >= _STARVATION_THRESHOLD_SECONDS
-                    for sid, since in self.waiting_since.items()
-                )
-                if blocked_by_starvation:
-                    self.waiting_since.setdefault(source_id, now)
-                    return False
-                current = self.in_flight.get(source_id, 0)
-                if current >= concurrency:
-                    self.waiting_since.setdefault(source_id, now)
-                    return False
-                self.active_source_id = source_id
-                self.in_flight[source_id] = current + 1
-                self.waiting_since.pop(source_id, None)
-                return True
-
-            # A different source is active on this resource -- only swap
-            # once it has fully drained (drain-before-swap).
-            active_in_flight = self.in_flight.get(self.active_source_id, 0)
-            if active_in_flight == 0:
-                self.active_source_id = source_id
-                self.in_flight[source_id] = 1
-                self.waiting_since.pop(source_id, None)
-                return True
-            self.waiting_since.setdefault(source_id, now)
-            return False
-
-    def release(self, source_id: str) -> None:
-        with self.lock:
-            current = self.in_flight.get(source_id, 0)
-            if current > 0:
-                self.in_flight[source_id] = current - 1
-
-    def snapshot(self) -> dict[str, Any]:
-        with self.lock:
-            return {
-                "active-source-id": self.active_source_id,
-                "in-flight": dict(self.in_flight),
-            }
 
 
 class _ProfileQueue:
@@ -418,11 +326,9 @@ class _ProfileQueue:
         self.max_concurrency = max_concurrency
         self.queue_max_size = queue_max_size
         self.lock = threading.Lock()
-        self.pending: deque[QueuedDispatch] = deque()
         self.running: set[str] = set()
         self.idle: set[str] = set()
         self.cancel_requested: set[str] = set()
-        self.compute_slots = threading.BoundedSemaphore(max_concurrency)
 
     def active_running(self) -> int:
         """Count of requests actually consuming compute (not waiting on session locks)."""
@@ -443,8 +349,12 @@ class GatewayQueueManager:
         # AS105/AS101: shared machine-wide capacity per model-sources.yaml
         # resource-id -- deliberately NOT per-lane. A resource is genuinely
         # shared across every profile/project naming a source on it.
-        self._resource_trackers: dict[str, _ResourceCapacityTracker] = {}
-        self._project_round_robin: dict[str, deque[str]] = {}
+        self._capacity = SourceCapacityAuthority(
+            starvation_seconds=_STARVATION_THRESHOLD_SECONDS,
+        )
+        # AS101: one canonical pending authority. Lanes retain only running
+        # session/compatibility state; they no longer own pending work.
+        self._pending_authority: PendingAuthority[QueuedDispatch] = PendingAuthority()
 
     def _execution_lane(self, snapshot: profiles_mod.ResolvedExecutionProfile) -> _ProfileQueue:
         lane_key_tuple = (snapshot.profile_id, snapshot.generation, snapshot.config_digest)
@@ -461,14 +371,6 @@ class GatewayQueueManager:
                 pq = _ProfileQueue(max_concurrency, queue_max_size)
                 self._lanes[lane_key_tuple] = pq
             return pq
-
-    def _resource_tracker(self, resource_id: str) -> _ResourceCapacityTracker:
-        with self._manager_lock:
-            tracker = self._resource_trackers.get(resource_id)
-            if tracker is None:
-                tracker = _ResourceCapacityTracker()
-                self._resource_trackers[resource_id] = tracker
-            return tracker
 
     def enqueue(
         self,
@@ -573,12 +475,10 @@ class GatewayQueueManager:
         from audiagentic.components.agents.gateway.instances import resolve_instance_facts
 
         instance_facts = resolve_instance_facts(project_root, snapshot.instances)
-        _instances_are_gated(instance_facts)  # raises on a mixed gated/ungated set
-
         # Lifecycle event publish is SYNC dispatch — a subscriber that calls
         # back into cancel()/enqueue() for the same profile would try to
         # re-acquire pq.lock and deadlock (threading.Lock is not reentrant).
-        # Keep the critical section limited to the pending-deque mutation
+        # Keep the critical section limited to the bounded admission check
         # itself; do all I/O and event publish after releasing the lock (RV31).
         entry = QueuedDispatch(
             request_id=request_id,
@@ -593,10 +493,18 @@ class GatewayQueueManager:
         )
         pending_count = 0
         with pq.lock:
-            queue_full = len(pq.pending) >= pq.queue_max_size
+            queue_full = self._pending_authority.count(
+                lambda request: request.value.snapshot == snapshot
+            ) >= pq.queue_max_size
             if not queue_full:
-                pq.pending.append(entry)
-                pending_count = len(pq.pending)
+                self._pending_authority.enqueue(
+                    request_id=entry.request_id,
+                    project_key=entry.project_key,
+                    value=entry,
+                )
+                pending_count = self._pending_authority.count(
+                    lambda request: request.value.snapshot == snapshot
+                )
 
         if queue_full:
             logger.info(
@@ -658,140 +566,72 @@ class GatewayQueueManager:
         return store.read_record(project_root, request_id)
 
     def _drain_all(self) -> None:
-        """Attempt to start as many pending requests as current capacity allows,
-        across every lane.
+        """Claim fair project heads and start any currently eligible work.
 
-        AS105/AS101: a gated lane's capacity is shared machine-wide via
-        resource trackers, so releasing capacity on one lane's request can
-        unblock a pending entry queued under a *different* lane/project --
-        every lane is reconsidered on every call, not just the one that just
-        freed up.
-        """
-        with self._manager_lock:
-            pqs = list(self._lanes.values())
-        for pq in pqs:
-            self._drain_ungated(pq)
-        self._drain_gated()
-
-    def _drain_ungated(self, pq: _ProfileQueue) -> None:
-        """Start worker threads for an ungated lane's pending requests.
-
-        AS15: uses active_running() (running - idle) so that session requests
-        waiting on turn_lock don't block other sessions from making progress.
-        Exactly today's per-profile semaphore behavior -- untouched for any
-        profile whose instances don't declare resource-id/concurrency.
+        Capacity is checked before a pending request is removed.  The pending
+        authority rotates only the project that actually starts work, so an
+        unavailable project head cannot starve another project with capacity.
         """
         while True:
-            with pq.lock:
-                if not pq.pending or _instances_are_gated(pq.pending[0].instance_facts):
-                    return
-                if pq.active_running() >= pq.max_concurrency:
-                    return
-                entry = pq.pending.popleft()
-                request_id = entry.request_id
-                pq.running.add(request_id)
-            thread = threading.Thread(
-                target=self._run_one,
-                args=(pq, entry, None),
-                daemon=True,
-                name=f"gateway-{entry.execution_profile_id}-{request_id}",
-            )
-            thread.start()
-
-    def _try_bind_gated(
-        self, instance_facts: tuple[InstanceFacts, ...]
-    ) -> tuple[str, str, str | None] | None:
-        """Try to bind one of a request's compatible gated instances.
-
-        Returns (source_id, resource_id, model_id) of the bound instance, or
-        None if none currently has spare capacity.
-        """
-        for facts in instance_facts:
-            tracker = self._resource_tracker(facts.resource_id)  # type: ignore[arg-type]
-            if tracker.try_acquire(facts.source_id, facts.concurrency):  # type: ignore[arg-type]
-                return (facts.source_id, facts.resource_id, facts.model_id)  # type: ignore[return-value]
-        return None
-
-    def _drain_gated(self) -> None:
-        """Bind pending gated requests to free resource capacity.
-
-        AS105/AS101: only the FIFO head of each lane is a dispatch candidate
-        (intra-lane order preserved); candidates for the same resource are
-        grouped by project and selected round-robin so one project cannot
-        monopolize shared hardware. Repeats until a full pass makes no
-        progress -- each successful bind can free room a later resource in
-        the same pass depends on.
-        """
-        while True:
-            with self._manager_lock:
-                pqs = list(self._lanes.values())
-
-            candidates_by_resource: dict[str, list[tuple[_ProfileQueue, QueuedDispatch]]] = {}
-            for pq in pqs:
+            started = False
+            for candidate in self._pending_authority.candidates():
+                entry = candidate.value
+                pq = self._execution_lane(entry.snapshot)
+                reservation: CapacityReservation | None = None
                 with pq.lock:
-                    if not pq.pending:
+                    reservation = self._try_reserve_source(entry, pq.max_concurrency)
+                    if reservation is None:
                         continue
-                    head = pq.pending[0]
-                    if not _instances_are_gated(head.instance_facts):
+                    claimed = self._pending_authority.claim(entry.request_id)
+                    if claimed is None:
+                        if reservation is not None:
+                            self._capacity.release(reservation)
                         continue
-                    candidate = (pq, head)
-                for facts in head.instance_facts:
-                    candidates_by_resource.setdefault(facts.resource_id, []).append(candidate)  # type: ignore[arg-type]
-
-            progressed = False
-            for resource_id, candidates in candidates_by_resource.items():
-                by_project: dict[str, list[tuple[_ProfileQueue, QueuedDispatch]]] = {}
-                for pq, entry in candidates:
-                    by_project.setdefault(entry.project_key, []).append((pq, entry))
-
-                order = self._project_round_robin.setdefault(resource_id, deque())
-                for project_key in by_project:
-                    if project_key not in order:
-                        order.append(project_key)
-                self._project_round_robin[resource_id] = deque(
-                    p for p in order if p in by_project
+                    pq.running.add(entry.request_id)
+                thread = threading.Thread(
+                    target=self._run_one,
+                    args=(pq, entry, reservation),
+                    daemon=True,
+                    name=f"gateway-{entry.execution_profile_id}-{entry.request_id}",
                 )
-
-                for project_key in list(self._project_round_robin[resource_id]):
-                    dispatched = False
-                    for pq, entry in by_project[project_key]:
-                        bound = self._try_bind_gated(entry.instance_facts)
-                        if bound is None:
-                            continue
-                        with pq.lock:
-                            if not pq.pending or pq.pending[0].request_id != entry.request_id:
-                                # Raced with a cancel or a concurrent drain
-                                # pass -- release the slot and let the next
-                                # pass reconsider whoever is actually at the
-                                # front now.
-                                self._resource_tracker(bound[1]).release(bound[0])
-                                continue
-                            pq.pending.popleft()
-                            pq.running.add(entry.request_id)
-                        thread = threading.Thread(
-                            target=self._run_one,
-                            args=(pq, entry, bound),
-                            daemon=True,
-                            name=f"gateway-{entry.execution_profile_id}-{entry.request_id}",
-                        )
-                        thread.start()
-                        progressed = True
-                        dispatched = True
-                        break
-                    if dispatched:
-                        # Rotate this project to the back so the next pass
-                        # favors a different project first (round robin).
-                        self._project_round_robin[resource_id].remove(project_key)
-                        self._project_round_robin[resource_id].append(project_key)
-                        break
-            if not progressed:
+                thread.start()
+                started = True
+                break
+            if not started:
                 return
+
+    def _try_reserve_source(
+        self, entry: QueuedDispatch, fallback_concurrency: int,
+    ) -> CapacityReservation | None:
+        """Reserve one compatible instance through the common capacity model.
+
+        Declared model sources use their shared physical resource.  Plain
+        instances use a profile-scoped virtual resource only to preserve the
+        existing profile limit while removing the separate semaphore path.
+        """
+        virtual_resource = (
+            f"profile:{entry.snapshot.profile_id}/"
+            f"{entry.snapshot.generation}/{entry.snapshot.config_digest}"
+        )
+        for facts in entry.instance_facts:
+            declared = facts.resource_id is not None
+            reservation = self._capacity.try_reserve(
+                source_id=facts.source_id,
+                resource_id=facts.resource_id if declared else virtual_resource,
+                concurrency=facts.concurrency if declared else fallback_concurrency,
+                model_id=facts.model_id,
+                capacity_source_id=facts.source_id if declared else virtual_resource,
+                declared=declared,
+            )
+            if reservation is not None:
+                return reservation
+        return None
 
     def _run_one(
         self,
         pq: _ProfileQueue,
         entry: QueuedDispatch,
-        bound: tuple[str, str, str | None] | None,
+        bound: CapacityReservation | None,
     ) -> None:
         project_root = entry.project_root
         execution_profile_id = entry.execution_profile_id
@@ -802,8 +642,6 @@ class GatewayQueueManager:
         lane_label = f"{entry.snapshot.profile_id}/{entry.snapshot.generation}"
 
         is_session = False
-        non_session_slot_held = False
-
         try:
             if request_id in pq.cancel_requested:
                 logger.info(
@@ -886,18 +724,21 @@ class GatewayQueueManager:
                 return
             _test_stall_claim_to_start()
             worker_id = f"worker_{uuid.uuid4().hex[:16]}"
-            if bound is not None and bound[2] is not None:
+            if bound is not None:
                 # A capacity reservation is not enough: persist the exact
                 # source/model under the same owner/revision fence that starts
-                # execution, before the provider runner can observe it.
+                # execution, before the provider runner can observe it. Plain
+                # instances use their source id as the durable model identity;
+                # this keeps bounded and unbounded placement on one contract.
                 record = store.bind_and_start_owned_attempt(
                     project_root,
                     request_id,
                     owner_epoch=owner_epoch,
                     worker_id=worker_id,
                     expected_revision=claimed["revision"],
-                    resolved_source_id=bound[0],
-                    resolved_model_id=bound[2],
+                    resolved_source_id=bound.source_id,
+                    resolved_model_id=bound.model_id or bound.source_id,
+                    resolved_capacity_generation=bound.capacity_source_id,
                 )
             else:
                 record = store.start_owned_attempt(
@@ -927,39 +768,44 @@ class GatewayQueueManager:
             # Detect session request early to set up callbacks.
             is_session = bool(record.get("session-id") or record.get("session-keep-alive"))
             if is_session:
+                # Admission only proves the session can start. Capacity is
+                # held by the request-specific callbacks around actual turns,
+                # never across an idle keep-alive lifetime.
+                turn_template = bound
+                if bound is not None:
+                    self._capacity.release(bound)
+                    bound = None
                 with pq.lock:
                     pq.idle.add(request_id)
 
-                session_slot_held = False
+                turn_reservation: CapacityReservation | None = None
 
                 async def _on_turn_starting(rid: str) -> None:
-                    nonlocal session_slot_held
-                    await asyncio.to_thread(pq.compute_slots.acquire)
+                    nonlocal turn_reservation
+                    if turn_template is None:
+                        raise RuntimeError("session turn has no capacity reservation template")
+                    turn_reservation = await asyncio.to_thread(
+                        self._capacity.reserve_when_available, turn_template,
+                    )
                     with pq.lock:
-                        session_slot_held = True
                         pq.idle.discard(rid)
 
                 async def _on_turn_done(rid: str) -> None:
-                    nonlocal session_slot_held
+                    nonlocal turn_reservation
                     with pq.lock:
-                        release_slot = session_slot_held
-                        session_slot_held = False
+                        released = turn_reservation
+                        turn_reservation = None
                         pq.idle.add(rid)
-                    if release_slot:
-                        pq.compute_slots.release()
+                    if released is not None:
+                        self._capacity.release(released)
                     self._drain_all()
 
                 _TURNCB.set_callbacks(request_id, _on_turn_starting, _on_turn_done)
                 # This worker is waiting at the session/turn boundary, so let
                 # another request reach the same bounded compute gate.
                 self._drain_all()
-            elif bound is None:
-                # Ungated: exactly today's per-profile semaphore behavior.
-                pq.compute_slots.acquire()
-                non_session_slot_held = True
-            # else: gated non-session -- capacity was already reserved on
-            # the resource tracker by _drain_gated's bind; nothing to
-            # acquire here.
+            # Every non-session dispatch has a source reservation from the
+            # common capacity authority; there is no ungated semaphore path.
 
             try:
                 result = runner(project_root, record)
@@ -1022,10 +868,8 @@ class GatewayQueueManager:
                     )
                     _publish_lifecycle_event("failed", failed)
         finally:
-            if non_session_slot_held:
-                pq.compute_slots.release()
             if bound is not None:
-                self._resource_tracker(bound[1]).release(bound[0])
+                self._capacity.release(bound)
             with pq.lock:
                 pq.running.discard(request_id)
                 pq.idle.discard(request_id)
@@ -1045,9 +889,7 @@ class GatewayQueueManager:
                 if lane_key_tuple[0] == execution_profile_id:
                     # Profile matches; check if this request is tracked here
                     with pq.lock:
-                        if request_id in pq.running or any(
-                            e.request_id == request_id for e in pq.pending
-                        ):
+                        if request_id in pq.running:
                             return pq
         return None
 
@@ -1059,6 +901,10 @@ class GatewayQueueManager:
         assume the terminal state will be 'cancelled' for a cancel issued
         against a running request (RV15 finding).
         """
+        removed = self._pending_authority.remove(request_id)
+        if removed is not None:
+            return store.cancel_queued_or_mark_requested(project_root, request_id)
+
         pq = self._find_lane_for_request(execution_profile_id, request_id)
         if pq is None:
             # A remote service/process can own the in-memory queue.  Durable
@@ -1067,13 +913,7 @@ class GatewayQueueManager:
             return store.cancel_queued_or_mark_requested(project_root, request_id)
 
         with pq.lock:
-            # Search deque for matching entry (pending entries are QueuedDispatch objects)
             removed_from_queue = False
-            for i, e in enumerate(pq.pending):
-                if e.request_id == request_id:
-                    del pq.pending[i]
-                    removed_from_queue = True
-                    break
             is_running = request_id in pq.running
             if is_running:
                 pq.cancel_requested.add(request_id)
@@ -1144,7 +984,14 @@ class GatewayQueueManager:
             sleep_seconds = backoff_seconds
             if deadline is not None:
                 sleep_seconds = min(sleep_seconds, max(0.0, deadline - now))
-            time.sleep(sleep_seconds)
+            # Local pending work can wake this waiter as soon as admission,
+            # cancellation or dispatch changes the pending authority.  Once
+            # dispatch has claimed it (or another host owns it), retain the
+            # durable-record polling path below as the cross-process truth.
+            if self._pending_authority.contains(request_id):
+                self._pending_authority.wait_for_change(sleep_seconds)
+            else:
+                time.sleep(sleep_seconds)
 
             now = time.monotonic()
             observed_signature = _record_signature(record_path)
@@ -1166,7 +1013,9 @@ class GatewayQueueManager:
         SH07 C2: multiple lanes (generations/digests) can exist for the same
         profile id; aggregate across them so the caller sees total capacity.
         """
-        pending = 0
+        pending = self._pending_authority.count(
+            lambda request: request.value.execution_profile_id == execution_profile_id
+        )
         running = 0
         active_running = 0
         idle = 0
@@ -1176,7 +1025,6 @@ class GatewayQueueManager:
             for lane_key_tuple, pq in self._lanes.items():
                 if lane_key_tuple[0] == execution_profile_id:
                     with pq.lock:
-                        pending += len(pq.pending)
                         running += len(pq.running)
                         active_running += pq.active_running()
                         idle += len(pq.idle)
@@ -1191,15 +1039,15 @@ class GatewayQueueManager:
         }
 
     def request_slot_status(self, execution_profile_id: str, request_id: str) -> str | None:
+        pending = self._pending_authority.get(request_id)
+        if pending is not None and pending.value.execution_profile_id == execution_profile_id:
+            return "pending"
         pq = self._find_lane_for_request(execution_profile_id, request_id)
         if pq is None:
             return None
         with pq.lock:
             if request_id in pq.running:
                 return "idle" if request_id in pq.idle else "active"
-            for e in pq.pending:
-                if e.request_id == request_id:
-                    return "pending"
         return None
 
     def all_queue_depths(self) -> dict[str, dict[str, int]]:
@@ -1216,7 +1064,13 @@ class GatewayQueueManager:
             public_id = _lane_public_id(lane_key_tuple)
             with pq.lock:
                 result[public_id] = {
-                    "pending": len(pq.pending),
+                    "pending": self._pending_authority.count(
+                        lambda request, lane=lane_key_tuple: (
+                            request.value.snapshot.profile_id,
+                            request.value.snapshot.generation,
+                            request.value.snapshot.config_digest,
+                        ) == lane
+                    ),
                     "running": len(pq.running),
                     "active_running": pq.active_running(),
                     "idle": len(pq.idle),
@@ -1240,7 +1094,13 @@ class GatewayQueueManager:
         try:
             return {
                 _lane_public_id(lkt): {
-                    "pending": len(pq.pending),
+                    "pending": self._pending_authority.count(
+                        lambda request, lane=lkt: (
+                            request.value.snapshot.profile_id,
+                            request.value.snapshot.generation,
+                            request.value.snapshot.config_digest,
+                        ) == lane
+                    ),
                     "running": len(pq.running),
                     "active_running": pq.active_running(),
                     "idle": len(pq.idle),

@@ -143,3 +143,21 @@ def test_gateway_operation_mcp_tools_delegate_to_management_api():
         correlation_id="corr_1",
     )
     get.assert_called_once_with(_ROOT, "op_001")
+
+
+def test_gateway_retention_policy_mcp_tool_delegates_to_management_api():
+    expected = {
+        "available": True,
+        "purge-enabled": False,
+        "minimum-archive-age-seconds": 0.0,
+        "max-batch-size": 100,
+        "policy-id": "machine-default",
+        "policy-digest": "abc",
+    }
+    with _patch_root(), patch(
+        "audiagentic.components.agents.gateway.management_api.gateway_get_retention_policy",
+        return_value=expected,
+    ) as mock:
+        result = agents_manage_mcp.agent_gateway_get_retention_policy()
+    assert result == expected
+    mock.assert_called_once_with(_ROOT)

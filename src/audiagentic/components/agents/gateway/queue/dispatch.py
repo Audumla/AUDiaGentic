@@ -202,12 +202,22 @@ def _dispatch_one_attempt(
         component_profile=component_profile,
         provider_isolation_tier=provider_isolation_tier,  # type: ignore[arg-type]
     )
+    from audiagentic.components.agents.gateway.queue.watchdog_policy import (
+        load_watchdog_policy,
+    )
+
+    watchdog_policy = load_watchdog_policy()
     try:
         result = execute_isolated_provider_turn(
             identity=identity,
             execution_request=provider_request.to_mapping(),
             timeout_seconds=worker_timeout_seconds,
-            activity_callback=lambda activity: _renew_activity(project_root, record, activity),
+            activity_callback=lambda activity: _renew_activity(
+                project_root,
+                record,
+                activity,
+                activity_lease_seconds=watchdog_policy.activity_lease_seconds,
+            ),
         )
     except TypeError as exc:
         # Preserve compatibility with test/delivery doubles written against
@@ -222,7 +232,13 @@ def _dispatch_one_attempt(
     return dict(result.result_data)
 
 
-def _renew_activity(project_root: Path, record: dict[str, Any], activity: Any) -> None:
+def _renew_activity(
+    project_root: Path,
+    record: dict[str, Any],
+    activity: Any,
+    *,
+    activity_lease_seconds: float = 300.0,
+) -> None:
     """Forward only authenticated worker activity to durable renewal."""
     from audiagentic.components.agents.contracts.worker_protocol import WorkerActivityEnvelope
     if not isinstance(activity, WorkerActivityEnvelope):
@@ -238,7 +254,7 @@ def _renew_activity(project_root: Path, record: dict[str, Any], activity: Any) -
             attempt_epoch=activity.identity.attempt_epoch,
             activity_seq=activity.activity_seq,
             activity_source=activity.activity_source,
-            activity_lease_seconds=300.0,
+            activity_lease_seconds=activity_lease_seconds,
         )
     except AudiaGenticError:
         # Activity is advisory evidence; a stale frame must not terminate a

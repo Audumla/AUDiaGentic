@@ -237,3 +237,64 @@ def test_drain_before_swap_anti_starvation_guard(tmp_path, home, monkeypatch):
     _enqueue_snapshot(manager, tmp_path, snap_b, runner_b, prompt="b1")
 
     assert started_b.wait(timeout=5), "model-b was starved past the anti-starvation threshold"
+
+
+def test_pending_project_head_blocked_on_capacity_does_not_block_another_project(tmp_path, home):
+    """AS101: one pending authority selects fair project heads across modes.
+
+    A gated request whose physical source is saturated must not prevent an
+    unrelated, ungated project head from being dispatched.
+    """
+    _add_source("gated", resource_id="gpu-0", concurrency=1)
+    manager = queue_mod.GatewayQueueManager()
+    hold = threading.Event()
+    started: list[str] = []
+    lock = threading.Lock()
+
+    def runner(project_root: Path, record: dict) -> dict:
+        with lock:
+            started.append(record["execution-profile-id"])
+        hold.wait(timeout=5)
+        return store.transition_record(
+            project_root, record["request-id"], "completed",
+            updates={"output": "done", "finished-at": now_iso_z()},
+        )
+
+    gated = _snapshot_for(tmp_path, "gated-profile", ("gated",))
+    ungated = _snapshot_for(tmp_path, "ungated-profile", ("plain-model",))
+    project_a = tmp_path / "project-a"
+    project_b = tmp_path / "project-b"
+    project_a.mkdir()
+    project_b.mkdir()
+
+    _enqueue_snapshot(manager, project_a, gated, runner, prompt="occupy")
+    deadline = time.monotonic() + 2
+    while len(started) < 1 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert started == ["gated-profile"]
+
+    _enqueue_snapshot(manager, project_a, gated, runner, prompt="blocked")
+    _enqueue_snapshot(manager, project_b, ungated, runner, prompt="ready")
+    deadline = time.monotonic() + 2
+    while len(started) < 2 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert set(started) == {"gated-profile", "ungated-profile"}
+    assert manager.queue_depth("gated-profile")["pending"] == 1
+    hold.set()
+
+
+def test_mixed_declared_and_plain_instances_use_one_placement_contract(tmp_path, home):
+    """AS101: a profile may mix bounded and unbounded source candidates."""
+    _add_source("bounded", resource_id="gpu-0", concurrency=1, model_id="bounded-model")
+    manager = queue_mod.GatewayQueueManager()
+    snapshot = _snapshot_for(tmp_path, "mixed-profile", ("bounded", "plain-model"))
+    record = _enqueue_snapshot(
+        manager,
+        tmp_path,
+        snapshot,
+        lambda root, item: store.transition_record(
+            root, item["request-id"], "completed",
+            updates={"output": "done", "finished-at": now_iso_z()},
+        ),
+    )
+    assert manager.wait(tmp_path, record["request-id"], timeout_seconds=5)["state"] == "completed"

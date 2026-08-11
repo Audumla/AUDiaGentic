@@ -60,7 +60,6 @@ def test_mutating_recipes_declare_disposable_home() -> None:
         "Dockerfile.pi-acp-resume-e2e",
         "Dockerfile.pi-rpc-tap-e2e",
         "Dockerfile.provider-cli-comprehensive",
-        "Dockerfile.provider-cli-test",
         "Dockerfile.provider-config-matrix-e2e",
         "Dockerfile.provider-lifecycle-e2e",
         "Dockerfile.provider-lsp-e2e",

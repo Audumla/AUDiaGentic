@@ -17,7 +17,17 @@ from audiagentic.components.agents.gateway.operations.archive import (
     GatewayArchiveExecutor,
     GatewayPurgeExecutor,
 )
-from audiagentic.components.agents.gateway.operations.evidence import GatewayWorkEvidenceReader
+from audiagentic.components.agents.gateway.operations.contracts import WorkEvidence
+from audiagentic.components.agents.gateway.operations.evidence import (
+    EvidenceFinding,
+    GatewayWorkEvidenceReader,
+)
+from audiagentic.components.agents.gateway.operations.retention_policy import load_retention_policy
+from audiagentic.components.agents.gateway.session.sessions_store import (
+    build_session_record,
+    record_session_turn,
+    write_session_record,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
@@ -163,6 +173,57 @@ def test_evidence_requires_matching_owner_fence_and_never_uses_silence() -> None
     }).evidence.value == "proven-dead"
 
 
+class _LiveEvidence:
+    def assess(self, _record: dict) -> EvidenceFinding:
+        return EvidenceFinding(WorkEvidence.LIVE, "live")
+
+
+def test_reconcile_reports_live_separately_from_unknown(tmp_path: Path) -> None:
+    class _LiveRequests:
+        def list_execution_requests(self, _root: Path, **_kwargs: object) -> list[dict]:
+            return [{"state": "running"}]
+
+    result = GatewayReconcileExecutor(_LiveRequests(), evidence=_LiveEvidence()).execute(
+        {"scope": {"project-root": str(tmp_path)}}
+    )
+    assert result["live"] == 1
+    assert result["unknown-evidence"] == 0
+
+
+def test_reconcile_terminalizes_only_fenced_proven_dead_targets(tmp_path: Path) -> None:
+    class _Requests:
+        def list_execution_requests(self, _root: Path, **_kwargs: object) -> list[dict]:
+            return [{
+                "request-id": "req_dead",
+                "state": "running",
+                "worker-id": "worker-1",
+                "attempt-epoch": 2,
+                "dispatch-owner-epoch": "owner-1",
+                "reconciliation-evidence": {
+                    "classification": "proven-dead",
+                    "worker-id": "worker-1",
+                    "attempt-epoch": 2,
+                },
+            }]
+
+    class _Terminalizer:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str]] = []
+
+        def terminalize_proven_dead(self, _root: Path, record: dict, reason: str) -> dict:
+            self.calls.append((record["request-id"], reason))
+            return {**record, "state": "failed"}
+
+    terminalizer = _Terminalizer()
+    result = GatewayReconcileExecutor(
+        _Requests(), terminalizer=terminalizer  # type: ignore[arg-type]
+    ).execute({"scope": {"project-root": str(tmp_path)}})
+
+    assert result == {"changed": 1, "unchanged": 0, "blocked": 0, "unknown-evidence": 0, "live": 0}
+    assert terminalizer.calls == [("req_dead", "fenced-owner-death-evidence")]
+    assert result["blocked"] == 0
+
+
 class _ArchiveRequests:
     def __init__(self, record: dict) -> None:
         self.record = record
@@ -201,10 +262,144 @@ def test_purge_revalidates_policy_and_manifest(tmp_path: Path, monkeypatch: pyte
     fake = _ArchiveRequests({"state": "completed"})
     GatewayArchiveExecutor(fake).execute({"scope": {"project-root": str(tmp_path), "request-ids": [request_id]}})
     time.sleep(0.02)
-    from audiagentic.components.agents.gateway.operations.retention_policy import (
-        load_retention_policy,
-    )
     snapshot = load_retention_policy().snapshot
     result = GatewayPurgeExecutor(fake).execute({"scope": {"project-root": str(tmp_path), "request-ids": [request_id], "retention-policy": snapshot}})
     assert result == {"changed": 1, "blocked": 0}
     assert not request_dir.exists()
+
+
+def test_purge_blocks_changed_attempt_fence_after_archive(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    policy_path = tmp_path / "machine-policy.json"
+    policy_path.write_text('{"policy-id":"p1","purge-enabled":true,"minimum-archive-age-seconds":0.01,"max-batch-size":2}', encoding="utf-8")
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    request_id = "req_archive_3"
+    request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id
+    request_dir.mkdir(parents=True)
+    (request_dir / "record.json").write_text('{"state":"completed"}', encoding="utf-8")
+    fake = _ArchiveRequests({"state": "completed", "attempt-epoch": 1})
+    GatewayArchiveExecutor(fake).execute({"scope": {"project-root": str(tmp_path), "request-ids": [request_id]}})
+    time.sleep(0.02)
+    snapshot = load_retention_policy().snapshot
+    fake.record["attempt-epoch"] = 2
+    result = GatewayPurgeExecutor(fake).execute({"scope": {"project-root": str(tmp_path), "request-ids": [request_id], "retention-policy": snapshot}})
+    assert result == {"changed": 0, "blocked": 1}
+    assert request_dir.exists()
+
+
+def test_purge_final_pin_recheck_wins_race(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    policy_path = tmp_path / "machine-policy.json"
+    policy_path.write_text('{"policy-id":"p1","purge-enabled":true,"minimum-archive-age-seconds":0.01,"max-batch-size":2}', encoding="utf-8")
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    request_id = "req_archive_4"
+    request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id
+    request_dir.mkdir(parents=True)
+    (request_dir / "record.json").write_text('{"state":"completed"}', encoding="utf-8")
+    fake = _ArchiveRequests({"state": "completed"})
+    GatewayArchiveExecutor(fake).execute({"scope": {"project-root": str(tmp_path), "request-ids": [request_id]}})
+    time.sleep(0.02)
+    snapshot = load_retention_policy().snapshot
+    import audiagentic.components.agents.gateway.operations.archive as archive_module
+    calls = {"count": 0}
+    def _pin_after_census(_root: Path, _request: str):
+        calls["count"] += 1
+        return type("Pin", (), {"pinned": calls["count"] > 1})()
+    monkeypatch.setattr(archive_module, "request_retention_pin", _pin_after_census)
+    monkeypatch.setattr(archive_module, "_request_retention_pin_unlocked", _pin_after_census)
+    result = GatewayPurgeExecutor(fake).execute({"scope": {"project-root": str(tmp_path), "request-ids": [request_id], "retention-policy": snapshot}})
+    assert result == {"changed": 0, "blocked": 1}
+    assert request_dir.exists()
+
+
+def _enabled_retention_policy(path: Path) -> None:
+    path.write_text(
+        '{"policy-id":"p1","purge-enabled":true,"minimum-archive-age-seconds":0.01,"max-batch-size":2}',
+        encoding="utf-8",
+    )
+
+
+def _archive_completed_request(tmp_path: Path, request_id: str, fake: _ArchiveRequests) -> Path:
+    request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id
+    request_dir.mkdir(parents=True)
+    (request_dir / "record.json").write_text('{"state":"completed"}', encoding="utf-8")
+    assert GatewayArchiveExecutor(fake).execute(
+        {"scope": {"project-root": str(tmp_path), "request-ids": [request_id]}}
+    ) == {"changed": 1, "blocked": 0}
+    time.sleep(0.02)
+    return request_dir
+
+
+def test_purge_final_fence_blocks_changed_request_record_after_archive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    policy_path = tmp_path / "machine-policy.json"
+    _enabled_retention_policy(policy_path)
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    request_id = "req_changed_fence"
+
+    class ChangingRequests(_ArchiveRequests):
+        calls = 0
+
+        def get_execution_request(self, root: Path, request: str) -> dict:
+            self.calls += 1
+            if self.calls >= 3:  # purge's immediate pre-delete re-read
+                return {"state": "completed", "attempts": [{"attempt": 2}]}
+            return super().get_execution_request(root, request)
+
+    fake = ChangingRequests({"state": "completed", "attempts": [{"attempt": 1}]})
+    request_dir = _archive_completed_request(tmp_path, request_id, fake)
+    result = GatewayPurgeExecutor(fake).execute(
+        {"scope": {"project-root": str(tmp_path), "request-ids": [request_id], "retention-policy": load_retention_policy().snapshot}}
+    )
+    assert result == {"changed": 0, "blocked": 1}
+    assert request_dir.exists()
+
+
+def test_purge_final_fence_blocks_machine_policy_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    policy_path = tmp_path / "machine-policy.json"
+    _enabled_retention_policy(policy_path)
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    request_id = "req_policy_fence"
+
+    class PolicyChangingRequests(_ArchiveRequests):
+        calls = 0
+
+        def get_execution_request(self, root: Path, request: str) -> dict:
+            self.calls += 1
+            # The first purge read happens after the policy snapshot check;
+            # change policy here to exercise the immediate pre-delete fence.
+            if self.calls == 2:
+                policy_path.write_text(
+                    '{"policy-id":"p1","purge-enabled":false,"minimum-archive-age-seconds":0.01,"max-batch-size":2}',
+                    encoding="utf-8",
+                )
+            return super().get_execution_request(root, request)
+
+    fake = PolicyChangingRequests({"state": "completed"})
+    request_dir = _archive_completed_request(tmp_path, request_id, fake)
+    result = GatewayPurgeExecutor(fake).execute(
+        {"scope": {"project-root": str(tmp_path), "request-ids": [request_id], "retention-policy": load_retention_policy().snapshot}}
+    )
+    assert result == {"changed": 0, "blocked": 1}
+    assert request_dir.exists()
+
+
+def test_purge_blocks_session_lineage_pin_created_after_archive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    policy_path = tmp_path / "machine-policy.json"
+    _enabled_retention_policy(policy_path)
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    request_id = "req_pinned_after_archive"
+    fake = _ArchiveRequests({"state": "completed"})
+    request_dir = _archive_completed_request(tmp_path, request_id, fake)
+    session = build_session_record(session_id="ses_purge_pin", execution_profile_id="review")
+    write_session_record(tmp_path, session)
+    record_session_turn(tmp_path, "ses_purge_pin", request_id)
+
+    result = GatewayPurgeExecutor(fake).execute(
+        {"scope": {"project-root": str(tmp_path), "request-ids": [request_id], "retention-policy": load_retention_policy().snapshot}}
+    )
+    assert result == {"changed": 0, "blocked": 1}
+    assert request_dir.exists()

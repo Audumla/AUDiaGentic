@@ -10,11 +10,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
 
-from audiagentic.components.agents.agents_paths import gateway_request_dir, gateway_root
-from audiagentic.components.agents.gateway.session.retention import request_retention_pin
+from audiagentic.components.agents.agents_paths import (
+    gateway_request_dir,
+    gateway_retention_lock_path,
+    gateway_root,
+)
+from audiagentic.components.agents.gateway.session.retention import (
+    _request_retention_pin_unlocked,
+    request_retention_pin,
+)
 from audiagentic.components.agents.gateway.store import TERMINAL_STATES
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_json, read_text_with_retry
+from audiagentic.foundation.system.process import StartupLock
 
 from .retention_policy import load_retention_policy, policy_matches
 
@@ -139,14 +147,32 @@ class GatewayPurgeExecutor:
                 blocked += 1
                 continue
             # Re-read immediately before deletion: archive work is never an
-            # authority and a newly-created session pin wins this race.
-            if request_retention_pin(root, request_id).pinned:
-                blocked += 1
-                continue
-            request_dir = gateway_request_dir(root, request_id)
-            if request_dir.exists():
-                shutil.rmtree(request_dir)
-            changed += 1
+            # authority. Every independently mutable fence is checked again:
+            # machine policy can be withdrawn, request attempts can change,
+            # archive contents can be altered, and a session pin can appear.
+            # Pin creation and deletion share this fence. This closes the
+            # census-to-delete race where a session could become referentially
+            # pinned after the final read but before rmtree.
+            with StartupLock(gateway_retention_lock_path(root)):
+                if not policy_matches(snapshot):
+                    blocked += 1
+                    continue
+                current_record = self._requests.get_execution_request(root, request_id)
+                current_digest = hashlib.sha256(
+                    json.dumps(current_record, sort_keys=True, separators=(",", ":")).encode()
+                ).hexdigest()
+                if (
+                    current_record.get("state") not in TERMINAL_STATES
+                    or manifest_data.get("record-digest") != current_digest
+                    or manifest_data.get("archive-digest") != _digest_tree(archive_dir)
+                    or _request_retention_pin_unlocked(root, request_id).pinned
+                ):
+                    blocked += 1
+                    continue
+                request_dir = gateway_request_dir(root, request_id)
+                if request_dir.exists():
+                    shutil.rmtree(request_dir)
+                changed += 1
         return {"changed": changed, "blocked": blocked}
 
 

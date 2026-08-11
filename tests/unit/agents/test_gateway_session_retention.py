@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from audiagentic.components.agents.agents_paths import gateway_request_dir
 from audiagentic.components.agents.gateway.session.retention import request_retention_pin
 from audiagentic.components.agents.gateway.session.sessions_store import (
     build_session_record,
@@ -21,3 +22,14 @@ def test_request_referenced_by_durable_session_is_retention_pinned(tmp_path):
 
 def test_unreferenced_request_is_not_retention_pinned(tmp_path):
     assert request_retention_pin(tmp_path, "req_unreferenced").pinned is False
+
+
+def test_durable_request_runtime_root_is_retention_pinned(tmp_path):
+    runtime = gateway_request_dir(tmp_path, "req_runtime") / "runtime"
+    runtime.mkdir(parents=True)
+    (runtime / "provider-state.json").write_text("{}", encoding="utf-8")
+
+    pin = request_retention_pin(tmp_path, "req_runtime")
+
+    assert pin.pinned is True
+    assert pin.reason == "durable-runtime-root"

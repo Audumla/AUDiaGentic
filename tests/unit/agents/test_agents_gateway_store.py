@@ -713,6 +713,8 @@ def test_owned_activity_renewal_persists_gateway_receipt_and_rejects_replay(tmp_
     assert renewed["activity-source"] == "worker-heartbeat"
     assert renewed["last-activity-at"] is not None
     assert renewed["activity-lease-expires-at"] is not None
+    assert renewed["watchdog-state"] == "active"
+    assert renewed["watchdog-reason"] == "verified-activity-renewed"
     replay = store.renew_owned_activity(
         tmp_path,
         record["request-id"],

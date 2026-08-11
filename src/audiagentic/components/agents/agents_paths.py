@@ -147,3 +147,8 @@ def gateway_output_index_path(project_root: Path, request_id: str) -> Path:
 def gateway_output_lock_path(project_root: Path, request_id: str) -> Path:
     """Return the per-request lock protecting output append operations."""
     return gateway_request_dir(project_root, request_id) / "output.lock"
+
+
+def gateway_retention_lock_path(project_root: Path) -> Path:
+    """Return the cross-surface lock for retention pins and purge deletion."""
+    return gateway_root(project_root) / "retention.mutation.lock"

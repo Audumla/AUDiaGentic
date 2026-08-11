@@ -220,6 +220,7 @@ def test_gateway_operation_runs_durably_and_redacts_private_scope(tmp_path: Path
             "changed": 0,
             "unchanged": 0,
             "unknown-evidence": 0,
+            "live": 0,
         }
         assert "scope" not in current
         assert "correlation-id" not in current
