@@ -137,6 +137,7 @@ def _make_runtime(*, resume_prepare=None) -> SessionRuntime:
         project_root, *, provider_id, surface_hint, model_id=None, resume_provider_ref=None, **_ignored
     ):
         transport = FakeAgentSessionTransport()
+        transport.ag_session_id = _ignored["ag_session_id"]
         if resume_provider_ref:
             transport.provider_session_ref = resume_provider_ref
         return _build_fake_prepared(transport)
@@ -181,6 +182,7 @@ class TestResumeSuccess:
             nonlocal call_count
             call_count += 1
             transport = FakeAgentSessionTransport()
+            transport.ag_session_id = _ignored["ag_session_id"]
             transport.provider_session_ref = resume_provider_ref or "x"
             return _build_fake_prepared(transport)
 

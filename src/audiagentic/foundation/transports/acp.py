@@ -55,6 +55,7 @@ from audiagentic.foundation.transports.agent_session import (
     TransportObservation,
     TransportObservationKind,
 )
+from audiagentic.foundation.transports.session_binding import ProviderSessionRef
 
 if TYPE_CHECKING:
     from acp import RequestPermissionResponse
@@ -741,6 +742,7 @@ class AcpSessionTransport:
                 },
             ) from exc
         self._finish_open(stack, connection, proc, str(session.session_id))
+        assert self._session_id is not None
         return self._session_id
 
     async def open_resumed(self, provider_session_ref: str) -> str:
@@ -798,6 +800,7 @@ class AcpSessionTransport:
         # LoadSessionResponse carries no session_id — the loaded session IS
         # the caller-supplied provider_session_ref (ACP session/load contract).
         self._finish_open(stack, connection, proc, provider_session_ref)
+        assert self._session_id is not None
         return self._session_id
 
     async def _spawn_and_initialize(self) -> tuple[AsyncExitStack, Any, Any]:
@@ -1566,6 +1569,7 @@ class AcpAgentSessionTransport:
         launch: AcpLaunch,
         *,
         cwd: Path,
+        ag_session_id: str,
         policy_fn: PolicyCallback | None = None,
         compact_events: bool = False,
         resume_provider_ref: str | None = None,
@@ -1578,6 +1582,7 @@ class AcpAgentSessionTransport:
             compact_events=compact_events,
             pre_spawn_hook=pre_spawn_hook,
         )
+        self._configured_ag_session_id = ag_session_id
         self._ag_session_id: str | None = None
         self._closed = False
         # Per-turn cancel signal for CANCEL_TURN control.
@@ -1609,16 +1614,14 @@ class AcpAgentSessionTransport:
             await self._inner.open_resumed(self._resume_provider_ref)
         else:
             await self._inner.open()
-        # Use the ACP-provided session id as the canonical AG session id.
-        # (AS30 binding will later map provider session ref ↔ AG session id.)
-        session_id = self._inner.session_id
-        if session_id is None:
+        provider_session_id = self._inner.session_id
+        if provider_session_id is None:
             raise AudiaGenticError(
                 code="CON-ACP-002",
                 kind="execution",
                 message="ACP transport opened without a session id",
             )
-        self._ag_session_id = session_id
+        self._ag_session_id = self._configured_ag_session_id
         # Surface the raw provider-native session id in metadata too (not just
         # as ag_session_id/provider_session_ref internally) so callers can see
         # and independently use the underlying harness's own session identity
@@ -1627,8 +1630,9 @@ class AcpAgentSessionTransport:
         # pruned, since the harness itself (pi, opencode, ...) keeps its own
         # session store independently of ours.
         return SessionOpenResult(
-            ag_session_id=session_id,
-            metadata={"provider-session-id": session_id},
+            ag_session_id=self._configured_ag_session_id,
+            provider_session_ref=ProviderSessionRef(provider_session_id),
+            metadata={"provider-session-id": provider_session_id},
         )
 
     async def prompt(

@@ -17,6 +17,7 @@ builders and no external dependency, so CI always covers the mechanism. It is
 provider-neutral on purpose: as harnesses beyond the pi canary arrive, this is
 the coverage that keeps working without a matching real-binary dependency.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -48,6 +49,8 @@ class TestObservabilityTapThreading:
 
         prepared = prepare_provider_session_transport(
             tmp_path,
+            ag_session_id="ag-test-session",
+            binding_sink=lambda update: None,
             provider_id="pi",
             surface_hint=SurfaceHint(surface_id="pi-community-acp", platform_hint="linux-amd64"),
             model_id="audiagentic/audiagentic-rig",
@@ -67,6 +70,8 @@ class TestObservabilityTapThreading:
 
         prepared = prepare_provider_session_transport(
             tmp_path,
+            ag_session_id="ag-test-session",
+            binding_sink=lambda update: None,
             provider_id="pi",
             surface_hint=SurfaceHint(surface_id="pi-community-acp", platform_hint="linux-amd64"),
             model_id="audiagentic/audiagentic-rig",
@@ -85,6 +90,8 @@ class TestObservabilityTapThreading:
 
         prepared = prepare_provider_session_transport(
             tmp_path,
+            ag_session_id="ag-test-session",
+            binding_sink=lambda update: None,
             provider_id="pi",
             surface_hint=SurfaceHint(surface_id="pi-community-acp", platform_hint="linux-amd64"),
             model_id="audiagentic/audiagentic-rig",
@@ -101,6 +108,8 @@ class TestObservabilityTapThreading:
 
         prepared = prepare_provider_session_transport(
             tmp_path,
+            ag_session_id="ag-test-session",
+            binding_sink=lambda update: None,
             provider_id="opencode",
             surface_hint=SurfaceHint(surface_id="opencode-acp", platform_hint="linux-amd64"),
             model_id="some-model",
@@ -116,14 +125,14 @@ class _FakeHook:
     """Stands in for a provider's concrete PreSpawnHook."""
 
 
-def _tap_aware_builder(project_root, *, model_id, request_runtime_root=None,
-                       enable_rpc_tap=False, mcp_surface=None):
+def _tap_aware_builder(
+    project_root, *, model_id, request_runtime_root=None, enable_rpc_tap=False, mcp_surface=None
+):
     """A builder that declares enable_rpc_tap, as pi's real one does."""
     return AcpLaunch(executable="fake-agent", args=("--acp",))
 
 
-def _tap_blind_builder(project_root, *, model_id, request_runtime_root=None,
-                       mcp_surface=None):
+def _tap_blind_builder(project_root, *, model_id, request_runtime_root=None, mcp_surface=None):
     """A builder with no enable_rpc_tap parameter, as most adapters have."""
     return AcpLaunch(executable="fake-agent", args=("--acp",))
 
@@ -150,6 +159,8 @@ class TestSignatureGuardWithFakeBuilders:
         )
         return prepare_provider_session_transport(
             tmp_path,
+            ag_session_id="ag-test-session",
+            binding_sink=lambda update: None,
             provider_id="pi",
             surface_hint=SurfaceHint(surface_id="pi-community-acp", platform_hint="linux-amd64"),
             model_id="audiagentic/audiagentic-rig",

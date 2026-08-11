@@ -127,12 +127,20 @@ def patch_provider_config(
     """Atomically update one provider's complete project-owned config file."""
     patch = {key: value for key, value in patch.items() if key != "enabled"}
     path = _provider_settings_path(project_root, provider_id)
-    if path.exists():
+    was_present = path.exists()
+    if was_present:
         payload = load_yaml_file(path)
     else:
         payload = {}
     payload.update(patch)
     _save_provider_config(path, payload)
+    if not was_present:
+        from audiagentic.foundation.toolchains.config.artifact_registry import ArtifactRegistry
+
+        ArtifactRegistry(project_root).register(
+            f"provider-settings/{provider_id}",
+            files=[path.relative_to(project_root)],
+        )
     return load_provider_config(project_root)
 
 
@@ -150,6 +158,10 @@ def set_provider_enabled(project_root: Path, provider_id: str, *, enabled: bool)
 
     fn = enable_implementation if enabled else disable_implementation
     if fn(project_root, _COMPONENT_ID, provider_id).get("ok"):
+        if not enabled:
+            from ..lifecycle.project_purge import purge_provider_project
+
+            purge_provider_project(project_root, provider_id)
         return
     state = get_implementation_state(project_root, _COMPONENT_ID, provider_id)
     set_implementation_state(
@@ -158,6 +170,10 @@ def set_provider_enabled(project_root: Path, provider_id: str, *, enabled: bool)
         provider_id,
         ImplementationState(enabled=enabled, options=state.options),
     )
+    if not enabled:
+        from ..lifecycle.project_purge import purge_provider_project
+
+        purge_provider_project(project_root, provider_id)
 
 
 _VALID_RECONCILIATION_MODES = ("auto", "allowlist", "prompt")

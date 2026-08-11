@@ -251,8 +251,8 @@ class TestTransportObservationEligibility:
 
         assert not is_eligible_transport_observation_publisher("unknown", "unknown-surface")
 
-    def test_eligible_list_linux_has_opencode_acp_and_pi_community_acp(self):
-        """On linux-amd64, opencode-acp and pi-community-acp are eligible.
+    def test_eligible_list_linux_includes_current_validated_surfaces(self):
+        """On linux-amd64, all currently validated ACP surfaces are eligible.
 
         AS41 Path A: pi-community-acp gained real evidence.validated=True
         this session (a genuine Docker-proven prompt turn), so it is now
@@ -264,27 +264,28 @@ class TestTransportObservationEligibility:
         )
 
         eligible = list_eligible_transport_observation_surfaces(platform="linux-amd64")
-        assert len(eligible) == 2
+        assert len(eligible) == 3
+        assert ("gpt-auto", "gpt-auto-browser") in eligible
         assert ("opencode", "opencode-acp") in eligible
         assert ("pi", "pi-community-acp") in eligible
 
-    def test_eligible_list_windows_includes_pi_community_acp(self):
-        """Windows has a validated Pi ACP prompt-turn proof."""
+    def test_eligible_list_windows_includes_current_validated_surfaces(self):
+        """Windows includes the validated Pi and gpt-auto surfaces."""
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             list_eligible_transport_observation_surfaces,
         )
 
         eligible = list_eligible_transport_observation_surfaces(platform="windows-amd64")
-        assert eligible == [("pi", "pi-community-acp")]
+        assert eligible == [("gpt-auto", "gpt-auto-browser"), ("pi", "pi-community-acp")]
 
-    def test_eligible_list_darwin_arm64_empty(self):
-        """On darwin-arm64, no surface is eligible — opencode-acp not validated there."""
+    def test_eligible_list_darwin_arm64_includes_gpt_auto(self):
+        """On darwin-arm64, gpt-auto is the currently validated surface."""
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             list_eligible_transport_observation_surfaces,
         )
 
         eligible = list_eligible_transport_observation_surfaces(platform="darwin-arm64")
-        assert len(eligible) == 0
+        assert eligible == [("gpt-auto", "gpt-auto-browser")]
 
 
 # ---------------------------------------------------------------------------

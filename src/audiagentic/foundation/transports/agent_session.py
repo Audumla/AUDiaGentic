@@ -17,6 +17,7 @@ from enum import StrEnum
 from typing import Any, Protocol
 
 from audiagentic.foundation.contracts.errors import make_error
+from audiagentic.foundation.transports.session_binding import ProviderSessionRef
 
 # ---------------------------------------------------------------------------
 # Coded error constants (registered in foundation/error-resolutions.yaml)
@@ -364,11 +365,13 @@ class SessionOpenResult:
     """Result of opening a transport session.
 
     ``ag_session_id`` is the canonical gateway-side session identifier.
-    ``provider_session_ref`` is intentionally not exposed here — it belongs
-    to the AS30 binding contract, not the foundation transport.
+    ``provider_session_ref`` is the protected provider-native identity when
+    it is already known. Providers that receive an identity after ``open``
+    publish it through the delayed binding sink.
     """
 
     ag_session_id: str
+    provider_session_ref: ProviderSessionRef | None = field(default=None, repr=False)
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

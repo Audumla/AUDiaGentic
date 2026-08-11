@@ -16,11 +16,18 @@ import pytest
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.acp import (
-    AcpAgentSessionTransport,
+    AcpAgentSessionTransport as _AcpAgentSessionTransport,
     AcpEvent,
     AcpLaunch,
     _map_acp_event_to_observation,
 )
+from audiagentic.foundation.transports.session_binding import ProviderSessionRef
+
+
+def AcpAgentSessionTransport(*args, **kwargs):
+    """Construct the ACP adapter with a caller-owned Gateway identity."""
+    kwargs.setdefault("ag_session_id", "ag-gateway-1")
+    return _AcpAgentSessionTransport(*args, **kwargs)
 from audiagentic.foundation.transports.agent_session import (
     AgentSessionTransport,
     ControlDisposition,
@@ -372,7 +379,8 @@ class TestAcpAgentSessionTransportOpenClose:
         _install_sdk(monkeypatch)
         transport = AcpAgentSessionTransport(AcpLaunch("agent"), cwd=tmp_path)
         result = await transport.open()
-        assert result.ag_session_id == "acp-s-1"
+        assert result.ag_session_id == "ag-gateway-1"
+        assert result.provider_session_ref == ProviderSessionRef("acp-s-1")
         assert transport.is_alive()
 
     @pytest.mark.asyncio
@@ -560,7 +568,7 @@ class TestAcpAgentSessionTransportPrompt:
             SessionPrompt(turn_id="t-1", body="hello"), sink,
         )
         for obs in delivered:
-            assert obs.ag_session_id == "acp-s-1"  # canonical id from open
+            assert obs.ag_session_id == "ag-gateway-1"
 
         await transport.close()
 
@@ -915,7 +923,7 @@ class TestProtocolConformance:
         )
 
         open_result = await transport.open()
-        assert open_result.ag_session_id == "acp-s-1"
+        assert open_result.ag_session_id == "ag-gateway-1"
 
         from audiagentic.foundation.transports.agent_session import SessionPrompt
 
@@ -970,7 +978,7 @@ class TestAcpRegressionParity:
         r2 = await transport.prompt(SessionPrompt(turn_id="t-2", body="two"), sink_2)
 
         # Same session id across turns
-        assert all(o.ag_session_id == "acp-s-1" for o in delivered_1 + delivered_2)
+        assert all(o.ag_session_id == "ag-gateway-1" for o in delivered_1 + delivered_2)
         # Different turn ids
         assert all(o.turn_id == "t-1" for o in delivered_1)
         assert all(o.turn_id == "t-2" for o in delivered_2)

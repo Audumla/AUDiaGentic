@@ -43,6 +43,7 @@ def rig(tmp_path, monkeypatch):
 
     def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
         transports.append(transport)
         return _build_fake_prepared(transport)
 
