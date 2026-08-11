@@ -186,11 +186,10 @@ def cmd_gateway_recover(args: argparse.Namespace, project_root: Path) -> int:
         recover_unprovable_owner,
     )
 
-    result = recover_unprovable_owner(
-        service_root=project_root,
-        confirm=args.confirm,
-        reason=args.reason,
-    )
+    # Automatic gateway ownership is machine-scoped.  Recovery must address
+    # the same default machine store as bootstrap, not synthesize a second
+    # project-local managed-service record beneath ``project_root``.
+    result = recover_unprovable_owner(confirm=args.confirm, reason=args.reason)
     _json_out(result)
     return 0
 

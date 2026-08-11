@@ -41,6 +41,9 @@ class Application:
     def close_execution_session(self, project_root, session_id):
         return {"operation": "close", "session-id": session_id}
 
+    def resume_execution_session(self, project_root, source_session_id, **kwargs):
+        return {"operation": "resume", "source-session-id": source_session_id, **kwargs}
+
 
 def _service(tmp_path: Path) -> GatewayServiceApplication:
     store = ManagedServiceStore(ServiceKey("gateway", "unit"), root=tmp_path)
@@ -90,6 +93,21 @@ def test_closed_operation_router_calls_public_application(tmp_path: Path) -> Non
         **authorization,
     )
     assert submitted["component_profile"] == "client-profile"
+
+    resumed = service.invoke(
+        "resume_execution_session",
+        str(tmp_path),
+        {"source_session_id": "ses_old", "control_id": "ctl_1"},
+        **authorization,
+    )
+    assert resumed == {
+        "operation": "resume",
+        "source-session-id": "ses_old",
+        "control_id": "ctl_1",
+        "identity_context_fingerprint": None,
+        "execution_context_fingerprint": None,
+        "model_id": None,
+    }
 
 
 def test_closed_operation_router_rejects_unknown_or_missing_parameters(tmp_path: Path) -> None:
