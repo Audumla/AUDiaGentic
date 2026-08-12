@@ -449,7 +449,6 @@ class TestQuarantineBoundedRetention:
         import time
 
         service_root = tmp_path / "service"
-        project_root = tmp_path / "project"
         idx_dir = wi._index_dir(service_root)
         idx_dir.mkdir(parents=True)
 

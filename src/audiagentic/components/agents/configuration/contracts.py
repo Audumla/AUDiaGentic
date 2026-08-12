@@ -17,9 +17,10 @@ class AgentsConfigDocument:
     roles: tuple[dict[str, Any], ...]
     execution_profiles: tuple[dict[str, Any], ...]
     agents: tuple[dict[str, Any], ...]
+    triggers: tuple[dict[str, Any], ...] = ()
 
     def __post_init__(self) -> None:
-        for field_name in ("roles", "execution_profiles", "agents"):
+        for field_name in ("roles", "execution_profiles", "agents", "triggers"):
             values = tuple(_freeze(value) for value in getattr(self, field_name))
             object.__setattr__(self, field_name, values)
 
@@ -40,6 +41,7 @@ class AgentsConfigDocument:
             "roles": encode(self.roles, "role_id"),
             "execution_profiles": encode(self.execution_profiles, "profile_id"),
             "agents": encode(self.agents, "agent_id"),
+            "triggers": encode(self.triggers, "trigger_id"),
         }
 
     @classmethod
@@ -50,6 +52,7 @@ class AgentsConfigDocument:
             roles=tuple(_collection(data, "roles", "role_id")),
             execution_profiles=tuple(_collection(data, "execution_profiles", "profile_id")),
             agents=tuple(_collection(data, "agents", "agent_id")),
+            triggers=tuple(_collection(data, "triggers", "trigger_id")),
         )
 
 

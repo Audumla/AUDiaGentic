@@ -6,9 +6,9 @@ config (`.audiagentic/config/{execution-profiles,roles,agent-definitions}.yaml`)
 to guard the "rig-tester-agent" entry created to exercise the AS62/AS63
 composition path end-to-end for real, not synthetically -- if someone edits
 or deletes one of the three files and breaks the cross-references, this is
-what catches it. AgentTaskFactory's actual submit/dispatch mechanics are
+what catches it. The GatewayClient's actual submit/dispatch mechanics are
 already covered generically (with tmp_path fixtures, not this repo's live
-runtime state) by test_agent_task_api.py -- deliberately not repeated here,
+runtime state) by the gateway lifecycle tests -- deliberately not repeated here,
 so this test stays read-only and never writes into the real
 `.audiagentic/runtime/` directory.
 """
