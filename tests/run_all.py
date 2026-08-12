@@ -81,6 +81,7 @@ RECIPE_IMAGES = [
     Img("audiagentic-gateway-opencode:local", "Dockerfile.gateway-opencode", note="real npm-CLI-provider gateway dispatch (dynamic discovery)"),
     Img("audiagentic-gateway-concurrency:local", "Dockerfile.gateway-concurrency", note="real concurrent gateway load + negative paths"),
     Img("audiagentic-gateway-pi-smoke:local", "Dockerfile.gateway-pi-smoke", note="SH16 real Pi CLI + embedded rig gateway dispatch"),
+    Img("audiagentic-gateway-session-orphan:local", "Dockerfile.gateway-session-orphan", note="AS91 real session orphan/reaper lifecycle"),
     Img("audiagentic-pi-rpc-tap-e2e:local", "Dockerfile.pi-rpc-tap-e2e", note="AS40 real pi-acp RPC tee shim, tapped conversational turn"),
     Img("audiagentic-pi-acp-resume-e2e:local", "Dockerfile.pi-acp-resume-e2e", note="AS49 real pi-acp session/load resume after process death"),
 ]

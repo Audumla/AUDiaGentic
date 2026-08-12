@@ -815,7 +815,13 @@ class GatewayQueueManager:
                     "failed",
                     "cancelled",
                 ):
-                    _publish_lifecycle_event(result["state"], result)
+                    # The runner may return an in-memory transition snapshot
+                    # that predates a separately persisted attempt update.
+                    # Re-read the terminal record before projecting the event
+                    # so observers receive the durable provider/model and
+                    # attempt attribution.
+                    terminal_record = store.read_record(project_root, request_id)
+                    _publish_lifecycle_event(terminal_record["state"], terminal_record)
             except AudiaGenticError as exc:
                 logger.error(
                     "gateway request runner raised", extra={"request-id": request_id}, exc_info=True

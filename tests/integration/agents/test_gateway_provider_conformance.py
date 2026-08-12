@@ -10,6 +10,7 @@ pytestmark = pytest.mark.no_parallel
 
 def test_gateway_provider_conformance_covers_every_descriptor() -> None:
     assert conformance.provider_ids() == (
+        "activity-rig",
         "aider",
         "antigravity",
         "claude",
@@ -40,4 +41,3 @@ def test_every_provider_exercises_gateway_request_states(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     conformance.assert_one_shot_state_matrix(tmp_path, provider_id, monkeypatch)
-

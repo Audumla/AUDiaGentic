@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.no_parallel
+
 from audiagentic.components.agents.agents_paths import gateway_timeline_path
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.queue import queue as queue_mod
