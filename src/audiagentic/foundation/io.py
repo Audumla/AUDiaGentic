@@ -23,6 +23,26 @@ _REPLACE_RETRY_ATTEMPTS = 5
 _REPLACE_RETRY_DELAY_SECONDS = 0.05
 
 
+class _UniqueKeySafeLoader(yaml.SafeLoader):
+    """SafeLoader that rejects duplicate mapping keys."""
+
+
+def _construct_unique_mapping(loader: yaml.Loader, node: yaml.MappingNode, deep: bool = False) -> dict[Any, Any]:
+    mapping: dict[Any, Any] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            raise ValueError(f"duplicate YAML key: {key!r}")
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+_UniqueKeySafeLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    _construct_unique_mapping,
+)
+
+
 def read_text_with_retry(path: Path, *, encoding: str = "utf-8") -> str:
     """Read through short Windows sharing violations from atomic replacement."""
     for attempt in range(_REPLACE_RETRY_ATTEMPTS):
@@ -131,8 +151,11 @@ def load_yaml_value(path: Path, default: Any = None) -> Any:
     if not path.exists():
         return default
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as exc:
+        data = yaml.load(
+            path.read_text(encoding="utf-8"),
+            Loader=_UniqueKeySafeLoader,
+        )
+    except (ValueError, yaml.YAMLError) as exc:
         raise _io_error(1, f"Invalid YAML config: {path}", path=str(path)) from exc
     return default if data is None else data
 

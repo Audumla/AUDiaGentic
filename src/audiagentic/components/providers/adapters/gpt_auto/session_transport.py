@@ -25,6 +25,19 @@ from .turn import GptAutoTurn
 from .urls import canonical_chat_url, url_matches_provider_session
 
 
+def _active_project_name(project_root: Path) -> str:
+    from audiagentic.foundation.io import load_yaml_file
+
+    config_path = project_root / ".audiagentic" / "config" / "project.yaml"
+    if config_path.exists():
+        data = load_yaml_file(config_path)
+        if isinstance(data, dict):
+            value = data.get("project-name", data.get("project_name"))
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return project_root.resolve().name
+
+
 class GptAutoSessionTransport:
     def __init__(self, chat: PersistentChat) -> None:
         self.chat = chat
@@ -104,7 +117,8 @@ def build_gpt_auto_session_transport(
     parsed = GptAutoConfig.from_dict(config)
     runtime = get_runtime(project_root, parsed)
     metadata = resume_metadata_hint or {}
-    project_url = str(metadata.get("project-url") or parsed.project_url)
+    project_url_value = metadata.get("project-url") or parsed.project_url
+    project_url = str(project_url_value) if project_url_value else None
     chat_url = metadata.get("chat-url")
     if resume_provider_ref:
         if not isinstance(chat_url, str) or not url_matches_provider_session(
@@ -116,6 +130,7 @@ def build_gpt_auto_session_transport(
         chat_url = canonical_chat_url(chat_url)
     chat = PersistentChat(
         ag_session_id=ag_session_id,
+        project_name=_active_project_name(project_root),
         project_url=project_url,
         runtime=runtime,
         binding_sink=binding_sink,

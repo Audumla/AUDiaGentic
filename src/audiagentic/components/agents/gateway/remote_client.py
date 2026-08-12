@@ -238,6 +238,36 @@ class StandaloneGatewayClient:
             ),
         )
 
+    def open_agent_context(self, project_root: Path, agent_id: str, title: str | None = None) -> dict[str, Any]:
+        return cast(dict[str, Any], self._call("open_agent_context", project_root, {"agent_id": agent_id, "title": title}))
+
+    def get_agent_context(self, project_root: Path, context_id: str) -> dict[str, Any]:
+        return cast(dict[str, Any], self._call("get_agent_context", project_root, {"context_id": context_id}))
+
+    def list_agent_contexts(self, project_root: Path) -> list[dict[str, Any]]:
+        return cast(list[dict[str, Any]], self._call("list_agent_contexts", project_root, {}))
+
+    def close_agent_context(self, project_root: Path, context_id: str) -> dict[str, Any]:
+        return cast(dict[str, Any], self._call("close_agent_context", project_root, {"context_id": context_id}))
+
+    def submit_agent_work(self, project_root: Path, context_id: str, message: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        return cast(dict[str, Any], self._call("submit_agent_work", project_root, {"context_id": context_id, "message": message, **kwargs}))
+
+    def get_agent_work(self, project_root: Path, work_id: str) -> dict[str, Any]:
+        return cast(dict[str, Any], self._call("get_agent_work", project_root, {"work_id": work_id}))
+
+    def list_agent_work(self, project_root: Path) -> list[dict[str, Any]]:
+        return cast(list[dict[str, Any]], self._call("list_agent_work", project_root, {}))
+
+    def add_agent_work_message(self, project_root: Path, work_id: str, message: dict[str, Any]) -> dict[str, Any]:
+        return cast(dict[str, Any], self._call("add_agent_work_message", project_root, {"work_id": work_id, "message": message}))
+
+    def cancel_agent_work(self, project_root: Path, work_id: str) -> dict[str, Any]:
+        return cast(dict[str, Any], self._call("cancel_agent_work", project_root, {"work_id": work_id}))
+
+    def read_agent_work_output(self, project_root: Path, work_id: str) -> dict[str, Any]:
+        return cast(dict[str, Any], self._call("read_agent_work_output", project_root, {"work_id": work_id}))
+
     # SH10 operator lifecycle surface (service-scoped; project root is the
     # caller's admission context only).
 

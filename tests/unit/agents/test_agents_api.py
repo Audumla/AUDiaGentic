@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from audiagentic.components.agents.agents_paths import execution_profiles_path
+from audiagentic.components.agents.agents_paths import agents_config_path
 from audiagentic.components.agents.models import execution_profile_api as agents_api
 from audiagentic.components.agents.models.execution_profile import (
     ExecutionProfileStore,
@@ -28,7 +28,7 @@ def _make_profile(**kwargs) -> dict:
 # ---------------------------------------------------------------------------
 
 def test_seed_execution_profiles_creates_file(tmp_path):
-    path = execution_profiles_path(tmp_path)
+    path = agents_config_path(tmp_path)
     assert not path.exists()
     agents_api.seed_execution_profiles(tmp_path)
     assert path.exists()
@@ -36,14 +36,14 @@ def test_seed_execution_profiles_creates_file(tmp_path):
 
 def test_seed_execution_profiles_idempotent(tmp_path):
     agents_api.seed_execution_profiles(tmp_path)
-    content_before = execution_profiles_path(tmp_path).read_text(encoding="utf-8")
+    content_before = agents_config_path(tmp_path).read_text(encoding="utf-8")
     agents_api.seed_execution_profiles(tmp_path)
-    content_after = execution_profiles_path(tmp_path).read_text(encoding="utf-8")
+    content_after = agents_config_path(tmp_path).read_text(encoding="utf-8")
     assert content_before == content_after
 
 
 def test_seed_execution_profiles_overwrites_stale_marker(tmp_path):
-    path = execution_profiles_path(tmp_path)
+    path = agents_config_path(tmp_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("# Installation marker\n", encoding="utf-8")
     agents_api.seed_execution_profiles(tmp_path)
@@ -54,11 +54,10 @@ def test_seed_execution_profiles_overwrites_stale_marker(tmp_path):
 
 def test_seed_execution_profiles_creates_default_profile(tmp_path):
     agents_api.seed_execution_profiles(tmp_path)
-    data = load_yaml_file(execution_profiles_path(tmp_path))
-    profiles = data.get("profiles", [])
+    data = load_yaml_file(agents_config_path(tmp_path))
+    profiles = data.get("execution_profiles", {})
     assert len(profiles) == 1
-    assert profiles[0]["profile_id"] == "default"
-    assert profiles[0]["is_default"] is True
+    assert profiles["default"]["is_default"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +77,7 @@ def test_load_execution_profiles_from_seed(tmp_path):
 
 
 def test_load_execution_profiles_invalid_yaml_raises_io_agp_001(tmp_path):
-    path = execution_profiles_path(tmp_path)
+    path = agents_config_path(tmp_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(":::\ninvalid: [yaml", encoding="utf-8")
     with pytest.raises(AudiaGenticError) as exc_info:
@@ -87,9 +86,9 @@ def test_load_execution_profiles_invalid_yaml_raises_io_agp_001(tmp_path):
 
 
 def test_load_execution_profiles_unsupported_contract_version_raises(tmp_path):
-    path = execution_profiles_path(tmp_path)
+    path = agents_config_path(tmp_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("contract-version: v99\nprofiles: []\n", encoding="utf-8")
+    path.write_text("contract-version: v99\nexecution_profiles: {}\n", encoding="utf-8")
     with pytest.raises(AudiaGenticError) as exc_info:
         agents_api.load_execution_profiles(tmp_path)
     assert exc_info.value.code == "VAL-EXP-004"
@@ -103,11 +102,11 @@ def test_save_execution_profiles_writes_file(tmp_path):
     p = execution_profile_from_dict(_make_profile())
     store = ExecutionProfileStore([p])
     agents_api.save_execution_profiles(tmp_path, store)
-    path = execution_profiles_path(tmp_path)
+    path = agents_config_path(tmp_path)
     assert path.exists()
     data = load_yaml_file(path)
     assert data["contract-version"] == "v2"
-    assert len(data["profiles"]) == 1
+    assert len(data["execution_profiles"]) == 1
 
 
 def test_save_execution_profiles_overwrites_existing(tmp_path):
@@ -115,9 +114,9 @@ def test_save_execution_profiles_overwrites_existing(tmp_path):
     agents_api.save_execution_profiles(tmp_path, ExecutionProfileStore([p1]))
     p2 = execution_profile_from_dict(_make_profile(profile_id="b"))
     agents_api.save_execution_profiles(tmp_path, ExecutionProfileStore([p2]))
-    data = load_yaml_file(execution_profiles_path(tmp_path))
-    assert len(data["profiles"]) == 1
-    assert data["profiles"][0]["profile_id"] == "b"
+    data = load_yaml_file(agents_config_path(tmp_path))
+    assert len(data["execution_profiles"]) == 1
+    assert "b" in data["execution_profiles"]
 
 
 # ---------------------------------------------------------------------------
@@ -174,11 +173,11 @@ def test_create_execution_profile_minimal(tmp_path):
 
 def test_create_execution_profile_persists_to_file(tmp_path):
     agents_api.create_execution_profile(tmp_path, _make_profile())
-    path = execution_profiles_path(tmp_path)
+    path = agents_config_path(tmp_path)
     assert path.exists()
     data = load_yaml_file(path)
     assert data["contract-version"] == "v2"
-    assert len(data["profiles"]) == 1
+    assert len(data["execution_profiles"]) == 1
 
 
 def test_create_execution_profile_with_params(tmp_path):
@@ -310,8 +309,8 @@ def test_delete_execution_profile_not_found_raises_res_agp_001(tmp_path):
 def test_delete_execution_profile_persists_to_file(tmp_path):
     agents_api.create_execution_profile(tmp_path, _make_profile())
     agents_api.delete_execution_profile(tmp_path, "test-profile")
-    data = load_yaml_file(execution_profiles_path(tmp_path))
-    assert data["profiles"] == []
+    data = load_yaml_file(agents_config_path(tmp_path))
+    assert data["execution_profiles"] == {}
 
 
 # ---------------------------------------------------------------------------

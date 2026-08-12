@@ -13,7 +13,15 @@ from audiagentic.foundation.transports.session_binding import (
 
 from .runtime import GptAutoProviderRuntime
 from .snapshot import ChatSnapshot
-from .urls import canonical_chat_url, parse_provider_session_id, url_matches_provider_session
+from .urls import (
+    canonical_chat_url,
+    canonical_project_url,
+    parse_project_id,
+    parse_provider_session_id,
+    url_matches_provider_session,
+)
+
+_PROJECTS_URL = "https://chatgpt.com/projects"
 
 
 class ChatState(StrEnum):
@@ -31,13 +39,15 @@ class PersistentChat:
         self,
         *,
         ag_session_id: str,
-        project_url: str,
+        project_name: str,
+        project_url: str | None,
         runtime: GptAutoProviderRuntime,
         binding_sink: ProviderSessionBindingSink,
         provider_session_id: str | None = None,
         chat_url: str | None = None,
     ) -> None:
         self.ag_session_id = ag_session_id
+        self.project_name = project_name
         self.project_url = project_url
         self.provider_session_id = provider_session_id
         self.chat_url = chat_url
@@ -67,6 +77,33 @@ class PersistentChat:
                 else "create_page"
             )
             self.page_handle = str(result["pageHandle"])
+            if not self.provider_session_id and not parse_project_id(self.project_url or ""):
+                await self.runtime.bridge.call(
+                    "navigate",
+                    {
+                        "pageHandle": self.page_handle,
+                        "url": _PROJECTS_URL,
+                        "timeoutMs": int(
+                            self.runtime.config.chat.navigation_timeout_seconds * 1000
+                        ),
+                    },
+                    timeout=self.runtime.config.chat.navigation_timeout_seconds + 2,
+                )
+                match = await self.runtime.bridge.call(
+                    "find_project_url",
+                    {
+                        "pageHandle": self.page_handle,
+                        "projectName": self.project_name,
+                        "timeoutMs": int(
+                            self.runtime.config.chat.ready_timeout_seconds * 1000
+                        ),
+                    },
+                    timeout=self.runtime.config.chat.ready_timeout_seconds + 2,
+                )
+                self.project_url = canonical_project_url(str(match["url"])) + "/project"
+                target = self.project_url
+            if not target:
+                raise RuntimeError("gpt-auto could not resolve a ChatGPT project URL")
             await self.runtime.bridge.call(
                 "navigate",
                 {

@@ -9,7 +9,12 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.agents.agents_paths import execution_profiles_path
+from audiagentic.components.agents.agents_paths import agents_config_path
+from audiagentic.components.agents.configuration.contracts import AgentsConfigDocument
+from audiagentic.components.agents.configuration.repository import (
+    AgentsConfigRepository,
+    AgentsConfigValidationError,
+)
 from audiagentic.components.agents.models.execution_profile import (
     ExecutionProfileStore,
     execution_profile_from_dict,
@@ -17,7 +22,7 @@ from audiagentic.components.agents.models.execution_profile import (
 )
 from audiagentic.foundation.components.hooks import ComponentStatusPayload
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import atomic_write_text, load_yaml_file, save_yaml_file
+from audiagentic.foundation.io import load_yaml_file
 
 logger = logging.getLogger(__name__)
 
@@ -57,33 +62,14 @@ def load_execution_profiles(project_root: Path) -> ExecutionProfileStore:
     Raises AudiaGenticError(IO-EXP-001) on read failure.
     Raises AudiaGenticError(VAL-EXP-004) on contract-version mismatch.
     """
-    path = execution_profiles_path(project_root)
-    data = _load_yaml_lenient(path)
-    if not data:
-        return ExecutionProfileStore()
-    cv = data.get("contract-version")
-    if cv and cv != "v2":
-        raise AudiaGenticError(
-            code="VAL-EXP-004",
-            kind="agents",
-            message="unsupported execution profiles contract version",
-            details={"contract-version": cv, "expected": "v2"},
-        )
-    entries = data.get("profiles", [])
-    if not isinstance(entries, list):
-        return ExecutionProfileStore()
-    store = ExecutionProfileStore()
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        try:
-            profile = execution_profile_from_dict(entry)
-            store._profiles[profile.profile_id] = profile
-        except AudiaGenticError:
-            logger.warning(
-                "Skipping invalid profile entry: %s", entry.get("profile_id", "<unknown>")
-            )
-    return store
+    try:
+        snapshot = AgentsConfigRepository().read(project_root)
+    except AgentsConfigValidationError as exc:
+        code = "VAL-EXP-004" if "contract-version" in str(exc) else "IO-EXP-001"
+        raise AudiaGenticError(code=code, kind="agents", message=str(exc), details={}) from exc
+    except Exception as exc:
+        raise AudiaGenticError(code="IO-EXP-001", kind="agents", message="failed to read agents config", details={}) from exc
+    return ExecutionProfileStore.from_dicts(list(snapshot.document.execution_profiles))
 
 
 def save_execution_profiles(project_root: Path, store: ExecutionProfileStore) -> None:
@@ -91,40 +77,47 @@ def save_execution_profiles(project_root: Path, store: ExecutionProfileStore) ->
 
     Raises AudiaGenticError(IO-EXP-002) on write failure.
     """
-    path = execution_profiles_path(project_root)
-    payload = {
-        "contract-version": "v2",
-        "profiles": store.to_dicts(),
-    }
+    repository = AgentsConfigRepository()
+    snapshot = repository.read(project_root)
+    document = AgentsConfigDocument(snapshot.document.contract_version, snapshot.document.prompts, snapshot.document.roles, tuple(store.to_dicts()), snapshot.document.agents)
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        save_yaml_file(path, payload, sort_keys=False, atomic=True)
+        repository.replace(project_root, document, expected_digest=(snapshot.digest if agents_config_path(project_root).exists() else None))
     except Exception as exc:
         raise AudiaGenticError(
             code="IO-EXP-002",
             kind="agents",
             message="failed to write execution profiles config",
-            details={"path": str(path), "error": str(exc)},
+            details={"path": "agents.yaml", "error": str(exc)},
         ) from exc
 
 
 def seed_execution_profiles(project_root: Path) -> None:
-    """Create the seed profiles file if it doesn't exist or is empty/stale."""
-    path = execution_profiles_path(project_root)
-    if path.exists():
-        content = path.read_text(encoding="utf-8").strip()
-        if content and "contract-version" in content:
-            return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        atomic_write_text(path, SEED_PROFILES_YAML)
-    except Exception as exc:
-        raise AudiaGenticError(
-            code="IO-EXP-002",
-            kind="agents",
-            message="failed to create seed execution profiles config",
-            details={"path": str(path), "error": str(exc)},
-        ) from exc
+    """Ensure the canonical Agents document has a default profile."""
+    repository = AgentsConfigRepository()
+    snapshot = repository.read(project_root)
+    if any(profile.get("is_default") for profile in snapshot.document.execution_profiles):
+        return
+    profile = execution_profile_from_dict(
+        {
+            "profile_id": "default",
+            "provider_id": "local-openai",
+            "instances": ["default"],
+            "is_default": True,
+            "description": "Default execution profile",
+        }
+    )
+    document = AgentsConfigDocument(
+        snapshot.document.contract_version,
+        snapshot.document.prompts,
+        snapshot.document.roles,
+        (*snapshot.document.execution_profiles, execution_profile_to_dict(profile)),
+        snapshot.document.agents,
+    )
+    repository.replace(
+        project_root,
+        document,
+        expected_digest=snapshot.digest if agents_config_path(project_root).exists() else None,
+    )
 
 
 def list_execution_profiles(project_root: Path) -> list[dict[str, Any]]:

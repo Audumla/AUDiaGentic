@@ -55,3 +55,33 @@ kinds:
           dispatchable: [accepted]
           active: [accepted, running]
           terminal: [completed, failed]
+  agent-context:
+    default-workflow: standard
+    workflows:
+      standard:
+        initial: open
+        values: [open, closed]
+        transitions:
+          open: [closed]
+          closed: []
+        state-sets:
+          terminal: [closed]
+          active: [open]
+  agent-work:
+    default-workflow: standard
+    workflows:
+      standard:
+        initial: submitted
+        values: [submitted, active, waiting, completed, failed, cancelled, rejected]
+        transitions:
+          submitted: [active, rejected, cancelled, failed]
+          waiting: [active, failed, cancelled]
+          active: [waiting, completed, failed, cancelled]
+          completed: []
+          failed: []
+          cancelled: []
+          rejected: []
+        state-sets:
+          terminal: [completed, failed, cancelled, rejected]
+          non-terminal: [submitted, active, waiting]
+          cancellable: [submitted, active, waiting]

@@ -84,6 +84,12 @@ def test_strict_config_is_typed_and_frozen():
         config.project_url = "changed"  # type: ignore[misc]
 
 
+def test_project_url_is_optional_for_project_name_discovery():
+    value = valid_config()
+    del value["project-url"]
+    assert GptAutoConfig.from_dict(value).project_url is None
+
+
 @pytest.mark.parametrize(
     "mutation",
     [

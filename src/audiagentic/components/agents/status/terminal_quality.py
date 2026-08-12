@@ -262,7 +262,7 @@ def _check_repetition(record: Mapping[str, Any]) -> TerminalQualitySignal | None
     output = _safe_output(record)
     if not output.strip():
         return None
-    lines = [l.rstrip() for l in output.splitlines()]
+    lines = [line.rstrip() for line in output.splitlines()]
 
     # Check identical line repetition
     from collections import Counter
@@ -287,8 +287,8 @@ def _check_repetition(record: Mapping[str, Any]) -> TerminalQualitySignal | None
     for pat in _PREAMBLE_PATTERNS:
         phrase_lines = [
             i
-            for i, l in enumerate(lines)
-            if re.search(pat, l, re.IGNORECASE | re.MULTILINE)
+            for i, line in enumerate(lines)
+            if re.search(pat, line, re.IGNORECASE | re.MULTILINE)
         ]
         if len(phrase_lines) >= _REPETITION_PHRASE_THRESHOLD:
             # Check intervening text between consecutive matches is small
