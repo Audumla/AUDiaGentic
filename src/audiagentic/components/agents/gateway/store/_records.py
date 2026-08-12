@@ -184,6 +184,7 @@ def build_record(
         "watchdog-state": "not-started",
         "watchdog-reason": None,
         "watchdog-policy": dict(watchdog_policy) if watchdog_policy is not None else None,
+        "terminal-classification": None,
         "resolved-instance-ids": resolved_instance_ids,
         "resolved-queue-limits": resolved_queue_limits,
         "admission-policy-digest": admission_policy_digest,
@@ -352,6 +353,7 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     migrated.setdefault("watchdog-state", "not-started")
     migrated.setdefault("watchdog-reason", None)
     migrated.setdefault("watchdog-policy", None)
+    migrated.setdefault("terminal-classification", None)
     return _validate(migrated, code="VAL-AGW-005")
 
 
@@ -437,7 +439,7 @@ def project_public_status(
         "resolved-source-id", "resolved-capacity-generation",
         "last-activity-at", "activity-sequence", "activity-source", "activity-lease-expires-at",
         "watchdog-state", "watchdog-reason",
-        "watchdog-policy",
+        "watchdog-policy", "terminal-classification",
         "resolved-instance-ids", "resolved-queue-limits", "admission-policy-digest",
     )
     status = {field: record.get(field) for field in visible}

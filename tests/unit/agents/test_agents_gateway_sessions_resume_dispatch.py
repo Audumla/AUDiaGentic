@@ -149,6 +149,23 @@ def _make_runtime(*, resume_prepare=None) -> SessionRuntime:
 
 
 class TestResumeSuccess:
+    def test_resume_preserves_provider_neutral_binding_identity(self, tmp_path: Path):
+        source = _write_terminal_source_session(tmp_path)
+        runtime = _make_runtime()
+        try:
+            resumed = runtime.resume_session(
+                tmp_path,
+                source["session-id"],
+                control_id="ctrl-provider-neutral",
+                identity_context_fingerprint=_IDENTITY_FP,
+                execution_context_fingerprint=_EXECUTION_FP,
+            )
+            assert resumed["binding"]["provider-id"] == _PROVIDER_ID
+            assert resumed["binding"]["surface-id"] == _SURFACE_ID
+            assert resumed["binding"]["relation"] == "resumed-from"
+        finally:
+            runtime.shutdown()
+
     def test_resume_creates_new_generation_linked_to_source(self, tmp_path: Path):
         source = _write_terminal_source_session(tmp_path)
         runtime = _make_runtime()
@@ -207,6 +224,21 @@ class TestResumeSuccess:
 
 
 class TestResumeRejections:
+    @pytest.mark.parametrize("surface_id", ["acp", "mcp-a2a"])
+    def test_provider_neutral_surface_resume_contract(self, tmp_path: Path, surface_id: str):
+        source = _write_terminal_source_session(tmp_path)
+        runtime = _make_runtime()
+        try:
+            resumed = runtime.resume_session(
+                tmp_path, source["session-id"], control_id=f"ctrl-{surface_id}",
+                identity_context_fingerprint=_IDENTITY_FP,
+                execution_context_fingerprint=_EXECUTION_FP,
+            )
+            assert resumed["binding"]["relation"] == "resumed-from"
+            assert resumed["binding"]["provider-id"] == _PROVIDER_ID
+        finally:
+            runtime.shutdown()
+
     def test_active_source_rejected(self, tmp_path: Path):
         source = _write_terminal_source_session(tmp_path, state="active")
         # Undo the terminal transition/retirement above for this one test —
@@ -229,7 +261,11 @@ class TestResumeRejections:
         def unsupported_prepare(
             project_root, *, provider_id, surface_hint, model_id=None, resume_provider_ref=None, **_ignored
         ):
-            return PreparedSessionTransport(transport=None, surface=None, effective_provider_ref=None)
+            return PreparedSessionTransport(  # type: ignore[arg-type]
+                transport=None,
+                surface=None,  # type: ignore[arg-type]
+                effective_provider_ref=None,  # type: ignore[arg-type]
+            )
 
         runtime = _make_runtime(resume_prepare=unsupported_prepare)
         try:

@@ -122,6 +122,23 @@ class ManagementOperationStore:
                 break
         return records
 
+    def list_records(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        """List durable operator records newest first for safe inspection."""
+        if limit <= 0:
+            raise AudiaGenticError("VAL-AGM-001", "agents", "limit must be positive", {})
+        if not self._root.exists():
+            return []
+        records: list[dict[str, Any]] = []
+        for child in self._root.iterdir():
+            if not child.is_dir() or not _ID_RE.fullmatch(child.name):
+                continue
+            try:
+                records.append(self.read(child.name))
+            except AudiaGenticError:
+                continue
+        records.sort(key=lambda item: str(item.get("created-at", "")), reverse=True)
+        return records[:limit]
+
     def active_count(self) -> int:
         """Return accepted/running gateway-operation count for quiescence."""
         if not self._root.exists():

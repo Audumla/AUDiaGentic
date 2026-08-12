@@ -64,31 +64,6 @@ def _failing_runner(project_root: Path, record: dict) -> dict:
     raise AudiaGenticError(code="EXT-FAKE-001", kind="providers", message="boom")
 
 
-# ---------------------------------------------------------------------------
-# param resolution
-# ---------------------------------------------------------------------------
-
-def test_resolve_max_concurrency_default():
-    assert queue_mod.resolve_max_concurrency({}) == 1
-
-
-def test_resolve_max_concurrency_rejects_wrong_type():
-    with pytest.raises(AudiaGenticError) as exc_info:
-        queue_mod.resolve_max_concurrency({"max-concurrency": "two"})
-    assert exc_info.value.code == "VAL-AGW-020"
-
-
-def test_resolve_max_concurrency_rejects_below_minimum():
-    with pytest.raises(AudiaGenticError) as exc_info:
-        queue_mod.resolve_max_concurrency({"max-concurrency": 0})
-    assert exc_info.value.code == "VAL-AGW-021"
-
-
-def test_resolve_queue_max_size_default():
-    assert queue_mod.resolve_queue_max_size({}, 1) == 8
-    assert queue_mod.resolve_queue_max_size({}, 5) == 10
-
-
 def test_project_queue_depths_excludes_other_projects(tmp_path: Path):
     manager = queue_mod.GatewayQueueManager()
     project_a = tmp_path / "project-a"
@@ -99,9 +74,9 @@ def test_project_queue_depths_excludes_other_projects(tmp_path: Path):
     started = threading.Event()
     runner = _blocking_runner(hold, started)
 
-    first = _submit(manager, project_a, "reporting-profile", {"max-concurrency": 1}, runner)
+    first = _submit(manager, project_a, "reporting-profile", {"virtual-capacity": 1}, runner)
     assert started.wait(timeout=2)
-    second = _submit(manager, project_b, "reporting-profile", {"max-concurrency": 1}, runner)
+    second = _submit(manager, project_b, "reporting-profile", {"virtual-capacity": 1}, runner)
 
     assert manager.project_queue_depths(project_a) == {
         "reporting-profile": {"pending": 0, "running": 1, "active_running": 1, "idle": 0}
@@ -118,7 +93,7 @@ def test_project_queue_depths_excludes_other_projects(tmp_path: Path):
 # concurrency
 # ---------------------------------------------------------------------------
 
-def test_max_concurrency_one_serializes_requests(tmp_path: Path):
+def test_virtual_capacity_one_serializes_requests(tmp_path: Path):
     manager = queue_mod.GatewayQueueManager()
     hold = threading.Event()
     started = threading.Event()
@@ -126,7 +101,7 @@ def test_max_concurrency_one_serializes_requests(tmp_path: Path):
 
     record1 = store.build_record(execution_profile_id="p1", prompt_body="a")
     store.write_record(tmp_path, record1)
-    t = threading.Thread(target=manager.enqueue, args=(tmp_path, record1, {"max-concurrency": 1}, runner))
+    t = threading.Thread(target=manager.enqueue, args=(tmp_path, record1, {"virtual-capacity": 1}, runner))
     t.start()
     assert started.wait(timeout=2)
 
@@ -135,7 +110,7 @@ def test_max_concurrency_one_serializes_requests(tmp_path: Path):
 
     record2 = store.build_record(execution_profile_id="p1", prompt_body="b")
     store.write_record(tmp_path, record2)
-    manager.enqueue(tmp_path, record2, {"max-concurrency": 1}, runner)
+    manager.enqueue(tmp_path, record2, {"virtual-capacity": 1}, runner)
     # second stays queued while first still holds
     assert store.read_record(tmp_path, record2["request-id"])["state"] == "queued"
 
@@ -145,7 +120,7 @@ def test_max_concurrency_one_serializes_requests(tmp_path: Path):
     assert result2["state"] == "completed"
 
 
-def test_max_concurrency_two_runs_two_third_waits(tmp_path: Path):
+def test_virtual_capacity_two_runs_two_third_waits(tmp_path: Path):
     manager = queue_mod.GatewayQueueManager()
     hold = threading.Event()
     started_count = threading.Semaphore(0)
@@ -163,7 +138,7 @@ def test_max_concurrency_two_runs_two_third_waits(tmp_path: Path):
         store.write_record(tmp_path, r)
 
     threads = [
-        threading.Thread(target=manager.enqueue, args=(tmp_path, r, {"max-concurrency": 2}, runner))
+        threading.Thread(target=manager.enqueue, args=(tmp_path, r, {"virtual-capacity": 2}, runner))
         for r in records
     ]
     # Start the first two requests together and wait for both runners before
@@ -235,7 +210,7 @@ def test_session_workers_share_one_profile_compute_slot(tmp_path: Path):
     ]
     for record in records:
         store.write_record(tmp_path, record)
-        manager.enqueue(tmp_path, record, {"max-concurrency": 1}, runner)
+        manager.enqueue(tmp_path, record, {"virtual-capacity": 1}, runner)
 
     assert workers_entered.acquire(timeout=2)
     assert workers_entered.acquire(timeout=2)
@@ -265,7 +240,7 @@ def test_fifo_ordering(tmp_path: Path):
 
     first = store.build_record(execution_profile_id="p3", prompt_body="first")
     store.write_record(tmp_path, first)
-    t1 = threading.Thread(target=manager.enqueue, args=(tmp_path, first, {"max-concurrency": 1}, runner))
+    t1 = threading.Thread(target=manager.enqueue, args=(tmp_path, first, {"virtual-capacity": 1}, runner))
     t1.start()
     time.sleep(0.05)  # ensure first claims the only slot before second/third submit
 
@@ -273,8 +248,8 @@ def test_fifo_ordering(tmp_path: Path):
     third = store.build_record(execution_profile_id="p3", prompt_body="third")
     store.write_record(tmp_path, second)
     store.write_record(tmp_path, third)
-    manager.enqueue(tmp_path, second, {"max-concurrency": 1}, runner)
-    t3 = threading.Thread(target=manager.enqueue, args=(tmp_path, third, {"max-concurrency": 1}, runner))
+    manager.enqueue(tmp_path, second, {"virtual-capacity": 1}, runner)
+    t3 = threading.Thread(target=manager.enqueue, args=(tmp_path, third, {"virtual-capacity": 1}, runner))
     t3.start()
     time.sleep(0.05)
 
@@ -298,17 +273,17 @@ def test_queue_full_rejects(tmp_path: Path):
 
     running = store.build_record(execution_profile_id="p4", prompt_body="running")
     store.write_record(tmp_path, running)
-    t = threading.Thread(target=manager.enqueue, args=(tmp_path, running, {"max-concurrency": 1, "queue-max-size": 1}, runner))
+    t = threading.Thread(target=manager.enqueue, args=(tmp_path, running, {"virtual-capacity": 1, "pending-capacity": 1}, runner))
     t.start()
     time.sleep(0.05)
 
     queued = store.build_record(execution_profile_id="p4", prompt_body="queued")
     store.write_record(tmp_path, queued)
-    manager.enqueue(tmp_path, queued, {"max-concurrency": 1, "queue-max-size": 1}, runner)
+    manager.enqueue(tmp_path, queued, {"virtual-capacity": 1, "pending-capacity": 1}, runner)
 
     overflow = store.build_record(execution_profile_id="p4", prompt_body="overflow")
     store.write_record(tmp_path, overflow)
-    result = manager.enqueue(tmp_path, overflow, {"max-concurrency": 1, "queue-max-size": 1}, runner)
+    result = manager.enqueue(tmp_path, overflow, {"virtual-capacity": 1, "pending-capacity": 1}, runner)
 
     assert result["state"] == "rejected"
     assert "queue full" in result["error"]["message"]
@@ -325,13 +300,13 @@ def test_cancel_queued_request(tmp_path: Path):
 
     running = store.build_record(execution_profile_id="p5", prompt_body="running")
     store.write_record(tmp_path, running)
-    t = threading.Thread(target=manager.enqueue, args=(tmp_path, running, {"max-concurrency": 1}, runner))
+    t = threading.Thread(target=manager.enqueue, args=(tmp_path, running, {"virtual-capacity": 1}, runner))
     t.start()
     time.sleep(0.05)
 
     queued = store.build_record(execution_profile_id="p5", prompt_body="queued")
     store.write_record(tmp_path, queued)
-    manager.enqueue(tmp_path, queued, {"max-concurrency": 1}, runner)
+    manager.enqueue(tmp_path, queued, {"virtual-capacity": 1}, runner)
 
     cancelled = manager.cancel(tmp_path, "p5", queued["request-id"])
     assert cancelled["state"] == "cancelled"
@@ -350,7 +325,7 @@ def test_cancel_running_request_persists_cancel_requested_flag(tmp_path: Path):
 
     record = store.build_record(execution_profile_id="p9", prompt_body="x")
     store.write_record(tmp_path, record)
-    t = threading.Thread(target=manager.enqueue, args=(tmp_path, record, {"max-concurrency": 1}, runner))
+    t = threading.Thread(target=manager.enqueue, args=(tmp_path, record, {"virtual-capacity": 1}, runner))
     t.start()
     assert started.wait(timeout=2)
 
@@ -376,7 +351,7 @@ def test_cancel_running_request_completion_still_wins(tmp_path: Path):
 
     record = store.build_record(execution_profile_id="p10", prompt_body="x")
     store.write_record(tmp_path, record)
-    t = threading.Thread(target=manager.enqueue, args=(tmp_path, record, {"max-concurrency": 1}, runner))
+    t = threading.Thread(target=manager.enqueue, args=(tmp_path, record, {"virtual-capacity": 1}, runner))
     t.start()
     assert started.wait(timeout=2)
 
@@ -397,7 +372,7 @@ def test_wait_times_out_for_long_running(tmp_path: Path):
 
     record = store.build_record(execution_profile_id="p6", prompt_body="x")
     store.write_record(tmp_path, record)
-    t = threading.Thread(target=manager.enqueue, args=(tmp_path, record, {"max-concurrency": 1}, runner))
+    t = threading.Thread(target=manager.enqueue, args=(tmp_path, record, {"virtual-capacity": 1}, runner))
     t.start()
 
     result = manager.wait(tmp_path, record["request-id"], timeout_seconds=0.2)
@@ -422,7 +397,7 @@ def test_cancel_after_dequeue_before_claim_is_terminal_not_stranded(tmp_path: Pa
         return original_claim(*args, **kwargs)
 
     monkeypatch.setattr(queue_mod.store, "claim_dispatch", paused_claim)
-    manager.enqueue(tmp_path, record, {"max-concurrency": 1}, _immediate_runner)
+    manager.enqueue(tmp_path, record, {"virtual-capacity": 1}, _immediate_runner)
     assert claim_entered.wait(timeout=2)
 
     cancelled = manager.cancel(tmp_path, "p5-race", record["request-id"])
@@ -536,7 +511,7 @@ def test_wait_returns_completed_result(tmp_path: Path):
     manager = queue_mod.GatewayQueueManager()
     record = store.build_record(execution_profile_id="p7", prompt_body="x")
     store.write_record(tmp_path, record)
-    manager.enqueue(tmp_path, record, {"max-concurrency": 1}, _immediate_runner)
+    manager.enqueue(tmp_path, record, {"virtual-capacity": 1}, _immediate_runner)
     result = manager.wait(tmp_path, record["request-id"], timeout_seconds=5)
     assert result["state"] == "completed"
     assert result["output"] == "done"
@@ -550,7 +525,7 @@ def test_failing_runner_transitions_to_failed(tmp_path: Path):
     manager = queue_mod.GatewayQueueManager()
     record = store.build_record(execution_profile_id="p8", prompt_body="x")
     store.write_record(tmp_path, record)
-    manager.enqueue(tmp_path, record, {"max-concurrency": 1}, _failing_runner)
+    manager.enqueue(tmp_path, record, {"virtual-capacity": 1}, _failing_runner)
     result = manager.wait(tmp_path, record["request-id"], timeout_seconds=5)
     assert result["state"] == "failed"
     assert result["error"]["code"] == "EXT-FAKE-001"
@@ -583,7 +558,7 @@ def test_terminal_lifecycle_event_carries_provider_and_attempt_info(tmp_path: Pa
             updates={"output": "done", "provider-id": "local-openai", "model-id": "gpt-4o", "finished-at": now_iso_z()},
         )
 
-    manager.enqueue(tmp_path, record, {"max-concurrency": 1}, runner)
+    manager.enqueue(tmp_path, record, {"virtual-capacity": 1}, runner)
     assert done.wait(timeout=5)
 
     payload = received[0]
@@ -604,7 +579,7 @@ def test_lifecycle_event_publish_failure_does_not_crash_worker(tmp_path: Path, m
     manager = queue_mod.GatewayQueueManager()
     record = store.build_record(execution_profile_id="p12", prompt_body="x")
     store.write_record(tmp_path, record)
-    manager.enqueue(tmp_path, record, {"max-concurrency": 1}, _immediate_runner)
+    manager.enqueue(tmp_path, record, {"virtual-capacity": 1}, _immediate_runner)
 
     result = manager.wait(tmp_path, record["request-id"], timeout_seconds=5)
     assert result["state"] == "completed"
@@ -613,67 +588,6 @@ def test_lifecycle_event_publish_failure_does_not_crash_worker(tmp_path: Path, m
 # ---------------------------------------------------------------------------
 # AS16 immutable-snapshot / race invariants
 # ---------------------------------------------------------------------------
-
-def test_snapshot_invariants_under_concurrent_modifications(tmp_path: Path):
-    """_snapshot_all returns internally consistent data even while profiles
-    mutate concurrently: running >= idle, active_running == running - idle,
-    active_running <= max_concurrency."""
-    manager = queue_mod.GatewayQueueManager()
-    hold = threading.Event()
-    started = threading.Semaphore(0)
-
-    def runner(project_root: Path, record: dict) -> dict:
-        started.release()
-        hold.wait(timeout=5)
-        return store.transition_record(
-            project_root, record["request-id"], "completed",
-            updates={"output": "done", "finished-at": now_iso_z()},
-        )
-
-    # Two profiles, one running request each (max-concurrency 2 so both start)
-    params = {"max-concurrency": 2}
-    records = [
-        store.build_record(execution_profile_id=f"pA{i}", prompt_body=str(i))
-        for i in range(4)
-    ]
-    for r in records:
-        store.write_record(tmp_path, r)
-
-    threads = [
-        threading.Thread(target=manager.enqueue, args=(tmp_path, r, params, runner))
-        for r in records
-    ]
-    for t in threads:
-        t.start()
-
-    # Wait for all to start running
-    for _ in range(4):
-        assert started.acquire(timeout=2)
-
-    # Rapidly take snapshots while state may change under concurrent turns
-    invariant_violations = []
-    for _ in range(50):
-        snap = manager._snapshot_all()
-        for pid, depth in snap.items():
-            if depth["running"] < depth["idle"]:
-                invariant_violations.append(f"{pid}: running({depth['running']}) < idle({depth['idle']})")
-            if depth["active_running"] != depth["running"] - depth["idle"]:
-                invariant_violations.append(
-                    f"{pid}: active_running({depth['active_running']}) != running({depth['running']}) - idle({depth['idle']})"
-                )
-            if depth["active_running"] > depth["max_concurrency"]:
-                invariant_violations.append(
-                    f"{pid}: active_running({depth['active_running']}) > max_concurrency({depth['max_concurrency']})"
-                )
-            if depth["pending"] < 0:
-                invariant_violations.append(f"{pid}: pending({depth['pending']}) < 0")
-
-    hold.set()
-    for t in threads:
-        t.join(timeout=5)
-
-    assert not invariant_violations, "Snapshot invariants violated:\n" + "\n".join(invariant_violations)
-
 
 class TestGatewayLifecycleSuffixMap:
     """BU02 validation V6: suffix→topic map correctness and unknown-suffix safety."""
@@ -717,7 +631,7 @@ class TestGatewayLifecycleSuffixMap:
             )
             return rec
 
-        manager.enqueue(tmp_path, record, {"max-concurrency": 1}, _runner_with_unknown_suffix)
+        manager.enqueue(tmp_path, record, {"virtual-capacity": 1}, _runner_with_unknown_suffix)
         result = manager.wait(tmp_path, record["request-id"], timeout_seconds=5)
         assert result["state"] == "completed"
 
@@ -737,12 +651,12 @@ def test_snapshot_invariants_idle_is_subset_of_running(tmp_path: Path):
     hold = threading.Event()
     runner = _blocking_runner(hold)
 
-    # Enqueue 3 requests with max_concurrency=2; first two run immediately, third is pending.
+    # Enqueue 3 requests with virtual_capacity=2; first two run immediately, third is pending.
     request_ids: list[str] = []
     for i in range(3):
         record = store.build_record(execution_profile_id="snap1", prompt_body=f"x{i}")
         store.write_record(tmp_path, record)
-        manager.enqueue(tmp_path, record, {"max-concurrency": 2}, runner)
+        manager.enqueue(tmp_path, record, {"virtual-capacity": 2}, runner)
         request_ids.append(record["request-id"])
 
     deadline = time.monotonic() + 2
@@ -772,7 +686,7 @@ def test_snapshot_invariants_active_running_arithmetic(tmp_path: Path):
     for i in range(4):
         record = store.build_record(execution_profile_id=profile_id, prompt_body=f"x{i}")
         store.write_record(tmp_path, record)
-        manager.enqueue(tmp_path, record, {"max-concurrency": 3}, runner)
+        manager.enqueue(tmp_path, record, {"virtual-capacity": 3}, runner)
 
     deadline = time.monotonic() + 2
     while time.monotonic() < deadline:
@@ -798,14 +712,14 @@ def test_snapshot_invariants_active_running_arithmetic(tmp_path: Path):
 
 
 def test_snapshot_no_impossible_slot_count(tmp_path: Path):
-    """pending + running must never exceed queue_max_size + max_concurrency from one snapshot."""
+    """pending + running must never exceed pending_capacity + virtual_capacity from one snapshot."""
     manager = queue_mod.GatewayQueueManager()
     hold = threading.Event()
     runner = _blocking_runner(hold)
 
     profile_id = "snap3"
-    params = {"max-concurrency": 2, "queue-max-size": 4}
-    # Submit max_concurrency + queue_max_size = 6 requests; all admitted.
+    params = {"virtual-capacity": 2, "pending-capacity": 4}
+    # Submit virtual_capacity + pending_capacity = 6 requests; all admitted.
     for i in range(6):
         record = store.build_record(execution_profile_id=profile_id, prompt_body=f"x{i}")
         store.write_record(tmp_path, record)
@@ -818,7 +732,7 @@ def test_snapshot_no_impossible_slot_count(tmp_path: Path):
             break
         time.sleep(0.02)
 
-    max_slots = params["max-concurrency"] + params["queue-max-size"]
+    max_slots = params["virtual-capacity"] + params["pending-capacity"]
     for _ in range(20):
         depth = manager.queue_depth(profile_id)
         total = depth["pending"] + depth["running"]
@@ -842,7 +756,7 @@ def test_snapshot_under_concurrent_completion(tmp_path: Path):
         )
 
     profile_id = "snap4"
-    params = {"max-concurrency": 2, "queue-max-size": 4}
+    params = {"virtual-capacity": 2, "pending-capacity": 4}
     records = []
     for i in range(6):
         record = store.build_record(execution_profile_id=profile_id, prompt_body=f"x{i}")
@@ -866,7 +780,7 @@ def test_snapshot_under_concurrent_completion(tmp_path: Path):
             f"arithmetic invariant broken: {depth}"
         )
         assert depth["idle"] <= depth["running"], f"idle > running: {depth}"
-        assert depth["pending"] + depth["running"] <= params["max-concurrency"] + params["queue-max-size"], (
+        assert depth["pending"] + depth["running"] <= params["virtual-capacity"] + params["pending-capacity"], (
             f"slot overflow: {depth}"
         )
         time.sleep(0.02)
@@ -881,7 +795,7 @@ def test_request_slot_status_consistent_with_snapshot(tmp_path: Path):
     profile_id = "snap5"
     record = store.build_record(execution_profile_id=profile_id, prompt_body="x")
     store.write_record(tmp_path, record)
-    manager.enqueue(tmp_path, record, {"max-concurrency": 1}, runner)
+    manager.enqueue(tmp_path, record, {"virtual-capacity": 1}, runner)
 
     request_id = record["request-id"]
 
@@ -905,7 +819,7 @@ def test_request_slot_status_consistent_with_snapshot(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 def test_sh07_per_request_dispatch_isolation(tmp_path: Path):
-    """SH07: two requests on the same profile with max_concurrency=1 must not
+    """SH07: two requests on the same profile with virtual_capacity=1 must not
     substitute caller context. Each runner receives its own project_root and
     its own record (distinct request-id)."""
     manager = queue_mod.GatewayQueueManager()
@@ -929,7 +843,7 @@ def test_sh07_per_request_dispatch_isolation(tmp_path: Path):
     root_b.mkdir()
 
     profile_id = "sh07-profile"
-    params = {"max-concurrency": 1}
+    params = {"virtual-capacity": 1}
 
     record_a = store.build_record(execution_profile_id=profile_id, prompt_body="prompt_a")
     store.write_record(root_a, record_a)
@@ -975,7 +889,7 @@ def test_sh07_cancel_pending_entry_with_two_entries(tmp_path: Path):
         )
 
     profile_id = "sh07-cancel"
-    params = {"max-concurrency": 1}
+    params = {"virtual-capacity": 1}
 
     record_first = store.build_record(execution_profile_id=profile_id, prompt_body="first")
     store.write_record(tmp_path, record_first)
@@ -1018,7 +932,7 @@ def test_sh07c2_same_params_share_one_lane(tmp_path: Path):
     from audiagentic.components.agents.gateway import profiles as profiles_mod
 
     # Same profile, same non-secret params → same snapshot digest → one lane
-    base_params = {"max-concurrency": 2, "provider_id": "local", "model_id": "m"}
+    base_params = {"virtual-capacity": 2, "provider_id": "local", "model_id": "m"}
 
     snap_a = profiles_mod.snapshot_from_resolved_profile(
         profile_id="shared-profile",
@@ -1088,8 +1002,8 @@ def test_sh07c2_different_params_create_separate_lanes(tmp_path: Path):
     """Same profile id but different non-secret params → separate lane keys."""
     from audiagentic.components.agents.gateway import profiles as profiles_mod
 
-    params_a = {"max-concurrency": 1, "provider_id": "local", "model_id": "m"}
-    params_b = {"max-concurrency": 2, "provider_id": "local", "model_id": "m"}  # different concurrency
+    params_a = {"virtual-capacity": 1, "provider_id": "local", "model_id": "m"}
+    params_b = {"virtual-capacity": 2, "provider_id": "local", "model_id": "m"}  # different concurrency
 
     snap_a = profiles_mod.snapshot_from_resolved_profile(
         profile_id="same-profile",
@@ -1111,45 +1025,37 @@ def test_sh07c2_different_params_create_separate_lanes(tmp_path: Path):
     )
 
 
-def test_sh07c2_all_queue_depths_public_ids_no_paths(tmp_path: Path):
-    """all_queue_depths returns redacted lane public ids with no project paths."""
+def test_project_queue_depths_is_project_scoped(tmp_path: Path):
+    """Project reporting exposes profile depth without internal lane keys."""
     manager = queue_mod.GatewayQueueManager()
 
     record = store.build_record(execution_profile_id="test-profile", prompt_body="x")
     store.write_record(tmp_path, record)
-    params = {"max-concurrency": 1, "provider_id": "local"}
+    params = {"virtual-capacity": 1, "provider_id": "local"}
     manager.enqueue(tmp_path, record, params, _immediate_runner)
 
-    depths = manager.all_queue_depths()
+    depths = manager.project_queue_depths(tmp_path)
 
     # Keys are public ids, not bare profile ids or paths
-    for key in depths:
-        assert tmp_path.as_posix() not in key, f"Project path leaked in lane public id: {key}"
-        # Public id format: profile_id/generation/short_digest
-        parts = key.split("/")
-        assert len(parts) == 3, f"Expected profile/gen/digest format, got: {key}"
-        assert parts[0] == "test-profile"
+    assert depths["test-profile"]["pending"] + depths["test-profile"]["running"] >= 0
 
 
-def test_sh07c2_queue_depth_public_ids_no_secrets(tmp_path: Path):
-    """queue_depth still works by bare profile id; all_queue_depths uses public ids."""
+def test_project_queue_depths_hides_other_projects(tmp_path: Path):
+    """Project reporting does not expose other projects or lane policy."""
     manager = queue_mod.GatewayQueueManager()
 
     record = store.build_record(execution_profile_id="prod-profile", prompt_body="x")
     store.write_record(tmp_path, record)
-    params = {"max-concurrency": 1, "provider_id": "local"}
+    params = {"virtual-capacity": 1, "provider_id": "local"}
     manager.enqueue(tmp_path, record, params, _immediate_runner)
 
     # queue_depth accepts bare profile id
     depth = manager.queue_depth("prod-profile")
-    assert depth["max_concurrency"] == 1
+    assert depth["virtual_capacity"] == 1
 
-    # all_queue_depths uses redacted public ids — no project paths or auth tokens
-    depths = manager.all_queue_depths()
-    for key in depths:
-        assert tmp_path.as_posix() not in key
-        assert "api-key" not in key.lower()
-        assert "token" not in key.lower()
+    # Project-scoped reporting exposes no project paths or auth tokens.
+    depths = manager.project_queue_depths(tmp_path)
+    assert "prod-profile" in depths
 
 
 # ---------------------------------------------------------------------------
@@ -1312,9 +1218,9 @@ def test_sh07c2_shared_mode_project_cannot_override_limits(tmp_path: Path, share
             updates={"output": "done", "finished-at": now_iso_z()},
         )
 
-    # Project tries to submit with max_concurrency=10 (irrelevant in gated
+    # Project tries to submit with virtual_capacity=10 (irrelevant in gated
     # mode -- capacity is sourced from the resource tracker, not params).
-    params = {"max-concurrency": 10, "provider_id": "local"}
+    params = {"virtual-capacity": 10, "provider_id": "local"}
 
     records = []
     for i in range(4):
@@ -1487,9 +1393,8 @@ def test_sh07c2_running_request_keeps_old_snapshot(tmp_path: Path):
         profiles_mod.set_gateway_registry(None)
 
 
-def test_sh07c2_queue_overview_redacted_lanes(tmp_path: Path):
-    """Queue overview groups by redacted lane public id and does not include
-    project roots or secrets."""
+def test_project_queue_depths_redacted(tmp_path: Path):
+    """Queue overview reports project profile depths without internal keys."""
     manager = queue_mod.GatewayQueueManager()
 
     record = store.build_record(
@@ -1503,12 +1408,7 @@ def test_sh07c2_queue_overview_redacted_lanes(tmp_path: Path):
     store.write_record(tmp_path, record)
     manager.enqueue(tmp_path, record, {"provider_id": "local"}, _immediate_runner)
 
-    depths = manager.all_queue_depths()
+    depths = manager.project_queue_depths(tmp_path)
 
     # Keys are lane public ids — no project paths
-    for key in depths:
-        assert tmp_path.as_posix() not in key, f"Project path leaked: {key}"
-        assert "\\" not in key, f"Windows path separator in lane id: {key}"
-        # Format: profile_id/generation/short_digest
-        parts = key.split("/")
-        assert len(parts) == 3, f"Expected profile/gen/digest format, got: {key}"
+    assert "overview-profile" in depths

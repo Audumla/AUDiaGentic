@@ -280,6 +280,22 @@ def _renew_activity(
         logger.debug("ignored stale worker activity", exc_info=True)
 
 
+def diagnose_activity_lease(project_root: Path, record: dict[str, Any]) -> dict[str, Any]:
+    """Run the non-terminal lease-expiry diagnostic for a running attempt."""
+    owner_epoch = record.get("dispatch-owner-epoch")
+    worker_id = record.get("worker-id")
+    attempt_epoch = record.get("attempt-epoch")
+    if not isinstance(owner_epoch, str) or not isinstance(worker_id, str) or not isinstance(attempt_epoch, int):
+        return record
+    return store.mark_watchdog_intervention_if_expired(
+        project_root,
+        record["request-id"],
+        owner_epoch=owner_epoch,
+        worker_id=worker_id,
+        attempt_epoch=attempt_epoch,
+    )
+
+
 def _try_profile_with_retries(
     project_root: Path,
     record: dict[str, Any],

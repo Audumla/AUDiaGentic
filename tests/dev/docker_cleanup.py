@@ -9,7 +9,6 @@ SAFE_IMAGE_PATTERNS = (
     "audia-test-base",
     "audiagentic-test",
     "audia-packaging",
-    "audia-provider-cli-test",
     "audia-provider-cli-comprehensive",
     "audiagentic-provider-lifecycle-e2e",
     "audia-provider-lsp-e2e",

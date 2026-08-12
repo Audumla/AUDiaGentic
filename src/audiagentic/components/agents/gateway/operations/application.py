@@ -48,6 +48,9 @@ class GatewayOperationsApplication:
     def get_operation(self, operation_id: str) -> dict[str, Any]:
         return _project_public(self._store.read(operation_id))
 
+    def list_operations(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        return [_project_public(item) for item in self._store.list_records(limit=limit)]
+
     def has_active_operations(self) -> bool:
         """Expose the one lifecycle fact needed by the service admission gate."""
         return self._store.active_count() > 0

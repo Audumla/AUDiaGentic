@@ -7,6 +7,7 @@ import os
 import secrets
 import threading
 from pathlib import Path
+from typing import Any
 
 from audiagentic.components.agents.gateway.application import (
     GatewayApplication,
@@ -250,6 +251,7 @@ class GatewayServiceHost:
         def _poll() -> None:
             while not self._operations_stop.wait(interval_seconds):
                 pump.run_once(owner_epoch=self.owner_epoch)
+                self.run_watchdog_pass()
 
         # Startup scan makes notifier loss and host restart harmless.
         pump.run_once(owner_epoch=self.owner_epoch)
@@ -257,6 +259,13 @@ class GatewayServiceHost:
             target=_poll, name="gateway-operations-poller", daemon=True
         )
         self._operations_thread.start()
+
+    def run_watchdog_pass(self) -> tuple[dict[str, Any], ...]:
+        """Diagnose only currently registered, project-scoped running work."""
+        from audiagentic.components.agents.gateway.queue.dispatch import diagnose_activity_lease
+        from audiagentic.components.agents.gateway.queue.watchdog_registry import watchdog_registry
+
+        return watchdog_registry().diagnose(diagnose_activity_lease)
 
     def close(self) -> None:
         if self._closed:

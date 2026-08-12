@@ -50,6 +50,7 @@ mcp-servers:
       - agent_gateway_set_config
       - agent_gateway_create_operation
       - agent_gateway_get_operation
+      - agent_gateway_list_operations
       - agent_gateway_get_retention_policy
     description: Execution profile, role, agent definition, and gateway-management (SH11) — CRUD for provider+model bindings, behavioral role definitions, their composition into logical agents, and declarative selection of the gateway management implementation (embedded/standalone/automatic)
     propagate: audiagentic
@@ -186,6 +187,10 @@ mcp-servers:
         description: "Return the redacted durable state/result of gateway operator work."
         parameters:
           operation_id: "Gateway operator operation identifier"
+      agent_gateway_list_operations:
+        description: "Read-only bounded list of redacted gateway operations for maintenance inspection."
+        parameters:
+          limit: "Maximum number of records to return (1-1000)"
       agent_gateway_get_retention_policy:
         description: "Return the redacted machine-owned archive retention policy; no policy path or project data is exposed."
         parameters: {}
