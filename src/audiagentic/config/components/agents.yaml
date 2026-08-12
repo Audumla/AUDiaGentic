@@ -273,7 +273,9 @@ mcp-servers:
         process.
       agent_task_gateway_overview: >
         Operator summary: persisted request counts by state, the 5 most recent
-        failures (redacted error only), and in-process per-profile queue depths.
+        failures (redacted error only), and project-scoped provider capacity
+        plus active work. Long-running requests remain non-terminal while
+        providers work; watchdog diagnostics are observations, not completion.
       agent_task_session_list: >
         List persisted gateway sessions, newest first. Each entry carries a
         "live" flag: true when this process holds the session's agent process
@@ -294,9 +296,12 @@ mcp-servers:
           payload: "Closed action-specific payload; no provider-native fields"
       agent_task_session_resume:
         description: >
-          Resume a validated provider conversation from a terminal source
-          session. The control id makes retries idempotent; a successor
-          session is created and the source binding remains immutable.
+          Resume a validated provider conversation by durable chat/session id,
+          even when the original tab or process is gone. The control id makes
+          retries idempotent; a successor session is created and the source
+          binding remains immutable. Provider identity is resolved from the
+          configured agent execution profile, never from provider-specific
+          gateway branches.
         parameters:
           source_session_id: "Terminal source session with a validated provider binding"
           control_id: "Caller idempotency identifier for the resume request"

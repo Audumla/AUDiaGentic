@@ -1174,3 +1174,20 @@ def test_owned_terminal_persists_watchdog_classification(tmp_path: Path) -> None
         updates={"error": {"code": "TO-AGW-076", "details": {"watchdog-classification": "verified-stall"}}},
     )
     assert terminal["terminal-classification"] == "verified-stall"
+
+
+def test_owned_terminal_persists_absolute_safety_ceiling_classification(tmp_path: Path) -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0)
+    running = store.start_owned_attempt(tmp_path, record["request-id"], owner_epoch="service-a", worker_id="worker-a", expected_revision=claimed["revision"])
+    terminal = store.transition_owned_terminal(
+        tmp_path,
+        record["request-id"],
+        "failed",
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        attempt_epoch=running["attempt-epoch"],
+        updates={"error": {"code": "TO-AGW-077", "details": {"watchdog-classification": "absolute-safety-ceiling"}}},
+    )
+    assert terminal["terminal-classification"] == "absolute-safety-ceiling"

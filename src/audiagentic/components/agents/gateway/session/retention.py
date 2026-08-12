@@ -16,7 +16,12 @@ from .sessions_store import list_session_records
 
 @dataclass(frozen=True)
 class RequestRetentionPin:
-    """A redacted answer to whether deleting an execution record is unsafe."""
+    """A redacted answer to whether deleting an execution record is unsafe.
+
+    ``pinned`` is released only by an explicit durable cleanup of the
+    referenced session lineage or runtime root.  Age, timeout, missing page,
+    and missing process/handle state are never release evidence.
+    """
 
     pinned: bool
     reason: str | None = None

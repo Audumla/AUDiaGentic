@@ -118,7 +118,11 @@ def docker_daemon_available() -> bool:
 def host_phase(extra: list[str]) -> int:
     """Run all non-Docker-daemon tests in parallel as one safe command."""
     banner("HOST suite (parallel, capped xdist --dist loadgroup)")
-    workers = os.environ.get("AUDIAGENTIC_XDIST_WORKERS", "8")
+    # Four workers is the safe Windows default for this suite: the e2e CLI
+    # tests launch many subprocesses and eight workers can cause an xdist
+    # worker to be terminated by the OS near collection completion.  CI and
+    # faster machines can still opt into a different cap explicitly.
+    workers = os.environ.get("AUDIAGENTIC_XDIST_WORKERS", "4")
     cmd = [
         sys.executable, "-m", "pytest",
         "-n", workers, "--dist", "loadgroup",
