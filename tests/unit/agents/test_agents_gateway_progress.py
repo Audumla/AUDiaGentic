@@ -87,6 +87,118 @@ def test_stale_progress_when_no_evidence_past_threshold(tmp_path: Path) -> None:
     assert projection["stale-reason"] == "no-turn-evidence-past-threshold"
 
 
+def test_stale_threshold_is_provider_neutral_across_execution_profiles() -> None:
+    now = datetime.datetime(2026, 1, 1, 0, 10, 10, tzinfo=datetime.timezone.utc)
+    for profile_id in ("fake", "acp", "mcp-a2a"):
+        record = store.build_record(execution_profile_id=profile_id, prompt_body="hello")
+        record["state"] = "running"
+        record["started-at"] = "2026-01-01T00:00:00Z"
+        projection = progress_mod.project_request_progress(record, now=now)
+        assert projection["stale-progress"] is True
+        assert projection["stale-reason"] == "no-turn-evidence-past-threshold"
+
+
+def test_stale_threshold_isolated_between_projects() -> None:
+    now = datetime.datetime(2026, 1, 1, 0, 10, 10, tzinfo=datetime.timezone.utc)
+    old_record = store.build_record(execution_profile_id="default", prompt_body="old")
+    old_record["state"] = "running"
+    old_record["started-at"] = "2026-01-01T00:00:00Z"
+    fresh_record = store.build_record(execution_profile_id="default", prompt_body="fresh")
+    fresh_record["state"] = "running"
+    fresh_record["started-at"] = "2026-01-01T00:09:30Z"
+
+    old_projection = progress_mod.project_request_progress(old_record, now=now)
+    fresh_projection = progress_mod.project_request_progress(fresh_record, now=now)
+
+    assert old_projection["stale-progress"] is True
+    assert fresh_projection["stale-progress"] is False
+
+
+def test_provider_neutral_cancellation_clears_stale_progress() -> None:
+    now = datetime.datetime(2026, 1, 1, 0, 10, 10, tzinfo=datetime.timezone.utc)
+    for profile_id in ("fake", "acp", "mcp-a2a"):
+        record = store.build_record(execution_profile_id=profile_id, prompt_body="cancel")
+        record["state"] = "cancelled"
+        record["started-at"] = "2026-01-01T00:00:00Z"
+        record["finished-at"] = "2026-01-01T00:00:05Z"
+        projection = progress_mod.project_request_progress(record, now=now)
+        assert projection["phase"] == "cancelled"
+        assert projection["stale-progress"] is False
+
+
+def test_cancelled_progress_survives_restart_round_trip() -> None:
+    record = store.build_record(execution_profile_id="acp", prompt_body="cancel")
+    record["state"] = "cancelled"
+    record["started-at"] = "2026-01-01T00:00:00Z"
+    record["finished-at"] = "2026-01-01T00:00:05Z"
+    reloaded = json.loads(json.dumps(record))
+    projection = progress_mod.project_request_progress(
+        reloaded,
+        now=datetime.datetime(2026, 1, 1, 1, 0, 0, tzinfo=datetime.timezone.utc),
+    )
+    assert projection["phase"] == "cancelled"
+    assert projection["stale-progress"] is False
+
+
+def test_completed_and_failed_progress_survive_restart_across_profiles() -> None:
+    now = datetime.datetime(2026, 1, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)
+    for profile_id in ("fake", "acp", "mcp-a2a"):
+        for terminal_state in ("completed", "failed"):
+            record = store.build_record(execution_profile_id=profile_id, prompt_body="terminal")
+            record["state"] = terminal_state
+            record["started-at"] = "2026-01-01T00:00:00Z"
+            record["finished-at"] = "2026-01-01T00:00:05Z"
+            reloaded = json.loads(json.dumps(record))
+            projection = progress_mod.project_request_progress(reloaded, now=now)
+            assert projection["phase"] == terminal_state
+            assert projection["stale-progress"] is False
+
+
+def test_deterministic_multi_project_soak_has_no_cross_record_state() -> None:
+    now = datetime.datetime(2026, 1, 1, 0, 10, 0, tzinfo=datetime.timezone.utc)
+    projections: list[dict[str, object]] = []
+    profiles = ("fake", "acp", "mcp-a2a")
+    for index in range(20):
+        record = store.build_record(execution_profile_id=profiles[index % len(profiles)], prompt_body="soak")
+        record["state"] = "cancelled" if index % 5 == 0 else "running"
+        record["started-at"] = "2026-01-01T00:00:00Z"
+        if record["state"] == "cancelled":
+            record["finished-at"] = "2026-01-01T00:00:05Z"
+            record = json.loads(json.dumps(record))
+        projections.append(progress_mod.project_request_progress(record, now=now))
+    assert sum(bool(item["stale-progress"]) for item in projections) == 16
+
+
+def test_source_loss_then_progress_event_recovers_without_terminalizing() -> None:
+    record = store.build_record(execution_profile_id="mcp-a2a", prompt_body="recover")
+    record["state"] = "running"
+    record["started-at"] = "2026-01-01T00:00:00Z"
+    now = datetime.datetime(2026, 1, 1, 0, 10, 0, tzinfo=datetime.timezone.utc)
+    stale = progress_mod.project_request_progress(record, now=now)
+    assert stale["stale-progress"] is True
+    recovered = progress_mod.project_request_progress(
+        record,
+        latest_session_event={"kind": "assistant-message", "timestamp": "2026-01-01T00:09:55Z"},
+        now=now,
+    )
+    assert recovered["phase"] == "model-active"
+    assert recovered["stale-progress"] is False
+
+
+def test_source_loss_then_explicit_failure_is_terminal_not_stale() -> None:
+    record = store.build_record(execution_profile_id="acp", prompt_body="fail")
+    record["state"] = "running"
+    record["started-at"] = "2026-01-01T00:00:00Z"
+    now = datetime.datetime(2026, 1, 1, 0, 10, 0, tzinfo=datetime.timezone.utc)
+    stale = progress_mod.project_request_progress(record, now=now)
+    assert stale["stale-progress"] is True
+    record["state"] = "failed"
+    record["finished-at"] = "2026-01-01T00:10:01Z"
+    terminal = progress_mod.project_request_progress(record, now=now)
+    assert terminal["phase"] == "failed"
+    assert terminal["stale-progress"] is False
+
+
 def test_stale_progress_with_session_event_past_threshold(tmp_path: Path) -> None:
     record = store.build_record(execution_profile_id="default", prompt_body="hello")
     record["state"] = "running"

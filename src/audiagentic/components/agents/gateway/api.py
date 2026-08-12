@@ -1,7 +1,7 @@
 """Agent Execution Gateway public API — async submit, blocking run, status, wait, cancel.
 
 Thin orchestration over agents_gateway_store (persistence), agents_gateway_queue
-(per-profile concurrency), and agents_gateway_dispatch (provider dispatch/retry/
+(provider-neutral capacity scheduling), and agents_gateway_dispatch (provider dispatch/retry/
 fallback). One GatewayQueueManager instance per process (module-level) — see
 its docstring for the process-lifetime caveat.
 
@@ -675,8 +675,8 @@ def run_execution_request(
 def gateway_capacity_status() -> dict[str, Any]:
     """Return provider-neutral source-capacity diagnostics.
 
-    Unlike the deprecated gateway_status compatibility projection, this does
-    not expose profile lane identifiers or queue-limit policy.
+    This exposes provider-neutral capacity facts and does not expose internal
+    scheduler identities or queue-policy implementation details.
     """
     return get_queue_manager().source_capacity_status()
 
@@ -691,7 +691,7 @@ def list_execution_requests(
 
     Reads from disk (agents_gateway_store.list_records), so this reflects
     requests from any process — including ones orphaned by a restart, unlike
-    the in-memory-only queue_status/gateway_status (RV33 finding).
+    unlike the removed in-memory-only status projections.
     """
     records = store.list_records(project_root)
     if state is not None:

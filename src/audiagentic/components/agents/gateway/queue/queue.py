@@ -410,6 +410,16 @@ class GatewayQueueManager:
             _publish_lifecycle_event("rejected", rejected)
             return rejected
 
+        # Records persist the gateway snapshot identity (generation and
+        # digest), not its execution parameters.  Recover the current,
+        # validated gateway snapshot before sizing the runtime lane; using
+        # snapshot_from_record()'s intentionally parameter-free shape would
+        # silently fall back to capacity=1 and would also break queue-depth
+        # accounting for non-default limits.
+        shared_registry = profiles_mod.get_gateway_registry()
+        if shared_registry is not None and profiles_mod.snapshot_from_record(record) is not None:
+            snapshot = shared_registry.resolve_snapshot(snapshot.profile_id)
+
         owner_epoch = dispatch_owner_epoch or f"local-{uuid.uuid4().hex}"
         pq = self._runtime_state(snapshot)
 
@@ -438,7 +448,11 @@ class GatewayQueueManager:
         pending_count = 0
         with pq.lock:
             queue_full = self._pending_authority.count(
-                lambda request: request.value.snapshot == snapshot
+                lambda request: (
+                    request.value.snapshot.profile_id == snapshot.profile_id
+                    and request.value.snapshot.generation == snapshot.generation
+                    and request.value.snapshot.config_digest == snapshot.config_digest
+                )
             ) >= pq.pending_capacity
             if not queue_full:
                 self._pending_authority.enqueue(
@@ -447,7 +461,11 @@ class GatewayQueueManager:
                     value=entry,
                 )
                 pending_count = self._pending_authority.count(
-                    lambda request: request.value.snapshot == snapshot
+                    lambda request: (
+                        request.value.snapshot.profile_id == snapshot.profile_id
+                        and request.value.snapshot.generation == snapshot.generation
+                        and request.value.snapshot.config_digest == snapshot.config_digest
+                    )
                 )
 
         if queue_full:

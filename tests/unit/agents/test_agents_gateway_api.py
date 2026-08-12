@@ -400,7 +400,19 @@ def test_gateway_overview_reflects_persisted_state_across_restart(tmp_path: Path
     assert overview["total_requests"] == 1
     assert overview["by_state"] == {"failed": 1}
     assert len(overview["recent_failures"]) == 1
-    assert overview["queues"] == {}  # in-memory state is gone after "restart"
+    assert overview["queues"] == {}
+
+
+def test_gateway_overview_history_comparison_survives_new_application(tmp_path: Path, monkeypatch):
+    record = store.build_record(execution_profile_id="review", prompt_body="history")
+    store.write_record(tmp_path, record)
+    store.transition_record(tmp_path, record["request-id"], "running")
+    store.transition_record(tmp_path, record["request-id"], "completed", updates={"output": "ok"})
+    first = gateway.gateway_overview(tmp_path)
+    monkeypatch.setattr(gateway, "get_queue_manager", lambda: agents_gateway_queue.GatewayQueueManager())
+    second = gateway.gateway_overview(tmp_path)
+    assert second["by_state"] == first["by_state"] == {"completed": 1}
+    assert second["total_requests"] == first["total_requests"] == 1
 
 
 def test_gateway_overview_diagnostics_reports_provider_load_errors(tmp_path: Path, monkeypatch):

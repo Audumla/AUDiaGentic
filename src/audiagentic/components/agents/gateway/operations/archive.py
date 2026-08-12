@@ -115,6 +115,12 @@ class GatewayPurgeExecutor:
         changed = 0
         blocked = 0
         for request_id in _ids(operation):
+            request_dir = gateway_request_dir(root, request_id)
+            archive_dir = gateway_root(root) / "archive" / request_id
+            # Purge is retry-safe: once both the live request and archived
+            # copy are gone, a replay is an idempotent no-op.
+            if not request_dir.exists() and not archive_dir.exists():
+                continue
             record = self._requests.get_execution_request(root, request_id)
             if record.get("state") not in TERMINAL_STATES:
                 blocked += 1
@@ -122,7 +128,6 @@ class GatewayPurgeExecutor:
             if request_retention_pin(root, request_id).pinned:
                 blocked += 1
                 continue
-            archive_dir = gateway_root(root) / "archive" / request_id
             manifest = archive_dir / "archive-manifest.json"
             if not manifest.is_file():
                 blocked += 1
@@ -169,10 +174,15 @@ class GatewayPurgeExecutor:
                 ):
                     blocked += 1
                     continue
-                request_dir = gateway_request_dir(root, request_id)
+                removed = False
                 if request_dir.exists():
                     shutil.rmtree(request_dir)
-                changed += 1
+                    removed = True
+                if archive_dir.exists():
+                    shutil.rmtree(archive_dir)
+                    removed = True
+                if removed:
+                    changed += 1
         return {"changed": changed, "blocked": blocked}
 
 
