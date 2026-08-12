@@ -41,7 +41,7 @@ def test_placeholder_role_exists() -> None:
 def test_rig_tester_agent_definition_exists_and_cross_references_match() -> None:
     definition = get_agent_definition(REPO_ROOT, "rig-tester-agent")
     assert definition["execution_profile_id"] == "rig-tester"
-    assert definition["role_id"] == "placeholder"
+    assert definition["role_ids"] == ["placeholder"]
 
 
 def test_rig_tester_agent_resolves_end_to_end() -> None:
@@ -52,4 +52,4 @@ def test_rig_tester_agent_resolves_end_to_end() -> None:
     assert resolved["agent_id"] == "rig-tester-agent"
     assert resolved["execution_profile"]["provider_id"] == "local-openai"
     assert resolved["execution_profile"]["instances"] == ["ag-rig"]
-    assert resolved["role"]["role_id"] == "placeholder"
+    assert resolved["roles"][0]["role_id"] == "placeholder"

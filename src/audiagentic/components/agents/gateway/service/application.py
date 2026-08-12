@@ -37,6 +37,16 @@ CAPABILITIES = (
     "service-lifecycle.v1",
     "gateway-profiles.reload",  # SH13 step 3-4
     "gateway-operations.v1",  # SH24: typed operator-operation authority
+    "contexts.open",
+    "contexts.get",
+    "contexts.list",
+    "contexts.close",
+    "work.submit",
+    "work.get",
+    "work.list",
+    "work.message",
+    "work.cancel",
+    "work.output",
 )
 
 
@@ -241,6 +251,33 @@ class GatewayServiceApplication:
                 ),
                 model_id=_optional_string(arguments, "model_id"),
             )
+        if operation == "open_agent_context":
+            _reject_unknown(arguments, {"agent_id", "title"})
+            return self._application.open_agent_context(root, _required(arguments, "agent_id"), _optional_string(arguments, "title"))
+        if operation == "get_agent_context":
+            return self._application.get_agent_context(root, _required(arguments, "context_id"))
+        if operation == "list_agent_contexts":
+            return self._application.list_agent_contexts(root)
+        if operation == "close_agent_context":
+            return self._application.close_agent_context(root, _required(arguments, "context_id"))
+        if operation == "submit_agent_work":
+            message = arguments.get("message")
+            if not isinstance(message, dict):
+                raise service_validation_error(32, "work message must be an object")
+            return self._application.submit_agent_work(root, _required(arguments, "context_id"), message, work_id=arguments.get("work_id"))
+        if operation == "get_agent_work":
+            return self._application.get_agent_work(root, _required(arguments, "work_id"))
+        if operation == "list_agent_work":
+            return self._application.list_agent_work(root)
+        if operation == "add_agent_work_message":
+            message = arguments.get("message")
+            if not isinstance(message, dict):
+                raise service_validation_error(33, "work message must be an object")
+            return self._application.add_agent_work_message(root, _required(arguments, "work_id"), message)
+        if operation == "cancel_agent_work":
+            return self._application.cancel_agent_work(root, _required(arguments, "work_id"))
+        if operation == "read_agent_work_output":
+            return self._application.read_agent_work_output(root, _required(arguments, "work_id"))
         if operation == "create_gateway_operation":
             return self._create_gateway_operation(arguments)
         if operation == "get_gateway_operation":
@@ -438,7 +475,7 @@ def _canonical_root(value: str) -> Path:
 
 
 _WORK_PRODUCING_OPERATIONS = frozenset(
-    {"submit_execution_request", "run_execution_request", "resume_execution_session"}
+    {"submit_execution_request", "run_execution_request", "resume_execution_session", "submit_agent_work"}
 )
 
 

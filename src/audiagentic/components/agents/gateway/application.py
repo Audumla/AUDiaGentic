@@ -35,6 +35,16 @@ class GatewayApplication(Protocol):
     def resume_execution_session(
         self, project_root: Path, source_session_id: str, **kwargs: Any
     ) -> dict[str, Any]: ...
+    def open_agent_context(self, project_root: Path, agent_id: str, title: str | None = None) -> dict[str, Any]: ...
+    def get_agent_context(self, project_root: Path, context_id: str) -> dict[str, Any]: ...
+    def list_agent_contexts(self, project_root: Path) -> list[dict[str, Any]]: ...
+    def close_agent_context(self, project_root: Path, context_id: str) -> dict[str, Any]: ...
+    def submit_agent_work(self, project_root: Path, context_id: str, message: dict[str, Any], **kwargs: Any) -> dict[str, Any]: ...
+    def get_agent_work(self, project_root: Path, work_id: str) -> dict[str, Any]: ...
+    def list_agent_work(self, project_root: Path) -> list[dict[str, Any]]: ...
+    def add_agent_work_message(self, project_root: Path, work_id: str, message: dict[str, Any]) -> dict[str, Any]: ...
+    def cancel_agent_work(self, project_root: Path, work_id: str) -> dict[str, Any]: ...
+    def read_agent_work_output(self, project_root: Path, work_id: str) -> dict[str, Any]: ...
 
 
 class InProcessGatewayApplication:
@@ -87,6 +97,48 @@ class InProcessGatewayApplication:
         self, project_root: Path, source_session_id: str, **kwargs: Any
     ) -> dict[str, Any]:
         return self._api().resume_execution_session(project_root, source_session_id, **kwargs)
+
+    def open_agent_context(self, project_root: Path, agent_id: str, title: str | None = None) -> dict[str, Any]:
+        from audiagentic.components.agents.context.service import open_context
+        return open_context(project_root, agent_id, title).to_mapping()
+
+    def get_agent_context(self, project_root: Path, context_id: str) -> dict[str, Any]:
+        from audiagentic.components.agents.context.service import get_context
+        return get_context(project_root, context_id).to_mapping()
+
+    def list_agent_contexts(self, project_root: Path) -> list[dict[str, Any]]:
+        from audiagentic.components.agents.context.service import list_contexts
+        return [record.to_mapping() for record in list_contexts(project_root)]
+
+    def close_agent_context(self, project_root: Path, context_id: str) -> dict[str, Any]:
+        from audiagentic.components.agents.context.service import close_context
+        return close_context(project_root, context_id).to_mapping()
+
+    def submit_agent_work(self, project_root: Path, context_id: str, message: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        from audiagentic.components.agents.work.contracts import WorkInputMessage
+        from audiagentic.components.agents.work.service import submit_work
+        return submit_work(project_root, context_id, WorkInputMessage(**message), **kwargs).to_mapping()
+
+    def get_agent_work(self, project_root: Path, work_id: str) -> dict[str, Any]:
+        from audiagentic.components.agents.work.service import get_work
+        return get_work(project_root, work_id).to_mapping()
+
+    def list_agent_work(self, project_root: Path) -> list[dict[str, Any]]:
+        from audiagentic.components.agents.work.service import list_work
+        return [record.to_mapping() for record in list_work(project_root)]
+
+    def add_agent_work_message(self, project_root: Path, work_id: str, message: dict[str, Any]) -> dict[str, Any]:
+        from audiagentic.components.agents.work.contracts import WorkInputMessage
+        from audiagentic.components.agents.work.service import add_work_message
+        return add_work_message(project_root, work_id, WorkInputMessage(**message)).to_mapping()
+
+    def cancel_agent_work(self, project_root: Path, work_id: str) -> dict[str, Any]:
+        from audiagentic.components.agents.work.service import cancel_work
+        return cancel_work(project_root, work_id).to_mapping()
+
+    def read_agent_work_output(self, project_root: Path, work_id: str) -> dict[str, Any]:
+        from audiagentic.components.agents.work.service import read_work_output
+        return read_work_output(project_root, work_id)
 
 
 _APPLICATION: GatewayApplication = InProcessGatewayApplication()

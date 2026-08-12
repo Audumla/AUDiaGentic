@@ -227,6 +227,8 @@ async def test_unproven_submission_fails_chat_instead_of_returning_empty_success
     assert turn.state is TurnState.TIMED_OUT
     assert chat.state is ChatState.FAILED
     assert chat.runtime.bridge.submit_calls == 1
+    assert chat.provider_session_id == "conversation-1"
+    assert chat.chat_url.endswith("/c/conversation-1")
 
 
 @pytest.mark.asyncio

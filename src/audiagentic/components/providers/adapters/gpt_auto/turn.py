@@ -21,6 +21,7 @@ from audiagentic.foundation.workflow import TransitionConfig, TransitionEngine
 
 from .chat import ChatState, PersistentChat
 from .snapshot import ChatSnapshot
+from .urls import parse_provider_session_id
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +128,12 @@ class GptAutoTurn:
         if proof is None:
             if self.state is TurnState.CANCELLED:
                 return self._result("cancelled")
+            # ChatGPT may have created/navigated to the conversation even when
+            # the exact prompt proof was not observable before the timeout.
+            # Preserve that durable provider URL so a failed keep-alive session
+            # can still be resumed later; this does not turn the ambiguous
+            # submission into a success.
+            await self._capture_provider_identity_after_ambiguous_submission()
             self._move(TurnState.TIMED_OUT)
             self.chat.state = ChatState.FAILED
             raise AudiaGenticError(
@@ -150,6 +157,21 @@ class GptAutoTurn:
         await self._emit(TransportObservationKind.TERMINAL, {"stop_reason": "end-turn"})
         result = self._result("end-turn")
         return SessionTurnResult(**{**result.__dict__, "final_summary": final})
+
+    async def _capture_provider_identity_after_ambiguous_submission(self) -> None:
+        """Persist a conversation URL observed after an ambiguous submit."""
+        if self.chat.provider_session_id is not None:
+            return
+        try:
+            current = await self.chat.snapshot()
+            if parse_provider_session_id(current.url):
+                await self.chat.acquire_provider_identity(current)
+        except Exception:  # noqa: BLE001 - preservation is best effort
+            logger.debug(
+                "could not preserve gpt-auto provider identity after ambiguous submission",
+                extra={"session-id": self.chat.ag_session_id},
+                exc_info=True,
+            )
 
     async def _submit_once(self) -> None:
         if self.submission_confirmed or self.state is not TurnState.SUBMITTING:

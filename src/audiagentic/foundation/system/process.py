@@ -185,7 +185,14 @@ class StartupLock:
                     self._fd = os.open(str(self._path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
                     os.write(self._fd, str(os.getpid()).encode())
                     return self
-                except FileExistsError:
+                except (FileExistsError, PermissionError):
+                    # On Windows, an existing lock file can surface as
+                    # PermissionError while another process owns an open
+                    # handle to it. Treat that case as contention; do not
+                    # unlink a file we have not established to be stale.
+                    if isinstance(sys.exc_info()[1], PermissionError):
+                        time.sleep(0.01)
+                        continue
                     try:
                         holder = int(self._path.read_text(encoding="utf-8"))
                         if pid_alive(holder):

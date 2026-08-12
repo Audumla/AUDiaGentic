@@ -42,6 +42,36 @@ class _FakeApplication:
     def cancel_execution_request(self, project_root, request_id):
         return self._record("cancel_execution_request", project_root, request_id=request_id)
 
+    def open_agent_context(self, project_root, agent_id, title=None):
+        return self._record("open_agent_context", project_root, agent_id, title)
+
+    def get_agent_context(self, project_root, context_id):
+        return self._record("get_agent_context", project_root, context_id)
+
+    def list_agent_contexts(self, project_root):
+        return self._record("list_agent_contexts", project_root)
+
+    def close_agent_context(self, project_root, context_id):
+        return self._record("close_agent_context", project_root, context_id)
+
+    def submit_agent_work(self, project_root, context_id, message, **kwargs):
+        return self._record("submit_agent_work", project_root, context_id, message, **kwargs)
+
+    def get_agent_work(self, project_root, work_id):
+        return self._record("get_agent_work", project_root, work_id)
+
+    def list_agent_work(self, project_root):
+        return self._record("list_agent_work", project_root)
+
+    def add_agent_work_message(self, project_root, work_id, message):
+        return self._record("add_agent_work_message", project_root, work_id, message)
+
+    def cancel_agent_work(self, project_root, work_id):
+        return self._record("cancel_agent_work", project_root, work_id)
+
+    def read_agent_work_output(self, project_root, work_id):
+        return self._record("read_agent_work_output", project_root, work_id)
+
 
 class _FakeHttpResponse:
     def __init__(self, payload: dict[str, Any]) -> None:
@@ -88,6 +118,8 @@ _CANONICAL_CANCEL_RESULT = {
     "state": "cancelled",
 }
 
+_CANONICAL_WORK_RESULT = {"work_id": "work_1", "state": "active"}
+
 
 @pytest.mark.parametrize(
     "operation, canonical_result, call_kwargs",
@@ -95,6 +127,9 @@ _CANONICAL_CANCEL_RESULT = {
         ("submit_execution_request", _CANONICAL_SUBMIT_RESULT, {"prompt_body": "hello"}),
         ("get_execution_request", _CANONICAL_STATUS_RESULT, {"request_id": "req_conformance123"}),
         ("cancel_execution_request", _CANONICAL_CANCEL_RESULT, {"request_id": "req_conformance123"}),
+        ("get_agent_work", _CANONICAL_WORK_RESULT, {"work_id": "work_1"}),
+        ("cancel_agent_work", {**_CANONICAL_WORK_RESULT, "state": "cancelled"}, {"work_id": "work_1"}),
+        ("read_agent_work_output", {"work_id": "work_1", "events": []}, {"work_id": "work_1"}),
     ],
 )
 def test_embedded_and_standalone_produce_the_same_canonical_result(

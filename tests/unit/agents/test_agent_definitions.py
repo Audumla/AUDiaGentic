@@ -42,7 +42,7 @@ def _make_definition(**kwargs) -> dict:
         "agent_id": "test-agent",
         "name": "Test Agent",
         "execution_profile_id": "fast",
-        "role_id": "reviewer",
+        "role_ids": ["reviewer"],
     }
     base.update(kwargs)
     return base
@@ -58,7 +58,7 @@ def test_validate_agent_definition_empty_dict_returns_four_issues():
     assert any("agent_id" in i for i in issues)
     assert any("name" in i for i in issues)
     assert any("execution_profile_id" in i for i in issues)
-    assert any("role_id" in i for i in issues)
+    assert any("role_ids" in i for i in issues)
 
 
 def test_validate_agent_definition_minimal_valid_returns_empty():
@@ -98,22 +98,22 @@ def test_agent_definition_from_dict_accepts_hyphen_keys():
         "agent_id": "x",
         "name": "X",
         "execution-profile-id": "p",
-        "role-id": "r",
+        "role-ids": ["r"],
         "advertised-skills": ["a"],
     }
     d = agent_definition_from_dict(data)
     assert d.execution_profile_id == "p"
-    assert d.role_id == "r"
+    assert d.role_ids == ("r",)
     assert d.advertised_skills == ["a"]
 
 
 def test_agent_definition_to_dict_includes_all_fields():
     d = AgentDefinition(
-        agent_id="x", name="X", execution_profile_id="p", role_id="r"
+        agent_id="x", name="X", execution_profile_id="p", role_ids=["r"]
     )
     result = agent_definition_to_dict(d)
     assert set(result.keys()) == {
-        "agent_id", "name", "execution_profile_id", "role_id",
+        "agent_id", "name", "execution_profile_id", "prompt_id", "role_ids",
         "description", "advertised_skills", "internal", "acp", "a2a",
     }
 
@@ -142,14 +142,17 @@ def test_store_add_duplicate_raises_res_agd_002():
 
 def test_create_get_update_delete_definition_round_trips(tmp_path: Path):
     (tmp_path / ".audiagentic").mkdir()
+    create_execution_profile(tmp_path, {"profile_id": "fast", "provider_id": "local-openai", "instances": ["gpt-4o-mini"]})
+    create_role(tmp_path, {"role_id": "reviewer", "instructions": "Review."})
     created = create_agent_definition(tmp_path, _make_definition())
     assert created["agent_id"] == "test-agent"
 
     fetched = get_agent_definition(tmp_path, "test-agent")
     assert fetched["execution_profile_id"] == "fast"
 
-    updated = update_agent_definition(tmp_path, "test-agent", {"role_id": "implementer"})
-    assert updated["role_id"] == "implementer"
+    create_role(tmp_path, {"role_id": "implementer", "instructions": "Implement."})
+    updated = update_agent_definition(tmp_path, "test-agent", {"role_ids": ["implementer"]})
+    assert updated["role_ids"] == ["implementer"]
     assert updated["agent_id"] == "test-agent"  # immutable
 
     deleted = delete_agent_definition(tmp_path, "test-agent")
@@ -172,7 +175,7 @@ def test_resolve_agent_definition_with_real_dependencies(tmp_path: Path):
     resolved = resolve_agent_definition(tmp_path, "test-agent")
     assert resolved["agent_id"] == "test-agent"
     assert resolved["execution_profile"]["profile_id"] == "fast"
-    assert resolved["role"]["role_id"] == "reviewer"
+    assert resolved["roles"][0]["role_id"] == "reviewer"
     assert resolved["publication"] == {"internal": True, "acp": False, "a2a": False}
 
 
@@ -188,16 +191,17 @@ def test_resolve_agent_definition_missing_role_raises_res_rol_001(tmp_path: Path
     create_execution_profile(
         tmp_path, {"profile_id": "fast", "provider_id": "local-openai", "instances": ["gpt-4o-mini"]}
     )
-    create_agent_definition(tmp_path, _make_definition(role_id="missing-role"))
     with pytest.raises(AudiaGenticError) as exc_info:
-        resolve_agent_definition(tmp_path, "test-agent")
-    assert exc_info.value.code == "RES-ROL-001"
+        create_agent_definition(tmp_path, _make_definition(role_ids=["missing-role"]))
+    assert exc_info.value.code == "IO-AGD-002"
 
 
 def test_resolve_agent_definition_launches_no_process_creates_no_task(tmp_path: Path):
     """Resolution is a pure lookup: neither fake dependency is ever called
     to `open`/`prompt` or otherwise start work -- only queried by ID."""
     (tmp_path / ".audiagentic").mkdir()
+    create_execution_profile(tmp_path, {"profile_id": "fast", "provider_id": "local-openai", "instances": ["gpt-4o-mini"]})
+    create_role(tmp_path, {"role_id": "reviewer", "instructions": "Review."})
 
     calls: list[str] = []
 
@@ -220,7 +224,7 @@ def test_resolve_agent_definition_launches_no_process_creates_no_task(tmp_path: 
     assert calls == ["profile:fast", "role:reviewer"]
     assert not any(c.startswith(("open", "prompt", "launch", "dispatch")) for c in calls)
     assert resolved["execution_profile"]["provider_id"] == "fake-provider"
-    assert resolved["role"]["instructions"] == "fake"
+    assert resolved["roles"][0]["instructions"] == "fake"
 
 
 # ---------------------------------------------------------------------------
@@ -237,11 +241,11 @@ def test_one_execution_profile_backs_two_agents_with_different_roles(tmp_path: P
 
     create_agent_definition(
         tmp_path,
-        _make_definition(agent_id="agent-a", execution_profile_id="shared", role_id="reviewer"),
+        _make_definition(agent_id="agent-a", execution_profile_id="shared", role_ids=["reviewer"]),
     )
     create_agent_definition(
         tmp_path,
-        _make_definition(agent_id="agent-b", execution_profile_id="shared", role_id="implementer"),
+        _make_definition(agent_id="agent-b", execution_profile_id="shared", role_ids=["implementer"]),
     )
 
     resolved_a = resolve_agent_definition(tmp_path, "agent-a")
@@ -249,8 +253,8 @@ def test_one_execution_profile_backs_two_agents_with_different_roles(tmp_path: P
 
     assert resolved_a["execution_profile"]["profile_id"] == "shared"
     assert resolved_b["execution_profile"]["profile_id"] == "shared"
-    assert resolved_a["role"]["role_id"] == "reviewer"
-    assert resolved_b["role"]["role_id"] == "implementer"
+    assert resolved_a["roles"][0]["role_id"] == "reviewer"
+    assert resolved_b["roles"][0]["role_id"] == "implementer"
 
 
 def test_agent_definition_re_pointed_to_compatible_profile_keeps_stable_id(tmp_path: Path):

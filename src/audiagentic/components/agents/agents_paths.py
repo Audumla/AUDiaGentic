@@ -7,6 +7,43 @@ from pathlib import Path
 from audiagentic.foundation.paths.names import project_marker_path
 
 
+def agents_config_path(project_root: Path) -> Path:
+    """Return the canonical project-owned Agents configuration document."""
+    return project_marker_path(project_root) / "config" / "agents.yaml"
+
+
+def agents_runtime_root(project_root: Path) -> Path:
+    return project_marker_path(project_root) / "runtime" / "agents"
+
+
+def agent_context_root(project_root: Path) -> Path:
+    return agents_runtime_root(project_root) / "contexts"
+
+
+def agent_context_path(project_root: Path, context_id: str) -> Path:
+    return agent_context_root(project_root) / context_id / "record.json"
+
+
+def agent_context_lock_path(project_root: Path, context_id: str) -> Path:
+    return agent_context_root(project_root) / context_id / "mutation.lock"
+
+
+def agent_work_root(project_root: Path) -> Path:
+    return agents_runtime_root(project_root) / "work"
+
+
+def agent_work_path(project_root: Path, work_id: str) -> Path:
+    return agent_work_root(project_root) / work_id / "record.json"
+
+
+def agent_work_lock_path(project_root: Path, work_id: str) -> Path:
+    return agent_work_root(project_root) / work_id / "mutation.lock"
+
+
+def agent_work_inputs_path(project_root: Path, work_id: str) -> Path:
+    return agent_work_root(project_root) / work_id / "inputs.ndjson"
+
+
 def execution_profiles_path(project_root: Path) -> Path:
     """Return the path to the execution profiles YAML config file."""
     return project_marker_path(project_root) / "config" / "execution-profiles.yaml"
