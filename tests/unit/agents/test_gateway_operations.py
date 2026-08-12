@@ -5,7 +5,10 @@ from pathlib import Path
 
 import pytest
 
+from audiagentic.components.agents.gateway import store as request_store
+from audiagentic.components.agents.gateway.application import InProcessGatewayApplication
 from audiagentic.components.agents.gateway.operations import (
+    GatewayOperationExecutor,
     GatewayOperationsApplication,
     GatewayReconcileExecutor,
     ManagementCommand,
@@ -134,6 +137,54 @@ def test_pump_requeues_claim_from_superseded_owner_epoch(tmp_path: Path) -> None
 
     assert executor.calls == ["op_001"]
     assert completed[0]["state"] == "completed"
+
+
+def test_public_create_real_executor_restart_race_fences_request_terminal_transition(tmp_path: Path) -> None:
+    """SH24 A-D proof: public operation -> pump -> real fenced request transition."""
+    request = request_store.build_record(
+        execution_profile_id="review", prompt_body="reconcile",
+    )
+    request_store.write_record(tmp_path, request)
+    claimed = request_store.claim_dispatch(
+        tmp_path, request["request-id"], owner_epoch="request-owner",
+        expected_revision=0,
+    )
+    running = request_store.start_owned_attempt(
+        tmp_path, request["request-id"], owner_epoch="request-owner",
+        worker_id="worker-proof", expected_revision=claimed["revision"],
+    )
+
+    class Application(InProcessGatewayApplication):
+        def list_execution_requests(self, project_root: Path, **_kwargs: object) -> list[dict]:
+            record = request_store.read_record(project_root, running["request-id"])
+            record["reconciliation-evidence"] = {
+                "classification": "proven-dead",
+                "worker-id": record["worker-id"],
+                "attempt-epoch": record["attempt-epoch"],
+            }
+            return [record]
+
+    operation_store = ManagementOperationStore(tmp_path)
+    public_app = GatewayOperationsApplication(operation_store)
+    created = public_app.create_operation(
+        ManagementCommand(
+            operation_id="op-real-proof",
+            kind=ManagementOperationKind.RECONCILE,
+            scope={"project-root": str(tmp_path)},
+        )
+    )
+    assert created["state"] == "accepted"
+    # Simulate a host crash after claim; the restarted pump must recover the
+    # operation and use the real executor/terminalizer exactly once.
+    assert operation_store.claim("op-real-proof", owner_epoch="host-before-restart")
+    completed = ManagementOperationPump(
+        operation_store, GatewayOperationExecutor(Application())
+    ).run_once(owner_epoch="host-after-restart")
+
+    assert completed[0]["state"] == "completed"
+    terminal = request_store.read_record(tmp_path, running["request-id"])
+    assert terminal["state"] == "failed"
+    assert terminal["error"]["code"] == "INT-AGW-077"
 
 
 class _Requests:

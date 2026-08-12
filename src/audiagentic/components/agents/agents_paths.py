@@ -40,6 +40,11 @@ def gateway_request_path(project_root: Path, request_id: str) -> Path:
     return gateway_request_dir(project_root, request_id) / "record.json"
 
 
+def gateway_publication_path(project_root: Path, request_id: str, *, attempt_epoch: int = 1) -> Path:
+    """Return the durable broker-publication intent for one request attempt."""
+    return gateway_request_dir(project_root, request_id) / f"publication-{attempt_epoch}.json"
+
+
 def gateway_timeline_path(project_root: Path, request_id: str) -> Path:
     """Return the timeline.ndjson path for a gateway request."""
     return gateway_request_dir(project_root, request_id) / "timeline.ndjson"

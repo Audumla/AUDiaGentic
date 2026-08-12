@@ -13,6 +13,7 @@ from audiagentic.foundation.system.managed_service import ManagedServiceStore
 from audiagentic.foundation.system.managed_service_contracts import (
     ManagedServiceRecord,
     conflict_error,
+    normalize_lease_history,
     prepare_restart_record,
     validate_facts,
     validate_id,
@@ -76,6 +77,24 @@ class ManagedServiceStarter:
         with self.store._lock():
             if self.store.record_path.exists():
                 record = self.store._read_unlocked()
+                # Reconnect is also the lease-expiry cleanup boundary.  Do
+                # this under the same startup lock before deciding whether a
+                # draining record is still authoritative; otherwise an expired
+                # client lease can strand a dead service forever.
+                timestamp = self.store._clock()
+                leases, changed = normalize_lease_history(
+                    record.leases, current_time=timestamp
+                )
+                if changed:
+                    record = self.store._write_unlocked(
+                        replace(
+                            record,
+                            revision=record.revision + 1,
+                            updated_at=timestamp,
+                            leases=leases,
+                        ),
+                        "lease.expired",
+                    )
                 attached = self._try_attach(
                     record,
                     declaration=declaration,
@@ -111,8 +130,17 @@ class ManagedServiceStarter:
         correlation_id: str | None,
         lease_facts: Mapping[str, Any],
     ) -> StartOrAttachResult | None:
-        if record.state in ("draining", "stopping"):
-            raise conflict_error(26, "managed service is draining or stopping", state=record.state)
+        if record.state == "draining":
+            # A drain with active clients is still authoritative. Once all
+            # leases are gone, a missing/unobservable recorded process is a
+            # stale host marker and may enter the normal restart path below.
+            if record.active_lease_count:
+                raise conflict_error(26, "managed service is draining", state=record.state)
+            if record.process is not None and self._observe(record.process) is not None:
+                raise conflict_error(28, "service process remains live while draining")
+            return None
+        if record.state == "stopping":
+            raise conflict_error(26, "managed service is stopping", state=record.state)
         if record.state in ("stopped", "failed"):
             if record.process is not None and self._observe(record.process) is not None:
                 raise conflict_error(27, "live process remains on non-running service record")

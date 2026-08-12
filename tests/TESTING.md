@@ -299,6 +299,25 @@ pytest --cov=src --cov-branch --cov-report=term-missing --cov-report=html
 Coverage is a diagnostic, not a goal. 100% coverage on a trivially-mocked module
 is worse than 70% on a module with meaningful behaviour tests.
 
+## Code-to-test traceability
+
+The conventional relationship is coverage plus ownership, not a hand-maintained
+source-file-to-test-file link. Coverage records which production lines and
+branches a test run executed; tier markers (`unit`, `integration`, `e2e`) and
+the component directory identify the test's scope. When changing code, run the
+focused component tests first, then inspect the branch coverage report for the
+changed module before running the full matrix:
+
+```bash
+pytest tests/unit/<component> tests/integration/<component> \
+  --cov=src/audiagentic/<component> --cov-branch --cov-report=term-missing
+```
+
+This avoids stale manual links while still showing missing behavior tests. Add
+a regression test beside the owning component whenever a changed branch is not
+covered; use `no_parallel` only when the code genuinely shares process-global
+state.
+
 ---
 
 ## Docker tests
