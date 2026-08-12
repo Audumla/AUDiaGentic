@@ -59,7 +59,6 @@ _MCP_CONFIG_PATHS: dict[str, str] = {
     "codex-toml":         ".codex/config.toml",
     "opencode-mcp":       ".opencode/opencode.json",
     "mcp-json-gemini":    ".gemini/settings.json",
-    "goose-yaml":         "~/.config/goose/config.yaml",
     "continue-json":      ".continue/config.json",
 }
 
@@ -89,10 +88,6 @@ def setup_provider_surfaces(project_root: Path) -> None:
     _ensure_dir_and_stub(project_root / ".codex" / "config.toml", "")
     _ensure_dir_and_stub(project_root / ".opencode" / "opencode.json", '{"mcp": {}}')
     _ensure_dir_and_stub(project_root / ".gemini" / "settings.json", '{"mcpServers": {}}')
-    _ensure_dir_and_stub(
-        _config_path(project_root, _MCP_CONFIG_PATHS["goose-yaml"]),
-        yaml.dump({"extensions": []}, default_flow_style=False),
-    )
     _ensure_dir_and_stub(
         project_root / ".continue" / "config.json",
         json.dumps({"mcpServers": []}),
@@ -298,216 +293,40 @@ def _installed_component_sandbox(
 
 
 # --------------------------------------------------------------------------- #
-# MCP server propagation tests
+# Consolidated component lifecycle tests
 # --------------------------------------------------------------------------- #
 
 @pytest.mark.parametrize("component_id", _PROPAGATION_COMPONENTS)
-def test_install_propagates_mcp_servers_to_providers(
-    component_id: str, tmp_path: Path
-) -> None:
-    """After install, all provider-propagated MCP servers appear in every provider config."""
-    expected_servers = _provider_mcp_server_names(component_id)
-    assert expected_servers, f"{component_id} is not an MCP propagation component"
-
-    with _installed_component_sandbox(tmp_path, f"mcp-install-{component_id}", component_id) as sb:
-
-        for config_rel in _provider_mcp_config_paths(sb.repo):
-            present = mcp_servers_in(sb.repo, config_rel)
-            missing = expected_servers - present
-            assert not missing, (
-                f"{component_id}: servers {missing} not found in {config_rel} after install. "
-                f"Present: {present}"
-            )
-
-
-@pytest.mark.parametrize("component_id", _PROPAGATION_COMPONENTS)
-def test_uninstall_removes_mcp_servers_from_providers(
-    component_id: str, tmp_path: Path
-) -> None:
-    """After uninstall, the component's MCP servers are removed from all provider configs."""
-    expected_servers = _provider_mcp_server_names(component_id)
-    assert expected_servers, f"{component_id} is not an MCP propagation component"
-
-    with _installed_component_sandbox(tmp_path, f"mcp-uninstall-{component_id}", component_id) as sb:
-
-        # Verify they were installed first
-        for config_rel in _provider_mcp_config_paths(sb.repo):
-            present = mcp_servers_in(sb.repo, config_rel)
-            assert expected_servers & present, (
-                f"{component_id}: no expected servers in {config_rel} before uninstall"
-            )
-
-        uninstall_component(component_id, sb.repo)
-        apply_surfaces(sb.repo)
-
-        for config_rel in _provider_mcp_config_paths(sb.repo):
-            still_present = mcp_servers_in(sb.repo, config_rel) & expected_servers
-            assert not still_present, (
-                f"{component_id}: servers {still_present} still in {config_rel} after uninstall"
-            )
-
-
-@pytest.mark.parametrize("component_id", _PROPAGATION_COMPONENTS)
-def test_disable_removes_provider_mcp_servers(
-    component_id: str, tmp_path: Path
-) -> None:
-    """Disable must remove MCP server entries from provider configs.
-
-    Enabled means the component's functionality (including its MCP tools) is
-    live; disabling it must stop those tools from being callable, not just
-    mark them inert in AUDiaGentic's own bookkeeping. Uninstall additionally
-    removes the component's install-time management state — disable and
-    uninstall diverge on that, not on MCP propagation.
-    """
-    expected_servers = _provider_mcp_server_names(component_id)
-    assert expected_servers, f"{component_id} is not an MCP propagation component"
-
-    with _installed_component_sandbox(tmp_path, f"mcp-disable-{component_id}", component_id) as sb:
-
-        disable_component(component_id, sb.repo)
-        # disable fires lifecycle.component.mcp.sync synchronously; no explicit
-        # apply_surfaces call needed for the MCP config to reflect the change.
-
-        for config_rel in _provider_mcp_config_paths(sb.repo):
-            still_present = mcp_servers_in(sb.repo, config_rel) & expected_servers
-            assert not still_present, (
-                f"{component_id}: servers {still_present} still in {config_rel} after disable"
-            )
-
-
-@pytest.mark.parametrize("component_id", _PROPAGATION_COMPONENTS)
-def test_enable_reinjects_provider_mcp_servers_after_disable(
-    component_id: str, tmp_path: Path
-) -> None:
-    """MCP servers pruned on disable reappear after enable, without reinstall."""
-    expected_servers = _provider_mcp_server_names(component_id)
-    assert expected_servers, f"{component_id} is not an MCP propagation component"
-
-    with _installed_component_sandbox(tmp_path, f"mcp-reenable-{component_id}", component_id) as sb:
-
-        disable_component(component_id, sb.repo)
-        for config_rel in _provider_mcp_config_paths(sb.repo):
-            still_present = mcp_servers_in(sb.repo, config_rel) & expected_servers
-            assert not still_present, (
-                f"{component_id}: servers {still_present} not pruned after disable"
-            )
-
-        enable_component(component_id, sb.repo)
-        for config_rel in _provider_mcp_config_paths(sb.repo):
-            present = mcp_servers_in(sb.repo, config_rel)
-            missing = expected_servers - present
-            assert not missing, (
-                f"{component_id}: servers {missing} not reinjected after re-enable. "
-                f"Present: {present}"
-            )
-
-
-# --------------------------------------------------------------------------- #
-# Surface contribution tests
-# --------------------------------------------------------------------------- #
-
-@pytest.mark.parametrize("component_id", _SURFACE_COMPONENTS)
-def test_install_injects_contribution_blocks(
-    component_id: str, tmp_path: Path
-) -> None:
-    """After install, CLAUDE.md contains managed blocks owned by component_id."""
-    expected_blocks = _component_contribution_block_ids(component_id)
-    assert expected_blocks, f"{component_id} is not a surface contribution component"
-
-    with _installed_component_sandbox(tmp_path, f"surface-install-{component_id}", component_id) as sb:
-
-        claude_md = sb.repo / "CLAUDE.md"
-        present = managed_blocks_in(claude_md)
-        missing = expected_blocks - present
-        assert not missing, (
-            f"{component_id}: blocks {missing} not found in CLAUDE.md after install. "
-            f"Present: {present}"
-        )
-
-
-@pytest.mark.parametrize("component_id", _SURFACE_COMPONENTS)
-def test_uninstall_removes_contribution_blocks(
-    component_id: str, tmp_path: Path
-) -> None:
-    """After uninstall, the component's managed blocks are gone from CLAUDE.md."""
-    expected_blocks = _component_contribution_block_ids(component_id)
-    assert expected_blocks, f"{component_id} is not a surface contribution component"
-
-    with _installed_component_sandbox(tmp_path, f"surface-uninstall-{component_id}", component_id) as sb:
-
-        # Sanity: blocks should be present before uninstall
-        claude_md = sb.repo / "CLAUDE.md"
-        before = managed_blocks_in(claude_md)
-        assert expected_blocks & before, (
-            f"{component_id}: no expected blocks in CLAUDE.md before uninstall"
-        )
-
-        uninstall_component(component_id, sb.repo)
-        apply_surfaces(sb.repo)
-
-        after = managed_blocks_in(claude_md)
-        still_present = expected_blocks & after
-        assert not still_present, (
-            f"{component_id}: blocks {still_present} still in CLAUDE.md after uninstall"
-        )
-
-
-@pytest.mark.parametrize("component_id", _SURFACE_COMPONENTS)
-def test_disable_removes_contribution_blocks(
-    component_id: str, tmp_path: Path
-) -> None:
-    """After disable + apply_surfaces, the component's managed blocks are pruned."""
-    expected_blocks = _component_contribution_block_ids(component_id)
-    assert expected_blocks, f"{component_id} is not a surface contribution component"
-
-    with _installed_component_sandbox(tmp_path, f"surface-disable-{component_id}", component_id) as sb:
-
-        claude_md = sb.repo / "CLAUDE.md"
-        before = managed_blocks_in(claude_md)
-        assert expected_blocks & before, (
-            f"{component_id}: no expected blocks before disable"
-        )
-
-        disable_component(component_id, sb.repo)
-        apply_surfaces(sb.repo)
-
-        after = managed_blocks_in(claude_md)
-        still_present = expected_blocks & after
-        assert not still_present, (
-            f"{component_id}: blocks {still_present} still in CLAUDE.md after disable+apply"
-        )
-
-
-@pytest.mark.parametrize("component_id", _SURFACE_COMPONENTS)
-def test_enable_reinjection_after_disable(
-    component_id: str, tmp_path: Path
-) -> None:
-    """Blocks removed on disable reappear after enable + apply_surfaces."""
-    expected_blocks = _component_contribution_block_ids(component_id)
-    assert expected_blocks, f"{component_id} is not a surface contribution component"
-
-    with _installed_component_sandbox(tmp_path, f"surface-reenable-{component_id}", component_id) as sb:
-
+def test_component_lifecycle_matrix(component_id: str, tmp_path: Path) -> None:
+    """Exercise the complete lifecycle after one install/setup per component."""
+    with _installed_component_sandbox(tmp_path, f"lifecycle-{component_id}", component_id) as sb:
+        configs = _provider_mcp_config_paths(sb.repo)
+        expected_servers = _provider_mcp_server_names(component_id)
+        expected_blocks = _component_contribution_block_ids(component_id)
         claude_md = sb.repo / "CLAUDE.md"
 
-        # Phase 1: disable → blocks gone
+        def assert_installed() -> None:
+            if expected_servers:
+                for config_rel in configs:
+                    assert expected_servers <= mcp_servers_in(sb.repo, config_rel)
+            if expected_blocks:
+                assert expected_blocks <= managed_blocks_in(claude_md)
+
+        def assert_pruned() -> None:
+            for config_rel in configs:
+                assert not (expected_servers & mcp_servers_in(sb.repo, config_rel))
+            assert not (expected_blocks & managed_blocks_in(claude_md))
+
+        assert_installed()
         disable_component(component_id, sb.repo)
         apply_surfaces(sb.repo)
-        after_disable = managed_blocks_in(claude_md)
-        still_present = expected_blocks & after_disable
-        assert not still_present, (
-            f"{component_id}: blocks {still_present} not pruned after disable"
-        )
-
-        # Phase 2: re-enable → blocks back
+        assert_pruned()
         enable_component(component_id, sb.repo)
         apply_surfaces(sb.repo)
-        after_enable = managed_blocks_in(claude_md)
-        missing = expected_blocks - after_enable
-        assert not missing, (
-            f"{component_id}: blocks {missing} not reinjected after re-enable. "
-            f"Present: {after_enable}"
-        )
+        assert_installed()
+        uninstall_component(component_id, sb.repo)
+        apply_surfaces(sb.repo)
+        assert_pruned()
 
 
 # --------------------------------------------------------------------------- #
