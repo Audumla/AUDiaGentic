@@ -185,8 +185,14 @@ def _publish_lifecycle_event(event_suffix: str, record: dict[str, Any]) -> None:
         "state": record["state"],
     }
     if event_suffix in _TERMINAL_EVENT_SUFFIXES:
-        payload["provider-id"] = record.get("provider-id")
-        payload["model-id"] = record.get("model-id")
+        # A runner may append the authoritative provider/model identity to
+        # the attempt before the terminal request snapshot is refreshed. Use
+        # that attempt as a fallback so observers never lose attribution due
+        # to the persistence ordering of the two records.
+        attempts = record.get("attempts") or []
+        latest_attempt = attempts[-1] if attempts else {}
+        payload["provider-id"] = record.get("provider-id") or latest_attempt.get("provider-id")
+        payload["model-id"] = record.get("model-id") or latest_attempt.get("model-id")
         payload["error"] = record.get("error")
         payload["attempt_count"] = len(record.get("attempts") or [])
     if event_suffix == "interrupted":
