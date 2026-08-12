@@ -200,13 +200,6 @@ class TestCredentialRejection:
         from audiagentic.foundation.event import get_bus
 
         bus = get_bus()
-        try:
-            # Probe whether the event bus is usable
-            def _dummy_cb(*args):  # noqa: ARG001
-                pass
-            bus.subscribe("agents.execution.queued", _dummy_cb)
-        except Exception:  # noqa: BLE001 — VAL-EVT-002 means bus was closed
-            pytest.skip("event bus closed by earlier test")
 
         _make_profile(tmp_path, "default", "local-openai")
         secret_prompt = "the password is AKIAABCDEFGHIJKLMNOP"

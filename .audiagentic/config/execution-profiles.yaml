@@ -1,37 +1,44 @@
 contract-version: v2
 profiles:
-- profile_id: rig-tester
-  provider_id: local-openai
-  instances: [ag-rig]
-  model_alias: null
-  params: {}
-  is_default: false
-  description: Local rig-hosted small test model (qwen3.5-2b via llama-server)
-- profile_id: gpt-auto
-  provider_id: gpt-auto
-  instances: [chatgpt]
-  model_alias: null
-  surface_id: gpt-auto-cdp
-  params:
-    session-turn-timeout-seconds: 3900
-    session-turn-silence-timeout-seconds: 0
-    session-idle-timeout-seconds: 0
-    session-max-lifetime-seconds: 0
-  is_default: false
-  description: Browser-driven ChatGPT via CDP session transport
-- profile_id: opencode-rig
-  provider_id: opencode
-  instances: [ag-rig]
-  model_alias: null
-  surface_id: opencode-acp
-  params: {}
-  is_default: false
-  description: OpenCode ACP session driven against the local embedded rig, for gateway-session-path validation against a non-browser provider
-- profile_id: pi-rig
-  provider_id: pi
-  instances: [ag-rig]
-  model_alias: null
-  surface_id: pi-community-acp
-  params: {}
-  is_default: false
-  description: Pi ACP (pi-community-acp) session driven against the local embedded rig, for gateway-session-path validation against a non-browser provider
+  - profile_id: rig-tester
+    provider_id: local-openai
+    instances: [ag-rig]
+    model_alias: null
+    params: {}
+    is_default: false
+    description: Local rig-hosted small test model
+  - profile_id: activity-rig
+    provider_id: activity-rig
+    instances: [local]
+    model_alias: activity-rig
+    params: {}
+    is_default: false
+    description: Repository-owned controllable worker activity fixture
+  - profile_id: gpt-auto
+    provider_id: gpt-auto
+    instances: [chatgpt]
+    model_alias: null
+    surface_id: gpt-auto-cdp
+    params:
+      session-turn-timeout-seconds: 3900
+      session-silence-timeout-seconds: 0
+      session-idle-timeout-seconds: 0
+      session-max-lifetime-seconds: 0
+    is_default: false
+    description: Browser-driven ChatGPT via CDP session transport
+  - profile_id: opencode-rig
+    provider_id: opencode
+    instances: [ag-rig]
+    model_alias: null
+    surface_id: opencode-acp
+    params: {}
+    is_default: false
+    description: OpenCode ACP session driven against local rig
+  - profile_id: pi-rig
+    provider_id: pi
+    instances: [ag-rig]
+    model_alias: null
+    surface_id: pi-community-acp
+    params: {}
+    is_default: false
+    description: Pi ACP session driven against local rig

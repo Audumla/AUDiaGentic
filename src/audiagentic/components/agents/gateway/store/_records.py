@@ -169,7 +169,6 @@ def build_record(
         "gateway-profile-id": gateway_profile_id,
         "gateway-profile-generation": gateway_profile_generation,
         "gateway-profile-config-digest": gateway_profile_config_digest,
-        "gateway-execution-lane-key": gateway_execution_lane_key,
         "resolved-provider-id": resolved_provider_id,
         "resolved-model-id": resolved_model_id,
         # AS101: admission identifies compatible instances only. The concrete
@@ -186,8 +185,6 @@ def build_record(
         "watchdog-policy": dict(watchdog_policy) if watchdog_policy is not None else None,
         "terminal-classification": None,
         "resolved-instance-ids": resolved_instance_ids,
-        "resolved-queue-limits": resolved_queue_limits,
-        "admission-policy-digest": admission_policy_digest,
         "mode": mode,
         "timeout-seconds": timeout_seconds,
         "source": source,
@@ -316,6 +313,8 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     treatment of an already-dispatched record with no durable binding.
     """
     migrated = dict(payload)
+    for retired_key in ("gateway-execution-lane-key", "resolved-queue-limits", "admission-policy-digest"):
+        migrated.pop(retired_key, None)
     migrated.setdefault("cancel-acknowledged-at", None)
     migrated.setdefault("cancel-acknowledged-by", None)
     migrated.setdefault("dispatch-service-root", None)
@@ -323,7 +322,7 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     # A briefly deployed v4 writer could have persisted the version before
     # adding all activity fields. Treat that shape as migratable too; never
     # strand a durable request merely because a process restarted mid-cutover.
-    if contract_version not in {"v1", "v2", "v3", _shared._CONTRACT_VERSION}:
+    if contract_version not in {"v1", "v2", "v3", "v4", _shared._CONTRACT_VERSION}:
         return _validate(migrated, code="VAL-AGW-005")
     migrated["contract-version"] = _shared._CONTRACT_VERSION
     if contract_version != _shared._CONTRACT_VERSION:

@@ -1,0 +1,5 @@
+provider_id: activity-rig
+execution_isolation_tier: full-isolation
+display_name: "AUDiaGentic Activity Rig"
+description: "Repository-owned controllable provider for authenticated activity/watchdog acceptance."
+access_mode: none

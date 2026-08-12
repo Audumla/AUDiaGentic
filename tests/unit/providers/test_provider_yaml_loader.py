@@ -194,7 +194,7 @@ class TestLoadProvidersFromDirectory:
                      # cross-provider Python list, no real descriptor at all).
                      "kilo", "zed", "crush",
                      # BR01: browser-driven ChatGPT provider descriptor.
-                     "gpt-auto"}
+                     "gpt-auto", "activity-rig"}
         loaded = set(providers)
         assert expected == loaded, f"Missing: {expected - loaded}, Extra: {loaded - expected}"
         for descriptor in providers.values():

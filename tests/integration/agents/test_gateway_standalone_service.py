@@ -15,6 +15,7 @@ from audiagentic.components.agents.gateway.client import (
     get_gateway_client,
     reset_gateway_client,
 )
+from audiagentic.components.agents.gateway.application import InProcessGatewayApplication
 from audiagentic.components.agents.gateway.remote_client import (
     StandaloneGatewayClient,
     load_auth_token,
@@ -481,6 +482,55 @@ def test_clean_restart_reuses_token_and_rotates_owner_epoch(tmp_path: Path) -> N
         _stop_host(second, second_thread)
 
 
+def test_host_background_operation_completes_after_readiness(tmp_path: Path) -> None:
+    from audiagentic.components.agents.gateway.operations import (
+        GatewayOperationsApplication,
+        ManagementCommand,
+        ManagementOperationKind,
+        ManagementOperationStore,
+    )
+    request_id = "req_host_ready_archive"
+    request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id
+    request_dir.mkdir(parents=True)
+    (request_dir / "record.json").write_text('{"state":"completed"}', encoding="utf-8")
+    application = InProcessGatewayApplication()
+    host, thread, _service_root, _token = _start_host(tmp_path, application)  # type: ignore[arg-type]
+    try:
+        op = GatewayOperationsApplication(ManagementOperationStore(host.service_store.root))
+        op.create_operation(ManagementCommand(operation_id="op_ready_archive", kind=ManagementOperationKind.RECONCILE, scope={"project-root": str(tmp_path), "dry-run": True}))
+        deadline = time.monotonic() + 3.5
+        while time.monotonic() < deadline and ManagementOperationStore(host.service_store.root).read("op_ready_archive")["state"] != "completed":
+            time.sleep(0.05)
+        final = ManagementOperationStore(host.service_store.root).read("op_ready_archive")
+        assert final["state"] == "completed", final
+    finally:
+        _stop_host(host, thread)
+
+
+def test_host_startup_scan_executes_operation_persisted_before_start(tmp_path: Path) -> None:
+    from audiagentic.components.agents.gateway.operations import (
+        GatewayOperationsApplication,
+        ManagementCommand,
+        ManagementOperationKind,
+        ManagementOperationStore,
+    )
+    request_id = "req_startup_archive"
+    request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id
+    request_dir.mkdir(parents=True)
+    (request_dir / "record.json").write_text('{"state":"completed"}', encoding="utf-8")
+    service_root = tmp_path / "services"
+    store = ManagementOperationStore(service_root / "machine" / "agent-execution-gateway" / "default")
+    GatewayOperationsApplication(store).create_operation(ManagementCommand(operation_id="op_startup_archive", kind=ManagementOperationKind.RECONCILE, scope={"project-root": str(tmp_path), "dry-run": True}))
+    host, thread, _service_root, _token = _start_host(tmp_path, InProcessGatewayApplication())  # type: ignore[arg-type]
+    try:
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline and store.read("op_startup_archive")["state"] != "completed":
+            time.sleep(0.05)
+        assert store.read("op_startup_archive")["state"] == "completed"
+    finally:
+        _stop_host(host, thread)
+
+
 def test_restart_preserves_durable_request_history_exactly(tmp_path: Path) -> None:
     """SH11 rollback rehearsal: restart changes owner epoch, not request history."""
     from audiagentic.components.agents.gateway import store as request_store
@@ -594,7 +644,7 @@ def test_service_host_startup_wires_gateway_owned_registry_from_config(
             result_b = client_b.wait_execution_request(root_b, submitted_b["request-id"], timeout_seconds=5)
             assert result_a["state"] == "completed"
             assert result_b["state"] == "completed"
-            assert result_a["gateway-execution-lane-key"] == result_b["gateway-execution-lane-key"]
+            assert result_a["resolved-instance-ids"] == result_b["resolved-instance-ids"]
         finally:
             provider_release.set()
             client_a.close()

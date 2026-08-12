@@ -74,6 +74,7 @@ PACKAGING = Img("audia-packaging:latest", "Dockerfile.packaging", note="clean-ro
 RECIPE_IMAGES = [
     Img("audia-provider-cli-comprehensive:latest", "Dockerfile.provider-cli-comprehensive", note="provider CLI comprehensive recipe"),
     Img("audiagentic-provider-lifecycle-e2e:latest", "Dockerfile.provider-lifecycle-e2e", note="provider full lifecycle recipe"),
+    Img("audiagentic-consumer-pipeline:local", "Dockerfile.consumer-pipeline", note="consumer pipeline integration"),
     Img("audia-provider-lsp-e2e:latest", "Dockerfile.provider-lsp-e2e", note="provider LSP install recipe"),
     Img("audia-mcp-tools-e2e:latest", "Dockerfile.mcp-tools-e2e", note="LSP MCP tools (consumes baked servers)"),
     Img("audiagentic-gateway-crash-matrix:local", "Dockerfile.gateway-crash-matrix", note="SH07 real-subprocess crash/recovery matrix"),

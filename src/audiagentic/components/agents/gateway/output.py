@@ -352,16 +352,17 @@ class OutputRelay(OutputSink):
                 },
             )
 
-        # If not degraded, persist the event
-        if not self._degraded:
-            self._persist_event(event, text_bytes)
-
         # Update in-memory state
         self._turn_bytes += text_bytes
         self._has_events = True
         if event.sequence is not None:
             self._last_sequence = event.sequence
             self._index_state.update(event.sequence, text_bytes)
+
+        # Persist after updating the index state so index.json describes the
+        # event just written, rather than lagging by one event.
+        if not self._degraded:
+            self._persist_event(event, text_bytes)
 
     def _validate_sequence(self, sequence: int | None) -> None:
         """Validate sequence monotonicity within this turn.
