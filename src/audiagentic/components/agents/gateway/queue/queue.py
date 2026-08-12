@@ -1,7 +1,7 @@
-"""Agent Execution Gateway per-profile queue and concurrency manager (AG09).
+"""Agent Execution Gateway scheduler and source-capacity manager.
 
-In-process only — a worker thread pool per profile, gated by a semaphore sized
-from the profile's params. Persisted request state (agents_gateway_store) is
+In-process only — a worker thread pool with source reservations. Persisted
+request state (agents_gateway_store) is
 the durable record; this manager is the in-memory scheduling layer on top of
 it. Process lifetime caveat: if the host process exits, queued/running records
 remain in the store but no worker will resume them (see AG13 for a startup
@@ -34,10 +34,13 @@ from audiagentic.components.agents.gateway.event_topics import (
     EXECUTION_STARTED_TOPIC,
 )
 from audiagentic.components.agents.gateway.instances import InstanceFacts
-from audiagentic.components.agents.gateway.mapping import first_present
 from audiagentic.components.agents.gateway.queue.capacity import (
     CapacityReservation,
     SourceCapacityAuthority,
+)
+from audiagentic.components.agents.gateway.queue.compat import (
+    resolve_max_concurrency,
+    resolve_queue_max_size,
 )
 from audiagentic.components.agents.gateway.queue.pending import PendingAuthority
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -244,55 +247,6 @@ class QueuedDispatch:
     service_root: Path | None
 
 
-def resolve_max_concurrency(params: dict[str, Any]) -> int:
-    """Resolve params.max-concurrency (or max_concurrency); default 1, minimum 1.
-
-    Raises on a present-but-invalid value rather than silently falling back to
-    the default — a typo'd key or wrong type should be loud, not silently
-    treated as max_concurrency=1 (RV19 finding on AG09).
-    """
-    value = first_present(params, "max-concurrency", "max_concurrency")
-    if value is None:
-        return 1
-    if not isinstance(value, int) or isinstance(value, bool):
-        raise AudiaGenticError(
-            code="VAL-AGW-020",
-            kind="agents",
-            message="execution profile params.max-concurrency must be an integer",
-            details={"value": value},
-        )
-    if value < 1:
-        raise AudiaGenticError(
-            code="VAL-AGW-021",
-            kind="agents",
-            message="execution profile params.max-concurrency must be >= 1",
-            details={"value": value},
-        )
-    return value
-
-
-def resolve_queue_max_size(params: dict[str, Any], max_concurrency: int) -> int:
-    """Resolve params.queue-max-size (or queue_max_size); default max(8, max_concurrency*2)."""
-    value = first_present(params, "queue-max-size", "queue_max_size")
-    if value is None:
-        return max(8, max_concurrency * 2)
-    if not isinstance(value, int) or isinstance(value, bool):
-        raise AudiaGenticError(
-            code="VAL-AGW-022",
-            kind="agents",
-            message="execution profile params.queue-max-size must be an integer",
-            details={"value": value},
-        )
-    if value < 1:
-        raise AudiaGenticError(
-            code="VAL-AGW-023",
-            kind="agents",
-            message="execution profile params.queue-max-size must be >= 1",
-            details={"value": value},
-        )
-    return value
-
-
 def _lane_public_id(lane_key_tuple: tuple[str, str, str]) -> str:
     """Human-readable lane identifier with no project paths or secrets.
 
@@ -313,8 +267,8 @@ def _lane_public_id(lane_key_tuple: tuple[str, str, str]) -> str:
 _STARVATION_THRESHOLD_SECONDS = 30.0
 
 
-class _ProfileQueue:
-    """Bookkeeping for one execution-profile's FIFO queue and concurrency gate.
+class _RuntimeState:
+    """Bookkeeping for one execution profile's active requests.
 
     Session-aware concurrency (AS15): pq.running tracks all dispatched requests,
     but pq.idle tracks those that are waiting on a session turn_lock (not doing
@@ -323,8 +277,9 @@ class _ProfileQueue:
     """
 
     def __init__(self, max_concurrency: int, queue_max_size: int) -> None:
-        self.max_concurrency = max_concurrency
-        self.queue_max_size = queue_max_size
+        # Compatibility-only virtual capacity for undeclared sources.
+        self._virtual_capacity = max_concurrency
+        self._pending_limit = queue_max_size
         self.lock = threading.Lock()
         self.running: set[str] = set()
         self.idle: set[str] = set()
@@ -344,7 +299,7 @@ class GatewayQueueManager:
     """
 
     def __init__(self) -> None:
-        self._lanes: dict[tuple[str, str, str], _ProfileQueue] = {}
+        self._runtime: dict[tuple[str, str, str], _RuntimeState] = {}
         self._manager_lock = threading.Lock()
         # AS105/AS101: shared machine-wide capacity per model-sources.yaml
         # resource-id -- deliberately NOT per-lane. A resource is genuinely
@@ -355,11 +310,12 @@ class GatewayQueueManager:
         # AS101: one canonical pending authority. Lanes retain only running
         # session/compatibility state; they no longer own pending work.
         self._pending_authority: PendingAuthority[QueuedDispatch] = PendingAuthority()
+        self._active_requests: dict[str, tuple[Path, str]] = {}
 
-    def _execution_lane(self, snapshot: profiles_mod.ResolvedExecutionProfile) -> _ProfileQueue:
+    def _runtime_state(self, snapshot: profiles_mod.ResolvedExecutionProfile) -> _RuntimeState:
         lane_key_tuple = (snapshot.profile_id, snapshot.generation, snapshot.config_digest)
         with self._manager_lock:
-            pq = self._lanes.get(lane_key_tuple)
+            pq = self._runtime.get(lane_key_tuple)
             if pq is None:
                 # AS105/AS101: these size the ungated (legacy semaphore) path
                 # and the admission queue-depth backpressure limit for both
@@ -368,8 +324,8 @@ class GatewayQueueManager:
                 params = dict(snapshot.execution_params)
                 max_concurrency = resolve_max_concurrency(params)
                 queue_max_size = resolve_queue_max_size(params, max_concurrency)
-                pq = _ProfileQueue(max_concurrency, queue_max_size)
-                self._lanes[lane_key_tuple] = pq
+                pq = _RuntimeState(max_concurrency, queue_max_size)
+                self._runtime[lane_key_tuple] = pq
             return pq
 
     def enqueue(
@@ -467,7 +423,7 @@ class GatewayQueueManager:
             return rejected
 
         owner_epoch = dispatch_owner_epoch or f"local-{uuid.uuid4().hex}"
-        pq = self._execution_lane(snapshot)
+        pq = self._runtime_state(snapshot)
 
         # AS105/AS101: resolve instance capacity facts once, at admission --
         # never re-derived at dispatch time, so a mid-flight model-sources.yaml
@@ -495,7 +451,7 @@ class GatewayQueueManager:
         with pq.lock:
             queue_full = self._pending_authority.count(
                 lambda request: request.value.snapshot == snapshot
-            ) >= pq.queue_max_size
+            ) >= pq._pending_limit
             if not queue_full:
                 self._pending_authority.enqueue(
                     request_id=entry.request_id,
@@ -512,7 +468,7 @@ class GatewayQueueManager:
                 extra={
                     "request-id": request_id,
                     "execution-profile-id": execution_profile_id,
-                    "queue-max-size": pq.queue_max_size,
+                    "queue-max-size": pq._pending_limit,
                 },
             )
             rejected = store.transition_record(
@@ -522,7 +478,7 @@ class GatewayQueueManager:
                 updates={
                     "error": {
                         "code": "VAL-AGW-025",
-                        "message": f"queue full for profile {execution_profile_id!r} (max {pq.queue_max_size})",
+                        "message": f"queue full (legacy pending limit) for profile {execution_profile_id!r} (max {pq._pending_limit})",
                         "kind": "agents",
                     }
                 },
@@ -534,7 +490,7 @@ class GatewayQueueManager:
                 state=rejected["state"],
                 attributes={
                     "execution-profile-id": execution_profile_id,
-                    "queue-max-size": pq.queue_max_size,
+                    "queue-max-size": pq._pending_limit,
                     "correlation_id": (rejected.get("metadata") or {}).get("correlation_id"),
                 },
             )
@@ -576,10 +532,10 @@ class GatewayQueueManager:
             started = False
             for candidate in self._pending_authority.candidates():
                 entry = candidate.value
-                pq = self._execution_lane(entry.snapshot)
+                pq = self._runtime_state(entry.snapshot)
                 reservation: CapacityReservation | None = None
                 with pq.lock:
-                    reservation = self._try_reserve_source(entry, pq.max_concurrency)
+                    reservation = self._try_reserve_source(entry, pq._virtual_capacity)
                     if reservation is None:
                         continue
                     claimed = self._pending_authority.claim(entry.request_id)
@@ -588,6 +544,9 @@ class GatewayQueueManager:
                             self._capacity.release(reservation)
                         continue
                     pq.running.add(entry.request_id)
+                    self._active_requests[entry.request_id] = (
+                        entry.project_root, entry.execution_profile_id,
+                    )
                 thread = threading.Thread(
                     target=self._run_one,
                     args=(pq, entry, reservation),
@@ -629,7 +588,7 @@ class GatewayQueueManager:
 
     def _run_one(
         self,
-        pq: _ProfileQueue,
+        pq: _RuntimeState,
         entry: QueuedDispatch,
         bound: CapacityReservation | None,
     ) -> None:
@@ -874,18 +833,19 @@ class GatewayQueueManager:
                 pq.running.discard(request_id)
                 pq.idle.discard(request_id)
                 pq.cancel_requested.discard(request_id)
+            self._active_requests.pop(request_id, None)
             _TURNCB.clear(request_id)
             self._drain_all()
 
     def _find_lane_for_request(
         self, execution_profile_id: str, request_id: str
-    ) -> _ProfileQueue | None:
+    ) -> _RuntimeState | None:
         """Scan lanes to find the queue that contains or tracks this request.
 
         Backward-compat: caller only knows execution_profile_id, not the full lane key.
         """
         with self._manager_lock:
-            for lane_key_tuple, pq in self._lanes.items():
+            for lane_key_tuple, pq in self._runtime.items():
                 if lane_key_tuple[0] == execution_profile_id:
                     # Profile matches; check if this request is tracked here
                     with pq.lock:
@@ -1022,13 +982,13 @@ class GatewayQueueManager:
         max_concurrency = 0
 
         with self._manager_lock:
-            for lane_key_tuple, pq in self._lanes.items():
+            for lane_key_tuple, pq in self._runtime.items():
                 if lane_key_tuple[0] == execution_profile_id:
                     with pq.lock:
                         running += len(pq.running)
                         active_running += pq.active_running()
                         idle += len(pq.idle)
-                    max_concurrency += pq.max_concurrency
+                    max_concurrency += pq._virtual_capacity
 
         return {
             "pending": pending,
@@ -1050,14 +1010,19 @@ class GatewayQueueManager:
                 return "idle" if request_id in pq.idle else "active"
         return None
 
+    def source_capacity_status(self) -> dict[str, dict[str, Any]]:
+        """Return redacted source-capacity state for operator diagnostics."""
+        return self._capacity.snapshots()
+
     def all_queue_depths(self) -> dict[str, dict[str, int]]:
+        """Deprecated compatibility projection; use project/source status."""
         """Return queue depth keyed by redacted lane public id (no paths/secrets).
 
         SH07 C2: lanes are identified by their public lane key, not bare profile
         ids. Multiple projects sharing a lane see one entry for that lane.
         """
         with self._manager_lock:
-            items = list(self._lanes.items())
+            items = list(self._runtime.items())
 
         result: dict[str, dict[str, int]] = {}
         for lane_key_tuple, pq in items:
@@ -1074,8 +1039,46 @@ class GatewayQueueManager:
                     "running": len(pq.running),
                     "active_running": pq.active_running(),
                     "idle": len(pq.idle),
-                    "max_concurrency": pq.max_concurrency,
+                    "max_concurrency": pq._virtual_capacity,
                 }
+        return result
+
+    def project_queue_depths(self, project_root: Path) -> dict[str, dict[str, int]]:
+        """Return redacted queue depth grouped by execution profile for a project.
+
+        This is the operator-facing reporting authority. It deliberately does
+        not expose internal lane keys or other projects' work.
+        """
+        project_key = str(project_root)
+        result: dict[str, dict[str, int]] = {}
+        pending_by_profile = self._pending_authority.count_by(
+            lambda request: (
+                request.project_key,
+                request.value.execution_profile_id,
+            )
+        )
+        for (request_project, profile_id), count in pending_by_profile.items():
+            if request_project != project_key:
+                continue
+            result[profile_id] = {
+                "pending": count, "running": 0, "active_running": 0, "idle": 0,
+            }
+        with self._manager_lock:
+            active = [
+                (request_id, profile_id)
+                for request_id, (root, profile_id) in self._active_requests.items()
+                if root == project_root
+            ]
+        for request_id, profile_id in active:
+            depth = result.setdefault(profile_id, {
+                "pending": 0, "running": 0, "active_running": 0, "idle": 0,
+            })
+            depth["running"] += 1
+            status = self.request_slot_status(profile_id, request_id)
+            if status == "idle":
+                depth["idle"] += 1
+            else:
+                depth["active_running"] += 1
         return result
 
     def _snapshot_all(self) -> dict[str, dict[str, int]]:
@@ -1087,8 +1090,8 @@ class GatewayQueueManager:
         Lock ordering (sorted by lane key tuple) avoids deadlock with _drain.
         """
         with self._manager_lock:
-            lane_key_tuples = sorted(self._lanes)
-        pqs = [self._lanes[lkt] for lkt in lane_key_tuples]
+            lane_key_tuples = sorted(self._runtime)
+        pqs = [self._runtime[lkt] for lkt in lane_key_tuples]
         for pq in pqs:
             pq.lock.acquire()
         try:
@@ -1104,7 +1107,7 @@ class GatewayQueueManager:
                     "running": len(pq.running),
                     "active_running": pq.active_running(),
                     "idle": len(pq.idle),
-                    "max_concurrency": pq.max_concurrency,
+                    "max_concurrency": pq._virtual_capacity,
                 }
                 for lkt, pq in zip(lane_key_tuples, pqs)
             }

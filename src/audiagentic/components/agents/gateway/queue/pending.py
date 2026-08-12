@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import threading
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Hashable
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
 T = TypeVar("T")
+K = TypeVar("K", bound=Hashable)
 
 
 @dataclass(frozen=True)
@@ -101,6 +102,14 @@ class PendingAuthority(Generic[T]):
     def count(self, predicate: Callable[[PendingRequest[T]], bool]) -> int:
         with self._condition:
             return sum(1 for request in self._by_request.values() if predicate(request))
+
+    def count_by(self, key: Callable[[PendingRequest[T]], K]) -> dict[K, int]:
+        with self._condition:
+            counts: dict[K, int] = {}
+            for request in self._by_request.values():
+                value = key(request)
+                counts[value] = counts.get(value, 0) + 1
+            return counts
 
     def depths(self) -> dict[str, int]:
         with self._condition:

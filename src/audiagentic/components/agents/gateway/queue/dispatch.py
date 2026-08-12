@@ -207,6 +207,24 @@ def _dispatch_one_attempt(
     )
 
     watchdog_policy = load_watchdog_policy()
+    persisted_policy = record.get("watchdog-policy")
+    if isinstance(persisted_policy, dict):
+        try:
+            # The record was admitted with a machine-owned snapshot. Use only
+            # its bounded lease value; malformed legacy snapshots fall back to
+            # the current safe machine policy.
+            lease = float(persisted_policy["activity-lease-seconds"])
+            if lease > 0:
+                watchdog_policy = type(watchdog_policy)(
+                    lease,
+                    float(persisted_policy.get("absolute-safety-ceiling-seconds", 0.0)),
+                    float(persisted_policy.get("diagnostic-grace-seconds", 30.0)),
+                    str(persisted_policy.get("policy-id", "snapshot")),
+                    str(persisted_policy.get("policy-digest", "snapshot")),
+                    True,
+                )
+        except (TypeError, ValueError, KeyError):
+            logger.warning("invalid persisted watchdog policy; using machine fallback", extra={"request-id": record.get("request-id")})
     try:
         result = execute_isolated_provider_turn(
             identity=identity,

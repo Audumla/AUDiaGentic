@@ -89,6 +89,31 @@ def test_resolve_queue_max_size_default():
     assert queue_mod.resolve_queue_max_size({}, 5) == 10
 
 
+def test_project_queue_depths_excludes_other_projects(tmp_path: Path):
+    manager = queue_mod.GatewayQueueManager()
+    project_a = tmp_path / "project-a"
+    project_b = tmp_path / "project-b"
+    project_a.mkdir()
+    project_b.mkdir()
+    hold = threading.Event()
+    started = threading.Event()
+    runner = _blocking_runner(hold, started)
+
+    first = _submit(manager, project_a, "reporting-profile", {"max-concurrency": 1}, runner)
+    assert started.wait(timeout=2)
+    second = _submit(manager, project_b, "reporting-profile", {"max-concurrency": 1}, runner)
+
+    assert manager.project_queue_depths(project_a) == {
+        "reporting-profile": {"pending": 0, "running": 1, "active_running": 1, "idle": 0}
+    }
+    assert manager.project_queue_depths(project_b) == {
+        "reporting-profile": {"pending": 1, "running": 0, "active_running": 0, "idle": 0}
+    }
+    hold.set()
+    assert manager.wait(project_a, first["request-id"], timeout_seconds=5)["state"] == "completed"
+    assert manager.wait(project_b, second["request-id"], timeout_seconds=5)["state"] == "completed"
+
+
 # ---------------------------------------------------------------------------
 # concurrency
 # ---------------------------------------------------------------------------

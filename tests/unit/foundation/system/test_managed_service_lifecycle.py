@@ -256,6 +256,77 @@ def test_drain_blocks_new_attach_and_stop_rechecks_lease_and_quiescence(tmp_path
     assert stopped.record.process is None
 
 
+def test_stale_draining_without_leases_restarts_through_normal_path(tmp_path: Path) -> None:
+    lifecycle, store, service, declaration = _lifecycle(tmp_path)
+    started = lifecycle.start_or_attach(
+        declaration, client_instance_id="client-a", lease_ttl_seconds=60
+    )
+    released = store.release_lease(started.lease.lease_id, expected_epoch=started.record.owner_epoch)
+    draining = lifecycle.request_drain(
+        expected_revision=released.revision, expected_epoch=released.owner_epoch
+    )
+    assert draining.state == "draining"
+    assert draining.process is not None
+    service.alive.pop(draining.process.pid, None)
+
+    restarted = lifecycle.start_or_attach(
+        declaration, client_instance_id="client-b", lease_ttl_seconds=60
+    )
+    assert restarted.disposition == "recovered"
+    assert restarted.record.state == "running"
+    assert service.launch_count == 2
+
+
+def test_reconnect_expires_dead_client_lease_before_stale_drain_restart(tmp_path: Path) -> None:
+    lifecycle, store, service, declaration = _lifecycle(tmp_path)
+    started = lifecycle.start_or_attach(
+        declaration, client_instance_id="client-a", lease_ttl_seconds=60
+    )
+    process = started.record.process
+    assert process is not None
+    released = store.release_lease(
+        started.lease.lease_id, expected_epoch=started.record.owner_epoch
+    )
+    draining = lifecycle.request_drain(
+        expected_revision=released.revision, expected_epoch=released.owner_epoch
+    )
+    # Simulate a client that died after the drain snapshot but before its
+    # lease-expiry sweep. The process is also gone, so reconnect is safe.
+    service.alive.pop(process.pid, None)
+    stale_lease = replace(
+        started.lease,
+        state="active",
+        expires_at="2000-01-01T00:00:00Z",
+    )
+    store._write_unlocked(
+        replace(draining, leases=(stale_lease,)), "test.expired-lease"
+    )
+
+    restarted = lifecycle.start_or_attach(
+        declaration, client_instance_id="client-b", lease_ttl_seconds=60
+    )
+    assert restarted.record.state == "running"
+    assert restarted.disposition == "recovered"
+    assert restarted.record.active_lease_count == 1
+
+
+def test_draining_with_live_process_refuses_restart_even_without_leases(tmp_path: Path) -> None:
+    lifecycle, store, service, declaration = _lifecycle(tmp_path)
+    started = lifecycle.start_or_attach(
+        declaration, client_instance_id="client-a", lease_ttl_seconds=60
+    )
+    released = store.release_lease(started.lease.lease_id, expected_epoch=started.record.owner_epoch)
+    _draining = lifecycle.request_drain(
+        expected_revision=released.revision, expected_epoch=released.owner_epoch
+    )
+
+    with pytest.raises(AudiaGenticError, match="CON-MSVC-028"):
+        lifecycle.start_or_attach(
+            declaration, client_instance_id="client-b", lease_ttl_seconds=60
+        )
+    assert service.launch_count == 1
+
+
 def test_guarded_stop_forces_only_after_fresh_ownership_match(tmp_path: Path) -> None:
     lifecycle, store, service, declaration = _lifecycle(tmp_path)
     started = lifecycle.start_or_attach(

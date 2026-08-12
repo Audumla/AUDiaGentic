@@ -155,5 +155,10 @@ class SourceCapacityAuthority:
             "active-source-id": None, "in-flight": {},
         }
 
+    def snapshots(self) -> dict[str, dict[str, Any]]:
+        with self._lock:
+            resources = tuple(self._resources.items())
+        return {resource_id: resource.snapshot() for resource_id, resource in resources}
+
 
 __all__ = ["CapacityReservation", "SourceCapacityAuthority"]

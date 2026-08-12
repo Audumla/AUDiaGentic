@@ -162,6 +162,23 @@ def build_and_run(img: Img, failures: list[str]) -> None:
         failures.append(img.tag)
 
 
+def build_and_run_provider_cli_matrix(img: Img, failures: list[str]) -> None:
+    """Run provider install assertions in one fresh container per provider."""
+    banner(f"DOCKER: {img.tag}  (isolated provider matrix)")
+    if build_image(img) != 0:
+        failures.append(f"{img.tag}:build")
+        return
+    if run([
+        sys.executable,
+        "tests/dev/run_provider_cli_isolated.py",
+        "--image",
+        img.tag,
+        "--retries",
+        "0",
+    ]) != 0:
+        failures.append(f"{img.tag}:provider-matrix")
+
+
 def docker_phase(include_lsp_install: bool, *, include_host_docker_tests: bool) -> int:
     """Build the image set once and run the in-container suites.
 
@@ -178,7 +195,10 @@ def docker_phase(include_lsp_install: bool, *, include_host_docker_tests: bool) 
     build_and_run(SUITE, failures)
     build_and_run(PACKAGING, failures)
     for img in RECIPE_IMAGES:
-        build_and_run(img, failures)
+        if img.tag == "audia-provider-cli-comprehensive:latest":
+            build_and_run_provider_cli_matrix(img, failures)
+        else:
+            build_and_run(img, failures)
 
     if include_lsp_install:
         build_and_run(LSP_INSTALL, failures)

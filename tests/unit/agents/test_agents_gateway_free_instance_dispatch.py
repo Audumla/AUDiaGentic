@@ -297,4 +297,10 @@ def test_mixed_declared_and_plain_instances_use_one_placement_contract(tmp_path,
             updates={"output": "done", "finished-at": now_iso_z()},
         ),
     )
-    assert manager.wait(tmp_path, record["request-id"], timeout_seconds=5)["state"] == "completed"
+    finished = manager.wait(tmp_path, record["request-id"], timeout_seconds=5)
+    assert finished["state"] == "completed"
+    # AS101: even an un-declared/plain candidate must be durably bound under
+    # the same admission fence as a resource-backed source.  This prevents a
+    # restarted gateway from losing the exact placement used by the runner.
+    assert finished["resolved-source-id"] in {"bounded", "plain-model"}
+    assert finished["resolved-model-id"]
