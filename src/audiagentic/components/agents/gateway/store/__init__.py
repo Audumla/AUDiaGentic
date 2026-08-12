@@ -1,9 +1,8 @@
 """Agent Execution Gateway request/result contract and persisted state store.
 
 Owns the gateway's own record shape and lifecycle — deliberately not built on
-agent_jobs.records.JobRecord (packet/workflow-profile/approvals/review-policy
-do not fit a gateway request; see AG07 notes for the reuse-vs-parallel
-decision). Reuses only the generic, already-shared primitives: atomic JSON
+the retired job-system record (packet/workflow-profile/approvals/review-policy
+do not fit a gateway request). Reuses only the generic, already-shared primitives: atomic JSON
 persistence (foundation.io), schema validation (foundation.contracts.schema_registry,
 same "<stem>.schema.json" convention as job-record), and the workflow transition
 engine (foundation.workflow) driven by this component's own workflows.yaml.

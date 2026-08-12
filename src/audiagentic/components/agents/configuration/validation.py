@@ -26,6 +26,11 @@ def validate_document(document: AgentsConfigDocument) -> tuple[str, ...]:
     roles = collect("roles", document.roles, "role_id")
     profiles = collect("execution_profiles", document.execution_profiles, "profile_id")
     agents = collect("agents", document.agents, "agent_id")
+    triggers = collect("triggers", document.triggers, "trigger_id")
+    for trigger_id, trigger in sorted(triggers.items()):
+        pattern = trigger.get("event_pattern", trigger.get("event-pattern"))
+        if not isinstance(pattern, str) or not pattern.strip():
+            errors.append(f"triggers[{trigger_id}].event_pattern: required non-empty string")
     for agent_id, agent in sorted(agents.items()):
         prompt_id = agent.get("prompt_id", agent.get("prompt-id"))
         if prompt_id is not None and prompt_id not in prompts:

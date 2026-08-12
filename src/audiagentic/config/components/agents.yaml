@@ -25,6 +25,38 @@ files:
     recursive: true
     description: Agent Execution Gateway request/result records
 mcp-servers:
+  - name: ag-agents-runtime
+    module: audiagentic.components.agents.mcp.runtime_mcp
+    direct-tools:
+      - agent_context_open
+      - agent_context_get
+      - agent_context_list
+      - agent_context_close
+      - agent_work_submit
+      - agent_work_list
+      - agent_work_get
+      - agent_work_message
+      - agent_work_cancel
+      - agent_work_output
+      - agent_work_submit_child
+    description: Canonical logical Context/Work runtime operations.
+    propagate: audiagentic
+    instructions: >
+      Operate on logical Agent Context and Work through the GatewayClient
+      boundary. Work output remains owned by the gateway execution output
+      surface; Context and Work records contain identity, lifecycle, and links.
+    tool-descriptions:
+      agent_context_open: Open a logical Agent Context.
+      agent_context_get: Read one Agent Context.
+      agent_context_list: List Agent Contexts.
+      agent_context_close: Close an Agent Context.
+      agent_work_submit: Submit one Work input in a Context.
+      agent_work_list: List Agent Work records.
+      agent_work_get: Read one Agent Work record.
+      agent_work_message: Append one caller message to Work.
+      agent_work_cancel: Cancel Work and linked execution.
+      agent_work_output: Project gateway-owned output for Work.
+      agent_work_submit_child: Create child Work linked to a parent Work.
   - name: ag-agents-mgmt
     module: audiagentic.components.agents.mcp.manage_mcp
     direct-tools:
