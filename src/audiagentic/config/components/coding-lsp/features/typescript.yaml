@@ -13,10 +13,13 @@ detection-markers: [tsconfig.json, package.json]
 dependencies:
   typescript-language-server:
     display-name: TypeScript Language Server
-    probe: all-binaries:typescript-language-server,tsserver
+    # Current TypeScript releases expose tsserver as an internal library rather
+    # than a standalone executable; the language-server CLI is the supported
+    # availability contract.
+    probe: binary:typescript-language-server
     toolchain: npm
-    package: [typescript-language-server, typescript]
-    uninstall-package: [typescript-language-server, typescript]
+    package: [typescript-language-server, "typescript@5.9.3"]
+    uninstall-package: [typescript-language-server, "typescript@5.9.3"]
 options-schema:
   server-settings:
     type: object

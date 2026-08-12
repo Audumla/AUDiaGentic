@@ -8,6 +8,7 @@ the external-mcp-servers declarations in source-control.yaml.
 from __future__ import annotations
 
 import logging
+import re
 import stat as _stat
 from pathlib import Path
 from typing import Any
@@ -123,6 +124,44 @@ def _install_hook_absent(hook_path: Path, project_root: Path) -> bool:
     return True
 
 
+def _strip_legacy_marker_body(existing: str) -> str | None:
+    """Remove a pre-managed-block hook body, returning the remaining content.
+
+    The legacy body runs from the marker comment to the end of the ``python -c``
+    invocation that closes it. Returns None when that terminator is not found,
+    so the caller can fall back rather than guess at how much to delete.
+    """
+    lines = existing.splitlines()
+    start = next(
+        (i for i, line in enumerate(lines) if line.strip().startswith(f"# {_HOOK_BLOCK_ID}")),
+        None,
+    )
+    if start is None:
+        return None
+    terminator = re.compile(r'^"\s*(?:2>\s*/dev/null\s*)?(?:\|\|\s*true\s*)?$')
+    end = next((i for i in range(start, len(lines)) if terminator.match(lines[i])), None)
+    if end is None:
+        return None
+    remaining = lines[:start] + lines[end + 1 :]
+    return "\n".join(remaining).rstrip("\n") + "\n"
+
+
+def _replace_legacy_marker(hook_path: Path, existing: str, hook_body_lf: str) -> None:
+    """Upgrade a legacy hook body in place to a managed block."""
+    stripped = _strip_legacy_marker_body(existing)
+    if stripped is None:
+        # Could not identify the legacy region; append the block rather than
+        # delete content we do not understand. Stamping is idempotent, so a
+        # leftover legacy invocation is harmless and now fails loudly.
+        logger.warning(
+            "Legacy hook body could not be delimited; appending managed block alongside it.",
+            extra={"path": str(hook_path)},
+        )
+    else:
+        atomic_write_text(hook_path, stripped)
+    apply_managed_block(hook_path, _HOOK_BLOCK_ID, hook_body_lf)
+
+
 def _install_hook_user_owned(hook_path: Path, project_root: Path) -> bool:
     """Append managed block to existing user-owned hook file."""
     change = apply_managed_block(
@@ -205,17 +244,29 @@ def install_post_commit_hook(
 
     # Check for legacy marker (pre-managed-block format)
     if _HOOK_BLOCK_ID in existing:
-        # Legacy marker present but not wrapped in managed block markers — treat as installed
+        # Ours, but written before the managed-block format. Upgrade it to a
+        # real block: reporting "installed" without rewriting would freeze the
+        # hook at its original body forever, so a stale entry point could never
+        # be corrected by reinstalling.
         logger.info(
-            "Legacy hook marker detected without formal block delimiters; treating as installed.",
+            "Legacy hook marker detected without block delimiters; upgrading to a managed block.",
             extra={"path": str(hook_path)},
         )
-        return {
+        result = {
             "installed": True,
             "path": str(hook_path),
             "ownership_mode": "block",
-            "reason": "legacy-marker-present",
+            "reason": "upgraded-legacy-marker",
         }
+        if dry_run:
+            result["dry_run_changes"] = {
+                "action": "replace-legacy-marker",
+                "bytes_before": len(existing.encode("utf-8")),
+            }
+            return result
+        _replace_legacy_marker(hook_path, existing, hook_body_lf)
+        _set_executable(hook_path)
+        return result
 
     # User-owned file (no marker, no block) → collision: append managed block
     result = {

@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from tests.helpers import sandbox as sandbox_helper
 
 from audiagentic.components.release import release_api
@@ -10,6 +12,8 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.paths.package import REPO_ROOT
 
 FIXTURES = REPO_ROOT / "docs" / "examples" / "fixtures"
+
+pytestmark = pytest.mark.no_parallel
 
 
 def _load_event(event_id: str, summary: str) -> dict:

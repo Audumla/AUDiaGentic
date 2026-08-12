@@ -148,3 +148,12 @@ def test_serialized_contracts_match_concrete_schemas():
     Draft202012Validator(result_schema).validate(
         PluginEntryResult(ok=True, supported=True, provider_id="opencode").to_mapping()
     )
+
+
+def test_plugin_options_preserve_json_scalar_types():
+    request = PluginEntryRequest(
+        "plugin",
+        ownership_scope="test",
+        options=(("enabled", True), ("turns", 3), ("debug", False)),
+    )
+    assert request.options_mapping() == {"enabled": True, "turns": 3, "debug": False}

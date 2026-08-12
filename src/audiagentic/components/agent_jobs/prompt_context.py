@@ -115,7 +115,7 @@ def build_prompt_context_from_event(
     project_root: str = "",
     project_id: str = "",
     job_id: str = "",
-    agent_profile_id: str = "",
+    execution_profile_id: str = "",
     provider_id: str = "",
     model_id: str = "",
     target: dict[str, Any] | None = None,
@@ -130,7 +130,7 @@ def build_prompt_context_from_event(
         project_root: Absolute path to the project root.
         project_id: Project identifier string.
         job_id: Job identifier string.
-        agent_profile_id: Resolved agent profile id.
+        execution_profile_id: Resolved execution profile id.
         provider_id: Resolved provider id.
         model_id: Resolved model id.
         target: Optional launch target info dict.
@@ -202,7 +202,7 @@ def build_prompt_context_from_event(
 
     # -- agent section --
     agent_section: dict[str, Any] = {
-        "profile_id": agent_profile_id,
+        "profile_id": execution_profile_id,
         "provider_id": provider_id,
         "model_id": model_id,
     }
@@ -229,7 +229,7 @@ def build_prompt_context_from_request(
     project_root: str = "",
     project_id: str = "",
     job_id: str = "",
-    agent_profile_id: str = "",
+    execution_profile_id: str = "",
     provider_id: str = "",
     model_id: str = "",
     explicit_context: dict[str, Any] | None = None,
@@ -242,7 +242,7 @@ def build_prompt_context_from_request(
         project_root: Absolute path to the project root.
         project_id: Project identifier string.
         job_id: Job identifier string.
-        agent_profile_id: Resolved agent profile id.
+        execution_profile_id: Resolved execution profile id.
         provider_id: Resolved provider id.
         model_id: Resolved model id.
         explicit_context: Optional caller-supplied context data merged into sections.
@@ -303,7 +303,7 @@ def build_prompt_context_from_request(
 
     # -- agent section --
     agent_section: dict[str, Any] = {
-        "profile_id": agent_profile_id,
+        "profile_id": execution_profile_id,
         "provider_id": provider_id,
         "model_id": model_id,
     }

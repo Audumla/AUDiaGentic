@@ -79,9 +79,7 @@
     "tag": {
       "type": "string",
       "enum": [
-        "ag-plan",
-        "ag-implement",
-        "ag-review",
+        "adhoc",
         "ag-ledger",
         "ag-check-in-prep"
       ]
@@ -287,7 +285,7 @@
     "prompt-template-file": {
       "type": "string"
     },
-    "agent-profile-id": {
+    "execution-profile-id": {
       "type": "string"
     },
     "context": {

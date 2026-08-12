@@ -35,6 +35,8 @@ def test_pi_acp_surface_resolves_through_public_api(tmp_path: Path) -> None:
 
     prepared = providers_api.prepare_provider_session_transport(
         tmp_path,
+        ag_session_id="ag-test-session",
+        binding_sink=lambda update: None,
         provider_id="pi",
         surface_hint=SurfaceHint(
             surface_id="pi-community-acp",

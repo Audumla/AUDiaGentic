@@ -9,21 +9,24 @@ helper; they contain no lifecycle/store/signal logic.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
+import signal
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
     )
+    from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
 
 
 def _standalone_client_from_env() -> StandaloneGatewayClient:
     """Build a StandaloneGatewayClient from environment (same env as get_gateway_client)."""
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
         load_auth_token,
     )
@@ -42,11 +45,65 @@ def _standalone_client_from_env() -> StandaloneGatewayClient:
 
 # - serve (existing) -
 
+
+class _ShutdownState:
+    """Mutable flag set by the signal handler, read after serve_forever() returns.
+
+    A plain attribute container rather than a bool local: the handler is a
+    closure invoked asynchronously by the interpreter's signal machinery, so
+    it needs a mutable object to record onto, not a rebound name.
+    """
+
+    def __init__(self) -> None:
+        self.forced_fallback = False
+
+
+def _shutdown_signals() -> list[int]:
+    """SIGINT/SIGTERM always; SIGBREAK too on Windows (CTRL_CLOSE/taskkill
+    maps there, not to SIGTERM). A hard TerminateProcess/-9 runs no handler —
+    that is covered by the next start's owner-claim liveness check and SH07
+    recovery, not by anything here."""
+    sigs = [signal.SIGINT, signal.SIGTERM]
+    win_break = getattr(signal, "SIGBREAK", None)
+    if win_break is not None:
+        sigs.append(win_break)
+    return sigs
+
+
+def _install_shutdown_signals(host: GatewayServiceHost) -> _ShutdownState:
+    """Drain-first signal handling for the serving process (SH10 Slice B).
+
+    Refuse-force semantics make no sense on an OS kill signal -- there is no
+    interactive way to "drain first" in response to SIGTERM, so this goes
+    straight to a forced stop. If that itself fails for some reason, fall
+    back to a raw server shutdown so the process still exits rather than
+    hanging on a broken lifecycle path.
+    """
+    state = _ShutdownState()
+
+    def _handler(signum: int, _frame: object) -> None:
+        del signum
+        try:
+            if host.lifecycle is not None:
+                host.lifecycle.request_stop(force=True)
+            else:
+                host.shutdown()
+        except Exception:
+            state.forced_fallback = True
+            with contextlib.suppress(Exception):
+                host.shutdown()
+
+    for sig in _shutdown_signals():
+        with contextlib.suppress(OSError, ValueError):
+            signal.signal(sig, _handler)
+    return state
+
+
 def cmd_gateway(args: argparse.Namespace, project_root: Path) -> int:
     del project_root
     if args.gateway_cmd != "serve":
         raise ValueError(f"unsupported gateway command: {args.gateway_cmd}")
-    from audiagentic.components.agents.agents_gateway_service_host import GatewayServiceHost
+    from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
 
     host = GatewayServiceHost.create(
         host=args.host,
@@ -55,13 +112,14 @@ def cmd_gateway(args: argparse.Namespace, project_root: Path) -> int:
     )
     print(f"gateway endpoint: {host.endpoint}")
     print(f"gateway token file: {host.token_path}")
+    shutdown_state = _install_shutdown_signals(host)
     try:
         host.serve_forever()
     except KeyboardInterrupt:
         return 0
     finally:
         host.close()
-    return 0
+    return 1 if shutdown_state.forced_fallback else 0
 
 
 # - SH10 lifecycle operators -
@@ -124,15 +182,14 @@ def cmd_gateway_recover(args: argparse.Namespace, project_root: Path) -> int:
     dead/unprovable service; it goes straight to the store via the
     lifecycle module.
     """
-    from audiagentic.components.agents.agents_gateway_lifecycle import (
+    from audiagentic.components.agents.gateway.service.lifecycle import (
         recover_unprovable_owner,
     )
 
-    result = recover_unprovable_owner(
-        service_root=project_root,
-        confirm=args.confirm,
-        reason=args.reason,
-    )
+    # Automatic gateway ownership is machine-scoped.  Recovery must address
+    # the same default machine store as bootstrap, not synthesize a second
+    # project-local managed-service record beneath ``project_root``.
+    result = recover_unprovable_owner(confirm=args.confirm, reason=args.reason)
     _json_out(result)
     return 0
 

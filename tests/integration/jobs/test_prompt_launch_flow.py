@@ -12,7 +12,6 @@ for path in (str(ROOT), str(SRC)):
 
 from tests.helpers import sandbox as sandbox_helper
 
-from audiagentic.components.agent_jobs import review_launch
 from audiagentic.components.agent_jobs.jobs_store import job_record_path
 from audiagentic.components.agent_jobs.prompt_launch import launch_prompt_request
 from audiagentic.components.agent_jobs.prompt_parser import parse_prompt_launch_request
@@ -106,7 +105,7 @@ def test_prompt_launch_creates_job_and_launch_artifact(tmp_path: Path) -> None:
     try:
         _write_project_and_provider_config(sandbox)
         request = parse_prompt_launch_request(
-            "@plan target=packet:PKT-JOB-008 provider=codex model=gpt-5.4-mini profile=standard\n"
+            "@adhoc target=packet:PKT-JOB-008 provider=codex model=gpt-5.4-mini profile=standard\n"
             "Continue implementing the packet.\n",
             surface="vscode",
             provider_id="codex",
@@ -117,7 +116,7 @@ def test_prompt_launch_creates_job_and_launch_artifact(tmp_path: Path) -> None:
         result = launch_prompt_request(sandbox.repo, request)
         assert result["status"] == "created"
         job = result["job"]
-        assert job["launch-tag"] == "ag-plan"
+        assert job["launch-tag"] == "adhoc"
         assert job["model-id"] == "gpt-5.4-mini"
         assert job_record_path(sandbox.repo, job["job-id"]).exists()
         launch_path = sandbox.repo / ".audiagentic" / "runtime" / "jobs" / job["job-id"] / "launch-request.json"
@@ -148,62 +147,4 @@ def test_prompt_launch_defaults_model_and_job_subject_from_provider_shorthand(tm
         assert job["launch-target"]["adhoc-id"] == "adh_20260330_0010"
         assert job["job-id"].startswith("job_")
     finally:
-        sandbox.cleanup()
-
-
-def test_prompt_review_creates_review_artifacts(tmp_path: Path) -> None:
-    sandbox = sandbox_helper.create(tmp_path, "prompt-review")
-    original_execute_provider = review_launch.execute_provider_review_turn
-    try:
-        _write_project_and_provider_config(sandbox)
-        captured: dict[str, object] = {}
-
-        def fake_execute_provider(project_root, *, provider_id, packet_data):  # type: ignore[no-untyped-def]
-            captured["packet_ctx"] = packet_data
-            return {
-                "provider-id": provider_id,
-                "status": "ok",
-                "output": json.dumps(
-                    {
-                        "findings": [
-                            {
-                                "finding-id": "fdg_001",
-                                "severity": "minor",
-                                "blocking": False,
-                                "summary": "Template-driven review executed.",
-                                "suggested-fix": "None needed.",
-                            }
-                        ],
-                        "recommendation": "pass-with-notes",
-                        "follow-up-actions": ["Archive the review output."],
-                    }
-                ),
-            }
-
-        review_launch.execute_provider_review_turn = fake_execute_provider  # type: ignore[assignment]
-        request = parse_prompt_launch_request(
-            "@r-cline id=job_001 ctx=documentation t=review-default\n",
-            surface="cli",
-            provider_id="cline",
-            session_id="sess_044",
-            workflow_profile="standard",
-            prompt_id="prm_20260330_0044",
-            project_root=sandbox.repo,
-        )
-        result = launch_prompt_request(sandbox.repo, request)
-        assert result["status"] == "open"
-        review_root = sandbox.repo / ".audiagentic" / "runtime" / "jobs" / result["job-id"] / "reviews"
-        assert any(review_root.glob("review-report.*.json"))
-        assert (review_root / "review-bundle.json").exists()
-        report = json.loads(next(review_root.glob("review-report.*.json")).read_text(encoding="utf-8"))
-        assert report["recommendation"] == "pass-with-notes"
-        assert report["findings"][0]["summary"] == "Template-driven review executed."
-        assert report["subject"]["job-id"] == "job_001"
-        assert report["criteria"]
-        packet_ctx = captured["packet_ctx"]
-        assert isinstance(packet_ctx, dict)
-        assert packet_ctx["stream-controls"]["enabled"] is True
-        assert packet_ctx["input-controls"]["capture-stdin"] is True
-    finally:
-        review_launch.execute_provider_review_turn = original_execute_provider  # type: ignore[assignment]
         sandbox.cleanup()

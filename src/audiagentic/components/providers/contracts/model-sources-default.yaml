@@ -1,0 +1,14 @@
+# Package default for the layered model-sources contract (AS105/AS101).
+# No default sources are shipped -- there is nothing sensible to assume
+# about a machine's shared local endpoints or a project's remote accounts.
+# This file exists only to satisfy load_layered_config's requirement that a
+# package-default layer exist; the real content is authored at the
+# user-global tier (shared local-endpoint sources) and/or project-local
+# tier (remote-account credentials), per model_source_config.py.
+#
+# Colocated with model-sources.schema.json rather than under
+# config/providers/ -- that directory is auto-globbed as provider
+# descriptors by components/providers/adapters/__init__.py, and this file
+# is not one.
+contract-version: v1
+sources: {}

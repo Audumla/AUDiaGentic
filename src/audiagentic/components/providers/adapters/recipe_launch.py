@@ -48,6 +48,7 @@ def _make_interactive_builder(provider_id: str, block: dict[str, Any]):
         provider: str,
         model: str,
         agent_runtime: Path,
+        provider_config: dict[str, Any] | None = None,
         mcp_surface: Any = None,
         runner_params: Any = None,
         smoke: bool = False,
@@ -55,6 +56,7 @@ def _make_interactive_builder(provider_id: str, block: dict[str, Any]):
         agent_dir = agent_runtime / "agent"
         context: dict[str, Any] = {
             "model": model,
+            "provider-config": provider_config or {},
             "prompt": None,
             "runner-args": _translate_runner_flags(block.get("runner-flags", {}), runner_params),
             "mcp-args": tuple(mcp_surface.extra_args) if mcp_surface is not None else (),
@@ -86,11 +88,13 @@ def _make_acp_builder(provider_id: str, block: dict[str, Any]):
         project_root: Path,
         *,
         model_id: str | None = None,
+        provider_config: dict[str, Any] | None = None,
         request_runtime_root: Path | None = None,
         mcp_surface: Any = None,
     ) -> ProviderLaunch:
         context: dict[str, Any] = {
             "model": model_id,
+            "provider-config": provider_config or {},
             "mcp-args": tuple(mcp_surface.extra_args) if mcp_surface is not None else (),
             "extra-env": dict(mcp_surface.extra_env) if mcp_surface is not None else {},
             "env": {

@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 # Cross-component mirror for agents-owned gateway topic (BU02).
 # Owner: agents/agents_gateway_events.CANCEL_REQUESTED_TOPIC
-GW_TOPIC_CANCEL_REQUESTED = "agents.llm.gateway.cancel-requested"
+GW_TOPIC_CANCEL_REQUESTED = "agents.execution.gateway.cancel-requested"
 
 
 def _record_control_timeline_event(
@@ -71,7 +71,6 @@ def _record_control_timeline_event(
     )
 
 
-
 def _publish_gateway_cancel_requested(
     project_root: Path,
     job: dict[str, Any],
@@ -79,7 +78,7 @@ def _publish_gateway_cancel_requested(
 ) -> None:
     """Propagate a persisted job cancellation to its owning gateway request (EDJ08).
 
-    Publishes ``agents.llm.gateway.cancel-requested`` for the job's
+    Publishes ``agents.execution.gateway.cancel-requested`` for the job's
     gateway-request artifact; no-op when the job has none. Called only after
     the job's transition to ``cancelled`` has persisted — a publish failure is
     dead-lettered and never rolls back the local cancellation. Never raises.
@@ -121,7 +120,7 @@ def _publish_gateway_cancel_requested(
             write_dead_letter(
                 project_root,
                 {
-                    "event_type": "agents.llm.gateway.cancel-requested",
+                    "event_type": "agents.execution.gateway.cancel-requested",
                     "payload_summary": f"request-id={request_id} job-id={job_id}",
                     "metadata": {"job-id": job_id, "correlation_id": correlation_id},
                     "trigger_id": "",

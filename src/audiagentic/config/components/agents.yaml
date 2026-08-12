@@ -1,137 +1,316 @@
 type: component
 contract-version: v1
 id: agents
-display-name: Agent Profiles
+display-name: Execution Profiles
 description: >
-  Agent profile management — bind a provider to a specific model with optional
+  Execution profile management — bind a provider to a specific model with optional
   execution parameters. Profiles are stored per-project and resolved at job launch.
 depends-on:
   - project
-lifecycle-observer: audiagentic.components.agents.agents_gateway_events
-status-hook: audiagentic.components.agents.agents_api.agent_status
+implementation-cardinality: exclusive
+lifecycle-observer: audiagentic.components.agents.gateway.events
+status-hook: audiagentic.components.agents.models.execution_profile_api.agent_status
 files:
-  - path: .audiagentic/config/agent-profiles.yaml
+  - path: .audiagentic/config/execution-profiles.yaml
     lifecycle: create-if-missing
-    description: Per-project agent profile configurations
-  - path: .audiagentic/runtime/agent-llm-gateway
+    description: Per-project execution profile configurations
+  - path: .audiagentic/config/roles.yaml
+    lifecycle: create-if-missing
+    description: Per-project role configurations (AS61)
+  - path: .audiagentic/config/agent-definitions.yaml
+    lifecycle: create-if-missing
+    description: Per-project agent definition configurations (AS62)
+  - path: .audiagentic/runtime/agent-execution-gateway
     lifecycle: runtime-only
     recursive: true
-    description: Agent LLM Gateway request/result records
+    description: Agent Execution Gateway request/result records
 mcp-servers:
   - name: ag-agents-mgmt
-    module: audiagentic.components.agents.agents_manage_mcp
+    module: audiagentic.components.agents.mcp.manage_mcp
     direct-tools:
-      - agent_list_profiles
-      - agent_get_profile
-      - agent_create_profile
-      - agent_update_profile
-      - agent_delete_profile
-    description: Agent profile management — CRUD operations for provider+model bindings
+      - agent_list_execution_profiles
+      - agent_get_execution_profile
+      - agent_create_execution_profile
+      - agent_update_execution_profile
+      - agent_delete_execution_profile
+      - agent_list_roles
+      - agent_get_role
+      - agent_create_role
+      - agent_update_role
+      - agent_delete_role
+      - agent_list_definitions
+      - agent_get_definition
+      - agent_create_definition
+      - agent_update_definition
+      - agent_delete_definition
+      - agent_gateway_status
+      - agent_gateway_list_implementations
+      - agent_gateway_select_implementation
+      - agent_gateway_get_config
+      - agent_gateway_set_config
+      - agent_gateway_create_operation
+      - agent_gateway_get_operation
+      - agent_gateway_list_operations
+      - agent_gateway_get_retention_policy
+    description: Execution profile, role, agent definition, and gateway-management (SH11) — CRUD for provider+model bindings, behavioral role definitions, their composition into logical agents, and declarative selection of the gateway management implementation (embedded/standalone/automatic)
     propagate: audiagentic
     instructions: >
-      CRUD for agent profiles (provider+model bindings). A profile's id is immutable —
-      delete and recreate to rename.
+      CRUD for execution profiles (provider+model bindings), roles (small,
+      provider-independent behavioral definitions), and agent definitions
+      (a stable ID composing one execution profile and one role, plus
+      optional advertised skills and internal/acp/a2a publication flags). A
+      profile, role, or agent definition's id is immutable — delete and
+      recreate to rename. Roles carry no provider/model selection, session
+      surface, queue, or runtime tool/MCP/permission configuration; those
+      stay owned by execution profiles and the harness's existing
+      configuration. Publication flags are authorization/visibility metadata
+      only — they do not install MCP servers, grant management MCP access,
+      alter harness runtime tools, or imply a selected session surface
+      supports ACP/A2A.
     tool-descriptions:
-      agent_list_profiles: List all agent profiles with summary information.
-      agent_get_profile:
+      agent_list_execution_profiles: List all execution profiles with summary information.
+      agent_get_execution_profile:
         description: >
-          Get a single agent profile by ID, returning full configuration including
-          provider_id, model_id, model_alias, params, and is-default flag.
+          Get a single execution profile by ID, returning full configuration including
+          provider_id, model_id, model_alias, params, surface_id (AS29 session surface
+          this profile launches through -- absent means provider default), and
+          is-default flag.
         parameters:
-          profile_id: "Agent profile identifier to look up"
-      agent_create_profile:
+          profile_id: "Execution profile identifier to look up"
+      agent_create_execution_profile:
         description: >
-          Create a new agent profile binding a provider to a specific model with optional
+          Create a new execution profile binding a provider to a specific model with optional
           execution parameters. Returns the created profile.
         parameters:
           profile: "Profile dict with provider_id, model_id, and optional params/is-default"
-      agent_update_profile:
+      agent_update_execution_profile:
         description: >
-          Update fields of an existing agent profile by ID. Profile id is immutable —
+          Update fields of an existing execution profile by ID. Profile id is immutable —
           delete and recreate to rename. Returns the updated profile.
         parameters:
           profile_id: "Profile identifier to update"
           updates: "Partial profile dict — only specified keys are modified"
-      agent_delete_profile:
-        description: Delete an agent profile by ID.
+      agent_delete_execution_profile:
+        description: Delete an execution profile by ID.
         parameters:
           profile_id: "Profile identifier to delete"
-
-  - name: ag-agents
-    module: audiagentic.components.agents.agents_mcp
-    direct-tools:
-      - agent_resolve_profile
-      - agent_resolve_default_profile
-      - agent_list_profiles
-    description: Agent profile resolution — look up profiles for job execution
-    propagate: providers
-    instructions: >
-      Resolve agent profiles to provider+model at job launch.
-    tool-descriptions:
-      agent_resolve_profile:
+      agent_list_roles: List all roles with summary information.
+      agent_get_role:
         description: >
-          Resolve an agent profile by ID. Returns provider_id, model_id, model_alias,
-          and params. Raises RES-AGP-001 if not found.
+          Get a single role by ID, returning instructions, required_capabilities,
+          output_guidance, and runtime_tool_policy_ref (inert placeholder).
         parameters:
-          profile_id: "Agent profile identifier to look up"
-      agent_resolve_default_profile: >
-        Resolve the profile marked as default. Raises RES-AGP-003 if no default exists.
-      agent_list_profiles: >
-        List all agent profiles with summary information.
+          role_id: "Role identifier to look up"
+      agent_create_role:
+        description: >
+          Create a new role with instructions and optional required capabilities.
+          Returns the created role.
+        parameters:
+          role: "Role dict with role_id, instructions, and optional required_capabilities/output_guidance"
+      agent_update_role:
+        description: >
+          Update fields of an existing role by ID. Role id is immutable —
+          delete and recreate to rename. Returns the updated role.
+        parameters:
+          role_id: "Role identifier to update"
+          updates: "Partial role dict — only specified keys are modified"
+      agent_delete_role:
+        description: Delete a role by ID.
+        parameters:
+          role_id: "Role identifier to delete"
+      agent_list_definitions: List all agent definitions with summary information.
+      agent_get_definition:
+        description: >
+          Get a single agent definition by ID, returning execution_profile_id,
+          role_id, advertised_skills, and publication flags (internal/acp/a2a).
+        parameters:
+          agent_id: "Agent definition identifier to look up"
+      agent_create_definition:
+        description: >
+          Create a new agent definition composing one execution profile and one
+          role. Returns the created definition. Does not validate that the
+          referenced execution_profile_id/role_id exist yet.
+        parameters:
+          definition: "Definition dict with agent_id, name, execution_profile_id, role_id"
+      agent_update_definition:
+        description: >
+          Update fields of an existing agent definition by ID, including
+          re-pointing it to a different execution_profile_id or role_id while
+          keeping its stable public ID. Returns the updated definition.
+        parameters:
+          agent_id: "Agent definition identifier to update"
+          updates: "Partial definition dict — only specified keys are modified"
+      agent_delete_definition:
+        description: Delete an agent definition by ID.
+        parameters:
+          agent_id: "Agent definition identifier to delete"
+      agent_gateway_status: >
+        Return the active gateway management implementation (embedded/standalone/automatic)
+        and whether it was explicitly selected or is only active by descriptor default.
+      agent_gateway_list_implementations: >
+        List all registered gateway management implementations with their display name,
+        description, default flag, and which one is currently active.
+      agent_gateway_select_implementation:
+        description: >
+          Switch the active gateway management implementation for this project
+          (SH11). Declarative alternative to the AUDIAGENTIC_GATEWAY_MODE env
+          override, which still takes precedence when set.
+        parameters:
+          implementation_id: "One of: embedded, standalone, automatic"
+      agent_gateway_get_config:
+        description: >
+          Return resolved config plus the settable-option schema for a gateway
+          implementation. The schema field describes every option it accepts
+          (type, description, required, default, allowed values). Use with
+          agent_gateway_set_config.
+        parameters:
+          implementation_id: "Implementation to inspect; defaults to the active one"
+      agent_gateway_set_config:
+        description: >
+          Validate and persist config updates for a gateway implementation.
+          See agent_gateway_get_config for the option schema it accepts.
+        parameters:
+          implementation_id: "Implementation to configure"
+          updates: "Partial options dict — only specified keys are validated and set"
+      agent_gateway_create_operation:
+        description: >
+          Create durable provider-neutral gateway operator work. The returned
+          acknowledgement only records accepted work; poll get operation for
+          completion. Scope never accepts prompts, outputs, credentials, or
+          provider-native handles.
+        parameters:
+          operation_id: "Caller idempotency identifier for this operation"
+          kind: "One of: reconcile, archive, purge"
+          scope: "Safe JSON selector mapping; reconcile requires absolute project-root"
+          correlation_id: "Optional safe correlation identifier"
+      agent_gateway_get_operation:
+        description: "Return the redacted durable state/result of gateway operator work."
+        parameters:
+          operation_id: "Gateway operator operation identifier"
+      agent_gateway_list_operations:
+        description: "Read-only bounded list of redacted gateway operations for maintenance inspection."
+        parameters:
+          limit: "Maximum number of records to return (1-1000)"
+      agent_gateway_get_retention_policy:
+        description: "Return the redacted machine-owned archive retention policy; no policy path or project data is exposed."
+        parameters: {}
 
   - name: ag-agents-gateway
-    module: audiagentic.components.agents.agents_gateway_mcp
+    module: audiagentic.components.agents.mcp.gateway_mcp
     direct-tools:
-      - agent_llm_submit
-      - agent_llm_status
-      - agent_llm_wait
-      - agent_llm_cancel
-      - agent_llm_run
-      - agent_llm_list_requests
-      - agent_llm_gateway_overview
-    description: Agent LLM Gateway — async submit/status/wait/cancel/run and observability (list/overview) for provider execution through an agent profile
+      - agent_list_definitions
+      - agent_task_submit
+      - agent_task_status
+      - agent_task_cancel
+      - agent_task_list_requests
+      - agent_task_gateway_overview
+      - agent_task_session_list
+      - agent_task_session_close
+      - agent_task_session_control
+      - agent_task_session_resume
+    description: >
+      Agent Execution Gateway — read-only agent-definition discovery,
+      agent_id-primary submission (AS63) plus status/cancel,
+      observability (list/overview), and session management
     propagate: providers
     instructions: >
-      Async path: agent_llm_submit returns request-id immediately; poll agent_llm_status
-      or block later with agent_llm_wait. Blocking path: agent_llm_run submits and waits
-      for a terminal result or timeout in one call — use for short one-shot work only.
-      Cancellation is best-effort: agent_llm_cancel on a queued request removes it before
-      it ever runs; on a running request it only records intent (cancel-requested) —
-      the request may still complete normally, and the persisted state reflects what
-      actually happened, not the cancel intent. Propagated to providers only; the
-      AUDiaGentic CLI harness must not receive the gateway server.
-      For most agent profiles, "output" is provider CLI/session execution output, not a
-      raw chat completion — only API-style providers (e.g. local-openai) return a direct
-      completion. Use agent_llm_gateway_overview or agent_llm_list_requests to see what's
-      happening without already knowing a request-id.
+      agent_task_submit is the sole submission surface (RV891) — pass an
+      agent_id (an Agent Definition: an execution profile plus a role bundled
+      under one stable ID) and it resolves the profile for you. Direct
+      execution_profile_id submission bypassing Agent Definition resolution
+      is available programmatically (AgentTaskFactory.submit_raw /
+      submit_execution_request) but not exposed over MCP — MCP is a
+      deliberately restrictive layer over the fuller Python API.
+      Submit returns a structured response with request-id, state, session-id
+      (auto-generated when session_keep_alive is true without a provided
+      session_id), and metadata. The runtime owns session ID generation —
+      the caller never invents one; it only references session-ids from
+      previous responses to continue a conversation.
+      agent_task_status/cancel/list_requests/gateway_overview/
+      session_list/session_close/session_control/session_resume work identically regardless of which
+      execution profile a request resolved through.
+      Async-only over MCP: submit returns request-id immediately; poll
+      agent_task_status until the request reaches a terminal state. A blocking
+      submit-and-wait-in-one-call exists only at the
+      underlying Python API (submit_execution_request/AgentTaskFactory.submit
+      with mode="blocking"), for in-process callers with no such transport
+      cap — deliberately not exposed over MCP.
+      Cancellation is best-effort: agent_task_cancel on a queued request
+      removes it before it ever runs; on a running request it only records
+      intent (cancel-requested) — the request may still complete normally,
+      and the persisted state reflects what actually happened, not the cancel
+      intent. Propagated to providers only; the AUDiaGentic CLI harness must
+      not receive the gateway server.
+      For most execution profiles, "output" is provider CLI/session execution
+      output, not a raw chat completion — only API-style providers (e.g.
+      local-openai) return a direct completion. Use agent_task_gateway_overview
+      or agent_task_list_requests to see what's happening without already
+      knowing a request-id.
     tool-descriptions:
-      agent_llm_submit: >
-        Submit an async request. agent-profile-id defaults to the default profile.
-        if not given explicitly. Returns {request-id, state: "queued", ...}.
-      agent_llm_status: >
-        Return the current persisted record for request-id (state, output, completion,
-        usage, error, attempts). Raises RES-AGW-001 if not found.
-      agent_llm_wait: >
-        Block until request-id reaches a terminal state (completed/failed/cancelled/
-        rejected) or timeout-seconds elapses (capped at 300s server-side). Returns the
-        record either way — check "state" to distinguish a real result from a timeout
-        (state will still be "running"/"queued").
-      agent_llm_cancel: >
-        Cancel a queued request, or best-effort mark a running one. See instructions
-        for the best-effort semantics.
-      agent_llm_run: >
-        Submit and block in one call (submit_llm_request with mode=blocking). Same
-        300s server-side timeout cap as agent_llm_wait.
-      agent_llm_list_requests: >
+      agent_list_definitions: >
+        List all agent definitions available to the gateway, including their
+        execution-profile and role references.
+      agent_task_submit: >
+        Submit an async request as agent_id (resolves the agent's execution
+        profile automatically). Returns structured response with:
+        {request-id, state, session-id, metadata}. When session_keep_alive
+        is true and no session_id is provided, a new session is auto-created
+        and its id returned. The runtime owns session ID generation — the
+        caller never invents one. Poll with agent_task_status using the
+        returned request-id. Once the adapter opens a session, the response
+        also includes provider-metadata when available. Raises RES-AGD-001
+        if agent_id is not a configured agent definition.
+      agent_task_status: >
+        Return the current persisted record for request-id (state, output,
+        completion, usage, error, attempts). Raises RES-AGW-001 if not found.
+      agent_task_cancel: >
+        Cancel a queued request, or best-effort mark a running one. See
+        instructions for the best-effort semantics.
+      agent_task_list_requests: >
         List persisted requests, most recent first. Optional state filter
-        (queued/running/completed/failed/cancelled/rejected) and limit. Reads from
-        disk, so this works even for requests from an earlier process.
-      agent_llm_gateway_overview: >
+        (queued/running/completed/failed/cancelled/rejected) and limit.
+        Reads from disk, so this works even for requests from an earlier
+        process.
+      agent_task_gateway_overview: >
         Operator summary: persisted request counts by state, the 5 most recent
-        failures (redacted error only), and in-process per-profile queue depths.
+        failures (redacted error only), and project-scoped provider capacity
+        plus active work. Long-running requests remain non-terminal while
+        providers work; watchdog diagnostics are observations, not completion.
+      agent_task_session_list: >
+        List persisted gateway sessions, newest first. Each entry carries a
+        "live" flag: true when this process holds the session's agent process
+        (only live sessions can accept new turns).
+      agent_task_session_close: >
+        Close a live agent session (terminates its agent process). Idempotent —
+        an already-closed or orphaned session returns its final record.
+      agent_task_session_control:
+        description: >
+          Issue one closed generic action against a live session. The response
+          is an acknowledgement only; it does not claim that a turn stopped or
+          a session became terminal. Poll request status for lifecycle truth.
+        parameters:
+          session_id: "Gateway session identifier"
+          action: "cancel-turn, interrupt-turn, respond-permission, or close-session"
+          control_id: "Caller idempotency identifier for this control request"
+          turn_id: "Optional active turn/request identifier"
+          payload: "Closed action-specific payload; no provider-native fields"
+      agent_task_session_resume:
+        description: >
+          Resume a validated provider conversation by durable chat/session id,
+          even when the original tab or process is gone. The control id makes
+          retries idempotent; a successor session is created and the source
+          binding remains immutable. Provider identity is resolved from the
+          configured agent execution profile, never from provider-specific
+          gateway branches.
+        parameters:
+          source_session_id: "Terminal source session with a validated provider binding"
+          control_id: "Caller idempotency identifier for the resume request"
+          identity_context_fingerprint: "Current provider identity context fingerprint"
+          execution_context_fingerprint: "Current execution context fingerprint"
+          model_id: "Optional current model identifier"
 
 # AS31 Stage-2: output relay policy
-# Defaults: disabled until surface is validated, 64KiB fragment limit, 512KB turn limit
+# Defaults: disabled until surface is validated; 64KiB fragments, 512KB turns.
 gateway:
   output:
     enabled: false
@@ -141,25 +320,66 @@ gateway:
 contributions:
   - id: agents/profile-doctrine
     owner: agents
-    title: Agent profile doctrine
+    title: Execution profile doctrine
     preferred-targets:
       - skill
       - instruction
     content:
       body: |
-        Agent profiles bind a provider to a specific model with optional execution
-        parameters. They are stored in .audiagentic/config/agent-profiles.yaml.
+        Execution profiles bind a provider to a specific model with optional
+        execution parameters. They are stored in .audiagentic/config/
+        execution-profiles.yaml.
 
         ## When to use
         - A job needs a predefined provider+model configuration
-        - Execution parameters (temperature, max-tokens) should be profile-driven
+        - Execution parameters (temperature, max-tokens) should be
+          profile-driven
         - Multiple projects need different default model configurations
 
         ## Resolution precedence at job launch
-        1. Explicit `agent-profile-id` in job request
+        1. Explicit `execution-profile-id` in job request
         2. Explicit provider-id / model-id in job request
-        3. Default agent profile (marked `is-default: true`)
+        3. Default execution profile (marked `is-default: true`)
 
         ## Naming
-        Use `agent-profile-id` (NOT `profile-id`) in job requests to avoid
-        collision with `workflow-profile` (lite/standard/strict stage pipelines).
+        Use `execution-profile-id` (NOT `profile-id`) in job requests to avoid
+        collision with `workflow-profile` (lite/standard/strict stage
+        pipelines).
+
+  - id: agents/role-precedence
+    owner: agents
+    title: Role selection precedence (AS61/RO01)
+    preferred-targets:
+      - skill
+      - instruction
+    content:
+      body: |
+        Today a Role is reached only through `agent_id` -> Agent Definition ->
+        `role_id` (agent_task_submit). There is no standalone `agent-role-id`
+        job-request field yet — that wiring belongs to AS78, not this
+        component. This section states the precedence/conflict rule that
+        MUST hold once one is introduced, so the rule is fixed before the
+        field exists rather than improvised after.
+
+        ## Resolution precedence at job launch (once agent-role-id exists)
+        1. Explicit `agent-role-id` in job request
+        2. Role carried by an explicit `agent-id` (Agent Definition)
+        3. Execution profile selection (`execution-profile-id` / provider-id
+           + model-id / default execution profile) is independent of role
+           selection — they compose, they do not override each other.
+        4. `workflow-profile` (lite/standard/strict stage pipelines) and
+           `component-profile` (per-process config layer) are orthogonal to
+           both and never interact with role/profile precedence.
+
+        ## Conflicts fail closed
+        A Role requirement that contradicts an explicitly selected Execution
+        Profile is an error raised before dispatch — never a silent override
+        in either direction, and never a permissive fallback. This applies
+        the moment AS78 exposes a path where the two could disagree; there is
+        no such path yet, so no conflict-checking code exists today.
+
+        ## Naming
+        `agent-role-id` must stay distinguishable from `execution-profile-id`,
+        `workflow-profile`, and `component-profile` — three distinct
+        "profile" concepts already exist in this project; a role is a fourth,
+        separate axis and must not collapse into any of them by accident.

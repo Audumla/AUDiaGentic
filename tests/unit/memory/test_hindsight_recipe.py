@@ -22,6 +22,7 @@ from audiagentic.components.memory.hindsight.mcp_recipe import (
 from audiagentic.components.memory.hindsight.provision import (
     _hindsight_families,
     _resolve_family,
+    _run_recipe,
     build_hindsight_status_report,
     discover_provider_ids,
     reconcile_hindsight,
@@ -79,28 +80,64 @@ class TestFamilyPreferenceOrder:
         assert family is None
 
 
+def test_opencode_recipe_installs_official_plugin_with_typed_options(tmp_path):
+    config_path = tmp_path / ".opencode" / "opencode.json"
+    config_path.parent.mkdir()
+    config_path.write_text(
+        json.dumps(
+            {
+                "$schema": "https://opencode.ai/config.json",
+                "theme": "user-theme",
+                "plugin": ["user-plugin"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    result, managed = _run_recipe(
+        "opencode",
+        tmp_path,
+        HindsightBackendConfig(base_url="http://memory.example:8888", bank_id="project-a"),
+        "apply",
+    )
+
+    assert result is not None and result.success
+    assert managed[0]["present"] is True
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert config["$schema"] == "https://opencode.ai/config.json"
+    assert config["theme"] == "user-theme"
+    assert config["plugin"] == [
+        "user-plugin",
+        [
+            "@vectorize-io/opencode-hindsight",
+            {
+                "hindsightApiUrl": "http://memory.example:8888",
+                "bankId": "project-a",
+                "autoRecall": True,
+                "autoRetain": True,
+                "recallBudget": "mid",
+                "retainEveryNTurns": 3,
+                "debug": False,
+            },
+        ],
+    ]
+
+    pruned, _ = _run_recipe(
+        "opencode",
+        tmp_path,
+        HindsightBackendConfig(base_url="http://memory.example:8888", bank_id="project-a"),
+        "prune",
+    )
+    assert pruned is not None and pruned.success
+    assert json.loads(config_path.read_text(encoding="utf-8")) == {
+        "$schema": "https://opencode.ai/config.json",
+        "theme": "user-theme",
+        "plugin": ["user-plugin"],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Desired state — typed, no Any payloads
 # ---------------------------------------------------------------------------
-
-
-class TestCodexHookEntries:
-    """Codex hook entries point at the recipe-fetched scripts, one per event."""
-
-    @pytest.mark.skip(reason="_build_codex_hook_entries removed in current provision flow")
-    def test_build_codex_hook_entries(self):
-        from audiagentic.components.memory.hindsight.provision import (
-            _build_codex_hook_entries,  # noqa: F401
-        )
-
-        entries = _build_codex_hook_entries()
-        assert {e.event for e in entries} == {"SessionStart", "UserPromptSubmit", "Stop"}
-        assert {e.managed_id for e in entries} == {
-            "hindsight/sessionstart",
-            "hindsight/userpromptsubmit",
-            "hindsight/stop",
-        }
-        assert all("scripts" in e.command for e in entries)
 
 
 # ---------------------------------------------------------------------------
@@ -297,10 +334,6 @@ class TestPiArtifactRecipe:
         )
         assert result is not None and result.success
 
-    @pytest.mark.skip(
-        reason="Requires pi provider installed to execute prune recipe end-to-end; "
-        "mocking execute_recipe_mode would skip the actual config-remove steps"
-    )
     def test_recipe_prune_removes_managed_keys_preserves_foreign(self, tmp_path, monkeypatch):
         from audiagentic.components.memory.hindsight import provision
 

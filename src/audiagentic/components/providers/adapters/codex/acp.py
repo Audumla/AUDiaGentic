@@ -26,7 +26,13 @@ from audiagentic.foundation.transports import AcpLaunch
 _CODEX_ACP_PACKAGE = "@agentclientprotocol/codex-acp"
 
 
-def build_acp_launch(project_root: Path, *, model_id: str | None = None) -> AcpLaunch:
+def build_acp_launch(
+    project_root: Path,
+    *,
+    model_id: str | None = None,
+    provider_config: dict | None = None,
+) -> AcpLaunch:
+    del provider_config
     # Prefer a locally installed codex-acp binary; fall back to npx so the
     # adapter works without a global install (npx resolves and caches it).
     direct = shutil.which("codex-acp")

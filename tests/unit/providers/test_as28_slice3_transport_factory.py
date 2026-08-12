@@ -12,6 +12,7 @@ Only provider-side contracts/services/adapters/providers_api are modified.
 No edits to agents/session runtime/dispatch, descriptors/YAML, AS19/AS30, or
 foundation neutral contracts.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -41,6 +42,7 @@ from audiagentic.foundation.transports.session_surface import (
 )
 
 # ── Helpers: fake descriptor construction ───────────────────────────────────
+
 
 def _fake_descriptor(
     provider_id: str = "test-provider",
@@ -85,6 +87,7 @@ def _fake_surface_decl(**kwargs: Any) -> Any:
     from audiagentic.components.providers.descriptors.session_surface_declarations import (
         SessionSurfaceDeclaration,
     )
+
     defaults = {
         "surface_id": "acp",
         "version_constraint": ">=1.0",
@@ -104,12 +107,14 @@ def _isolate_registry(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     from audiagentic.components.providers.descriptors.registry import (
         _registry,
     )
+
     _registry._items.clear()
 
     yield tmp_path
 
 
 # ── Exact snapshot reuse ────────────────────────────────────────────────────
+
 
 class TestExactSnapshotReuse:
     """The surface in PreparedSessionTransport is the same frozen snapshot
@@ -128,10 +133,14 @@ class TestExactSnapshotReuse:
 
         hint = SurfaceHint(surface_id="acp")
         resolved = providers_api.resolve_session_surface(
-            tmp_path, "reuse-prov", hint,
+            tmp_path,
+            "reuse-prov",
+            hint,
         )
         prepared = providers_api.prepare_provider_session_transport(
             tmp_path,
+            ag_session_id="ag-test-session",
+            binding_sink=lambda update: None,
             provider_id="reuse-prov",
             surface_hint=hint,
             model_id="gpt-4",
@@ -156,6 +165,8 @@ class TestExactSnapshotReuse:
         hint = SurfaceHint(surface_id="acp")
         prepared = providers_api.prepare_provider_session_transport(
             tmp_path,
+            ag_session_id="ag-test-session",
+            binding_sink=lambda update: None,
             provider_id="ref-prov",
             surface_hint=hint,
             model_id="gpt-4",
@@ -168,6 +179,7 @@ class TestExactSnapshotReuse:
 
 # ── Unsupported → no launch, transport=None ─────────────────────────────────
 
+
 class TestUnsupportedNoLaunch:
     """All unsupported paths return transport=None without launching a process."""
 
@@ -177,6 +189,8 @@ class TestUnsupportedNoLaunch:
 
         prepared = providers_api.prepare_provider_session_transport(
             tmp_path,
+            ag_session_id="ag-test-session",
+            binding_sink=lambda update: None,
             provider_id="nonexistent-provider",
             surface_hint=SurfaceHint(surface_id="acp"),
         )
@@ -198,6 +212,8 @@ class TestUnsupportedNoLaunch:
 
         prepared = providers_api.prepare_provider_session_transport(
             tmp_path,
+            ag_session_id="ag-test-session",
+            binding_sink=lambda update: None,
             provider_id="disabled-prov",
             surface_hint=SurfaceHint(surface_id="acp"),
         )
@@ -218,6 +234,8 @@ class TestUnsupportedNoLaunch:
 
         prepared = providers_api.prepare_provider_session_transport(
             tmp_path,
+            ag_session_id="ag-test-session",
+            binding_sink=lambda update: None,
             provider_id="no-surface-prov",
             surface_hint=SurfaceHint(surface_id="acp"),
         )
@@ -229,9 +247,7 @@ class TestUnsupportedNoLaunch:
         """Version mismatch returns UNSUPPORTED with transport=None."""
         descriptor = _fake_descriptor(
             "ver-mismatch-prov",
-            session_surfaces=(
-                _fake_surface_decl(surface_id="acp", version_constraint=">=3.0"),
-            ),
+            session_surfaces=(_fake_surface_decl(surface_id="acp", version_constraint=">=3.0"),),
         )
         register(descriptor)
         set_provider_enabled(tmp_path, "ver-mismatch-prov", enabled=True)
@@ -245,6 +261,8 @@ class TestUnsupportedNoLaunch:
 
         prepared = providers_api.prepare_provider_session_transport(
             tmp_path,
+            ag_session_id="ag-test-session",
+            binding_sink=lambda update: None,
             provider_id="ver-mismatch-prov",
             surface_hint=SurfaceHint(surface_id="acp"),
         )
@@ -277,6 +295,8 @@ class TestUnsupportedNoLaunch:
 
         prepared = providers_api.prepare_provider_session_transport(
             tmp_path,
+            ag_session_id="ag-test-session",
+            binding_sink=lambda update: None,
             provider_id="plat-mismatch-prov",
             surface_hint=SurfaceHint(surface_id="acp", platform_hint="windows-amd64"),
         )
@@ -290,9 +310,7 @@ class TestUnsupportedNoLaunch:
         evidence.validated=True to build a transport at all)."""
         descriptor = _fake_descriptor(
             "unval-prov",
-            session_surfaces=(
-                _fake_surface_decl(evidence=ValidationEvidence(validated=False)),
-            ),
+            session_surfaces=(_fake_surface_decl(evidence=ValidationEvidence(validated=False)),),
         )
         register(descriptor)
         set_provider_enabled(tmp_path, "unval-prov", enabled=True)
@@ -301,6 +319,8 @@ class TestUnsupportedNoLaunch:
 
         prepared = providers_api.prepare_provider_session_transport(
             tmp_path,
+            ag_session_id="ag-test-session",
+            binding_sink=lambda update: None,
             provider_id="unval-prov",
             surface_hint=SurfaceHint(surface_id="acp"),
         )
@@ -313,9 +333,7 @@ class TestUnsupportedNoLaunch:
         returns transport=None."""
         descriptor = _fake_descriptor(
             "blocked-prov",
-            session_surfaces=(
-                _fake_surface_decl(evidence=ValidationEvidence(validated=False)),
-            ),
+            session_surfaces=(_fake_surface_decl(evidence=ValidationEvidence(validated=False)),),
         )
         register(descriptor)
         set_provider_enabled(tmp_path, "blocked-prov", enabled=True)
@@ -324,6 +342,8 @@ class TestUnsupportedNoLaunch:
 
         prepared = providers_api.prepare_provider_session_transport(
             tmp_path,
+            ag_session_id="ag-test-session",
+            binding_sink=lambda update: None,
             provider_id="blocked-prov",
             surface_hint=SurfaceHint(surface_id="acp"),
         )
@@ -335,9 +355,7 @@ class TestUnsupportedNoLaunch:
         """Missing adapter_ref factory returns UNSUPPORTED with transport=None."""
         descriptor = _fake_descriptor(
             "missing-factory-prov",
-            session_surfaces=(
-                _fake_surface_decl(adapter_ref="nonexistent.module:factory_fn"),
-            ),
+            session_surfaces=(_fake_surface_decl(adapter_ref="nonexistent.module:factory_fn"),),
         )
         register(descriptor)
         set_provider_enabled(tmp_path, "missing-factory-prov", enabled=True)
@@ -346,6 +364,8 @@ class TestUnsupportedNoLaunch:
 
         prepared = providers_api.prepare_provider_session_transport(
             tmp_path,
+            ag_session_id="ag-test-session",
+            binding_sink=lambda update: None,
             provider_id="missing-factory-prov",
             surface_hint=SurfaceHint(surface_id="acp"),
         )
@@ -355,6 +375,7 @@ class TestUnsupportedNoLaunch:
 
 
 # ── OpenCode ACP factory returns neutral protocol ───────────────────────────
+
 
 class TestOpenCodeFactoryNeutralProtocol:
     """Supported ACP surface produces AcpAgentSessionTransport (not raw AcpLaunch)."""
@@ -376,6 +397,7 @@ class TestOpenCodeFactoryNeutralProtocol:
         dummy_launch = AcpLaunch(executable="dummy", args=(), environment={})
 
         import audiagentic.components.providers.services.execution.execution as exec_mod
+
         orig = exec_mod.load_acp_launch_builder
 
         try:
@@ -385,6 +407,8 @@ class TestOpenCodeFactoryNeutralProtocol:
 
             prepared = providers_api.prepare_provider_session_transport(
                 tmp_path,
+                ag_session_id="ag-test-session",
+                binding_sink=lambda update: None,
                 provider_id="acp-prov",
                 surface_hint=SurfaceHint(surface_id="acp"),
                 model_id="gpt-4",
@@ -414,6 +438,7 @@ class TestOpenCodeFactoryNeutralProtocol:
 
         dummy_launch = AcpLaunch(executable="dummy", args=(), environment={})
         import audiagentic.components.providers.services.execution.execution as exec_mod
+
         orig = exec_mod.load_acp_launch_builder
 
         try:
@@ -423,6 +448,8 @@ class TestOpenCodeFactoryNeutralProtocol:
 
             prepared = providers_api.prepare_provider_session_transport(
                 tmp_path,
+                ag_session_id="ag-test-session",
+                binding_sink=lambda update: None,
                 provider_id="no-expose-prov",
                 surface_hint=SurfaceHint(surface_id="acp"),
                 model_id="gpt-4",
@@ -437,12 +464,14 @@ class TestOpenCodeFactoryNeutralProtocol:
 
 # ── No agents imports descriptor/ACP ────────────────────────────────────────
 
+
 class TestNoAgentsImports:
     """providers_api and public_execution must not import from agents."""
 
     def test_no_agent_import_in_providers_api(self):
         """providers_api must not import from components.agents at module level."""
         from audiagentic.components.providers import providers_api
+
         source = _inspect_source(providers_api)
         for line in source.splitlines():
             stripped = line.strip()
@@ -450,38 +479,38 @@ class TestNoAgentsImports:
                 continue
             # Module-level imports (not inside functions) — indent check.
             if "from audiagentic.components.agents" in stripped:
-                pytest.fail(
-                    f"providers_api must not import from agents: {stripped}"
-                )
+                pytest.fail(f"providers_api must not import from agents: {stripped}")
 
     def test_no_agent_import_in_public_execution(self):
         """public_execution must not import from components.agents."""
         from audiagentic.components.providers.services.execution import public_execution
+
         source = _inspect_source(public_execution)
         for line in source.splitlines():
             stripped = line.strip()
             if stripped.startswith("#"):
                 continue
             if "from audiagentic.components.agents" in stripped:
-                pytest.fail(
-                    f"public_execution must not import from agents: {stripped}"
-                )
+                pytest.fail(f"public_execution must not import from agents: {stripped}")
 
     def test_no_descriptor_import_in_providers_api_top_level(self):
         """providers_api must not import descriptor base at module level."""
         from audiagentic.components.providers import providers_api
+
         source = _inspect_source(providers_api)
         for line in source.splitlines():
             stripped = line.strip()
             if stripped.startswith("#"):
                 continue
-            if "from audiagentic.components.providers.descriptors.base" in stripped and not stripped.startswith("    "):
-                pytest.fail(
-                    "providers_api must not import descriptor base at module level"
-                )
+            if (
+                "from audiagentic.components.providers.descriptors.base" in stripped
+                and not stripped.startswith("    ")
+            ):
+                pytest.fail("providers_api must not import descriptor base at module level")
 
 
 # ── Adapter ref redaction ───────────────────────────────────────────────────
+
 
 class TestAdapterRefRedaction:
     """Resolved snapshots through the transport API carry no adapter_ref."""
@@ -490,9 +519,7 @@ class TestAdapterRefRedaction:
         """Even when the descriptor has an adapter_ref, it is not in the snapshot."""
         descriptor = _fake_descriptor(
             "redact-prov",
-            session_surfaces=(
-                _fake_surface_decl(adapter_ref="some.module:factory_fn"),
-            ),
+            session_surfaces=(_fake_surface_decl(adapter_ref="some.module:factory_fn"),),
         )
         register(descriptor)
         set_provider_enabled(tmp_path, "redact-prov", enabled=True)
@@ -501,6 +528,8 @@ class TestAdapterRefRedaction:
 
         prepared = providers_api.prepare_provider_session_transport(
             tmp_path,
+            ag_session_id="ag-test-session",
+            binding_sink=lambda update: None,
             provider_id="redact-prov",
             surface_hint=SurfaceHint(surface_id="acp"),
         )
@@ -521,6 +550,8 @@ class TestAdapterRefRedaction:
 
         prepared = providers_api.prepare_provider_session_transport(
             tmp_path,
+            ag_session_id="ag-test-session",
+            binding_sink=lambda update: None,
             provider_id="ref-redact-prov",
             surface_hint=SurfaceHint(surface_id="acp"),
         )
@@ -531,6 +562,7 @@ class TestAdapterRefRedaction:
 
 
 # ── No process launch on unsupported ────────────────────────────────────────
+
 
 class TestNoProcessLaunch:
     """Unsupported surfaces never spawn a child process."""
@@ -544,6 +576,8 @@ class TestNoProcessLaunch:
 
         prepared = providers_api.prepare_provider_session_transport(
             tmp_path,
+            ag_session_id="ag-test-session",
+            binding_sink=lambda update: None,
             provider_id="nonexistent-provider",
             surface_hint=SurfaceHint(surface_id="acp"),
         )
@@ -569,6 +603,8 @@ class TestNoProcessLaunch:
         # Request a non-existent surface — no fallback to acp or mcp.
         prepared = providers_api.prepare_provider_session_transport(
             tmp_path,
+            ag_session_id="ag-test-session",
+            binding_sink=lambda update: None,
             provider_id="multi-prov",
             surface_hint=SurfaceHint(surface_id="nonexistent-surface"),
         )
@@ -578,6 +614,7 @@ class TestNoProcessLaunch:
 
 
 # ── Old API unchanged (backward compatibility) ──────────────────────────────
+
 
 class TestOldApiUnchanged:
     """prepare_provider_acp_launch contract remains stable."""
@@ -604,6 +641,7 @@ class TestOldApiUnchanged:
 
         dummy_launch = AcpLaunch(executable="dummy", args=(), environment={})
         import audiagentic.components.providers.services.execution.execution as exec_mod
+
         orig = exec_mod.load_acp_launch_builder
 
         try:
@@ -640,6 +678,7 @@ class TestOldApiUnchanged:
 
 # ── PreparedSessionTransport type properties ───────────────────────────────
 
+
 class TestPreparedSessionTransportType:
     """PreparedSessionTransport is frozen and carries only expected fields."""
 
@@ -649,6 +688,8 @@ class TestPreparedSessionTransportType:
 
         prepared = providers_api.prepare_provider_session_transport(
             tmp_path,
+            ag_session_id="ag-test-session",
+            binding_sink=lambda update: None,
             provider_id="nonexistent",
             surface_hint=SurfaceHint(surface_id="acp"),
         )
@@ -671,6 +712,7 @@ class TestPreparedSessionTransportType:
             # which is exactly what this guard exists to keep off the snapshot.
             "unavailable_code",
             "unavailable_message",
+            "runtime_preserve_relpaths",
         }
 
     def test_unavailable_reason_fields_are_scalars(self):
@@ -683,6 +725,7 @@ class TestPreparedSessionTransportType:
 
 
 # ── No duplicate resolver / public ACP leakage ─────────────────────────────
+
 
 class TestNoDuplicateResolver:
     """Self-review: no duplicate resolver or public ACP leakage."""
@@ -700,6 +743,7 @@ class TestNoDuplicateResolver:
         set_provider_enabled(tmp_path, "single-prov", enabled=True)
 
         import audiagentic.components.providers.services.execution.execution as exec_mod
+
         orig = exec_mod.load_acp_launch_builder
 
         try:
@@ -709,6 +753,7 @@ class TestNoDuplicateResolver:
             from audiagentic.components.providers.services.session.session_surface_resolution import (
                 resolve_session_surface as _resolve,
             )
+
             orig_resolve = _resolve.__module__
 
             def counting_resolve(*args, **kwargs):
@@ -722,6 +767,8 @@ class TestNoDuplicateResolver:
 
             prepared = providers_api.prepare_provider_session_transport(
                 tmp_path,
+                ag_session_id="ag-test-session",
+                binding_sink=lambda update: None,
                 provider_id="single-prov",
                 surface_hint=SurfaceHint(surface_id="acp"),
                 model_id="gpt-4",
@@ -759,6 +806,7 @@ class TestNoDuplicateResolver:
 
         dummy_launch = AcpLaunch(executable="dummy", args=(), environment={})
         import audiagentic.components.providers.services.execution.execution as exec_mod
+
         orig = exec_mod.load_acp_launch_builder
 
         try:
@@ -768,6 +816,8 @@ class TestNoDuplicateResolver:
 
             prepared = providers_api.prepare_provider_session_transport(
                 tmp_path,
+                ag_session_id="ag-test-session",
+                binding_sink=lambda update: None,
                 provider_id="protocol-prov",
                 surface_hint=SurfaceHint(surface_id="acp"),
                 model_id="gpt-4",
@@ -786,7 +836,9 @@ class TestNoDuplicateResolver:
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
+
 def _inspect_source(module: Any) -> str:
     """Get source of a module as string."""
     import inspect
+
     return inspect.getsource(module)

@@ -69,10 +69,10 @@ capabilities:
       connectors: [openai-compatible, openai, anthropic]
     evidence:
       note: >-
-        catalog refresh: opencode models --verbose; requires an installed
-        OpenCode CLI; catalog contents depend on provider authentication and
-        upstream cache state (tool_version 1.17.18)
-      source: "docs/reference/model-source-evidence/opencode.md#opencode-evidence"
+        Project-local managed entries share OpenCode's opencode.json and use
+        an AUDiaGentic ownership registry; unowned provider/model entries are
+        preserved during apply and prune.
+      source: "tests/unit/providers/test_materialize_full_chain.py"
 
   surface-skill:
     mechanism: ".opencode/skills/{tag}/SKILL.md"
@@ -137,11 +137,9 @@ capabilities:
   model-config-projection:
     evidence:
       note: >-
-        BLOCKED: structured provider config; config filename and winning
-        container remain unresolved; no safe automatic projection contract is
-        verified (tool_version 1.17.18) — resolve config.json versus
-        opencode.json and provider key shape.
-      source: "docs/reference/model-source-evidence/opencode.md#opencode-evidence"
+        Project-local opencode.json projection is managed by explicit
+        ownership markers; unowned entries are preserved.
+      source: "tests/unit/providers/test_materialize_full_chain.py"
 
   # --- ACP protocol-feature evidence (plan agent-sessions AS01-AS07) -----
   # One neutral kind, one list entry per feature so verification status

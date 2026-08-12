@@ -1,11 +1,9 @@
-"""Docker-gated provider prompt launch validation across the full registry.
+"""Docker-gated provider prompt launch validation for executable providers.
 
-Every registered provider is accounted for here. Expectations are capability
-aware:
-  - real execution adapters must launch successfully
-  - stubbed adapters must report stubbed status
-  - ok-stub adapters must return their synthetic success payload
-  - unsupported adapters must fail with their declared contract error
+The provider registry and descriptor tests cover catalogue-only providers.
+This suite is reserved for providers with an executable launch contract, so
+catalogue stubs and intentionally unsupported adapters do not become fake
+skipped tests.
 
 Cloud/API-backed providers are env-gated so the Docker recipe can opt into the
 providers/models it has credentials for without making the suite flaky.
@@ -25,7 +23,13 @@ from audiagentic.components.providers.services.lifecycle.lifecycle import (
     uninstall_provider_cli,
 )
 from audiagentic.foundation.paths.home import global_harness_runtime
-from audiagentic.runtime.harness import RunnerParams, build_global_context, run_agent
+from audiagentic.runtime.harness import (
+    RunnerParams,
+    build_global_context,
+    refresh_materialized_agent_config,
+    run_agent,
+)
+from audiagentic.runtime.harness.provisioning import provision_embedded_rig
 
 pytestmark = [
     pytest.mark.mutates_host,
@@ -169,12 +173,14 @@ def _pi_case(project_root: Path) -> None:
             "AUDIAGENTIC_TEST_PI_PROVIDER",
             "audiagentic",
         )
-        rig_bin_dir = global_harness_runtime() / "rig" / "bin"
-        if not rig_bin_dir.exists():
-            pytest.skip(f"pi embedded rig assets missing at {rig_bin_dir}")
+        harness_runtime = global_harness_runtime()
+        provision_embedded_rig(harness_runtime, project_root)
+        refresh_materialized_agent_config(harness_runtime, project_root=project_root)
+        rig_bin_dir = harness_runtime / "rig" / "bin"
+        assert rig_bin_dir.is_dir(), f"AG rig bin directory was not provisioned: {rig_bin_dir}"
         ctx = build_global_context(
             project_root=project_root,
-            agent_runtime=global_harness_runtime(),
+            agent_runtime=harness_runtime,
             enable_mcp=False,
         )
         exit_code = run_agent(ctx, RunnerParams(prompt=_DEFAULT_PROMPT, mode="text"), smoke=False)
@@ -279,18 +285,6 @@ def _local_openai_case(project_root: Path) -> None:
     _assert_contains(result, "local-openai", _DEFAULT_EXPECTED)
 
 
-def _stub_case(provider_id: str, project_root: Path) -> None:
-    pytest.skip(f"{provider_id} execution bridge not wired; descriptor is stub-only")
-
-
-def _ok_stub_case(provider_id: str, project_root: Path) -> None:
-    pytest.skip(f"{provider_id} execution bridge not wired; descriptor is ok-stub only")
-
-
-def _unsupported_case(provider_id: str, project_root: Path) -> None:
-    pytest.skip(f"{provider_id} is intentionally unsupported for CLI execution")
-
-
 def _dispatch(provider_id: str, project_root: Path) -> None:
     if provider_id == "pi":
         _pi_case(project_root)
@@ -319,19 +313,23 @@ def _dispatch(provider_id: str, project_root: Path) -> None:
     if provider_id == "local-openai":
         _local_openai_case(project_root)
         return
-    if provider_id in {"aider", "antigravity", "goose", "openhands", "plandex"}:
-        _stub_case(provider_id, project_root)
-        return
-    if provider_id == "continue":
-        _ok_stub_case(provider_id, project_root)
-        return
-    if provider_id == "roo":
-        _unsupported_case(provider_id, project_root)
-        return
     raise AssertionError(f"unhandled provider_id {provider_id!r}")
 
 
-@pytest.mark.parametrize("provider_id", sorted(all_descriptors()))
+_EXECUTABLE_PROVIDER_IDS = (
+    "claude",
+    "cline",
+    "codex",
+    "copilot",
+    "gemini",
+    "local-openai",
+    "opencode",
+    "pi",
+    "qwen",
+)
+
+
+@pytest.mark.parametrize("provider_id", _EXECUTABLE_PROVIDER_IDS)
 @pytest.mark.timeout(600)
 def test_provider_prompt_launch_contract(
     provider_id: str,

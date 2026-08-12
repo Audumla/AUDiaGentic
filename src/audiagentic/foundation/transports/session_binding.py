@@ -6,8 +6,10 @@ ProviderSessionRef is protected/opaque; binding identity is scoped by AS29.
 """
 from __future__ import annotations
 
+from collections.abc import Awaitable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Protocol
 
 from audiagentic.foundation.contracts.errors import make_error
 
@@ -77,6 +79,47 @@ class ProviderSessionRef:
                 kind="session-binding-validation",
                 message="provider session ref value must be a non-empty string",
             )
+
+
+BindingMetadataValue = str | int | float | bool | None
+
+
+@dataclass(frozen=True)
+class ProviderSessionBindingUpdate:
+    """One-time publication of a lazily assigned provider identity."""
+
+    provider_session_ref: ProviderSessionRef
+    metadata: Mapping[str, BindingMetadataValue] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.metadata, Mapping):
+            raise make_error(
+                prefix="VAL", component="TRANSPORT", number=1,
+                kind="session-binding-validation",
+                message="provider binding metadata must be a mapping",
+            )
+        for key, value in self.metadata.items():
+            if not isinstance(key, str) or not key:
+                raise make_error(
+                    prefix="VAL", component="TRANSPORT", number=1,
+                    kind="session-binding-validation",
+                    message="provider binding metadata keys must be non-empty strings",
+                )
+            if value is not None and not isinstance(value, (str, int, float, bool)):
+                raise make_error(
+                    prefix="VAL", component="TRANSPORT", number=1,
+                    kind="session-binding-validation",
+                    message="provider binding metadata values must be scalar",
+                )
+
+
+class ProviderSessionBindingSink(Protocol):
+    """Gateway-owned sink for a provider's delayed first binding."""
+
+    def __call__(
+        self,
+        update: ProviderSessionBindingUpdate,
+    ) -> Awaitable[None] | None: ...
 
 
 @dataclass(frozen=True)

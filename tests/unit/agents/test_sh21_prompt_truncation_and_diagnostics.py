@@ -11,6 +11,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 from audiagentic.components.agents.contracts.worker_protocol import (
     WorkerErrorEnvelope,
     WorkerExecuteEnvelope,
@@ -18,6 +20,8 @@ from audiagentic.components.agents.contracts.worker_protocol import (
     decode_worker_message,
     encode_worker_message,
 )
+
+pytestmark = pytest.mark.no_parallel
 
 FINGERPRINT = "a" * 64
 
@@ -295,7 +299,7 @@ class TestWorkerExceptionDiagnostics:
         # Simulate the worker host reading a valid frame but then raising
         # an unexpected exception. We test this by running the worker host
         # as a subprocess with crafted input.
-        from audiagentic.components.agents.agents_gateway_worker_host import (
+        from audiagentic.components.agents.gateway.queue.worker_host import (
             _emit_worker_diagnostic,
         )
 
@@ -363,7 +367,7 @@ class TestWorkerExceptionDiagnostics:
 
         # Simulate what happens in main(): _emit_worker_diagnostic writes
         # to stderr, then a clean error envelope goes to stdout.
-        from audiagentic.components.agents.agents_gateway_worker_host import (
+        from audiagentic.components.agents.gateway.queue.worker_host import (
             _emit_worker_diagnostic,
             _write,
         )
@@ -390,9 +394,13 @@ class TestWorkerExceptionDiagnostics:
 
         stdout_buf = io.StringIO()
         stderr_buf = io.StringIO()
+        from audiagentic.components.agents.gateway.queue import worker_host
+
+        old_protocol_out = worker_host._PROTOCOL_OUT
         old_stdout = sys.stdout
         old_stderr = sys.stderr
         try:
+            worker_host._PROTOCOL_OUT = stdout_buf
             sys.stdout = stdout_buf
             sys.stderr = stderr_buf
 
@@ -409,6 +417,7 @@ class TestWorkerExceptionDiagnostics:
                 )
             )
         finally:
+            worker_host._PROTOCOL_OUT = old_protocol_out
             sys.stdout = old_stdout
             sys.stderr = old_stderr
 
@@ -435,7 +444,7 @@ class TestWorkerHostDiagnosticEmission:
     """Unit tests for _emit_worker_diagnostic behavior."""
 
     def test_diagnostic_contains_exception_class_and_message(self, tmp_path: Path) -> None:
-        from audiagentic.components.agents.agents_gateway_worker_host import (
+        from audiagentic.components.agents.gateway.queue.worker_host import (
             _emit_worker_diagnostic,
         )
 
@@ -454,7 +463,7 @@ class TestWorkerHostDiagnosticEmission:
 
     def test_diagnostic_is_bounded(self, tmp_path: Path) -> None:
         """Diagnostic traceback is truncated when it exceeds the limit."""
-        from audiagentic.components.agents.agents_gateway_worker_host import (
+        from audiagentic.components.agents.gateway.queue.worker_host import (
             _MAX_DIAGNOSTIC_BYTES,
             _emit_worker_diagnostic,
         )
@@ -490,7 +499,7 @@ class TestWorkerHostDiagnosticEmission:
 
     def test_diagnostic_does_not_contain_secret_values(self, tmp_path: Path) -> None:
         """Worker diagnostics must not carry raw secret material."""
-        from audiagentic.components.agents.agents_gateway_worker_host import (
+        from audiagentic.components.agents.gateway.queue.worker_host import (
             _emit_worker_diagnostic,
         )
 
@@ -808,15 +817,19 @@ class TestWorkerHostFailureRedaction:
             working_directory=str(tmp_path.resolve()),
         )
 
-        from audiagentic.components.agents.agents_gateway_worker_host import (
+        from audiagentic.components.agents.gateway.queue.worker_host import (
             _emit_worker_diagnostic,
             _write,
         )
 
         stdout_buf = io.StringIO()
         stderr_buf = io.StringIO()
+        from audiagentic.components.agents.gateway.queue import worker_host
+
+        old_protocol_out = worker_host._PROTOCOL_OUT
         old_stdout, old_stderr = sys.stdout, sys.stderr
         try:
+            worker_host._PROTOCOL_OUT = stdout_buf
             sys.stdout = stdout_buf
             sys.stderr = stderr_buf
 
@@ -832,6 +845,7 @@ class TestWorkerHostFailureRedaction:
                 )
             )
         finally:
+            worker_host._PROTOCOL_OUT = old_protocol_out
             sys.stdout = old_stdout
             sys.stderr = old_stderr
 
@@ -857,7 +871,7 @@ class TestWorkerHostFailureRedaction:
         """Worker diagnostic is truncated when it exceeds the 64 KB limit."""
         import io
 
-        from audiagentic.components.agents.agents_gateway_worker_host import (
+        from audiagentic.components.agents.gateway.queue.worker_host import (
             _MAX_DIAGNOSTIC_BYTES,
             _emit_worker_diagnostic,
         )
@@ -895,9 +909,9 @@ class TestWorkerHostFailureRedaction:
     ) -> None:
         """Normal cancellation (cancel_requested=True) does NOT produce
         worker diagnostic evidence. Only INT-AGW-076 errors do."""
-        from audiagentic.components.agents import agents_gateway_store as gws
+        from audiagentic.components.agents.gateway import store as gws
 
-        record = gws.build_record(agent_profile_id="default", prompt_body="do the thing")
+        record = gws.build_record(execution_profile_id="default", prompt_body="do the thing")
         gws.write_record(tmp_path, record)
         gws.transition_record(tmp_path, record["request-id"], "running")
 

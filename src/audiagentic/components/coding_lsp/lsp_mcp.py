@@ -16,9 +16,9 @@ from typing import Any
 
 from audiagentic.components.coding_lsp import lsp_api
 from audiagentic.foundation.mcp.component_server import (
-    log_tool_call,
     mcp_server,
     run_mcp_server,
+    tool_boundary,
 )
 
 mcp = mcp_server(__name__)
@@ -32,7 +32,7 @@ atexit.register(_teardown)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def lsp_diagnostics(
     paths: list[str] | None = None,
     root: str = ".",
@@ -55,7 +55,7 @@ def lsp_diagnostics(
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def lsp_symbol_context(file: str, position: str) -> dict[str, Any]:
     """Understand the symbol at a position in one call — the go-to "what is this?" tool.
 
@@ -78,7 +78,7 @@ _NAVIGATE = {
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def lsp_navigate(file: str, position: str, kind: str = "definition") -> list[dict[str, Any]]:
     """Follow a code relationship from the symbol at a position.
 
@@ -92,7 +92,7 @@ def lsp_navigate(file: str, position: str, kind: str = "definition") -> list[dic
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def lsp_symbols(query: str = "", file: str | None = None, root: str = ".") -> list[dict[str, Any]]:
     """Find symbols by name across the workspace, or list one file's outline.
 
@@ -105,7 +105,7 @@ def lsp_symbols(query: str = "", file: str | None = None, root: str = ".") -> li
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def lsp_edit(
     file: str,
     action: str,

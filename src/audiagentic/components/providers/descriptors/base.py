@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .session_surface_declarations import SessionSurfaceDeclaration
@@ -12,10 +12,8 @@ from audiagentic.foundation.steps import CallableStep, SequenceStep, ShellStep
 from audiagentic.foundation.toolchains.config.managed_config import ManagedConfigSpec
 
 from ..contracts.mcp_launch_surface import McpLaunchIsolationTier
+from ..contracts.provider_execution import ProviderIsolationTier as IsolationTier
 from .automation_capabilities import ProviderAutomationCapability
-
-IsolationTier = Literal["full-isolation", "partial-isolation", "no-isolation"]
-CapabilityAuthority = Literal["automation", "operational", "evidence-only"]
 
 # ── Unified capability record ────────────────────────────────────────────
 # Replaces the four separate descriptor blocks (automation_capabilities,
@@ -254,7 +252,8 @@ class ProviderDescriptor:
     # When reading legacy shape, derived from flat fields in loader.
     capabilities: tuple[Capability, ...] = field(default_factory=tuple)
 
-    # access-mode written to providers.yaml when this provider is first enabled.
+    # access-mode written to the provider's project-owned settings file when
+    # this provider is first enabled.
     # "cli"  — invoked as a subprocess CLI tool
     # "env"  — accessed via environment / API key (no local binary)
     # "none" — passthrough bridge, no direct provider access

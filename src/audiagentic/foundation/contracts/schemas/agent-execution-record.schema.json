@@ -1,0 +1,272 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "contract-version",
+    "request-id",
+    "execution-profile-id",
+    "mode",
+    "state",
+    "created-at",
+    "updated-at",
+    "attempts",
+    "metadata",
+    "cancel-requested"
+    ,"cancel-acknowledged-at"
+    ,"cancel-acknowledged-by"
+    ,"revision"
+    ,"worker-id"
+    ,"attempt-epoch"
+    ,"dispatch-owner-epoch"
+    ,"dispatch-claimed-at"
+    ,"dispatch-service-root"
+    ,"recovery"
+    ,"resolved-source-id"
+    ,"resolved-capacity-generation"
+    ,"last-activity-at"
+    ,"activity-sequence"
+    ,"activity-source"
+    ,"activity-lease-expires-at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "contract-version": {
+      "const": "v5"
+    },
+    "request-id": {
+      "type": "string"
+    },
+    "execution-profile-id": {
+      "type": "string"
+    },
+    "prompt-body": {
+      "type": ["string", "null"]
+    },
+    "prompt-digest": {
+      "type": ["string", "null"]
+    },
+    "manifest-id": {
+      "type": ["string", "null"]
+    },
+    "context-fingerprint": {
+      "type": ["string", "null"]
+    },
+    "idempotency-key": {
+      "type": ["string", "null"]
+    },
+    "correlation-id": {
+      "type": ["string", "null"]
+    },
+    "gateway-profile-id": {
+      "type": ["string", "null"]
+    },
+    "gateway-profile-generation": {
+      "type": ["string", "null"]
+    },
+    "gateway-profile-config-digest": {
+      "type": ["string", "null"]
+    },
+    "resolved-provider-id": {
+      "type": ["string", "null"]
+    },
+    "resolved-model-id": {
+      "type": ["string", "null"]
+    },
+    "resolved-source-id": {
+      "description": "AS101: concrete model-sources source selected by the scheduler. It remains null while queued and is atomically written with the owned transition to running before provider invocation.",
+      "type": ["string", "null"]
+    },
+    "resolved-capacity-generation": {
+      "description": "AS101: capacity snapshot generation from which resolved-source-id was reserved.",
+      "type": ["string", "null"]
+    },
+    "last-activity-at": {
+      "description": "SH22 gateway-received timestamp of last accepted request/attempt-bound activity; never worker-supplied time.",
+      "type": ["string", "null"]
+    },
+    "activity-sequence": {
+      "description": "SH22 last accepted strictly increasing worker activity sequence for the current attempt.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "activity-source": {
+      "type": ["string", "null"]
+    },
+    "activity-lease-expires-at": {
+      "type": ["string", "null"]
+    },
+    "watchdog-state": {
+      "type": ["string", "null"],
+      "enum": ["not-started", "active", "unknown", "intervention", "terminal", null]
+    },
+    "watchdog-reason": {
+      "type": ["string", "null"]
+    },
+    "terminal-classification": {
+      "type": ["string", "null"],
+      "enum": ["cancelled", "worker-process-exited", "provider-terminal-error", "verified-stall", "absolute-safety-ceiling", null]
+    },
+    "watchdog-policy": {
+      "type": ["object", "null"],
+      "properties": {
+        "policy-id": {"type": "string"},
+        "policy-digest": {"type": "string"},
+        "activity-lease-seconds": {"type": "number", "exclusiveMinimum": 0},
+        "absolute-safety-ceiling-seconds": {"type": "number", "minimum": 0},
+        "diagnostic-grace-seconds": {"type": "number", "exclusiveMinimum": 0},
+        "available": {"type": "boolean"}
+      },
+      "required": ["policy-id", "policy-digest", "activity-lease-seconds", "absolute-safety-ceiling-seconds", "diagnostic-grace-seconds", "available"],
+      "additionalProperties": false
+    },
+    "resolved-instance-ids": {
+      "description": "AS105/AS101: the admitted compatible model-sources.yaml source-id set (ResolvedExecutionProfile.instances at admission time). Absent on records predating the free-instance dispatch migration -- snapshot_from_record() fails closed on those rather than misparsing them.",
+      "type": ["array", "null"],
+      "items": {"type": "string"}
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["async", "blocking"]
+    },
+    "timeout-seconds": {
+      "type": ["number", "null"]
+    },
+    "source": {
+      "type": ["string", "null"]
+    },
+    "session-id": {
+      "type": ["string", "null"]
+    },
+    "provider-metadata": {
+      "type": ["object", "null"],
+      "additionalProperties": true
+    },
+    "session-keep-alive": {
+      "type": ["boolean", "null"]
+    },
+    "session-idle-timeout-seconds": {
+      "type": ["number", "null"]
+    },
+    "session-max-lifetime-seconds": {
+      "type": ["number", "null"]
+    },
+    "metadata": {
+      "type": "object"
+    },
+    "state": {
+      "type": "string",
+      "enum": ["queued", "running", "completed", "failed", "cancelled", "rejected", "interrupted"]
+    },
+    "cancel-requested": {
+      "type": "boolean"
+    },
+    "cancel-acknowledged-at": {
+      "type": ["string", "null"]
+    },
+    "cancel-acknowledged-by": {
+      "type": ["string", "null"]
+    },
+    "revision": {"type": "integer", "minimum": 0},
+    "worker-id": {"type": ["string", "null"]},
+    "attempt-epoch": {"type": "integer", "minimum": 0},
+    "dispatch-owner-epoch": {"type": ["string", "null"]},
+    "dispatch-claimed-at": {"type": ["string", "null"]},
+    "dispatch-service-root": {"type": ["string", "null"]},
+    "recovery": {
+      "type": ["object", "null"],
+      "required": ["reason", "outcome"],
+      "properties": {
+        "reason": {
+          "type": "string",
+          "enum": ["service-restart", "unproven-dispatch", "unproven-execution"]
+        },
+        "outcome": {
+          "type": "string",
+          "enum": ["resubmit-required", "replay-required", "manual-review-required"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "replay-required": {
+      "type": ["boolean", "null"]
+    },
+    "replay-reason": {
+      "type": ["string", "null"]
+    },
+    "replayed-by-request-id": {
+      "type": ["string", "null"]
+    },
+    "resumed-from-request-id": {
+      "type": ["string", "null"]
+    },
+    "provider-id": {
+      "type": ["string", "null"]
+    },
+    "model-id": {
+      "type": ["string", "null"]
+    },
+    "output": {
+      "type": ["string", "null"]
+    },
+    "completion": {
+      "type": ["object", "null"]
+    },
+    "usage": {
+      "type": ["object", "null"]
+    },
+    "error": {
+      "type": ["object", "null"],
+      "properties": {
+        "code": {"type": "string"},
+        "message": {"type": "string"},
+        "kind": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "attempts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["execution-profile-id", "state", "started-at"],
+        "properties": {
+          "execution-profile-id": {"type": "string"},
+          "provider-id": {"type": ["string", "null"]},
+          "model-id": {"type": ["string", "null"]},
+          "state": {
+            "type": "string",
+            "enum": ["running", "completed", "failed", "cancelled"]
+          },
+          "error": {
+            "type": ["object", "null"]
+          },
+          "started-at": {"type": "string"},
+          "finished-at": {"type": ["string", "null"]}
+          ,"worker-id": {"type": ["string", "null"]}
+          ,"attempt-epoch": {"type": "integer", "minimum": 0}
+        },
+        "additionalProperties": false
+      }
+    },
+    "created-at": {
+      "type": "string"
+    },
+    "updated-at": {
+      "type": "string"
+    },
+    "started-at": {
+      "type": ["string", "null"]
+    },
+    "finished-at": {
+      "type": ["string", "null"]
+    },
+    "worker-evidence": {
+      "description": "Private operator-only bounded redacted diagnostic for INT-AGW-076 worker failures. Never exposed in public status.",
+      "type": ["object", "null"],
+      "properties": {
+        "error-type": {"type": "string"},
+        "worker-diagnostic": {"type": "string"}
+      },
+      "additionalProperties": false
+    }
+  }
+}

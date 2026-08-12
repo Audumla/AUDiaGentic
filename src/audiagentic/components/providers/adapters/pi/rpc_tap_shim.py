@@ -21,6 +21,7 @@ import subprocess
 import sys
 import threading
 from collections.abc import Callable
+from typing import Any
 
 CHUNK_SIZE = 65536
 
@@ -173,33 +174,30 @@ def run_tee(
     stdout,
     tap_address: str | None,
     tap_authkey: bytes | None,
-    spawn: Callable[[list[str]], subprocess.Popen] | None = None,
+    spawn: Callable[[list[str]], Any] | None = None,
     tap_connect_timeout: float = 2.0,
 ) -> int:
     """Spawn argv as the real Pi child and tee its stdout. Returns its exit code.
 
-    `spawn` is injectable for tests (defaults to a real subprocess.Popen with
-    piped stdio). `stdin`/`stdout` are this process's own raw byte streams
-    (buffer-level, not text-wrapped) -- injectable for tests.
+    `spawn` is injectable for tests (defaults to spawn_supervised which provides
+    Job Object + tree teardown). `stdin`/`stdout` are this process's own raw byte
+    streams (buffer-level, not text-wrapped) -- injectable for tests.
     """
-    spawn = spawn or (
-        lambda cmd: subprocess.Popen(
-            cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
-    )
-    child = spawn(argv)
-    # Adopt the real `pi` child into a kill-on-close Job Object (Windows) so it
-    # cannot outlive this shim even if the shim itself is hard-killed -- the
-    # same orphan-on-crash gap `supervised_process` closes for other harness
-    # grandchildren. No-op on POSIX and for test doubles without a real pid.
-    _job_handle = None
-    child_pid = getattr(child, "pid", None)
-    if child_pid is not None:
+    if spawn is None:
         from audiagentic.foundation.system.supervised_process import (
-            adopt_pid_into_kill_job,
+            spawn_supervised,
         )
 
-        _job_handle = adopt_pid_into_kill_job(child_pid)
+        def _supervised_spawn(cmd: list[str]) -> Any:
+            return spawn_supervised(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=False,
+            ).process
+
+    child = (spawn or _supervised_spawn)(argv)
     tap = _TapSink(tap_address, tap_authkey, connect_timeout=tap_connect_timeout)
     stderr_captured = bytearray()
 
@@ -217,13 +215,6 @@ def run_tee(
     for t in threads:
         t.join(timeout=2.0)
     tap.close()
-    if _job_handle is not None and os.name == "nt":
-        import ctypes
-
-        try:
-            ctypes.windll.kernel32.CloseHandle(_job_handle)
-        except OSError:
-            pass
     # AS41 diagnostic: on non-zero exit, dump the child's captured stderr to
     # our own stderr so a parent reading it can see the crash reason. Gated by
     # an env var (default off) to preserve byte-transparency in production.

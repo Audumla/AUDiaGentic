@@ -11,8 +11,13 @@ and subprocess spawning to prove the consumer pipeline works in isolation.
 """
 from __future__ import annotations
 
+# Imports below the Docker-harness marker are intentionally grouped by
+# consumer surface for readability.
+# ruff: noqa: E402
+
 import asyncio
 import json
+import os
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -21,24 +26,25 @@ from typing import Any
 
 import pytest
 
-# ── AS30 imports ───────────────────────────────────────────────────────
-from audiagentic.components.agents import (
-    agents_gateway_session_bindings as bindings,
-)
-from audiagentic.components.agents import (
-    agents_gateway_sessions_store as session_store,
+pytestmark = pytest.mark.skipif(
+    os.environ.get("AUDIAGENTIC_DOCKER_TESTS") != "1",
+    reason="consumer pipeline tests require the Docker test harness",
 )
 
 # ── AS31 imports ───────────────────────────────────────────────────────
-from audiagentic.components.agents.agents_gateway_output import (
+from audiagentic.components.agents.gateway.output import (
     OutputPolicy,
     append_agent_output_record,
     create_relay,
     read_request_output,
 )
 
+# ── AS30 imports ───────────────────────────────────────────────────────
+from audiagentic.components.agents.gateway.session import bindings as bindings
+from audiagentic.components.agents.gateway.session import sessions_store as session_store
+
 # ── AS19 imports ───────────────────────────────────────────────────────
-from audiagentic.components.agents.agents_harness_status_observer_ingress import (
+from audiagentic.components.agents.status.harness_status_observer_ingress import (
     MAX_REQUEST_BODY_BYTES,
     SessionObserverIngress,
 )
@@ -62,13 +68,15 @@ def _make_session_record(
     provider_ref: str,
     state: str = "active",
     provider_id: str | None = "test-provider",
+    surface_id: str = "test-surface",
 ) -> dict[str, Any]:
     """Write a session record with a binding and return it."""
     record = session_store.build_session_record(
         session_id=session_id,
-        agent_profile_id="default",
+        execution_profile_id="default",
         provider_id=provider_id,
         provider_session_ref=provider_ref,
+        surface_id=surface_id,
     )
     if state != "active":
         record["state"] = state
@@ -160,16 +168,21 @@ class TestAS19ObserverIngressDocker:
         # Need a running event loop for callback delivery.
         loop = asyncio.new_event_loop()
         try:
-            ingress.deliver_observation(
-                binding_id=binding_id,
-                token=token,
-                observation=observation,
-                session_id=session_id,
-                project_root=str(project_root),
-            )
+            asyncio.set_event_loop(loop)
+            async def deliver() -> None:
+                assert ingress.deliver_observation(
+                    binding_id=binding_id,
+                    token=token,
+                    observation=observation,
+                    session_id=session_id,
+                    project_root=str(project_root),
+                ) is True
+
+            loop.run_until_complete(deliver())
             # Give the task a moment to run.
             loop.run_until_complete(asyncio.sleep(0.1))
         finally:
+            asyncio.set_event_loop(None)
             loop.close()
 
         assert len(observations_received) == 1
@@ -279,7 +292,7 @@ class TestAS30SessionBindingDocker:
         assert payload["contract-version"] == "v1"
         ref_key = bindings.provider_ref_key(
             provider_id="test-provider",
-            surface_id=None,
+            surface_id="test-surface",
             ref_namespace=None,
             identity_context_fingerprint=None,
             provider_session_ref="ref-alpha",
@@ -307,15 +320,16 @@ class TestAS30SessionBindingDocker:
 import json, sys
 sys.path.insert(0, "/app/src")
 from pathlib import Path
-from audiagentic.components.agents import agents_gateway_session_bindings as bindings
-from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+from audiagentic.components.agents.gateway.session import bindings as bindings
+from audiagentic.components.agents.gateway.session import sessions_store as session_store
 
 project_root = Path("{project_root}")
 record = session_store.build_session_record(
     session_id="ses_cross_002",
-    agent_profile_id="default",
+    execution_profile_id="default",
     provider_id="test-provider",
     provider_session_ref="ref-cross",
+    surface_id="test-surface",
 )
 session_store.write_session_record(project_root, record)
 try:
@@ -325,7 +339,7 @@ except Exception as e:
     if "duplicate owned" in str(e):
         print("DUPLICATE_REJECTED")
     else:
-        print(f"UNEXPECTED: {e}")
+        print(f"UNEXPECTED: {{e}}")
 """,
             ],
             capture_output=True,
@@ -400,7 +414,7 @@ except Exception as e:
         rebuilt = bindings.rebuild_index(project_root)
         ref_key = bindings.provider_ref_key(
             provider_id="test-provider",
-            surface_id=None,
+            surface_id="test-surface",
             ref_namespace=None,
             identity_context_fingerprint=None,
             provider_session_ref="ref-dup-rebuild",
@@ -423,7 +437,7 @@ except Exception as e:
         payload = json.loads(index_path.read_text(encoding="utf-8"))
         ref_key = bindings.provider_ref_key(
             provider_id="test-provider",
-            surface_id=None,
+            surface_id="test-surface",
             ref_namespace=None,
             identity_context_fingerprint=None,
             provider_session_ref="ref-retire",
@@ -750,7 +764,7 @@ class TestConsumerPipelineFullIntegration:
         payload = json.loads(index_path.read_text(encoding="utf-8"))
         ref_key = bindings.provider_ref_key(
             provider_id="test-provider",
-            surface_id=None,
+            surface_id="test-surface",
             ref_namespace=None,
             identity_context_fingerprint=None,
             provider_session_ref=provider_ref,
@@ -803,8 +817,8 @@ class TestConsumerPipelineFullIntegration:
 import json, sys
 sys.path.insert(0, "/app/src")
 from pathlib import Path
-from audiagentic.components.agents import agents_gateway_session_bindings as bindings
-from audiagentic.components.agents.agents_gateway_output import read_request_output
+from audiagentic.components.agents.gateway.session import bindings as bindings
+from audiagentic.components.agents.gateway.output import read_request_output
 
 project_root = Path("{project_root}")
 

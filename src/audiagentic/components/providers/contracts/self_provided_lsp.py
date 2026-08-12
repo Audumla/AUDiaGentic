@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
 
-SelfProvidedLspMode = Literal["apply", "status"]
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+from .automation_vocabulary import ProviderApplyStatusMode as SelfProvidedLspMode
+
+_VALID_STATES = {"provisioned", "needs-action", "unknown"}
 
 
 @dataclass(frozen=True)
@@ -28,6 +31,15 @@ class SelfProvidedLspResult:
     state: str = "unknown"
     error_code: str | None = None
     action_needed: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.state not in _VALID_STATES:
+            raise AudiaGenticError(
+                code="VAL-PLSP-001",
+                kind="providers",
+                message="invalid self-provided-LSP state",
+                details={"state": self.state},
+            )
 
     def to_mapping(self) -> dict[str, object]:
         return {

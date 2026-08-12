@@ -39,7 +39,7 @@
         "kind": {"enum": ["event"]},
         "enabled": {"type": "boolean"},
         "event-pattern": {"type": "string"},
-        "agent-profile-id": {"type": "string"},
+        "execution-profile-id": {"type": "string"},
         "workflow-profile": {
           "type": "string",
           "enum": ["lite", "standard", "strict"]
@@ -77,7 +77,7 @@
         "kind": {"enum": ["event"]},
         "enabled": {"type": "boolean"},
         "event-pattern": {"type": "string"},
-        "agent-profile-id": {"type": "string"},
+        "execution-profile-id": {"type": "string"},
         "workflow-profile": {
           "type": "string",
           "enum": ["lite", "standard", "strict"]

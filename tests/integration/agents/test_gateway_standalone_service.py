@@ -11,16 +11,20 @@ from urllib.request import Request, urlopen
 
 import pytest
 
-from audiagentic.components.agents.agents_api import create_profile
-from audiagentic.components.agents.agents_gateway_client import (
+from audiagentic.components.agents.gateway.client import (
     get_gateway_client,
     reset_gateway_client,
 )
-from audiagentic.components.agents.agents_gateway_remote_client import (
+from audiagentic.components.agents.gateway.application import InProcessGatewayApplication
+from audiagentic.components.agents.gateway.remote_client import (
     StandaloneGatewayClient,
     load_auth_token,
 )
-from audiagentic.components.agents.agents_gateway_service_host import GatewayServiceHost
+from audiagentic.components.agents.gateway.service.contract import PROTOCOL_VERSION
+from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
+from audiagentic.components.agents.models.execution_profile_api import (
+    create_execution_profile,
+)
 from audiagentic.components.providers.providers_api import ProviderExecutionResult
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.features.base import ImplementationState
@@ -39,7 +43,7 @@ class SharedApplication:
         self.run_release = threading.Event()
         self.run_completed = threading.Event()
 
-    def submit_llm_request(self, project_root, **kwargs):
+    def submit_execution_request(self, project_root, **kwargs):
         with self.guard:
             self.next_id += 1
             request_id = f"req_{self.next_id}"
@@ -47,33 +51,33 @@ class SharedApplication:
             self.requests[request_id] = record
             return dict(record)
 
-    def get_llm_request(self, project_root, request_id):
+    def get_execution_request(self, project_root, request_id):
         return dict(self.requests[request_id])
 
-    def wait_llm_request(self, project_root, request_id, timeout_seconds=None):
+    def wait_execution_request(self, project_root, request_id, timeout_seconds=None):
         return dict(self.requests[request_id])
 
-    def cancel_llm_request(self, project_root, request_id):
+    def cancel_execution_request(self, project_root, request_id):
         with self.guard:
             self.requests[request_id]["state"] = "cancel-requested"
             return dict(self.requests[request_id])
 
-    def run_llm_request(self, project_root, **kwargs):
+    def run_execution_request(self, project_root, **kwargs):
         self.run_started.set()
         self.run_release.wait(timeout=5)
         self.run_completed.set()
         return {"request-id": "req_blocking", "state": "succeeded"}
 
-    def list_llm_requests(self, project_root, **kwargs):
+    def list_execution_requests(self, project_root, **kwargs):
         return [dict(value) for value in self.requests.values()]
 
     def gateway_overview(self, project_root):
         return {"total_requests": len(self.requests), "project-root": str(project_root)}
 
-    def list_llm_sessions(self, project_root, **kwargs):
+    def list_execution_sessions(self, project_root, **kwargs):
         return []
 
-    def close_llm_session(self, project_root, session_id):
+    def close_execution_session(self, project_root, session_id):
         return {"session-id": session_id, "state": "closed"}
 
 
@@ -121,9 +125,10 @@ def _raw_post(endpoint: str, token: str, route: str, body: dict) -> dict:
 
 
 def _make_profile(project_root: Path) -> None:
-    create_profile(project_root, {
+    create_execution_profile(project_root, {
         "profile_id": "default",
         "provider_id": "local-openai",
+        "instances": ["gpt-4o"],
         "model_id": "gpt-4o",
         "is_default": True,
         "params": {},
@@ -140,9 +145,9 @@ def test_independent_clients_share_one_authenticated_control_plane(tmp_path: Pat
     first = StandaloneGatewayClient(host.endpoint, token)
     second = StandaloneGatewayClient(host.endpoint, token)
     try:
-        submitted = first.submit_llm_request(tmp_path, prompt_body="hello", mode="async")
-        observed = second.get_llm_request(tmp_path, submitted["request-id"])
-        cancelled = second.cancel_llm_request(tmp_path, submitted["request-id"])
+        submitted = first.submit_execution_request(tmp_path, prompt_body="hello", mode="async")
+        observed = second.get_execution_request(tmp_path, submitted["request-id"])
+        cancelled = second.cancel_execution_request(tmp_path, submitted["request-id"])
 
         assert observed["request-id"] == submitted["request-id"]
         assert cancelled["state"] == "cancel-requested"
@@ -176,7 +181,7 @@ def test_authenticated_raw_calls_cannot_bypass_protocol_or_lease_authority(
             token,
             "/v1/call",
             {
-                "protocol-version": "gateway-service-v1",
+                "protocol-version": PROTOCOL_VERSION,
                 "owner-epoch": host.owner_epoch,
                 "lease-id": "lease_missing",
                 "operation": "gateway_overview",
@@ -190,6 +195,85 @@ def test_authenticated_raw_calls_cannot_bypass_protocol_or_lease_authority(
         assert application.requests == {}
     finally:
         _stop_host(host, thread)
+
+
+def test_gateway_operation_runs_durably_and_redacts_private_scope(tmp_path: Path) -> None:
+    application = SharedApplication()
+    host, thread, _service_root, token_path = _start_host(tmp_path, application)
+    client = StandaloneGatewayClient(host.endpoint, load_auth_token(token_path))
+    try:
+        created = client.create_gateway_operation(
+            tmp_path,
+            operation_id="op_standalone_reconcile_001",
+            kind="reconcile",
+            scope={"project-root": str(tmp_path)},
+            correlation_id="corr_standalone",
+        )
+        deadline = time.monotonic() + 5
+        current = created
+        while current["state"] in {"accepted", "running"} and time.monotonic() < deadline:
+            time.sleep(0.05)
+            current = client.get_gateway_operation(tmp_path, "op_standalone_reconcile_001")
+
+        assert current["state"] == "completed"
+        assert current["result"] == {
+            "blocked": 0,
+            "changed": 0,
+            "unchanged": 0,
+            "unknown-evidence": 0,
+            "live": 0,
+        }
+        assert "scope" not in current
+        assert "correlation-id" not in current
+    finally:
+        client.close()
+        _stop_host(host, thread)
+
+
+@pytest.mark.parametrize(
+    ("operation_id", "kind", "scope", "error_code"),
+    [
+        ("x", "reconcile", {"project-root": "C:/workspace"}, "VAL-AGM-003"),
+        ("op_bad_kind_001", "unknown", {}, "VAL-AGSV-027"),
+        ("op_unsafe_001", "reconcile", {"prompt-body": "secret"}, "VAL-AGM-005"),
+    ],
+)
+def test_gateway_operation_rejects_invalid_or_unsafe_commands(
+    tmp_path: Path,
+    operation_id: str,
+    kind: str,
+    scope: dict,
+    error_code: str,
+) -> None:
+    application = SharedApplication()
+    host, thread, _service_root, token_path = _start_host(tmp_path, application)
+    client = StandaloneGatewayClient(host.endpoint, load_auth_token(token_path))
+    try:
+        with pytest.raises(AudiaGenticError, match=error_code):
+            client.create_gateway_operation(
+                tmp_path,
+                operation_id=operation_id,
+                kind=kind,
+                scope=scope,
+            )
+    finally:
+        client.close()
+        _stop_host(host, thread)
+
+
+def test_operator_force_stop_exits_the_host_without_handler_deadlock(tmp_path: Path) -> None:
+    application = SharedApplication()
+    host, thread, _service_root, token_path = _start_host(tmp_path, application)
+    client = StandaloneGatewayClient(host.endpoint, load_auth_token(token_path))
+    try:
+        stopped = client.service_stop(tmp_path, force=True)
+        assert stopped["stopping"] is True
+        thread.join(timeout=5)
+        assert not thread.is_alive()
+    finally:
+        client.close()
+        host.close()
+    assert host.service_store.read().state == "stopped"
 
 
 @pytest.mark.parametrize(
@@ -214,7 +298,7 @@ def test_standalone_submission_wire_errors_are_canonical_client_errors(
             {
                 "client-instance-id": "submission-validation",
                 "ttl-seconds": 60,
-                "protocol-version": "gateway-service-v1",
+                "protocol-version": PROTOCOL_VERSION,
             },
         )["result"]
         response = _raw_post(
@@ -222,10 +306,10 @@ def test_standalone_submission_wire_errors_are_canonical_client_errors(
             token,
             "/v1/call",
             {
-                "protocol-version": "gateway-service-v1",
+                "protocol-version": PROTOCOL_VERSION,
                 "owner-epoch": lease["owner-epoch"],
                 "lease-id": lease["lease-id"],
-                "operation": "submit_llm_request",
+                "operation": "submit_execution_request",
                 "project-root": str(tmp_path),
                 "params": params,
             },
@@ -291,7 +375,7 @@ def test_client_timeout_does_not_cancel_service_owned_work(tmp_path: Path) -> No
     client = StandaloneGatewayClient(host.endpoint, load_auth_token(token_path), request_timeout=0.05)
     try:
         with pytest.raises(AudiaGenticError, match="NET-AGSV-002"):
-            client.run_llm_request(tmp_path, prompt_body="slow")
+            client.run_execution_request(tmp_path, prompt_body="slow")
         assert application.run_started.wait(timeout=3)
         application.run_release.set()
         assert application.run_completed.wait(timeout=3)
@@ -316,7 +400,7 @@ def test_real_gateway_work_survives_submitter_disconnect(tmp_path: Path, monkeyp
         )
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", slow_provider
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn", slow_provider
     )
     host = GatewayServiceHost.create(
         service_root=tmp_path / "service-state",
@@ -328,7 +412,7 @@ def test_real_gateway_work_survives_submitter_disconnect(tmp_path: Path, monkeyp
     submitter = StandaloneGatewayClient(host.endpoint, token)
     observer = StandaloneGatewayClient(host.endpoint, token)
     try:
-        submitted = submitter.submit_llm_request(
+        submitted = submitter.submit_execution_request(
             tmp_path, prompt_body="continue after disconnect", mode="async"
         )
         assert provider_started.wait(timeout=2)
@@ -336,7 +420,7 @@ def test_real_gateway_work_survives_submitter_disconnect(tmp_path: Path, monkeyp
         assert host.service_store.read().active_lease_count == 0
 
         provider_release.set()
-        result = observer.wait_llm_request(
+        result = observer.wait_execution_request(
             tmp_path, submitted["request-id"], timeout_seconds=5
         )
         assert result["state"] == "completed"
@@ -370,7 +454,7 @@ def test_unauthenticated_and_malformed_clients_are_rejected_without_token_leak(t
             urlopen(malformed, timeout=2)
         assert json.loads(invalid.value.read().decode("utf-8"))["error-code"] == "VAL-AGSV-007"
 
-        assert token not in (service_root / "machine" / "agent-llm-gateway" / "default" / "service.json").read_text(encoding="utf-8")
+        assert token not in (service_root / "machine" / "agent-execution-gateway" / "default" / "service.json").read_text(encoding="utf-8")
     finally:
         _stop_host(host, thread)
 
@@ -398,10 +482,83 @@ def test_clean_restart_reuses_token_and_rotates_owner_epoch(tmp_path: Path) -> N
         _stop_host(second, second_thread)
 
 
+def test_host_background_operation_completes_after_readiness(tmp_path: Path) -> None:
+    from audiagentic.components.agents.gateway.operations import (
+        GatewayOperationsApplication,
+        ManagementCommand,
+        ManagementOperationKind,
+        ManagementOperationStore,
+    )
+    request_id = "req_host_ready_archive"
+    request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id
+    request_dir.mkdir(parents=True)
+    (request_dir / "record.json").write_text('{"state":"completed"}', encoding="utf-8")
+    application = InProcessGatewayApplication()
+    host, thread, _service_root, _token = _start_host(tmp_path, application)  # type: ignore[arg-type]
+    try:
+        op = GatewayOperationsApplication(ManagementOperationStore(host.service_store.root))
+        op.create_operation(ManagementCommand(operation_id="op_ready_archive", kind=ManagementOperationKind.RECONCILE, scope={"project-root": str(tmp_path), "dry-run": True}))
+        deadline = time.monotonic() + 3.5
+        while time.monotonic() < deadline and ManagementOperationStore(host.service_store.root).read("op_ready_archive")["state"] != "completed":
+            time.sleep(0.05)
+        final = ManagementOperationStore(host.service_store.root).read("op_ready_archive")
+        assert final["state"] == "completed", final
+    finally:
+        _stop_host(host, thread)
+
+
+def test_host_startup_scan_executes_operation_persisted_before_start(tmp_path: Path) -> None:
+    from audiagentic.components.agents.gateway.operations import (
+        GatewayOperationsApplication,
+        ManagementCommand,
+        ManagementOperationKind,
+        ManagementOperationStore,
+    )
+    request_id = "req_startup_archive"
+    request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id
+    request_dir.mkdir(parents=True)
+    (request_dir / "record.json").write_text('{"state":"completed"}', encoding="utf-8")
+    service_root = tmp_path / "services"
+    store = ManagementOperationStore(service_root / "machine" / "agent-execution-gateway" / "default")
+    GatewayOperationsApplication(store).create_operation(ManagementCommand(operation_id="op_startup_archive", kind=ManagementOperationKind.RECONCILE, scope={"project-root": str(tmp_path), "dry-run": True}))
+    host, thread, _service_root, _token = _start_host(tmp_path, InProcessGatewayApplication())  # type: ignore[arg-type]
+    try:
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline and store.read("op_startup_archive")["state"] != "completed":
+            time.sleep(0.05)
+        assert store.read("op_startup_archive")["state"] == "completed"
+    finally:
+        _stop_host(host, thread)
+
+
+def test_restart_preserves_durable_request_history_exactly(tmp_path: Path) -> None:
+    """SH11 rollback rehearsal: restart changes owner epoch, not request history."""
+    from audiagentic.components.agents.gateway import store as request_store
+
+    application = SharedApplication()
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    durable = request_store.build_record(execution_profile_id="default", prompt_body="history")
+    durable["state"] = "completed"
+    durable["output"] = "stable"
+    request_store.write_record(project_root, durable)
+    first, first_thread, service_root, token_path = _start_host(tmp_path, application)
+    before = request_store.read_record(project_root, durable["request-id"])
+    _stop_host(first, first_thread)
+    second = GatewayServiceHost.create(application=application, service_root=service_root, token_path=token_path)
+    second_thread = threading.Thread(target=second.serve_forever)
+    second_thread.start()
+    try:
+        after = request_store.read_record(project_root, durable["request-id"])
+        assert after == before
+    finally:
+        _stop_host(second, second_thread)
+
+
 def test_service_host_boots_with_no_gateway_registry_config_present(tmp_path: Path) -> None:
     """RV745: a fresh machine with no gateway-profiles.yaml keeps embedded-mode
     behavior — no shared registry is installed, matching prior behavior."""
-    from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
+    from audiagentic.components.agents.gateway import profiles as profiles_mod
 
     application = SharedApplication()
     host, thread, _service_root, _token_path = _start_host(tmp_path, application)
@@ -419,7 +576,7 @@ def test_service_host_startup_wires_gateway_owned_registry_from_config(
     registry from a machine-scoped config file, and two distinct project roots
     submitting the same gateway profile share its global queue limit through
     the real HTTP service, not project-local config."""
-    from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
+    from audiagentic.components.agents.gateway import profiles as profiles_mod
 
     root_a = tmp_path / "project_a"
     root_b = tmp_path / "project_b"
@@ -434,10 +591,11 @@ def test_service_host_startup_wires_gateway_owned_registry_from_config(
         "profiles:\n"
         "- profile_id: default\n"
         "  provider_id: local-openai\n"
+        "  instances: [gpt-4o]\n"
         "  model_id: gpt-4o\n"
         "  params:\n"
-        "    max-concurrency: 1\n"
-        "    queue-max-size: 8\n",
+        "    virtual-capacity: 1\n"
+        "    pending-capacity: 8\n",
         encoding="utf-8",
     )
 
@@ -454,7 +612,7 @@ def test_service_host_startup_wires_gateway_owned_registry_from_config(
         )
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn", slow_provider
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn", slow_provider
     )
     host = GatewayServiceHost.create(
         service_root=tmp_path / "service-state",
@@ -471,22 +629,22 @@ def test_service_host_startup_wires_gateway_owned_registry_from_config(
         client_a = StandaloneGatewayClient(host.endpoint, token)
         client_b = StandaloneGatewayClient(host.endpoint, token)
         try:
-            submitted_a = client_a.submit_llm_request(root_a, prompt_body="from-a", mode="async")
+            submitted_a = client_a.submit_execution_request(root_a, prompt_body="from-a", mode="async")
             assert provider_started.wait(timeout=2)
 
-            # Global max_concurrency=1 for this gateway-owned profile: project
+            # Global virtual_capacity=1 for this gateway-owned profile: project
             # B's request must queue behind project A's, not run independently
             # under a project-local limit.
-            submitted_b = client_b.submit_llm_request(root_b, prompt_body="from-b", mode="async")
-            status_b = client_b.get_llm_request(root_b, submitted_b["request-id"])
+            submitted_b = client_b.submit_execution_request(root_b, prompt_body="from-b", mode="async")
+            status_b = client_b.get_execution_request(root_b, submitted_b["request-id"])
             assert status_b["state"] in ("queued", "dispatching")
 
             provider_release.set()
-            result_a = client_a.wait_llm_request(root_a, submitted_a["request-id"], timeout_seconds=5)
-            result_b = client_b.wait_llm_request(root_b, submitted_b["request-id"], timeout_seconds=5)
+            result_a = client_a.wait_execution_request(root_a, submitted_a["request-id"], timeout_seconds=5)
+            result_b = client_b.wait_execution_request(root_b, submitted_b["request-id"], timeout_seconds=5)
             assert result_a["state"] == "completed"
             assert result_b["state"] == "completed"
-            assert result_a["gateway-execution-lane-key"] == result_b["gateway-execution-lane-key"]
+            assert result_a["resolved-instance-ids"] == result_b["resolved-instance-ids"]
         finally:
             provider_release.set()
             client_a.close()
@@ -515,7 +673,7 @@ def test_explicit_composition_mode_selects_standalone_without_fallback(
 
 
 def test_service_process_crash_allows_deterministic_explicit_restart(tmp_path: Path) -> None:
-    from audiagentic.components.agents.agents_gateway_service_host import GATEWAY_SERVICE_KEY
+    from audiagentic.components.agents.gateway.service.host import GATEWAY_SERVICE_KEY
 
     port = choose_free_port("127.0.0.1")
     endpoint = f"http://127.0.0.1:{port}"
@@ -597,7 +755,7 @@ def test_service_process_crash_allows_deterministic_explicit_restart(tmp_path: P
 def test_spooled_trigger_is_admitted_by_running_service(tmp_path: Path) -> None:
     """A trigger published while the service is DOWN is durably admitted once
     the service starts, carrying spool-derived idempotency and correlation."""
-    from audiagentic.components.agents.agents_event_topics import GATEWAY_REQUESTED_TOPIC
+    from audiagentic.components.agents.gateway.event_topics import GATEWAY_REQUESTED_TOPIC
 
     application = SharedApplication()
     service_root = tmp_path / "services"
@@ -612,7 +770,7 @@ def test_spooled_trigger_is_admitted_by_running_service(tmp_path: Path) -> None:
             "-c",
             (
                 "import sys; from pathlib import Path\n"
-                "from audiagentic.components.agents.agents_gateway_ingress import publish_gateway_trigger\n"
+                "from audiagentic.components.agents.gateway.ingress import publish_gateway_trigger\n"
                 f"event_id = publish_gateway_trigger({GATEWAY_REQUESTED_TOPIC!r}, "
                 f"{{'project-root': {str(tmp_path / 'proj')!r}, 'prompt-body': 'spooled hello'}}, "
                 f"metadata={{'correlation_id': 'corr-spool'}}, service_root=Path({str(service_root)!r}))\n"
@@ -644,7 +802,7 @@ def test_spooled_trigger_is_admitted_by_running_service(tmp_path: Path) -> None:
 def test_idle_grace_self_shutdown_retires_record(tmp_path: Path, monkeypatch) -> None:
     """With an idle grace configured, a quiescent service with no leases
     drains and exits by itself; close() retires the record to 'stopped'."""
-    from audiagentic.components.agents.agents_gateway_service_host import GATEWAY_SERVICE_KEY
+    from audiagentic.components.agents.gateway.service.host import GATEWAY_SERVICE_KEY
 
     monkeypatch.setenv("AUDIAGENTIC_GATEWAY_IDLE_GRACE_SECONDS", "0.1")
     application = SharedApplication()
@@ -667,6 +825,13 @@ def _make_gateway_profiles_config(path: Path, profiles: list[dict]) -> None:
     """Write a gateway-profiles.yaml file."""
     import yaml
 
+    profiles = [
+        {
+            **profile,
+            "instances": profile.get("instances") or [profile.get("model_id", "gpt-4o")],
+        }
+        for profile in profiles
+    ]
     data = {"contract-version": "v1", "profiles": profiles}
     path.write_text(
         yaml.dump(data, default_flow_style=False, sort_keys=False),
@@ -677,9 +842,9 @@ def _make_gateway_profiles_config(path: Path, profiles: list[dict]) -> None:
 def test_reload_gateway_profiles_atomic_swap(tmp_path: Path) -> None:
     """SH13 step 3-4: reload_profile_registry atomically swaps the registry
     under a lock; on success, returns only redacted generation metadata.
-    A redacted agents.llm.gateway.profile-reloaded event is published."""
-    from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
-    from audiagentic.components.agents.agents_event_topics import (
+    A redacted agents.execution.gateway.profile-reloaded event is published."""
+    from audiagentic.components.agents.gateway import profiles as profiles_mod
+    from audiagentic.components.agents.gateway.event_topics import (
         GATEWAY_PROFILE_RELOADED_TOPIC,
     )
 
@@ -693,7 +858,7 @@ def test_reload_gateway_profiles_atomic_swap(tmp_path: Path) -> None:
             "profile_id": "default",
             "provider_id": "local-openai",
             "model_id": "gpt-4o",
-            "params": {"max-concurrency": 1, "queue-max-size": 8},
+            "params": {"virtual-capacity": 1, "pending-capacity": 8},
         },
     ])
 
@@ -716,7 +881,7 @@ def test_reload_gateway_profiles_atomic_swap(tmp_path: Path) -> None:
                 "profile_id": "default",
                 "provider_id": "local-openai",
                 "model_id": "gpt-4o",
-                "params": {"max-concurrency": 3, "queue-max-size": 16},
+                "params": {"virtual-capacity": 3, "pending-capacity": 16},
             },
         ])
 
@@ -739,8 +904,8 @@ def test_reload_gateway_profiles_atomic_swap(tmp_path: Path) -> None:
         # Generation must have changed (new config)
         assert gen_v2 != gen_v1
         # New limits from config
-        assert snap_v2.max_concurrency == 3
-        assert snap_v2.queue_max_size == 16
+        assert snap_v2.execution_params["virtual-capacity"] == 3
+        assert snap_v2.execution_params["pending-capacity"] == 16
 
         # Step 4: old and new summaries carry only redacted metadata (no secrets)
         for summary_key in ("old-generation-summary", "new-generation-summary"):
@@ -768,7 +933,7 @@ def test_reload_gateway_profiles_atomic_swap(tmp_path: Path) -> None:
 def test_reload_retains_previous_on_failure(tmp_path: Path) -> None:
     """SH13 step 3: if reload fails (config file missing), the previous
     registry is retained and the operation returns success=False."""
-    from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
+    from audiagentic.components.agents.gateway import profiles as profiles_mod
 
     config_path = tmp_path / "gateway-profiles.yaml"
     _make_gateway_profiles_config(config_path, [
@@ -776,12 +941,12 @@ def test_reload_retains_previous_on_failure(tmp_path: Path) -> None:
             "profile_id": "default",
             "provider_id": "local-openai",
             "model_id": "gpt-4o",
-            "params": {"max-concurrency": 1, "queue-max-size": 8},
+            "params": {"virtual-capacity": 1, "pending-capacity": 8},
         },
     ])
 
-    registry = profiles_mod.InMemoryGatewayRegistry()
-    registry.register("default", provider_id="local-openai", model_id="gpt-4o")
+    registry = profiles_mod.InMemoryExecutionProfileRegistry()
+    registry.register("default", provider_id="local-openai", instances=("gpt-4o",))
     profiles_mod.set_gateway_registry(registry)
     profiles_mod.set_gateway_registry_config_path(config_path)
     gen_before = registry.resolve_snapshot("default").generation
@@ -806,7 +971,7 @@ def test_reload_retains_previous_on_failure(tmp_path: Path) -> None:
 def test_reload_via_service_operation(tmp_path: Path) -> None:
     """SH13 step 3-4: reload_gateway_profiles operation is callable through
     the HTTP service and returns redacted metadata."""
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
     )
 
@@ -820,7 +985,7 @@ def test_reload_via_service_operation(tmp_path: Path) -> None:
             "profile_id": "default",
             "provider_id": "local-openai",
             "model_id": "gpt-4o",
-            "params": {"max-concurrency": 1, "queue-max-size": 8},
+            "params": {"virtual-capacity": 1, "pending-capacity": 8},
         },
     ])
 
@@ -843,7 +1008,7 @@ def test_stale_queued_snapshot_rejected_on_reload(tmp_path: Path, monkeypatch) -
     """SH13 step 7-8: after a reload changes the profile generation,
     queued work with a stale snapshot is rejected with CON-AGW-101 while
     a running request keeps its original snapshot uninterrupted."""
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
     )
 
@@ -860,7 +1025,7 @@ def test_stale_queued_snapshot_rejected_on_reload(tmp_path: Path, monkeypatch) -
             "profile_id": "default",
             "provider_id": "local-openai",
             "model_id": "gpt-4o",
-            "params": {"max-concurrency": 1, "queue-max-size": 8},
+            "params": {"virtual-capacity": 1, "pending-capacity": 8},
         },
     ])
 
@@ -881,7 +1046,7 @@ def test_stale_queued_snapshot_rejected_on_reload(tmp_path: Path, monkeypatch) -
         )
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
         slow_provider,
     )
     host = GatewayServiceHost.create(
@@ -892,19 +1057,19 @@ def test_stale_queued_snapshot_rejected_on_reload(tmp_path: Path, monkeypatch) -
     thread = threading.Thread(target=host.serve_forever)
     thread.start()
     try:
-        from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
+        from audiagentic.components.agents.gateway import profiles as profiles_mod
 
         token = load_auth_token(host.token_path)
         client_a = StandaloneGatewayClient(host.endpoint, token)
         client_b = StandaloneGatewayClient(host.endpoint, token)
         try:
-            # Submit first request — it will run (max_concurrency=1)
-            submitted_a = client_a.submit_llm_request(root_a, prompt_body="running", mode="async")
+            # Submit first request — it will run (virtual_capacity=1)
+            submitted_a = client_a.submit_execution_request(root_a, prompt_body="running", mode="async")
             assert provider_started.wait(timeout=2), "first request should start running"
 
             # Submit second request — it queues behind the first
-            submitted_b = client_b.submit_llm_request(root_b, prompt_body="queued", mode="async")
-            status_b = client_b.get_llm_request(root_b, submitted_b["request-id"])
+            submitted_b = client_b.submit_execution_request(root_b, prompt_body="queued", mode="async")
+            status_b = client_b.get_execution_request(root_b, submitted_b["request-id"])
             assert status_b["state"] in ("queued", "dispatching")
 
             # Reload the gateway profiles config with changed limits
@@ -913,7 +1078,7 @@ def test_stale_queued_snapshot_rejected_on_reload(tmp_path: Path, monkeypatch) -
                     "profile_id": "default",
                     "provider_id": "local-openai",
                     "model_id": "gpt-4o",
-                    "params": {"max-concurrency": 2, "queue-max-size": 16},
+                    "params": {"virtual-capacity": 2, "pending-capacity": 16},
                 },
             ])
             reload_result = profiles_mod.reload_profile_registry()
@@ -925,16 +1090,16 @@ def test_stale_queued_snapshot_rejected_on_reload(tmp_path: Path, monkeypatch) -
             # proactively at reload time, so releasing A (freeing the lane's
             # only slot) is what triggers B's dispatch attempt and rejection.
             provider_release.set()
-            result_a = client_a.wait_llm_request(root_a, submitted_a["request-id"], timeout_seconds=5)
+            result_a = client_a.wait_execution_request(root_a, submitted_a["request-id"], timeout_seconds=5)
             assert result_a["state"] == "completed"
 
             # Step 7: queued stale snapshot (B) is rejected with CON-AGW-101
             # once its dispatch was attempted.
             deadline = time.monotonic() + 5
-            status_b_after = client_b.get_llm_request(root_b, submitted_b["request-id"])
+            status_b_after = client_b.get_execution_request(root_b, submitted_b["request-id"])
             while status_b_after["state"] == "queued" and time.monotonic() < deadline:
                 time.sleep(0.05)
-                status_b_after = client_b.get_llm_request(root_b, submitted_b["request-id"])
+                status_b_after = client_b.get_execution_request(root_b, submitted_b["request-id"])
             assert status_b_after["state"] == "rejected"
             assert "CON-AGW-101" in (status_b_after.get("error") or {}).get("code", "")
         finally:
@@ -948,7 +1113,7 @@ def test_stale_queued_snapshot_rejected_on_reload(tmp_path: Path, monkeypatch) -
 def test_redacted_status_no_secrets_in_overview(tmp_path: Path) -> None:
     """SH13 step 9: self-review — gateway status and queue overview contain
     no secret keys or filesystem paths beyond the project root."""
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
     )
 
@@ -963,8 +1128,8 @@ def test_redacted_status_no_secrets_in_overview(tmp_path: Path) -> None:
             "provider_id": "local-openai",
             "model_id": "gpt-4o",
             "params": {
-                "max-concurrency": 2,
-                "queue-max-size": 8,
+                "virtual-capacity": 2,
+                "pending-capacity": 8,
                 "api-key": "sk-test-secret-value",  # secret that must be redacted
             },
         },
@@ -990,7 +1155,7 @@ def test_redacted_status_no_secrets_in_overview(tmp_path: Path) -> None:
             assert "api-key" not in overview_str or overview_str.count("api-key") == 0
 
             # Reload result should also be redacted
-            from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
+            from audiagentic.components.agents.gateway import profiles as profiles_mod
             reload_result = profiles_mod.reload_profile_registry()
             assert reload_result["success"] is True
             reload_str = json.dumps(reload_result).lower()
@@ -1003,7 +1168,7 @@ def test_absent_shared_profile_rejected_not_fallback(tmp_path: Path) -> None:
     """SH13 step 5: when a shared registry is active but the requested
     profile does not exist in it, the request is rejected — no fallback to
     project-local limits."""
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
     )
 
@@ -1019,12 +1184,12 @@ def test_absent_shared_profile_rejected_not_fallback(tmp_path: Path) -> None:
             "profile_id": "other-profile",
             "provider_id": "local-openai",
             "model_id": "gpt-4o",
-            "params": {"max-concurrency": 1, "queue-max-size": 8},
+            "params": {"virtual-capacity": 1, "pending-capacity": 8},
         },
     ])
 
     # Use the real application (not the SharedApplication test double, which
-    # stubs submit_llm_request and never touches the gateway registry) so
+    # stubs submit_execution_request and never touches the gateway registry) so
     # this actually exercises registry-backed rejection.
     host = GatewayServiceHost.create(
         service_root=tmp_path / "service-state-absent",
@@ -1039,8 +1204,8 @@ def test_absent_shared_profile_rejected_not_fallback(tmp_path: Path) -> None:
             # Requesting 'default' — not in shared registry → should fail,
             # not silently fall back to the project-local profile's limits.
             with pytest.raises(AudiaGenticError) as exc_info:
-                client.submit_llm_request(root, prompt_body="hello", mode="async")
-            assert exc_info.value.code == "RES-AGP-001"
+                client.submit_execution_request(root, prompt_body="hello", mode="async")
+            assert exc_info.value.code == "RES-EXP-001"
     finally:
         _stop_host(host, thread)
 
@@ -1048,7 +1213,7 @@ def test_absent_shared_profile_rejected_not_fallback(tmp_path: Path) -> None:
 def test_embedded_compatibility_when_no_shared_registry(tmp_path: Path) -> None:
     """SH13 step 6: when no shared gateway registry is installed, embedded
     compatibility mode still works — project-local profiles are used."""
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
     )
 
@@ -1062,7 +1227,7 @@ def test_embedded_compatibility_when_no_shared_registry(tmp_path: Path) -> None:
     try:
         with StandaloneGatewayClient(host.endpoint, token) as client:
             # No shared registry — embedded mode should work
-            submitted = client.submit_llm_request(root, prompt_body="embedded", mode="async")
+            submitted = client.submit_execution_request(root, prompt_body="embedded", mode="async")
             assert "request-id" in submitted
     finally:
         _stop_host(host, thread)
@@ -1073,7 +1238,7 @@ def test_reload_concurrency_no_state_corruption(tmp_path: Path, monkeypatch) -> 
     corrupt registry state — the atomic swap under a short lock guarantees
     that a request admitted during reload sees either the old or new registry,
     never a torn or partially-updated one."""
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
     )
 
@@ -1090,7 +1255,7 @@ def test_reload_concurrency_no_state_corruption(tmp_path: Path, monkeypatch) -> 
             "profile_id": "default",
             "provider_id": "local-openai",
             "model_id": "gpt-4o",
-            "params": {"max-concurrency": 1, "queue-max-size": 8},
+            "params": {"virtual-capacity": 1, "pending-capacity": 8},
         },
     ])
 
@@ -1107,7 +1272,7 @@ def test_reload_concurrency_no_state_corruption(tmp_path: Path, monkeypatch) -> 
         )
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
         slow_provider,
     )
     host = GatewayServiceHost.create(
@@ -1118,14 +1283,14 @@ def test_reload_concurrency_no_state_corruption(tmp_path: Path, monkeypatch) -> 
     thread = threading.Thread(target=host.serve_forever)
     thread.start()
     try:
-        from audiagentic.components.agents import agents_gateway_profiles as profiles_mod
+        from audiagentic.components.agents.gateway import profiles as profiles_mod
 
         token = load_auth_token(host.token_path)
         client_a = StandaloneGatewayClient(host.endpoint, token)
         client_b = StandaloneGatewayClient(host.endpoint, token)
         try:
-            # Submit first request — it will run (max_concurrency=1), holding the slot
-            submitted_a = client_a.submit_llm_request(root_a, prompt_body="hold", mode="async")
+            # Submit first request — it will run (virtual_capacity=1), holding the slot
+            submitted_a = client_a.submit_execution_request(root_a, prompt_body="hold", mode="async")
             assert provider_started.wait(timeout=2), "first request should start running"
 
             gen_v1 = profiles_mod.get_gateway_registry().resolve_snapshot("default").generation
@@ -1140,7 +1305,7 @@ def test_reload_concurrency_no_state_corruption(tmp_path: Path, monkeypatch) -> 
                         "profile_id": "default",
                         "provider_id": "local-openai",
                         "model_id": "gpt-4o",
-                        "params": {"max-concurrency": 2, "queue-max-size": 16},
+                        "params": {"virtual-capacity": 2, "pending-capacity": 16},
                     },
                 ])
                 result = profiles_mod.reload_profile_registry()
@@ -1153,15 +1318,15 @@ def test_reload_concurrency_no_state_corruption(tmp_path: Path, monkeypatch) -> 
 
             # Submit second request during the reload — it should see a consistent
             # registry (either v1 or v2, never torn)
-            submitted_b = client_b.submit_llm_request(root_b, prompt_body="during-reload", mode="async")
+            submitted_b = client_b.submit_execution_request(root_b, prompt_body="during-reload", mode="async")
             reload_thread.join(timeout=5)
 
             assert len(reload_results) == 1
             assert reload_results[0]["success"] is True
 
             # Both requests should be in a valid state (not corrupted)
-            status_a = client_a.get_llm_request(root_a, submitted_a["request-id"])
-            status_b = client_b.get_llm_request(root_b, submitted_b["request-id"])
+            status_a = client_a.get_execution_request(root_a, submitted_a["request-id"])
+            status_b = client_b.get_execution_request(root_b, submitted_b["request-id"])
 
             # A is running (holds the slot), B is queued or running (concurrency=2 now)
             assert status_a["state"] == "running"
@@ -1174,11 +1339,11 @@ def test_reload_concurrency_no_state_corruption(tmp_path: Path, monkeypatch) -> 
 
             # Complete the running request
             provider_release.set()
-            result_a = client_a.wait_llm_request(root_a, submitted_a["request-id"], timeout_seconds=5)
+            result_a = client_a.wait_execution_request(root_a, submitted_a["request-id"], timeout_seconds=5)
             assert result_a["state"] == "completed"
 
             # B should also complete (no corruption from concurrent reload)
-            result_b = client_b.wait_llm_request(root_b, submitted_b["request-id"], timeout_seconds=5)
+            result_b = client_b.wait_execution_request(root_b, submitted_b["request-id"], timeout_seconds=5)
             assert result_b["state"] == "completed"
         finally:
             provider_release.set()

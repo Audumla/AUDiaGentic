@@ -1,0 +1,19 @@
+FROM audia-test-base:latest
+
+WORKDIR /app
+ENV AUDIAGENTIC_DOCKER_TESTS=1
+ENV AUDIAGENTIC_GATEWAY_SESSION_ORPHAN_DOCKER=1
+ENV HOME=/tmp/audiagentic-test-home
+ENV AUDIAGENTIC_HOME=/tmp/audiagentic-test-home/.audiagentic
+ENV PYTHONPATH="/app/src"
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+
+# AS91: execute the real SessionRuntime/reaper tests inside a Linux container.
+# The tests spawn real adopted descendants, observe creation identity, and
+# exercise the owning-task cleanup path; this is intentionally not a marker-only
+# skip or a mocked process observation.
+COPY pyproject.toml README.md ./
+COPY src ./src
+COPY tests ./tests
+
+CMD ["bash", "-c", "uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp,test]' && /venv/bin/pytest tests/unit/agents/test_agents_gateway_sessions.py -q -k 'real_owned_subprocess or external_orphan' --tb=short"]

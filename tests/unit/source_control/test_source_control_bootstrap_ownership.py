@@ -15,6 +15,25 @@ from audiagentic.components.release.release_please.install import install
 from audiagentic.components.source_control import source_control_bootstrap as bootstrap
 from audiagentic.foundation.toolchains.config.artifact_registry import ArtifactRegistry
 
+
+def _hook_entry_point() -> str:
+    """Name of the symbol the hook invokes, resolved by actually importing it.
+
+    The hook calls into Python from a shell string, so no importer scan sees
+    that edge. Deriving the expected name from a real import means an assertion
+    against the hook body cannot pass while the entry point is missing --
+    the gap that let the installed hook no-op silently for weeks.
+    """
+    from audiagentic.components.source_control.git_commits import stamp_ledger_for_commit
+
+    return stamp_ledger_for_commit.__name__
+
+
+def test_hook_body_entry_point_resolves() -> None:
+    """The hook template must name a symbol that genuinely imports."""
+    assert _hook_entry_point() in bootstrap._post_commit_hook_body()
+
+
 # --- Feature A: Release install ownership ---------------------------------
 
 class TestReleaseInstallOwnership:
@@ -167,7 +186,7 @@ class TestHookInstallOwnership:
         assert result["installed"] is True
         content = hook.read_text(encoding="utf-8")
         # Empty block replaced with full hook body
-        assert "stamp_fragments_for_commit" in content
+        assert _hook_entry_point() in content
 
     def test_fb_dry_run_no_side_effects(self, tmp_path: Path, monkeypatch) -> None:
         """Dry-run returns planned changes without writing or registry mutations."""

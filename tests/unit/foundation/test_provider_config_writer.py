@@ -1,7 +1,7 @@
 """Tests for provider config patch/enable/disable helpers.
 
-Provider enablement lives in feature state (features.yaml); providers.yaml holds
-only rich runtime config and never carries `enabled`.
+Provider enablement lives in feature state (features.yaml); each provider file
+holds only rich runtime config and never carries `enabled`.
 """
 from __future__ import annotations
 
@@ -22,8 +22,8 @@ from audiagentic.foundation.features.state import (
 )
 
 
-def _providers_yaml(tmp_path: Path) -> Path:
-    return tmp_path / ".audiagentic" / "config" / "runtime" / "providers.yaml"
+def _provider_yaml(tmp_path: Path, provider_id: str) -> Path:
+    return tmp_path / ".audiagentic" / "config" / "providers" / f"{provider_id}.yaml"
 
 
 def test_set_provider_enabled_writes_feature_state(tmp_path: Path) -> None:
@@ -36,23 +36,27 @@ def test_set_provider_enabled_writes_feature_state(tmp_path: Path) -> None:
 
 
 def test_set_provider_enabled_does_not_persist_enabled_to_providers_yaml(tmp_path: Path) -> None:
-    patch_provider_config(tmp_path, "claude", {"access-mode": "cli"})
+    patch_provider_config(tmp_path, "claude", {"install-mode": "external-configured", "access-mode": "cli"})
     set_provider_enabled(tmp_path, "claude", enabled=True)
 
-    saved = yaml.safe_load(_providers_yaml(tmp_path).read_text(encoding="utf-8"))
-    assert "enabled" not in saved["providers"]["claude"]
+    saved = yaml.safe_load(_provider_yaml(tmp_path, "claude").read_text(encoding="utf-8"))
+    assert "enabled" not in saved
 
 
 def test_patch_provider_config_strips_enabled(tmp_path: Path) -> None:
-    patch_provider_config(tmp_path, "gemini", {"enabled": True, "access-mode": "cli"})
+    patch_provider_config(
+        tmp_path,
+        "gemini",
+        {"enabled": True, "install-mode": "external-configured", "access-mode": "cli"},
+    )
 
-    saved = yaml.safe_load(_providers_yaml(tmp_path).read_text(encoding="utf-8"))
-    assert "enabled" not in saved["providers"]["gemini"]
-    assert saved["providers"]["gemini"]["access-mode"] == "cli"
+    saved = yaml.safe_load(_provider_yaml(tmp_path, "gemini").read_text(encoding="utf-8"))
+    assert "enabled" not in saved
+    assert saved["access-mode"] == "cli"
 
 
 def test_patch_provider_config_merges_shallow(tmp_path: Path) -> None:
-    patch_provider_config(tmp_path, "gemini", {"access-mode": "cli"})
+    patch_provider_config(tmp_path, "gemini", {"install-mode": "external-configured", "access-mode": "cli"})
     result = patch_provider_config(tmp_path, "gemini", {"default-model": "gemini-2.0"})
 
     assert result["providers"]["gemini"]["access-mode"] == "cli"
@@ -60,26 +64,28 @@ def test_patch_provider_config_merges_shallow(tmp_path: Path) -> None:
 
 
 def test_patch_provider_config_does_not_affect_other_providers(tmp_path: Path) -> None:
-    patch_provider_config(tmp_path, "claude", {"access-mode": "cli"})
-    patch_provider_config(tmp_path, "codex", {"access-mode": "env"})
+    patch_provider_config(tmp_path, "claude", {"install-mode": "external-configured", "access-mode": "cli"})
+    patch_provider_config(
+        tmp_path,
+        "codex",
+        {"install-mode": "external-configured", "access-mode": "env", "auth-ref": "env:OPENAI_API_KEY"},
+    )
 
-    saved = yaml.safe_load(_providers_yaml(tmp_path).read_text(encoding="utf-8"))
-    assert saved["providers"]["claude"]["access-mode"] == "cli"
-    assert saved["providers"]["codex"]["access-mode"] == "env"
+    claude = yaml.safe_load(_provider_yaml(tmp_path, "claude").read_text(encoding="utf-8"))
+    codex = yaml.safe_load(_provider_yaml(tmp_path, "codex").read_text(encoding="utf-8"))
+    assert claude["access-mode"] == "cli"
+    assert codex["access-mode"] == "env"
 
 
 def test_load_provider_config_derives_enabled_from_feature_state(tmp_path: Path) -> None:
-    path = _providers_yaml(tmp_path)
+    path = _provider_yaml(tmp_path, "codex")
     path.parent.mkdir(parents=True)
     path.write_text(
         "\n".join(
             [
-                "contract-version: v1",
-                "providers:",
-                "  codex:",
-                "    install-mode: external-configured",
-                "    access-mode: cli",
-                "    auth-ref: env:OPENAI_API_KEY",
+                "install-mode: external-configured",
+                "access-mode: cli",
+                "auth-ref: env:OPENAI_API_KEY",
             ]
         ),
         encoding="utf-8",

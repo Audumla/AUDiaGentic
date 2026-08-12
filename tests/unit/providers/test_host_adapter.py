@@ -19,6 +19,23 @@ def test_vscode_host_loaded_from_config():
     assert adapter.workspace_marker == ".vscode"
     assert adapter.extensions_manifest == ".vscode/extensions.json"
     assert adapter.extension_dir().name == "extensions"
+    assert adapter.settings_manifest == ".vscode/settings.json"
+
+
+def test_settings_manifest_path(tmp_path: Path):
+    adapter = get_host_adapter("vscode")
+    assert adapter.settings_manifest_path(tmp_path) == tmp_path / ".vscode" / "settings.json"
+
+
+def test_settings_manifest_path_raises_when_unconfigured(tmp_path: Path):
+    adapter = HostAdapter(
+        host_id="no-settings-editor",
+        workspace_marker=".ns",
+        extensions_manifest=".ns/exts.json",
+        extensions_dir=str(tmp_path / "ext-store"),
+    )
+    with pytest.raises(AudiaGenticError, match="CFG-HOST-002"):
+        adapter.settings_manifest_path(tmp_path)
 
 
 def test_unknown_host_raises():

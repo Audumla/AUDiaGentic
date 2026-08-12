@@ -11,7 +11,7 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from tests.integration.providers.harness import provider_ids
+from tests.integration.providers.harness import provider_ids  # noqa: E402
 
 
 def _mount_path(path: Path) -> str:
@@ -50,10 +50,10 @@ def _run_for_provider(provider_id: str, *, image: str, mount: str | None) -> tup
         "-lc",
         (
             "unset WSL_DISTRO_NAME WSL_INTEROP WSLENV && "
-            "export PATH=/root/.local/bin:/usr/local/bin:$PATH && "
+            "export PATH=/venv/bin:$HOME/.local/bin:/root/.local/bin:/usr/local/bin:$PATH && "
             "pytest "
-            "tests/integration/providers/test_provider_cli_workflow_docker.py "
             "tests/integration/providers/test_provider_cli_comprehensive.py "
+            "tests/integration/providers/test_provider_cli_workflow_docker.py "
             "-q"
         ),
     ])

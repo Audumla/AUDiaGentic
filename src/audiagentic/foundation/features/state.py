@@ -308,6 +308,21 @@ def set_implementation_state(
     set_component_state(project_root, parent, component)
 
 
+def remove_implementation_state(project_root: Path, parent: str, implementation_id: str) -> bool:
+    """Remove one implementation's project state, returning whether it existed."""
+    component = get_component_state(project_root, parent)
+    implementations = component.get("implementations")
+    if not isinstance(implementations, dict) or implementation_id not in implementations:
+        return False
+    del implementations[implementation_id]
+    if implementations:
+        component["implementations"] = implementations
+    else:
+        component.pop("implementations", None)
+    set_component_state(project_root, parent, component)
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Implementation-scoped feature state (flat composite key format)
 # ---------------------------------------------------------------------------
