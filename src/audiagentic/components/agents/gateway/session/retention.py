@@ -11,6 +11,7 @@ from audiagentic.components.agents.agents_paths import (
 )
 from audiagentic.foundation.system.process import StartupLock
 
+from .root_registry import request_ids_for_registered_roots
 from .sessions_store import list_session_records
 
 
@@ -34,6 +35,8 @@ def _request_retention_pin_unlocked(project_root: Path, request_id: str) -> Requ
     after its browser tab/process has gone away.  The binding itself remains
     private; this API exposes only the boolean safety fact and a stable reason.
     """
+    if request_ids_for_registered_roots(project_root, request_id):
+        return RequestRetentionPin(True, "relocated-session-lineage")
     for record in list_session_records(project_root):
         activity = record.get("activity")
         request_ids = activity.get("request-ids") if isinstance(activity, dict) else None

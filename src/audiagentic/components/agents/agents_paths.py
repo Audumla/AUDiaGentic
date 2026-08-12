@@ -90,6 +90,16 @@ def gateway_session_binding_lock_path(project_root: Path) -> Path:
     return gateway_sessions_root(project_root) / "session-binding-index.lock"
 
 
+def gateway_session_root_registry_path(project_root: Path) -> Path:
+    """Return the durable session-root/request lineage registry path."""
+    return gateway_sessions_root(project_root) / "session-root-registry.json"
+
+
+def gateway_session_root_registry_lock_path(project_root: Path) -> Path:
+    """Return the lock guarding the durable session-root registry."""
+    return gateway_sessions_root(project_root) / "session-root-registry.lock"
+
+
 # ── AS49: explicit resume idempotency ───────────────────────────────────────
 
 
