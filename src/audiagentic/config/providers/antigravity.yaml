@@ -33,7 +33,7 @@ capabilities:
           - bash
           # pi-lens-ignore: line-length
           - "-lc"
-          - "rm -f $(which agy) 2>/dev/null; rm -rf ~/.gemini/antigravity 2>/dev/null; true"
+          - "rm -f \"$HOME/.local/bin/agy\" \"$(command -v agy 2>/dev/null)\" 2>/dev/null; rm -rf ~/.gemini/antigravity 2>/dev/null; true"
 
   # pi-lens-ignore: line-length
   mcp:

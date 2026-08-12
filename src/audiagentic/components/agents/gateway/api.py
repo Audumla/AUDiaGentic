@@ -420,6 +420,10 @@ def submit_execution_request(
     # The client key currently arrives through transport metadata. It remains
     # available for envelope validation but must never reach records, queues,
     # events, or provider packets in raw form.
+    from audiagentic.components.agents.gateway.queue.watchdog_policy import load_watchdog_policy
+
+    # Snapshot the machine-owned watchdog policy at admission. Dispatch and
+    # renewal therefore cannot change semantics halfway through a request.
     record = store.build_record(
         request_id=request_id,
         execution_profile_id=resolved_profile_id,
@@ -454,6 +458,7 @@ def submit_execution_request(
         # profile-level queue limit -- retired, always None going forward.
         resolved_queue_limits=None,
         admission_policy_digest=None,
+        watchdog_policy=load_watchdog_policy().snapshot,
     )
     record, created = store.admit_record(
         project_root,
@@ -678,6 +683,15 @@ def gateway_status() -> dict[str, Any]:
     if persisted records exist). Prefer gateway_overview() for a complete
     picture; kept for backward compatibility with existing callers."""
     return get_queue_manager().all_queue_depths()
+
+
+def gateway_capacity_status() -> dict[str, Any]:
+    """Return provider-neutral source-capacity diagnostics.
+
+    Unlike the deprecated gateway_status compatibility projection, this does
+    not expose profile lane identifiers or queue-limit policy.
+    """
+    return get_queue_manager().source_capacity_status()
 
 
 def list_execution_requests(
@@ -982,7 +996,7 @@ def gateway_overview(project_root: Path) -> dict[str, Any]:
         "total_requests": len(records),
         "by_state": by_state,
         "recent_failures": recent_failures,
-        "queues": get_queue_manager().all_queue_depths(),
+        "queues": get_queue_manager().project_queue_depths(project_root),
         "sessions": {
             "active-count": sum(1 for s in sessions if s["live"]),
             "sessions": [
