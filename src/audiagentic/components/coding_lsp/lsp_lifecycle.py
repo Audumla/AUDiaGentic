@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -95,13 +96,29 @@ class LspSession:
             self.server_config.command,
             cwd=str(self.project_root),
         )
+        initialization_options = dict(self.server_config.settings)
+        if "typescript-language-server" in self.server_config.command:
+            workspace_tsserver = (
+                self.project_root / "node_modules" / "typescript" / "lib" / "tsserver.js"
+            )
+            candidates = (
+                workspace_tsserver,
+                Path("/usr/local/lib/node_modules/typescript/lib/tsserver.js"),
+                Path("/usr/lib/node_modules/typescript/lib/tsserver.js"),
+            )
+            tsserver = next((str(path) for path in candidates if path.is_file()), None)
+            tsserver = tsserver or shutil.which("tsserver")
+            if tsserver:
+                ts_options = dict(initialization_options.get("tsserver") or {})
+                ts_options.setdefault("path", tsserver)
+                initialization_options["tsserver"] = ts_options
         result = self.bridge.send_request(
             "initialize",
             {
                 "processId": os.getpid(),
                 "rootUri": self.root_uri,
                 "capabilities": self._client_capabilities(),
-                "initializationOptions": self.server_config.settings,
+                "initializationOptions": initialization_options,
                 "workspaceFolders": [{"uri": self.root_uri, "name": self.project_root.name}],
                 "workDoneProgress": True,
             },

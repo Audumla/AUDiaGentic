@@ -17,7 +17,7 @@ def test_contention_sample_persists_and_summarizes(tmp_path: Path) -> None:
                 "running": 1,
                 "active_running": 1,
                 "idle": 0,
-                "max_concurrency": 1,
+                "virtual_capacity": 1,
             }
         },
         ingress_pending=3,

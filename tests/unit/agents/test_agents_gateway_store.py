@@ -729,6 +729,43 @@ def test_owned_activity_renewal_persists_gateway_receipt_and_rejects_replay(tmp_
     assert replay["last-activity-at"] == renewed["last-activity-at"]
 
 
+@pytest.mark.parametrize("activity_source", ["provider-progress", "acp-progress", "mcp-a2a-progress"])
+def test_provider_neutral_activity_source_renews_fenced_lease(tmp_path: Path, activity_source: str) -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0)
+    running = store.start_owned_attempt(tmp_path, record["request-id"], owner_epoch="service-a", worker_id="worker-a", expected_revision=claimed["revision"])
+    renewed = store.renew_owned_activity(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        attempt_epoch=running["attempt-epoch"],
+        activity_seq=1,
+        activity_source=activity_source,
+        activity_lease_seconds=300,
+    )
+    assert renewed["activity-source"] == activity_source
+    assert renewed["watchdog-state"] == "active"
+
+
+def test_activity_watchdog_state_survives_store_reload_nonterminal(tmp_path: Path) -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0)
+    running = store.start_owned_attempt(tmp_path, record["request-id"], owner_epoch="service-a", worker_id="worker-a", expected_revision=claimed["revision"])
+    renewed = store.renew_owned_activity(
+        tmp_path, record["request-id"], owner_epoch="service-a", worker_id="worker-a",
+        attempt_epoch=running["attempt-epoch"], activity_seq=7,
+        activity_source="provider-progress", activity_lease_seconds=300,
+    )
+    reloaded = store.read_record(tmp_path, record["request-id"])
+    assert reloaded["state"] == "running"
+    assert reloaded["activity-sequence"] == renewed["activity-sequence"] == 7
+    assert reloaded["watchdog-state"] == "active"
+    assert reloaded["watchdog-reason"] == "verified-activity-renewed"
+
+
 def test_owned_activity_renewal_rejects_wrong_attempt_fence(tmp_path: Path) -> None:
     record = store.build_record(execution_profile_id="default", prompt_body="hello")
     store.write_record(tmp_path, record)
@@ -753,6 +790,28 @@ def test_owned_activity_renewal_rejects_wrong_attempt_fence(tmp_path: Path) -> N
             activity_source="worker-heartbeat",
             activity_lease_seconds=30,
         )
+
+
+def test_expired_activity_only_marks_diagnostic_intervention(tmp_path: Path) -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0)
+    running = store.start_owned_attempt(tmp_path, record["request-id"], owner_epoch="service-a", worker_id="worker-a", expected_revision=claimed["revision"])
+    expired = dict(running)
+    expired["activity-lease-expires-at"] = "2000-01-01T00:00:00Z"
+    store.write_record(tmp_path, expired)
+
+    diagnosed = store.mark_watchdog_intervention_if_expired(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        attempt_epoch=running["attempt-epoch"],
+    )
+
+    assert diagnosed["state"] == "running"
+    assert diagnosed["watchdog-state"] == "intervention"
+    assert diagnosed["watchdog-reason"] == "activity-lease-expired-diagnostic"
 
 
 def test_owned_dispatch_fences_reject_stale_owner_worker_and_attempt(tmp_path: Path) -> None:
@@ -804,7 +863,8 @@ def test_owned_mutations_require_a_complete_owner_identity(tmp_path: Path) -> No
     with pytest.raises(AudiaGenticError, match="VAL-AGW-085"):
         store.transition_owned_terminal(
             tmp_path, record["request-id"], "failed",
-            owner_epoch=None, worker_id="worker-current", attempt_epoch=running["attempt-epoch"],
+            owner_epoch=None,  # type: ignore[arg-type]
+            worker_id="worker-current", attempt_epoch=running["attempt-epoch"],
         )
 
 
@@ -904,12 +964,12 @@ def test_sh21_rv769_int_agw_076_persists_private_worker_evidence(
     )
 
     # AudiaGenticError redacts secrets in details; the diagnostic becomes [REDACTED]
-    assert err.details["worker-diagnostic"] == "[REDACTED]"
+    assert err.details["worker-diagnostic"] == "[REDACTED]"  # type: ignore[index]
 
     record = store.build_record(execution_profile_id="default", prompt_body="do the thing")
     store.write_record(tmp_path, record)
     store.transition_record(tmp_path, record["request-id"], "running")
-    updated = store.transition_record(
+    updated = store.transition_record(  # type: ignore[assignment]
         tmp_path, record["request-id"], "failed",
         updates={"error": err},
     )
@@ -961,12 +1021,12 @@ def test_sh21_rv769_safe_worker_diagnostic_survives_in_evidence(
         details={"worker-diagnostic": safe_diagnostic},
     )
     # Safe diagnostic is NOT redacted (no secret patterns)
-    assert err.details["worker-diagnostic"] == safe_diagnostic
+    assert err.details["worker-diagnostic"] == safe_diagnostic  # type: ignore[index]
 
     record = store.build_record(execution_profile_id="default", prompt_body="do the thing")
     store.write_record(tmp_path, record)
     store.transition_record(tmp_path, record["request-id"], "running")
-    updated = store.transition_record(
+    updated = store.transition_record(  # type: ignore[assignment]
         tmp_path, record["request-id"], "failed",
         updates={"error": err},
     )
@@ -1097,3 +1157,20 @@ def test_sh21_rv769_worker_evidence_is_bounded(tmp_path: Path) -> None:
     # Must be truncated to 2 KB + "\n<truncated>"
     assert len(diag) <= _MAX + len("\n<truncated>")
     assert diag.endswith("\n<truncated>")
+
+
+def test_owned_terminal_persists_watchdog_classification(tmp_path: Path) -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0)
+    running = store.start_owned_attempt(tmp_path, record["request-id"], owner_epoch="service-a", worker_id="worker-a", expected_revision=claimed["revision"])
+    terminal = store.transition_owned_terminal(
+        tmp_path,
+        record["request-id"],
+        "failed",
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        attempt_epoch=running["attempt-epoch"],
+        updates={"error": {"code": "TO-AGW-076", "details": {"watchdog-classification": "verified-stall"}}},
+    )
+    assert terminal["terminal-classification"] == "verified-stall"

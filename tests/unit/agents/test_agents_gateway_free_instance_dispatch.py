@@ -68,7 +68,7 @@ def _enqueue_snapshot(
         resolved_instance_ids=list(snapshot.instances),
     )
     store.write_record(project_root, record)
-    return manager.enqueue(project_root, record, {}, runner)
+    return manager.enqueue(project_root, record, dict(snapshot.execution_params), runner)
 
 
 def _blocking_runner(hold: threading.Event, started_counter: list, lock: threading.Lock):

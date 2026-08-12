@@ -38,11 +38,12 @@ from audiagentic.components.agents.gateway.queue.capacity import (
     CapacityReservation,
     SourceCapacityAuthority,
 )
-from audiagentic.components.agents.gateway.queue.compat import (
-    resolve_max_concurrency,
-    resolve_queue_max_size,
+from audiagentic.components.agents.gateway.queue.capacity_policy import (
+    resolve_pending_capacity,
+    resolve_virtual_capacity,
 )
 from audiagentic.components.agents.gateway.queue.pending import PendingAuthority
+from audiagentic.components.agents.gateway.queue.watchdog_registry import watchdog_registry
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
 
@@ -94,7 +95,7 @@ def _record_signature(path: Path) -> tuple[int, int, int] | None:
 class TurnConcurrencyCallbacks:
     """Two-phase concurrency hooks called by SessionRuntime when a session turn
     actually starts and finishes on the transport. Per-request callbacks are
-    stored in a thread-safe dict to support max_concurrency > 1 (AS15).
+    stored in a thread-safe dict to support virtual_capacity > 1 (AS15).
 
     SessionRuntime invokes the callbacks on its asyncio loop. Blocking slot
     acquisition is therefore delegated to a worker thread.
@@ -247,19 +248,6 @@ class QueuedDispatch:
     service_root: Path | None
 
 
-def _lane_public_id(lane_key_tuple: tuple[str, str, str]) -> str:
-    """Human-readable lane identifier with no project paths or secrets.
-
-    AS105/AS101: replaces the retired GatewayExecutionLaneKey.public_id() --
-    the tuple itself (profile_id, generation, config_digest) is still the
-    lane identity; only the class wrapper (and its lane_key()-as-capacity-key
-    role) is retired.
-    """
-    profile_id, generation, config_digest = lane_key_tuple
-    short_digest = config_digest.replace("sha256:", "")[:12]
-    return f"{profile_id}/{generation}/{short_digest}"
-
-
 # AS105/AS101 drain-before-swap: once a request for a different source
 # sharing a gated resource has waited this long, stop admitting more of the
 # currently-active source so in_flight can drain to zero and the resource
@@ -276,10 +264,10 @@ class _RuntimeState:
     idle sessions don't block other profiles from making progress.
     """
 
-    def __init__(self, max_concurrency: int, queue_max_size: int) -> None:
-        # Compatibility-only virtual capacity for undeclared sources.
-        self._virtual_capacity = max_concurrency
-        self._pending_limit = queue_max_size
+    def __init__(self, virtual_capacity: int, pending_capacity: int) -> None:
+        # Provider-neutral fallback capacity for sources without declarations.
+        self.virtual_capacity = virtual_capacity
+        self.pending_capacity = pending_capacity
         self.lock = threading.Lock()
         self.running: set[str] = set()
         self.idle: set[str] = set()
@@ -313,19 +301,19 @@ class GatewayQueueManager:
         self._active_requests: dict[str, tuple[Path, str]] = {}
 
     def _runtime_state(self, snapshot: profiles_mod.ResolvedExecutionProfile) -> _RuntimeState:
-        lane_key_tuple = (snapshot.profile_id, snapshot.generation, snapshot.config_digest)
+        profile_identity = (snapshot.profile_id, snapshot.generation, snapshot.config_digest)
         with self._manager_lock:
-            pq = self._runtime.get(lane_key_tuple)
+            pq = self._runtime.get(profile_identity)
             if pq is None:
                 # AS105/AS101: these size the ungated (legacy semaphore) path
                 # and the admission queue-depth backpressure limit for both
-                # modes. Gated profiles ignore max_concurrency for compute
+                # modes. Gated profiles ignore virtual_capacity for compute
                 # gating -- capacity comes from the resource trackers instead.
                 params = dict(snapshot.execution_params)
-                max_concurrency = resolve_max_concurrency(params)
-                queue_max_size = resolve_queue_max_size(params, max_concurrency)
-                pq = _RuntimeState(max_concurrency, queue_max_size)
-                self._runtime[lane_key_tuple] = pq
+                virtual_capacity = resolve_virtual_capacity(params)
+                pending_capacity = resolve_pending_capacity(params, virtual_capacity)
+                pq = _RuntimeState(virtual_capacity, pending_capacity)
+                self._runtime[profile_identity] = pq
             return pq
 
     def enqueue(
@@ -392,7 +380,7 @@ class GatewayQueueManager:
                 extra={
                     "request-id": request_id,
                     "execution-profile-id": execution_profile_id,
-                    "lane": lane_label,
+                    "profile": lane_label,
                 },
             )
             rejected = store.transition_record(
@@ -414,7 +402,7 @@ class GatewayQueueManager:
                 state=rejected["state"],
                 attributes={
                     "execution-profile-id": execution_profile_id,
-                    "lane": lane_label,
+                    "profile": lane_label,
                     "gateway-profile-generation": snapshot.generation,
                     "correlation_id": (rejected.get("metadata") or {}).get("correlation_id"),
                 },
@@ -451,7 +439,7 @@ class GatewayQueueManager:
         with pq.lock:
             queue_full = self._pending_authority.count(
                 lambda request: request.value.snapshot == snapshot
-            ) >= pq._pending_limit
+            ) >= pq.pending_capacity
             if not queue_full:
                 self._pending_authority.enqueue(
                     request_id=entry.request_id,
@@ -468,7 +456,7 @@ class GatewayQueueManager:
                 extra={
                     "request-id": request_id,
                     "execution-profile-id": execution_profile_id,
-                    "queue-max-size": pq._pending_limit,
+                    "pending-capacity": pq.pending_capacity,
                 },
             )
             rejected = store.transition_record(
@@ -478,7 +466,7 @@ class GatewayQueueManager:
                 updates={
                     "error": {
                         "code": "VAL-AGW-025",
-                        "message": f"queue full (legacy pending limit) for profile {execution_profile_id!r} (max {pq._pending_limit})",
+                        "message": f"queue full for profile {execution_profile_id!r} (max {pq.pending_capacity})",
                         "kind": "agents",
                     }
                 },
@@ -490,7 +478,7 @@ class GatewayQueueManager:
                 state=rejected["state"],
                 attributes={
                     "execution-profile-id": execution_profile_id,
-                    "queue-max-size": pq._pending_limit,
+                    "pending-capacity": pq.pending_capacity,
                     "correlation_id": (rejected.get("metadata") or {}).get("correlation_id"),
                 },
             )
@@ -535,7 +523,7 @@ class GatewayQueueManager:
                 pq = self._runtime_state(entry.snapshot)
                 reservation: CapacityReservation | None = None
                 with pq.lock:
-                    reservation = self._try_reserve_source(entry, pq._virtual_capacity)
+                    reservation = self._try_reserve_source(entry, pq.virtual_capacity)
                     if reservation is None:
                         continue
                     claimed = self._pending_authority.claim(entry.request_id)
@@ -625,7 +613,7 @@ class GatewayQueueManager:
             if not validator.validate_snapshot_current(entry.snapshot):
                 logger.info(
                     "gateway request rejected before dispatch: stale profile snapshot",
-                    extra={"request-id": request_id, "lane": lane_label},
+                    extra={"request-id": request_id, "profile": lane_label},
                 )
                 rejected = store.transition_record(
                     project_root,
@@ -646,7 +634,7 @@ class GatewayQueueManager:
                     state=rejected["state"],
                     attributes={
                         "execution-profile-id": execution_profile_id,
-                        "lane": lane_label,
+                        "profile": lane_label,
                         "gateway-profile-generation": entry.snapshot.generation,
                     },
                 )
@@ -711,6 +699,7 @@ class GatewayQueueManager:
                 "gateway request running",
                 extra={"request-id": request_id, "execution-profile-id": execution_profile_id},
             )
+            watchdog_registry().register(project_root, record)
             store.record_gateway_timeline(
                 project_root,
                 request_id,
@@ -827,6 +816,7 @@ class GatewayQueueManager:
                     )
                     _publish_lifecycle_event("failed", failed)
         finally:
+            watchdog_registry().unregister(project_root, request_id)
             if bound is not None:
                 self._capacity.release(bound)
             with pq.lock:
@@ -837,10 +827,10 @@ class GatewayQueueManager:
             _TURNCB.clear(request_id)
             self._drain_all()
 
-    def _find_lane_for_request(
+    def _find_profile_for_request(
         self, execution_profile_id: str, request_id: str
     ) -> _RuntimeState | None:
-        """Scan lanes to find the queue that contains or tracks this request.
+        """Scan profile generations to find the queue tracking this request.
 
         Backward-compat: caller only knows execution_profile_id, not the full lane key.
         """
@@ -865,7 +855,7 @@ class GatewayQueueManager:
         if removed is not None:
             return store.cancel_queued_or_mark_requested(project_root, request_id)
 
-        pq = self._find_lane_for_request(execution_profile_id, request_id)
+        pq = self._find_profile_for_request(execution_profile_id, request_id)
         if pq is None:
             # A remote service/process can own the in-memory queue.  Durable
             # cancellation still has to reach the record even when this local
@@ -979,7 +969,7 @@ class GatewayQueueManager:
         running = 0
         active_running = 0
         idle = 0
-        max_concurrency = 0
+        virtual_capacity = 0
 
         with self._manager_lock:
             for lane_key_tuple, pq in self._runtime.items():
@@ -988,21 +978,21 @@ class GatewayQueueManager:
                         running += len(pq.running)
                         active_running += pq.active_running()
                         idle += len(pq.idle)
-                    max_concurrency += pq._virtual_capacity
+                    virtual_capacity += pq.virtual_capacity
 
         return {
             "pending": pending,
             "running": running,
             "active_running": active_running,
             "idle": idle,
-            "max_concurrency": max_concurrency,
+            "virtual_capacity": virtual_capacity,
         }
 
     def request_slot_status(self, execution_profile_id: str, request_id: str) -> str | None:
         pending = self._pending_authority.get(request_id)
         if pending is not None and pending.value.execution_profile_id == execution_profile_id:
             return "pending"
-        pq = self._find_lane_for_request(execution_profile_id, request_id)
+        pq = self._find_profile_for_request(execution_profile_id, request_id)
         if pq is None:
             return None
         with pq.lock:
@@ -1013,35 +1003,6 @@ class GatewayQueueManager:
     def source_capacity_status(self) -> dict[str, dict[str, Any]]:
         """Return redacted source-capacity state for operator diagnostics."""
         return self._capacity.snapshots()
-
-    def all_queue_depths(self) -> dict[str, dict[str, int]]:
-        """Deprecated compatibility projection; use project/source status."""
-        """Return queue depth keyed by redacted lane public id (no paths/secrets).
-
-        SH07 C2: lanes are identified by their public lane key, not bare profile
-        ids. Multiple projects sharing a lane see one entry for that lane.
-        """
-        with self._manager_lock:
-            items = list(self._runtime.items())
-
-        result: dict[str, dict[str, int]] = {}
-        for lane_key_tuple, pq in items:
-            public_id = _lane_public_id(lane_key_tuple)
-            with pq.lock:
-                result[public_id] = {
-                    "pending": self._pending_authority.count(
-                        lambda request, lane=lane_key_tuple: (
-                            request.value.snapshot.profile_id,
-                            request.value.snapshot.generation,
-                            request.value.snapshot.config_digest,
-                        ) == lane
-                    ),
-                    "running": len(pq.running),
-                    "active_running": pq.active_running(),
-                    "idle": len(pq.idle),
-                    "max_concurrency": pq._virtual_capacity,
-                }
-        return result
 
     def project_queue_depths(self, project_root: Path) -> dict[str, dict[str, int]]:
         """Return redacted queue depth grouped by execution profile for a project.
@@ -1080,37 +1041,3 @@ class GatewayQueueManager:
             else:
                 depth["active_running"] += 1
         return result
-
-    def _snapshot_all(self) -> dict[str, dict[str, int]]:
-        """Immutable cross-lane snapshot of all queue depths.
-
-        Acquires every lane lock simultaneously so the returned dict is a
-        consistent view: running >= idle and active_running == running - idle
-        hold for each lane *and* across lanes at the same instant.
-        Lock ordering (sorted by lane key tuple) avoids deadlock with _drain.
-        """
-        with self._manager_lock:
-            lane_key_tuples = sorted(self._runtime)
-        pqs = [self._runtime[lkt] for lkt in lane_key_tuples]
-        for pq in pqs:
-            pq.lock.acquire()
-        try:
-            return {
-                _lane_public_id(lkt): {
-                    "pending": self._pending_authority.count(
-                        lambda request, lane=lkt: (
-                            request.value.snapshot.profile_id,
-                            request.value.snapshot.generation,
-                            request.value.snapshot.config_digest,
-                        ) == lane
-                    ),
-                    "running": len(pq.running),
-                    "active_running": pq.active_running(),
-                    "idle": len(pq.idle),
-                    "max_concurrency": pq._virtual_capacity,
-                }
-                for lkt, pq in zip(lane_key_tuples, pqs)
-            }
-        finally:
-            for pq in reversed(pqs):
-                pq.lock.release()

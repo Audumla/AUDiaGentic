@@ -301,7 +301,7 @@ def test_wait_timeout_progress_reflects_live_session_turn_evidence(tmp_path: Pat
 
 
 def test_cancel_queued_request_reaches_cancelled_state(tmp_path: Path, monkeypatch):
-    _make_profile(tmp_path, "default", "local-openai", **{"max-concurrency": 1})
+    _make_profile(tmp_path, "default", "local-openai", **{"virtual-capacity": 1})
     hold = threading.Event()
     started = threading.Event()
 

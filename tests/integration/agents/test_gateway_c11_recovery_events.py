@@ -35,7 +35,7 @@ def _make_profile(project_root: Path) -> None:
             "model_id": "gpt-4o",
             "instances": ["gpt-4o"],
             "is_default": True,
-            "params": {"max-concurrency": 1},
+            "params": {"virtual-capacity": 1},
         },
     )
     set_implementation_state(

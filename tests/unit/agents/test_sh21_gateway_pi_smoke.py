@@ -174,7 +174,7 @@ def pi_profile_setup(project_root: Path) -> None:
             "provider_id": "pi",
             "instances": ["brutus/coder-quality-mid"],
             "is_default": True,
-            "params": {"max-concurrency": 1},
+            "params": {"virtual-capacity": 1},
         },
     )
     set_implementation_state(project_root, "providers", "pi", ImplementationState(enabled=True))

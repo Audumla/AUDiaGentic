@@ -208,7 +208,7 @@ def _provision_provider_project(tmp_path: Path, provider_id: str, monkeypatch) -
         profile_id="docker-harness-rig",
         provider_id=provider_id,
         model_id=_FULL_MODEL_REF,
-        max_concurrency=1,
+        virtual_capacity=1,
     )
     _write_harness_config(tmp_path, provider_id)
     harness_runtime = tmp_path / "harness-runtime"

@@ -672,19 +672,6 @@ def run_execution_request(
     )
 
 
-def queue_status(execution_profile_id: str) -> dict[str, Any]:
-    """Return queue depth/running/max-concurrency for one profile (used by AG13 status)."""
-    return get_queue_manager().queue_depth(execution_profile_id)
-
-
-def gateway_status() -> dict[str, Any]:
-    """Return queue depth/running/max-concurrency for every profile with an
-    active queue in THIS process only (in-memory — empty after a restart even
-    if persisted records exist). Prefer gateway_overview() for a complete
-    picture; kept for backward compatibility with existing callers."""
-    return get_queue_manager().all_queue_depths()
-
-
 def gateway_capacity_status() -> dict[str, Any]:
     """Return provider-neutral source-capacity diagnostics.
 

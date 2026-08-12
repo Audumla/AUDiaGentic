@@ -1,7 +1,7 @@
 """E2E: real concurrent gateway load inside Docker.
 
-Runs the real-subprocess concurrency suite (max-concurrency saturation,
-cross-project lane sharing, queue-max-size rejection, reload-vs-load races,
+Runs the real-subprocess concurrency suite (virtual-capacity saturation,
+cross-project lane sharing, pending-capacity rejection, reload-vs-load races,
 cancel-vs-concurrent-dispatch) inside the audiagentic-gateway-concurrency
 container.
 

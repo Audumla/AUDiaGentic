@@ -49,6 +49,7 @@ _MUTABLE_RESULT_FIELDS = {
     "replay-required",
     "replay-reason",
     "replayed-by-request-id",
+    "terminal-classification",
 }
 
 _COMPONENT_ID = "agents"

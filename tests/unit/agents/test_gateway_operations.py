@@ -72,6 +72,19 @@ def test_public_operation_projection_omits_scope_and_correlation(tmp_path: Path)
     assert "correlation-id" not in public
 
 
+def test_operation_inventory_is_bounded_and_redacted(tmp_path: Path) -> None:
+    app = GatewayOperationsApplication(ManagementOperationStore(tmp_path))
+    app.create_operation(_command("op_001"))
+    app.create_operation(_command("op_002"))
+
+    inventory = app.list_operations(limit=1)
+
+    assert len(inventory) == 1
+    assert inventory[0]["operation-id"] == "op_002"
+    assert "scope" not in inventory[0]
+    assert "correlation-id" not in inventory[0]
+
+
 def test_claim_is_compare_and_swap_and_finish_is_owner_fenced(tmp_path: Path) -> None:
     store = ManagementOperationStore(tmp_path)
     store.create(_command())

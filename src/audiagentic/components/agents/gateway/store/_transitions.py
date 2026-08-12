@@ -717,6 +717,57 @@ def renew_owned_activity(
         return updated
 
 
+def mark_watchdog_intervention_if_expired(
+    project_root: Path,
+    request_id: str,
+    *,
+    owner_epoch: str,
+    worker_id: str,
+    attempt_epoch: int,
+) -> dict[str, Any]:
+    """Record a non-terminal diagnostic when an owned activity lease expires.
+
+    Lease expiry is only a suspicion signal: this transition never fails or
+    interrupts the request. Positive death evidence remains the sole route to
+    terminal recovery. The owner/worker/attempt fence prevents stale monitors
+    from annotating a successor attempt.
+    """
+    from datetime import datetime, timezone
+
+    _require_owned_identity(owner_epoch, worker_id, attempt_epoch)
+    with _request_lock(project_root, request_id):
+        record = _read_record_locked(project_root, request_id)
+        _check_expected_identity(
+            record,
+            expected_revision=None,
+            expected_dispatch_owner_epoch=owner_epoch,
+            expected_worker_id=worker_id,
+            expected_attempt_epoch=attempt_epoch,
+        )
+        if record["state"] != "running":
+            return record
+        expiry = record.get("activity-lease-expires-at")
+        if not isinstance(expiry, str) or not expiry:
+            return record
+        try:
+            expired = datetime.fromisoformat(expiry.replace("Z", "+00:00")) <= datetime.now(timezone.utc)
+        except ValueError:
+            expired = False
+        if not expired or record.get("watchdog-state") == "intervention":
+            return record
+        timestamp = now_iso_z()
+        updated = dict(record)
+        updated.update({
+            "watchdog-state": "intervention",
+            "watchdog-reason": "activity-lease-expired-diagnostic",
+            "updated-at": timestamp,
+            "revision": record["revision"] + 1,
+        })
+        write_record(project_root, updated)
+        record_gateway_timeline(project_root, request_id, "activity.lease-expired-diagnostic", state="running", attributes={"attempt-epoch": attempt_epoch})
+        return updated
+
+
 def update_owned_running_session(
     project_root: Path,
     request_id: str,
@@ -791,11 +842,18 @@ def transition_owned_terminal(
     if new_state not in _shared.TERMINAL_STATES:
         raise AudiaGenticError("VAL-AGW-084", "agents", "owned transition must be terminal", {})
     _require_owned_identity(owner_epoch, worker_id, attempt_epoch)
+    terminal_updates = dict(updates or {})
+    error = terminal_updates.get("error")
+    if isinstance(error, dict):
+        details = error.get("details")
+        classification = details.get("watchdog-classification") if isinstance(details, dict) else None
+        if isinstance(classification, str) and classification:
+            terminal_updates["terminal-classification"] = classification
     updated = transition_record(
         project_root,
         request_id,
         new_state,
-        updates=updates,
+        updates=terminal_updates,
         expected_dispatch_owner_epoch=owner_epoch,
         expected_worker_id=worker_id,
         expected_attempt_epoch=attempt_epoch,

@@ -520,8 +520,8 @@ def test_service_host_startup_wires_gateway_owned_registry_from_config(
         "  instances: [gpt-4o]\n"
         "  model_id: gpt-4o\n"
         "  params:\n"
-        "    max-concurrency: 1\n"
-        "    queue-max-size: 8\n",
+        "    virtual-capacity: 1\n"
+        "    pending-capacity: 8\n",
         encoding="utf-8",
     )
 
@@ -558,7 +558,7 @@ def test_service_host_startup_wires_gateway_owned_registry_from_config(
             submitted_a = client_a.submit_execution_request(root_a, prompt_body="from-a", mode="async")
             assert provider_started.wait(timeout=2)
 
-            # Global max_concurrency=1 for this gateway-owned profile: project
+            # Global virtual_capacity=1 for this gateway-owned profile: project
             # B's request must queue behind project A's, not run independently
             # under a project-local limit.
             submitted_b = client_b.submit_execution_request(root_b, prompt_body="from-b", mode="async")
@@ -784,7 +784,7 @@ def test_reload_gateway_profiles_atomic_swap(tmp_path: Path) -> None:
             "profile_id": "default",
             "provider_id": "local-openai",
             "model_id": "gpt-4o",
-            "params": {"max-concurrency": 1, "queue-max-size": 8},
+            "params": {"virtual-capacity": 1, "pending-capacity": 8},
         },
     ])
 
@@ -807,7 +807,7 @@ def test_reload_gateway_profiles_atomic_swap(tmp_path: Path) -> None:
                 "profile_id": "default",
                 "provider_id": "local-openai",
                 "model_id": "gpt-4o",
-                "params": {"max-concurrency": 3, "queue-max-size": 16},
+                "params": {"virtual-capacity": 3, "pending-capacity": 16},
             },
         ])
 
@@ -830,8 +830,8 @@ def test_reload_gateway_profiles_atomic_swap(tmp_path: Path) -> None:
         # Generation must have changed (new config)
         assert gen_v2 != gen_v1
         # New limits from config
-        assert snap_v2.execution_params["max-concurrency"] == 3
-        assert snap_v2.execution_params["queue-max-size"] == 16
+        assert snap_v2.execution_params["virtual-capacity"] == 3
+        assert snap_v2.execution_params["pending-capacity"] == 16
 
         # Step 4: old and new summaries carry only redacted metadata (no secrets)
         for summary_key in ("old-generation-summary", "new-generation-summary"):
@@ -867,7 +867,7 @@ def test_reload_retains_previous_on_failure(tmp_path: Path) -> None:
             "profile_id": "default",
             "provider_id": "local-openai",
             "model_id": "gpt-4o",
-            "params": {"max-concurrency": 1, "queue-max-size": 8},
+            "params": {"virtual-capacity": 1, "pending-capacity": 8},
         },
     ])
 
@@ -911,7 +911,7 @@ def test_reload_via_service_operation(tmp_path: Path) -> None:
             "profile_id": "default",
             "provider_id": "local-openai",
             "model_id": "gpt-4o",
-            "params": {"max-concurrency": 1, "queue-max-size": 8},
+            "params": {"virtual-capacity": 1, "pending-capacity": 8},
         },
     ])
 
@@ -951,7 +951,7 @@ def test_stale_queued_snapshot_rejected_on_reload(tmp_path: Path, monkeypatch) -
             "profile_id": "default",
             "provider_id": "local-openai",
             "model_id": "gpt-4o",
-            "params": {"max-concurrency": 1, "queue-max-size": 8},
+            "params": {"virtual-capacity": 1, "pending-capacity": 8},
         },
     ])
 
@@ -989,7 +989,7 @@ def test_stale_queued_snapshot_rejected_on_reload(tmp_path: Path, monkeypatch) -
         client_a = StandaloneGatewayClient(host.endpoint, token)
         client_b = StandaloneGatewayClient(host.endpoint, token)
         try:
-            # Submit first request — it will run (max_concurrency=1)
+            # Submit first request — it will run (virtual_capacity=1)
             submitted_a = client_a.submit_execution_request(root_a, prompt_body="running", mode="async")
             assert provider_started.wait(timeout=2), "first request should start running"
 
@@ -1004,7 +1004,7 @@ def test_stale_queued_snapshot_rejected_on_reload(tmp_path: Path, monkeypatch) -
                     "profile_id": "default",
                     "provider_id": "local-openai",
                     "model_id": "gpt-4o",
-                    "params": {"max-concurrency": 2, "queue-max-size": 16},
+                    "params": {"virtual-capacity": 2, "pending-capacity": 16},
                 },
             ])
             reload_result = profiles_mod.reload_profile_registry()
@@ -1054,8 +1054,8 @@ def test_redacted_status_no_secrets_in_overview(tmp_path: Path) -> None:
             "provider_id": "local-openai",
             "model_id": "gpt-4o",
             "params": {
-                "max-concurrency": 2,
-                "queue-max-size": 8,
+                "virtual-capacity": 2,
+                "pending-capacity": 8,
                 "api-key": "sk-test-secret-value",  # secret that must be redacted
             },
         },
@@ -1110,7 +1110,7 @@ def test_absent_shared_profile_rejected_not_fallback(tmp_path: Path) -> None:
             "profile_id": "other-profile",
             "provider_id": "local-openai",
             "model_id": "gpt-4o",
-            "params": {"max-concurrency": 1, "queue-max-size": 8},
+            "params": {"virtual-capacity": 1, "pending-capacity": 8},
         },
     ])
 
@@ -1181,7 +1181,7 @@ def test_reload_concurrency_no_state_corruption(tmp_path: Path, monkeypatch) -> 
             "profile_id": "default",
             "provider_id": "local-openai",
             "model_id": "gpt-4o",
-            "params": {"max-concurrency": 1, "queue-max-size": 8},
+            "params": {"virtual-capacity": 1, "pending-capacity": 8},
         },
     ])
 
@@ -1215,7 +1215,7 @@ def test_reload_concurrency_no_state_corruption(tmp_path: Path, monkeypatch) -> 
         client_a = StandaloneGatewayClient(host.endpoint, token)
         client_b = StandaloneGatewayClient(host.endpoint, token)
         try:
-            # Submit first request — it will run (max_concurrency=1), holding the slot
+            # Submit first request — it will run (virtual_capacity=1), holding the slot
             submitted_a = client_a.submit_execution_request(root_a, prompt_body="hold", mode="async")
             assert provider_started.wait(timeout=2), "first request should start running"
 
@@ -1231,7 +1231,7 @@ def test_reload_concurrency_no_state_corruption(tmp_path: Path, monkeypatch) -> 
                         "profile_id": "default",
                         "provider_id": "local-openai",
                         "model_id": "gpt-4o",
-                        "params": {"max-concurrency": 2, "queue-max-size": 16},
+                        "params": {"virtual-capacity": 2, "pending-capacity": 16},
                     },
                 ])
                 result = profiles_mod.reload_profile_registry()

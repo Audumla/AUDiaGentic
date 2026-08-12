@@ -113,7 +113,7 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
         profile_id="pi-smoke",
         provider_id="pi",
         model_id=_PI_MODEL_REF,
-        max_concurrency=1,
+        virtual_capacity=1,
     )
 
     # Real npm install of the Pi CLI + pi-mcp-adapter + pi-acp, through the

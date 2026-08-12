@@ -274,6 +274,12 @@ class StandaloneGatewayClient:
             params["correlation_id"] = correlation_id
         return cast(dict[str, Any], self._call("create_gateway_operation", project_root, params))
 
+    def list_gateway_operations(self, project_root: Path, *, limit: int = 100) -> list[dict[str, Any]]:
+        result = self._call("list_gateway_operations", project_root, {"limit": limit})
+        if not isinstance(result, dict) or not isinstance(result.get("operations"), list):
+            raise AudiaGenticError("IO-AGW-121", "agents", "gateway operation listing is invalid", {})
+        return cast(list[dict[str, Any]], result["operations"])
+
     def get_gateway_operation(self, project_root: Path, operation_id: str) -> dict[str, Any]:
         return cast(
             dict[str, Any],

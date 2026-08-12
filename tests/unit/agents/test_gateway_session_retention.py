@@ -33,3 +33,13 @@ def test_durable_request_runtime_root_is_retention_pinned(tmp_path):
 
     assert pin.pinned is True
     assert pin.reason == "durable-runtime-root"
+
+
+def test_empty_runtime_root_does_not_create_false_retention_pin(tmp_path):
+    runtime = gateway_request_dir(tmp_path, "req_empty") / "runtime"
+    runtime.mkdir(parents=True)
+
+    pin = request_retention_pin(tmp_path, "req_empty")
+
+    assert pin.pinned is False
+    assert pin.reason is None

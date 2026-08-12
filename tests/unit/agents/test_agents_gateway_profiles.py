@@ -9,7 +9,7 @@ from audiagentic.components.agents.gateway import profiles as profiles_mod
 class TestStripSecrets:
     def test_removes_known_secret_keys(self):
         params = {
-            "max-concurrency": 2,
+            "virtual-capacity": 2,
             "api-key": "sk-12345",
             "model_id": "gpt-4",
             "token": "tok_abc",
@@ -17,12 +17,12 @@ class TestStripSecrets:
         stripped = profiles_mod._strip_secrets(params)
         assert "api-key" not in stripped
         assert "token" not in stripped
-        assert "max-concurrency" in stripped
+        assert "virtual-capacity" in stripped
         assert "model_id" in stripped
 
     def test_preserves_non_secret_params(self):
         params = {
-            "max-concurrency": 2,
+            "virtual-capacity": 2,
             "temperature": 0.7,
             "provider_id": "openai",
         }
@@ -35,20 +35,20 @@ class TestStripSecrets:
 
 class TestConfigDigest:
     def test_deterministic_for_same_params(self):
-        params_a = {"max-concurrency": 2, "model_id": "gpt-4", "provider_id": "openai"}
-        params_b = {"provider_id": "openai", "max-concurrency": 2, "model_id": "gpt-4"}
+        params_a = {"virtual-capacity": 2, "model_id": "gpt-4", "provider_id": "openai"}
+        params_b = {"provider_id": "openai", "virtual-capacity": 2, "model_id": "gpt-4"}
         digest_a = profiles_mod._config_digest(params_a)
         digest_b = profiles_mod._config_digest(params_b)
         assert digest_a == digest_b
 
     def test_different_when_params_differ(self):
-        params_a = {"max-concurrency": 2, "provider_id": "openai"}
-        params_b = {"max-concurrency": 3, "provider_id": "openai"}
+        params_a = {"virtual-capacity": 2, "provider_id": "openai"}
+        params_b = {"virtual-capacity": 3, "provider_id": "openai"}
         assert profiles_mod._config_digest(params_a) != profiles_mod._config_digest(params_b)
 
     def test_secrets_dont_affect_digest(self):
-        params_a = {"max-concurrency": 2, "provider_id": "openai"}
-        params_b = {"max-concurrency": 2, "provider_id": "openai", "api-key": "sk-12345"}
+        params_a = {"virtual-capacity": 2, "provider_id": "openai"}
+        params_b = {"virtual-capacity": 2, "provider_id": "openai", "api-key": "sk-12345"}
         assert profiles_mod._config_digest(params_a) == profiles_mod._config_digest(params_b)
 
     def test_format_has_sha256_prefix(self):
@@ -86,7 +86,7 @@ class TestResolvedExecutionProfile:
 
 class TestSnapshotFromResolvedProfile:
     def test_same_params_produce_same_generation(self):
-        params = {"max-concurrency": 1, "provider_id": "local", "model_id": "m"}
+        params = {"virtual-capacity": 1, "provider_id": "local", "model_id": "m"}
         snap_a = profiles_mod.snapshot_from_resolved_profile(
             profile_id="p", provider_id=params["provider_id"], instances=("m",), params=params,
         )
@@ -99,10 +99,10 @@ class TestSnapshotFromResolvedProfile:
     def test_different_params_produce_different_generation(self):
         base = {"provider_id": "local"}
         snap_a = profiles_mod.snapshot_from_resolved_profile(
-            profile_id="p", provider_id=base["provider_id"], instances=("m",), params={**base, "max-concurrency": 1},
+            profile_id="p", provider_id=base["provider_id"], instances=("m",), params={**base, "virtual-capacity": 1},
         )
         snap_b = profiles_mod.snapshot_from_resolved_profile(
-            profile_id="p", provider_id=base["provider_id"], instances=("m",), params={**base, "max-concurrency": 2},
+            profile_id="p", provider_id=base["provider_id"], instances=("m",), params={**base, "virtual-capacity": 2},
         )
         assert (snap_a.generation, snap_a.config_digest) != (snap_b.generation, snap_b.config_digest)
 

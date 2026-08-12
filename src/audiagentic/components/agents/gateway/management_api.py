@@ -205,6 +205,17 @@ def gateway_get_operation(project_root: Path, operation_id: str) -> dict[str, An
         client.close()
 
 
+def gateway_list_operations(project_root: Path, *, limit: int = 100) -> list[dict[str, Any]]:
+    """List redacted durable gateway operation status for safe maintenance."""
+    from audiagentic.components.agents.gateway.service.bootstrap import start_or_attach_gateway
+
+    client = start_or_attach_gateway()
+    try:
+        return client.list_gateway_operations(project_root, limit=limit)
+    finally:
+        client.close()
+
+
 def gateway_get_retention_policy(project_root: Path) -> dict[str, Any]:
     """Return the redacted machine retention policy for operator inspection.
 
