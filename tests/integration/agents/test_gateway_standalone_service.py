@@ -481,6 +481,30 @@ def test_clean_restart_reuses_token_and_rotates_owner_epoch(tmp_path: Path) -> N
         _stop_host(second, second_thread)
 
 
+def test_restart_preserves_durable_request_history_exactly(tmp_path: Path) -> None:
+    """SH11 rollback rehearsal: restart changes owner epoch, not request history."""
+    from audiagentic.components.agents.gateway import store as request_store
+
+    application = SharedApplication()
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    durable = request_store.build_record(execution_profile_id="default", prompt_body="history")
+    durable["state"] = "completed"
+    durable["output"] = "stable"
+    request_store.write_record(project_root, durable)
+    first, first_thread, service_root, token_path = _start_host(tmp_path, application)
+    before = request_store.read_record(project_root, durable["request-id"])
+    _stop_host(first, first_thread)
+    second = GatewayServiceHost.create(application=application, service_root=service_root, token_path=token_path)
+    second_thread = threading.Thread(target=second.serve_forever)
+    second_thread.start()
+    try:
+        after = request_store.read_record(project_root, durable["request-id"])
+        assert after == before
+    finally:
+        _stop_host(second, second_thread)
+
+
 def test_service_host_boots_with_no_gateway_registry_config_present(tmp_path: Path) -> None:
     """RV745: a fresh machine with no gateway-profiles.yaml keeps embedded-mode
     behavior — no shared registry is installed, matching prior behavior."""

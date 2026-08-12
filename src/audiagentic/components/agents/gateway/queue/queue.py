@@ -278,6 +278,15 @@ class _RuntimeState:
         return len(self.running) - len(self.idle)
 
 
+@dataclass(frozen=True)
+class ProfileGenerationIdentity:
+    """Immutable identity for one resolved execution-profile generation."""
+
+    profile_id: str
+    generation: str
+    config_digest: str
+
+
 class GatewayQueueManager:
     """Per-profile FIFO queues with strict concurrency, cancel, and wait.
 
@@ -287,7 +296,7 @@ class GatewayQueueManager:
     """
 
     def __init__(self) -> None:
-        self._runtime: dict[tuple[str, str, str], _RuntimeState] = {}
+        self._runtime: dict[ProfileGenerationIdentity, _RuntimeState] = {}
         self._manager_lock = threading.Lock()
         # AS105/AS101: shared machine-wide capacity per model-sources.yaml
         # resource-id -- deliberately NOT per-lane. A resource is genuinely
@@ -301,7 +310,9 @@ class GatewayQueueManager:
         self._active_requests: dict[str, tuple[Path, str]] = {}
 
     def _runtime_state(self, snapshot: profiles_mod.ResolvedExecutionProfile) -> _RuntimeState:
-        profile_identity = (snapshot.profile_id, snapshot.generation, snapshot.config_digest)
+        profile_identity = ProfileGenerationIdentity(
+            snapshot.profile_id, snapshot.generation, snapshot.config_digest
+        )
         with self._manager_lock:
             pq = self._runtime.get(profile_identity)
             if pq is None:
@@ -850,11 +861,11 @@ class GatewayQueueManager:
     ) -> _RuntimeState | None:
         """Scan profile generations to find the queue tracking this request.
 
-        Backward-compat: caller only knows execution_profile_id, not the full lane key.
+        Resolve the active profile generation from the provider-neutral profile id.
         """
         with self._manager_lock:
-            for lane_key_tuple, pq in self._runtime.items():
-                if lane_key_tuple[0] == execution_profile_id:
+            for profile_identity, pq in self._runtime.items():
+                if profile_identity.profile_id == execution_profile_id:
                     # Profile matches; check if this request is tracked here
                     with pq.lock:
                         if request_id in pq.running:
@@ -976,10 +987,10 @@ class GatewayQueueManager:
                 backoff_seconds = min(backoff_seconds * 2, _WAIT_MAX_BACKOFF_SECONDS)
 
     def queue_depth(self, execution_profile_id: str) -> dict[str, int]:
-        """Return aggregate queue depth across all lanes for this profile.
+        """Return aggregate queue depth across profile generations.
 
-        SH07 C2: multiple lanes (generations/digests) can exist for the same
-        profile id; aggregate across them so the caller sees total capacity.
+        Multiple immutable profile generations can coexist during reload; the
+        provider-neutral API aggregates them for the requested profile.
         """
         pending = self._pending_authority.count(
             lambda request: request.value.execution_profile_id == execution_profile_id
@@ -990,8 +1001,8 @@ class GatewayQueueManager:
         virtual_capacity = 0
 
         with self._manager_lock:
-            for lane_key_tuple, pq in self._runtime.items():
-                if lane_key_tuple[0] == execution_profile_id:
+            for profile_identity, pq in self._runtime.items():
+                if profile_identity.profile_id == execution_profile_id:
                     with pq.lock:
                         running += len(pq.running)
                         active_running += pq.active_running()
