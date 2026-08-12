@@ -246,6 +246,12 @@ class GatewayServiceApplication:
         if operation == "get_gateway_operation":
             _reject_unknown(arguments, {"operation_id"})
             return self._operations.get_operation(_required(arguments, "operation_id"))
+        if operation == "list_gateway_operations":
+            _reject_unknown(arguments, {"limit"})
+            limit = arguments.get("limit", 100)
+            if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0 or limit > 1000:
+                raise service_validation_error(29, "gateway operation limit must be an integer from 1 to 1000")
+            return {"operations": self._operations.list_operations(limit=limit)}
         if operation == "service_status":
             return self._lifecycle_controller().status()
         if operation == "service_drain":

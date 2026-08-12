@@ -180,7 +180,7 @@ def test_agent_task_cancel_queued_request(tmp_path: Path, monkeypatch):
             "profile_id": "fast",
             "provider_id": "local-openai",
             "instances": ["gpt-4o-mini"],
-            "params": {"max-concurrency": 1},
+            "params": {"virtual-capacity": 1},
         },
     )
     set_implementation_state(tmp_path, "providers", "local-openai", ImplementationState(enabled=True))

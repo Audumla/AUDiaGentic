@@ -212,6 +212,15 @@ def agent_gateway_get_operation(operation_id: str) -> dict:
 
 @mcp.tool()
 @tool_boundary
+def agent_gateway_list_operations(limit: int = 100) -> list[dict]:
+    """List bounded redacted gateway operations for maintenance inspection."""
+    from audiagentic.components.agents.gateway.management_api import gateway_list_operations
+
+    return gateway_list_operations(project_root_from_env(), limit=limit)
+
+
+@mcp.tool()
+@tool_boundary
 def agent_gateway_get_retention_policy() -> dict:
     """Read the redacted machine-owned archive retention policy."""
     from audiagentic.components.agents.gateway.management_api import (

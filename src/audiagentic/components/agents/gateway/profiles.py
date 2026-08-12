@@ -1,4 +1,4 @@
-"""Gateway-owned profile snapshot and execution lane key (SH07 C2).
+"""Gateway-owned immutable execution-profile snapshot (SH07 C2).
 
 InMemoryExecutionProfileRegistry is the gateway-owned authority for shared gateway
 mode: GatewayServiceHost loads it from the machine-scoped gateway profiles
@@ -89,7 +89,7 @@ class ResolvedExecutionProfile:
     resolution return -- schema-validated at construction so the two sources
     cannot silently drift (AS60 step 2).
 
-    AS105/AS101 v2: capacity (max_concurrency/queue_max_size) is retired --
+    AS105/AS101 v2: capacity (virtual_capacity/pending_capacity) is retired --
     it lives per-instance on providers' model-sources.yaml sources now, not
     on the profile. ``instances`` names the compatible source-id set;
     free-instance dispatch binds to one of them only at dispatch time.
@@ -145,8 +145,8 @@ class ExecutionProfileRegistry(Protocol):
     In shared gateway mode, this registry resolves the authoritative snapshot
     for a profile id.  Project-local config is not authoritative for queue
     limits, provider/model binding, or generation.  The registry provides an
-    immutable snapshot at admission time; queue lanes are keyed by that
-    snapshot's lane key.
+    immutable snapshot at admission time; scheduler state is keyed by this
+    snapshot identity.
 
     When a full admin API ships, this protocol will be implemented by a
     service-side component backed by persistent configuration (TODO: replace

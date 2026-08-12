@@ -55,7 +55,7 @@ def gateway_quiescence_facts(service_root: Path | None = None) -> dict[str, Any]
     from audiagentic.components.agents.gateway.ingress import ingress_backlog
     from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
 
-    depths = api.gateway_status()
+    depths = api.get_queue_manager().project_queue_depths(service_root) if service_root is not None else {}
     pending = sum(d.get("pending", 0) for d in depths.values())
     running = sum(d.get("running", 0) for d in depths.values())
     runtime = peek_session_runtime()

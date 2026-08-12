@@ -83,8 +83,8 @@ def write_execution_profile(
     profile_id: str = "default",
     provider_id: str,
     model_id: str,
-    max_concurrency: int = 1,
-    queue_max_size: int | None = None,
+    virtual_capacity: int = 1,
+    pending_capacity: int | None = None,
     retry_count: int = 0,
     extra_params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -94,9 +94,9 @@ def write_execution_profile(
     persists through the same path a real caller would use, so a schema
     drift or validation bug in profile creation is exercised, not bypassed.
     """
-    params: dict[str, Any] = {"retry-count": retry_count, "max-concurrency": max_concurrency}
-    if queue_max_size is not None:
-        params["queue-max-size"] = queue_max_size
+    params: dict[str, Any] = {"retry-count": retry_count, "virtual-capacity": virtual_capacity}
+    if pending_capacity is not None:
+        params["pending-capacity"] = pending_capacity
     if extra_params:
         params.update(extra_params)
     return create_execution_profile(
@@ -105,6 +105,11 @@ def write_execution_profile(
             "profile_id": profile_id,
             "provider_id": provider_id,
             "model_id": model_id,
+            # These gateway-concurrency scenarios intentionally exercise the
+            # profile's virtual capacity.  Use a plain instance id so the
+            # test does not accidentally inherit capacity from a project or
+            # user model-sources declaration.
+            "instances": [model_id],
             "is_default": True,
             "params": params,
         },
@@ -259,9 +264,17 @@ def write_gateway_profiles_config(
     """
     import yaml
 
+    normalized_profiles: list[dict[str, Any]] = []
+    for profile in profiles:
+        normalized = dict(profile)
+        if "instances" not in normalized and normalized.get("model_id"):
+            model_id = normalized["model_id"]
+            normalized["instances"] = [model_id]
+        normalized_profiles.append(normalized)
+
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        yaml.safe_dump({"profiles": profiles}, sort_keys=False),
+        yaml.safe_dump({"profiles": normalized_profiles}, sort_keys=False),
         encoding="utf-8",
     )
     return path
@@ -312,10 +325,20 @@ def start_gateway_subprocess(
         text=True,
         env=env,
     )
+    captured_output: list[str] = []
+    proc._ag_captured_output = captured_output  # type: ignore[attr-defined]
+
+    def _capture_output() -> None:
+        if proc.stdout is None:
+            return
+        for line in proc.stdout:
+            captured_output.append(line.rstrip())
+
+    threading.Thread(target=_capture_output, daemon=True).start()
 
     def _probe_ready() -> bool:
         if proc.poll() is not None:
-            out = proc.stdout.read() if proc.stdout else ""
+            out = "\n".join(captured_output)
             raise AssertionError(
                 f"gateway subprocess exited early (code {proc.returncode}):\n{out}"
             )

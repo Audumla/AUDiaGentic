@@ -48,3 +48,16 @@ def test_capacity_authority_uses_injected_clock_for_drain_before_swap() -> None:
     )
     assert swapped is not None
     assert authority.snapshot("swap-host")["active-source-id"] == "source-b"
+
+
+def test_capacity_status_is_provider_neutral_and_not_lane_policy() -> None:
+    authority = SourceCapacityAuthority()
+    reservation = authority.try_reserve(
+        source_id="source-a", resource_id="gpu-0", concurrency=2, model_id="model-a",
+    )
+    assert reservation is not None
+    status = authority.snapshots()
+    assert status["gpu-0"]["active-source-id"] == "source-a"
+    assert status["gpu-0"]["in-flight"] == {"source-a": 1}
+    assert "lane" not in status["gpu-0"]
+    assert "virtual-capacity" not in status["gpu-0"]

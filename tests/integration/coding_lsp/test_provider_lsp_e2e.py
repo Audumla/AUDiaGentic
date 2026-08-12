@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -43,6 +44,7 @@ from audiagentic.components.providers.descriptors.registry import all_descriptor
 from audiagentic.foundation.components.dependencies import build_dependency_workflow
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.lifecycle.components import enable_component, install_component
+from audiagentic.foundation.toolchains.config.managed_config import resolve_managed_config_path
 
 pytestmark = [
     pytest.mark.mutates_host,
@@ -153,6 +155,15 @@ def provisioned_project(tmp_path_factory) -> Path:
         name, body = _SAMPLE[lang]
         (root / name).write_text(body, encoding="utf-8")
 
+    subprocess.run(
+        ["npm", "install", "--no-audit", "--no-fund", "--ignore-scripts", "typescript@5.9.3"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    os.environ["NODE_PATH"] = str(root / "node_modules")
+
     return root
 
 # ---------------------------------------------------------------------------
@@ -236,7 +247,9 @@ def test_native_provider_configs_scope_to_enabled_languages(provisioned_project:
     codex = tomllib.loads((provisioned_project / ".codex" / "config.toml").read_text(encoding="utf-8"))
     assert set(codex.get("language_servers", {}).keys()) == set(LANGUAGES)
     opencode = json.loads((provisioned_project / ".opencode" / "opencode.json").read_text(encoding="utf-8"))
-    assert set(opencode.get("lsp", {}).keys()) == {_to_opencode_key(l) for l in LANGUAGES}
+    assert set(opencode.get("lsp", {}).keys()) == {
+        _to_opencode_key(language) for language in LANGUAGES
+    }
     qwen = json.loads((provisioned_project / ".lsp.json").read_text(encoding="utf-8"))
     assert set(qwen.keys()) == set(LANGUAGES)
 
@@ -246,7 +259,7 @@ def test_generic_provider_has_ag_lsp(provisioned_project: Path, provider_id: str
     descriptor = _PROVIDERS[provider_id]
     spec = descriptor.mcp_config
     assert spec is not None
-    config_path = spec.config_path(provisioned_project) if callable(spec.config_path) else (provisioned_project / spec.config_path)
+    config_path = resolve_managed_config_path(spec, provisioned_project)
     servers = spec.reader(config_path)
     assert "ag-lsp" in servers, f"{provider_id} missing ag-lsp MCP server"
 

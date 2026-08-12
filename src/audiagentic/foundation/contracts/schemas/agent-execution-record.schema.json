@@ -105,6 +105,10 @@
     "watchdog-reason": {
       "type": ["string", "null"]
     },
+    "terminal-classification": {
+      "type": ["string", "null"],
+      "enum": ["cancelled", "worker-process-exited", "provider-terminal-error", "verified-stall", "absolute-safety-ceiling", null]
+    },
     "watchdog-policy": {
       "type": ["object", "null"],
       "properties": {
@@ -126,8 +130,8 @@
     "resolved-queue-limits": {
       "type": ["object", "null"],
       "properties": {
-        "max-concurrency": {"type": "integer"},
-        "queue-max-size": {"type": "integer"}
+        "virtual-capacity": {"type": "integer"},
+        "pending-capacity": {"type": "integer"}
       },
       "additionalProperties": false
     },
