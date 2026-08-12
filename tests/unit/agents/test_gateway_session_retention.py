@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from audiagentic.components.agents.agents_paths import gateway_request_dir
 from audiagentic.components.agents.gateway.session.retention import request_retention_pin
+from audiagentic.components.agents.gateway.session.root_registry import (
+    register_session_root,
+    unregister_session_root,
+)
 from audiagentic.components.agents.gateway.session.sessions_store import (
     build_session_record,
     record_session_turn,
@@ -43,3 +47,17 @@ def test_empty_runtime_root_does_not_create_false_retention_pin(tmp_path):
 
     assert pin.pinned is False
     assert pin.reason is None
+
+
+def test_relocated_session_root_registry_pins_request_until_explicit_release(tmp_path):
+    register_session_root(
+        tmp_path,
+        session_id="ses_relocated",
+        request_ids=("req_relocated",),
+        root=tmp_path / "sessions" / "ses_relocated",
+    )
+    pinned = request_retention_pin(tmp_path, "req_relocated")
+    assert pinned.pinned is True
+    assert pinned.reason == "relocated-session-lineage"
+    unregister_session_root(tmp_path, session_id="ses_relocated")
+    assert request_retention_pin(tmp_path, "req_relocated").pinned is False
