@@ -13,8 +13,6 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.no_parallel
-
 from audiagentic.components.agents.agents_paths import gateway_timeline_path
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.queue import queue as queue_mod
@@ -22,6 +20,8 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.event import get_bus, reset_bus
 from audiagentic.foundation.io import load_ndjson
 from audiagentic.foundation.time import now_iso_z
+
+pytestmark = pytest.mark.no_parallel
 
 
 @pytest.fixture(autouse=True)

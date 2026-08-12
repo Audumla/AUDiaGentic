@@ -7,10 +7,9 @@ effect. It carries no provider/model selection, session surface, queue, or
 runtime tool/MCP/permission configuration -- those stay owned by
 ExecutionProfile and the harness's existing configuration.
 
-`instructions` is a plain string or opaque reference (RV889, 2026-08-04): not
-a reuse-dependency on `agent_jobs/prompt_templates.py`'s `@tag` mechanism,
-which is slated for rework. See project memory
-`project_agent_jobs_rework_pending.md`.
+`instructions` is a plain string or opaque reference (RV889, 2026-08-04): it
+has no dependency on workflow prompt-template mechanics. Prompt composition
+is owned by PromptDefinition and the canonical Agents config.
 """
 from __future__ import annotations
 

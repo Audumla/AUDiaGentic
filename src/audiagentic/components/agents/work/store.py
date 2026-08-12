@@ -53,6 +53,55 @@ class AgentWorkStore:
             atomic_write_json(path, updated.to_mapping())
             return updated
 
+    def link_execution(self, project_root: Path, work_id: str, execution_id: str, *, expected_revision: int) -> AgentWorkRecord:
+        """Attach the gateway request after admission without owning execution."""
+        path = agent_work_path(project_root, work_id)
+        with StartupLock(agent_work_lock_path(project_root, work_id)):
+            current = _from_mapping(load_json_file(path))
+            if current.revision != expected_revision:
+                raise RuntimeError("work revision conflict")
+            if current.active_execution_id and current.active_execution_id != execution_id:
+                raise ValueError("work already links a different execution")
+            updated = AgentWorkRecord(
+                current.work_id, current.context_id, current.state, current.wait_reason,
+                execution_id, current.parent_work_id, current.current_interaction_id,
+                current.revision + 1, current.created_at, _now(),
+            )
+            atomic_write_json(path, updated.to_mapping())
+            return updated
+
+    def set_waiting(self, project_root: Path, work_id: str, *, interaction_id: str, reason: AgentWorkWaitReason, expected_revision: int) -> AgentWorkRecord:
+        path = agent_work_path(project_root, work_id)
+        with StartupLock(agent_work_lock_path(project_root, work_id)):
+            current = _from_mapping(load_json_file(path))
+            if current.revision != expected_revision:
+                raise RuntimeError("work revision conflict")
+            if current.state is not AgentWorkState.ACTIVE:
+                raise ValueError("only active work can wait")
+            updated = AgentWorkRecord(
+                current.work_id, current.context_id, AgentWorkState.WAITING, reason,
+                current.active_execution_id, current.parent_work_id, interaction_id,
+                current.revision + 1, current.created_at, _now(),
+            )
+            atomic_write_json(path, updated.to_mapping())
+            return updated
+
+    def resume_waiting(self, project_root: Path, work_id: str, *, expected_revision: int) -> AgentWorkRecord:
+        path = agent_work_path(project_root, work_id)
+        with StartupLock(agent_work_lock_path(project_root, work_id)):
+            current = _from_mapping(load_json_file(path))
+            if current.revision != expected_revision:
+                raise RuntimeError("work revision conflict")
+            if current.state is not AgentWorkState.WAITING:
+                raise ValueError("only waiting work can resume")
+            updated = AgentWorkRecord(
+                current.work_id, current.context_id, AgentWorkState.ACTIVE, None,
+                current.active_execution_id, current.parent_work_id, None,
+                current.revision + 1, current.created_at, _now(),
+            )
+            atomic_write_json(path, updated.to_mapping())
+            return updated
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()

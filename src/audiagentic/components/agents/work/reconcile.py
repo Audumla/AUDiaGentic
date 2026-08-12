@@ -44,3 +44,20 @@ def reconcile_work(project_root: Path, work: AgentWorkRecord, *, execution_state
         target,
         expected_revision=work.revision,
     )
+
+
+def reconcile_linked_execution(project_root: Path, work: AgentWorkRecord) -> AgentWorkRecord:
+    """Read gateway status and project it onto Work after restart/recovery."""
+    if not work.active_execution_id:
+        return work
+    from audiagentic.components.agents.gateway.client import get_gateway_client
+
+    execution = get_gateway_client(project_root).get_execution_request(
+        project_root,
+        work.active_execution_id,
+    )
+    return reconcile_work(
+        project_root,
+        work,
+        execution_state=str(execution.get("state", "")),
+    )

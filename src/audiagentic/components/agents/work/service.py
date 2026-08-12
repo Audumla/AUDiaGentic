@@ -12,13 +12,43 @@ from audiagentic.components.agents.work.inputs import append_work_input
 from audiagentic.components.agents.work.store import AgentWorkStore
 
 
-def submit_work(project_root: Path, context_id: str, message: WorkInputMessage, *, work_id: str | None = None) -> AgentWorkRecord:
+def submit_work(
+    project_root: Path,
+    context_id: str,
+    message: WorkInputMessage,
+    *,
+    work_id: str | None = None,
+    parent_work_id: str | None = None,
+) -> AgentWorkRecord:
     context = get_context(project_root, context_id)
     if context.state.value != "open":
         raise ValueError("context is closed")
     store = AgentWorkStore()
-    work = store.create(project_root, context_id, work_id=work_id)
+    try:
+        if parent_work_id is not None:
+            parent = store.get(project_root, parent_work_id)
+            if parent.context_id != context_id:
+                raise ValueError("parent work belongs to a different context")
+        work = store.create(
+            project_root,
+            context_id,
+            work_id=work_id,
+            parent_work_id=parent_work_id,
+        )
+    except FileExistsError:
+        work = store.get(project_root, work_id)
+        if work.context_id != context_id:
+            raise ValueError("work ID belongs to a different context")
+        if work.state in {
+            AgentWorkState.COMPLETED,
+            AgentWorkState.FAILED,
+            AgentWorkState.CANCELLED,
+            AgentWorkState.REJECTED,
+        }:
+            return work
     append_work_input(project_root, work.work_id, message)
+    if work.state != AgentWorkState.SUBMITTED:
+        return work
     return store.transition(project_root, work.work_id, AgentWorkState.ACTIVE, expected_revision=work.revision)
 
 
@@ -26,8 +56,33 @@ def get_work(project_root: Path, work_id: str) -> AgentWorkRecord:
     return AgentWorkStore().get(project_root, work_id)
 
 
+def link_work_execution(project_root: Path, work_id: str, execution_id: str, *, expected_revision: int) -> AgentWorkRecord:
+    return AgentWorkStore().link_execution(project_root, work_id, execution_id, expected_revision=expected_revision)
+
+
 def list_work(project_root: Path) -> tuple[AgentWorkRecord, ...]:
     return AgentWorkStore().list(project_root)
+
+
+def child_work(project_root: Path, parent_work_id: str) -> tuple[AgentWorkRecord, ...]:
+    return tuple(work for work in list_work(project_root) if work.parent_work_id == parent_work_id)
+
+
+def submit_child_work(
+    project_root: Path,
+    parent_work_id: str,
+    message: WorkInputMessage,
+    *,
+    work_id: str | None = None,
+) -> AgentWorkRecord:
+    parent = get_work(project_root, parent_work_id)
+    return submit_work(
+        project_root,
+        parent.context_id,
+        message,
+        work_id=work_id,
+        parent_work_id=parent_work_id,
+    )
 
 
 def add_work_message(project_root: Path, work_id: str, message: WorkInputMessage) -> AgentWorkRecord:

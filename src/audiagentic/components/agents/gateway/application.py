@@ -115,9 +115,30 @@ class InProcessGatewayApplication:
         return close_context(project_root, context_id).to_mapping()
 
     def submit_agent_work(self, project_root: Path, context_id: str, message: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        from audiagentic.components.agents.context.service import get_context
         from audiagentic.components.agents.work.contracts import WorkInputMessage
-        from audiagentic.components.agents.work.service import submit_work
-        return submit_work(project_root, context_id, WorkInputMessage(**message), **kwargs).to_mapping()
+        from audiagentic.components.agents.work.service import link_work_execution, submit_work
+
+        work = submit_work(project_root, context_id, WorkInputMessage(**message), **kwargs)
+        if work.active_execution_id:
+            return work.to_mapping()
+        context = get_context(project_root, context_id)
+        execution = self.submit_execution_request(
+            project_root,
+            execution_profile_id=context.composition.execution_profile_id,
+            prompt_body=message["text"],
+            metadata={
+                "context-id": context_id,
+                "work-id": work.work_id,
+                "agent-config-fingerprint": context.composition.fingerprint,
+            },
+        )
+        return link_work_execution(
+            project_root,
+            work.work_id,
+            execution["request-id"],
+            expected_revision=work.revision,
+        ).to_mapping()
 
     def get_agent_work(self, project_root: Path, work_id: str) -> dict[str, Any]:
         from audiagentic.components.agents.work.service import get_work
@@ -133,8 +154,17 @@ class InProcessGatewayApplication:
         return add_work_message(project_root, work_id, WorkInputMessage(**message)).to_mapping()
 
     def cancel_agent_work(self, project_root: Path, work_id: str) -> dict[str, Any]:
-        from audiagentic.components.agents.work.service import cancel_work
-        return cancel_work(project_root, work_id).to_mapping()
+        from audiagentic.components.agents.work.service import cancel_work, child_work, get_work
+
+        work = get_work(project_root, work_id)
+        to_cancel = (work, *child_work(project_root, work_id))
+        for candidate in to_cancel:
+            if candidate.active_execution_id:
+                self.cancel_execution_request(project_root, candidate.active_execution_id)
+        cancel_work(project_root, work_id)
+        for candidate in to_cancel[1:]:
+            cancel_work(project_root, candidate.work_id)
+        return get_work(project_root, work_id).to_mapping()
 
     def read_agent_work_output(self, project_root: Path, work_id: str) -> dict[str, Any]:
         from audiagentic.components.agents.work.service import read_work_output

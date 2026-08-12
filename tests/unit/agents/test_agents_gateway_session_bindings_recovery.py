@@ -474,7 +474,6 @@ class TestWindowsCompatibility:
 
         session_dir = session_store.gateway_session_path(project_root, "ses_win_compat").parent
         # Path objects normalize; on Windows they may use backslashes.
-        path_str = str(session_dir)
         if os.name == "nt":
             # Windows paths use backslashes (or forward slashes — both work).
             pass  # Just verify the path is valid and the directory exists.

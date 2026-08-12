@@ -187,7 +187,7 @@ def main() -> int:
             return 1
         results.append(
             _submit(
-                factory,
+                client,
                 "Finalize the review with three proof invariants and one completion blocker.",
                 session_id=session_id,
                 stage=3,

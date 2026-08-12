@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from audiagentic.components.agents.mcp import gateway_mcp as agents_gateway_mcp
 
-_ROOT = Path("/fake/root")
+_ROOT = Path("C:/fake/root")
 
 
 def _patch_root():
@@ -132,23 +132,17 @@ def test_agent_task_gateway_overview_delegates():
 
 def test_agent_task_submit_resolves_agent_and_delegates():
     """agent_task_submit resolves the agent definition, then submits through
-    the gateway client -- the sole MCP submission path (RV891). Returns
-    task.status(): a delegating re-read through the same client, not the raw
-    submit response -- so both client calls are mocked."""
+     the gateway client -- the sole MCP submission path (RV891)."""
     with (
         _patch_root(),
         patch(
             "audiagentic.components.agents.models.agent_definition_api.get_agent_definition",
             return_value={"agent_id": "reviewer-agent", "execution_profile_id": "fast"},
         ) as mock_get_definition,
-        patch("audiagentic.components.agents.gateway.client.get_gateway_client") as mock_get_client,
+        patch("audiagentic.components.agents.mcp.gateway_mcp.get_gateway_client") as mock_get_client,
     ):
         mock_client = mock_get_client.return_value
         mock_client.submit_execution_request.return_value = {
-            "request-id": "req_x",
-            "state": "queued",
-        }
-        mock_client.get_execution_request.return_value = {
             "request-id": "req_x",
             "state": "queued",
         }
@@ -156,7 +150,7 @@ def test_agent_task_submit_resolves_agent_and_delegates():
 
     assert result["state"] == "queued"
     mock_get_definition.assert_called_once_with(_ROOT, "reviewer-agent")
-    mock_client.get_execution_request.assert_called_once_with(_ROOT, "req_x")
+    mock_client.get_execution_request.assert_not_called()
     mock_client.submit_execution_request.assert_called_once_with(
         _ROOT,
         execution_profile_id="fast",

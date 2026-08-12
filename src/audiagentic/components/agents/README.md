@@ -73,9 +73,9 @@ validated against `agent-execution-record.schema.json`.
   underlying Python API, not as an MCP tool.
   Direct execution_profile_id submission bypassing Agent Definition
   resolution is not exposed over MCP — use the Python API layer
-  (`AgentTaskFactory.submit_raw`/`submit_execution_request`) for that.
+  (`GatewayClient.submit_execution_request`) for that.
 - **Blocking** (Python API only, not exposed over MCP) — `submit_execution_request(...,
-  mode="blocking")` / `run_execution_request(...)` / `AgentTaskFactory.submit(...,
+  mode="blocking")` / `run_execution_request(...)` / `GatewayClient.submit_execution_request(...,
   mode="blocking")` submit and wait for a terminal result or timeout in one call, with
   no transport-imposed cap — for in-process callers only (e.g. a supervisor holding its
   own thread for a long task, RV511).

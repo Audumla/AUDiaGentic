@@ -64,10 +64,10 @@ class AgentsConfigRepository:
     def get(self, project_root: Path, kind: ConfigKind, item_id: str) -> dict[str, Any]:
         """Return one canonical record by collection kind and stable id."""
         snapshot = self.read(project_root)
-        key = {"prompt": "prompt_id", "role": "role_id", "execution_profile": "profile_id", "agent": "agent_id"}.get(kind)
+        key = {"prompt": "prompt_id", "role": "role_id", "execution_profile": "profile_id", "agent": "agent_id", "trigger": "trigger_id"}.get(kind)
         if key is None:
             raise KeyError(f"unknown config kind: {kind}")
-        values = getattr(snapshot.document, {"prompt": "prompts", "role": "roles", "execution_profile": "execution_profiles", "agent": "agents"}[kind])
+        values = getattr(snapshot.document, {"prompt": "prompts", "role": "roles", "execution_profile": "execution_profiles", "agent": "agents", "trigger": "triggers"}[kind])
         for value in values:
             mapping = value.to_dict() if hasattr(value, "to_dict") else value
             if mapping.get(key, mapping.get(key.replace("_", "-"))) == item_id:
@@ -85,12 +85,12 @@ class AgentsConfigRepository:
         """Replace or insert one record, validating the complete document."""
         snapshot = self.read(project_root)
         collections = {
-            "prompt": "prompts", "role": "roles", "execution_profile": "execution_profiles", "agent": "agents"
+            "prompt": "prompts", "role": "roles", "execution_profile": "execution_profiles", "agent": "agents", "trigger": "triggers"
         }
         collection = collections.get(kind)
         if collection is None:
             raise KeyError(f"unknown config kind: {kind}")
-        key = {"prompt": "prompt_id", "role": "role_id", "execution_profile": "profile_id", "agent": "agent_id"}[kind]
+        key = {"prompt": "prompt_id", "role": "role_id", "execution_profile": "profile_id", "agent": "agent_id", "trigger": "trigger_id"}[kind]
         values = list(getattr(snapshot.document, collection))
         item_id = item.get(key, item.get(key.replace("_", "-")))
         for index, existing in enumerate(values):
@@ -105,16 +105,17 @@ class AgentsConfigRepository:
             snapshot.document.roles if collection != "roles" else tuple(values),
             snapshot.document.execution_profiles if collection != "execution_profiles" else tuple(values),
             snapshot.document.agents if collection != "agents" else tuple(values),
+            snapshot.document.triggers if collection != "triggers" else tuple(values),
         )
         return self.replace(project_root, document, expected_digest=expected_digest)
 
     def delete(self, project_root: Path, kind: ConfigKind, item_id: str, *, expected_digest: str) -> AgentsConfigSnapshot:
         snapshot = self.read(project_root)
-        collections = {"prompt": "prompts", "role": "roles", "execution_profile": "execution_profiles", "agent": "agents"}
+        collections = {"prompt": "prompts", "role": "roles", "execution_profile": "execution_profiles", "agent": "agents", "trigger": "triggers"}
         collection = collections.get(kind)
         if collection is None:
             raise KeyError(f"unknown config kind: {kind}")
-        key = {"prompt": "prompt_id", "role": "role_id", "execution_profile": "profile_id", "agent": "agent_id"}[kind]
+        key = {"prompt": "prompt_id", "role": "role_id", "execution_profile": "profile_id", "agent": "agent_id", "trigger": "trigger_id"}[kind]
         values = tuple(value for value in getattr(snapshot.document, collection) if value.get(key, value.get(key.replace("_", "-"))) != item_id)
         if len(values) == len(getattr(snapshot.document, collection)):
             raise KeyError(item_id)
@@ -124,6 +125,7 @@ class AgentsConfigRepository:
             snapshot.document.roles if collection != "roles" else values,
             snapshot.document.execution_profiles if collection != "execution_profiles" else values,
             snapshot.document.agents if collection != "agents" else values,
+            snapshot.document.triggers if collection != "triggers" else values,
         )
         return self.replace(project_root, document, expected_digest=expected_digest)
 

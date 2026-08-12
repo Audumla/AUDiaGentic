@@ -45,6 +45,24 @@ def test_agents_config_repository_compare_and_swap_rejects_stale_digest(tmp_path
         repo.replace(tmp_path, AgentsConfigDocument("v2", (), (), (), ()), expected_digest="stale")
 
 
+def test_agents_config_repository_supports_trigger_records(tmp_path: Path) -> None:
+    repo = AgentsConfigRepository()
+    document = AgentsConfigDocument(
+        "v2", (), (), (), (),
+        ({"trigger_id": "orders-created", "event_pattern": "orders.created", "enabled": True},),
+    )
+    snapshot = repo.replace(tmp_path, document, expected_digest=None)
+    assert repo.get(tmp_path, "trigger", "orders-created")["event_pattern"] == "orders.created"
+    updated = repo.put(
+        tmp_path,
+        "trigger",
+        {"trigger_id": "orders-created", "event_pattern": "orders.*", "enabled": True},
+        expected_digest=snapshot.digest,
+    )
+    assert repo.get(tmp_path, "trigger", "orders-created")["event_pattern"] == "orders.*"
+    assert updated.digest != snapshot.digest
+
+
 @pytest.mark.parametrize(
     ("agent", "needle"),
     [

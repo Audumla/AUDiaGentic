@@ -77,24 +77,8 @@ def test_gateway_mcp_imports_only_public_client_and_mcp_scaffolding() -> None:
     assert "audiagentic.components.agents.gateway.client" in imports
 
 
-def test_agent_task_api_imports_only_public_client_not_core_api() -> None:
-    """AS63 acceptance criteria: one agent-work path. AgentTaskFactory/AgentTask
-    (agent_task_api.py) reach the gateway only through the same public client
-    seam gateway_mcp.py uses -- never gateway.api/store/queue/dispatch/
-    application directly -- so agent_id-primary and execution_profile_id-direct
-    submission are two entry points onto one path, not two engines."""
-    path = COMPONENTS / "agents" / "models" / "agent_task_api.py"
-    forbidden = (
-        "gateway.api",
-        "gateway.store",
-        "gateway.queue",
-        "gateway.dispatch",
-        "gateway.application",
-    )
-    imports = _imports(path)
-    violations = [target for target in imports if any(name in target for name in forbidden)]
-    assert not violations
-    assert "audiagentic.components.agents.gateway.client" in imports
+def test_legacy_agent_task_api_is_retired() -> None:
+    assert not (COMPONENTS / "agents" / "models" / "agent_task_api.py").exists()
 
 
 def test_gateway_core_owns_no_mcp_timeout_constant() -> None:
