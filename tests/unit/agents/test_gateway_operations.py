@@ -1,5 +1,7 @@
+# pyright: reportArgumentType=false, reportOptionalMemberAccess=false
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 
@@ -26,6 +28,7 @@ from audiagentic.components.agents.gateway.operations.evidence import (
     GatewayWorkEvidenceReader,
 )
 from audiagentic.components.agents.gateway.operations.retention_policy import load_retention_policy
+from audiagentic.components.agents.gateway.session.retention import request_retention_pin
 from audiagentic.components.agents.gateway.session.sessions_store import (
     build_session_record,
     record_session_turn,
@@ -315,6 +318,38 @@ def test_archive_is_integrity_manifest_and_purge_fails_closed_without_policy(tmp
     assert request_dir.exists()
 
 
+def test_archive_preserves_durable_runtime_lineage_for_resume(tmp_path: Path) -> None:
+    request_id = "req_archive_resume"
+    request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id
+    runtime_dir = request_dir / "runtime"
+    runtime_dir.mkdir(parents=True)
+    (request_dir / "record.json").write_text('{"state":"completed","session-id":"ses_resume"}', encoding="utf-8")
+    (runtime_dir / "provider-session.json").write_text('{"continuation":"opaque"}', encoding="utf-8")
+    fake = _ArchiveRequests({"state": "completed", "session-id": "ses_resume"})
+
+    result = GatewayArchiveExecutor(fake).execute({"scope": {"project-root": str(tmp_path), "request-ids": [request_id]}})
+
+    assert result == {"changed": 1, "blocked": 0}
+    archived_runtime = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / "archive" / request_id / "runtime" / "provider-session.json"
+    assert archived_runtime.is_file()
+
+
+def test_archive_replay_is_idempotent_and_preserves_manifest(tmp_path: Path) -> None:
+    request_id = "req_archive_idempotent"
+    request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id
+    request_dir.mkdir(parents=True)
+    (request_dir / "record.json").write_text('{"state":"completed"}', encoding="utf-8")
+    fake = _ArchiveRequests({"state": "completed"})
+    scope = {"project-root": str(tmp_path), "request-ids": [request_id]}
+
+    first = GatewayArchiveExecutor(fake).execute({"scope": scope})
+    second = GatewayArchiveExecutor(fake).execute({"scope": scope})
+
+    assert first == {"changed": 1, "blocked": 0}
+    assert second == {"changed": 0, "blocked": 0}
+    assert (tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / "archive" / request_id / "archive-manifest.json").is_file()
+
+
 def test_purge_revalidates_policy_and_manifest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     policy_path = tmp_path / "machine-policy.json"
     policy_path.write_text('{"policy-id":"p1","purge-enabled":true,"minimum-archive-age-seconds":0.01,"max-batch-size":2}', encoding="utf-8")
@@ -329,6 +364,34 @@ def test_purge_revalidates_policy_and_manifest(tmp_path: Path, monkeypatch: pyte
     snapshot = load_retention_policy().snapshot
     result = GatewayPurgeExecutor(fake).execute({"scope": {"project-root": str(tmp_path), "request-ids": [request_id], "retention-policy": snapshot}})
     assert result == {"changed": 1, "blocked": 0}
+    assert not request_dir.exists()
+
+
+def test_purge_replay_is_idempotent_after_archive_removal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    policy_path = tmp_path / "machine-policy.json"
+    policy_path.write_text(
+        '{"policy-id":"p1","purge-enabled":true,"minimum-archive-age-seconds":0.01,"max-batch-size":2}',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    request_id = "req_purge_idempotent"
+    request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id
+    request_dir.mkdir(parents=True)
+    (request_dir / "record.json").write_text('{"state":"completed"}', encoding="utf-8")
+    fake = _ArchiveRequests({"state": "completed"})
+    GatewayArchiveExecutor(fake).execute({"scope": {"project-root": str(tmp_path), "request-ids": [request_id]}})
+    time.sleep(0.02)
+    scope = {
+        "project-root": str(tmp_path),
+        "request-ids": [request_id],
+        "retention-policy": load_retention_policy().snapshot,
+    }
+
+    first = GatewayPurgeExecutor(fake).execute({"scope": scope})
+    second = GatewayPurgeExecutor(fake).execute({"scope": scope})
+
+    assert first == {"changed": 1, "blocked": 0}
+    assert second == {"changed": 0, "blocked": 0}
     assert not request_dir.exists()
 
 
@@ -449,6 +512,120 @@ def test_purge_final_fence_blocks_machine_policy_change(
     assert request_dir.exists()
 
 
+def test_purge_final_fence_blocks_archive_mutation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    policy_path = tmp_path / "machine-policy.json"
+    _enabled_retention_policy(policy_path)
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    request_id = "req_archive_content_fence"
+    archive_path: Path | None = None
+
+    class ArchiveChangingRequests(_ArchiveRequests):
+        calls = 0
+
+        def get_execution_request(self, root: Path, request: str) -> dict[str, object]:
+            self.calls += 1
+            if self.calls == 3 and archive_path is not None:
+                (archive_path / "record.json").write_text('{"state":"tampered"}', encoding="utf-8")
+            return super().get_execution_request(root, request)
+
+    fake = ArchiveChangingRequests({"state": "completed"})
+    request_dir = _archive_completed_request(tmp_path, request_id, fake)
+    archive_path = (
+        tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / "archive" / request_id
+    )
+    result = GatewayPurgeExecutor(fake).execute(
+        {"scope": {"project-root": str(tmp_path), "request-ids": [request_id], "retention-policy": load_retention_policy().snapshot}}
+    )
+    assert result == {"changed": 0, "blocked": 1}
+    assert request_dir.exists()
+    assert archive_path.exists()
+
+
+def test_purge_final_fence_blocks_policy_withdrawal_at_delete_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    policy_path = tmp_path / "machine-policy.json"
+    _enabled_retention_policy(policy_path)
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    request_id = "req_policy_final_boundary"
+
+    class FinalPolicyChangingRequests(_ArchiveRequests):
+        calls = 0
+
+        def get_execution_request(self, root: Path, request: str) -> dict[str, object]:
+            self.calls += 1
+            if self.calls == 2:
+                policy_path.write_text(
+                    '{"policy-id":"p1","purge-enabled":false,"minimum-archive-age-seconds":0.01,"max-batch-size":2}',
+                    encoding="utf-8",
+                )
+            return super().get_execution_request(root, request)
+
+    fake = FinalPolicyChangingRequests({"state": "completed"})
+    request_dir = _archive_completed_request(tmp_path, request_id, fake)
+    result = GatewayPurgeExecutor(fake).execute(
+        {"scope": {"project-root": str(tmp_path), "request-ids": [request_id], "retention-policy": load_retention_policy().snapshot}}
+    )
+    assert result == {"changed": 0, "blocked": 1}
+    assert request_dir.exists()
+
+
+def test_purge_final_fence_blocks_attempt_epoch_change_during_census(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    policy_path = tmp_path / "machine-policy.json"
+    _enabled_retention_policy(policy_path)
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    request_id = "req_attempt_final_boundary"
+
+    class FinalAttemptChangingRequests(_ArchiveRequests):
+        calls = 0
+
+        def get_execution_request(self, root: Path, request: str) -> dict[str, object]:
+            self.calls += 1
+            if self.calls == 2:
+                self.record["attempts"] = [{"attempt": 2}]
+            return super().get_execution_request(root, request)
+
+    fake = FinalAttemptChangingRequests({"state": "completed", "attempts": [{"attempt": 1}]})
+    request_dir = _archive_completed_request(tmp_path, request_id, fake)
+    result = GatewayPurgeExecutor(fake).execute(
+        {"scope": {"project-root": str(tmp_path), "request-ids": [request_id], "retention-policy": load_retention_policy().snapshot}}
+    )
+    assert result == {"changed": 0, "blocked": 1}
+    assert request_dir.exists()
+
+
+def test_purge_final_fence_blocks_session_lineage_created_during_census(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    policy_path = tmp_path / "machine-policy.json"
+    _enabled_retention_policy(policy_path)
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    request_id = "req_lineage_final_boundary"
+    session = build_session_record(session_id="ses_lineage_boundary", execution_profile_id="review")
+    write_session_record(tmp_path, session)
+
+    class FinalLineageChangingRequests(_ArchiveRequests):
+        calls = 0
+
+        def get_execution_request(self, root: Path, request: str) -> dict[str, object]:
+            self.calls += 1
+            if self.calls == 2:
+                record_session_turn(tmp_path, "ses_lineage_boundary", request_id)
+            return super().get_execution_request(root, request)
+
+    fake = FinalLineageChangingRequests({"state": "completed"})
+    request_dir = _archive_completed_request(tmp_path, request_id, fake)
+    result = GatewayPurgeExecutor(fake).execute(
+        {"scope": {"project-root": str(tmp_path), "request-ids": [request_id], "retention-policy": load_retention_policy().snapshot}}
+    )
+    assert result == {"changed": 0, "blocked": 1}
+    assert request_dir.exists()
+
+
 def test_purge_blocks_session_lineage_pin_created_after_archive(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -467,3 +644,177 @@ def test_purge_blocks_session_lineage_pin_created_after_archive(
     )
     assert result == {"changed": 0, "blocked": 1}
     assert request_dir.exists()
+    archive_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / "archive" / request_id
+    assert (archive_dir / "archive-manifest.json").is_file()
+    # The durable session turn remains available as the continuation
+    # authority; a blocked purge must not discard resumable lineage.
+    session_path = (
+        tmp_path
+        / ".audiagentic"
+        / "runtime"
+        / "agent-execution-gateway"
+        / "sessions"
+        / "ses_purge_pin"
+        / "record.json"
+    )
+    assert session_path.is_file()
+
+
+def test_retention_release_requires_explicit_lineage_removal(tmp_path: Path) -> None:
+    request_id = "req_release_policy"
+    session = build_session_record(session_id="ses_release", execution_profile_id="review")
+    write_session_record(tmp_path, session)
+    record_session_turn(tmp_path, "ses_release", request_id)
+
+    pinned = request_retention_pin(tmp_path, request_id)
+    assert pinned.pinned is True
+    assert pinned.reason == "session-lineage-reference"
+
+    session["activity"] = {"request-ids": [], "turn-count": 1}
+    write_session_record(tmp_path, session)
+    released = request_retention_pin(tmp_path, request_id)
+    assert released.pinned is False
+    assert released.reason is None
+
+
+def test_durable_runtime_pin_survives_reload_until_explicit_cleanup(tmp_path: Path) -> None:
+    request_id = "req_runtime_release"
+    runtime_root = (
+        tmp_path
+        / ".audiagentic"
+        / "runtime"
+        / "agent-execution-gateway"
+        / request_id
+        / "runtime"
+    )
+    runtime_root.mkdir(parents=True)
+    continuation = runtime_root / "provider-session.json"
+    continuation.write_text('{"provider-session-id":"opaque-1"}', encoding="utf-8")
+
+    # A fresh read (equivalent to a host restart) still observes the durable pin.
+    assert request_retention_pin(tmp_path, request_id).pinned is True
+    assert request_retention_pin(tmp_path, request_id).reason == "durable-runtime-root"
+
+    continuation.unlink()
+    assert request_retention_pin(tmp_path, request_id).pinned is False
+
+
+def test_generic_provider_session_release_after_terminal_reload(tmp_path: Path) -> None:
+    for profile_id in ("fake", "acp", "mcp-a2a"):
+        request_id = f"req_terminal_release_{profile_id}"
+        session_id = f"ses_terminal_release_{profile_id}"
+        session = build_session_record(session_id=session_id, execution_profile_id=profile_id)
+        write_session_record(tmp_path, session)
+        record_session_turn(tmp_path, session_id, request_id)
+        assert request_retention_pin(tmp_path, request_id).pinned is True
+
+        # Simulate terminal-session persistence/reload followed by explicit
+        # lineage release; provider identity does not alter the contract.
+        persisted = json.loads((tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / "sessions" / session_id / "record.json").read_text(encoding="utf-8"))
+        persisted["activity"]["request-ids"] = []
+        write_session_record(tmp_path, persisted)
+        assert request_retention_pin(tmp_path, request_id).pinned is False
+
+
+def test_archive_is_provider_neutral_across_execution_profiles(tmp_path: Path) -> None:
+    for profile_id in ("fake", "acp", "mcp-a2a"):
+        request_id = f"req_archive_profile_{profile_id}"
+        request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id
+        request_dir.mkdir(parents=True)
+        (request_dir / "record.json").write_text(
+            json.dumps({"state": "completed", "execution-profile-id": profile_id}), encoding="utf-8"
+        )
+        fake = _ArchiveRequests({"state": "completed", "execution-profile-id": profile_id})
+        result = GatewayArchiveExecutor(fake).execute(
+            {"scope": {"project-root": str(tmp_path), "request-ids": [request_id]}}
+        )
+        assert result == {"changed": 1, "blocked": 0}
+
+
+def test_purge_is_provider_neutral_across_execution_profiles(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    policy_path = tmp_path / "machine-policy.json"
+    _enabled_retention_policy(policy_path)
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    for profile_id in ("fake", "acp", "mcp-a2a"):
+        request_id = f"req_purge_profile_{profile_id}"
+        request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id
+        request_dir.mkdir(parents=True)
+        (request_dir / "record.json").write_text(
+            json.dumps({"state": "completed", "execution-profile-id": profile_id}), encoding="utf-8"
+        )
+        fake = _ArchiveRequests({"state": "completed", "execution-profile-id": profile_id})
+        GatewayArchiveExecutor(fake).execute(
+            {"scope": {"project-root": str(tmp_path), "request-ids": [request_id]}}
+        )
+        time.sleep(0.02)
+        result = GatewayPurgeExecutor(fake).execute(
+            {"scope": {"project-root": str(tmp_path), "request-ids": [request_id], "retention-policy": load_retention_policy().snapshot}}
+        )
+        assert result == {"changed": 1, "blocked": 0}
+
+
+def test_purge_blocks_linked_lineage_across_provider_profiles(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    policy_path = tmp_path / "machine-policy.json"
+    _enabled_retention_policy(policy_path)
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    for profile_id in ("fake", "acp", "mcp-a2a"):
+        request_id = f"req_purge_linked_{profile_id}"
+        session_id = f"ses_purge_linked_{profile_id}"
+        session = build_session_record(session_id=session_id, execution_profile_id=profile_id)
+        write_session_record(tmp_path, session)
+        request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id
+        request_dir.mkdir(parents=True)
+        (request_dir / "record.json").write_text(json.dumps({"state": "completed"}), encoding="utf-8")
+        fake = _ArchiveRequests({"state": "completed"})
+        GatewayArchiveExecutor(fake).execute(
+            {"scope": {"project-root": str(tmp_path), "request-ids": [request_id]}}
+        )
+        record_session_turn(tmp_path, session_id, request_id)
+        time.sleep(0.02)
+        result = GatewayPurgeExecutor(fake).execute(
+            {"scope": {"project-root": str(tmp_path), "request-ids": [request_id], "retention-policy": load_retention_policy().snapshot}}
+        )
+        assert result == {"changed": 0, "blocked": 1}
+        assert request_dir.exists()
+
+
+def test_lineage_mutation_fence_is_provider_neutral(tmp_path: Path) -> None:
+    for profile_id in ("fake", "acp", "mcp-a2a"):
+        request_id = f"req_lineage_mutation_{profile_id}"
+        session_id = f"ses_lineage_mutation_{profile_id}"
+        session = build_session_record(session_id=session_id, execution_profile_id=profile_id)
+        write_session_record(tmp_path, session)
+        assert request_retention_pin(tmp_path, request_id).pinned is False
+        record_session_turn(tmp_path, session_id, request_id)
+        assert request_retention_pin(tmp_path, request_id).pinned is True
+        session = json.loads(
+            (tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / "sessions" / session_id / "record.json").read_text(encoding="utf-8")
+        )
+        session["activity"]["request-ids"] = []
+        write_session_record(tmp_path, session)
+        assert request_retention_pin(tmp_path, request_id).pinned is False
+
+
+def test_purge_after_explicit_lineage_release_is_allowed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    policy_path = tmp_path / "machine-policy.json"
+    _enabled_retention_policy(policy_path)
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RETENTION_POLICY", str(policy_path))
+    request_id = "req_purge_after_release"
+    session_id = "ses_purge_after_release"
+    session = build_session_record(session_id=session_id, execution_profile_id="acp")
+    write_session_record(tmp_path, session)
+    request_dir = tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / request_id
+    request_dir.mkdir(parents=True)
+    (request_dir / "record.json").write_text('{"state":"completed"}', encoding="utf-8")
+    fake = _ArchiveRequests({"state": "completed"})
+    GatewayArchiveExecutor(fake).execute({"scope": {"project-root": str(tmp_path), "request-ids": [request_id]}})
+    record_session_turn(tmp_path, session_id, request_id)
+    session["activity"] = {"request-ids": [], "turn-count": 1}
+    write_session_record(tmp_path, session)
+    time.sleep(0.02)
+    result = GatewayPurgeExecutor(fake).execute({"scope": {"project-root": str(tmp_path), "request-ids": [request_id], "retention-policy": load_retention_policy().snapshot}})
+    assert result == {"changed": 1, "blocked": 0}

@@ -61,6 +61,15 @@ def test_select_implementation_persists_and_is_reflected_in_status(tmp_path: Pat
     assert status["enabled"] is True
 
 
+def test_implementation_rollback_restores_previous_boundary(tmp_path: Path) -> None:
+    gateway_select_implementation(tmp_path, "automatic")
+    assert gateway_status(tmp_path)["implementation"] == "automatic"
+    gateway_select_implementation(tmp_path, "embedded")
+    restored = gateway_status(tmp_path)
+    assert restored["implementation"] == "embedded"
+    assert restored["enabled"] is True
+
+
 def test_get_config_exposes_option_schema_for_automatic(tmp_path: Path) -> None:
     config = gateway_get_config(tmp_path, "automatic")
     assert config["implementation"] == "automatic"
