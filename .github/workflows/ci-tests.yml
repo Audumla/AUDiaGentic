@@ -86,6 +86,10 @@ jobs:
             dockerfile: Dockerfile.gateway-pi-smoke
             tag: audiagentic-gateway-pi-smoke
             base: true
+          - name: gateway-session-orphan # AS91 real session orphan/reaper lifecycle
+            dockerfile: Dockerfile.gateway-session-orphan
+            tag: audiagentic-gateway-session-orphan
+            base: true
           - name: pi-rpc-tap-e2e         # AS40 real pi-acp RPC tee shim, tapped conversational turn
             dockerfile: Dockerfile.pi-rpc-tap-e2e
             tag: audiagentic-pi-rpc-tap-e2e
