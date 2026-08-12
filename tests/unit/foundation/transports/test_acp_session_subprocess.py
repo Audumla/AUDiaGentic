@@ -84,14 +84,15 @@ async def test_close_kills_child_process_no_orphan(tmp_path):
 
         await transport.close()
 
-        # No-orphan proof: the child PID must be gone
-        # On Windows, os.kill(pid, 0) raises OSError for a dead pid instead of
-        # ProcessLookupError; we catch both.
-        try:
-            os.kill(child_pid, 0)
-            raise AssertionError(f"Child process {child_pid} still alive after close() — orphan!")
-        except (ProcessLookupError, OSError):
-            pass  # expected: process is dead
+        # No-orphan proof: the child PID must be gone.
+        # Use foundation pid_alive() instead of os.kill(pid, 0) — on Windows,
+        # os.kill(pid, 0) can report a recently-killed process as alive due to
+        # handle retention. pid_alive() queries GetExitCodeProcess directly.
+        from audiagentic.foundation.system.process import pid_alive
+
+        assert not pid_alive(child_pid), (
+            f"Child process {child_pid} still alive after close() — orphan!"
+        )
     finally:
         await transport.close()
 

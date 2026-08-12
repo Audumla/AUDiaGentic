@@ -12,6 +12,10 @@ This repository uses AUDiaGentic workflow jobs.
 - Preserve raw prompt text in provenance metadata.
 - Keep provenance visible: provider id, surface, and session id should survive normalization.
 
+NEVER use git stash
+
+has
+
 <!-- ag:managed:begin -->
 _Managed by AUDiaGentic — generated from component configs. Edit the owning component and re-run surface apply; edits here are overwritten._
 
@@ -73,24 +77,59 @@ Choose a prefix matching the plan name (CC → code-cleanup, LSP → lsp-mcp-enh
 - standards: Applicable standards/rules
 - notes: Key design principles and additional context
 
-## Agent profile doctrine
+## Execution profile doctrine
 
-Agent profiles bind a provider to a specific model with optional execution
-parameters. They are stored in .audiagentic/config/agent-profiles.yaml.
+Execution profiles bind a provider to a specific model with optional
+execution parameters. They are stored in .audiagentic/config/
+execution-profiles.yaml.
 
 ## When to use
 - A job needs a predefined provider+model configuration
-- Execution parameters (temperature, max-tokens) should be profile-driven
+- Execution parameters (temperature, max-tokens) should be
+  profile-driven
 - Multiple projects need different default model configurations
 
 ## Resolution precedence at job launch
-1. Explicit `agent-profile-id` in job request
+1. Explicit `execution-profile-id` in job request
 2. Explicit provider-id / model-id in job request
-3. Default agent profile (marked `is-default: true`)
+3. Default execution profile (marked `is-default: true`)
 
 ## Naming
-Use `agent-profile-id` (NOT `profile-id`) in job requests to avoid
-collision with `workflow-profile` (lite/standard/strict stage pipelines).
+Use `execution-profile-id` (NOT `profile-id`) in job requests to avoid
+collision with `workflow-profile` (lite/standard/strict stage
+pipelines).
+
+## Role selection precedence (AS61/RO01)
+
+Today a Role is reached only through `agent_id` -> Agent Definition ->
+`role_id` (agent_task_submit). There is no standalone `agent-role-id`
+job-request field yet — that wiring belongs to AS78, not this
+component. This section states the precedence/conflict rule that
+MUST hold once one is introduced, so the rule is fixed before the
+field exists rather than improvised after.
+
+## Resolution precedence at job launch (once agent-role-id exists)
+1. Explicit `agent-role-id` in job request
+2. Role carried by an explicit `agent-id` (Agent Definition)
+3. Execution profile selection (`execution-profile-id` / provider-id
+   + model-id / default execution profile) is independent of role
+   selection — they compose, they do not override each other.
+4. `workflow-profile` (lite/standard/strict stage pipelines) and
+   `component-profile` (per-process config layer) are orthogonal to
+   both and never interact with role/profile precedence.
+
+## Conflicts fail closed
+A Role requirement that contradicts an explicitly selected Execution
+Profile is an error raised before dispatch — never a silent override
+in either direction, and never a permissive fallback. This applies
+the moment AS78 exposes a path where the two could disagree; there is
+no such path yet, so no conflict-checking code exists today.
+
+## Naming
+`agent-role-id` must stay distinguishable from `execution-profile-id`,
+`workflow-profile`, and `component-profile` — three distinct
+"profile" concepts already exist in this project; a role is a fourth,
+separate axis and must not collapse into any of them by accident.
 
 ## Memory usage guidance
 
@@ -102,62 +141,38 @@ Use Hindsight memory when prior project context may help.
 ## Component profile doctrine
 
 Component profiles select an alternative set of component configurations
-for a single process invocation. They override the base component
-definitions with
-per-profile customizations (enabled/disabled components,
-overridden mcp-servers,
-adjusted parameters).
+for a single process invocation. They override the base component definitions
+with per-profile customizations (enabled/disabled components, overridden
+mcp-servers, and adjusted parameters).
 
 ## What component profiles are
 
 A component profile is a named configuration layer loaded via the
 `--component-profile` CLI flag or the `AUDIAGENTIC_COMPONENT_PROFILE`
 environment variable. The profile name maps to a project-scoped folder:
-`<project-root>/.audiagentic/<profile-name>/components/`. Descriptor
-YAML files in that folder layer on top of the base component definitions
-from the package's `config/components/`; a profile descriptor sharing an
-id with a base descriptor wins (last-wins overlay).
+`<project-root>/.audiagentic/<profile-name>/components/`.
 
 ## Distinction from other profile concepts
 
-Three unrelated mechanisms use the word "profile" in this codebase:
-
-- **Component profiles** — select alternative component configurations
-  for the harness. Controlled by `--component-profile` /
-  `AUDIAGENTIC_COMPONENT_PROFILE`. Stored in
-  `<project-root>/.audiagentic/<profile-name>/components/`.
-
-- **Agent profiles** — bind a provider to a specific model with optional
-  execution parameters. Used at job-launch time to resolve which model
-  invoke. Stored in `.audiagentic/config/agent-profiles.yaml`.
-Referenced via
-  `agent-profile-id` in job requests.
-
-- **Workflow profiles** — define lite/standard/strict stage pipelines
-  task execution. Controlled by `workflow-profile` in job or plan
-  configuration. Not the same as component profiles or agent profiles.
-
-Additionally, rig model profiles (controlled by
-`AUDIAGENTIC_RIG_MODEL_PROFILE` and related env vars) configure
-inference parameters and are orthogonal to all three of the above.
+Component profiles, execution profiles, workflow profiles, and rig model
+profiles are separate mechanisms. Execution profiles bind a provider to a
+model; workflow profiles select stage pipelines; rig model profiles configure
+inference parameters.
 
 ## Usage
 
 - CLI flag: `--component-profile <profile-name>`
 - Environment variable: `AUDIAGENTIC_COMPONENT_PROFILE=<profile-name>`
-- Default fallback: if neither is set, the harness loads base component
-  definitions from `src/audiagentic/config/components/` with no overlay.
 
 ## One-profile-per-process constraint
 
-A single process runs with exactly one component profile (or none). The
-profile is captured at the first component registration in the process;
-requesting a different profile later in the same process raises
-VAL-COMP-010. To switch profiles, stop the current session and restart
-with a different `--component-profile` value or updated environment
-variable.
+A single process runs with exactly one component profile (or none). To switch
+profiles, stop the current session and restart with the desired profile.
 
 ## Source control doctrine
 
 Do not invoke git or GitHub APIs directly — use the MCP tools.
+Never use `git stash` — this is a shared, multi-agent working tree and a stash
+can silently collide with another session's live edits. If work needs to be set
+aside, split it into its own deliberate check-in group or leave it uncommitted.
 <!-- ag:managed:end -->

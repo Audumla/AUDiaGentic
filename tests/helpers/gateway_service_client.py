@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-from audiagentic.components.agents.agents_gateway_remote_client import (
+from audiagentic.components.agents.gateway.remote_client import (
     StandaloneGatewayClient,
     load_auth_token,
 )

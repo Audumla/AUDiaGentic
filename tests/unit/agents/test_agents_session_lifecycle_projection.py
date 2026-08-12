@@ -7,7 +7,7 @@ cancel-with-commit, and identical evidence from two sources.
 """
 from __future__ import annotations
 
-from audiagentic.components.agents.agents_session_lifecycle_projection import (
+from audiagentic.components.agents.status.session_lifecycle_projection import (
     SessionLifecycleEvidence,
     evidence_from_latest_turn_projection,
     project_session_lifecycle,

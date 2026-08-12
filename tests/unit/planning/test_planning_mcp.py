@@ -48,10 +48,10 @@ def test_plan_list_items_delegates_to_api():
 
 
 def test_plan_list_items_rejects_unfiltered():
-    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    from mcp.server.fastmcp.exceptions import ToolError
 
     with _patch_root():
-        with pytest.raises(AudiaGenticError, match="VAL-PLN-026"):
+        with pytest.raises(ToolError, match="VAL-PLN-026"):
             planning_mcp.plan_list_items()
 
 

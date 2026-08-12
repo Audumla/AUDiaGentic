@@ -41,6 +41,55 @@ imports of the platform component's internals.
 Future platform APIs require the same narrow, documented approval. They are
 shared lower-layer seams, not general component-to-component exceptions.
 
+### Composition candidates
+
+- A binding names a component's public surface or a foundation capability —
+  never an internal collaborator. This bounds the composition graph to
+  component/capability boundaries, order tens permanently, not to the number
+  of classes in the codebase. A component's internal collaborators are
+  constructed by that component and never appear in the graph.
+- Distinguish a **binding** from a **composed singleton**. A binding is a
+  genuine choice between two or more implementations that configuration
+  selects. A composed singleton is one implementation with no choice to make,
+  composed because its construction/shutdown ordering is worth owning.
+  Conflating the two — giving a single-implementation service a binding entry
+  selected by profile or environment instead of composing it directly — is
+  another way a composition root becomes a container.
+- Evaluate lifecycle by scope, not by whether a mutable setter/getter exists
+  today. A dependency whose construction and teardown are scoped to one
+  process's entire operational lifetime is a valid candidate even if it is
+  currently exposed as a module-global installed by a constructor and cleared
+  by a destructor — that is ordinary object lifecycle, not runtime
+  mode-switching. A dependency that is genuinely swapped *during* normal
+  operation (not at process start/end) is not a build-time candidate; its
+  internal mutability, if any, belongs inside the composed object's own
+  method, not the graph.
+- More than one composition root is expected, not a violation: different
+  process kinds compose different graphs. A later root is deliberate when a
+  new process kind needs its own composed dependencies; it is not evidence
+  that the first root was wrong.
+- For request/task-shaped work with many independent live instances, compose
+  the **factory**, not the instances. The factory is the one binding — it
+  legitimately owns the lifetime of the stateful resources (queues,
+  connections, runtimes) that instances route through. What it mints is a
+  freely-constructed, uncomposed **handle**: a thin object wrapping an
+  identity plus delegating methods that re-read the durable source of truth
+  on every call, never independently-cached state. A handle is never tracked
+  by the graph, never a scope, and callers may hold as many as they like.
+  Composing the handle instead of the factory is another route to a
+  container: a per-request or per-task binding is not a component boundary.
+- A composed surface is a controlled, tight API layer, not a general-purpose
+  access point. It exposes the narrow set of operations its stated workflow
+  needs, in a consistent method shape (mirroring existing composed surfaces'
+  design and naming), not an accreting catalogue of "also add this while
+  we're in here." A surface is not composed at every consumer that touches
+  it, either — most consumers should reach it through a scoped adapter
+  (protocol, MCP, CLI) calling the one composed thing, not by receiving the
+  composed dependency directly. If a proposed binding's method count or
+  consumer list keeps growing, that is a signal it has stopped being one
+  component boundary and started being a dumping ground; split it or push
+  the extra surface back behind the adapter layer instead of widening it.
+
 ## 2. Extensions and Configuration
 
 - Entity declarations belong in configuration, not central Python lists or

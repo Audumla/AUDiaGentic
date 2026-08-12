@@ -5,6 +5,7 @@ package root directory (audiagentic) must import these constants or functions,
 never hardcode the literals. This is the central resolver for profile-aware
 path construction.
 """
+
 from __future__ import annotations
 
 import os
@@ -18,8 +19,24 @@ PROJECT_MARKER_NAME = ".audiagentic"
 PACKAGE_ROOT_NAME = "audiagentic"
 """Package root directory name inside the source tree."""
 
+CONFIG_DIR_NAME = "config"
+"""Config subdirectory inside .audiagentic/ — source-of-truth config."""
+
+RUNTIME_DIR_NAME = "runtime"
+"""Runtime subdirectory inside .audiagentic/ — cache, logs, temp data."""
+
+LINTING_DIR_NAME = "linting"
+"""Linting subdirectory inside .audiagentic/config/ — shared lint rules."""
+
+CACHE_DIR_NAME = "cache"
+"""Cache subdirectory inside .audiagentic/runtime/ — safely deletable."""
+
+LOGS_DIR_NAME = "logs"
+"""Logs subdirectory inside .audiagentic/runtime/ — component logs."""
+
 
 # ── Package root resolution ───────────────────────────────────────────────
+
 
 def find_package_root(start: Path | None = None) -> Path:
     """Walk up from *start* (default this file's parent) until a directory
@@ -63,9 +80,35 @@ def get_package_providers_config_dir() -> Path:
 
 # ── Project marker resolution ─────────────────────────────────────────────
 
+
 def project_marker_path(project_root: Path) -> Path:
     """Return the .audiagentic marker directory inside a project root."""
     return project_root / PROJECT_MARKER_NAME
+
+
+def project_config_dir(project_root: Path) -> Path:
+    """Return .audiagentic/config/ — source-of-truth config location."""
+    return project_marker_path(project_root) / CONFIG_DIR_NAME
+
+
+def project_runtime_dir(project_root: Path) -> Path:
+    """Return .audiagentic/runtime/ — cache, logs, temp data."""
+    return project_marker_path(project_root) / RUNTIME_DIR_NAME
+
+
+def project_cache_dir(project_root: Path) -> Path:
+    """Return .audiagentic/runtime/cache/ — safely deletable cache data."""
+    return project_runtime_dir(project_root) / CACHE_DIR_NAME
+
+
+def project_linting_dir(project_root: Path) -> Path:
+    """Return .audiagentic/config/linting/ — shared lint rules."""
+    return project_config_dir(project_root) / LINTING_DIR_NAME
+
+
+def project_logs_dir(project_root: Path) -> Path:
+    """Return .audiagentic/runtime/logs/ — component logs."""
+    return project_runtime_dir(project_root) / LOGS_DIR_NAME
 
 
 def home_directory() -> Path:
@@ -78,6 +121,7 @@ def home_directory() -> Path:
 
 
 # ── Component config directory resolution ─────────────────────────────────
+
 
 def get_component_config_dirs() -> list[Path]:
     """Resolve base component config directories from override sources.
@@ -94,6 +138,7 @@ def get_component_config_dirs() -> list[Path]:
 
 
 # ── Profile-aware paths (CP03/CP04) ────────────────────────────────────────
+
 
 def resolve_profile_root(
     project_root: Path,

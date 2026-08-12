@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from audiagentic.components.agents import agents_gateway_session_bindings as bindings
+from audiagentic.components.agents.gateway.session import bindings as bindings
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 # ── existing test (AS19) ─────────────────────────────────────

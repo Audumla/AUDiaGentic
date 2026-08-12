@@ -51,7 +51,11 @@ class _MockLspServer:
         rid = msg.get("id")
         if rid is not None:
             if self.fail_after and self.request_count >= self.fail_after:
-                resp = {"jsonrpc": "2.0", "id": rid, "error": {"code": -32603, "message": "internal error"}}
+                resp = {
+                    "jsonrpc": "2.0",
+                    "id": rid,
+                    "error": {"code": -32603, "message": "internal error"},
+                }
             else:
                 resp = {"jsonrpc": "2.0", "id": rid, "result": {"echo": msg.get("method")}}
             payload = json.dumps(resp, separators=(",", ":")).encode("utf-8")
@@ -62,7 +66,7 @@ class _MockLspServer:
 
 def test_launch_and_shutdown() -> None:
     bridge = LspJsonRpc()
-    bridge._process = None
+    bridge._supervised = None
     assert not bridge.is_alive()
     bridge.shutdown()
 
@@ -71,12 +75,24 @@ def test_write_message_frames_correctly() -> None:
     bridge = LspJsonRpc()
     fake_stdin: list[bytes] = []
 
-    class FakeProcess:
+    class FakeStdin:
+        def write(self, d):
+            fake_stdin.append(d)
+
+        def flush(self):
+            pass
+
+    class _FakeInnerProcess:
+        poll = lambda self: None
+        stdin = FakeStdin()
+
+    class FakeSupervised:
         def poll(self):
             return None
-        stdin = type("SI", (), {"write": lambda s, d: fake_stdin.append(d), "flush": lambda s: None})()
 
-    bridge._process = FakeProcess()  # type: ignore[assignment]
+        process = _FakeInnerProcess()
+
+    bridge._supervised = FakeSupervised()  # type: ignore[assignment]
     bridge._write_message({"jsonrpc": "2.0", "method": "test", "id": 1})
     raw = fake_stdin[0]
     assert b"Content-Length:" in raw
@@ -121,24 +137,36 @@ def test_shutdown_sends_request_then_exit(monkeypatch) -> None:
     bridge = LspJsonRpc()
     calls: list[tuple[str, str]] = []
 
-    class FakeProcess:
+    class FakeSupervised:
         def poll(self):
             return None
+
         def wait(self, timeout=None):
             return 0
 
-    bridge._process = FakeProcess()  # type: ignore[assignment]
+        def close(self):
+            pass
+
+    bridge._supervised = FakeSupervised()  # type: ignore[assignment]
     bridge._running = True
 
-    monkeypatch.setattr(bridge, "send_request", lambda method, params, id=None, timeout=30.0: calls.append(("request", method)) or {})
-    monkeypatch.setattr(bridge, "send_notification", lambda method, params: calls.append(("notification", method)))
+    monkeypatch.setattr(
+        bridge,
+        "send_request",
+        lambda method, params, id=None, timeout=30.0: calls.append(("request", method)) or {},
+    )
+    monkeypatch.setattr(
+        bridge, "send_notification", lambda method, params: calls.append(("notification", method))
+    )
 
     bridge.shutdown()
 
     assert calls == [("request", "shutdown"), ("notification", "exit")]
 
 
-@pytest.mark.skipif(shutil.which("pyright-langserver") is None, reason="pyright-langserver not on PATH")
+@pytest.mark.skipif(
+    shutil.which("pyright-langserver") is None, reason="pyright-langserver not on PATH"
+)
 def test_real_pyright_lifecycle():
     bridge = LspJsonRpc()
     try:
@@ -175,21 +203,32 @@ def test_on_notification_multiple_handlers() -> None:
     assert len(bridge._notification_handlers["test/notif"]) == 2
 
 
-def _fake_process():
-    class FP:
+def _fake_supervised():
+    class _FakeInnerProcess:
+        poll = lambda self: None  # noqa: E731
+        stdin = None
+
+    class FakeSupervised:
         def poll(self):
             return None
-    return FP()  # type: ignore[return-value]
+
+        process = _FakeInnerProcess()
+
+    return FakeSupervised()  # type: ignore[return-value]
 
 
 def test_reader_loop_dispatches_notification(monkeypatch) -> None:
     bridge = LspJsonRpc()
-    bridge._process = _fake_process()  # type: ignore[assignment]
+    bridge._supervised = _fake_supervised()  # type: ignore[assignment]
     received: list[dict] = []
     bridge.on_notification("textDocument/publishDiagnostics", lambda p: received.append(p))
 
     messages = [
-        {"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"uri": "file://test.py", "diagnostics": []}},
+        {
+            "jsonrpc": "2.0",
+            "method": "textDocument/publishDiagnostics",
+            "params": {"uri": "file://test.py", "diagnostics": []},
+        },
     ]
     msg_count = [0]
 
@@ -208,7 +247,7 @@ def test_reader_loop_dispatches_notification(monkeypatch) -> None:
 
 def test_reader_loop_handles_server_request_workspace_config(monkeypatch) -> None:
     bridge = LspJsonRpc()
-    bridge._process = _fake_process()  # type: ignore[assignment]
+    bridge._supervised = _fake_supervised()  # type: ignore[assignment]
     sent_messages: list[dict] = []
     monkeypatch.setattr(bridge, "_write_message", lambda m: sent_messages.append(m))
 
@@ -220,6 +259,7 @@ def test_reader_loop_handles_server_request_workspace_config(monkeypatch) -> Non
     }
 
     call_count = [0]
+
     def stopping_read():
         call_count[0] += 1
         if call_count[0] == 1:
@@ -236,7 +276,7 @@ def test_reader_loop_handles_server_request_workspace_config(monkeypatch) -> Non
 
 def test_reader_loop_handles_server_request_register_capability(monkeypatch) -> None:
     bridge = LspJsonRpc()
-    bridge._process = _fake_process()  # type: ignore[assignment]
+    bridge._supervised = _fake_supervised()  # type: ignore[assignment]
     sent_messages: list[dict] = []
     monkeypatch.setattr(bridge, "_write_message", lambda m: sent_messages.append(m))
 
@@ -248,6 +288,7 @@ def test_reader_loop_handles_server_request_register_capability(monkeypatch) -> 
     }
 
     call_count = [0]
+
     def stopping_read():
         call_count[0] += 1
         if call_count[0] == 1:
@@ -264,13 +305,14 @@ def test_reader_loop_handles_server_request_register_capability(monkeypatch) -> 
 
 def test_reader_loop_drops_unhandled_message(monkeypatch, caplog) -> None:
     bridge = LspJsonRpc()
-    bridge._process = _fake_process()  # type: ignore[assignment]
+    bridge._supervised = _fake_supervised()  # type: ignore[assignment]
     sent_messages: list[dict] = []
     monkeypatch.setattr(bridge, "_write_message", lambda m: sent_messages.append(m))
 
     unknown_msg = {"jsonrpc": "2.0", "result": "orphan"}
 
     call_count = [0]
+
     def fake_read():
         call_count[0] += 1
         if call_count[0] == 1:
@@ -287,7 +329,7 @@ def test_reader_loop_drops_unhandled_message(monkeypatch, caplog) -> None:
 
 def test_reader_loop_handles_unknown_server_request(monkeypatch) -> None:
     bridge = LspJsonRpc()
-    bridge._process = _fake_process()  # type: ignore[assignment]
+    bridge._supervised = _fake_supervised()  # type: ignore[assignment]
     sent_messages: list[dict] = []
     monkeypatch.setattr(bridge, "_write_message", lambda m: sent_messages.append(m))
 
@@ -299,6 +341,7 @@ def test_reader_loop_handles_unknown_server_request(monkeypatch) -> None:
     }
 
     call_count = [0]
+
     def fake_read():
         call_count[0] += 1
         if call_count[0] == 1:
@@ -315,11 +358,12 @@ def test_reader_loop_handles_unknown_server_request(monkeypatch) -> None:
 
 def test_reader_loop_still_routes_responses() -> None:
     bridge = LspJsonRpc()
-    bridge._process = _fake_process()  # type: ignore[assignment]
+    bridge._supervised = _fake_supervised()  # type: ignore[assignment]
     response_msg = {"jsonrpc": "2.0", "id": 1, "result": {"ok": True}}
 
     bridge._pending[1] = __import__("threading").Event()
     call_count = [0]
+
     def fake_read():
         call_count[0] += 1
         if call_count[0] == 1:
@@ -336,14 +380,18 @@ def test_reader_loop_still_routes_responses() -> None:
 
 def test_send_request_uses_method_timeout(monkeypatch) -> None:
     bridge = LspJsonRpc()
-    bridge._process = _fake_process()  # type: ignore[assignment]
+    bridge._supervised = _fake_supervised()  # type: ignore[assignment]
     received_timeout = []
 
     def _fake_write(_msg):
         pass
 
     monkeypatch.setattr(bridge, "_write_message", _fake_write)
-    monkeypatch.setattr(__import__("threading").Event, "wait", lambda self, timeout=None: (received_timeout.append(timeout), False)[-1])
+    monkeypatch.setattr(
+        __import__("threading").Event,
+        "wait",
+        lambda self, timeout=None: (received_timeout.append(timeout), False)[-1],
+    )
 
     try:
         bridge.send_request("textDocument/definition", {}, id=1)
@@ -355,7 +403,7 @@ def test_send_request_uses_method_timeout(monkeypatch) -> None:
 
 def test_send_request_sends_cancel_on_timeout(monkeypatch) -> None:
     bridge = LspJsonRpc()
-    bridge._process = _fake_process()  # type: ignore[assignment]
+    bridge._supervised = _fake_supervised()  # type: ignore[assignment]
     cancel_sent = []
 
     def _fake_write(msg):
@@ -396,6 +444,7 @@ def test_session_manager_rebuilds_dead_session() -> None:
     class FakeSession:
         def is_ready(self):
             return False
+
         def shutdown(self):
             pass
 
@@ -403,23 +452,28 @@ def test_session_manager_rebuilds_dead_session() -> None:
     manager._last_used["/root"] = {"python": 0.0}
 
     call_count = [0]
+
     class RebuildSession:
         def initialize(self):
             call_count[0] += 1
+
         def initialized(self):
             pass
+
         def is_ready(self):
             return True
+
         def shutdown(self):
             pass
+
         server_config = config
         project_root = __import__("pathlib").Path("/root")
 
-    original_init = None
     def fake_init(*args, **kwargs):
         return RebuildSession()
 
     import audiagentic.components.coding_lsp.lsp_session_manager as sm_mod
+
     original_cls = sm_mod.LspSession
     sm_mod.LspSession = fake_init  # type: ignore[assignment]
 

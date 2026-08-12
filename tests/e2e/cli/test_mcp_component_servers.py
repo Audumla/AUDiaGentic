@@ -196,12 +196,22 @@ def _call(
             }
         ],
         {msg_id},
-        time.time() + 5,
+        # Provider status composes every registered descriptor and can be
+        # noticeably slower when the server is pointed at the full checkout.
+        # Allow that legitimate work to finish under xdist load.
+        time.time() + 20,
     )
-    resp = next(r for r in responses if r.get("id") == msg_id)
+    resp = next((r for r in responses if r.get("id") == msg_id), None)
+    assert resp is not None, f"no response for {tool!r}"
     assert "error" not in resp, f"tool {tool!r} error: {resp['error']}"
     blocks = resp["result"]["content"]
-    parsed = [json.loads(b["text"]) for b in blocks]
+    parsed = []
+    for block in blocks:
+        text = block["text"]
+        try:
+            parsed.append(json.loads(text))
+        except json.JSONDecodeError:
+            parsed.append(text)
     return parsed if len(parsed) > 1 else parsed[0]
 
 
@@ -346,7 +356,12 @@ def test_planning_server_exposes_expected_tools(tmp_path, _planning_server):
 
 
 def test_planning_server_can_list_items(tmp_path, project_root, _planning_server):
-    result = _call(_planning_server, "plan_list_items", {}, project_root=project_root)
+    result = _call(
+        _planning_server,
+        "plan_list_items",
+        {"plan": "code-cleanup"},
+        project_root=project_root,
+    )
     # Should return a list (possibly empty) — the key is no transport error
     payload = result if isinstance(result, dict) else result[0]
     assert "items" in payload or "total" in payload, f"Unexpected response structure: {payload}"

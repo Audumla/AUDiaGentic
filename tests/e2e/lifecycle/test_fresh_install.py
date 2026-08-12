@@ -27,17 +27,16 @@ def test_fresh_install_creates_scaffold_and_manifest(tmp_path: Path) -> None:
         result = apply_fresh_install(sandbox.repo)
         assert result["status"] == "success"
         assert (sandbox.repo / ".audiagentic" / "config" / "project.yaml").is_file()
-        assert (sandbox.repo / ".audiagentic" / "config" / "runtime" / "providers.yaml").is_file()
+        assert not (sandbox.repo / ".audiagentic" / "config" / "runtime" / "providers.yaml").exists()
         assert not (
             sandbox.repo / ".audiagentic" / "config" / "execution" / "prompt-syntax.yaml"
         ).exists()
-        assert (sandbox.repo / ".audiagentic" / "prompts" / "ag-review" / "default.md").exists()
         # Component markers are the new install record
         assert (sandbox.repo / ".audiagentic" / "components" / "project.yaml").is_file()
-        assert any(
-            path.startswith(".audiagentic/runtime/")
-            for path in result["baseline-sync-report"]["excluded-paths"]
-        )
+        assert not (sandbox.repo / ".audiagentic" / "components" / "providers.yaml").exists()
+        assert not (sandbox.repo / ".audiagentic" / "components" / "agent-ledger.yaml").exists()
+        assert not (sandbox.repo / ".audiagentic" / "components" / "memory.yaml").exists()
+        assert not (sandbox.repo / ".audiagentic" / "components" / "agent-planning.yaml").exists()
 
         project_cfg = _load_yaml(sandbox.repo / ".audiagentic" / "config" / "project.yaml")
         validator = Draft202012Validator(read_schema("project-config"))

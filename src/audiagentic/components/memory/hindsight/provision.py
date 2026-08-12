@@ -175,7 +175,10 @@ def _resolve_recipe(
             "BANK_ID": backend.bank_id or "",
         }
     if family == "plugin-entry":
-        return _RECIPE_DIR / _PLUGIN_RECIPE, base_params
+        return _RECIPE_DIR / _PLUGIN_RECIPE, {
+            "URL": backend.base_url,
+            **base_params,
+        }
     # No family supported — guidance-only, no recipe
     return None, {}
 

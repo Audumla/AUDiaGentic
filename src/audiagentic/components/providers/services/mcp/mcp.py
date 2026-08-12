@@ -214,7 +214,7 @@ def sync_managed_provider_mcp_scope(
     descriptor = _descriptor(provider_id)
     spec = descriptor.mcp_config
     if spec is None:
-        return {"ok": False, "supported": False, "reason": "no mcp_config defined"}
+        return {"ok": False, "supported": False, "reason": "no mcp_config"}
     result = sync_managed_config(
         spec,
         project_root,

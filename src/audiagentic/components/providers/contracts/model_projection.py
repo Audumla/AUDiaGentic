@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any
 
-ModelProjectionMode = Literal["plan", "apply", "prune", "status"]
+from .automation_vocabulary import ProviderAutomationMode as ModelProjectionMode
 
 
 @dataclass(frozen=True)

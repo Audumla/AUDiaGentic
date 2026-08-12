@@ -198,10 +198,21 @@ def _main(argv: list[str] | None = None) -> int:
     release_parser.add_argument("--release-id", default="rel_0001", metavar="ID")
 
     config_parser = subparsers.add_parser(
-        "config", help="Repair or inspect generated configuration"
+        "config", help="Refresh, clean, and synchronize generated configuration"
     )
     config_sub = config_parser.add_subparsers(dest="config_cmd", required=True)
-    config_sub.add_parser("sync", help="Rebuild generated config for the selected harness")
+    config_sub.add_parser(
+        "refresh",
+        help="Refresh AUDiaGentic surfaces and synchronize configured provider configs",
+    )
+    config_sub.add_parser(
+        "sync",
+        help="Alias for config refresh",
+    )
+    config_sub.add_parser(
+        "clean",
+        help="Prune AUDiaGentic-owned surfaces and remove generated runtime config",
+    )
 
     # Private stdio entrypoint retained for generated MCP configuration.
     mcp_parser = subparsers.add_parser("mcp", help="Internal MCP stdio entrypoint")
@@ -223,6 +234,11 @@ def _main(argv: list[str] | None = None) -> int:
         import os
 
         os.environ["AUDIAGENTIC_COMPONENT_PROFILE"] = args.component_profile
+
+    if args.command == "config":
+        import os
+
+        os.environ["AUDIAGENTIC_QUIET_STATUS"] = "1"
 
     project_root = Path(args.project).resolve() if args.project else Path.cwd()
 

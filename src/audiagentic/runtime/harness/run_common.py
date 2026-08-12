@@ -9,6 +9,7 @@ from pathlib import Path
 
 from audiagentic.foundation.cli_io import print_message
 from audiagentic.foundation.contracts.errors import make_error
+from audiagentic.foundation.system.supervised_process import spawn_supervised
 from audiagentic.runtime.harness.context import AgentContext, new_launch_runtime_root
 
 
@@ -47,11 +48,16 @@ def build_global_context(
             number=1,
             kind="harness",
             message=f"No system-installed {harness_type} harness found on PATH.",
-            details={"harness_type": harness_type, "hint": f"install {harness_type}, then run: audiagentic bootstrap"},
+            details={
+                "harness_type": harness_type,
+                "hint": f"install {harness_type}, then run: audiagentic bootstrap",
+            },
         )
 
     harness_cfg = load_harness_config(project_root=project_root)
-    requested_model = os.environ.get("AUDIAGENTIC_AG_MODEL") or harness_cfg.get("rig", {}).get("model")
+    requested_model = os.environ.get("AUDIAGENTIC_AG_MODEL") or harness_cfg.get("rig", {}).get(
+        "model"
+    )
     if not requested_model:
         raise make_error(
             prefix="CFG",
@@ -140,7 +146,9 @@ def write_run_started(log_path: Path, ctx: AgentContext, agent_args: list[str]) 
 
 def append_run_finished(log_path: Path, returncode: int) -> None:
     with log_path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps({"event": "agent_run_finished", "returncode": int(returncode)}) + "\n")
+        handle.write(
+            json.dumps({"event": "agent_run_finished", "returncode": int(returncode)}) + "\n"
+        )
 
 
 def print_startup_info(
@@ -233,15 +241,17 @@ def run_provider_agent(
     if smoke:
         print_message(f"Checking local LLM endpoint: {ctx.endpoint}/models")
         require_models_endpoint(ctx.endpoint, timeout=15)
-        timeout = float(os.environ.get("AUDIAGENTIC_AG_SMOKE_TIMEOUT") or require_smoke_timeout(ctx.harness_cfg))
+        timeout = float(
+            os.environ.get("AUDIAGENTIC_AG_SMOKE_TIMEOUT") or require_smoke_timeout(ctx.harness_cfg)
+        )
         with log_path.open("w", encoding="utf-8") as handle:
-            process = subprocess.Popen(command, cwd=ctx.agent_work, env=env, stdout=handle, stderr=subprocess.STDOUT, text=True)
+            supervised = spawn_supervised(
+                command, cwd=ctx.agent_work, env=env, stdout=handle, stderr=subprocess.STDOUT
+            )
             try:
-                returncode = process.wait(timeout=timeout)
+                returncode = supervised.wait(timeout=timeout)
             except subprocess.TimeoutExpired:
-                from audiagentic.foundation.system.process import kill_process_tree
-
-                kill_process_tree(process.pid)
+                supervised.close()
                 handle.write(f"\nSmoke timed out after {timeout:.1f}s\n")
                 return 124
         sys.stdout.write(log_path.read_text(encoding="utf-8"))

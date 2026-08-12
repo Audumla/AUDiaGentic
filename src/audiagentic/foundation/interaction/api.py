@@ -1,4 +1,4 @@
-"""Public interaction API — ask, push_status, request, respond, get_response."""
+"""Public interaction API — ask, push_status, request_interaction, respond, get_response."""
 from __future__ import annotations
 
 import asyncio
@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.event import DeliveryMode, get_bus
-from audiagentic.foundation.interaction import backend as _backend_mod
+from audiagentic.foundation.interaction.backend import current_backend
 from audiagentic.foundation.interaction.mcp import ask_async
 from audiagentic.foundation.interaction.models import (
     DEFAULT_TTL_SECONDS,
@@ -46,7 +46,8 @@ def ask(
     Resolution order: explicit global backend > MCP contextvar (with
     run_coroutine_threadsafe for cross-thread calls) > TIMED_OUT fallback.
     """
-    if _backend_mod._backend is not None and hasattr(_backend_mod._backend, "ask"):
+    backend = current_backend()
+    if backend is not None and hasattr(backend, "ask"):
         ask_req = AskRequest(
             title=title,
             description=description,
@@ -55,7 +56,7 @@ def ask(
             timeout_seconds=timeout_seconds,
         )
         try:
-            return _backend_mod._backend.ask(ask_req)
+            return backend.ask(ask_req)
         except Exception:
             logger.debug("Backend ask failed", exc_info=True)
 
@@ -87,7 +88,7 @@ def ask(
 
     logger.debug("ask() called with no backend or ctx — returning timeout", extra={"title": title})
     if persist and project_root is not None:
-        request_id = request(
+        request_id = request_interaction(
             kind="ask",
             title=title,
             description=description,
@@ -103,7 +104,7 @@ def ask(
     return AskResponse(status=ResponseStatus.TIMED_OUT)
 
 
-def request(
+def request_interaction(
     kind: str,
     title: str,
     *,
@@ -153,9 +154,10 @@ def respond(
         _publish("interaction.answered", dict(payload))
         return
 
-    if _backend_mod._backend is not None and hasattr(_backend_mod._backend, "respond"):
+    backend = current_backend()
+    if backend is not None and hasattr(backend, "respond"):
         try:
-            _backend_mod._backend.respond(request_id, choice, details=details or {})
+            backend.respond(request_id, choice, details=details or {})
         except Exception:
             logger.debug("Backend respond failed", exc_info=True)
 
@@ -204,9 +206,10 @@ def push_status(
         details=dict(details) if details else {},
     )
 
-    if _backend_mod._backend is not None and hasattr(_backend_mod._backend, "push_status"):
+    backend = current_backend()
+    if backend is not None and hasattr(backend, "push_status"):
         try:
-            _backend_mod._backend.push_status(msg)
+            backend.push_status(msg)
             _publish("interaction.status", {
                 "component": component,
                 "level": level,

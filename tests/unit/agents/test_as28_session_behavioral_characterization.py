@@ -26,10 +26,8 @@ from tests.unit.agents.test_agents_gateway_sessions import (
     _Clock,
 )
 
-from audiagentic.components.agents import (
-    agents_gateway_sessions_store as session_store,
-)
-from audiagentic.components.agents.agents_gateway_sessions import SessionRuntime
+from audiagentic.components.agents.gateway.session import sessions_store as session_store
+from audiagentic.components.agents.gateway.session.sessions import SessionRuntime
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 # ── helpers ──────────────────────────────────────────────────────
@@ -38,7 +36,7 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 def _open(runtime: SessionRuntime, project_root: Path, **kwargs) -> dict[str, Any]:
     return runtime.open_session(
         project_root,
-        agent_profile_id="profile-1",
+        execution_profile_id="profile-1",
         provider_id="opencode",
         model_id="m1",
         surface_hint=kwargs.pop("surface_hint", None),
@@ -66,8 +64,9 @@ def characterization_rig(tmp_path: Path):
     clock = _Clock()
     transports: list[FakeAgentSessionTransport] = []
 
-    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None):
+    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
         transports.append(transport)
         return _build_fake_prepared(transport)
 
@@ -111,8 +110,8 @@ def test_acp_sequence_open_two_turns_cancel_close(
     # AS28 slice 4b-A: result is SessionTurnResult with final_summary (not AcpResult)
     assert hasattr(result1, "observations_delivered"), "SessionTurnResult carries observations"
     stored = session_store.read_session_record(tmp_path, session_id)
-    assert stored["turn-count"] == 1
-    assert stored["request-ids"] == ["req_1"]
+    assert stored["activity"]["turn-count"] == 1
+    assert stored["activity"]["request-ids"] == ["req_1"]
 
     # Step 3: second turn blocked so cancel can be tested
     gate = threading.Event()
@@ -151,8 +150,8 @@ def test_acp_sequence_open_two_turns_cancel_close(
 
     # Durable record reflects the full sequence
     stored = session_store.read_session_record(tmp_path, session_id)
-    assert stored["turn-count"] == 2
-    assert sorted(stored["request-ids"]) == ["req_1", "req_2"]
+    assert stored["activity"]["turn-count"] == 2
+    assert sorted(stored["activity"]["request-ids"]) == ["req_1", "req_2"]
 
 
 def test_acp_sequence_queue_fifo_ordering(
@@ -205,8 +204,9 @@ def test_acp_sequence_queue_full_rejects(
     clock = _Clock()
     transports: list[FakeAgentSessionTransport] = []
 
-    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None):
+    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
         transports.append(transport)
         return _build_fake_prepared(transport)
 

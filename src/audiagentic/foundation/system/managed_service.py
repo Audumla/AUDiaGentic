@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import atomic_write_json
+from audiagentic.foundation.io import atomic_write_json, read_json_with_retry
 from audiagentic.foundation.observability.timeline import record_timeline_event
 from audiagentic.foundation.paths.home import global_service_runtime
 from audiagentic.foundation.system.managed_service_contracts import (
@@ -65,7 +65,7 @@ class ManagedServiceStore:
         if not self.record_path.exists():
             raise validation_error(10, "managed-service record not found", path=str(self.record_path))
         try:
-            value = json.loads(self.record_path.read_text(encoding="utf-8"))
+            value = read_json_with_retry(self.record_path)
         except (OSError, json.JSONDecodeError) as exc:
             raise validation_error(11, "managed-service record is unreadable", path=str(self.record_path)) from exc
         if not isinstance(value, dict):
@@ -305,6 +305,35 @@ class ManagedServiceStore:
 
     def release_lease(self, lease_id: str, *, expected_epoch: str) -> ManagedServiceRecord:
         return self._finish_lease(lease_id, expected_epoch=expected_epoch, target="released")
+
+    def revoke_active_leases(self, *, expected_epoch: str) -> ManagedServiceRecord:
+        """Release every active lease during an explicitly forced shutdown.
+
+        A normal stop never calls this method.  It exists so a force-stop can
+        converge the durable owner record instead of leaving it permanently
+        draining behind leases whose clients cannot contact the stopped host.
+        """
+        with self._lock():
+            record = self._read_unlocked()
+            self._check_epoch(record, expected_epoch)
+            timestamp = self._clock()
+            normalized, normalized_changed = normalize_lease_history(
+                record.leases, current_time=timestamp
+            )
+            changed = False
+            leases: list[ClientLease] = []
+            for lease in normalized:
+                if lease.active:
+                    lease = replace(lease, state="released")
+                    changed = True
+                leases.append(lease)
+            retained, _ = normalize_lease_history(tuple(leases), current_time=timestamp)
+            if not changed and not normalized_changed:
+                return record
+            return self._write_unlocked(
+                replace(record, revision=record.revision + 1, updated_at=timestamp, leases=retained),
+                "lease.revoked-forced-stop",
+            )
 
     def _finish_lease(self, lease_id: str, *, expected_epoch: str, target: LeaseState) -> ManagedServiceRecord:
         with self._lock():

@@ -32,8 +32,8 @@ def test_dispatch_to_opencode(tmp_path: Path):
 
     materialize_provider_config(project_root, "opencode", HARNESS_CFG)
 
-    assert (project_root / ".opencode" / "config.json").exists()
-    assert "audiagentic" in (project_root / ".opencode" / "config.json").read_text()
+    assert (project_root / ".opencode" / "opencode.json").exists()
+    assert "audiagentic" in (project_root / ".opencode" / "opencode.json").read_text()
 
 
 def test_unknown_provider_raises(tmp_path: Path):

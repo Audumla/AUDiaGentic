@@ -7,6 +7,7 @@ tests/integration/providers/test_pi_acp_resume_live.py-style Docker tests
 (AS40/AS49's established pattern) — this file is the fast, deterministic
 unit layer for the mapping/threading logic itself.
 """
+
 from __future__ import annotations
 
 import time
@@ -31,46 +32,66 @@ def _frame(frame_type: str, **extra) -> JsonlTapFrame:
 
 # ── Frame mapper: closed vocabulary ─────────────────────────────────────────
 
+
 class TestMapPiRpcFrameToObservation:
     @pytest.mark.parametrize(
         "frame_type,expected_kind",
         [
             ("agent_start", TransportObservationKind.ACTIVITY),
-            ("message_update", TransportObservationKind.ACTIVITY),
+            ("message_update", TransportObservationKind.IN_PROGRESS),
             ("turn_end", TransportObservationKind.TERMINAL),
             ("agent_end", TransportObservationKind.TERMINAL),
         ],
     )
     def test_docker_proven_frame_types_mapped(self, frame_type, expected_kind):
         obs = map_pi_rpc_frame_to_observation(
-            _frame(frame_type), ag_session_id="s1", turn_id="t1", sequence=1,
+            _frame(frame_type),
+            ag_session_id="s1",
+            turn_id="t1",
+            sequence=1,
         )
         assert obs.kind == expected_kind
 
     @pytest.mark.parametrize(
         "frame_type",
-        ["tool_execution_start", "tool_execution_update", "tool_execution_end",
-         "compaction_start", "compaction_end", "queue_update", "auto_retry_start",
-         "extension_ui_request", "something_never_seen"],
+        [
+            "tool_execution_start",
+            "tool_execution_update",
+            "tool_execution_end",
+            "compaction_start",
+            "compaction_end",
+            "queue_update",
+            "auto_retry_start",
+            "extension_ui_request",
+            "something_never_seen",
+        ],
     )
     def test_unproven_frame_types_degrade_to_unknown(self, frame_type):
         """Source-documented but not transcript-proven this session — must
         NOT be claimed as a known kind (AS41's own conservative doctrine)."""
         obs = map_pi_rpc_frame_to_observation(
-            _frame(frame_type), ag_session_id="s1", turn_id="t1", sequence=1,
+            _frame(frame_type),
+            ag_session_id="s1",
+            turn_id="t1",
+            sequence=1,
         )
         assert obs.kind == TransportObservationKind.TRANSPORT_UNKNOWN
 
     def test_no_payload_leak_into_attributes(self):
         obs = map_pi_rpc_frame_to_observation(
             _frame("agent_start", secret_field="should-never-appear"),
-            ag_session_id="s1", turn_id="t1", sequence=1,
+            ag_session_id="s1",
+            turn_id="t1",
+            sequence=1,
         )
         assert obs.attributes == {}
 
     def test_correlation_fields_set_from_caller(self):
         obs = map_pi_rpc_frame_to_observation(
-            _frame("agent_start"), ag_session_id="my-session", turn_id="my-turn", sequence=7,
+            _frame("agent_start"),
+            ag_session_id="my-session",
+            turn_id="my-turn",
+            sequence=7,
         )
         assert obs.ag_session_id == "my-session"
         assert obs.turn_id == "my-turn"
@@ -83,6 +104,7 @@ class TestMapPiRpcFrameToObservation:
 
 
 # ── PiRpcTapObservationSource: threaded drain ───────────────────────────────
+
 
 class _FakeListener:
     def __init__(self):
@@ -128,7 +150,7 @@ class TestPiRpcTapObservationSource:
 
         assert [first.kind, second.kind, third.kind] == [
             TransportObservationKind.ACTIVITY,
-            TransportObservationKind.ACTIVITY,
+            TransportObservationKind.IN_PROGRESS,
             TransportObservationKind.TERMINAL,
         ]
         assert [first.sequence, second.sequence, third.sequence] == [1, 2, 3]
@@ -162,6 +184,7 @@ class TestPiRpcTapObservationSource:
 
 
 # ── PiRpcTapPreSpawnHook: no-op unless the launch enabled a tap ────────────
+
 
 class TestPiRpcTapPreSpawnHook:
     def test_no_op_when_no_tap_configured(self, monkeypatch):

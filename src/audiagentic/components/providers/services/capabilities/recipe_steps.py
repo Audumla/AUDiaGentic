@@ -270,7 +270,10 @@ _MANAGED_PLUGIN_SCHEMA: dict[str, Any] = {
         "entry-id": _ID,
         "ownership-scope": _ID,
         "mode": {"enum": ["apply", "prune", "status"]},
-        "options": {"type": "object", "additionalProperties": {"type": "string"}},
+        "options": {
+            "type": "object",
+            "additionalProperties": {"type": ["string", "number", "integer", "boolean", "null"]},
+        },
     },
 }
 
@@ -311,7 +314,10 @@ def _build_managed_plugin(data, params=None):
         provider_id=sub(data["provider"]),
         entry_id=sub(data["entry-id"]),
         ownership_scope=sub(data["ownership-scope"]),
-        options={str(k): str(sub(v)) for k, v in dict(data.get("options", {})).items()},
+        options={
+            str(k): sub(v) if isinstance(v, str) else v
+            for k, v in dict(data.get("options", {})).items()
+        },
         mode=data.get("mode", "apply"),
     )
 

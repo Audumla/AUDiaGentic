@@ -7,10 +7,10 @@ from typing import Any
 from audiagentic.components.memory import memory_api
 from audiagentic.foundation.mcp.component_server import (
     FastMCP,
-    log_tool_call,
     mcp_server,
     project_root_from_env,
     run_mcp_server,
+    tool_boundary,
 )
 
 logger = logging.getLogger(__name__)
@@ -20,12 +20,12 @@ def build_server() -> FastMCP:
     mcp = mcp_server(__name__)
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def memory_status() -> dict[str, Any]:
         return memory_api.memory_status(project_root_from_env()).to_dict()
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def memory_hindsight_status() -> dict[str, Any]:
         """Return per-provider Hindsight integration status.
 
@@ -35,12 +35,12 @@ def build_server() -> FastMCP:
         return memory_api.memory_hindsight_status(project_root_from_env())
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def memory_list_implementations() -> dict[str, Any]:
         return memory_api.memory_list_implementations(project_root_from_env())
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def memory_select_implementation(implementation_id: str) -> dict[str, Any]:
         """Switch the active memory implementation. Provider integration reconciles asynchronously."""
         root = project_root_from_env()
@@ -49,7 +49,7 @@ def build_server() -> FastMCP:
         return result
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def memory_get_config(implementation_id: str | None = None) -> dict[str, Any]:
         """Return resolved config plus the settable-option schema for an implementation.
 
@@ -62,7 +62,7 @@ def build_server() -> FastMCP:
         return memory_api.memory_get_config(project_root_from_env(), implementation_id)
 
     @mcp.tool()
-    @log_tool_call
+    @tool_boundary
     def memory_set_config(
         implementation_id: str,
         updates: dict[str, Any],

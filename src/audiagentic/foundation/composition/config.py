@@ -77,11 +77,17 @@ class CompositionConfig:
     bindings: dict[ServiceId, ImplementationId]
 
 
-def parse_composition_config(raw: Any) -> CompositionConfig:
+def parse_composition_config(raw: Any, *, namespace: str = CONFIG_NAMESPACE) -> CompositionConfig:
     """Validate a loaded mapping into a `CompositionConfig`.
 
     Separated from loading so the schema can be tested without touching disk,
     and so callers holding an already-loaded mapping do not re-read it.
+
+    `namespace` selects the top-level key a *second* composition root's config
+    is nested under (e.g. `gateway-service-composition` for the gateway-service
+    process root) -- distinct roots get distinct package-default/override files
+    via `load_composition_config`'s own `namespace` parameter, so this only
+    matters for a raw mapping passed directly in tests.
     """
     if raw is None:
         raw = {}
@@ -92,7 +98,7 @@ def parse_composition_config(raw: Any) -> CompositionConfig:
             actual_type=type(raw).__name__,
         )
 
-    section = raw.get(CONFIG_NAMESPACE, raw)
+    section = raw.get(namespace, raw)
     if not isinstance(section, dict):
         raise composition_error(
             1,
@@ -159,13 +165,19 @@ def load_composition_config(
     *,
     pkg_default_path: Path,
     project_root: Path | None = None,
+    namespace: str = CONFIG_NAMESPACE,
 ) -> CompositionConfig:
-    """Load and validate composition config across the three standard tiers."""
+    """Load and validate composition config across the three standard tiers.
+
+    `namespace` also selects the override filename (`<namespace>.yaml` under
+    the user-global and project-local config directories), so a second
+    composition root's config never collides with the primary root's.
+    """
     from audiagentic.foundation.config import load_layered_config
 
     raw = load_layered_config(
         pkg_default_path=pkg_default_path,
         project_root=project_root,
-        namespace=CONFIG_NAMESPACE,
+        namespace=namespace,
     )
-    return parse_composition_config(raw)
+    return parse_composition_config(raw, namespace=namespace)

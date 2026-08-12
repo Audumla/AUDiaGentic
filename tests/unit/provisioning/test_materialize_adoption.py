@@ -45,8 +45,7 @@ def _harness_cfg() -> dict:
 #   Provider surfaces: operate_provider_surfaces(root, "pi", mode="apply")
 #
 # OpenCode writes (via adapter install module):
-#   root/AGENTS.md                  — template + injections + provider surface managed blocks
-#   Provider surfaces: operate_provider_surfaces(root, "opencode", mode="apply")
+#   root/AGENTS.md                  — template + scoped provider surface blocks
 #
 # Model config (models.json / .opencode/config.json) goes through model-projection family.
 
@@ -75,8 +74,10 @@ def test_agents_md_template_layer_writes(tmp_path: Path) -> None:
     assert "Project instructions" in content
 
 
-def test_agents_md_surface_apply_is_called(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """operate_provider_surfaces is called during OpenCode materialize."""
+def test_agents_md_surface_apply_is_called_during_materialize(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Materialize applies provider surfaces after project-scope filtering."""
     project_root = tmp_path / "project"
     project_root.mkdir()
 
@@ -93,8 +94,7 @@ def test_agents_md_surface_apply_is_called(tmp_path: Path, monkeypatch: pytest.M
 
     providers_api.materialize_provider_config(project_root, "opencode", _harness_cfg())
 
-    assert len(calls) == 1
-    assert calls[0] == (str(project_root), "opencode", "apply")
+    assert calls == [(str(project_root), "opencode", "apply")]
 
 
 def test_agents_md_idempotent_after_repeated_materialize(tmp_path: Path) -> None:

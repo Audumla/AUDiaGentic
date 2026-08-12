@@ -10,8 +10,8 @@ from collections.abc import Iterable
 from pathlib import Path
 
 CANONICAL_SCHEMA_IDS = (
-    "agent-llm-record",
-    "agent-llm-session",
+    "agent-execution-record",
+    "agent-execution-session",
     "agent-output-event",
     "approval-request",
     "change-event",
@@ -35,6 +35,7 @@ CANONICAL_SCHEMA_IDS = (
     "provider-stream-manifest",
     "provider-session-input",
     "provider-session-manifest",
+    "resolved-execution-profile",
     "review-bundle",
     "review-report",
     "stage-result",

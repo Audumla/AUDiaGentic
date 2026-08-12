@@ -6,6 +6,7 @@ import pytest
 
 from audiagentic.components.agents.contracts.worker_protocol import (
     WORKER_PROTOCOL_VERSION,
+    WorkerActivityEnvelope,
     WorkerErrorEnvelope,
     WorkerExecuteEnvelope,
     WorkerExecutionIdentity,
@@ -79,6 +80,10 @@ def _execution_result(**overrides: object) -> dict[str, object]:
         (
             lambda root: WorkerHandshakeEnvelope(_identity(root), _process()),
             WorkerHandshakeEnvelope,
+        ),
+        (
+            lambda root: WorkerActivityEnvelope(_identity(root), _process(), 1, "worker-heartbeat"),
+            WorkerActivityEnvelope,
         ),
         (
             lambda root: WorkerResultEnvelope(_identity(root), _process(), _execution_result()),
@@ -174,6 +179,14 @@ def test_result_rejects_stale_attempt_identity(tmp_path: Path) -> None:
         WorkerResultEnvelope(
             _identity(tmp_path), _process(), _execution_result(**{"attempt-epoch": 1})
         )
+
+
+@pytest.mark.parametrize("sequence, source", [(0, "worker-heartbeat"), (1, "bad source"), (True, "worker-heartbeat")])
+def test_activity_envelope_requires_bounded_monotonic_safe_fields(
+    tmp_path: Path, sequence: object, source: str
+) -> None:
+    with pytest.raises(AudiaGenticError, match="VAL-AGW-074"):
+        WorkerActivityEnvelope(_identity(tmp_path), _process(), sequence, source)  # type: ignore[arg-type]
 
 
 def test_decoder_rejects_unknown_fields_and_versions(tmp_path: Path) -> None:

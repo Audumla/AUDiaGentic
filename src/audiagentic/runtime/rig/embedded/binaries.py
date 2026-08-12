@@ -207,6 +207,12 @@ def update_binaries(runtime_dir: Path | None = None, target_bin_dir: Path | None
             previous = target_dir.parent / f".{target_dir.name}.previous-{uuid.uuid4().hex}"
             if target_dir.exists():
                 os.replace(target_dir, previous)
+                # Windows cannot replace a non-empty directory atomically with
+                # os.replace. The prior payload is already protected by the
+                # rollback directory, so remove any directory entry left at
+                # the destination before promoting the verified stage.
+                if target_dir.exists():
+                    shutil.rmtree(target_dir)
             try:
                 os.replace(stage_dir, target_dir)
             except BaseException:

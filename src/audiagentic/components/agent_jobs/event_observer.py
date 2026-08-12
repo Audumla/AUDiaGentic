@@ -4,6 +4,7 @@ Subscribes to configured event trigger patterns on the foundation event bus
 and dispatches matching events through the gateway lifecycle.  Handler
 failures are dead-lettered and never propagate to other subscribers.
 """
+
 from __future__ import annotations
 
 import logging
@@ -58,14 +59,16 @@ _TRIGGER_AUDIT_PATH = Path(".audiagentic") / "runtime" / "agent-jobs" / "trigger
 # BU02: agent_jobs must not import agents modules (enforced by test_gateway_boundary.py).
 # The registry-equality test in tests/unit/jobs/test_gateway_topic_mirrors.py asserts
 # these mirror strings match the registered owner topics.
-GW_TOPIC_REQUESTED = "agents.llm.gateway.requested"  # owner: agents/agents_gateway_events
-GW_TOPIC_CANCEL_REQUESTED = "agents.llm.gateway.cancel-requested"  # owner: agents/agents_gateway_events
+GW_TOPIC_REQUESTED = "agents.execution.gateway.requested"  # owner: agents/agents_gateway_events
+GW_TOPIC_CANCEL_REQUESTED = (
+    "agents.execution.gateway.cancel-requested"  # owner: agents/agents_gateway_events
+)
 GW_OUTCOME_TOPICS = (
-    "agents.llm.completed",
-    "agents.llm.failed",
-    "agents.llm.rejected",
-    "agents.llm.cancelled",
-    "agents.llm.interrupted",
+    "agents.execution.completed",
+    "agents.execution.failed",
+    "agents.execution.rejected",
+    "agents.execution.cancelled",
+    "agents.execution.interrupted",
 )
 
 
@@ -192,10 +195,7 @@ class EventObserver:
         metadata = dict(metadata or {})
 
         # -- resolve correlation_id --------------------------------------------------
-        correlation_id = (
-            metadata.get("correlation-id")
-            or metadata.get("correlation_id")
-        )
+        correlation_id = metadata.get("correlation-id") or metadata.get("correlation_id")
         if not correlation_id:
             correlation_id = _get_ctx_correlation_id() or _new_correlation_id()
             metadata["correlation_id"] = correlation_id
@@ -360,7 +360,7 @@ class EventObserver:
             subject=subject_data,
         )
 
-        agent_profile_id = trigger_config.agent_profile_id or ""
+        execution_profile_id = trigger_config.execution_profile_id or ""
         provider_id = job_record.get("provider-id", "")
         model_id = job_record.get("model-id") or ""
 
@@ -374,7 +374,7 @@ class EventObserver:
             project_root=str(root),
             project_id=job_record.get("project-id", ""),
             job_id=job_record["job-id"],
-            agent_profile_id=agent_profile_id,
+            execution_profile_id=execution_profile_id,
             provider_id=provider_id,
             model_id=model_id,
             target=trigger_config.target,
@@ -391,8 +391,12 @@ class EventObserver:
             from audiagentic.foundation.io import atomic_write_json
 
             launch_path = (
-                root / ".audiagentic" / "runtime" / "jobs"
-                / job_record["job-id"] / "launch-request.json"
+                root
+                / ".audiagentic"
+                / "runtime"
+                / "jobs"
+                / job_record["job-id"]
+                / "launch-request.json"
             )
             if launch_path.exists():
                 import json as _json
@@ -417,7 +421,7 @@ class EventObserver:
             {
                 "project-root": str(root),
                 "prompt-body": prompt_body,
-                "agent-profile-id": trigger_config.agent_profile_id,
+                "execution-profile-id": trigger_config.execution_profile_id,
                 "source": f"event-trigger:{trigger_config.trigger_id}",
             },
             metadata=gateway_metadata,
@@ -489,13 +493,12 @@ class EventObserver:
     # ------------------------------------------------------------------
 
     GW_OUTCOME_MAP: dict[str, str] = {
-        "agents.llm.completed": "completed",
-        "agents.llm.failed": "failed",
-        "agents.llm.rejected": "failed",
-        "agents.llm.cancelled": "cancelled",
-        # C11: interrupted gateway request maps to failed job (SH12 N2 may
+        "agents.execution.completed": "completed",
+        "agents.execution.failed": "failed",
+        "agents.execution.rejected": "failed",
+        "agents.execution.cancelled": "cancelled",  # C11: interrupted gateway request maps to failed job (SH12 N2 may
         # later introduce a dedicated 'interrupted' job state).
-        "agents.llm.interrupted": "failed",
+        "agents.execution.interrupted": "failed",
     }
 
     def _handle_gateway_outcome(
@@ -553,8 +556,7 @@ class EventObserver:
                     code="CON-STATE-001",
                     kind="agent-jobs",
                     message=(
-                        "gateway outcome received for pre-dispatch job; "
-                        "refusing state propagation"
+                        "gateway outcome received for pre-dispatch job; refusing state propagation"
                     ),
                     details={
                         "job-id": job_id,
@@ -576,9 +578,7 @@ class EventObserver:
             # -- capture request-id from first lifecycle event ----------------------
             if request_id:
                 artifacts = record.get("artifacts") or []
-                has_request_artifact = any(
-                    a.get("kind") == "gateway-request" for a in artifacts
-                )
+                has_request_artifact = any(a.get("kind") == "gateway-request" for a in artifacts)
                 if not has_request_artifact:
                     append_gateway_artifact(root, job_id, request_id)
 
@@ -707,7 +707,7 @@ class EventObserver:
             "kind": tc.kind,
             "enabled": tc.enabled,
             "event-pattern": tc.event_pattern,
-            "agent-profile-id": tc.agent_profile_id,
+            "execution-profile-id": tc.execution_profile_id,
             "workflow-profile": tc.workflow_profile,
             "target": tc.target,
             "prompt-template": tc.prompt_template,

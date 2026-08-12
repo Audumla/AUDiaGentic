@@ -29,6 +29,7 @@ COPY src ./src
 COPY tests ./tests
 COPY docs/examples ./docs/examples
 COPY docs/reference ./docs/reference
+COPY docs/planning ./docs/planning
 COPY .audiagentic/config ./.audiagentic/config
 COPY .audiagentic/skills ./.audiagentic/skills
 COPY .gemini ./.gemini

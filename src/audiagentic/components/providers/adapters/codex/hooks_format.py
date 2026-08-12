@@ -8,6 +8,7 @@ under event keys; 'type' stays adapter-internal).
 Also carries the surgical [features] hooks upsert — enables the flag
 when writing entries.
 """
+
 from __future__ import annotations
 
 import json
@@ -169,8 +170,12 @@ def write_codex_hooks(path: Path, entries: dict[str, dict[str, Any]]) -> None:
     """Write one or more hook entries into hooks.json.
 
     Merges with existing content — foreign entries are preserved. Enables the
-    [features] hooks = true flag in ~/.codex/config.toml so Codex will
-    actually run hooks (decision (a) of MA26 step 3).
+    [features] hooks = true flag in config.toml so Codex will actually run
+    hooks (decision (a) of MA26 step 3).
+
+    The enable flag is written to project-local config when the hooks file
+    is under a .codex/ directory (project-local), falling back to global
+    ~/.codex/config.toml only for legacy home-scoped paths.
     """
     data = _load_hooks(path)
     hooks_section = data.setdefault("hooks", {})
@@ -196,7 +201,35 @@ def write_codex_hooks(path: Path, entries: dict[str, dict[str, Any]]) -> None:
         hooks_list.append({"hooks": [hook_entry]})
 
     _save_hooks(path, data)
-    _enable_codex_hooks(Path.home() / ".codex" / "config.toml")
+    _enable_codex_hooks_from_hooks_path(path)
+
+
+def resolve_codex_hooks_path(project_root: Path | None) -> Path:
+    """Resolve Codex hooks path.
+
+    Returns project-local <project>/.codex/hooks.json when project_root is
+    given, falling back to global ~/.codex/hooks.json.
+    """
+    if project_root is None:
+        return Path.home() / ".codex" / "hooks.json"
+    return project_root / ".codex" / "hooks.json"
+
+
+def _enable_codex_hooks_from_hooks_path(hooks_path: Path) -> None:
+    """Derive the config.toml path from a hooks.json location and enable hooks.
+
+    When hooks are at <project>/.codex/hooks.json, writes to
+    <project>/.codex/config.toml (project-local).  When hooks are at
+    ~/.codex/hooks.json, falls back to ~/.codex/config.toml (global).
+    This keeps the enable flag in the same scope as the hooks file.
+    """
+    # If the hooks file is directly under a .codex/ directory, assume that
+    # parent is the config root for both hooks and config.toml.
+    if hooks_path.parent.name == ".codex":
+        _enable_codex_hooks(hooks_path.parent / "config.toml")
+    else:
+        # Legacy fallback: global path.
+        _enable_codex_hooks(Path.home() / ".codex" / "config.toml")
 
 
 def remove_codex_hook(path: Path, name: str) -> bool:

@@ -4,6 +4,8 @@ import argparse
 import sys
 from pathlib import Path
 
+import pytest
+
 from audiagentic import launcher
 from audiagentic.foundation.components.loader import register_all_components
 from audiagentic.foundation.components.registry import get_mcp_server_declaration
@@ -11,6 +13,8 @@ from audiagentic.foundation.lifecycle.components import install_component
 from audiagentic.foundation.mcp import McpServerEntry
 from audiagentic.foundation.mcp.json_format import _resolve_command
 from audiagentic.foundation.mcp.projection import collect_component_mcp_entries
+
+pytestmark = pytest.mark.no_parallel
 
 
 def _collect(project_root: Path) -> dict[str, McpServerEntry]:
@@ -52,7 +56,7 @@ def test_agents_functional_servers_are_in_collected_mcp_entries(
     install_component("agents", project_root)
     entries = _collect(project_root)
 
-    assert {"ag-agents", "ag-agents-gateway"} <= set(entries)
+    assert {"ag-agents-gateway"} <= set(entries)
     assert "ag-agents-mgmt" not in entries
 
 

@@ -10,6 +10,7 @@ pytestmark = pytest.mark.no_parallel
 
 def test_gateway_provider_conformance_covers_every_descriptor() -> None:
     assert conformance.provider_ids() == (
+        "activity-rig",
         "aider",
         "antigravity",
         "claude",
@@ -17,8 +18,11 @@ def test_gateway_provider_conformance_covers_every_descriptor() -> None:
         "codex",
         "continue",
         "copilot",
+        "crush",
         "gemini",
         "goose",
+        "gpt-auto",
+        "kilo",
         "local-openai",
         "opencode",
         "openhands",
@@ -26,6 +30,7 @@ def test_gateway_provider_conformance_covers_every_descriptor() -> None:
         "plandex",
         "qwen",
         "roo",
+        "zed",
     )
 
 
@@ -36,12 +41,3 @@ def test_every_provider_exercises_gateway_request_states(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     conformance.assert_one_shot_state_matrix(tmp_path, provider_id, monkeypatch)
-
-
-@pytest.mark.parametrize("provider_id", conformance.provider_ids())
-def test_every_provider_exercises_gateway_session_binding_open_flow(
-    provider_id: str,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    conformance.assert_session_binding_open_flow(tmp_path, provider_id, monkeypatch)

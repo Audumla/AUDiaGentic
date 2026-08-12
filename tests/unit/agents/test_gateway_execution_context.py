@@ -26,7 +26,7 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 def _envelope(tmp_path: Path, **overrides) -> SubmissionEnvelope:
     values = {
         "project_root": str(tmp_path),
-        "agent_profile_id": "deep-coder-opencode",
+        "execution_profile_id": "deep-coder-opencode",
         "prompt_body": "implement the thing",
         "session": {"session_id": None, "keep_alive": False},
     }
@@ -37,7 +37,7 @@ def _envelope(tmp_path: Path, **overrides) -> SubmissionEnvelope:
 def _identity(**overrides) -> ManifestIdentity:
     values = {
         "project_root": "h:/projects/a",
-        "agent_profile_id": "deep-coder-opencode",
+        "execution_profile_id": "deep-coder-opencode",
         "provider_id": "opencode",
         "model_id": "brutus/coder-quality-mid",
         "provider_isolation_tier": "partial-isolation",
@@ -149,7 +149,7 @@ class TestCrossProjectIsolation:
             (root_a, "profile-a", "a" * 64),
             (root_b, "profile-b", "b" * 64),
         ):
-            envelope = _envelope(tmp_path, project_root=str(root), agent_profile_id=profile)
+            envelope = _envelope(tmp_path, project_root=str(root), execution_profile_id=profile)
             manifests.append(
                 build_manifest(
                     envelope,
@@ -157,7 +157,7 @@ class TestCrossProjectIsolation:
                     request_id="r",
                     resolved_at="2026-07-17T00:00:00Z",
                     canonical_root=envelope.validate(),
-                    agent_profile_id=profile,
+                    execution_profile_id=profile,
                     provider_id="opencode",
                     model_id="brutus/coder-quality-mid",
                     provider_isolation_tier="partial-isolation",
@@ -172,7 +172,7 @@ class TestCrossProjectIsolation:
     def test_identity_fields_are_a_closed_set(self) -> None:
         assert set(_identity().to_mapping()) == {
             "project_root",
-            "agent_profile_id",
+            "execution_profile_id",
             "provider_id",
             "model_id",
             "provider_isolation_tier",
@@ -194,7 +194,7 @@ class TestRedaction:
             request_id="r",
             resolved_at="2026-07-17T00:00:00Z",
             canonical_root=envelope.validate(),
-            agent_profile_id="deep-coder-opencode",
+            execution_profile_id="deep-coder-opencode",
             provider_id="opencode",
             model_id="brutus/coder-quality-mid",
             provider_isolation_tier="partial-isolation",
@@ -264,7 +264,7 @@ class TestVersionNegotiation:
             request_id="r",
             resolved_at="2026-07-17T00:00:00Z",
             canonical_root=envelope.validate(),
-            agent_profile_id="deep-coder-opencode",
+            execution_profile_id="deep-coder-opencode",
             provider_id="opencode",
             model_id="brutus/coder-quality-mid",
             provider_isolation_tier="partial-isolation",

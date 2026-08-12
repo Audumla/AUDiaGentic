@@ -92,6 +92,40 @@ def test_sync_ask_on_same_loop_does_not_block_or_elicit() -> None:
     assert not ctx.called.is_set()
 
 
+def test_current_backend_returns_none_when_unset() -> None:
+    assert interaction.current_backend() is None
+
+
+def test_current_backend_returns_the_set_backend() -> None:
+    backend = _Backend(AskResponse(status=ResponseStatus.ANSWERED, choice="yes"))
+    interaction.set_backend(backend)
+
+    assert interaction.current_backend() is backend
+
+
+def test_use_backend_is_active_inside_the_block_and_cleared_after() -> None:
+    backend = _Backend(AskResponse(status=ResponseStatus.ANSWERED, choice="yes"))
+
+    with interaction.use_backend(backend):
+        assert interaction.current_backend() is backend
+        response = interaction.ask("Reload?")
+        assert response.choice == "yes"
+
+    assert interaction.current_backend() is None
+
+
+def test_use_backend_clears_even_when_the_block_raises() -> None:
+    backend = _Backend(AskResponse(status=ResponseStatus.ANSWERED, choice="yes"))
+
+    try:
+        with interaction.use_backend(backend):
+            raise ValueError("boom")
+    except ValueError:
+        pass
+
+    assert interaction.current_backend() is None
+
+
 def test_sync_ask_from_worker_thread_submits_to_mcp_loop() -> None:
     ready = threading.Event()
     stop = threading.Event()

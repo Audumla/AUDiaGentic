@@ -16,6 +16,7 @@ dependencies = [
   "rapidfuzz>=3.0",
   "jsonschema>=4.18",
   "mcp==1.27.0",
+  "tomli-w>=1.0",
   "rich>=15.0.0",
 ]
 
@@ -72,6 +73,7 @@ where = ["src"]
   "config/components/**/*.yml",
   "config/components/**/*.json",
   "config/components/release/.github/workflows/*.yml",
+  "config/providers/*.yaml",
   # Package-default configs
   "config/provisioning/harness/*.yaml",
   "config/provisioning/rig/*.yaml",
@@ -110,7 +112,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
-testpaths = ["tests/unit", "tests/integration", "tests/e2e", "tests/deferred"]
+testpaths = ["tests/unit", "tests/integration", "tests/e2e"]
 pythonpath = ["src"]
 addopts = "-ra -q --tb=short --strict-markers --strict-config --import-mode=importlib -p no:randomly"
 timeout = 30

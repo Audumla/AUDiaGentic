@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from audiagentic.components.agents import agents_gateway_bootstrap as bootstrap
-from audiagentic.components.agents.agents_gateway_service_application import PROTOCOL_VERSION
+from audiagentic.components.agents.gateway.service import bootstrap as bootstrap
+from audiagentic.components.agents.gateway.service.application import PROTOCOL_VERSION
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 

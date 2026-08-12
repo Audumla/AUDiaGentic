@@ -1,12 +1,18 @@
-# Generic managed-plugin recipe for providers with plugin-entry capability.
+# OpenCode Hindsight plugin recipe, following
+# https://hindsight.vectorize.io/guides/2026/04/16/guide-opencode-memory-with-hindsight
 #
-# Register a single plugin entry (ag-hindsight) under the namespaced
-# ownership scope memory/hindsight/{server_name}.
+# The managed-config registry uses the package name as its stable identity;
+# it must not write AUDiaGentic's internal ``ag-hindsight`` label into
+# OpenCode's plugin array.
 recipe-id: hindsight-plugin
 recipe-version: "1.0.0"
 description: >-
   Managed plugin entry for a Hindsight-integrated provider.
 parameters:
+  - name: URL
+    required: true
+  - name: BANK_ID
+    required: false
   - name: PROVIDER
     required: true
   - name: OWNERSHIP_SCOPE
@@ -16,12 +22,20 @@ lifecycle:
     - type: managed-plugin
       id: plugin
       provider: "{PROVIDER}"
-      entry-id: ag-hindsight
+      entry-id: "@vectorize-io/opencode-hindsight"
       ownership-scope: "{OWNERSHIP_SCOPE}"
+      options:
+        hindsightApiUrl: "{URL}"
+        bankId: "{BANK_ID}"
+        autoRecall: true
+        autoRetain: true
+        recallBudget: mid
+        retainEveryNTurns: 3
+        debug: false
   uninstall-steps:
     - type: managed-plugin
       id: prune-plugin
       provider: "{PROVIDER}"
-      entry-id: ag-hindsight
+      entry-id: "@vectorize-io/opencode-hindsight"
       ownership-scope: "{OWNERSHIP_SCOPE}"
       mode: prune

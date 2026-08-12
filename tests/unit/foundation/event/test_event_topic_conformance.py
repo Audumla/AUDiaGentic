@@ -207,11 +207,11 @@ class TestTopicNamingGrammar:
 
         reg = TopicRegistry()
         spec1 = EventTopicSpec(owner="agents", description="gateway completed")
-        reg.register_topic("agents.llm.completed", spec1)
+        reg.register_topic("agents.execution.completed", spec1)
 
         spec2 = EventTopicSpec(owner="agent-jobs", description="different owner")
         with pytest.raises(Exception, match="CON-EVT-011|claimed by two owners"):
-            reg.register_topic("agents.llm.completed", spec2)
+            reg.register_topic("agents.execution.completed", spec2)
 
     def test_same_owner_overlay_allowed(self, tmp_path):  # noqa: ARG001
         from audiagentic.foundation.event.topic_registry import (
@@ -221,12 +221,12 @@ class TestTopicNamingGrammar:
 
         reg = TopicRegistry()
         spec1 = EventTopicSpec(owner="agents", description="v1")
-        reg.register_topic("agents.llm.completed", spec1)
+        reg.register_topic("agents.execution.completed", spec1)
 
         spec2 = EventTopicSpec(owner="agents", description="v2 updated")
         # Same-owner overlay is last-wins — no exception
-        reg.register_topic("agents.llm.completed", spec2)
-        resolved = reg.get_topic("agents.llm.completed")
+        reg.register_topic("agents.execution.completed", spec2)
+        resolved = reg.get_topic("agents.execution.completed")
         assert resolved is not None
         assert resolved.description == "v2 updated"
 
@@ -353,7 +353,7 @@ class TestAssertEventPayload:
         # Minimal required payload (as emitted when transport has no child_pid)
         assert_event_payload(
             "agents.session.opened",
-            {"session-id": "ses_1", "agent-profile-id": "profile-1", "state": "active"},
+            {"session-id": "ses_1", "execution-profile-id": "profile-1", "state": "active"},
         )
 
         # Full payload with AS17 adopted-process fields (as emitted in production)
@@ -361,7 +361,7 @@ class TestAssertEventPayload:
             "agents.session.opened",
             {
                 "session-id": "ses_1",
-                "agent-profile-id": "profile-1",
+                "execution-profile-id": "profile-1",
                 "state": "active",
                 "provider-id": "opencode",
                 "model-id": "m1",
@@ -394,13 +394,13 @@ class TestMirrorTopicEquality:
         """
         # Agent-owned canonical topics (registered in agents/events.yaml)
         owner_topics = {
-            "agents.llm.gateway.requested",
-            "agents.llm.gateway.cancel-requested",
-            "agents.llm.completed",
-            "agents.llm.failed",
-            "agents.llm.rejected",
-            "agents.llm.cancelled",
-            "agents.llm.interrupted",
+            "agents.execution.gateway.requested",
+            "agents.execution.gateway.cancel-requested",
+            "agents.execution.completed",
+            "agents.execution.failed",
+            "agents.execution.rejected",
+            "agents.execution.cancelled",
+            "agents.execution.interrupted",
         }
 
         # Agent-jobs mirror constants (defined in event_observer.py, control.py)
@@ -425,9 +425,9 @@ class TestMirrorTopicEquality:
             )
 
         # Mirror strings must equal the owner's registered topic exactly
-        assert GW_TOPIC_REQUESTED == "agents.llm.gateway.requested"
-        assert GW_TOPIC_CANCEL_REQUESTED == "agents.llm.gateway.cancel-requested"
-        assert CONTROL_CANCEL_MIRROR == "agents.llm.gateway.cancel-requested"
+        assert GW_TOPIC_REQUESTED == "agents.execution.gateway.requested"
+        assert GW_TOPIC_CANCEL_REQUESTED == "agents.execution.gateway.cancel-requested"
+        assert CONTROL_CANCEL_MIRROR == "agents.execution.gateway.cancel-requested"
 
         # Gateway outcome topics all registered
         for topic in GW_OUTCOME_TOPICS:

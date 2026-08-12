@@ -31,11 +31,11 @@ from pathlib import Path
 import pytest
 from tests.unit.agents.test_agents_gateway_sessions import _build_fake_prepared
 
-from audiagentic.components.agents.agents_event_topics import (
+from audiagentic.components.agents.gateway.event_topics import (
     TURN_MODEL_COMPLETED_TOPIC,
     TURN_MODEL_STARTED_TOPIC,
 )
-from audiagentic.components.agents.agents_gateway_sessions import SessionRuntime
+from audiagentic.components.agents.gateway.session.sessions import SessionRuntime
 from audiagentic.foundation.event import get_bus, reset_bus
 from audiagentic.foundation.transports import AcpLaunch
 from audiagentic.foundation.transports.acp import AcpAgentSessionTransport
@@ -69,10 +69,11 @@ def test_real_subprocess_flood_evicts_bounded_and_publishes_turn_events(tmp_path
     get_bus().subscribe(TURN_MODEL_STARTED_TOPIC, on_model_started)
     get_bus().subscribe(TURN_MODEL_COMPLETED_TOPIC, on_model_completed)
 
-    def prepare_real_subprocess(project_root, *, provider_id, surface_hint, model_id=None, **_kwargs):
+    def prepare_real_subprocess(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         transport = AcpAgentSessionTransport(
             AcpLaunch(executable=sys.executable, args=(_FAKE_AGENT,)),
             cwd=project_root,
+            ag_session_id=kwargs["ag_session_id"],
         )
         return _build_fake_prepared(transport)
 
@@ -80,7 +81,7 @@ def test_real_subprocess_flood_evicts_bounded_and_publishes_turn_events(tmp_path
     try:
         record = runtime.open_session(
             tmp_path,
-            agent_profile_id="profile-1",
+            execution_profile_id="profile-1",
             provider_id="opencode",
             model_id="m1",
         )

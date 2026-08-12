@@ -31,8 +31,7 @@ class TestProviderYamlLoader:
         """Load claude.yaml and verify all fields."""
         config_dir = get_providers_config_dir()
         claude_path = config_dir / "claude.yaml"
-        if not claude_path.exists():
-            pytest.skip("claude.yaml not yet created")
+        assert claude_path.exists(), f"missing provider descriptor: {claude_path}"
 
         descriptor = load_provider_descriptor(claude_path)
         assert isinstance(descriptor, ProviderDescriptor)
@@ -43,7 +42,10 @@ class TestProviderYamlLoader:
         assert descriptor.cli_install is not None
         assert descriptor.cli_install.executable == "claude"
         assert descriptor.mcp_config is not None
-        assert descriptor.mcp_config.config_path == "~/.claude/mcp.json"
+        # Project-local .mcp.json via a resolver callable, not a literal
+        # home-scoped path (CC55: Claude moved off ~/.claude/mcp.json).
+        assert callable(descriptor.mcp_config.config_path)
+        assert descriptor.mcp_config.config_path.__name__ == "resolve_claude_mcp_config_path"
         assert descriptor.mcp_config.reader is read_mcp_json
         assert descriptor.mcp_config.writer is write_mcp_json
         assert descriptor.mcp_config.remover is remove_mcp_json
@@ -56,8 +58,7 @@ class TestProviderYamlLoader:
         """Claude permissions match expected values."""
         config_dir = get_providers_config_dir()
         claude_path = config_dir / "claude.yaml"
-        if not claude_path.exists():
-            pytest.skip("claude.yaml not yet created")
+        assert claude_path.exists(), f"missing provider descriptor: {claude_path}"
 
         descriptor = load_provider_descriptor(claude_path)
         assert descriptor.permissions.can_write_files is True
@@ -69,20 +70,20 @@ class TestProviderYamlLoader:
         """Claude agent files are loaded correctly."""
         config_dir = get_providers_config_dir()
         claude_path = config_dir / "claude.yaml"
-        if not claude_path.exists():
-            pytest.skip("claude.yaml not yet created")
+        assert claude_path.exists(), f"missing provider descriptor: {claude_path}"
 
         descriptor = load_provider_descriptor(claude_path)
-        assert len(descriptor.agent_files) == 3
+        assert len(descriptor.agent_files) == 2
         assert descriptor.agent_files[0].rel_path == "CLAUDE.md"
         assert descriptor.agent_files[0].managed is True
+        assert descriptor.agent_files[1].rel_path == ".claude/settings.json"
+        assert descriptor.agent_files[1].managed is False
 
     def test_claude_host_capabilities(self) -> None:
         """Claude VS Code extension is loaded correctly."""
         config_dir = get_providers_config_dir()
         claude_path = config_dir / "claude.yaml"
-        if not claude_path.exists():
-            pytest.skip("claude.yaml not yet created")
+        assert claude_path.exists(), f"missing provider descriptor: {claude_path}"
 
         descriptor = load_provider_descriptor(claude_path)
         assert len(descriptor.host_capabilities) == 1
@@ -93,8 +94,7 @@ class TestProviderYamlLoader:
         """Claude fetch_catalog_fn resolves to callable."""
         config_dir = get_providers_config_dir()
         claude_path = config_dir / "claude.yaml"
-        if not claude_path.exists():
-            pytest.skip("claude.yaml not yet created")
+        assert claude_path.exists(), f"missing provider descriptor: {claude_path}"
 
         descriptor = load_provider_descriptor(claude_path)
         assert descriptor.fetch_catalog_fn is not None
@@ -104,8 +104,7 @@ class TestProviderYamlLoader:
         """Load pi.yaml and verify callable install/uninstall."""
         config_dir = get_providers_config_dir()
         pi_path = config_dir / "pi.yaml"
-        if not pi_path.exists():
-            pytest.skip("pi.yaml not yet created")
+        assert pi_path.exists(), f"missing provider descriptor: {pi_path}"
 
         descriptor = load_provider_descriptor(pi_path)
         assert descriptor.provider_id == "pi"
@@ -119,8 +118,7 @@ class TestProviderYamlLoader:
         """Pi install/uninstall steps are callable."""
         config_dir = get_providers_config_dir()
         pi_path = config_dir / "pi.yaml"
-        if not pi_path.exists():
-            pytest.skip("pi.yaml not yet created")
+        assert pi_path.exists(), f"missing provider descriptor: {pi_path}"
 
         descriptor = load_provider_descriptor(pi_path)
         from audiagentic.foundation.steps import CallableStep
@@ -196,7 +194,7 @@ class TestLoadProvidersFromDirectory:
                      # cross-provider Python list, no real descriptor at all).
                      "kilo", "zed", "crush",
                      # BR01: browser-driven ChatGPT provider descriptor.
-                     "gpt-auto"}
+                     "gpt-auto", "activity-rig"}
         loaded = set(providers)
         assert expected == loaded, f"Missing: {expected - loaded}, Extra: {loaded - expected}"
         for descriptor in providers.values():
@@ -371,3 +369,76 @@ class TestManagedConfigTransports:
                     if isinstance(mechanism, dict) and "remote" in mechanism:
                         offenders.append(f"{path.name}:{kind}")
         assert not offenders, f"stale `remote:` key still present in {offenders}"
+
+
+class TestLoaderResilience:
+    """CC56: one bad provider descriptor must not crash the whole loader."""
+
+    VALID_YAML = (
+        "provider_id: test-valid\n"
+        "display_name: Test Valid\n"
+        "execution_isolation_tier: no-isolation\n"
+    )
+    # Missing required `display_name` — triggers VAL-DESC-003.
+    INVALID_YAML = "provider_id: test-invalid\nexecution_isolation_tier: no-isolation\n"
+
+    def test_invalid_descriptor_is_skipped_not_fatal(self, tmp_path) -> None:
+        from audiagentic.components.providers.descriptors.loader import (
+            clear_load_errors,
+            get_load_errors,
+        )
+
+        (tmp_path / "valid.yaml").write_text(self.VALID_YAML, encoding="utf-8")
+        (tmp_path / "invalid.yaml").write_text(self.INVALID_YAML, encoding="utf-8")
+
+        clear_load_errors()
+        try:
+            providers = load_providers_from_directory(tmp_path)
+            assert "test-valid" in providers
+            assert "test-invalid" not in providers
+
+            errors = get_load_errors()
+            assert len(errors) == 1
+            path, exc = errors[0]
+            assert path.name == "invalid.yaml"
+            assert "display_name" in str(exc)
+        finally:
+            clear_load_errors()
+
+    def test_clear_load_errors_resets_the_collector(self, tmp_path) -> None:
+        from audiagentic.components.providers.descriptors.loader import (
+            clear_load_errors,
+            get_load_errors,
+        )
+
+        (tmp_path / "invalid.yaml").write_text(self.INVALID_YAML, encoding="utf-8")
+
+        clear_load_errors()
+        try:
+            load_providers_from_directory(tmp_path)
+            assert get_load_errors()
+            clear_load_errors()
+            assert get_load_errors() == []
+        finally:
+            clear_load_errors()
+
+    def test_provider_load_errors_surface_through_providers_api(self, tmp_path) -> None:
+        """The operator-facing accessor (consumed by gateway_overview) reports
+        skipped descriptors as (filename, truncated-message) pairs."""
+        from audiagentic.components.providers.descriptors.loader import (
+            clear_load_errors,
+        )
+        from audiagentic.components.providers.providers_api import (
+            get_provider_load_errors,
+        )
+
+        (tmp_path / "invalid.yaml").write_text(self.INVALID_YAML, encoding="utf-8")
+
+        clear_load_errors()
+        try:
+            load_providers_from_directory(tmp_path)
+            errors = get_provider_load_errors()
+            assert errors == [("invalid.yaml", errors[0][1])]
+            assert "display_name" in errors[0][1]
+        finally:
+            clear_load_errors()

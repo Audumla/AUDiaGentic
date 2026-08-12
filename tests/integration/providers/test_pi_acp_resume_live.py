@@ -163,9 +163,11 @@ def test_real_acp_agent_session_transport_resumes_after_real_process_death(
 
         async def _run() -> tuple[bool, int, str]:
             # ── Transport #1: real session/new + one real turn ──────────
-            transport_1 = AcpAgentSessionTransport(_build_launch(), cwd=project_root)
+            transport_1 = AcpAgentSessionTransport(
+                _build_launch(), cwd=project_root, ag_session_id="ag-pi-acp-resume"
+            )
             open_result = await transport_1.open()
-            provider_session_ref = open_result.ag_session_id
+            provider_session_ref = open_result.provider_session_ref.value
 
             events_1: list = []
 
@@ -187,7 +189,10 @@ def test_real_acp_agent_session_transport_resumes_after_real_process_death(
             # ── Transport #2: brand-new object AND brand-new process,
             # resuming the exact provider_session_ref from transport #1 ──
             transport_2 = AcpAgentSessionTransport(
-                _build_launch(), cwd=project_root, resume_provider_ref=provider_session_ref,
+                _build_launch(),
+                cwd=project_root,
+                ag_session_id="ag-pi-acp-resume",
+                resume_provider_ref=provider_session_ref,
             )
             await transport_2.open()
 

@@ -417,11 +417,13 @@ def test_real_pi_rpc_transcript_captures_tool_call_frame_types(
             # turn; 400 was proven too few empirically (this session, real
             # Docker run); generous bound so we get a conclusive result.
             prompt_resp = None
+            observed_messages: list[dict] = []
             for _ in range(4000):
                 line = proc.stdout.readline()
                 if not line:
                     break
                 message = json.loads(line)
+                observed_messages.append(message)
                 if message.get("id") == 3:
                     prompt_resp = message
                     break
@@ -431,12 +433,16 @@ def test_real_pi_rpc_transcript_captures_tool_call_frame_types(
                 # failure message is actionable instead of a bare "never
                 # resolved" -- this is the exact signal that was missing when
                 # the original run burned three Docker cycles blind.
-                exit_code = proc.poll()
+                try:
+                    exit_code = proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    exit_code = proc.poll()
                 stderr_text = b"".join(stderr_chunks).decode("utf-8", errors="replace")
                 pytest.fail(
                     f"session/prompt never resolved -- child EOF (exit_code={exit_code}).\n"
                     f"--- captured stderr (pi-acp + shim dump) ---\n{stderr_text}\n"
-                    f"--- end stderr ---"
+                    f"--- end stderr ---\n"
+                    f"last protocol messages: {json.dumps(observed_messages[-10:], default=str)}"
                 )
             assert "result" in prompt_resp, json.dumps(prompt_resp, indent=2)
         finally:

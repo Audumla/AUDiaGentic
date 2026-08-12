@@ -1,6 +1,6 @@
-# Agent LLM Gateway request state workflow. Loaded by agents_gateway_store.py
-# via the shared foundation.workflow.transitions primitives — mirrors the
-# pattern agent_jobs/workflows.yaml uses for job records, applied to the
+# Agent Execution Gateway request state workflow.
+# Loaded by gateway/store/_shared.py through the shared foundation.workflow
+# transitions primitives — mirrors the pattern agent_jobs/workflows.yaml uses
 # gateway's own (unrelated) request/result data shape.
 kinds:
   gateway-request:
@@ -8,7 +8,8 @@ kinds:
     workflows:
       standard:
         initial: queued
-        values: [queued, running, completed, failed, cancelled, rejected, interrupted]
+        values:
+          [queued, running, completed, failed, cancelled, rejected, interrupted]
         transitions:
           queued: [running, cancelled, rejected, interrupted]
           running: [completed, failed, cancelled, interrupted]
@@ -36,3 +37,21 @@ kinds:
           failed: []
         state-sets:
           terminal: [closed, expired, failed]
+  # SH24: durable gateway operation.  This deliberately models
+  # only the operation lifecycle; request/session lifecycle, evidence and
+  # per-target results remain separate contracts.
+  gateway-operation:
+    default-workflow: standard
+    workflows:
+      standard:
+        initial: accepted
+        values: [accepted, running, completed, failed]
+        transitions:
+          accepted: [running, failed]
+          running: [accepted, completed, failed]
+          completed: []
+          failed: []
+        state-sets:
+          dispatchable: [accepted]
+          active: [accepted, running]
+          terminal: [completed, failed]

@@ -36,6 +36,7 @@ Exit code is non-zero if any executed phase fails.
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -71,15 +72,16 @@ PACKAGING = Img("audia-packaging:latest", "Dockerfile.packaging", note="clean-ro
 
 # Recipe / mutating images — isolated, run real install recipes.
 RECIPE_IMAGES = [
-    Img("audia-provider-cli-test:latest", "Dockerfile.provider-cli-test", note="provider CLI provisioning recipe"),
     Img("audia-provider-cli-comprehensive:latest", "Dockerfile.provider-cli-comprehensive", note="provider CLI comprehensive recipe"),
     Img("audiagentic-provider-lifecycle-e2e:latest", "Dockerfile.provider-lifecycle-e2e", note="provider full lifecycle recipe"),
+    Img("audiagentic-consumer-pipeline:local", "Dockerfile.consumer-pipeline", note="consumer pipeline integration"),
     Img("audia-provider-lsp-e2e:latest", "Dockerfile.provider-lsp-e2e", note="provider LSP install recipe"),
     Img("audia-mcp-tools-e2e:latest", "Dockerfile.mcp-tools-e2e", note="LSP MCP tools (consumes baked servers)"),
     Img("audiagentic-gateway-crash-matrix:local", "Dockerfile.gateway-crash-matrix", note="SH07 real-subprocess crash/recovery matrix"),
     Img("audiagentic-gateway-opencode:local", "Dockerfile.gateway-opencode", note="real npm-CLI-provider gateway dispatch (dynamic discovery)"),
     Img("audiagentic-gateway-concurrency:local", "Dockerfile.gateway-concurrency", note="real concurrent gateway load + negative paths"),
     Img("audiagentic-gateway-pi-smoke:local", "Dockerfile.gateway-pi-smoke", note="SH16 real Pi CLI + embedded rig gateway dispatch"),
+    Img("audiagentic-gateway-session-orphan:local", "Dockerfile.gateway-session-orphan", note="AS91 real session orphan/reaper lifecycle"),
     Img("audiagentic-pi-rpc-tap-e2e:local", "Dockerfile.pi-rpc-tap-e2e", note="AS40 real pi-acp RPC tee shim, tapped conversational turn"),
     Img("audiagentic-pi-acp-resume-e2e:local", "Dockerfile.pi-acp-resume-e2e", note="AS49 real pi-acp session/load resume after process death"),
 ]
@@ -117,10 +119,15 @@ def docker_daemon_available() -> bool:
 
 def host_phase(extra: list[str]) -> int:
     """Run all non-Docker-daemon tests in parallel as one safe command."""
-    banner("HOST suite (parallel, -n auto --dist loadgroup)")
+    banner("HOST suite (parallel, capped xdist --dist loadgroup)")
+    # Four workers is the safe Windows default for this suite: the e2e CLI
+    # tests launch many subprocesses and eight workers can cause an xdist
+    # worker to be terminated by the OS near collection completion.  CI and
+    # faster machines can still opt into a different cap explicitly.
+    workers = os.environ.get("AUDIAGENTIC_XDIST_WORKERS", "4")
     cmd = [
         sys.executable, "-m", "pytest",
-        "-n", "auto", "--dist", "loadgroup",
+        "-n", workers, "--dist", "loadgroup",
         "-m", "not docker and not opt_in",  # exclude daemon-driven and explicit opt-in tests
         *extra,
     ]
@@ -161,6 +168,23 @@ def build_and_run(img: Img, failures: list[str]) -> None:
         failures.append(img.tag)
 
 
+def build_and_run_provider_cli_matrix(img: Img, failures: list[str]) -> None:
+    """Run provider install assertions in one fresh container per provider."""
+    banner(f"DOCKER: {img.tag}  (isolated provider matrix)")
+    if build_image(img) != 0:
+        failures.append(f"{img.tag}:build")
+        return
+    if run([
+        sys.executable,
+        "tests/dev/run_provider_cli_isolated.py",
+        "--image",
+        img.tag,
+        "--retries",
+        "0",
+    ]) != 0:
+        failures.append(f"{img.tag}:provider-matrix")
+
+
 def docker_phase(include_lsp_install: bool, *, include_host_docker_tests: bool) -> int:
     """Build the image set once and run the in-container suites.
 
@@ -177,7 +201,10 @@ def docker_phase(include_lsp_install: bool, *, include_host_docker_tests: bool) 
     build_and_run(SUITE, failures)
     build_and_run(PACKAGING, failures)
     for img in RECIPE_IMAGES:
-        build_and_run(img, failures)
+        if img.tag == "audia-provider-cli-comprehensive:latest":
+            build_and_run_provider_cli_matrix(img, failures)
+        else:
+            build_and_run(img, failures)
 
     if include_lsp_install:
         build_and_run(LSP_INSTALL, failures)

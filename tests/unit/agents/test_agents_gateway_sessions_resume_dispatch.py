@@ -24,15 +24,15 @@ from typing import Any
 
 import pytest
 
-from audiagentic.components.agents import agents_gateway_session_bindings as binding_store
-from audiagentic.components.agents import agents_gateway_sessions_store as session_store
-from audiagentic.components.agents.agents_gateway_session_resume import (
+from audiagentic.components.agents.gateway.session import bindings as binding_store
+from audiagentic.components.agents.gateway.session import sessions_store as session_store
+from audiagentic.components.agents.gateway.session.resume import (
     ERR_IDEMPOTENT_REPLAY_OF_FAILURE,
     ERR_SOURCE_NOT_TERMINAL,
     ERR_UNSUPPORTED_CAPABILITY,
     lookup_resume_attempt,
 )
-from audiagentic.components.agents.agents_gateway_sessions import SessionRuntime
+from audiagentic.components.agents.gateway.session.sessions import SessionRuntime
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.session_surface import PreparedSessionTransport
 
@@ -96,10 +96,11 @@ def _write_terminal_source_session(
     """Build+persist a source session record with a REAL (non-'unknown')
     binding, already terminal — the shape resume_session requires."""
     record = session_store.build_session_record(
-        agent_profile_id="profile-1",
+        execution_profile_id="profile-1",
         provider_id=_PROVIDER_ID,
         model_id="m1",
         provider_session_ref="source-provider-ref-1",
+        surface_id=_SURFACE_ID,
         idle_timeout_seconds=900,
         max_lifetime_seconds=14_400,
     )
@@ -132,8 +133,11 @@ class _Clock:
 
 
 def _make_runtime(*, resume_prepare=None) -> SessionRuntime:
-    def default_resume_prepare(project_root, *, provider_id, surface_hint, model_id=None, resume_provider_ref=None):
+    def default_resume_prepare(
+        project_root, *, provider_id, surface_hint, model_id=None, resume_provider_ref=None, **_ignored
+    ):
         transport = FakeAgentSessionTransport()
+        transport.ag_session_id = _ignored["ag_session_id"]
         if resume_provider_ref:
             transport.provider_session_ref = resume_provider_ref
         return _build_fake_prepared(transport)
@@ -145,6 +149,23 @@ def _make_runtime(*, resume_prepare=None) -> SessionRuntime:
 
 
 class TestResumeSuccess:
+    def test_resume_preserves_provider_neutral_binding_identity(self, tmp_path: Path):
+        source = _write_terminal_source_session(tmp_path)
+        runtime = _make_runtime()
+        try:
+            resumed = runtime.resume_session(
+                tmp_path,
+                source["session-id"],
+                control_id="ctrl-provider-neutral",
+                identity_context_fingerprint=_IDENTITY_FP,
+                execution_context_fingerprint=_EXECUTION_FP,
+            )
+            assert resumed["binding"]["provider-id"] == _PROVIDER_ID
+            assert resumed["binding"]["surface-id"] == _SURFACE_ID
+            assert resumed["binding"]["relation"] == "resumed-from"
+        finally:
+            runtime.shutdown()
+
     def test_resume_creates_new_generation_linked_to_source(self, tmp_path: Path):
         source = _write_terminal_source_session(tmp_path)
         runtime = _make_runtime()
@@ -172,10 +193,13 @@ class TestResumeSuccess:
         source = _write_terminal_source_session(tmp_path)
         call_count = 0
 
-        def counting_prepare(project_root, *, provider_id, surface_hint, model_id=None, resume_provider_ref=None):
+        def counting_prepare(
+            project_root, *, provider_id, surface_hint, model_id=None, resume_provider_ref=None, **_ignored
+        ):
             nonlocal call_count
             call_count += 1
             transport = FakeAgentSessionTransport()
+            transport.ag_session_id = _ignored["ag_session_id"]
             transport.provider_session_ref = resume_provider_ref or "x"
             return _build_fake_prepared(transport)
 
@@ -200,6 +224,21 @@ class TestResumeSuccess:
 
 
 class TestResumeRejections:
+    @pytest.mark.parametrize("surface_id", ["acp", "mcp-a2a"])
+    def test_provider_neutral_surface_resume_contract(self, tmp_path: Path, surface_id: str):
+        source = _write_terminal_source_session(tmp_path)
+        runtime = _make_runtime()
+        try:
+            resumed = runtime.resume_session(
+                tmp_path, source["session-id"], control_id=f"ctrl-{surface_id}",
+                identity_context_fingerprint=_IDENTITY_FP,
+                execution_context_fingerprint=_EXECUTION_FP,
+            )
+            assert resumed["binding"]["relation"] == "resumed-from"
+            assert resumed["binding"]["provider-id"] == _PROVIDER_ID
+        finally:
+            runtime.shutdown()
+
     def test_active_source_rejected(self, tmp_path: Path):
         source = _write_terminal_source_session(tmp_path, state="active")
         # Undo the terminal transition/retirement above for this one test —
@@ -219,8 +258,14 @@ class TestResumeRejections:
     def test_unsupported_transport_rejected_no_live_session(self, tmp_path: Path):
         source = _write_terminal_source_session(tmp_path)
 
-        def unsupported_prepare(project_root, *, provider_id, surface_hint, model_id=None, resume_provider_ref=None):
-            return PreparedSessionTransport(transport=None, surface=None, effective_provider_ref=None)
+        def unsupported_prepare(
+            project_root, *, provider_id, surface_hint, model_id=None, resume_provider_ref=None, **_ignored
+        ):
+            return PreparedSessionTransport(  # type: ignore[arg-type]
+                transport=None,
+                surface=None,  # type: ignore[arg-type]
+                effective_provider_ref=None,  # type: ignore[arg-type]
+            )
 
         runtime = _make_runtime(resume_prepare=unsupported_prepare)
         try:

@@ -19,7 +19,7 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 def _setup_project(tmp_path: Path) -> Path:
     project_root = tmp_path / "project"
     config_dir = project_root / ".audiagentic" / "config"
-    (config_dir / "runtime").mkdir(parents=True)
+    (config_dir / "providers").mkdir(parents=True)
     (config_dir / "project.yaml").write_text(
         "\n".join(
             [
@@ -31,16 +31,12 @@ def _setup_project(tmp_path: Path) -> Path:
         ),
         encoding="utf-8",
     )
-    (config_dir / "runtime" / "providers.yaml").write_text(
+    (config_dir / "providers" / "codex.yaml").write_text(
         "\n".join(
             [
-                "contract-version: v1",
-                "providers:",
-                "  codex:",
-                "    enabled: true",
-                "    install-mode: external-configured",
-                "    access-mode: cli",
-                "    default-model: gpt-5.4-mini",
+                "install-mode: external-configured",
+                "access-mode: cli",
+                "default-model: gpt-5.4-mini",
             ]
         ),
         encoding="utf-8",
@@ -60,7 +56,7 @@ def _request(overrides: dict | None = None) -> dict:
             "model-id": None,
             "model-alias": None,
         },
-        "tag": "ag-implement",
+        "tag": "adhoc",
         "target": {"kind": "packet", "packet-id": "PKT-1"},
         "workflow-profile": "standard",
         "prompt-body": "Continue implementing the packet.\n",
@@ -96,9 +92,9 @@ class TestSchemaXor:
         del request["prompt-body"]
         assert validate_prompt_launch_request(request) != []
 
-    def test_agent_profile_id_and_context_accepted(self) -> None:
+    def test_execution_profile_id_and_context_accepted(self) -> None:
         request = _request(
-            {"agent-profile-id": "codex-default", "context": {"anything": {"goes": 1}}}
+            {"execution-profile-id": "codex-default", "context": {"anything": {"goes": 1}}}
         )
         assert validate_prompt_launch_request(request) == []
 

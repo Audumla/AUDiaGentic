@@ -11,10 +11,12 @@ import threading
 from pathlib import Path
 from types import SimpleNamespace
 
-from audiagentic.components.agents import agents_gateway_api as gateway
-from audiagentic.components.agents import agents_gateway_sessions_store as session_store
-from audiagentic.components.agents.agents_api import create_profile
-from audiagentic.components.agents.agents_terminal_quality import (
+from audiagentic.components.agents.gateway import api as gateway
+from audiagentic.components.agents.gateway.session import sessions_store as session_store
+from audiagentic.components.agents.models.execution_profile_api import (
+    create_execution_profile,
+)
+from audiagentic.components.agents.status.terminal_quality import (
     CLASSIFIER_VERSION,
     TerminalQualityLabel,
 )
@@ -38,10 +40,10 @@ _FORBIDDEN_EVIDENCE_KEYS = {
 
 
 def _make_profile(project_root: Path, profile_id: str, provider_id: str, **params) -> None:
-    create_profile(project_root, {
+    create_execution_profile(project_root, {
         "profile_id": profile_id,
         "provider_id": provider_id,
-        "model_id": "gpt-4o",
+        "instances": ["gpt-4o"],
         "is_default": True,
         "params": params,
     })
@@ -224,11 +226,11 @@ class TestTerminalQualityInStatus:
             })
 
         monkeypatch.setattr(
-            "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+            "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
             fake_execute_provider,
         )
 
-        result = gateway.run_llm_request(tmp_path, prompt_body="hi")
+        result = gateway.run_execution_request(tmp_path, prompt_body="hi")
         assert result["state"] == "completed"
 
         status = gateway.request_runtime_status(tmp_path, result["request-id"])
@@ -255,11 +257,11 @@ class TestTerminalQualityInStatus:
             })
 
         monkeypatch.setattr(
-            "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+            "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
             slow_execute_provider,
         )
 
-        submitted = gateway.submit_llm_request(tmp_path, prompt_body="hi")
+        submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
         status = gateway.request_runtime_status(tmp_path, submitted["request-id"])
 
         assert "terminal-quality" not in status, (
@@ -267,7 +269,7 @@ class TestTerminalQualityInStatus:
         )
 
         hold.set()
-        gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=5)
+        gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=5)
 
     def test_terminal_quality_sh07_shape(self, tmp_path: Path, monkeypatch):
         """SH07 incident shape: completed but output ends mid-progress."""
@@ -286,11 +288,11 @@ class TestTerminalQualityInStatus:
             })
 
         monkeypatch.setattr(
-            "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+            "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
             fake_execute_provider,
         )
 
-        result = gateway.run_llm_request(tmp_path, prompt_body="hi")
+        result = gateway.run_execution_request(tmp_path, prompt_body="hi")
         assert result["state"] == "completed"
 
         status = gateway.request_runtime_status(tmp_path, result["request-id"])
@@ -318,11 +320,11 @@ class TestTerminalQualityInStatus:
             })
 
         monkeypatch.setattr(
-            "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+            "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
             fake_execute_provider,
         )
 
-        result = gateway.run_llm_request(tmp_path, prompt_body="SECRET PROMPT")
+        result = gateway.run_execution_request(tmp_path, prompt_body="SECRET PROMPT")
         assert result["state"] == "completed"
 
         status = gateway.request_runtime_status(tmp_path, result["request-id"])
@@ -348,11 +350,11 @@ class TestTerminalQualityInStatus:
             raise AudiaGenticError(code="VAL-FAKE-001", kind="providers", message="broke")
 
         monkeypatch.setattr(
-            "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+            "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
             failing_execute_provider,
         )
 
-        result = gateway.run_llm_request(tmp_path, prompt_body="hi")
+        result = gateway.run_execution_request(tmp_path, prompt_body="hi")
         assert result["state"] == "failed"
 
         status = gateway.request_runtime_status(tmp_path, result["request-id"])
@@ -360,7 +362,7 @@ class TestTerminalQualityInStatus:
 
 
 # ===========================================================================
-# Terminal-quality in wait_llm_request (AS36 step 5b)
+# Terminal-quality in wait_execution_request (AS36 step 5b)
 # ===========================================================================
 
 class TestTerminalQualityInWait:
@@ -378,16 +380,16 @@ class TestTerminalQualityInWait:
             })
 
         monkeypatch.setattr(
-            "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+            "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
             fake_execute_provider,
         )
 
-        submitted = gateway.submit_llm_request(tmp_path, prompt_body="hi")
-        result = gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=10)
+        submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
+        result = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=10)
 
         assert result["state"] == "completed"
         assert "terminal-quality" in result, (
-            "wait_llm_request should include terminal-quality for terminal results"
+            "wait_execution_request should include terminal-quality for terminal results"
         )
         assert result["terminal-quality"]["label"] == TerminalQualityLabel.CLEAN.value
 
@@ -406,12 +408,12 @@ class TestTerminalQualityInWait:
             })
 
         monkeypatch.setattr(
-            "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+            "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
             slow_execute_provider,
         )
 
-        submitted = gateway.submit_llm_request(tmp_path, prompt_body="hi")
-        result = gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=0.2)
+        submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
+        result = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=0.2)
 
         assert result.get("wait-timeout") is True
         assert "terminal-quality" not in result, (
@@ -419,7 +421,7 @@ class TestTerminalQualityInWait:
         )
 
         hold.set()
-        gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=5)
+        gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=5)
 
     def test_terminal_quality_in_wait_sh07_shape(self, tmp_path: Path, monkeypatch):
         """SH07 shape: completed but output ends mid-progress — should be suspicious."""
@@ -438,12 +440,12 @@ class TestTerminalQualityInWait:
             })
 
         monkeypatch.setattr(
-            "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+            "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
             fake_execute_provider,
         )
 
-        submitted = gateway.submit_llm_request(tmp_path, prompt_body="hi")
-        result = gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=10)
+        submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
+        result = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=10)
 
         assert result["state"] == "completed"
         assert "terminal-quality" in result
@@ -466,12 +468,12 @@ class TestTerminalQualityInWait:
             })
 
         monkeypatch.setattr(
-            "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+            "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
             fake_execute_provider,
         )
 
-        submitted = gateway.submit_llm_request(tmp_path, prompt_body="hi")
-        result = gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=10)
+        submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
+        result = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=10)
 
         assert result["state"] == "completed"
         assert "terminal-quality" in result

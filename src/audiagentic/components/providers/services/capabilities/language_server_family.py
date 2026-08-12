@@ -16,7 +16,14 @@ from audiagentic.foundation.toolchains.config.managed_config import (
     resolve_managed_config_path,
 )
 
-_SUPPORTED_MODES = frozenset({"apply", "prune", "status"})
+FAMILY_ID = "language-server-projection"
+
+
+def _family_declaration():
+    """Resolve the language-server-projection family declaration from config."""
+    from audiagentic.components.providers.descriptors.capability_catalogue import get_catalogue
+
+    return get_catalogue().families[FAMILY_ID]
 
 
 def _result(**updates: Any) -> LanguageServerProjectionResult:
@@ -39,7 +46,7 @@ def manage_language_servers(
         or descriptor.automation_capability("language-server-projection") is None
     ):
         return _result(provider_id=provider_id, ok=False, supported=False, error_code="RES-PREC-001")
-    if mode not in _SUPPORTED_MODES:
+    if mode not in _family_declaration().supported_modes:
         return _result(provider_id=provider_id, ok=False, error_code="CON-PREC-002")
 
     spec = descriptor.language_servers_config

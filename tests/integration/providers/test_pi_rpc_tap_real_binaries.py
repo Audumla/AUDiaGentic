@@ -193,3 +193,136 @@ def test_two_simultaneous_real_sessions_do_not_cross_contaminate(tmp_path: Path)
     assert ids_a, "session A tap captured no sessionId-bearing frames"
     assert ids_b, "session B tap captured no sessionId-bearing frames"
     assert ids_a.isdisjoint(ids_b), f"cross-contamination: shared session ids {ids_a & ids_b}"
+
+
+_RIG_BASE_URL = os.environ.get("AUDIAGENTIC_TEST_RIG_URL", "http://127.0.0.1:42001/v1")
+_RIG_MODEL_ID = "qwen3.5-2b"
+_RIG_PROMPT_TEXT = "Reply with exactly: OK"
+
+
+def _rig_reachable(base_url: str) -> bool:
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(base_url.rstrip("/") + "/models", timeout=2):
+            return True
+    except OSError:
+        return False
+
+
+def _seed_isolated_rig_model(agent_dir: Path, base_url: str, model_id: str) -> None:
+    """Seed an isolated PI_CODING_AGENT_DIR with one model pointing at a real
+    local rig, using the same write_pi_models the model-management API uses
+    to materialize pi's config — hermetic (tmp_path-scoped), no host mutation.
+    """
+    from audiagentic.components.providers.adapters.pi.model_config import write_pi_models
+
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    write_pi_models(
+        agent_dir / "models.json",
+        {
+            "AUDiaGentic Embedded Rig": {
+                "provider_id": "audiagentic",
+                "baseUrl": base_url,
+                "api": "openai-completions",
+                "apiKey": "dummy",
+                "compat": {"supportsDeveloperRole": False, "supportsReasoningEffort": False},
+                "model_id": model_id,
+                "visible_name": "AUDiaGentic Embedded Rig",
+                "contextWindow": 262144,
+                "maxTokens": 4096,
+            }
+        },
+    )
+
+
+@pytest.mark.timeout(120)
+@pytest.mark.skipif(not _rig_reachable(_RIG_BASE_URL), reason=f"no rig reachable at {_RIG_BASE_URL}")
+def test_real_pi_acp_drives_a_full_prompt_turn_against_local_rig_on_windows(tmp_path: Path) -> None:
+    """Closes the windows-amd64 evidence gap pi.yaml's harness_observability
+    block documents for pi-community-acp: the Docker E2E test
+    (test_pi_rpc_tap_transcript_e2e.py) is the only proof of a real,
+    model-thinking-producing prompt turn, and it only runs on linux-amd64.
+    This is that same proof, native (non-Docker) on Windows — real pi-acp
+    bridge, real pi binary, a real locally-hosted OpenAI-compatible model
+    (the embedded rig), session/new through session/prompt to a real
+    end_turn completion. Host-safe: skipped outright if no rig is running,
+    never touches the host's own ~/.pi config (isolated PI_CODING_AGENT_DIR
+    seeded via write_pi_models, the same function the model-management API
+    uses to materialize provider config).
+    """
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    runtime_root = tmp_path / "runtime"
+    launch = pi_acp.build_acp_launch(project_root, request_runtime_root=runtime_root)
+    _seed_isolated_rig_model(
+        Path(launch.environment["PI_CODING_AGENT_DIR"]), _RIG_BASE_URL, _RIG_MODEL_ID
+    )
+
+    env = dict(os.environ)
+    env.update(launch.environment)
+    proc = subprocess.Popen(
+        [launch.executable, *launch.args],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+    )
+    threading.Thread(target=lambda: proc.stderr.read(), daemon=True).start()
+
+    try:
+        _send(
+            proc,
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {"protocolVersion": 1, "clientCapabilities": {}},
+            },
+        )
+        init_resp = json.loads(proc.stdout.readline())
+        assert init_resp["result"]["agentInfo"]["name"] == "pi-acp"
+
+        _send(
+            proc,
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "session/new",
+                "params": {"cwd": str(project_root.resolve()), "mcpServers": []},
+            },
+        )
+        session_resp = json.loads(proc.stdout.readline())
+        assert "result" in session_resp, json.dumps(session_resp, indent=2)
+        session_id = session_resp["result"]["sessionId"]
+
+        _send(
+            proc,
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "session/prompt",
+                "params": {
+                    "sessionId": session_id,
+                    "prompt": [{"type": "text", "text": _RIG_PROMPT_TEXT}],
+                },
+            },
+        )
+        prompt_resp = None
+        for _ in range(200):
+            line = proc.stdout.readline()
+            if not line:
+                break
+            message = json.loads(line)
+            if message.get("id") == 3:
+                prompt_resp = message
+                break
+        assert prompt_resp is not None, "session/prompt never resolved"
+        assert "result" in prompt_resp, json.dumps(prompt_resp, indent=2)
+        assert prompt_resp["result"].get("stopReason") == "end_turn"
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()

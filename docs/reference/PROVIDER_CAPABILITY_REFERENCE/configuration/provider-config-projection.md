@@ -85,6 +85,29 @@ Only OpenCode and Kilo Code support `OPENCODE_CONFIG_CONTENT` / `KILO_CONFIG_CON
 
 ## Implications for AUDiaGentic
 
+### AUDiaGentic-owned provider settings files
+
+Each provider has one complete project-owned settings document:
+
+```text
+.audiagentic/config/providers/<provider-id>.yaml
+```
+
+The file contains shared launch fields and an optional provider-owned
+`settings` mapping:
+
+```yaml
+install-mode: external-configured
+access-mode: none
+settings:
+  browser_port: 9224
+```
+
+The providers component discovers these files and passes the merged provider
+mapping to execution. The reconciliation policy is stored separately in
+`.audiagentic/config/provider-policy.yaml`; there is no shared provider
+registry file. Provider adapters explicitly consume their `settings` keys.
+
 - **OpenCode and Kilo Code** provide the best isolation story: `OPENCODE_CONFIG_CONTENT` / `KILO_CONFIG_CONTENT` allows AUDiaGentic to launch a provider instance with a completely independent config without any filesystem interaction.
 - **Qwen Code**'s `--settings <path>` is useful for project-level isolation but requires writing to disk.
 - **Codex**'s `-c` flag is limited: even when pointing to a different file, `model_providers` cannot be overridden in project-local config — custom providers must live in the user-level config.

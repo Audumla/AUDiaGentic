@@ -79,6 +79,20 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
     except Exception:
         logger.warning("Auto-update check failed", exc_info=True)
 
+    # Resolve the reconciliation-policy every launch (cheap: one config read
+    # plus CLI probes only for undecided providers) — independent of the
+    # heavier auto-enable/disable stamp gate below, so allowlist/prompt mode
+    # catches a newly-installed CLI without the user needing to know about
+    # the stamp file or AUDIAGENTIC_RECONCILE_PROVIDERS_ON_LAUNCH.
+    try:
+        from audiagentic.components.providers.services.lifecycle.lifecycle import (
+            resolve_reconciliation_policy,
+        )
+
+        resolve_reconciliation_policy(project_root)
+    except Exception:
+        logger.warning("Reconciliation-policy resolution failed", exc_info=True)
+
     # Sync provider enablement with actual host state on first run only.
     # Subsequent reconciliation is internal-only (no public/MCP surface) —
     # rerun by removing the launch-reconciled stamp or setting
@@ -92,7 +106,7 @@ def _cmd_launch(project_root: Path, args: list[str], runner_params: RunnerParams
             _status("reconciling providers...")
 
             def _on_provider(provider_id: str, status: str) -> None:
-                if status in ("enabled", "disabled"):
+                if status in ("enabled", "disabled", "skipped"):
                     _status(f"  {provider_id}: {status}")
 
             reconcile_all_providers(project_root=project_root, on_provider=_on_provider)

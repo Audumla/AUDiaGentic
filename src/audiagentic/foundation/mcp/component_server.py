@@ -3,12 +3,13 @@
 Provides the FastMCP factory (name resolved from component config),
 async output bridging so component MCP servers can stream progress and
 log events without coupling to the transport layer, and the
-log_tool_call decorator for automatic tool call tracing.
+tool_boundary decorator for tool call tracing and error redaction.
 """
 from __future__ import annotations
 
 import asyncio
 import functools
+import json
 import logging
 import queue
 import time
@@ -30,10 +31,12 @@ from audiagentic.foundation.logging.redaction import (
 
 try:
     from mcp.server.fastmcp import FastMCP
+    from mcp.server.fastmcp.exceptions import ToolError
     from mcp.server.fastmcp.server import Context
 except ImportError:  # pragma: no cover
     FastMCP = Any  # type: ignore[misc, assignment]
     Context = Any  # type: ignore[misc, assignment]
+    ToolError = RuntimeError  # type: ignore[misc, assignment]
 
 T = TypeVar("T")
 logger = logging.getLogger(__name__)
@@ -98,50 +101,59 @@ def tool_parameter_spec(decl: Any, name: str) -> dict[str, Any]:
     return schema
 
 
-def report_error(
-    label: str, tool_name: str, exc: Exception, logger: logging.Logger
-) -> dict[str, Any]:
-    """Return a standardized MCP error envelope, logging the failure.
+def _tool_error_text(exc: Exception, tool_name: str, log: logging.Logger) -> str:
+    """Redact an exception into client-safe ToolError text.
 
-    Egress boundary: sanitises all string values in the envelope and then
-    verifies no secret-shaped content remains. If any value still contains
-    a redaction-match pattern, the envelope is collapsed to a generic error
-    rather than leaking partial secrets.
+    Operators get the full structured envelope in the log record; callers get
+    code + redacted message + resolution. Fail-closed: if secret-shaped
+    content survives redaction, the text collapses to a generic failure.
     """
-    logger.exception("%s tool failed: %s", label, tool_name)
     if isinstance(exc, AudiaGenticError):
         envelope = redact_error_envelope(exc)
-        envelope["tool"] = tool_name
+        log.error("tool failed", extra={"tool": tool_name, "error": envelope})
+        parts = [f"{envelope['error-code']}: {redact_text(envelope['message'])}"]
+        resolution = envelope.get("resolution")
+        if resolution:
+            parts.append(f"resolution: {resolution}")
+        details = envelope.get("details") or {}
+        if details:
+            parts.append(f"details: {json.dumps(details, sort_keys=True)}")
+        text = "\n".join(parts)
     else:
-        envelope = {"ok": False, "error": redact_text(str(exc)), "tool": tool_name}
+        text = redact_text(str(exc))
+        log.error("tool failed", extra={"tool": tool_name}, exc_info=True)
 
-    # Fail-closed: if any string value survives with secret-shaped content,
-    # collapse to a generic error to prevent leakage. The key-value pattern
-    # (api_key/token/secret/password) is already handled by redact_text which
-    # replaces the value with [REDACTED], so we skip it here.
+    # Fail-closed: if any secret-shaped content survives, collapse to a
+    # generic error rather than leaking partial secrets. The key-value
+    # pattern (api_key/token/secret/password) is already handled by
+    # redact_text, which replaces the value with [REDACTED], so skip it here.
     for pattern in DEFAULT_REDACT_PATTERNS:
         if pattern.pattern.startswith(r"(https?://"):
             continue  # URL-credential patterns have special replacement
         if r"api[_-]?key|token|secret|password" in pattern.pattern:
             continue  # key-value pattern already redacted by redact_text
-        for val in envelope.values():
-            if isinstance(val, str) and pattern.search(val):
-                return {"ok": False, "error": "tool failed", "tool": tool_name}
-    return envelope
+        if pattern.search(text):
+            return "tool failed"
+    return text
 
 
-def log_tool_call(func: Callable) -> Callable:
-    """Decorator that adds entry/exit/error logging to an MCP tool function.
+def tool_boundary(func: Callable) -> Callable:
+    """Adapter boundary for an MCP tool: trace the call, redact and translate errors.
 
-    Stacking order — @mcp.tool() must be outermost, @log_tool_call innermost:
+    Stacking order — @mcp.tool() must be outermost, @tool_boundary innermost:
 
         @mcp.tool()
-        @log_tool_call
+        @tool_boundary
         def my_tool(...): ...
 
-    Logs tool name + correlation ID at DEBUG on entry; duration_ms at INFO on
-    success; full traceback at ERROR on failure. Args are never logged —
+    Logs tool name at DEBUG on entry and duration_ms at INFO on success. On
+    failure, raises ToolError with redacted, client-safe text and logs the
+    full structured envelope at ERROR for operators. Args are never logged —
     they may contain secrets, API keys, or user PII (security invariant).
+
+    Tools return domain data or raise. A tool must never return an
+    error-shaped dict: the declared return type describes every value the
+    tool can produce, which is what makes its outputSchema honest.
     """
     if asyncio.iscoroutinefunction(func):
         @functools.wraps(func)
@@ -153,21 +165,16 @@ def log_tool_call(func: Callable) -> Callable:
             t0 = time.monotonic()
             try:
                 result = await func(*args, **kwargs)
-                logger.info(
-                    "tool call done",
-                    extra={
-                        "tool": func.__name__,
-                        "duration_ms": int((time.monotonic() - t0) * 1000),
-                    },
-                )
-                return result
-            except Exception:
-                logger.error(
-                    "tool call failed",
-                    extra={"tool": func.__name__},
-                    exc_info=True,
-                )
-                raise
+            except Exception as exc:
+                raise ToolError(_tool_error_text(exc, func.__name__, logger)) from exc
+            logger.info(
+                "tool call done",
+                extra={
+                    "tool": func.__name__,
+                    "duration_ms": int((time.monotonic() - t0) * 1000),
+                },
+            )
+            return result
         return _async_wrapper
 
     @functools.wraps(func)
@@ -179,21 +186,16 @@ def log_tool_call(func: Callable) -> Callable:
         t0 = time.monotonic()
         try:
             result = func(*args, **kwargs)
-            logger.info(
-                "tool call done",
-                extra={
-                    "tool": func.__name__,
-                    "duration_ms": int((time.monotonic() - t0) * 1000),
-                },
-            )
-            return result
-        except Exception:
-            logger.error(
-                "tool call failed",
-                extra={"tool": func.__name__},
-                exc_info=True,
-            )
-            raise
+        except Exception as exc:
+            raise ToolError(_tool_error_text(exc, func.__name__, logger)) from exc
+        logger.info(
+            "tool call done",
+            extra={
+                "tool": func.__name__,
+                "duration_ms": int((time.monotonic() - t0) * 1000),
+            },
+        )
+        return result
     return _sync_wrapper
 
 

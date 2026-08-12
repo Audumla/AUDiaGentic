@@ -7,10 +7,13 @@ and max-lifetime reaping, busy rejection, dead-child failure, shutdown.
 AS28 slice 4a: tests inject provider_prepare_fn returning PreparedSessionTransport
 with a FakeAgentSessionTransport — no AcpLaunch / AcpSessionTransport required.
 """
+
 from __future__ import annotations
 
 import functools
 import multiprocessing
+import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -18,13 +21,23 @@ from typing import Any
 
 import pytest
 
-from audiagentic.components.agents import agents_gateway_session_bindings as binding_store
-from audiagentic.components.agents import agents_gateway_sessions_store as session_store
-from audiagentic.components.agents.agents_gateway_sessions import SessionRuntime
 from audiagentic.components.agents.agents_paths import gateway_session_binding_index_path
+from audiagentic.components.agents.gateway.session import bindings as binding_store
+from audiagentic.components.agents.gateway.session import sessions as sessions_module
+from audiagentic.components.agents.gateway.session import sessions_store as session_store
+from audiagentic.components.agents.gateway.session.sessions import SessionRuntime
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.io import load_ndjson
+from audiagentic.foundation.system.adopted_process import (
+    AdoptedChild,
+    OwnershipCheckResult,
+    adopt_child,
+)
+from audiagentic.foundation.system.managed_process import ProcessEvidence
 from audiagentic.foundation.transports.agent_session import (
     CorrelationQuality,
+    ProviderSessionRef,
+    SessionOpenResult,
     SessionTurnResult,
 )
 from audiagentic.foundation.transports.session_surface import (
@@ -51,11 +64,15 @@ class FakeAgentSessionTransport:
         # AS18: optional on_event emitter for intra-turn events
         self.on_event_emitter: Any = None  # callable((on_event, session_id) -> None)
         self.provider_session_ref = "prov-ses-1"
+        self.ag_session_id = "ag-s-fake"
 
-    async def open(self) -> str:
+    async def open(self) -> SessionOpenResult:
         self.opened = True
         self.alive = True
-        return self.provider_session_ref
+        return SessionOpenResult(
+            ag_session_id=self.ag_session_id,
+            provider_session_ref=ProviderSessionRef(value=self.provider_session_ref),
+        )
 
     def is_alive(self) -> bool:
         return self.alive and not self.closed
@@ -91,8 +108,10 @@ class FakeAgentSessionTransport:
                     break
                 if self.closed:
                     raise AudiaGenticError(
-                        code="EXT-ACP-001", kind="execution",
-                        message="transport closed mid-turn", details={},
+                        code="EXT-ACP-001",
+                        kind="execution",
+                        message="transport closed mid-turn",
+                        details={},
                     )
                 await asyncio.sleep(0.01)
         self.turns.append(prompt_text)
@@ -207,16 +226,19 @@ def rig(tmp_path):
     transports: list[FakeAgentSessionTransport] = []
     counter = 0
 
-    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None):
+    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         nonlocal counter
         counter += 1
         transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
         transport.provider_session_ref = f"prov-ses-{counter}"
         transports.append(transport)
         return _build_fake_prepared(transport)
 
     runtime = SessionRuntime(
-        clock=clock, reap_interval_seconds=0.05, provider_prepare_fn=fake_prepare,
+        clock=clock,
+        reap_interval_seconds=0.05,
+        provider_prepare_fn=fake_prepare,
     )
     yield runtime, clock, transports, tmp_path
     runtime.shutdown()
@@ -225,7 +247,7 @@ def rig(tmp_path):
 def _open(runtime, tmp_path, **kwargs) -> dict[str, Any]:
     return runtime.open_session(
         tmp_path,
-        agent_profile_id="profile-1",
+        execution_profile_id="profile-1",
         provider_id="opencode",
         model_id="m1",
         surface_hint=kwargs.pop("surface_hint", None),
@@ -250,7 +272,7 @@ def test_unsupported_surface_raises_no_child(tmp_path):
     raises CON-AGW-095 — no child starts, no live session exposed."""
     clock = _Clock()
 
-    def unsupported_prepare(project_root, *, provider_id, surface_hint, model_id=None):
+    def unsupported_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         return PreparedSessionTransport(
             transport=None,
             surface=_build_fake_surface(),
@@ -262,13 +284,15 @@ def test_unsupported_surface_raises_no_child(tmp_path):
         )
 
     runtime = SessionRuntime(
-        clock=clock, reap_interval_seconds=60, provider_prepare_fn=unsupported_prepare,
+        clock=clock,
+        reap_interval_seconds=60,
+        provider_prepare_fn=unsupported_prepare,
     )
     try:
         with pytest.raises(AudiaGenticError, match="CON-AGW-095"):
             runtime.open_session(
                 tmp_path,
-                agent_profile_id="profile-1",
+                execution_profile_id="profile-1",
                 provider_id="opencode",
                 model_id="m1",
                 surface_hint=None,
@@ -284,24 +308,29 @@ def test_provider_prepare_called_once_with_explicit_context(tmp_path):
     clock = _Clock()
     call_args: list[dict[str, Any]] = []
 
-    def tracking_prepare(project_root, *, provider_id, surface_hint, model_id=None):
-        call_args.append({
-            "project_root": str(project_root),
-            "provider_id": provider_id,
-            "model_id": model_id,
-            "surface_hint": surface_hint,
-        })
+    def tracking_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
+        call_args.append(
+            {
+                "project_root": str(project_root),
+                "provider_id": provider_id,
+                "model_id": model_id,
+                "surface_hint": surface_hint,
+            }
+        )
         transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
         return _build_fake_prepared(transport)
 
     runtime = SessionRuntime(
-        clock=clock, reap_interval_seconds=60, provider_prepare_fn=tracking_prepare,
+        clock=clock,
+        reap_interval_seconds=60,
+        provider_prepare_fn=tracking_prepare,
     )
     record: dict[str, Any] | None = None
     try:
         record = runtime.open_session(
             tmp_path,
-            agent_profile_id="profile-1",
+            execution_profile_id="profile-1",
             provider_id="test-provider",
             model_id="test-model",
             surface_hint=None,
@@ -328,8 +357,9 @@ def test_open_passes_exact_snapshot_and_transport(tmp_path):
     transports: list[FakeAgentSessionTransport] = []
     expected_surface = _build_fake_surface()
 
-    def prepare_with_surface(project_root, *, provider_id, surface_hint, model_id=None):
+    def prepare_with_surface(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
         transports.append(transport)
         return PreparedSessionTransport(
             transport=transport,
@@ -342,13 +372,15 @@ def test_open_passes_exact_snapshot_and_transport(tmp_path):
         )
 
     runtime = SessionRuntime(
-        clock=clock, reap_interval_seconds=60, provider_prepare_fn=prepare_with_surface,
+        clock=clock,
+        reap_interval_seconds=60,
+        provider_prepare_fn=prepare_with_surface,
     )
     record: dict[str, Any] | None = None
     try:
         record = runtime.open_session(
             tmp_path,
-            agent_profile_id="profile-1",
+            execution_profile_id="profile-1",
             provider_id="test-provider",
             model_id="m1",
             surface_hint=None,
@@ -373,13 +405,16 @@ def test_open_failure_cleans_partial_runtime(tmp_path):
     clock = _Clock()
     transports: list[FakeAgentSessionTransport] = []
 
-    def prepare_fn(project_root, *, provider_id, surface_hint, model_id=None):
+    def prepare_fn(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
         transports.append(transport)
         return _build_fake_prepared(transport)
 
     runtime = SessionRuntime(
-        clock=clock, reap_interval_seconds=60, provider_prepare_fn=prepare_fn,
+        clock=clock,
+        reap_interval_seconds=60,
+        provider_prepare_fn=prepare_fn,
     )
     record: dict[str, Any] | None = None
     try:
@@ -389,7 +424,7 @@ def test_open_failure_cleans_partial_runtime(tmp_path):
         # We test this by verifying that a successful open has an opened transport.
         record = runtime.open_session(
             tmp_path,
-            agent_profile_id="profile-1",
+            execution_profile_id="profile-1",
             provider_id="opencode",
             model_id="m1",
             surface_hint=None,
@@ -407,7 +442,7 @@ def test_open_prompt_close_lifecycle(rig):
     record = _open(runtime, tmp_path)
     session_id = record["session-id"]
     assert record["state"] == "active"
-    assert record["contract-version"] == "v2"
+    assert record["contract-version"] == "v3"
     assert record["binding"]["provider-session-ref"] == "prov-ses-1"
     public_binding = binding_store.public_binding_projection(record["binding"])
     assert public_binding is not None
@@ -417,8 +452,8 @@ def test_open_prompt_close_lifecycle(rig):
     result = runtime.prompt_in_session(tmp_path, session_id, "hello", request_id="req_1")
     assert result.stop_reason == "end_turn"
     stored = session_store.read_session_record(tmp_path, session_id)
-    assert stored["turn-count"] == 1
-    assert stored["request-ids"] == ["req_1"]
+    assert stored["activity"]["turn-count"] == 1
+    assert stored["activity"]["request-ids"] == ["req_1"]
 
     closed = runtime.close_session(tmp_path, session_id)
     assert closed["state"] == "closed"
@@ -527,13 +562,16 @@ def test_turn_queue_full_rejects(rig, tmp_path):
     clock = _Clock()
     transports: list[FakeAgentSessionTransport] = []
 
-    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None):
+    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
         transports.append(transport)
         return _build_fake_prepared(transport)
 
     runtime = SessionRuntime(
-        clock=clock, reap_interval_seconds=60, provider_prepare_fn=fake_prepare,
+        clock=clock,
+        reap_interval_seconds=60,
+        provider_prepare_fn=fake_prepare,
         session_queue_max=1,
     )
     try:
@@ -544,7 +582,9 @@ def test_turn_queue_full_rejects(rig, tmp_path):
 
         threads = [
             threading.Thread(
-                target=lambda p=p: _swallow(lambda: runtime.prompt_in_session(tmp_path, session_id, p))
+                target=lambda p=p: _swallow(
+                    lambda: runtime.prompt_in_session(tmp_path, session_id, p)
+                )
             )
             for p in ("running", "queued")
         ]
@@ -639,55 +679,55 @@ def test_shutdown_closes_all_sessions(rig):
 
 
 def test_api_list_and_close_sessions(rig, monkeypatch):
-    from audiagentic.components.agents import agents_gateway_api as api
-    from audiagentic.components.agents import agents_gateway_sessions as sessions_module
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway.session import sessions as sessions_module
 
     runtime, clock, transports, tmp_path = rig
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
     monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
 
     record = _open(runtime, tmp_path)
-    listed = api.list_llm_sessions(tmp_path)
+    listed = api.list_execution_sessions(tmp_path)
     assert [s["session-id"] for s in listed] == [record["session-id"]]
     assert listed[0]["live"] is True
     assert "provider-session-ref" not in repr(listed)
     assert listed[0]["binding"]["provider-ref-key-prefix"]
 
-    closed = api.close_llm_session(tmp_path, record["session-id"])
+    closed = api.close_execution_session(tmp_path, record["session-id"])
     assert closed["state"] == "closed"
-    assert api.list_llm_sessions(tmp_path)[0]["live"] is False
+    assert api.list_execution_sessions(tmp_path)[0]["live"] is False
     # Idempotent on an already-terminal session
-    again = api.close_llm_session(tmp_path, record["session-id"])
+    again = api.close_execution_session(tmp_path, record["session-id"])
     assert again["state"] == "closed"
 
 
 def test_api_close_orphaned_session_marks_failed(rig, monkeypatch):
-    from audiagentic.components.agents import agents_gateway_api as api
-    from audiagentic.components.agents import agents_gateway_sessions as sessions_module
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway.session import sessions as sessions_module
 
     runtime, clock, transports, tmp_path = rig
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
 
     # Persisted active, but no live handle (simulates a previous process)
-    record = session_store.build_session_record(agent_profile_id="profile-1")
+    record = session_store.build_session_record(execution_profile_id="profile-1")
     session_store.write_session_record(tmp_path, record)
 
-    closed = api.close_llm_session(tmp_path, record["session-id"])
+    closed = api.close_execution_session(tmp_path, record["session-id"])
     assert closed["state"] == "failed"
     assert closed["close-reason"] == "orphaned"
 
 
 def test_session_record_validation():
     with pytest.raises(AudiaGenticError, match="VAL-AGW-050"):
-        session_store.build_session_record(agent_profile_id="p", idle_timeout_seconds=-1)
+        session_store.build_session_record(execution_profile_id="p", idle_timeout_seconds=-1)
     with pytest.raises(AudiaGenticError, match="VAL-AGW-051"):
-        session_store.build_session_record(agent_profile_id="p", max_lifetime_seconds=-5)
+        session_store.build_session_record(execution_profile_id="p", max_lifetime_seconds=-5)
     # 0 disables a bound — valid (RV513)
     record = session_store.build_session_record(
-        agent_profile_id="p", idle_timeout_seconds=0, max_lifetime_seconds=0
+        execution_profile_id="p", idle_timeout_seconds=0, max_lifetime_seconds=0
     )
-    assert record["idle-timeout-seconds"] == 0
-    assert record["max-lifetime-seconds"] == 0
+    assert record["policy"]["idle-timeout-seconds"] == 0
+    assert record["policy"]["max-lifetime-seconds"] == 0
 
 
 def test_cross_process_session_turn_appends_do_not_lose_updates(tmp_path: Path) -> None:
@@ -695,7 +735,7 @@ def test_cross_process_session_turn_appends_do_not_lose_updates(tmp_path: Path) 
     request records), so concurrent processes recording turns on the same
     session cannot lose an update — every request-id and the turn-count
     both reflect all N appends."""
-    record = session_store.build_session_record(agent_profile_id="p")
+    record = session_store.build_session_record(execution_profile_id="p")
     session_store.write_session_record(tmp_path, record)
     session_id = record["session-id"]
     context = multiprocessing.get_context("spawn")
@@ -718,17 +758,17 @@ def test_cross_process_session_turn_appends_do_not_lose_updates(tmp_path: Path) 
 
     assert [process.exitcode for process in processes] == [0] * count
     final = session_store.read_session_record(tmp_path, session_id)
-    assert final["turn-count"] == count
-    assert sorted(final["request-ids"]) == sorted(f"req_{index}" for index in range(count))
+    assert final["activity"]["turn-count"] == count
+    assert sorted(final["activity"]["request-ids"]) == sorted(f"req_{index}" for index in range(count))
 
 
-def test_v1_session_record_migrates_to_v2_binding(tmp_path):
+def test_v1_session_record_without_surface_fails_closed(tmp_path):
     import json
 
     legacy = {
         "contract-version": "v1",
         "session-id": "ses_legacy",
-        "agent-profile-id": "p",
+        "execution-profile-id": "p",
         "provider-id": "opencode",
         "model-id": "m",
         "provider-session-ref": "secret-ref",
@@ -744,16 +784,20 @@ def test_v1_session_record_migrates_to_v2_binding(tmp_path):
         "last-activity-at": "2026-01-01T00:00:00Z",
         "closed-at": None,
     }
-    path = tmp_path / "runtime" / "agent-llm-gateway" / "sessions" / "ses_legacy" / "record.json"
+    path = (
+        tmp_path
+        / ".audiagentic"
+        / "runtime"
+        / "agent-execution-gateway"
+        / "sessions"
+        / "ses_legacy"
+        / "record.json"
+    )
     path.parent.mkdir(parents=True)
     path.write_text(json.dumps(legacy), encoding="utf-8")
 
-    migrated = session_store.read_session_record(tmp_path, "ses_legacy")
-    assert migrated["contract-version"] == "v2"
-    assert "provider-session-ref" not in migrated
-    assert migrated["binding"]["provider-session-ref"] == "secret-ref"
-    assert migrated["binding"]["relation"] == "opened"
-    assert migrated["binding"]["ownership"] == "owned"
+    with pytest.raises(AudiaGenticError, match="has no resolved surface id"):
+        session_store.read_session_record(tmp_path, "ses_legacy")
 
 
 def test_binding_index_uses_hash_not_raw_ref(rig):
@@ -768,13 +812,16 @@ def test_duplicate_owned_binding_rolls_back_transport(tmp_path):
     clock = _Clock()
     transports: list[FakeAgentSessionTransport] = []
 
-    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None):
+    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
         transport.provider_session_ref = "same-ref"
         transports.append(transport)
         return _build_fake_prepared(transport)
 
-    runtime = SessionRuntime(clock=clock, reap_interval_seconds=60, provider_prepare_fn=fake_prepare)
+    runtime = SessionRuntime(
+        clock=clock, reap_interval_seconds=60, provider_prepare_fn=fake_prepare
+    )
     try:
         _open(runtime, tmp_path)
         with pytest.raises(AudiaGenticError, match="CON-AGW-096"):
@@ -788,13 +835,16 @@ def test_closed_owned_binding_allows_later_same_ref(tmp_path):
     clock = _Clock()
     transports: list[FakeAgentSessionTransport] = []
 
-    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None):
+    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
         transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
         transport.provider_session_ref = "same-ref"
         transports.append(transport)
         return _build_fake_prepared(transport)
 
-    runtime = SessionRuntime(clock=clock, reap_interval_seconds=60, provider_prepare_fn=fake_prepare)
+    runtime = SessionRuntime(
+        clock=clock, reap_interval_seconds=60, provider_prepare_fn=fake_prepare
+    )
     try:
         first = _open(runtime, tmp_path)
         runtime.close_session(tmp_path, first["session-id"])
@@ -806,30 +856,36 @@ def test_closed_owned_binding_allows_later_same_ref(tmp_path):
 
 
 def test_request_record_session_field_validation():
-    from audiagentic.components.agents import agents_gateway_store as store
+    from audiagentic.components.agents.gateway import store as store
 
     # session_idle_timeout without keep_alive still rejected (VAL-AGW-059)
     with pytest.raises(AudiaGenticError, match="VAL-AGW-059"):
         store.build_record(
-            agent_profile_id="p", prompt_body="x",
+            execution_profile_id="p",
+            prompt_body="x",
             session_idle_timeout_seconds=60,
         )
     # session_max_lifetime without keep_alive still rejected (VAL-AGW-061)
     with pytest.raises(AudiaGenticError, match="VAL-AGW-061"):
         store.build_record(
-            agent_profile_id="p", prompt_body="x",
+            execution_profile_id="p",
+            prompt_body="x",
             session_max_lifetime_seconds=60,  # requires keep-alive
         )
     # Negative max_lifetime rejected
     with pytest.raises(AudiaGenticError, match="VAL-AGW-061"):
         store.build_record(
-            agent_profile_id="p", prompt_body="x",
-            session_keep_alive=True, session_max_lifetime_seconds=-1,
+            execution_profile_id="p",
+            prompt_body="x",
+            session_keep_alive=True,
+            session_max_lifetime_seconds=-1,
         )
     # New session with keep-alive and bounds (unchanged)
     record = store.build_record(
-        agent_profile_id="p", prompt_body="x",
-        session_keep_alive=True, session_idle_timeout_seconds=60,
+        execution_profile_id="p",
+        prompt_body="x",
+        session_keep_alive=True,
+        session_idle_timeout_seconds=60,
         session_max_lifetime_seconds=0,  # 0 = no lifetime cap (RV513)
     )
     assert record["session-keep-alive"] is True
@@ -840,11 +896,13 @@ def test_request_record_session_field_validation():
 def test_session_id_with_keep_alive_allowed():
     """session_id + session_keep_alive=true is valid: continue session and
     leave it live after the turn."""
-    from audiagentic.components.agents import agents_gateway_store as store
+    from audiagentic.components.agents.gateway import store as store
 
     record = store.build_record(
-        agent_profile_id="p", prompt_body="x",
-        session_id="ses_1", session_keep_alive=True,
+        execution_profile_id="p",
+        prompt_body="x",
+        session_id="ses_1",
+        session_keep_alive=True,
     )
     assert record["session-id"] == "ses_1"
     assert record["session-keep-alive"] is True
@@ -853,10 +911,11 @@ def test_session_id_with_keep_alive_allowed():
 def test_session_id_with_keep_alive_omitted_is_none():
     """session_id without keep_alive (omitted) stores None — preserves
     existing behavior: continued session stays live after the turn."""
-    from audiagentic.components.agents import agents_gateway_store as store
+    from audiagentic.components.agents.gateway import store as store
 
     record = store.build_record(
-        agent_profile_id="p", prompt_body="x",
+        execution_profile_id="p",
+        prompt_body="x",
         session_id="ses_1",
     )
     assert record["session-id"] == "ses_1"
@@ -866,11 +925,13 @@ def test_session_id_with_keep_alive_omitted_is_none():
 def test_session_id_with_keep_alive_false_allowed():
     """session_id + session_keep_alive=false is valid: continue session and
     close it after the turn if quiescent."""
-    from audiagentic.components.agents import agents_gateway_store as store
+    from audiagentic.components.agents.gateway import store as store
 
     record = store.build_record(
-        agent_profile_id="p", prompt_body="x",
-        session_id="ses_1", session_keep_alive=False,
+        execution_profile_id="p",
+        prompt_body="x",
+        session_id="ses_1",
+        session_keep_alive=False,
     )
     assert record["session-id"] == "ses_1"
     assert record["session-keep-alive"] is False
@@ -879,10 +940,11 @@ def test_session_id_with_keep_alive_false_allowed():
 def test_session_id_with_keep_alive_and_bounds_allowed():
     """session_id + keep_alive=true + bounds is valid: continue session,
     update its lifetime policy after the turn."""
-    from audiagentic.components.agents import agents_gateway_store as store
+    from audiagentic.components.agents.gateway import store as store
 
     record = store.build_record(
-        agent_profile_id="p", prompt_body="x",
+        execution_profile_id="p",
+        prompt_body="x",
         session_id="ses_1",
         session_keep_alive=True,
         session_idle_timeout_seconds=120,
@@ -898,18 +960,20 @@ def test_session_id_with_keep_alive_false_and_bounds_rejected():
     """session_id + keep_alive=false + bounds is rejected: without
     keep-alive, no lifetime policy update happens after the turn, so bounds
     are meaningless."""
-    from audiagentic.components.agents import agents_gateway_store as store
+    from audiagentic.components.agents.gateway import store as store
 
     with pytest.raises(AudiaGenticError, match="VAL-AGW-059"):
         store.build_record(
-            agent_profile_id="p", prompt_body="x",
+            execution_profile_id="p",
+            prompt_body="x",
             session_id="ses_1",
             session_keep_alive=False,
             session_idle_timeout_seconds=60,
         )
     with pytest.raises(AudiaGenticError, match="VAL-AGW-061"):
         store.build_record(
-            agent_profile_id="p", prompt_body="x",
+            execution_profile_id="p",
+            prompt_body="x",
             session_id="ses_1",
             session_keep_alive=False,
             session_max_lifetime_seconds=3600,
@@ -1000,6 +1064,7 @@ def test_session_lifecycle_events_published(rig, monkeypatch):
         events_captured.append((topic, payload))
 
     from audiagentic.foundation import event as event_mod
+
     monkeypatch.setattr(event_mod, "get_bus", lambda: _FakeBus(fake_publish))
 
     record = _open(runtime, tmp_path)
@@ -1010,7 +1075,7 @@ def test_session_lifecycle_events_published(rig, monkeypatch):
     topic, payload = events_captured[0]
     assert topic == "agents.session.opened"
     assert payload["session-id"] == session_id
-    assert payload["agent-profile-id"] == "profile-1"
+    assert payload["execution-profile-id"] == "profile-1"
     assert payload["state"] == "active"
     assert payload["provider-id"] == "opencode"
     assert payload["model-id"] == "m1"
@@ -1044,6 +1109,7 @@ def test_publish_failure_does_not_break_session_lifecycle(rig, monkeypatch):
         raise RuntimeError("bus is down")
 
     from audiagentic.foundation import event as event_mod
+
     monkeypatch.setattr(event_mod, "get_bus", lambda: _FakeBus(raising_publish))
 
     # Open succeeds despite publish failure
@@ -1078,21 +1144,35 @@ def test_intra_turn_events_wired_to_eventbus(rig, monkeypatch):
         events_captured.append((topic, {**payload, "_metadata": metadata or {}}))
 
     from audiagentic.foundation import event as event_mod
+
     monkeypatch.setattr(event_mod, "get_bus", lambda: _FakeBus(capture_publish))
 
     # Configure the fake transport to emit CANONICAL intra-turn events via
     # the neutral sink (TransportObservation), the way the real transport does.
     async def _emit_test_events(on_event, session_id):
         from audiagentic.foundation.transports.agent_session import TransportObservationKind
-        for i, (kind_enum, attributes) in enumerate([
-            (TransportObservationKind.ACTIVITY, {"model_activity": "generating"}),
-            (TransportObservationKind.ACTIVITY, {"model_activity": "generating"}),  # deduped
-            (TransportObservationKind.TOOL_REQUESTED, {"tool_call_id": "tc1", "tool_status": "pending"}),
-            (TransportObservationKind.TOOL_REQUESTED, {"tool_call_id": "tc1", "tool_status": "in_progress"}),  # deduped
-            (TransportObservationKind.TOOL_FINISHED, {"tool_call_id": "tc1", "tool_status": "failed"}),
-            (TransportObservationKind.TERMINAL, {"stop_reason": "end_turn"}),
-        ]):
+
+        for i, (kind_enum, attributes) in enumerate(
+            [
+                (TransportObservationKind.ACTIVITY, {"model_activity": "generating"}),
+                (TransportObservationKind.ACTIVITY, {"model_activity": "generating"}),  # deduped
+                (
+                    TransportObservationKind.TOOL_REQUESTED,
+                    {"tool_call_id": "tc1", "tool_status": "pending"},
+                ),
+                (
+                    TransportObservationKind.TOOL_REQUESTED,
+                    {"tool_call_id": "tc1", "tool_status": "in_progress"},
+                ),  # deduped
+                (
+                    TransportObservationKind.TOOL_FINISHED,
+                    {"tool_call_id": "tc1", "tool_status": "failed"},
+                ),
+                (TransportObservationKind.TERMINAL, {"stop_reason": "end_turn"}),
+            ]
+        ):
             from audiagentic.foundation.transports.agent_session import TransportObservation
+
             obs = TransportObservation(
                 ag_session_id=session_id,
                 turn_id="turn-1",
@@ -1134,7 +1214,7 @@ def test_intra_turn_events_wired_to_eventbus(rig, monkeypatch):
     for topic, payload in turn_topics:
         assert payload["session-id"] == session_id
         assert payload["request-id"] == "req_1"
-        assert payload["agent-profile-id"] is not None
+        assert payload["execution-profile-id"] is not None
         assert payload["semantic-strength"] == "unknown"
         assert payload["verification-tier"] == "unknown"
         assert payload["_metadata"] == {"correlation_id": "corr_1"}
@@ -1155,6 +1235,7 @@ def test_turn_event_publish_failure_does_not_break_prompt(rig, monkeypatch):
         raise RuntimeError("bus is down")
 
     from audiagentic.foundation import event as event_mod
+
     monkeypatch.setattr(event_mod, "get_bus", lambda: _FakeBus(raising_publish))
 
     # Configure the fake transport to emit an intra-turn event (triggers publish failure)
@@ -1163,6 +1244,7 @@ def test_turn_event_publish_failure_does_not_break_prompt(rig, monkeypatch):
             TransportObservation,
             TransportObservationKind,
         )
+
         obs = TransportObservation(
             ag_session_id=session_id,
             turn_id="turn-1",
@@ -1190,22 +1272,27 @@ def test_turn_event_publish_failure_does_not_break_prompt(rig, monkeypatch):
 # ── RV680: turn deadline, protocol cancel, silence watchdog ─────────
 
 
-def test_turn_deadline_fails_session(rig):
-    """A turn that exceeds session-turn-timeout-seconds fails the session
-    with TO-AGW-090 instead of blocking the worker forever."""
+def test_turn_deadline_is_not_terminal_evidence(rig):
+    """Elapsed time does not fail a session; explicit cancel remains available."""
     runtime, clock, transports, tmp_path = rig
     record = _open(runtime, tmp_path, turn_timeout_seconds=0.2)
     session_id = record["session-id"]
     transports[0].block_event = threading.Event()  # never set — the turn hangs
 
-    with pytest.raises(AudiaGenticError) as excinfo:
-        runtime.prompt_in_session(tmp_path, session_id, "hang forever")
-    assert excinfo.value.code == "TO-AGW-090"
-
-    stored = session_store.read_session_record(tmp_path, session_id)
-    assert stored["state"] == "failed"
-    assert stored["close-reason"] == "turn-timeout"
-    assert runtime.live_session_ids() == []
+    result: list = []
+    worker = threading.Thread(
+        target=lambda: result.append(
+            runtime.prompt_in_session(tmp_path, session_id, "long tool call", request_id="req_deadline")
+        )
+    )
+    worker.start()
+    assert _wait_for(worker.is_alive)
+    time.sleep(0.3)
+    assert worker.is_alive()
+    assert runtime.request_cancel("req_deadline") is True
+    worker.join(timeout=5)
+    assert result and result[0].stop_reason == "cancelled"
+    runtime.close_session(tmp_path, session_id)
 
 
 def test_request_cancel_interrupts_running_turn(rig):
@@ -1220,9 +1307,7 @@ def test_request_cancel_interrupts_running_turn(rig):
 
     def _turn():
         results.append(
-            runtime.prompt_in_session(
-                tmp_path, session_id, "long turn", request_id="req_cancel_1"
-            )
+            runtime.prompt_in_session(tmp_path, session_id, "long turn", request_id="req_cancel_1")
         )
 
     worker = threading.Thread(target=_turn)
@@ -1238,38 +1323,251 @@ def test_request_cancel_interrupts_running_turn(rig):
     runtime.close_session(tmp_path, session_id)
 
 
-def test_silence_watchdog_fails_silent_turn_as_policy_timeout(rig):
-    """With an explicit silence bound, a turn producing no transport events
-    hits a configured policy timeout and the reaper fails the session."""
+def test_silence_watchdog_records_suspicion_without_failing_turn(rig):
+    """Silence can be monitored, but remote/tool waits are not failures."""
     runtime, clock, transports, tmp_path = rig
     record = _open(runtime, tmp_path, turn_silence_timeout_seconds=5.0, turn_timeout_seconds=0)
     session_id = record["session-id"]
     transports[0].block_event = threading.Event()  # silent, endless turn
 
+    results: list = []
+
     def _turn():
-        with pytest.raises(AudiaGenticError):
-            runtime.prompt_in_session(tmp_path, session_id, "silent turn")
+        results.append(runtime.prompt_in_session(tmp_path, session_id, "silent turn", request_id="req_silent"))
 
     worker = threading.Thread(target=_turn)
     worker.start()
     assert _wait_for(lambda: worker.is_alive())
     time.sleep(0.1)  # turn is now inside the transport block loop
     clock.now += 60.0  # exceed the 5s silence bound on the injected clock
-    assert _wait_for(lambda: session_id not in runtime.live_session_ids(), timeout=5.0)
-    # The reaper closed the transport; the aborted in-flight turn raises.
+    time.sleep(0.1)
+    assert session_id in runtime.live_session_ids()
+    assert runtime.request_cancel("req_silent") is True
     worker.join(timeout=5.0)
-    stored = session_store.read_session_record(tmp_path, session_id)
-    assert stored["state"] == "failed"
-    assert stored["close-reason"] == "turn-silence-timeout"
+    assert results and results[0].stop_reason == "cancelled"
+    runtime.close_session(tmp_path, session_id)
+
+
+# ── AS91: positive owned-child death reaps through the turn task ─────────
+
+
+def _owned_child() -> AdoptedChild:
+    return AdoptedChild(
+        evidence=ProcessEvidence(
+            pid=4242,
+            scope="session-child",
+            command_fingerprint="sha256:" + "a" * 64,
+            ownership_proof_kind="creation-identity",
+            owner_epoch="test-owner",
+            creation_identity="created:4242",
+        )
+    )
+
+
+def _attach_adopted_child(runtime: SessionRuntime, session_id: str, child: AdoptedChild) -> None:
+    async def attach() -> None:
+        runtime._handles[session_id].adopted_child = child  # noqa: SLF001 - runtime seam test
+
+    runtime._call(attach(), timeout=2)  # noqa: SLF001 - runtime seam test
+
+
+def test_reaper_proven_owned_child_death_cleans_through_owning_turn_once(rig, monkeypatch):
+    runtime, _clock, transports, tmp_path = rig
+    record = _open(runtime, tmp_path)
+    session_id = record["session-id"]
+    transports[0].block_event = threading.Event()
+    _attach_adopted_child(runtime, session_id, _owned_child())
+    events: list[tuple[str, dict[str, Any]]] = []
+    monkeypatch.setattr(
+        sessions_module,
+        "_publish_session_event",
+        lambda topic, payload, **_kwargs: events.append((topic, payload)),
+    )
+    import audiagentic.foundation.system.adopted_process as adopted_process
+
+    monkeypatch.setattr(
+        adopted_process,
+        "observe_child",
+        lambda _evidence: OwnershipCheckResult(
+            owned=False, alive=False, observed=None, refusal_reason="process-dead"
+        ),
+    )
+    from audiagentic.components.agents.gateway.queue import queue as queue_module
+
+    released_turns: list[str] = []
+
+    async def record_turn_done(request_id: str) -> None:
+        released_turns.append(request_id)
+
+    monkeypatch.setattr(queue_module, "notify_turn_done", record_turn_done)
+    outcome: list[BaseException] = []
+
+    def run_turn() -> None:
+        try:
+            runtime.prompt_in_session(tmp_path, session_id, "blocked", request_id="req_orphan")
+        except BaseException as exc:  # cancellation is the expected owner-task cleanup signal
+            outcome.append(exc)
+
+    worker = threading.Thread(target=run_turn)
+    worker.start()
+    assert _wait_for(
+        lambda: runtime.session_runtime_status(session_id).get("current-request-id") == "req_orphan"
+    )
+
+    runtime._call(runtime._reap_once(), timeout=2)  # noqa: SLF001 - direct deterministic sweep
+    runtime._call(runtime._reap_once(), timeout=2)  # noqa: SLF001 - prove idempotence after removal
+    worker.join(timeout=3)
+
+    assert not worker.is_alive()
+    assert outcome
+    assert released_turns == ["req_orphan"]
+    durable = session_store.read_session_record(tmp_path, session_id)
+    assert durable["state"] == "failed"
+    assert durable["close-reason"] == "orphaned"
+    orphan_events = [event for event in events if event[0] == "agents.session.orphaned"]
+    assert len(orphan_events) == 1
+    timeline = load_ndjson(session_store.gateway_session_timeline_path(tmp_path, session_id))
+    assert [entry["event"] for entry in timeline].count("session.orphaned") == 1
+    assert runtime.session_runtime_status(session_id) == {"available": False}
+
+
+def test_reaper_unknown_owned_child_evidence_does_not_clean_up_busy_turn(rig, monkeypatch):
+    runtime, _clock, transports, tmp_path = rig
+    record = _open(runtime, tmp_path)
+    session_id = record["session-id"]
+    transports[0].block_event = threading.Event()
+    _attach_adopted_child(runtime, session_id, _owned_child())
+    events: list[str] = []
+    monkeypatch.setattr(
+        sessions_module,
+        "_publish_session_event",
+        lambda topic, _payload, **_kwargs: events.append(topic),
+    )
+    import audiagentic.foundation.system.adopted_process as adopted_process
+
+    monkeypatch.setattr(
+        adopted_process,
+        "observe_child",
+        lambda _evidence: OwnershipCheckResult(
+            owned=False, alive=True, observed=None, refusal_reason="unobservable"
+        ),
+    )
+    outcome: list[BaseException] = []
+
+    def run_turn() -> None:
+        try:
+            runtime.prompt_in_session(tmp_path, session_id, "blocked", request_id="req_unknown")
+        except BaseException as exc:
+            outcome.append(exc)
+
+    worker = threading.Thread(target=run_turn)
+    worker.start()
+    assert _wait_for(
+        lambda: runtime.session_runtime_status(session_id).get("current-request-id") == "req_unknown"
+    )
+
+    runtime._call(runtime._reap_once(), timeout=2)  # noqa: SLF001 - direct deterministic sweep
+    assert worker.is_alive()
+    assert session_store.read_session_record(tmp_path, session_id)["state"] == "active"
+    assert "agents.session.orphaned" not in events
+
+    assert runtime.request_cancel("req_unknown") is True
+    worker.join(timeout=3)
+    assert not worker.is_alive()
+    assert outcome == []
+    runtime.close_session(tmp_path, session_id)
+
+
+def test_reaper_real_owned_subprocess_death_emits_once_and_releases_turn(rig, tmp_path):
+    """AS91 process-boundary proof: a real adopted child exits mid-turn.
+
+    The reaper consumes foundation's authenticated creation-identity evidence;
+    no synthetic observation is injected.  This is intentionally kept
+    deterministic by terminating the child ourselves, then sweeping once.
+    """
+    runtime, _clock, transports, _fixture_root = rig
+    record = _open(runtime, tmp_path)
+    session_id = record["session-id"]
+    transports[0].block_event = threading.Event()
+
+    child_cmd = (sys.executable, "-c", "import time; time.sleep(60)")
+    child_proc = subprocess.Popen(child_cmd)
+    adopted = adopt_child(pid=child_proc.pid, command=child_cmd, owner_epoch="real-owner")
+    assert isinstance(adopted, AdoptedChild)
+    _attach_adopted_child(runtime, session_id, adopted)
+
+    outcome: list[BaseException] = []
+
+    def run_turn() -> None:
+        try:
+            runtime.prompt_in_session(tmp_path, session_id, "blocked", request_id="req_real_orphan")
+        except BaseException as exc:  # cancellation is the owner cleanup signal
+            outcome.append(exc)
+
+    worker = threading.Thread(target=run_turn)
+    worker.start()
+    assert _wait_for(
+        lambda: runtime.session_runtime_status(session_id).get("current-request-id") == "req_real_orphan"
+    )
+    child_proc.terminate()
+    child_proc.wait(timeout=5)
+
+    runtime._call(runtime._reap_once(), timeout=2)  # noqa: SLF001 - deterministic sweep
+    worker.join(timeout=3)
+    assert not worker.is_alive()
+    assert outcome
+    durable = session_store.read_session_record(tmp_path, session_id)
+    assert durable["state"] == "failed"
+    assert durable["close-reason"] == "orphaned"
+    timeline = load_ndjson(session_store.gateway_session_timeline_path(tmp_path, session_id))
+    assert [entry["event"] for entry in timeline].count("session.orphaned") == 1
+
+
+def test_reaper_real_external_subprocess_is_never_touched(rig, tmp_path):
+    """AS91 negative process-boundary proof: external child is diagnostics-only."""
+    runtime, _clock, transports, _fixture_root = rig
+    record = _open(runtime, tmp_path)
+    session_id = record["session-id"]
+    transports[0].block_event = threading.Event()
+
+    child_cmd = (sys.executable, "-c", "import time; time.sleep(60)")
+    child_proc = subprocess.Popen(child_cmd)
+    adopted = adopt_child(
+        pid=child_proc.pid,
+        command=child_cmd,
+        owner_epoch="external-owner",
+        is_external=True,
+    )
+    assert isinstance(adopted, AdoptedChild)
+    _attach_adopted_child(runtime, session_id, adopted)
+
+    worker = threading.Thread(
+        target=lambda: runtime.prompt_in_session(
+            tmp_path, session_id, "blocked", request_id="req_external_orphan"
+        )
+    )
+    worker.start()
+    assert _wait_for(
+        lambda: runtime.session_runtime_status(session_id).get("current-request-id") == "req_external_orphan"
+    )
+    child_proc.terminate()
+    child_proc.wait(timeout=5)
+    runtime._call(runtime._reap_once(), timeout=2)  # noqa: SLF001
+    assert worker.is_alive()
+    assert session_store.read_session_record(tmp_path, session_id)["state"] == "active"
+    assert runtime.request_cancel("req_external_orphan") is True
+    worker.join(timeout=3)
+    runtime.close_session(tmp_path, session_id)
 
 
 # AS34: stale persisted active session diagnostics.
 
+
 def test_stale_persisted_session_lists_not_live_no_runtime_started(tmp_path, monkeypatch):
     """A persisted active session with no live runtime lists as not-live with a
     stale diagnostic flag, and listing does NOT start a new runtime."""
-    from audiagentic.components.agents import agents_gateway_api as api
-    from audiagentic.components.agents import agents_gateway_sessions as sessions_module
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway.session import sessions as sessions_module
 
     # No runtime — ensure by resetting the singleton.
     saved_runtime = getattr(sessions_module, "_SESSION_RUNTIME", None)
@@ -1277,11 +1575,11 @@ def test_stale_persisted_session_lists_not_live_no_runtime_started(tmp_path, mon
         sessions_module._SESSION_RUNTIME = None  # type: ignore[attr-defined]
 
         # Persisted active record — no live handle in this process
-        record = session_store.build_session_record(agent_profile_id="profile-1")
+        record = session_store.build_session_record(execution_profile_id="profile-1")
         stale_id = record["session-id"]
         session_store.write_session_record(tmp_path, record)
 
-        listed = api.list_llm_sessions(tmp_path)
+        listed = api.list_execution_sessions(tmp_path)
         row = [s for s in listed if s["session-id"] == stale_id][0]
         assert row["live"] is False
         # A stale persisted active session should carry a diagnostic flag.
@@ -1301,8 +1599,8 @@ def test_stale_persisted_session_lists_not_live_no_runtime_started(tmp_path, mon
 def test_live_session_lists_without_stale_flag(rig, monkeypatch):
     """A live active session from the runtime lists as live=True and does NOT
     carry a stale diagnostic flag."""
-    from audiagentic.components.agents import agents_gateway_api as api
-    from audiagentic.components.agents import agents_gateway_sessions as sessions_module
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway.session import sessions as sessions_module
 
     runtime, clock, transports, tmp_path = rig
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
@@ -1311,7 +1609,7 @@ def test_live_session_lists_without_stale_flag(rig, monkeypatch):
     record = _open(runtime, tmp_path)
     session_id = record["session-id"]
 
-    listed = api.list_llm_sessions(tmp_path)
+    listed = api.list_execution_sessions(tmp_path)
     row = [s for s in listed if s["session-id"] == session_id][0]
     assert row["live"] is True
     # Live sessions must not carry a stale flag.
@@ -1320,23 +1618,25 @@ def test_live_session_lists_without_stale_flag(rig, monkeypatch):
 
 def test_closing_session_not_in_runtime_is_stale(tmp_path, monkeypatch):
     """A persisted closing session with no live runtime is also flagged stale."""
-    from audiagentic.components.agents import agents_gateway_api as api
-    from audiagentic.components.agents import agents_gateway_sessions as sessions_module
-    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway.session import sessions as sessions_module
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
 
     saved_runtime = getattr(sessions_module, "_SESSION_RUNTIME", None)
     try:
         sessions_module._SESSION_RUNTIME = None  # type: ignore[attr-defined]
 
         # Persisted closing record — no live handle
-        record = session_store.build_session_record(agent_profile_id="profile-1")
+        record = session_store.build_session_record(execution_profile_id="profile-1")
         closing_id = record["session-id"]
         session_store.write_session_record(tmp_path, record)
         session_store.transition_session_record(
-            tmp_path, closing_id, "closing",
+            tmp_path,
+            closing_id,
+            "closing",
         )
 
-        listed = api.list_llm_sessions(tmp_path)
+        listed = api.list_execution_sessions(tmp_path)
         row = [s for s in listed if s["session-id"] == closing_id][0]
         assert row["live"] is False
         assert row.get("runtime-state") == "stale-non-live"
@@ -1348,19 +1648,19 @@ def test_closing_session_not_in_runtime_is_stale(tmp_path, monkeypatch):
 def test_stale_session_when_runtime_exists_but_not_live(rig, monkeypatch):
     """When a runtime exists but the session is not in its live set,
     listing reports stale-non-live without starting anything."""
-    from audiagentic.components.agents import agents_gateway_api as api
-    from audiagentic.components.agents import agents_gateway_sessions as sessions_module
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway.session import sessions as sessions_module
 
     runtime, clock, transports, tmp_path = rig
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
     monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
 
     # Persisted active record that is NOT in the runtime's live set
-    stale_record = session_store.build_session_record(agent_profile_id="profile-1")
+    stale_record = session_store.build_session_record(execution_profile_id="profile-1")
     stale_id = stale_record["session-id"]
     session_store.write_session_record(tmp_path, stale_record)
 
-    listed = api.list_llm_sessions(tmp_path)
+    listed = api.list_execution_sessions(tmp_path)
     row = [s for s in listed if s["session-id"] == stale_id][0]
     assert row["live"] is False
     assert row.get("runtime-state") == "stale-non-live"
@@ -1369,8 +1669,8 @@ def test_stale_session_when_runtime_exists_but_not_live(rig, monkeypatch):
 def test_gateway_overview_active_count_excludes_stale(rig, monkeypatch):
     """gateway_overview counts only live sessions in active-count, not stale
     persisted active rows."""
-    from audiagentic.components.agents import agents_gateway_api as api
-    from audiagentic.components.agents import agents_gateway_sessions as sessions_module
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway.session import sessions as sessions_module
 
     runtime, clock, transports, tmp_path = rig
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
@@ -1380,7 +1680,7 @@ def test_gateway_overview_active_count_excludes_stale(rig, monkeypatch):
     live_record = _open(runtime, tmp_path)
 
     # One stale persisted active session (no live handle)
-    stale_record = session_store.build_session_record(agent_profile_id="profile-1")
+    stale_record = session_store.build_session_record(execution_profile_id="profile-1")
     session_store.write_session_record(tmp_path, stale_record)
 
     overview = api.gateway_overview(tmp_path)
@@ -1397,15 +1697,15 @@ def test_gateway_overview_active_count_excludes_stale(rig, monkeypatch):
 def test_list_sessions_no_provider_ref_leak(rig, monkeypatch):
     """Public session rows must not leak provider-session-ref or full
     provider-ref-key; only the prefix is allowed (binding projection)."""
-    from audiagentic.components.agents import agents_gateway_api as api
-    from audiagentic.components.agents import agents_gateway_sessions as sessions_module
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway.session import sessions as sessions_module
 
     runtime, clock, transports, tmp_path = rig
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
     monkeypatch.setattr(sessions_module, "peek_session_runtime", lambda: runtime)
 
     record = _open(runtime, tmp_path)
-    listed = api.list_llm_sessions(tmp_path)
+    listed = api.list_execution_sessions(tmp_path)
     row = [s for s in listed if s["session-id"] == record["session-id"]][0]
 
     # repr of the entire listing must not contain provider-session-ref or
@@ -1428,8 +1728,8 @@ def test_list_sessions_no_provider_ref_leak(rig, monkeypatch):
 def test_api_close_live_session_result_is_redacted(rig, monkeypatch):
     """Live close returns public session shape: no provider-session-ref or full
     provider-ref-key in the close result, but useful fields are retained."""
-    from audiagentic.components.agents import agents_gateway_api as api
-    from audiagentic.components.agents import agents_gateway_sessions as sessions_module
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway.session import sessions as sessions_module
 
     runtime, clock, transports, tmp_path = rig
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
@@ -1437,11 +1737,11 @@ def test_api_close_live_session_result_is_redacted(rig, monkeypatch):
     record = _open(runtime, tmp_path)
     session_id = record["session-id"]
 
-    closed = api.close_llm_session(tmp_path, session_id)
+    closed = api.close_execution_session(tmp_path, session_id)
     assert closed["state"] == "closed"
     assert closed["close-reason"] == "client-request"
     assert closed["session-id"] == session_id
-    assert closed["agent-profile-id"] == "profile-1"
+    assert closed["execution-profile-id"] == "profile-1"
 
     # Redaction: no provider-session-ref or full provider-ref-key in output
     close_repr = repr(closed)
@@ -1458,8 +1758,8 @@ def test_api_close_live_session_result_is_redacted(rig, monkeypatch):
 def test_api_close_durable_record_retains_protected_binding(rig, monkeypatch):
     """After close, the durable persisted session record still carries the
     protected binding internals for ownership/recovery (AS35 requirement 4)."""
-    from audiagentic.components.agents import agents_gateway_api as api
-    from audiagentic.components.agents import agents_gateway_sessions as sessions_module
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway.session import sessions as sessions_module
 
     runtime, clock, transports, tmp_path = rig
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
@@ -1468,7 +1768,7 @@ def test_api_close_durable_record_retains_protected_binding(rig, monkeypatch):
     session_id = record["session-id"]
     original_ref = record["binding"]["provider-session-ref"]
 
-    closed = api.close_llm_session(tmp_path, session_id)
+    closed = api.close_execution_session(tmp_path, session_id)
     # Public result is redacted
     assert "provider-session-ref" not in repr(closed)
 
@@ -1481,8 +1781,8 @@ def test_api_close_durable_record_retains_protected_binding(rig, monkeypatch):
 def test_api_close_idempotent_terminal_result_is_redacted(rig, monkeypatch):
     """Idempotent close of an already-terminal session returns a redacted
     public result (AS35 requirement 5 — idempotent path)."""
-    from audiagentic.components.agents import agents_gateway_api as api
-    from audiagentic.components.agents import agents_gateway_sessions as sessions_module
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway.session import sessions as sessions_module
 
     runtime, clock, transports, tmp_path = rig
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
@@ -1491,11 +1791,11 @@ def test_api_close_idempotent_terminal_result_is_redacted(rig, monkeypatch):
     session_id = record["session-id"]
 
     # Close first time
-    api.close_llm_session(tmp_path, session_id)
+    api.close_execution_session(tmp_path, session_id)
     full_key = record["binding"]["provider-ref-key"]
 
     # Idempotent second close reads from durable store.
-    again = api.close_llm_session(tmp_path, session_id)
+    again = api.close_execution_session(tmp_path, session_id)
     assert again["state"] == "closed"
     again_repr = repr(again)
     assert "provider-session-ref" not in again_repr
@@ -1506,23 +1806,24 @@ def test_api_close_orphaned_stale_result_is_redacted(rig, monkeypatch):
     """Close of a stale non-live active session (orphaned by restart) returns
     a redacted public result with state=failed/close-reason=orphaned (AS35
     requirement 5 - stale non-live active path)."""
-    from audiagentic.components.agents import agents_gateway_api as api
-    from audiagentic.components.agents import agents_gateway_sessions as sessions_module
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway.session import sessions as sessions_module
 
     runtime, clock, transports, tmp_path = rig
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
 
     # Build a fresh persisted active record (no live handle) to simulate orphan
     orphan_record = session_store.build_session_record(
-        agent_profile_id="profile-1",
+        execution_profile_id="profile-1",
         provider_id="opencode",
         provider_session_ref="orphan-ref",
+        surface_id="opencode-acp",
     )
     orphan_id = orphan_record["session-id"]
     full_key = orphan_record["binding"]["provider-ref-key"]
     session_store.write_session_record(tmp_path, orphan_record)
 
-    closed = api.close_llm_session(tmp_path, orphan_id)
+    closed = api.close_execution_session(tmp_path, orphan_id)
     assert closed["state"] == "failed"
     assert closed["close-reason"] == "orphaned"
     # Redacted public result
@@ -1539,11 +1840,11 @@ def test_latest_turn_projection_excludes_native_topic(tmp_path: Path) -> None:
     """native-topic is not public; latest_turn_projection must not leak it."""
     import json
 
-    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
     from audiagentic.components.agents.agents_paths import gateway_session_timeline_path
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
 
     # Build a minimal session record so timeline path exists
-    record = session_store.build_session_record(agent_profile_id="default")
+    record = session_store.build_session_record(execution_profile_id="default")
     session_id = record["session-id"]
     session_store.write_session_record(tmp_path, record)
 
@@ -1608,19 +1909,23 @@ def test_as21_accepted_evidence_only_rejected_does_not_change_decision(rig):
 
     def _inject_lease(evidence_items: list) -> None:
         lease = _build_fake_observer_lease(evidence_items)
+
         async def _set_lease():
             handle = runtime._handles[session_id]
             handle.observer_lease = lease
+
         runtime._call(_set_lease(), timeout=2)
 
     def _make_emit_one(session_id: str, turn_id: str):
         """Return an on_event_emitter coroutine that triggers one TransportObservation."""
+
         async def _sink(obs_sink, provider_session_id):
             from audiagentic.foundation.transports.agent_session import (
                 CorrelationQuality,
                 TransportObservation,
                 TransportObservationKind,
             )
+
             obs = TransportObservation(
                 ag_session_id=session_id,
                 turn_id=turn_id,
@@ -1633,6 +1938,7 @@ def test_as21_accepted_evidence_only_rejected_does_not_change_decision(rig):
             result = obs_sink(obs)
             if result is not None:
                 await result
+
         return _sink
 
     # Turn 1: valid activity evidence accepted → decision goes to "active".
@@ -1650,12 +1956,16 @@ def test_as21_accepted_evidence_only_rejected_does_not_change_decision(rig):
     _inject_lease([ev_activity])
     transports[0].on_event_emitter = _make_emit_one(session_id, "req_as21_1")
     runtime.prompt_in_session(
-        tmp_path, session_id, "turn 1", request_id="req_as21_1",
+        tmp_path,
+        session_id,
+        "turn 1",
+        request_id="req_as21_1",
     )
 
     # Check decision for the specific (session, request) key.
     dec = runtime._evidence_projection.latest_decision_for_key(
-        session_id, "req_as21_1",
+        session_id,
+        "req_as21_1",
     )
     assert dec is not None
     assert dec.coarse_state == "active"
@@ -1676,14 +1986,18 @@ def test_as21_accepted_evidence_only_rejected_does_not_change_decision(rig):
     _inject_lease([ev_duplicate])
     transports[0].on_event_emitter = _make_emit_one(session_id, "req_as21_2")
     runtime.prompt_in_session(
-        tmp_path, session_id, "turn 2", request_id="req_as21_2",
+        tmp_path,
+        session_id,
+        "turn 2",
+        request_id="req_as21_2",
     )
 
     # Turn 1 decision should be unchanged (still active) — rejected evidence
     # did not alter it. Also verify turn 2 has no projection (evidence was
     # rejected by sink).
     dec1 = runtime._evidence_projection.latest_decision_for_key(
-        session_id, "req_as21_1",
+        session_id,
+        "req_as21_1",
     )
     assert dec1 is not None
     assert dec1.coarse_state == "active"
@@ -1721,10 +2035,13 @@ def test_as21_accepted_evidence_only_rejected_does_not_change_decision(rig):
             TransportObservation,
             TransportObservationKind,
         )
-        for i, kind in enumerate([
-            TransportObservationKind.ACTIVITY,
-            TransportObservationKind.TOOL_REQUESTED,
-        ]):
+
+        for i, kind in enumerate(
+            [
+                TransportObservationKind.ACTIVITY,
+                TransportObservationKind.TOOL_REQUESTED,
+            ]
+        ):
             obs = TransportObservation(
                 ag_session_id=session_id,
                 turn_id="req_as21_3",
@@ -1740,13 +2057,17 @@ def test_as21_accepted_evidence_only_rejected_does_not_change_decision(rig):
 
     transports[0].on_event_emitter = _emit_two
     runtime.prompt_in_session(
-        tmp_path, session_id, "turn 3", request_id="req_as21_3",
+        tmp_path,
+        session_id,
+        "turn 3",
+        request_id="req_as21_3",
     )
 
     # Turn 3: first evidence accepted (waiting-permission → waiting), second
     # rejected (lower-sequence). Decision should be waiting, not active+tool.
     dec3 = runtime._evidence_projection.latest_decision_for_key(
-        session_id, "req_as21_3",
+        session_id,
+        "req_as21_3",
     )
     assert dec3 is not None
     # First evidence was waiting-permission → waiting; rejected one didn't change it
@@ -1767,18 +2088,23 @@ def test_as21_accepted_evidence_only_rejected_does_not_change_decision(rig):
     _inject_lease([ev_mismatch])
     transports[0].on_event_emitter = _make_emit_one(session_id, "req_as21_4")
     runtime.prompt_in_session(
-        tmp_path, session_id, "turn 4", request_id="req_as21_4",
+        tmp_path,
+        session_id,
+        "turn 4",
+        request_id="req_as21_4",
     )
 
     # Turn 4 has no projected decision (evidence was rejected by sink).
     dec4 = runtime._evidence_projection.latest_decision_for_key(
-        session_id, "req_as21_4",
+        session_id,
+        "req_as21_4",
     )
     assert dec4 is None
 
     # Previous turns' decisions are unchanged.
     dec1_after = runtime._evidence_projection.latest_decision_for_key(
-        session_id, "req_as21_1",
+        session_id,
+        "req_as21_1",
     )
     assert dec1_after.coarse_state == "active"
 
@@ -1803,9 +2129,11 @@ def test_as19_request_id_binding_no_spurious_reject(rig):
 
     def _inject_lease(evidence_items: list) -> None:
         lease = _build_fake_observer_lease(evidence_items)
+
         async def _set_lease():
             handle = runtime._handles[session_id]
             handle.observer_lease = lease
+
         runtime._call(_set_lease(), timeout=2)
 
     # The observer lease was opened at session open with request_id=None.
@@ -1831,6 +2159,7 @@ def test_as19_request_id_binding_no_spurious_reject(rig):
             TransportObservation,
             TransportObservationKind,
         )
+
         obs = TransportObservation(
             ag_session_id=session_id,
             turn_id="req_binding_1",
@@ -1846,13 +2175,17 @@ def test_as19_request_id_binding_no_spurious_reject(rig):
 
     transports[0].on_event_emitter = _emit_one
     runtime.prompt_in_session(
-        tmp_path, session_id, "binding test", request_id="req_binding_1",
+        tmp_path,
+        session_id,
+        "binding test",
+        request_id="req_binding_1",
     )
 
     # The evidence should have been accepted (not spuriously rejected due to
     # the lease's request_id=None at session open). Decision should be active.
     dec = runtime._evidence_projection.latest_decision_for_key(
-        session_id, "req_binding_1",
+        session_id,
+        "req_binding_1",
     )
     assert dec is not None, (
         "Evidence was spuriously rejected — lease request_id=None caused "

@@ -114,11 +114,21 @@ def _load_skills_from_registry(project_root: Path | None = None) -> list[SkillDe
                 skills.append(_skill_definition_from_content(tag_id, content))
                 continue
         skills.append(_skill_definition_from_content(tag_id, descriptor.skill_content()))
+    if project_root is not None:
+        project_skills = project_root / ".audiagentic" / "skills"
+        for path in sorted(project_skills.glob("project-*/skill.md")):
+            tag_id = path.parent.name
+            skills.append(_skill_definition_from_content(tag_id, path.read_text(encoding="utf-8")))
     return skills
 
 
 def _build_base_surfaces(project_root: Path, syntax: dict[str, object]) -> dict[Path, str]:
     """Build rendered surfaces from provider renderers (without contribution overlays)."""
+    from audiagentic.components.providers.descriptors.feature_mapping import KIND_SKILLS
+    from audiagentic.components.providers.services.config.feature_resolution import (
+        resolve_active_provider_features,
+    )
+
     skills = _load_skills_from_registry(project_root)
     surface_config = syntax.get("skill-surfaces")
     if not isinstance(surface_config, dict):
@@ -128,9 +138,16 @@ def _build_base_surfaces(project_root: Path, syntax: dict[str, object]) -> dict[
             message="prompt syntax missing skill-surfaces config",
         )
     renderers = load_renderer_registry()
+    active_skill_providers = {
+        resolved.provider_id
+        for resolved in resolve_active_provider_features(project_root)
+        if resolved.kind == KIND_SKILLS
+    }
     surfaces: dict[Path, str] = {}
     for provider, config in surface_config.items():
         if not isinstance(provider, str) or not isinstance(config, dict):
+            continue
+        if provider not in active_skill_providers:
             continue
         renderer_name = config.get("renderer")
         if not isinstance(renderer_name, str):
@@ -149,15 +166,19 @@ def _build_base_surfaces(project_root: Path, syntax: dict[str, object]) -> dict[
                 details={"renderer_name": renderer_name},
             )
         rendered = renderer(project_root=project_root, syntax=syntax, skills=skills, config=config)
-        overlaps = set(surfaces).intersection(rendered)
-        if overlaps:
+        conflicting = {
+            path
+            for path, content in rendered.items()
+            if path in surfaces and surfaces[path] != content
+        }
+        if conflicting:
             raise AudiaGenticError(
                 code="VAL-PROV-SKILL-005",
                 kind="providers",
-                message=f"duplicate generated surface(s): {sorted(str(path) for path in overlaps)}",
-                details={"overlaps": [str(p) for p in overlaps]},
+                message=f"conflicting generated surface(s): {sorted(str(path) for path in conflicting)}",
+                details={"overlaps": [str(p) for p in conflicting]},
             )
-        surfaces.update(rendered)
+        surfaces.update({path: content for path, content in rendered.items() if path not in surfaces})
     return surfaces
 
 

@@ -19,6 +19,7 @@ from audiagentic.components.providers.contracts.generated_surface import (
 )
 from audiagentic.components.providers.providers_api import (
     operate_provider_surface,
+    operate_provider_surfaces,
 )
 from audiagentic.components.providers.skill_surfaces import build_skill_surfaces
 from audiagentic.components.providers.surfaces.base import (
@@ -149,6 +150,16 @@ def test_apply_provider_surfaces_writes_provider_owned_paths(tmp_path: Path) -> 
     assert str(target) in result.written_paths
     # block_id is no longer emitted into the file; the friendly title is
     assert "Agent ledger process" in target.read_text(encoding="utf-8")
+
+
+def test_operate_provider_surfaces_only_targets_enabled_providers(tmp_path: Path) -> None:
+    _install_agent_ledger(tmp_path)
+    _enable_provider(tmp_path, "codex", "opencode")
+
+    results = operate_provider_surfaces(tmp_path, mode="plan")
+
+    assert len(results) == 2
+    assert all(result.managed_block_ids == ("agent-ledger/process",) for result in results)
 
 
 def test_roo_provider_surface_owns_roo_rules_path(tmp_path: Path) -> None:

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from audiagentic.foundation.logging.redaction import redact_text, truncate_output
+from audiagentic.foundation.system.supervised_process import spawn_supervised
 from audiagentic.runtime.system.platform import platform_key as _platform_key
 
 from .results import StepResult
@@ -66,47 +67,46 @@ class ShellStep:
         env.update({"PYTHONUNBUFFERED": "1", "PYTHONDONTWRITEBYTECODE": "1"})
         if self.env:
             env.update(self.env)
-        process: subprocess.Popen[str] | None = None
+        supervised = spawn_supervised(
+            list(resolved),
+            cwd=os.path.expanduser(self.cwd) if self.cwd else context.get("cwd"),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=env,
+        )
+        proc = supervised.process
+        lines: list[str] = []
         try:
-            process = subprocess.Popen(
-                list(resolved),
-                cwd=os.path.expanduser(self.cwd) if self.cwd else context.get("cwd"),
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                bufsize=1,
-                env=env,
-            )
-            lines: list[str] = []
             if self.progress_callback:
                 def _stream() -> None:
-                    assert process and process.stdout
-                    for line in process.stdout:
+                    assert proc.stdout
+                    for line in proc.stdout:
                         safe = line.rstrip("\n\r")
                         lines.append(safe)
                         self.progress_callback(safe)  # type: ignore[misc]
                 reader = threading.Thread(target=_stream, daemon=True)
                 reader.start()
-                process.wait(timeout=self.timeout)
+                supervised.wait(timeout=self.timeout)
                 reader.join(timeout=1)
             else:
-                output, _ = process.communicate(timeout=self.timeout)
+                output, _ = proc.communicate(timeout=self.timeout)
                 lines = list(output.splitlines())
         except subprocess.TimeoutExpired:
-            if process:
-                process.kill()
-                process.wait(timeout=5)
+            # Let SupervisedProcess handle tree teardown
+            supervised.close()
             return StepResult(status="failed", outputs={"command": list(resolved)}, reason=f"timed out after {self.timeout}s")
         except Exception as exc:  # noqa: BLE001
+            supervised.close()
             return StepResult(status="failed", outputs={"command": list(resolved)}, reason=str(exc))
+        finally:
+            supervised.close()
         output = truncate_output("\n".join(lines))
+        returncode = proc.returncode if proc.poll() is not None else 0
         return StepResult(
-            status="ok" if process.returncode == 0 else "failed",
-            outputs={"command": list(resolved), "returncode": process.returncode, "stdout": output, "stderr": ""},
-            reason=None if process.returncode == 0 else output or None,
+            status="ok" if returncode == 0 else "failed",
+            outputs={"command": list(resolved), "returncode": returncode, "stdout": output, "stderr": ""},
+            reason=None if returncode == 0 else output or None,
         )
 
     def _run_shell(self, cmd: str, context: dict[str, Any]) -> StepResult:

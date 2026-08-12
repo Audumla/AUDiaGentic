@@ -38,7 +38,7 @@ class TriggerConfig:
     kind: str
     enabled: bool = True
     event_pattern: str | None = None
-    agent_profile_id: str | None = None
+    execution_profile_id: str | None = None
     workflow_profile: str | None = None
     target: dict[str, Any] | None = None
     prompt_template: str | None = None
@@ -95,7 +95,7 @@ def _coerce(
         kind=trigger["kind"],
         enabled=trigger.get("enabled", True),
         event_pattern=trigger.get("event-pattern"),
-        agent_profile_id=trigger.get("agent-profile-id"),
+        execution_profile_id=trigger.get("execution-profile-id"),
         workflow_profile=trigger.get("workflow-profile"),
         target=trigger.get("target"),
         prompt_template=prompt_template,

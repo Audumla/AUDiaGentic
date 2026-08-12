@@ -9,6 +9,7 @@ def reset_gateway_queue() -> None:
     need an explicit boundary because multiple scenarios reuse the default
     profile id while using different temporary project roots.
     """
-    from audiagentic.components.agents import agents_gateway_api, agents_gateway_queue
+    from audiagentic.components.agents.gateway import api as agents_gateway_api
+    from audiagentic.components.agents.gateway.queue import queue as agents_gateway_queue
 
-    agents_gateway_api._QUEUE_MANAGER = agents_gateway_queue.GatewayQueueManager()
+    agents_gateway_api.set_queue_manager(agents_gateway_queue.GatewayQueueManager())

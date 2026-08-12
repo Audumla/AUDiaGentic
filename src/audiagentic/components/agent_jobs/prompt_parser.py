@@ -36,7 +36,7 @@ ALLOWED_DIRECTIVES = {
     "model",
     "model-alias",
     "profile",
-    "agent-profile-id",
+    "execution-profile-id",
     "id",
     "subject",
     "context",
@@ -146,7 +146,7 @@ def parse_prompt_launch_request(
     allowed_tags = load_canonical_tags(prompt_syntax)
     no_body_required_tags = load_no_body_required_tags(prompt_syntax)
     review_tag = load_review_tag(prompt_syntax)
-    implement_tag = str(prompt_syntax.get("implement-tag") or "ag-implement")
+    implement_tag = str(prompt_syntax.get("implement-tag") or generic_tag)
 
     tag_token, provider_suffix = _split_tag_and_provider(raw_tag, tag_aliases=tag_aliases, generic_tag=generic_tag, allowed_tags=allowed_tags)
     provider_token = provider_aliases.get(tag_token)
@@ -314,8 +314,8 @@ def parse_prompt_launch_request(
         "existing-job-id": directives.get("job"),
         "prompt-body": body,
     }
-    if "agent-profile-id" in directives:
-        payload["agent-profile-id"] = directives["agent-profile-id"]
+    if "execution-profile-id" in directives:
+        payload["execution-profile-id"] = directives["execution-profile-id"]
     if prompt_controls:
         payload["prompt-controls"] = prompt_controls
     if review_policy is not None:

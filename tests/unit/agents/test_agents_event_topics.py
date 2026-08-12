@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from audiagentic.components.agents import agents_event_topics as topics
+from audiagentic.components.agents.gateway import event_topics as topics
 from audiagentic.foundation.event.topic_registry import (
     get_topic_registry,
     load_all_event_topics,

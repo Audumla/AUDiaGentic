@@ -8,3 +8,4 @@ hosts:
     workspace-marker: ".vscode"
     extensions-manifest: ".vscode/extensions.json"
     extensions-dir: "~/.vscode/extensions"
+    settings-manifest: ".vscode/settings.json"

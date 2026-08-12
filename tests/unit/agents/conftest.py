@@ -1,8 +1,8 @@
 """Shared fixtures for agents unit tests.
 
-agents_gateway_api._QUEUE_MANAGER is a process-global singleton (by design —
+agents_gateway_api's queue manager is a process-global singleton (by design —
 one instance per hosting process, see its module docstring). Left un-reset,
-two tests using the same agent_profile_id (most fixtures default to
+two tests using the same execution_profile_id (most fixtures default to
 "default") share the same in-memory _ProfileQueue, so a worker thread
 started by one test's project_root can dequeue and process a request
 belonging to a later test's (different) project_root — a real cross-test

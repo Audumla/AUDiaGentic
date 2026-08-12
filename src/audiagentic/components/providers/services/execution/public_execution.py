@@ -6,6 +6,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.providers.contracts.mcp_launch_surface import (
+    McpLaunchIsolationTier,
+)
 from audiagentic.components.providers.contracts.provider_execution import (
     ProviderAcpLaunchResult,
     ProviderExecutionRequest,
@@ -42,6 +45,27 @@ def get_provider_execution_isolation_tier(provider_id: str) -> ProviderIsolation
             details={"provider-id": provider_id},
         )
     return descriptor.execution_isolation_tier
+
+
+def get_provider_mcp_launch_isolation_tier(provider_id: str) -> McpLaunchIsolationTier:
+    """Return the descriptor-backed provider-wide MCP launch isolation fact.
+
+    An inherent harness fact (what MCP servers a launch can be scoped to see),
+    not mutable feature state — mirrors get_provider_execution_isolation_tier
+    exactly, so a caller can discover the tier without going through
+    prepare_provider_mcp_surface's full launch-preparation path.
+    """
+    from audiagentic.components.providers.descriptors.registry import get_descriptor
+
+    descriptor = get_descriptor(provider_id)
+    if descriptor is None:
+        raise AudiaGenticError(
+            code="RES-PEXE-001",
+            kind="providers",
+            message="provider descriptor is required for execution",
+            details={"provider-id": provider_id},
+        )
+    return descriptor.mcp_launch_isolation_tier
 
 
 def get_provider_runtime_config_state(
@@ -231,6 +255,10 @@ def prepare_provider_acp_launch(
             details={"provider-id": provider_id},
         )
     launch_kwargs = {"model_id": resolved_model_id}
+    import inspect
+
+    if "provider_config" in inspect.signature(builder).parameters:
+        launch_kwargs["provider_config"] = provider_config
     if request_runtime_root is not None:
         launch_kwargs["request_runtime_root"] = request_runtime_root
     if mcp_entries is not None:
@@ -278,14 +306,23 @@ def prepare_interactive_provider_launch(
             message="provider does not support interactive CLI launch",
             details={"provider-id": provider_id},
         )
+    runtime = get_provider_runtime_config_state(project_root, provider_id)
+    provider_config = runtime["config"] if isinstance(runtime["config"], dict) else {}
+    import inspect
+
+    builder_kwargs = {
+        "provider": provider,
+        "model": model,
+        "agent_runtime": agent_runtime,
+        "mcp_surface": mcp_surface,
+        "runner_params": runner_params,
+        "smoke": smoke,
+    }
+    if "provider_config" in inspect.signature(builder).parameters:
+        builder_kwargs["provider_config"] = provider_config
     return builder(
         project_root,
-        provider=provider,
-        model=model,
-        agent_runtime=agent_runtime,
-        mcp_surface=mcp_surface,
-        runner_params=runner_params,
-        smoke=smoke,
+        **builder_kwargs,
     )
 
 
@@ -444,10 +481,25 @@ def _observability_hook_factories() -> dict[str, Any]:
     return {"pi": PiRpcTapPreSpawnHook}
 
 
+def _runtime_preserve_relpaths_registry() -> dict[str, tuple[str, ...]]:
+    """provider_id -> runtime-root-relative paths holding the provider's own
+    durable session state, for providers that write local, resumable state
+    into the per-request isolated runtime root. Deliberately a plain dict
+    (same shape as _observability_hook_factories), not a plugin registry --
+    add entries only once a provider's actual on-disk layout is confirmed
+    (see pi/acp.py's _request_environment for pi's isolation layout).
+    Empty/absent means "nothing to preserve", not "no resume support" --
+    e.g. gpt-auto's session lives in the browser, never on local disk, so it
+    has no entry here despite supporting resume-by-ref.
+    """
+    return {"pi": ("pi/agent/sessions",)}
+
+
 def _build_transport_from_launch(
     project_root: Path,
     launch: Any,
     *,
+    ag_session_id: str,
     resume_provider_ref: str | None = None,
     pre_spawn_hook: Any = None,
 ) -> Any:
@@ -480,6 +532,7 @@ def _build_transport_from_launch(
     return AcpAgentSessionTransport(
         launch,
         cwd=project_root,
+        ag_session_id=ag_session_id,
         resume_provider_ref=resume_provider_ref,
         pre_spawn_hook=pre_spawn_hook,
     )
@@ -489,6 +542,8 @@ def prepare_provider_session_transport(
     project_root: Path,
     *,
     provider_id: str,
+    ag_session_id: str,
+    binding_sink: Any,
     surface_hint: SurfaceHint,
     model_id: str | None = None,
     model_alias: str | None = None,
@@ -497,6 +552,7 @@ def prepare_provider_session_transport(
     require_isolated_mcp: bool = False,
     resume_provider_ref: str | None = None,
     enable_observability_tap: bool = False,
+    resume_provider_metadata: dict[str, Any] | None = None,
 ) -> PreparedSessionTransport:
     """Resolve a session-surface snapshot and build the transport factory.
 
@@ -564,6 +620,33 @@ def prepare_provider_session_transport(
             effective_provider_ref=effective_ref,
         )
 
+    # ── Supported CDP surface (gpt-auto): build the CDP transport ─────
+    # gpt-auto has no ACP launch builder. Its thin transport resolves a shared
+    # provider runtime plus one PersistentChat through the same neutral
+    # AgentSessionTransport seam — no browser type crosses this boundary.
+    if provider_id == "gpt-auto" and surface_hint.surface_id == "gpt-auto-cdp":
+        from audiagentic.components.providers.adapters.gpt_auto.session_transport import (
+            build_gpt_auto_session_transport,
+        )
+
+        runtime = get_provider_runtime_config_state(project_root, provider_id)
+        provider_config = runtime["config"]
+        if not isinstance(provider_config, dict):
+            provider_config = {}
+        transport = build_gpt_auto_session_transport(
+            project_root,
+            config=provider_config,
+            ag_session_id=ag_session_id,
+            binding_sink=binding_sink,
+            resume_provider_ref=resume_provider_ref,
+            resume_metadata_hint=resume_provider_metadata,
+        )
+        return PreparedSessionTransport(
+            transport=transport,
+            surface=surface,
+            effective_provider_ref=effective_ref,
+        )
+
     # ── Supported ACP surface: wire provider-local factory composition ──
     from audiagentic.foundation.transports.acp import AcpLaunch
 
@@ -605,6 +688,10 @@ def prepare_provider_session_transport(
 
     # Build the ACP launch via the provider adapter's build_acp_launch.
     launch_kwargs: dict[str, Any] = {"model_id": resolved_model_id}
+    import inspect
+
+    if "provider_config" in inspect.signature(builder).parameters:
+        launch_kwargs["provider_config"] = provider_config
     if request_runtime_root is not None:
         launch_kwargs["request_runtime_root"] = request_runtime_root
     # AS41: only Pi's build_acp_launch declares enable_rpc_tap today — no
@@ -618,14 +705,14 @@ def prepare_provider_session_transport(
         if "enable_rpc_tap" in inspect.signature(builder).parameters:
             launch_kwargs["enable_rpc_tap"] = True
     if mcp_entries is not None:
-        surface = prepare_provider_mcp_surface(
+        mcp_launch_surface = prepare_provider_mcp_surface(
             project_root,
             provider_id=provider_id,
             entries=tuple(mcp_entries),
             runtime_root=request_runtime_root,
             require_exact_isolation=require_isolated_mcp,
         )
-        launch_kwargs["mcp_surface"] = surface
+        launch_kwargs["mcp_surface"] = mcp_launch_surface
     try:
         acp_launch = builder(project_root, **launch_kwargs)
     except AudiaGenticError as exc:
@@ -693,6 +780,7 @@ def prepare_provider_session_transport(
     # Wrap in private AcpAgentSessionTransport (AS28 slice 2 adapter).
     transport = _build_transport_from_launch(
         project_root, acp_launch,
+        ag_session_id=ag_session_id,
         resume_provider_ref=resume_provider_ref,
         pre_spawn_hook=pre_spawn_hook,
     )
@@ -701,6 +789,11 @@ def prepare_provider_session_transport(
         transport=transport,
         surface=surface,
         effective_provider_ref=effective_ref,
+        runtime_preserve_relpaths=(
+            _runtime_preserve_relpaths_registry().get(provider_id, ())
+            if request_runtime_root is not None
+            else ()
+        ),
     )
 
 

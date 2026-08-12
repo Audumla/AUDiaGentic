@@ -19,7 +19,9 @@ logger = logging.getLogger(__name__)
 def materialize_model_config_path(project_root: Path, agent_runtime: Path | None) -> Path:
     """OpenCode launches consume the project-local config document."""
     del agent_runtime
-    return project_root / ".opencode" / "config.json"
+    # Keep projection in the descriptor's native config target. A second
+    # config.json splits model ownership from OpenCode's active config.
+    return project_root / ".opencode" / "opencode.json"
 
 
 def _build_agents_md(project_root: Path) -> str:
@@ -38,7 +40,7 @@ def materialize_provider_config(
     """Write all OpenCode-specific config files.
 
     Called at install and refresh time. Writes:
-      - <project_root>/AGENTS.md             — template + injections + provider surface contributions
+      - <project_root>/AGENTS.md             — provider-owned template
       - <project_root>/.opencode/config.json — rig provider entry
 
     No .mcp.json is written: stock opencode never reads bare .mcp.json, and that
@@ -56,9 +58,9 @@ def materialize_provider_config(
     if agents_md:
         (project_root / "AGENTS.md").write_text(agents_md, encoding="utf-8")
 
-    # Apply provider surface contributions for OpenCode (managed blocks inside
-    # AGENTS.md — apply_managed_blocks only touches its own previously-managed
-    # region, so this cannot clobber the template or user-authored content).
+    # Apply provider surface contributions for OpenCode. Contributions declare
+    # their project scope in component config; project-only AUDiaGentic doctrine
+    # is filtered out for ordinary consumer projects by the surface loader.
     try:
         from audiagentic.components.providers import providers_api
 

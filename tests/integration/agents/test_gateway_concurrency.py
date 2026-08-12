@@ -4,9 +4,9 @@ rig — the coverage gap crash-matrix/opencode don't fill.
 Every other gateway Docker suite either focuses on crash recovery
 (test_gateway_crash_matrix_docker.py) or a single real-CLI happy path
 (test_gateway_opencode_docker.py). Neither proves the gateway's actual
-concurrency guarantees under real overlapping requests: max-concurrency
+concurrency guarantees under real overlapping requests: virtual-capacity
 genuinely bounding simultaneous dispatch, two different projects sharing one
-gateway-owned profile lane (SH07 Slice 0 / SH13), queue-max-size rejection,
+gateway-owned profile lane (SH07 Slice 0 / SH13), pending-capacity rejection,
 and reload-vs-in-flight-load races. Those guarantees are proven today only
 against an in-process fake (tests/integration/agents/test_gateway_standalone_service.py)
 — this suite proves them against a real OS subprocess and a real HTTP rig.
@@ -30,7 +30,7 @@ from tests.integration.agents.gateway_docker_harness import (
     stop_subprocess_gracefully,
     wait_for,
     wait_for_record_state,
-    write_agent_profile,
+    write_execution_profile,
     write_gateway_profiles_config,
 )
 
@@ -64,7 +64,7 @@ def _start_service(
     gateway_profiles: list[dict],
     name: str = "service-state",
 ) -> tuple:
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
         load_auth_token,
     )
@@ -82,37 +82,41 @@ def _start_service(
     return proc, client, service_root, token_path, gw_config_path
 
 
-def test_real_concurrent_saturation_bounds_at_max_concurrency(
+def test_real_concurrent_saturation_bounds_at_virtual_capacity(
     tmp_path: Path, rig_server
 ) -> None:
-    """max-concurrency=2, 3 submitted: exactly 2 genuinely overlap in-flight
+    """virtual-capacity=2, 3 submitted: exactly 2 genuinely overlap in-flight
     (never more), the 3rd stays queued until a slot frees, and all 3
     eventually complete."""
     _require_docker_gate()
     rig_port = rig_server.server_address[1]
-    write_agent_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", max_concurrency=1)
+    write_execution_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", virtual_capacity=1)
     enable_local_openai(tmp_path, rig_port)
 
     proc, client, service_root, token_path, _ = _start_service(
         tmp_path,
         gateway_profiles=[{
             "profile_id": "default", "provider_id": "local-openai", "model_id": "audiagentic-rig",
-            "params": {"max-concurrency": 2, "queue-max-size": 8},
+            "params": {"virtual-capacity": 2, "pending-capacity": 8},
         }],
     )
     try:
-        first = client.submit_llm_request(tmp_path, prompt_body="one", mode="async")
-        second = client.submit_llm_request(tmp_path, prompt_body="two", mode="async")
-        third = client.submit_llm_request(tmp_path, prompt_body="three", mode="async")
+        first = client.submit_execution_request(tmp_path, prompt_body="one", mode="async")
+        second = client.submit_execution_request(tmp_path, prompt_body="two", mode="async")
+        third = client.submit_execution_request(tmp_path, prompt_body="three", mode="async")
 
         # Both concurrency slots must fill before the rig releases anything —
         # this is the actual proof of real overlap, not a timing guess.
-        wait_for(
-            lambda: HoldableRigHandler.active_count == 2,
-            timeout=10, what="two requests genuinely in-flight simultaneously",
-        )
+        try:
+            wait_for(
+                lambda: HoldableRigHandler.active_count == 2,
+                timeout=10, what="two requests genuinely in-flight simultaneously",
+            )
+        except AssertionError as exc:
+            output = getattr(proc, "_ag_captured_output", [])
+            raise AssertionError(f"{exc}; gateway output: {' | '.join(output[-20:])}") from exc
         # The third must still be queued, not dispatched, while both slots are full.
-        third_status = client.get_llm_request(tmp_path, third["request-id"])
+        third_status = client.get_execution_request(tmp_path, third["request-id"])
         assert third_status["state"] == "queued"
 
         HoldableRigHandler.hold.set()
@@ -122,7 +126,7 @@ def test_real_concurrent_saturation_bounds_at_max_concurrency(
             assert recovered["state"] == "completed"
 
         assert HoldableRigHandler.peak_active_count == 2, (
-            f"expected exactly 2 concurrent in-flight requests (max-concurrency=2), "
+            f"expected exactly 2 concurrent in-flight requests (virtual-capacity=2), "
             f"observed peak={HoldableRigHandler.peak_active_count}"
         )
     finally:
@@ -133,7 +137,7 @@ def test_real_concurrent_saturation_bounds_at_max_concurrency(
 def test_cross_project_sharing_enforces_global_limit(tmp_path: Path, rig_server) -> None:
     """SH07 Slice 0 / SH13: two DIFFERENT project roots submitting against
     the SAME gateway-owned profile share one physical lane — the global
-    max-concurrency is enforced across both projects combined, not per
+    virtual-capacity is enforced across both projects combined, not per
     project. Proven here against a real subprocess for the first time (the
     existing coverage in test_gateway_standalone_service.py is in-process)."""
     _require_docker_gate()
@@ -143,19 +147,19 @@ def test_cross_project_sharing_enforces_global_limit(tmp_path: Path, rig_server)
     root_a.mkdir()
     root_b.mkdir()
     for root in (root_a, root_b):
-        write_agent_profile(root, provider_id="local-openai", model_id="audiagentic-rig", max_concurrency=1)
+        write_execution_profile(root, provider_id="local-openai", model_id="audiagentic-rig", virtual_capacity=1)
         enable_local_openai(root, rig_port)
 
     proc, client, service_root, token_path, _ = _start_service(
         tmp_path,
         gateway_profiles=[{
             "profile_id": "default", "provider_id": "local-openai", "model_id": "audiagentic-rig",
-            "params": {"max-concurrency": 1, "queue-max-size": 8},
+            "params": {"virtual-capacity": 1, "pending-capacity": 8},
         }],
     )
     try:
-        from_a = client.submit_llm_request(root_a, prompt_body="from project a", mode="async")
-        from_b = client.submit_llm_request(root_b, prompt_body="from project b", mode="async")
+        from_a = client.submit_execution_request(root_a, prompt_body="from project a", mode="async")
+        from_b = client.submit_execution_request(root_b, prompt_body="from project b", mode="async")
 
         # Only one slot exists globally — exactly one of the two projects'
         # requests can be running at a time, never both.
@@ -179,7 +183,7 @@ def test_cross_project_sharing_enforces_global_limit(tmp_path: Path, rig_server)
         stop_subprocess_gracefully(proc)
 
 
-def test_queue_max_size_exceeded_is_rejected_not_silently_dropped(
+def test_pending_capacity_exceeded_is_rejected_not_silently_dropped(
     tmp_path: Path, rig_server
 ) -> None:
     """Negative path: once the queue is genuinely full, a further submission
@@ -187,26 +191,26 @@ def test_queue_max_size_exceeded_is_rejected_not_silently_dropped(
     disappear and does not block the requests already admitted."""
     _require_docker_gate()
     rig_port = rig_server.server_address[1]
-    write_agent_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", max_concurrency=1)
+    write_execution_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", virtual_capacity=1)
     enable_local_openai(tmp_path, rig_port)
 
     proc, client, service_root, token_path, _ = _start_service(
         tmp_path,
         gateway_profiles=[{
             "profile_id": "default", "provider_id": "local-openai", "model_id": "audiagentic-rig",
-            "params": {"max-concurrency": 1, "queue-max-size": 1},
+            "params": {"virtual-capacity": 1, "pending-capacity": 1},
         }],
     )
     try:
-        running = client.submit_llm_request(tmp_path, prompt_body="running", mode="async")
+        running = client.submit_execution_request(tmp_path, prompt_body="running", mode="async")
         wait_for(
             lambda: HoldableRigHandler.active_count == 1,
             timeout=10, what="first request occupies the sole concurrency slot",
         )
-        queued = client.submit_llm_request(tmp_path, prompt_body="queued", mode="async")
-        assert client.get_llm_request(tmp_path, queued["request-id"])["state"] == "queued"
+        queued = client.submit_execution_request(tmp_path, prompt_body="queued", mode="async")
+        assert client.get_execution_request(tmp_path, queued["request-id"])["state"] == "queued"
 
-        overflow = client.submit_llm_request(tmp_path, prompt_body="overflow", mode="async")
+        overflow = client.submit_execution_request(tmp_path, prompt_body="overflow", mode="async")
         assert overflow["state"] == "rejected", overflow
         assert overflow["error"]["code"] == "VAL-AGW-025"
 
@@ -230,16 +234,16 @@ def test_reload_racing_concurrent_load_rejects_stale_keeps_running_intact(
     running under its original snapshot."""
     _require_docker_gate()
     rig_port = rig_server.server_address[1]
-    write_agent_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", max_concurrency=1)
+    write_execution_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", virtual_capacity=1)
     enable_local_openai(tmp_path, rig_port)
 
     gw_config_path = tmp_path / "gateway-profiles.yaml"
     write_gateway_profiles_config(gw_config_path, [{
         "profile_id": "default", "provider_id": "local-openai", "model_id": "audiagentic-rig",
-        "params": {"max-concurrency": 1, "queue-max-size": 8},
+        "params": {"virtual-capacity": 1, "pending-capacity": 8},
     }])
 
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
         load_auth_token,
     )
@@ -250,18 +254,18 @@ def test_reload_racing_concurrent_load_rejects_stale_keeps_running_intact(
     proc = start_gateway_subprocess(service_root, token_path, port, gateway_profiles_config=gw_config_path)
     client = StandaloneGatewayClient(f"http://127.0.0.1:{port}", load_auth_token(token_path))
     try:
-        running = client.submit_llm_request(tmp_path, prompt_body="running", mode="async")
+        running = client.submit_execution_request(tmp_path, prompt_body="running", mode="async")
         wait_for(
             lambda: HoldableRigHandler.active_count == 1,
             timeout=10, what="request occupies the sole concurrency slot",
         )
-        queued = client.submit_llm_request(tmp_path, prompt_body="queued", mode="async")
-        assert client.get_llm_request(tmp_path, queued["request-id"])["state"] == "queued"
+        queued = client.submit_execution_request(tmp_path, prompt_body="queued", mode="async")
+        assert client.get_execution_request(tmp_path, queued["request-id"])["state"] == "queued"
 
         # Mutate the config and reload through the real HTTP service operation.
         write_gateway_profiles_config(gw_config_path, [{
             "profile_id": "default", "provider_id": "local-openai", "model_id": "audiagentic-rig",
-            "params": {"max-concurrency": 2, "queue-max-size": 16},
+            "params": {"virtual-capacity": 2, "pending-capacity": 16},
         }])
         reload_result = client._call("reload_gateway_profiles", tmp_path, {})
         assert reload_result["success"] is True
@@ -287,28 +291,28 @@ def test_cancel_racing_concurrent_dispatch_does_not_disturb_others(
     requests terminates only that one — the others complete normally."""
     _require_docker_gate()
     rig_port = rig_server.server_address[1]
-    write_agent_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", max_concurrency=1)
+    write_execution_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", virtual_capacity=1)
     enable_local_openai(tmp_path, rig_port)
 
     proc, client, service_root, token_path, _ = _start_service(
         tmp_path,
         gateway_profiles=[{
             "profile_id": "default", "provider_id": "local-openai", "model_id": "audiagentic-rig",
-            "params": {"max-concurrency": 2, "queue-max-size": 8},
+            "params": {"virtual-capacity": 2, "pending-capacity": 8},
         }],
     )
     try:
-        first = client.submit_llm_request(tmp_path, prompt_body="keep-running-1", mode="async")
-        second = client.submit_llm_request(tmp_path, prompt_body="keep-running-2", mode="async")
-        to_cancel = client.submit_llm_request(tmp_path, prompt_body="cancel-me", mode="async")
+        first = client.submit_execution_request(tmp_path, prompt_body="keep-running-1", mode="async")
+        second = client.submit_execution_request(tmp_path, prompt_body="keep-running-2", mode="async")
+        to_cancel = client.submit_execution_request(tmp_path, prompt_body="cancel-me", mode="async")
 
         wait_for(
             lambda: HoldableRigHandler.active_count == 2,
             timeout=10, what="both concurrency slots occupied, third queued",
         )
-        assert client.get_llm_request(tmp_path, to_cancel["request-id"])["state"] == "queued"
+        assert client.get_execution_request(tmp_path, to_cancel["request-id"])["state"] == "queued"
 
-        client.cancel_llm_request(tmp_path, to_cancel["request-id"])
+        client.cancel_execution_request(tmp_path, to_cancel["request-id"])
         HoldableRigHandler.hold.set()
 
         cancelled = wait_for_record_state(

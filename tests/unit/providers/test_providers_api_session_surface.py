@@ -8,6 +8,7 @@ Tests verify:
 - Unsupported surface produces no live transport
 - Prior behavior remains stable (prepare_provider_acp_launch unchanged)
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -36,6 +37,7 @@ from audiagentic.foundation.transports.session_surface import (
 )
 
 # ── Helpers: fake descriptor construction ───────────────────────────────────
+
 
 def _fake_descriptor(
     provider_id: str = "test-provider",
@@ -80,6 +82,7 @@ def _fake_surface_decl(**kwargs: Any) -> Any:
     from audiagentic.components.providers.descriptors.session_surface_declarations import (
         SessionSurfaceDeclaration,
     )
+
     defaults = {
         "surface_id": "acp",
         "version_constraint": ">=1.0",
@@ -99,12 +102,14 @@ def _isolate_registry(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     from audiagentic.components.providers.descriptors.registry import (
         _registry,
     )
+
     _registry._items.clear()
 
     yield tmp_path
 
 
 # ── Public API exact forwarding ─────────────────────────────────────────────
+
 
 class TestResolveSessionSurfacePublicApi:
     """resolve_session_surface delegates to resolver and returns frozen types."""
@@ -172,6 +177,7 @@ class TestResolveSessionSurfacePublicApi:
 
 # ── Adapter-ref redaction ───────────────────────────────────────────────────
 
+
 class TestAdapterRefRedaction:
     """Resolved snapshots through the public API carry no adapter_ref."""
 
@@ -179,9 +185,7 @@ class TestAdapterRefRedaction:
         """Even when the descriptor has an adapter_ref, it is not in the snapshot."""
         descriptor = _fake_descriptor(
             "redact-test",
-            session_surfaces=(
-                _fake_surface_decl(adapter_ref="some.module:factory_fn"),
-            ),
+            session_surfaces=(_fake_surface_decl(adapter_ref="some.module:factory_fn"),),
         )
         register(descriptor)
         set_provider_enabled(tmp_path, "redact-test", enabled=True)
@@ -229,13 +233,15 @@ class TestAdapterRefRedaction:
             if stripped.startswith("#"):
                 continue
             # Only top-level imports (not inside functions) count.
-            if "from audiagentic.components.providers.descriptors.base" in stripped and not stripped.startswith("    "):
-                pytest.fail(
-                    "providers_api must not import descriptor base at module level"
-                )
+            if (
+                "from audiagentic.components.providers.descriptors.base" in stripped
+                and not stripped.startswith("    ")
+            ):
+                pytest.fail("providers_api must not import descriptor base at module level")
 
 
 # ── PreparedSessionTransport: one snapshot reused ───────────────────────────
+
 
 class TestPreparedSessionTransportReusesSnapshot:
     """prepare_provider_session_transport returns the same surface snapshot."""
@@ -268,6 +274,7 @@ class TestPreparedSessionTransportReusesSnapshot:
             return dummy_launch
 
         import audiagentic.components.providers.services.execution.execution as exec_mod
+
         orig = exec_mod.load_acp_launch_builder
 
         try:
@@ -276,6 +283,8 @@ class TestPreparedSessionTransportReusesSnapshot:
             hint = SurfaceHint(surface_id="acp")
             prepared = providers_api.prepare_provider_session_transport(
                 tmp_path,
+                ag_session_id="ag-test-session",
+                binding_sink=lambda update: None,
                 provider_id="transport-test",
                 surface_hint=hint,
                 model_id="gpt-4",
@@ -287,6 +296,7 @@ class TestPreparedSessionTransportReusesSnapshot:
             from audiagentic.foundation.transports.acp import (
                 AcpAgentSessionTransport,
             )
+
             assert isinstance(prepared.transport, AcpAgentSessionTransport)
             # The raw AcpLaunch is not exposed directly — it's wrapped.
             assert prepared.transport is not dummy_launch
@@ -311,6 +321,8 @@ class TestPreparedSessionTransportReusesSnapshot:
         hint = SurfaceHint(surface_id="acp")
         prepared = providers_api.prepare_provider_session_transport(
             tmp_path,
+            ag_session_id="ag-test-session",
+            binding_sink=lambda update: None,
             provider_id="nonexistent-provider",
             surface_hint=hint,
         )
@@ -341,6 +353,7 @@ class TestPreparedSessionTransportReusesSnapshot:
 
         dummy_launch = AcpLaunch(executable="dummy", args=(), environment={})
         import audiagentic.components.providers.services.execution.execution as exec_mod
+
         orig = exec_mod.load_acp_launch_builder
 
         try:
@@ -349,13 +362,13 @@ class TestPreparedSessionTransportReusesSnapshot:
             hint = SurfaceHint(surface_id="acp")
 
             # Resolve independently.
-            resolved = providers_api.resolve_session_surface(
-                tmp_path, "reuse-test", hint
-            )
+            resolved = providers_api.resolve_session_surface(tmp_path, "reuse-test", hint)
 
             # Prepare transport (which also resolves).
             prepared = providers_api.prepare_provider_session_transport(
                 tmp_path,
+                ag_session_id="ag-test-session",
+                binding_sink=lambda update: None,
                 provider_id="reuse-test",
                 surface_hint=hint,
                 model_id="gpt-4",
@@ -373,6 +386,7 @@ class TestPreparedSessionTransportReusesSnapshot:
 
 
 # ── Prior behavior stability ────────────────────────────────────────────────
+
 
 class TestPriorBehaviorStability:
     """Existing prepare_provider_acp_launch contract remains stable."""
@@ -397,6 +411,7 @@ class TestPriorBehaviorStability:
 
         dummy_launch = AcpLaunch(executable="dummy", args=(), environment={})
         import audiagentic.components.providers.services.execution.execution as exec_mod
+
         orig = exec_mod.load_acp_launch_builder
 
         try:
@@ -437,6 +452,7 @@ class TestPriorBehaviorStability:
 
 # ── PreparedSessionTransport type properties ───────────────────────────────
 
+
 class TestPreparedSessionTransportType:
     """PreparedSessionTransport is a frozen dataclass from foundation."""
 
@@ -464,6 +480,7 @@ class TestPreparedSessionTransportType:
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
+
 def _make_unsupported_surface() -> ResolvedSessionSurface:
     """Create an UNSUPPORTED ResolvedSessionSurface for testing."""
     from audiagentic.foundation.transports.session_surface import (
@@ -482,4 +499,5 @@ def _make_unsupported_surface() -> ResolvedSessionSurface:
 def _inspect_source(module: Any) -> str:
     """Get source of a module as string."""
     import inspect
+
     return inspect.getsource(module)

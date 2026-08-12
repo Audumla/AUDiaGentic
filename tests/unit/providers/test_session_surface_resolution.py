@@ -871,12 +871,7 @@ class TestNoAgentImport:
             assert "from audiagentic.components.agents" not in stripped
 
     def test_no_provider_descriptor_import_in_agents(self):
-        try:
-            from audiagentic.components.agents import (
-                agents_gateway_session_bindings as agsb,
-            )
-        except ImportError:
-            pytest.skip("agents_gateway_session_bindings not available")
+        from audiagentic.components.agents.gateway.session import bindings as agsb
 
         source = _inspect_source(agsb)
         for line in source.splitlines():
@@ -886,12 +881,7 @@ class TestNoAgentImport:
             assert "from audiagentic.components.providers.descriptors" not in stripped
 
     def test_no_protocol_import_in_agents(self):
-        try:
-            from audiagentic.components.agents import (
-                agents_gateway_session_bindings as agsb,
-            )
-        except ImportError:
-            pytest.skip("agents_gateway_session_bindings not available")
+        from audiagentic.components.agents.gateway.session import bindings as agsb
 
         source = _inspect_source(agsb)
         for line in source.splitlines():

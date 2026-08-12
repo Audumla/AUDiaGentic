@@ -44,12 +44,13 @@ def build_acp_launch(
     project_root: Path,
     *,
     model_id: str | None = None,
+    provider_config: dict | None = None,
     request_runtime_root: Path | None = None,
     mcp_surface=None,
 ) -> AcpLaunch:
     del request_runtime_root
     environment = {}
-    if model_id or mcp_surface is not None:
+    if model_id or mcp_surface is not None or provider_config:
         # OpenCode documents inline config as highest-precedence runtime config.
         # Snapshot the project config so session workers do not fall through to
         # user-global auth/config when the provider was materialized locally.
@@ -74,6 +75,9 @@ def build_acp_launch(
                 document["enabled_providers"] = list(provider_map.keys())
         if model_id:
             document["model"] = model_id
+        settings = provider_config.get("settings") if isinstance(provider_config, dict) else None
+        if isinstance(settings, dict):
+            document.update(settings)
         document = _merge_mcp_surface(document, mcp_surface)
         environment["OPENCODE_CONFIG_CONTENT"] = json.dumps(document)
         if mcp_surface is not None:

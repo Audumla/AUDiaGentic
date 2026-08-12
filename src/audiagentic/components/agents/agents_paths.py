@@ -1,4 +1,5 @@
 """Path resolution for the agents component."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,27 +7,42 @@ from pathlib import Path
 from audiagentic.foundation.paths.names import project_marker_path
 
 
-def agent_profiles_path(project_root: Path) -> Path:
-    """Return the path to the agent profiles YAML config file."""
-    return project_marker_path(project_root) / "config" / "agent-profiles.yaml"
+def execution_profiles_path(project_root: Path) -> Path:
+    """Return the path to the execution profiles YAML config file."""
+    return project_marker_path(project_root) / "config" / "execution-profiles.yaml"
 
 
-_GATEWAY_ROOT = Path("runtime") / "agent-llm-gateway"
+def roles_path(project_root: Path) -> Path:
+    """Return the path to the roles YAML config file."""
+    return project_marker_path(project_root) / "config" / "roles.yaml"
+
+
+def agent_definitions_path(project_root: Path) -> Path:
+    """Return the path to the agent definitions YAML config file."""
+    return project_marker_path(project_root) / "config" / "agent-definitions.yaml"
+
+
+_GATEWAY_ROOT = Path("runtime") / "agent-execution-gateway"
 
 
 def gateway_root(project_root: Path) -> Path:
-    """Return the .audiagentic/runtime/agent-llm-gateway root for a project."""
+    """Return the .audiagentic/runtime/agent-execution-gateway root for a project."""
     return project_marker_path(project_root) / _GATEWAY_ROOT
 
 
 def gateway_request_dir(project_root: Path, request_id: str) -> Path:
-    """Return the gateway request directory (.../agent-llm-gateway/<request-id>)."""
+    """Return the gateway request directory (.../agent-execution-gateway/<request-id>)."""
     return gateway_root(project_root) / request_id
 
 
 def gateway_request_path(project_root: Path, request_id: str) -> Path:
     """Return the record.json path for a gateway request."""
     return gateway_request_dir(project_root, request_id) / "record.json"
+
+
+def gateway_publication_path(project_root: Path, request_id: str, *, attempt_epoch: int = 1) -> Path:
+    """Return the durable broker-publication intent for one request attempt."""
+    return gateway_request_dir(project_root, request_id) / f"publication-{attempt_epoch}.json"
 
 
 def gateway_timeline_path(project_root: Path, request_id: str) -> Path:
@@ -44,57 +60,9 @@ def gateway_idempotency_index_path(project_root: Path, key_digest: str) -> Path:
     return gateway_root(project_root) / "idempotency" / f"{key_digest}.json"
 
 
-# Legacy defect (SH review C3): session paths were rooted at the bare project
-# root instead of the .audiagentic marker, creating <project>/runtime/... .
-_LEGACY_SESSIONS_ROOT = Path("runtime") / "agent-llm-gateway" / "sessions"
-_migrated_session_roots: set[Path] = set()
-
-
-def _migrate_legacy_sessions_root(project_root: Path, target: Path) -> None:
-    """One-time move of the accidental top-level sessions tree into the marker.
-
-    Both-roots-present is surfaced, never silently merged: the legacy tree is
-    left in place and a warning names it so an operator can reconcile.
-    """
-    if project_root in _migrated_session_roots:
-        return
-    _migrated_session_roots.add(project_root)
-    legacy = project_root / _LEGACY_SESSIONS_ROOT
-    try:
-        if not legacy.is_dir():
-            return
-        if target.exists():
-            import logging
-
-            logging.getLogger(__name__).warning(
-                "both legacy and current gateway session roots exist; leaving legacy in place",
-                extra={"legacy-root": str(legacy), "current-root": str(target)},
-            )
-            return
-        target.parent.mkdir(parents=True, exist_ok=True)
-        legacy.rename(target)
-        # Remove the now-empty accidental top-level runtime tree if nothing
-        # else was created under it.
-        for parent in (legacy.parent, legacy.parent.parent):
-            try:
-                parent.rmdir()
-            except OSError:
-                break
-    except OSError:
-        import logging
-
-        logging.getLogger(__name__).warning(
-            "failed to migrate legacy gateway session root",
-            extra={"legacy-root": str(legacy)},
-            exc_info=True,
-        )
-
-
 def gateway_sessions_root(project_root: Path) -> Path:
-    """Return the .audiagentic/runtime/agent-llm-gateway/sessions root for a project."""
-    target = gateway_root(project_root) / "sessions"
-    _migrate_legacy_sessions_root(project_root, target)
-    return target
+    """Return the .audiagentic/runtime/agent-execution-gateway/sessions root for a project."""
+    return gateway_root(project_root) / "sessions"
 
 
 def gateway_session_dir(project_root: Path, session_id: str) -> Path:
@@ -122,6 +90,16 @@ def gateway_session_binding_lock_path(project_root: Path) -> Path:
     return gateway_sessions_root(project_root) / "session-binding-index.lock"
 
 
+def gateway_session_root_registry_path(project_root: Path) -> Path:
+    """Return the durable session-root/request lineage registry path."""
+    return gateway_sessions_root(project_root) / "session-root-registry.json"
+
+
+def gateway_session_root_registry_lock_path(project_root: Path) -> Path:
+    """Return the lock guarding the durable session-root registry."""
+    return gateway_sessions_root(project_root) / "session-root-registry.lock"
+
+
 # ── AS49: explicit resume idempotency ───────────────────────────────────────
 
 
@@ -140,6 +118,17 @@ def gateway_session_resume_lock_path(project_root: Path, session_id: str) -> Pat
     """Return the lock path guarding a source session's resume-idempotency record."""
     return gateway_session_dir(project_root, session_id) / "resume-idempotency.lock"
 
+
+def gateway_session_control_idempotency_path(project_root: Path, session_id: str) -> Path:
+    """Return the durable generic-control idempotency record for a session."""
+    return gateway_session_dir(project_root, session_id) / "control-idempotency.json"
+
+
+def gateway_session_control_lock_path(project_root: Path, session_id: str) -> Path:
+    """Return the lock guarding a session's generic-control idempotency record."""
+    return gateway_session_dir(project_root, session_id) / "control-idempotency.lock"
+
+
 # ── AS31 Stage-2: output event paths ───────────────────────────────────────
 
 _OUTPUT_DIR = Path("output")
@@ -148,30 +137,33 @@ _OUTPUT_EVENTS_DIR = _OUTPUT_DIR / "events"
 
 def gateway_output_dir(project_root: Path, request_id: str) -> Path:
     """Return the output directory for a gateway request
-    (.../agent-llm-gateway/<request-id>/output)."""
+    (.../agent-execution-gateway/<request-id>/output)."""
     return gateway_request_dir(project_root, request_id) / _OUTPUT_DIR
 
 
 def gateway_output_events_dir(project_root: Path, request_id: str) -> Path:
     """Return the output events subdirectory for a gateway request
-    (.../agent-llm-gateway/<request-id>/output/events)."""
+    (.../agent-execution-gateway/<request-id>/output/events)."""
     return gateway_output_dir(project_root, request_id) / _OUTPUT_EVENTS_DIR
 
 
-def gateway_output_event_path(
-    project_root: Path, request_id: str, sequence: int
-) -> Path:
+def gateway_output_event_path(project_root: Path, request_id: str, sequence: int) -> Path:
     """Return the per-event JSON path for a given sequence number.
-    (.../agent-llm-gateway/<request-id>/output/events/<seq>.json)."""
+    (.../agent-execution-gateway/<request-id>/output/events/<seq>.json)."""
     return gateway_output_events_dir(project_root, request_id) / f"{sequence}.json"
 
 
 def gateway_output_index_path(project_root: Path, request_id: str) -> Path:
     """Return the output index path for a gateway request.
-    (.../agent-llm-gateway/<request-id>/output/index.json)."""
+    (.../agent-execution-gateway/<request-id>/output/index.json)."""
     return gateway_output_dir(project_root, request_id) / "index.json"
 
 
 def gateway_output_lock_path(project_root: Path, request_id: str) -> Path:
     """Return the per-request lock protecting output append operations."""
     return gateway_request_dir(project_root, request_id) / "output.lock"
+
+
+def gateway_retention_lock_path(project_root: Path) -> Path:
+    """Return the cross-surface lock for retention pins and purge deletion."""
+    return gateway_root(project_root) / "retention.mutation.lock"

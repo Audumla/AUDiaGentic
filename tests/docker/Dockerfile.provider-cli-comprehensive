@@ -16,4 +16,7 @@ COPY docs/examples ./docs/examples
 RUN uv venv /venv && \
     uv pip install --python /venv/bin/python -q --no-compile -e '.[test]'
 
-CMD ["/venv/bin/pytest", "tests/integration/providers/test_provider_cli_comprehensive.py", "-v", "-x"]
+# Keep registry/recipe assertions and real install/uninstall workflows in the
+# same image layer. The isolated provider runner supplies one fresh container
+# per provider, so installed state never leaks between providers.
+CMD ["/venv/bin/pytest", "tests/integration/providers/test_provider_cli_comprehensive.py", "tests/integration/providers/test_provider_cli_workflow_docker.py", "-v", "-x"]

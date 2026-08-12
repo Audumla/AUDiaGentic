@@ -40,7 +40,7 @@ def test_typescript_dependency_installs_server_and_runtime() -> None:
     inner = step.variants["run"]
     command = inner.command if hasattr(inner, "command") else ()
     assert command[:4] == ("npm", "install", "-g", "typescript-language-server")
-    assert command[4:] == ("typescript",)
+    assert command[4:] == ("typescript@5.9.3",)
 
 
 def test_typescript_dependency_uses_cross_platform_npm() -> None:
@@ -48,8 +48,8 @@ def test_typescript_dependency_uses_cross_platform_npm() -> None:
     cfg = dep_cfgs["typescript-language-server"]
 
     assert cfg["toolchain"] == "npm"
-    assert cfg["package"] == ["typescript-language-server", "typescript"]
-    assert cfg["probe"] == "all-binaries:typescript-language-server,tsserver"
+    assert cfg["package"] == ["typescript-language-server", "typescript@5.9.3"]
+    assert cfg["probe"] == "binary:typescript-language-server"
 
 
 def test_clangd_dependency_has_os_package_manager_variants() -> None:

@@ -9,8 +9,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 import audiagentic.components.providers  # noqa: F401 — register provider descriptors
 from audiagentic.components.memory.hindsight import provision as prov
 from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
@@ -93,8 +91,9 @@ class TestLifecycleHint:
         from audiagentic.components.providers.descriptors.registry import get_descriptor
 
         desc = get_descriptor("gemini")
-        if desc is None or not getattr(desc, "deprecated", False):
-            pytest.skip("gemini not marked deprecated in current config")
+        assert desc is not None and getattr(desc, "deprecated", False), (
+            "gemini must remain marked deprecated while this migration hint is covered"
+        )
 
         results = [
             {
@@ -191,21 +190,6 @@ class TestMcpRefreshMode:
 
 class TestReconcileLifecycleHints:
     """Test that reconcile surfaces lifecycle hints on the entry dicts."""
-
-    def test_gemini_deprecation_hint(self, tmp_path, monkeypatch):
-        """Gemini should have deprecation hint in reconcile result."""
-        _patch_backend(monkeypatch, HindsightBackendConfig(base_url="http://hs:1/", api_key="k"))
-
-        from audiagentic.components.providers.descriptors.registry import get_descriptor
-
-        desc = get_descriptor("gemini")
-        if desc is None or not getattr(desc, "deprecated", False):
-            pytest.skip("gemini not marked deprecated in current config")
-
-        out = prov.reconcile_hindsight(tmp_path, ["gemini"])
-        entry = out["providers"].get("gemini", {})
-        hint = entry.get("action_needed", "") or ""
-        assert "deprecated" in hint.lower(), f"Expected deprecation hint, got: {hint}"
 
     def test_no_hint_for_guidance_only_provider(self, tmp_path, monkeypatch):
         """Guidance-only providers get no lifecycle hints."""
