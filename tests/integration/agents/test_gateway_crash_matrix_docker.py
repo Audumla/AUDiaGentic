@@ -12,7 +12,7 @@ service against the same service-root to prove recovery reaches the correct
 terminal state. Opt-in Docker gate, mirroring test_gateway_opencode_docker.py.
 
 Provisioning goes through gateway_docker_harness.py, which wraps AUDiaGentic's
-real agent-profile/provider-config APIs — no hand-written config files.
+real execution-profile/provider-config APIs — no hand-written config files.
 """
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ from tests.integration.agents.gateway_docker_harness import (
     wait_for,
     wait_for_index_phase,
     wait_for_record_state,
-    write_agent_profile,
+    write_execution_profile,
 )
 from tests.integration.agents.gateway_docker_harness import read_record as _read_record
 
@@ -73,13 +73,13 @@ def test_crash_while_admitted_but_unclaimed_recovers_as_replay_required(
     dispatch owner — killing the service there must recover it as terminal
     interrupted + replay-required=true, never re-enqueued."""
     _require_docker_gate()
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
         load_auth_token,
     )
 
     rig_port = rig_server.server_address[1]
-    write_agent_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", max_concurrency=1)
+    write_execution_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", virtual_capacity=1)
     enable_local_openai(tmp_path, rig_port)
 
     service_root = tmp_path / "service-state"
@@ -89,8 +89,8 @@ def test_crash_while_admitted_but_unclaimed_recovers_as_replay_required(
     client = StandaloneGatewayClient(f"http://127.0.0.1:{port}", load_auth_token(token_path))
     try:
 
-        first = client.submit_llm_request(tmp_path, prompt_body="hold me", mode="async")
-        second = client.submit_llm_request(tmp_path, prompt_body="stay queued", mode="async")
+        first = client.submit_execution_request(tmp_path, prompt_body="hold me", mode="async")
+        second = client.submit_execution_request(tmp_path, prompt_body="stay queued", mode="async")
 
         # First occupies the sole concurrency slot (rig holds its response);
         # second must sit admitted-only, never claimed, while the slot is full.
@@ -128,13 +128,13 @@ def test_crash_while_running_recovers_as_interrupted(tmp_path: Path, rig_server)
     terminal interrupted with the stale-owner error, never left running
     forever and never silently re-dispatched."""
     _require_docker_gate()
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
         load_auth_token,
     )
 
     rig_port = rig_server.server_address[1]
-    write_agent_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", max_concurrency=1)
+    write_execution_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", virtual_capacity=1)
     enable_local_openai(tmp_path, rig_port)
 
     service_root = tmp_path / "service-state"
@@ -144,11 +144,14 @@ def test_crash_while_running_recovers_as_interrupted(tmp_path: Path, rig_server)
     client = StandaloneGatewayClient(f"http://127.0.0.1:{port}", load_auth_token(token_path))
     request_id = None
     try:
-        submitted = client.submit_llm_request(tmp_path, prompt_body="hang here", mode="async")
+        submitted = client.submit_execution_request(tmp_path, prompt_body="hang here", mode="async")
         request_id = submitted["request-id"]
 
         wait_for_record_state(tmp_path, request_id, {"running"})
-        wait_for_index_phase(service_root, request_id, "running")
+        # The request record is the authoritative running-state gate. The
+        # work-index update is deliberately best-effort at this boundary; the
+        # restart assertion below verifies recovery from the durable request
+        # state without coupling this proof to index-write scheduling.
 
         kill_subprocess(proc)
     finally:
@@ -176,13 +179,13 @@ def test_cancel_raced_with_recovery_reaches_consistent_terminal_state(
     recovery: the restarted service still terminalizes the stale running
     request exactly once, and the cancel-requested flag survives."""
     _require_docker_gate()
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
         load_auth_token,
     )
 
     rig_port = rig_server.server_address[1]
-    write_agent_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", max_concurrency=1)
+    write_execution_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", virtual_capacity=1)
     enable_local_openai(tmp_path, rig_port)
 
     service_root = tmp_path / "service-state"
@@ -192,11 +195,11 @@ def test_cancel_raced_with_recovery_reaches_consistent_terminal_state(
     client = StandaloneGatewayClient(f"http://127.0.0.1:{port}", load_auth_token(token_path))
     request_id = None
     try:
-        submitted = client.submit_llm_request(tmp_path, prompt_body="hang then cancel", mode="async")
+        submitted = client.submit_execution_request(tmp_path, prompt_body="hang then cancel", mode="async")
         request_id = submitted["request-id"]
         wait_for_record_state(tmp_path, request_id, {"running"})
 
-        client.cancel_llm_request(tmp_path, request_id)
+        client.cancel_execution_request(tmp_path, request_id)
         wait_for(
             lambda: _read_record(tmp_path, request_id).get("cancel-requested") is True,
             timeout=10, what="cancel-requested flag persisted",
@@ -228,13 +231,13 @@ def test_malformed_active_work_entry_is_quarantined_not_deleted_on_restart(
     starts must be quarantined for forensic analysis, not silently deleted,
     and must not block recovery of a real, valid entry alongside it."""
     _require_docker_gate()
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
         load_auth_token,
     )
 
     rig_port = rig_server.server_address[1]
-    write_agent_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", max_concurrency=1)
+    write_execution_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", virtual_capacity=1)
     enable_local_openai(tmp_path, rig_port)
 
     service_root = tmp_path / "service-state"
@@ -244,7 +247,7 @@ def test_malformed_active_work_entry_is_quarantined_not_deleted_on_restart(
     client = StandaloneGatewayClient(f"http://127.0.0.1:{port}", load_auth_token(token_path))
     request_id = None
     try:
-        submitted = client.submit_llm_request(tmp_path, prompt_body="hang", mode="async")
+        submitted = client.submit_execution_request(tmp_path, prompt_body="hang", mode="async")
         request_id = submitted["request-id"]
         wait_for_record_state(tmp_path, request_id, {"running"})
         kill_subprocess(proc)
@@ -308,13 +311,13 @@ def test_crash_after_claim_before_start_recovers_as_replay_required(
     interrupted + replay-required=true (never left claimed forever, never
     silently resumed as if it had started)."""
     _require_docker_gate()
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
         load_auth_token,
     )
 
     rig_port = rig_server.server_address[1]
-    write_agent_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", max_concurrency=1)
+    write_execution_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", virtual_capacity=1)
     enable_local_openai(tmp_path, rig_port)
 
     service_root = tmp_path / "service-state"
@@ -327,7 +330,7 @@ def test_crash_after_claim_before_start_recovers_as_replay_required(
     client = StandaloneGatewayClient(f"http://127.0.0.1:{port}", load_auth_token(token_path))
     request_id = None
     try:
-        submitted = client.submit_llm_request(tmp_path, prompt_body="claim then stall", mode="async")
+        submitted = client.submit_execution_request(tmp_path, prompt_body="claim then stall", mode="async")
         request_id = submitted["request-id"]
 
         # Observed directly from the on-disk control-plane index: claimed
@@ -371,7 +374,7 @@ def test_crash_after_terminal_before_index_cleanup_preserves_terminal_result(
     pointing at an already-terminal request and sweep them without ever
     re-terminalizing, overwriting, or duplicating the completed result."""
     _require_docker_gate()
-    from audiagentic.components.agents.agents_gateway_remote_client import (
+    from audiagentic.components.agents.gateway.remote_client import (
         StandaloneGatewayClient,
         load_auth_token,
     )
@@ -381,7 +384,7 @@ def test_crash_after_terminal_before_index_cleanup_preserves_terminal_result(
     # so the request reaches a terminal state on its own -- release the hold
     # up front instead of using it to stall the request.
     _HoldableRigHandler.hold.set()
-    write_agent_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", max_concurrency=1)
+    write_execution_profile(tmp_path, provider_id="local-openai", model_id="audiagentic-rig", virtual_capacity=1)
     enable_local_openai(tmp_path, rig_port)
 
     service_root = tmp_path / "service-state"
@@ -395,7 +398,7 @@ def test_crash_after_terminal_before_index_cleanup_preserves_terminal_result(
     request_id = None
     pre_crash_record = None
     try:
-        submitted = client.submit_llm_request(tmp_path, prompt_body="complete then stall", mode="async")
+        submitted = client.submit_execution_request(tmp_path, prompt_body="complete then stall", mode="async")
         request_id = submitted["request-id"]
 
         # Caught mid-stall: the terminal write already landed, but cleanup

@@ -1,48 +1,49 @@
 # Agents Component
 
-Agent profile management — bind a provider to a specific model with optional
+Execution profile management — bind a provider to a specific model with optional
 execution parameters. Profiles are stored per-project in
-`.audiagentic/config/agent-profiles.yaml` and resolved at job launch time.
+`.audiagentic/config/execution-profiles.yaml` and resolved at job launch time.
 
 ## Architecture
 
-- `models.py` — AgentProfile dataclass, AgentProfilesStore, validation
+- `models.py` — ExecutionProfile dataclass, ExecutionProfileStore, validation
 - `agents_paths.py` — Path resolution for profile config files
 - `agents_api.py` — Pure-logic CRUD API (load, save, list, get, create, update, delete, resolve), agent_status status-hook
 - `agents_manage_mcp.py` — Management MCP server (CRUD tools, CLI-side only)
 - `agents_mcp.py` — Operational MCP server (resolve tools, provider-facing)
-- `agents_gateway_store/` — Gateway request/result record contract and persisted state (AG08), split into _shared, _admission, _records, _transitions (SH18)
+- `agents_gateway_store/` — Gateway request/result record contract and persisted state (AG08), split into _shared,_admission, _records,_transitions (SH18)
 - `agents_gateway_queue.py` — Per-profile FIFO queue, concurrency limiting, cancel, wait, lifecycle events (AG09)
 - `agents_gateway_dispatch.py` — Provider dispatch, retry, fallback (AG10)
 - `agents_gateway_session_dispatch.py` — Sessionful dispatch path extracted from dispatch.py (SH18)
 - `agents_gateway_turn_events.py` — Turn-event projection and publishing extracted from sessions.py (SH18)
 - `agents_gateway_api.py` — Public submit/status/wait/cancel/run API (AG11)
 - `agents_gateway_mcp.py` — Gateway MCP server (AG11)
-- `agents_gateway_events.py` — Event-triggered submission via `agents.llm.gateway.requested` (AG12)
+- `agents_gateway_events.py` — Event-triggered submission via `agents.execution.gateway.requested` (AG12)
 - `agents_gateway_application.py` — Framework-neutral gateway application contract
 - `agents_gateway_service_application.py` — Closed standalone v1 operation/lease router
 - `agents_gateway_http_transport.py` — Authenticated IPv4-loopback HTTP adapter
 - `agents_gateway_remote_client.py` — Explicit standalone client with bounded attach semantics
-- `agents_gateway_service_host.py` — Foundation managed-service host composition
+- `agents_gateway_service_host.py` — Foundation managed-service host composition; also the sole caller of `runtime/bootstrap/gateway_service_composition.py`'s second composition root (AS60 step 7 / RV888), which composes the shared-gateway execution-profile registry as install/uninstall around this host's own construction/close
 
 ## Two-server pattern (profiles)
 
 Management (`ag-agents-mgmt`, propagate: `audiagentic`) handles admin operations.
-Operational (`ag-agents`, propagate: `audiagentic,providers`) provides resolution
-capabilities to providers during job execution.
+Operational (`ag-agents-gateway`, propagate: `providers`) exposes `agent_task_submit`
+and status/cancel/session management to provider CLIs during job execution.
 
 ## Error codes
 
-- `VAL-AGP-001` through `VAL-AGP-005` — Profile validation failures
-- `RES-AGP-001` — Profile not found
-- `RES-AGP-002` — Duplicate profile ID
-- `RES-AGP-003` — No default profile
-- `IO-AGP-001` — Failed to read profiles file
-- `IO-AGP-002` — Failed to write profiles file
+- `VAL-EXP-001` — Profile validation failures
+- `VAL-EXP-004` — Unsupported profiles contract version
+- `RES-EXP-001` — Profile not found
+- `RES-EXP-002` — Duplicate profile ID
+- `RES-EXP-003` — No default profile
+- `IO-EXP-001` — Failed to read profiles file
+- `IO-EXP-002` — Failed to write profiles file
 
-## Agent LLM Gateway
+## Agent Execution Gateway
 
-A queued, concurrency-limited dispatch layer that resolves an agent profile
+A queued, concurrency-limited dispatch layer that resolves an execution profile
 to a provider/model and executes provider work through
 `providers.services.execution.execute_provider`, with retry and
 cross-profile fallback. Deliberately built on its own request/result
@@ -50,7 +51,7 @@ contract rather than agent-jobs' `JobRecord` — see [AG07](../../../../docs/pla
 for why (packet/workflow-profile/approvals/review-policy don't fit a
 gateway request).
 
-**What `output` actually contains depends on the provider.** For most agent
+**What `output` actually contains depends on the provider.** For most execution
 profiles (any CLI-based provider — claude, codex, aider, etc.), a gateway
 request runs a full provider CLI/session invocation and `output` is that
 session's stdout, not a raw chat completion — the claude adapter, for
@@ -60,21 +61,28 @@ any OpenAI-compatible HTTP endpoint) behave like a direct chat completion.
 Don't assume `output` is a clean model response unless the resolved profile's
 provider is one of the API-style ones.
 
-Persisted at `.audiagentic/runtime/agent-llm-gateway/<request-id>/record.json`,
-validated against `agent-llm-record.schema.json`.
+Persisted at `.audiagentic/runtime/agent-execution-gateway/<request-id>/record.json`,
+validated against `agent-execution-record.schema.json`.
 
 ### Request modes
 
-- **Async** (default) — `agent_llm_submit` returns `{request-id, state: "queued"}` immediately.
-  Poll `agent_llm_status(request_id)` or block later with `agent_llm_wait(request_id, timeout_seconds)`.
-- **Blocking** — `agent_llm_run` submits and waits for a terminal result or timeout in one call.
-  MCP adapter timeout cap: `agents_gateway_mcp.MCP_BLOCKING_TIMEOUT_SECONDS` (300s) — a longer
-  requested timeout is silently clamped, since a blocking MCP tool call must not hold the
-  connection past the client's own transport timeout.
-- **Event-triggered** — publish `agents.llm.gateway.requested` on the foundation event bus
-  (`{project-root, prompt-body, agent-profile-id?, blocking?, source?}`).
+- **Async** (default, and the only mode exposed over MCP) - `agent_task_submit`
+  (the sole MCP submission surface, AS63) returns `{request-id, state: "queued"}`
+  immediately. Poll `agent_task_status(request_id)` until the request reaches
+  a terminal state. Blocking submit-and-wait remains available through the
+  underlying Python API, not as an MCP tool.
+  Direct execution_profile_id submission bypassing Agent Definition
+  resolution is not exposed over MCP — use the Python API layer
+  (`AgentTaskFactory.submit_raw`/`submit_execution_request`) for that.
+- **Blocking** (Python API only, not exposed over MCP) — `submit_execution_request(...,
+  mode="blocking")` / `run_execution_request(...)` / `AgentTaskFactory.submit(...,
+  mode="blocking")` submit and wait for a terminal result or timeout in one call, with
+  no transport-imposed cap — for in-process callers only (e.g. a supervisor holding its
+  own thread for a long task, RV511).
+- **Event-triggered** — publish `agents.execution.gateway.requested` on the foundation event bus
+  (`{project-root, prompt-body, execution-profile-id?, blocking?, source?}`).
   Always async unless `payload.blocking` is explicitly set. Not for one-shot MCP-tool use —
-  use `agent_llm_run` for that.
+  use `agent_task_submit` and poll `agent_task_status` for that.
 
 ### State model
 
@@ -86,7 +94,7 @@ records intent (the dispatch retry loop checks it between attempts and stops, bu
 request that finishes normally before the next check completes as `completed`, not `cancelled`
 — cancellation of an in-flight provider call is best-effort, not interruptive).
 
-### Params (agent profile `params` block)
+### Params (execution profile `params` block)
 
 All optional, all validated (a present-but-invalid value raises rather than silently
 defaulting) — resolved via `agents_gateway_queue.resolve_*` / `agents_gateway_dispatch.resolve_retry_count`:
@@ -112,8 +120,8 @@ Non-session requests keep the between-attempts cooperative check only.
 ### Lifecycle events
 
 Published by `agents_gateway_queue` for *every* request regardless of origin (MCP or event):
-`agents.llm.queued`, `agents.llm.started`, `agents.llm.completed`, `agents.llm.failed`,
-`agents.llm.cancelled`, `agents.llm.rejected`. Base payload: `{request-id, agent-profile-id,
+`agents.execution.queued`, `agents.execution.started`, `agents.execution.completed`, `agents.execution.failed`,
+`agents.execution.cancelled`, `agents.execution.rejected`. Base payload: `{request-id, execution-profile-id,
 state}`; terminal events (`completed`/`failed`/`cancelled`/`rejected`) additionally carry
 `provider-id`, `model-id`, `error`, and `attempt_count` so an observer can tell what happened
 without reading `record.json`. `correlation_id`/`subject` are preserved automatically — they

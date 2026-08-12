@@ -71,3 +71,34 @@ def test_release_does_not_stop_while_another_lease_is_active(monkeypatch) -> Non
     attachment = service.RigAttachment("http://127.0.0.1:42001/v1", "m", "lease", "epoch")
     service.release_embedded_rig(attachment)
     assert calls == ["release"]
+
+
+def test_multiple_clients_attach_to_one_shared_rig(monkeypatch, tmp_path: Path) -> None:
+    calls: list[dict[str, object]] = []
+
+    class Lifecycle:
+        def __init__(self, _store, _hooks) -> None:
+            pass
+
+        def start_or_attach(self, _declaration, **kwargs):
+            calls.append(kwargs)
+            index = len(calls)
+            return SimpleNamespace(
+                record=SimpleNamespace(owner_epoch="shared-epoch"),
+                lease=SimpleNamespace(lease_id=f"lease-{index}"),
+            )
+
+    monkeypatch.setattr(service, "ManagedServiceLifecycle", Lifecycle)
+    monkeypatch.setattr(service, "prepare_launch", lambda **_kwargs: _plan(tmp_path))
+    monkeypatch.setattr(service.RigAttachment, "start_renewal", lambda self: None)
+
+    first = service.start_or_attach_embedded_rig(
+        profile_name="profile", rig_port=42001, model_id="audiagentic-rig"
+    )
+    second = service.start_or_attach_embedded_rig(
+        profile_name="profile", rig_port=42001, model_id="audiagentic-rig"
+    )
+
+    assert [first.lease_id, second.lease_id] == ["lease-1", "lease-2"]
+    assert len({item["client_instance_id"] for item in calls}) == 2
+    assert len(calls) == 2

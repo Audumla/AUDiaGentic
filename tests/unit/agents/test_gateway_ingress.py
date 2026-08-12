@@ -7,11 +7,11 @@ from typing import Any
 
 import pytest
 
-from audiagentic.components.agents.agents_event_topics import (
+from audiagentic.components.agents.gateway.event_topics import (
     GATEWAY_CANCEL_REQUESTED_TOPIC,
     GATEWAY_REQUESTED_TOPIC,
 )
-from audiagentic.components.agents.agents_gateway_ingress import (
+from audiagentic.components.agents.gateway.ingress import (
     drain_gateway_ingress,
     gateway_ingress_spool,
     ingress_backlog,
@@ -28,7 +28,7 @@ class FakeApplication:
         self.cancels: list[tuple[Path, str]] = []
         self.raise_code: str | None = None
 
-    def submit_llm_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]:
+    def submit_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]:
         if self.raise_code:
             raise AudiaGenticError(
                 code=self.raise_code, kind="agents", message="scripted", details={}
@@ -36,7 +36,7 @@ class FakeApplication:
         self.submissions.append({"project_root": project_root, **kwargs})
         return {"request-id": f"req_{len(self.submissions)}", "state": "queued"}
 
-    def cancel_llm_request(self, project_root: Path, request_id: str) -> dict[str, Any]:
+    def cancel_execution_request(self, project_root: Path, request_id: str) -> dict[str, Any]:
         self.cancels.append((project_root, request_id))
         return {"request-id": request_id, "state": "cancelled"}
 
@@ -56,7 +56,7 @@ def _publish_request(service_root: Path, project: Path, **overrides) -> str:
 
 def test_spooled_request_admitted_with_delivery_idempotency(rig):
     app, service_root, project = rig
-    event_id = _publish_request(service_root, project, **{"agent-profile-id": "p1"})
+    event_id = _publish_request(service_root, project, **{"execution-profile-id": "p1"})
     assert ingress_backlog(service_root) == {"pending": 1, "dead-letter": 0}
 
     outcome = drain_gateway_ingress(app, service_root=service_root)
@@ -65,7 +65,7 @@ def test_spooled_request_admitted_with_delivery_idempotency(rig):
 
     submitted = app.submissions[0]
     assert submitted["prompt_body"] == "hello"
-    assert submitted["agent_profile_id"] == "p1"
+    assert submitted["execution_profile_id"] == "p1"
     assert submitted["mode"] == "async"  # spooled triggers are always async
     assert submitted["metadata"]["idempotency_key"] == f"gateway-spool:{event_id}"
     assert submitted["metadata"]["correlation_id"] == "corr-1"

@@ -1,0 +1,19 @@
+type: implementation
+contract-version: v1
+parent: agents
+id: standalone
+display-name: Standalone
+description: >-
+  Explicit endpoint+token connection to an already-running gateway service.
+  Never auto-starts a service; requires the endpoint and token file to be
+  configured, or the equivalent env override during the migration window.
+default: false
+options-schema:
+  endpoint:
+    type: string
+    required: true
+    description: "HTTP endpoint of the already-running standalone gateway service."
+  token-file:
+    type: string
+    required: true
+    description: "Path to the private file holding the gateway's auth token."

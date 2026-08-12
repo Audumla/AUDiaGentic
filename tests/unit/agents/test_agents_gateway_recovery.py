@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.components.agents import agents_gateway_api as api
-from audiagentic.components.agents import agents_gateway_recovery as recovery
-from audiagentic.components.agents import agents_gateway_store as store
+from audiagentic.components.agents.gateway import api as api
+from audiagentic.components.agents.gateway import store as store
+from audiagentic.components.agents.gateway.queue import recovery as recovery
 
 
 def test_gateway_api_does_not_expose_second_recovery_authority() -> None:
@@ -15,7 +15,7 @@ def test_gateway_api_does_not_expose_second_recovery_authority() -> None:
 
 
 def _record(project_root: Path, prompt: str = "hello") -> dict:
-    record = store.build_record(agent_profile_id="default", prompt_body=prompt)
+    record = store.build_record(execution_profile_id="default", prompt_body=prompt)
     store.write_record(project_root, record)
     return record
 
@@ -280,6 +280,29 @@ def test_link_replay_sets_replayed_by_on_old_request(tmp_path: Path) -> None:
 
     assert linked["replayed-by-request-id"] == new_request_id
     assert linked["state"] == "interrupted"
+
+
+def test_restart_recovery_preserves_watchdog_classification_evidence(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    record = _record(project_root)
+    store.claim_dispatch(
+        project_root, record["request-id"], owner_epoch="old-epoch",
+        expected_revision=record["revision"], service_root=tmp_path / "service",
+    )
+    running = store.start_owned_attempt(
+        project_root, record["request-id"], owner_epoch="old-epoch",
+        worker_id="worker-a", expected_revision=1,
+    )
+    store.renew_owned_activity(
+        project_root, record["request-id"], owner_epoch="old-epoch", worker_id="worker-a",
+        attempt_epoch=running["attempt-epoch"], activity_seq=2,
+        activity_source="provider-progress", activity_lease_seconds=300,
+    )
+    recovery.recover_gateway_requests(tmp_path / "service", live_owner_epoch="new-epoch")
+    recovered = store.read_record(project_root, record["request-id"])
+    assert recovered["state"] == "interrupted"
+    assert recovered["recovery"]["reason"] == "service-restart"
+    assert recovered["activity-sequence"] == 2
 
 
 def test_link_replay_fails_for_non_terminal(tmp_path: Path) -> None:

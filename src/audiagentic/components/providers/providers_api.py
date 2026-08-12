@@ -14,8 +14,12 @@ never construct or dispatch a recipe.
 from __future__ import annotations
 
 import asyncio
+import logging
+import time
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from audiagentic.components.providers.contracts.cli_lifecycle import (
     CliLifecycleMode,
@@ -50,6 +54,7 @@ from audiagentic.components.providers.contracts.managed_mcp import (
     ManagedMcpResult,
 )
 from audiagentic.components.providers.contracts.mcp_launch_surface import (
+    McpLaunchIsolationTier,
     McpLaunchServerEntry,
     McpLaunchSurfaceResult,
 )
@@ -97,6 +102,15 @@ def get_provider_execution_isolation_tier(provider_id: str) -> ProviderIsolation
     return _get_tier(provider_id)
 
 
+def get_provider_mcp_launch_isolation_tier(provider_id: str) -> McpLaunchIsolationTier:
+    """Return the provider-wide MCP launch isolation fact."""
+    from audiagentic.components.providers.services.execution.public_execution import (
+        get_provider_mcp_launch_isolation_tier as _get_tier,
+    )
+
+    return _get_tier(provider_id)
+
+
 def get_provider_runtime_config_state(
     project_root: Path,
     provider_id: str,
@@ -136,6 +150,19 @@ def list_canonical_provider_ids() -> tuple[str, ...]:
     )
 
     return _list()
+
+
+def get_provider_load_errors() -> list[tuple[str, str]]:
+    """Return residual descriptor load errors as (file, error_message) pairs.
+
+    Providers whose descriptors failed to parse are skipped and logged;
+    this accessor exposes the failures for operator diagnostics.
+    The error message is truncated to 200 characters.
+    """
+    from audiagentic.components.providers.descriptors.loader import get_load_errors as _get
+
+    errors = _get()
+    return [(str(path.name), str(exc)[:200]) for path, exc in errors]
 
 
 def get_prompt_syntax_defaults() -> dict[str, Any]:
@@ -489,16 +516,24 @@ def manage_mcp_entries_all(
     the managed-mcp capability return ``supported=False``.
     """
     from audiagentic.components.providers.descriptors.registry import all_descriptors
+    from audiagentic.components.providers.services.config.provider_config import (
+        is_provider_enabled,
+    )
 
     results: list[ManagedMcpResult] = []
     for descriptor in all_descriptors().values():
         if descriptor.mcp_config is None:
             continue
+        enabled = is_provider_enabled(project_root, descriptor.provider_id)
+        effective_request = request if enabled else ManagedMcpRequest(
+            ownership_scope=request.ownership_scope,
+            entries=(),
+        )
         result = manage_mcp_entries(
             project_root,
             descriptor.provider_id,
-            mode=mode,
-            request=request,
+            mode=mode if enabled else "prune",
+            request=effective_request,
         )
         results.append(result)
     return results
@@ -549,6 +584,20 @@ def manage_language_servers_all(
         )
         results.append(result)
     return results
+
+
+def write_host_settings(
+    project_root: Path,
+    updates: dict[str, Any],
+    *,
+    host_id: str = "vscode",
+) -> Path:
+    """Merge provider-owned host settings through the public provider boundary."""
+    from audiagentic.components.providers.surfaces.host_settings import (
+        write_host_settings as _write,
+    )
+
+    return _write(project_root, updates, host_id=host_id)
 
 
 def manage_model_projection(
@@ -718,8 +767,14 @@ def operate_provider_surfaces(
         )
 
     renderers = load_contribution_renderer_registry()
+    from audiagentic.components.providers.descriptors.feature_mapping import KIND_SURFACE
+    from audiagentic.components.providers.services.config.feature_resolution import (
+        active_provider_ids,
+    )
+
+    active_provider_ids_for_surface = active_provider_ids(project_root, KIND_SURFACE)
     results: list[GeneratedSurfaceResult] = []
-    for pid in sorted(renderers):
+    for pid in sorted(active_provider_ids_for_surface & set(renderers)):
         try:
             single = operate_provider_surfaces(
                 project_root,
@@ -738,6 +793,41 @@ def operate_provider_surfaces(
                 )
             )
     return results
+
+
+def get_reconciliation_policy(project_root: Path) -> dict[str, Any]:
+    """Return this project's provider reconciliation policy (defaults to auto)."""
+    from audiagentic.components.providers.services.config.provider_config import (
+        get_reconciliation_policy as _get,
+    )
+
+    return _get(project_root)
+
+
+def set_reconciliation_policy(
+    project_root: Path,
+    *,
+    mode: str,
+    allowed_providers: list[str] | None = None,
+    decided_providers: list[str] | None = None,
+) -> dict[str, Any]:
+    """Set this project's provider reconciliation policy.
+
+    mode='auto' enables whatever provider CLI is detected on launch (today's
+    behavior). mode='allowlist' only auto-enables providers in
+    allowed_providers. mode='prompt' is resolved interactively at launch
+    (see resolve_reconciliation_policy).
+    """
+    from audiagentic.components.providers.services.config.provider_config import (
+        set_reconciliation_policy as _set,
+    )
+
+    return _set(
+        project_root,
+        mode=mode,
+        allowed_providers=allowed_providers,
+        decided_providers=decided_providers,
+    )
 
 
 def list_providers(project_root: Path) -> dict[str, Any]:
@@ -962,7 +1052,7 @@ def describe_provider(project_root: Path, provider_id: str) -> dict[str, Any]:
 
     Joins descriptor summary, status/probe, execution support, model catalog,
     managed-config surfaces, and ownership registries. Performs NO new
-    discovery, NO duplicate probes/catalog parsing, and NO agent-profile join
+    discovery, NO duplicate probes/catalog parsing, and NO execution-profile join
     (agents owns profiles — ``related_tools`` points there instead).
     """
     from audiagentic.components.providers.descriptors.registry import get_descriptor
@@ -1026,7 +1116,7 @@ def describe_provider(project_root: Path, provider_id: str) -> dict[str, Any]:
         # secrets.py scheme:locator reference strings (e.g. "env:OPENAI_API_KEY"),
         # never a resolved value.
         "vendor_key_injection": dict(descriptor.vendor_key_injection),
-        "related_tools": ["agent_list_profiles"],
+        "related_tools": ["agent_list_execution_profiles"],
     }
 
 
@@ -1112,10 +1202,78 @@ def model_source_list(project_root: Path) -> dict[str, Any]:
             "model-id": source.get("model-id"),
             "enabled": source.get("enabled", True),
             "api-key-ref": source.get("api-key-ref"),
+            "resource-id": source.get("resource-id"),
+            "concurrency": source.get("concurrency"),
         }
         for source_id, source in (document.get("sources") or {}).items()
     }
     return {"ok": True, "contract-version": document.get("contract-version"), "sources": sources}
+
+
+def model_source_list_resolved(project_root: Path) -> dict[str, Any]:
+    """List sources from the merged view: user-global shared local-endpoint
+    sources plus this project's own sources (AS105/AS101). What a source
+    actually resolves to for dispatch -- read-only, never for mutation."""
+    from audiagentic.components.providers.services.config.model_source_config import (
+        load_resolved_model_sources,
+    )
+
+    document = load_resolved_model_sources(project_root)
+    sources = {
+        source_id: {
+            "source-class": source.get("source-class"),
+            "display-name": source.get("display-name"),
+            "vendor-id": source.get("vendor-id"),
+            "connector": source.get("connector"),
+            "model-discovery": source.get("model-discovery"),
+            "model-id": source.get("model-id"),
+            "enabled": source.get("enabled", True),
+            "api-key-ref": source.get("api-key-ref"),
+            "resource-id": source.get("resource-id"),
+            "concurrency": source.get("concurrency"),
+        }
+        for source_id, source in (document.get("sources") or {}).items()
+    }
+    return {"ok": True, "contract-version": document.get("contract-version"), "sources": sources}
+
+
+def resolve_instance_capacity(
+    project_root: Path, source_ids: list[str]
+) -> dict[str, dict[str, Any]]:
+    """AS105/AS101: resolve ExecutionProfile.instances entries for dispatch.
+
+    Naming a model-sources.yaml source-id is opportunistic, not required --
+    not every provider has (or can have) a catalog entry there (e.g. a
+    browser-driven CDP session has no HTTP endpoint or vendor account to
+    declare). Returns ``{instance_id: {"model-id":..., "resource-id":
+    str|None, "concurrency": int|None}}``:
+
+    - If ``instance_id`` matches a declared source in the resolved
+      (user-global + project-local) view, its resource-id/concurrency
+      (if any) participate in free-instance dispatch.
+    - Otherwise, ``instance_id`` itself is treated as a plain, ungated
+      model-id -- exactly reproducing the pre-AS105/AS101
+      ``ExecutionProfile.model_id: str`` behavior for a profile that never
+      opted into the shared capacity model.
+    """
+    from audiagentic.components.providers.services.config.model_source_config import (
+        load_resolved_model_sources,
+    )
+
+    document = load_resolved_model_sources(project_root)
+    sources = document.get("sources") or {}
+    result: dict[str, dict[str, Any]] = {}
+    for source_id in source_ids:
+        source = sources.get(source_id)
+        if source is None:
+            result[source_id] = {"model-id": source_id, "resource-id": None, "concurrency": None}
+            continue
+        result[source_id] = {
+            "model-id": source.get("model-id"),
+            "resource-id": source.get("resource-id"),
+            "concurrency": source.get("concurrency"),
+        }
+    return result
 
 
 def list_model_inventory(project_root: Path) -> dict[str, Any]:
@@ -1411,6 +1569,104 @@ def model_source_set_enabled(
     return _mutate_model_sources(project_root, mutate)
 
 
+# ── User-global tier (AS105/AS101) — shared local-endpoint sources ────────
+# Machine-wide, not project-scoped: no timeline recording (no project to
+# attribute it to). Mirrors the project-local mutation shape exactly.
+
+
+def _mutate_user_global_model_sources(mutate) -> dict[str, Any]:
+    from audiagentic.components.providers.services.config.model_source_config import (
+        load_user_global_model_sources,
+        validate_model_sources,
+        write_user_global_model_sources,
+    )
+    from audiagentic.foundation.contracts.errors import make_error
+
+    current = load_user_global_model_sources()
+    proposed = mutate(json_roundtrip(current))
+    issues = validate_model_sources(proposed)
+    if issues:
+        raise make_error(
+            prefix="VAL",
+            component="MEP",
+            number=1,
+            kind="providers",
+            message="user-global model-sources.yaml failed schema validation",
+            details={"issues": issues},
+        )
+    write_user_global_model_sources(proposed)
+    diff = _model_source_diff(current, proposed)
+    return {"ok": True, "diff": diff, "written": True}
+
+
+def model_source_list_global() -> dict[str, Any]:
+    from audiagentic.components.providers.services.config.model_source_config import (
+        load_user_global_model_sources,
+    )
+
+    document = load_user_global_model_sources()
+    sources = {
+        source_id: {
+            "source-class": source.get("source-class"),
+            "display-name": source.get("display-name"),
+            "connector": source.get("connector"),
+            "model-id": source.get("model-id"),
+            "enabled": source.get("enabled", True),
+            "resource-id": source.get("resource-id"),
+            "concurrency": source.get("concurrency"),
+        }
+        for source_id, source in (document.get("sources") or {}).items()
+    }
+    return {"ok": True, "contract-version": document.get("contract-version"), "sources": sources}
+
+
+def model_source_add_global(source_id: str, config: dict[str, Any]) -> dict[str, Any]:
+    from audiagentic.foundation.contracts.errors import make_error
+
+    def mutate(document: dict[str, Any]) -> dict[str, Any]:
+        sources = document.setdefault("sources", {})
+        if source_id in sources:
+            raise make_error(
+                prefix="VAL",
+                component="MEP",
+                number=1,
+                kind="providers",
+                message="user-global model source already exists; use model_source_update_global",
+                details={"source-id": source_id},
+            )
+        sources[source_id] = config
+        return document
+
+    return _mutate_user_global_model_sources(mutate)
+
+
+def model_source_update_global(source_id: str, updates: dict[str, Any]) -> dict[str, Any]:
+    def mutate(document: dict[str, Any]) -> dict[str, Any]:
+        sources = _require_source(document, source_id)
+        sources[source_id].update(updates)
+        return document
+
+    return _mutate_user_global_model_sources(mutate)
+
+
+def model_source_remove_global(source_id: str) -> dict[str, Any]:
+    def mutate(document: dict[str, Any]) -> dict[str, Any]:
+        sources = _require_source(document, source_id)
+        del sources[source_id]
+        return document
+
+    return _mutate_user_global_model_sources(mutate)
+
+
+def model_source_set_enabled_global(source_id: str, enabled: bool) -> dict[str, Any]:
+    def mutate(document: dict[str, Any]) -> dict[str, Any]:
+        sources = _require_source(document, source_id)
+        sources[source_id]["enabled"] = enabled
+        return document
+
+    return _mutate_user_global_model_sources(mutate)
+
+
 async def refresh_all_catalogs(project_root: Path) -> dict[str, Any]:
     from audiagentic.components.providers.services.catalog.catalog import (
         refresh_all_catalogs as _refresh,
@@ -1474,6 +1730,8 @@ def prepare_provider_session_transport(
     project_root: Path,
     *,
     provider_id: str,
+    ag_session_id: str,
+    binding_sink: Any,
     surface_hint: SurfaceHint,
     model_id: str | None = None,
     model_alias: str | None = None,
@@ -1482,6 +1740,7 @@ def prepare_provider_session_transport(
     require_isolated_mcp: bool = False,
     resume_provider_ref: str | None = None,
     enable_observability_tap: bool = False,
+    resume_provider_metadata: dict[str, Any] | None = None,
 ) -> PreparedSessionTransport:
     """Prepare a session transport with resolved surface snapshot.
 
@@ -1508,18 +1767,47 @@ def prepare_provider_session_transport(
         prepare_provider_session_transport as _prepare,
     )
 
-    return _prepare(
-        project_root,
-        provider_id=provider_id,
-        surface_hint=surface_hint,
-        model_id=model_id,
-        model_alias=model_alias,
-        request_runtime_root=request_runtime_root,
-        mcp_entries=mcp_entries,
-        require_isolated_mcp=require_isolated_mcp,
-        resume_provider_ref=resume_provider_ref,
-        enable_observability_tap=enable_observability_tap,
+    started = time.monotonic()
+    logger.info(
+        "provider session transport prepare begin provider=%s model=%s surface=%s resume-ref=%s",
+        provider_id,
+        model_id,
+        getattr(surface_hint, "surface_id", None),
+        resume_provider_ref,
+        extra={"gpt-auto-phase": "provider-prepare.begin"},
     )
+    try:
+        result = _prepare(
+            project_root,
+            provider_id=provider_id,
+            ag_session_id=ag_session_id,
+            binding_sink=binding_sink,
+            surface_hint=surface_hint,
+            model_id=model_id,
+            model_alias=model_alias,
+            request_runtime_root=request_runtime_root,
+            mcp_entries=mcp_entries,
+            require_isolated_mcp=require_isolated_mcp,
+            resume_provider_ref=resume_provider_ref,
+            enable_observability_tap=enable_observability_tap,
+            resume_provider_metadata=resume_provider_metadata,
+        )
+    except Exception:
+        logger.exception(
+            "provider session transport prepare failed elapsed-ms=%.1f provider=%s",
+            (time.monotonic() - started) * 1000,
+            provider_id,
+            extra={"gpt-auto-phase": "provider-prepare.failed"},
+        )
+        raise
+    logger.info(
+        "provider session transport prepare complete elapsed-ms=%.1f provider=%s transport=%s",
+        (time.monotonic() - started) * 1000,
+        provider_id,
+        type(result.transport).__name__ if result.transport is not None else None,
+        extra={"gpt-auto-phase": "provider-prepare.complete"},
+    )
+    return result
 
 
 # ── AS19 Stage-2 Slice A: harness status observer resolution ────────
@@ -1622,7 +1910,9 @@ __all__ = [
     "ProviderExecutionResult",
     "ProviderAcpLaunchResult",
     "ProviderIsolationTier",
+    "McpLaunchIsolationTier",
     "get_provider_execution_isolation_tier",
+    "get_provider_mcp_launch_isolation_tier",
     "get_provider_runtime_config_state",
     "execute_provider_turn",
     "prepare_provider_acp_launch",
@@ -1647,6 +1937,8 @@ __all__ = [
     "execute_provider_review_turn",
     "list_providers",
     "get_provider_status",
+    "get_reconciliation_policy",
+    "set_reconciliation_policy",
     "list_provider_descriptors",
     "list_provider_models",
     "refresh_provider_catalog",
@@ -1685,6 +1977,7 @@ __all__ = [
     "SelfProvidedLspRequest",
     "manage_language_servers",
     "manage_language_servers_all",
+    "write_host_settings",
     "adopt_legacy_mcp_ownership",
     "manage_mcp_entries",
     "manage_mcp_entries_all",

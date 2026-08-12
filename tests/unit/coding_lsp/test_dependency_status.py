@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from audiagentic.components.coding_lsp import coding_lsp_bootstrap, language_registry
+from audiagentic.components.coding_lsp.coding_lsp_config import get_coding_lsp_dir
 from audiagentic.foundation.components.dependencies import build_dependency_install_commands
 
 
@@ -79,6 +80,7 @@ def test_status_payload_returns_contract_when_nothing_missing(tmp_path: Path, mo
 def test_on_installed_creates_dirs_without_writing_lsp_json(tmp_path: Path) -> None:
     coding_lsp_bootstrap._on_installed(tmp_path)
 
-    assert (tmp_path / ".coding-lsp").is_dir()
-    assert (tmp_path / ".coding-lsp" / "logs").is_dir()
-    assert not (tmp_path / ".coding-lsp" / "lsp.json").exists()
+    coding_lsp_dir = get_coding_lsp_dir(tmp_path)
+    assert coding_lsp_dir.is_dir()
+    assert (coding_lsp_dir / "logs").is_dir()
+    assert not (coding_lsp_dir / "lsp.json").exists()

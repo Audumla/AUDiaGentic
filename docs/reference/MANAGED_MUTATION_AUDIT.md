@@ -70,8 +70,8 @@ Categories: `shared-config`, `adapter-serializer`, `generated-surface`,
 | src/audiagentic/runtime/harness/pi/install/patches_mcp_register.py:_patch_mcp_direct_tools_live_register | write_text | third-party-repair | adapter exemption candidate | MA03 | Patches installed third-party package. |
 | src/audiagentic/runtime/harness/pi/mcp_format.py:remove_pi_mcp_json | atomic_write_json | adapter-serializer | registered provider serializer | MA03 | Duplicate runtime serializer/lifecycle wrapper. |
 | src/audiagentic/runtime/harness/pi/mcp_format.py:write_pi_mcp_json | atomic_write_json | adapter-serializer | registered provider serializer | MA03 | Duplicate runtime serializer/lifecycle wrapper. |
-| src/audiagentic/components/providers/adapters/pi/model_config.py:write_pi_models | write_text | adapter-serializer | atomic foundation writer | keep | Compliant pi model config serializer using write_text. |
-| src/audiagentic/components/providers/adapters/pi/model_config.py:remove_pi_model | write_text | adapter-serializer | atomic foundation writer | keep | Compliant pi model removal via conditional write_text.
+| src/audiagentic/components/providers/adapters/pi/model_config.py:write_pi_models | atomic_write_json | adapter-serializer | atomic foundation writer | keep | Compliant pi model config serializer using atomic JSON writes. |
+| src/audiagentic/components/providers/adapters/pi/model_config.py:remove_pi_model | atomic_write_json | adapter-serializer | atomic foundation writer | keep | Compliant pi model removal via conditional atomic JSON write.
 
 ## Non-mutation architecture findings
 

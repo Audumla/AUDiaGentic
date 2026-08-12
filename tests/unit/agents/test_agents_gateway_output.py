@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.components.agents.agents_gateway_output import (
+from audiagentic.components.agents.gateway.output import (
     OutputPolicy,
     create_relay,
     read_request_output,

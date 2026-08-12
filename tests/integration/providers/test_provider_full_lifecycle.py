@@ -48,6 +48,11 @@ from audiagentic.foundation.lifecycle.components import (
     enable_component,
     install_component,
 )
+from audiagentic.foundation.features.lifecycle import enable_implementation
+from audiagentic.foundation.toolchains.config.managed_config import (
+    ManagedConfigSpec,
+    resolve_managed_config_path,
+)
 
 pytestmark = [
     pytest.mark.mutates_host,
@@ -117,10 +122,7 @@ _INSTRUCTION_PROVIDERS = {
 
 def _resolve_mcp_path(spec: ManagedConfigSpec, project_root: Path) -> Path:
     """Resolve MCP config path, handling callable config_path."""
-    cp = spec.config_path
-    if callable(cp):
-        return cp(project_root)
-    return project_root / cp
+    return resolve_managed_config_path(spec, project_root)
 
 
 def _mcp_config_exists(project_root: Path, provider_id: str) -> bool:
@@ -225,7 +227,6 @@ class TestProviderInstallUninstall:
                 if not target.exists():
                     target.write_text("", encoding="utf-8")
 
-        install_provider_cli(provider_id, timeout=600, project_root=project_root)
         apply_provider_surfaces(project_root, provider_id=provider_id)
 
         # Verify managed agent files exist
@@ -235,8 +236,6 @@ class TestProviderInstallUninstall:
                     f"{provider_id}: managed agent file {af.rel_path} missing"
                 )
 
-        # Cleanup
-        uninstall_provider_cli(provider_id, timeout=300, project_root=project_root)
 
 
 class TestProviderMcpConfig:
@@ -257,8 +256,6 @@ class TestProviderMcpConfig:
         (project_root / ".audiagentic").mkdir(parents=True, exist_ok=True)
 
         install_component("providers", project_root)
-        install_provider_cli(provider_id, timeout=600, project_root=project_root)
-
         # Ensure MCP config file exists
         config_path = _resolve_mcp_path(spec, project_root)
         config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -301,7 +298,6 @@ class TestProviderMcpConfig:
         )
 
         # Cleanup
-        uninstall_provider_cli(provider_id, timeout=300, project_root=project_root)
 
     @pytest.mark.parametrize("provider_id", sorted(_MCP_PROVIDERS))
     def test_mcp_config_format_preserved(self, provider_id: str, tmp_path: Path) -> None:
@@ -315,8 +311,6 @@ class TestProviderMcpConfig:
         (project_root / ".audiagentic").mkdir(parents=True, exist_ok=True)
 
         install_component("providers", project_root)
-        install_provider_cli(provider_id, timeout=600, project_root=project_root)
-
         config_path = _resolve_mcp_path(spec, project_root)
         config_path.parent.mkdir(parents=True, exist_ok=True)
         if not config_path.exists():
@@ -354,7 +348,6 @@ class TestProviderMcpConfig:
 
         # Cleanup
         remove_provider_mcp_server(provider_id, "format-test", project_root)
-        uninstall_provider_cli(provider_id, timeout=300, project_root=project_root)
 
 
 class TestProviderDisableRemovesMcp:
@@ -372,14 +365,14 @@ class TestProviderDisableRemovesMcp:
         install_component("providers", project_root)
         install_component("coding-lsp", project_root)
         enable_component("coding-lsp", project_root)
+        enable_implementation(project_root, "coding-lsp", "ag-lsp")
 
         # Install provider
-        install_provider_cli(provider_id, timeout=300, project_root=project_root)
-
         # Ensure MCP config file exists
         desc = _desc(provider_id)
         spec = desc.mcp_config
         assert spec is not None
+        set_provider_enabled(project_root, provider_id, enabled=True)
         config_path = _resolve_mcp_path(spec, project_root)
         config_path.parent.mkdir(parents=True, exist_ok=True)
         if not config_path.exists():
@@ -416,7 +409,6 @@ class TestProviderDisableRemovesMcp:
         )
 
         # Cleanup
-        uninstall_provider_cli(provider_id, timeout=300, project_root=project_root)
 
 
 class TestProviderSkillSurface:
@@ -446,8 +438,6 @@ class TestProviderSkillSurface:
         (project_root / ".audiagentic").mkdir(parents=True, exist_ok=True)
 
         install_component("providers", project_root)
-        install_provider_cli(provider_id, timeout=300, project_root=project_root)
-
         # Verify skill directory parent exists or can be created
         skill_dir = Path(desc.skill_surface_path).parent
         skill_dir_path = project_root / skill_dir
@@ -456,8 +446,6 @@ class TestProviderSkillSurface:
             f"{provider_id}: skill directory {skill_dir} not creatable"
         )
 
-        # Cleanup
-        uninstall_provider_cli(provider_id, timeout=300, project_root=project_root)
 
 
 class TestProviderInstructionFile:
@@ -484,15 +472,12 @@ class TestProviderInstructionFile:
         if not instr_path.exists():
             instr_path.write_text("", encoding="utf-8")
 
-        install_provider_cli(provider_id, timeout=300, project_root=project_root)
         apply_provider_surfaces(project_root, provider_id=provider_id)
 
         assert instr_path.exists(), (
             f"{provider_id}: instruction file {desc.instruction_file} missing"
         )
 
-        # Cleanup
-        uninstall_provider_cli(provider_id, timeout=300, project_root=project_root)
 
 
 class TestProviderDescriptorCompleteness:

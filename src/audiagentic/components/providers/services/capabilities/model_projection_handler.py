@@ -21,7 +21,14 @@ from ..catalog.models import (
     list_provider_models_config as _list_config,
 )
 
-_SUPPORTED_MODES = frozenset({"plan", "apply", "prune", "status"})
+FAMILY_ID = "model-projection"
+
+
+def _family_declaration():
+    """Resolve the model-projection family declaration from config."""
+    from audiagentic.components.providers.descriptors.capability_catalogue import get_catalogue
+
+    return get_catalogue().families[FAMILY_ID]
 
 
 def _entry_to_materialized(entry) -> MaterializedModelEntry:
@@ -65,7 +72,7 @@ def _handler_impl(
         return ModelProjectionResult(
             ok=False, supported=False, provider_id=provider_id, error_code="RES-PREC-001"
         )
-    if mode not in _SUPPORTED_MODES:
+    if mode not in _family_declaration().supported_modes:
         return ModelProjectionResult(
             ok=False, supported=True, provider_id=provider_id, error_code="CON-PREC-002"
         )

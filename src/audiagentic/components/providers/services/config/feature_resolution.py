@@ -65,6 +65,15 @@ def enabled_provider_ids(project_root: Path) -> set[str]:
     }
 
 
+def active_provider_ids(project_root: Path, kind: str) -> set[str]:
+    """Return providers with an enabled implementation feature of ``kind``."""
+    return {
+        resolved.provider_id
+        for resolved in resolve_active_provider_features(project_root)
+        if resolved.kind == kind
+    }
+
+
 def resolve_active_provider_features(project_root: Path) -> list[ResolvedProviderFeature]:
     resolved: list[ResolvedProviderFeature] = []
     for provider_id, descriptor in sorted(all_descriptors().items()):

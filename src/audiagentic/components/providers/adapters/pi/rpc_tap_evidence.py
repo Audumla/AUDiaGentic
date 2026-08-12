@@ -55,7 +55,7 @@ from audiagentic.foundation.transports.agent_session import (
 # else -> TRANSPORT_UNKNOWN with zero attributes (never leak raw payload).
 _PI_FRAME_KIND_TO_TRANSPORT: dict[str, TransportObservationKind] = {
     "agent_start": TransportObservationKind.ACTIVITY,
-    "message_update": TransportObservationKind.ACTIVITY,
+    "message_update": TransportObservationKind.IN_PROGRESS,
     "turn_end": TransportObservationKind.TERMINAL,
     "agent_end": TransportObservationKind.TERMINAL,
 }

@@ -42,16 +42,33 @@ def load_project_config(project_root: Path) -> dict[str, Any]:
     return load_yaml_file(path)
 
 
+def _first_instance_model_id(project_root: Path, resolved: dict[str, Any]) -> str | None:
+    """AS105/AS101: resolve a profile's first instance to a concrete model-id.
+
+    This function's contract returns a single model_id; a genuinely
+    multi-instance profile only has its first instance represented here.
+    Acceptable for this legacy launch path, pending its rework (superseded
+    by the harness-native Skill launch path).
+    """
+    instances = resolved.get("instances") or []
+    if not instances:
+        return None
+    from audiagentic.components.agents.gateway.instances import resolve_instance_facts
+
+    facts = resolve_instance_facts(project_root, (instances[0],))
+    return facts[0].model_id
+
+
 def _resolve_agent_provider_model(
     project_root: Path,
     request: dict[str, Any],
 ) -> tuple[str, str | None, str | None]:
-    """Resolve provider_id, model_id, model_alias from agent profile or request.
+    """Resolve provider_id, model_id, model_alias from execution profile or request.
 
     Precedence:
-      1. agent-profile-id in request -> resolve profile -> override provider/model
+      1. execution-profile-id in request -> resolve profile -> override provider/model
       2. Explicit provider-id / model-id in request source
-      3. Default agent profile
+      3. Default execution profile
       4. Fallback to local-openai (backward compat)
 
     Returns (provider_id, model_id, model_alias).
@@ -61,47 +78,51 @@ def _resolve_agent_provider_model(
     explicit_model = source.get("model-id")
     explicit_alias = source.get("model-alias")
 
-    agent_profile_id = request.get("agent-profile-id")
-    if agent_profile_id:
-        from audiagentic.components.agents.agents_api import resolve_profile
-        resolved = resolve_profile(project_root, agent_profile_id)
+    execution_profile_id = request.get("execution-profile-id")
+    if execution_profile_id:
+        from audiagentic.components.agents.models.execution_profile_api import (
+            resolve_execution_profile,
+        )
+        resolved = resolve_execution_profile(project_root, execution_profile_id)
         provider_id = resolved["provider_id"]
         if not is_provider_enabled(project_root, provider_id):
             raise AudiaGenticError(
                 code="CON-AGJ-002",
                 kind="agent-jobs",
-                message="agent profile references a disabled provider",
+                message="execution profile references a disabled provider",
                 details={
-                    "profile_id": agent_profile_id,
+                    "profile_id": execution_profile_id,
                     "provider_id": provider_id,
                 },
             )
-        return provider_id, resolved.get("model_id"), resolved.get("model_alias")
+        return provider_id, _first_instance_model_id(project_root, resolved), resolved.get("model_alias")
 
     if explicit_provider or explicit_model:
         return explicit_provider or "local-openai", explicit_model, explicit_alias
 
     try:
-        from audiagentic.components.agents.agents_api import resolve_default_profile
-        resolved = resolve_default_profile(project_root)
+        from audiagentic.components.agents.models.execution_profile_api import (
+            resolve_default_execution_profile,
+        )
+        resolved = resolve_default_execution_profile(project_root)
         provider_id = resolved["provider_id"]
         if not is_provider_enabled(project_root, provider_id):
             raise AudiaGenticError(
                 code="CON-AGJ-002",
                 kind="agent-jobs",
-                message="default agent profile references a disabled provider",
+                message="default execution profile references a disabled provider",
                 details={
                     "profile_id": resolved["profile_id"],
                     "provider_id": provider_id,
                 },
             )
-        return provider_id, resolved.get("model_id"), resolved.get("model_alias")
+        return provider_id, _first_instance_model_id(project_root, resolved), resolved.get("model_alias")
     except AudiaGenticError as exc:
-        if exc.code == "RES-AGP-003":
+        if exc.code == "RES-EXP-003":
             raise AudiaGenticError(
                 code="CON-AGJ-001",
                 kind="agent-jobs",
-                message="no default agent profile and no explicit provider/model in request",
+                message="no default execution profile and no explicit provider/model in request",
                 details={},
             ) from exc
         raise
@@ -212,7 +233,7 @@ def _render_launch_prompt(
         project_root=str(project_root),
         project_id=load_project_config(project_root).get("project-id", ""),
         job_id=job_id,
-        agent_profile_id=request.get("agent-profile-id") or "",
+        execution_profile_id=request.get("execution-profile-id") or "",
         provider_id=provider_id,
         model_id=model_id or "",
         explicit_context=explicit_context if isinstance(explicit_context, dict) else None,
@@ -356,7 +377,9 @@ def launch_prompt_request(
             "reason": "adhoc target disabled",
             "prompt-id": request["prompt-id"],
         }
-    if request["tag"] == review_tag:
+    # ``adhoc`` is the generic fallback when no review action is registered;
+    # it must never accidentally enter the review pipeline.
+    if review_tag != "adhoc" and request["tag"] == review_tag:
         from audiagentic.components.agent_jobs.review_launch import launch_review_request
 
         return {"status": "ok", **launch_review_request(project_root, request, now_fn=now_fn)}
@@ -440,7 +463,7 @@ def build_job_from_event(
     provider_id, resolved_model, resolved_alias = _resolve_agent_provider_model(
         project_root,
         {
-            "agent-profile-id": trigger_config.get("agent-profile-id"),
+            "execution-profile-id": trigger_config.get("execution-profile-id"),
             "source": {},
         },
     )

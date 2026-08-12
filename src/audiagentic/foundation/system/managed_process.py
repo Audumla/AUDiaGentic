@@ -116,6 +116,76 @@ def _windows_creation_identity(pid: int) -> str | None:
         kernel32.CloseHandle(handle)
 
 
+def process_cpu_time_seconds(pid: int) -> float | None:
+    """Return cumulative user+system CPU time consumed by a process, in
+    seconds, or None when it cannot be read (dead, permission denied,
+    platform gap).
+
+    A real, verifiable OS fact used to distinguish "actively computing" from
+    "hung/blocked" -- a process making genuine progress keeps consuming CPU
+    time; one blocked forever on a lock, an unresponsive socket, or a
+    deliberately-hung script does not. Known blind spot, stated honestly:
+    this cannot see progress in a process that is itself blocked waiting on
+    a remote network response (e.g. a hosted-API call) -- that class of
+    activity has no local CPU signature. Treat this as the conservative
+    floor signal, not a complete one.
+    """
+    if not pid_alive(pid):
+        return None
+    if os.name == "nt":
+        return _windows_cpu_time_seconds(pid)
+    proc_stat = Path(f"/proc/{pid}/stat")
+    try:
+        fields = proc_stat.read_text(encoding="utf-8").split()
+        utime_ticks = int(fields[13])
+        stime_ticks = int(fields[14])
+        clock_ticks = os.sysconf("SC_CLK_TCK")
+        return (utime_ticks + stime_ticks) / clock_ticks
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+def _windows_cpu_time_seconds(pid: int) -> float | None:
+    import ctypes
+    from ctypes import wintypes
+
+    process_query_limited_information = 0x1000
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.GetProcessTimes.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(wintypes.FILETIME),
+        ctypes.POINTER(wintypes.FILETIME),
+        ctypes.POINTER(wintypes.FILETIME),
+        ctypes.POINTER(wintypes.FILETIME),
+    ]
+    kernel32.GetProcessTimes.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+    if not handle:
+        return None
+    creation = wintypes.FILETIME()
+    exit_time = wintypes.FILETIME()
+    kernel_time = wintypes.FILETIME()
+    user_time = wintypes.FILETIME()
+    try:
+        if not kernel32.GetProcessTimes(
+            handle,
+            ctypes.byref(creation),
+            ctypes.byref(exit_time),
+            ctypes.byref(kernel_time),
+            ctypes.byref(user_time),
+        ):
+            return None
+        # FILETIME is 100-nanosecond intervals.
+        kernel_ticks = (kernel_time.dwHighDateTime << 32) | kernel_time.dwLowDateTime
+        user_ticks = (user_time.dwHighDateTime << 32) | user_time.dwLowDateTime
+        return (kernel_ticks + user_ticks) / 1e7
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def observe_process(evidence: ProcessEvidence) -> ProcessIdentity | None:
     """Capture every live identity fact the platform exposes for comparison.
 

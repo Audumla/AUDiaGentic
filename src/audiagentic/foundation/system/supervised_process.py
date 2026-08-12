@@ -21,6 +21,7 @@ running for days.
 On both platforms a belt-and-suspenders ``kill_process_tree`` runs in ``finally``
 and SIGINT/SIGTERM received by the launcher are forwarded to the host.
 """
+
 from __future__ import annotations
 
 import logging
@@ -102,10 +103,17 @@ def _assign_handle_to_kill_job(process_handle: int) -> object | None:
         ]
 
     class _IO_COUNTERS(ctypes.Structure):
-        _fields_ = [(name, ctypes.c_ulonglong) for name in (
-            "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
-            "ReadTransferCount", "WriteTransferCount", "OtherTransferCount",
-        )]
+        _fields_ = [
+            (name, ctypes.c_ulonglong)
+            for name in (
+                "ReadOperationCount",
+                "WriteOperationCount",
+                "OtherOperationCount",
+                "ReadTransferCount",
+                "WriteTransferCount",
+                "OtherTransferCount",
+            )
+        ]
 
     class _EXTENDED_LIMIT(ctypes.Structure):
         _fields_ = [
@@ -121,7 +129,10 @@ def _assign_handle_to_kill_job(process_handle: int) -> object | None:
     kernel32.CreateJobObjectW.argtypes = [wintypes.LPVOID, wintypes.LPCWSTR]
     kernel32.SetInformationJobObject.restype = wintypes.BOOL
     kernel32.SetInformationJobObject.argtypes = [
-        wintypes.HANDLE, ctypes.c_int, wintypes.LPVOID, wintypes.DWORD,
+        wintypes.HANDLE,
+        ctypes.c_int,
+        wintypes.LPVOID,
+        wintypes.DWORD,
     ]
     kernel32.AssignProcessToJobObject.restype = wintypes.BOOL
     kernel32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
@@ -173,7 +184,7 @@ class SupervisedProcess:
     blocking harness launches and short-lived isolated workers.
     """
 
-    process: subprocess.Popen[str]
+    process: subprocess.Popen[Any]
     _job: object | None = None
     _process_group_id: int | None = None
     _closed: bool = False
@@ -218,9 +229,15 @@ class SupervisedProcess:
                     os.killpg(self._process_group_id, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
-            kill_process_tree(self.process.pid)
+            pid = getattr(self.process, "pid", None)
+            if isinstance(pid, int):
+                kill_process_tree(pid)
             try:
                 self.process.wait(timeout=5.0)
+            except TypeError:
+                # Small process doubles used by unit tests may expose only
+                # wait() without subprocess.Popen's timeout parameter.
+                self.process.wait()
             except subprocess.TimeoutExpired:
                 logger.warning("Supervised process did not exit after tree teardown")
         finally:
@@ -243,6 +260,7 @@ def spawn_supervised(
     stdout: Any = None,
     stderr: Any = None,
     isolated_process_group: bool = False,
+    text: bool = True,
 ) -> SupervisedProcess:
     """Start an owned child with optional replacement environment and pipes."""
     proc = subprocess.Popen(
@@ -252,8 +270,9 @@ def spawn_supervised(
         stdin=stdin,
         stdout=stdout,
         stderr=stderr,
-        text=True,
-        encoding="utf-8",
+        text=text,
+        encoding="utf-8" if text else None,
+        errors="replace" if text else None,
         start_new_session=isolated_process_group and os.name != "nt",
     )
     job: object | None = None
@@ -261,7 +280,9 @@ def spawn_supervised(
         try:
             job = _assign_to_kill_job(proc)
         except Exception:  # noqa: BLE001 — never leave an unsupervised child
-            logger.warning("Job Object assignment failed; relying on explicit teardown", exc_info=True)
+            logger.warning(
+                "Job Object assignment failed; relying on explicit teardown", exc_info=True
+            )
     return SupervisedProcess(
         process=proc,
         _job=job,

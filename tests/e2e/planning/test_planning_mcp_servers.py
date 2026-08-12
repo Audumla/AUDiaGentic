@@ -262,7 +262,7 @@ class TestPlanningMcpServer:
     def test_plan_list_items_returns_empty_on_fresh_root(self, tmp_path: Path) -> None:
         proc = _start_server("audiagentic.components.planning.planning_mcp", tmp_path)
         try:
-            result = _call(proc, "plan_list_items", {})
+            result = _call(proc, "plan_list_items", {"plan": "e2e-test"})
             assert result.get("items") == [], f"Expected empty page, got: {result}"
             assert result.get("total") == 0
         finally:
@@ -275,7 +275,7 @@ class TestPlanningMcpServer:
             create_result = _call(proc, "plan_create_item", {"item": item})
             assert create_result.get("id") == "E2E01", f"create_item failed: {create_result}"
 
-            raw = _call(proc, "plan_list_items", {}, msg_id=4)
+            raw = _call(proc, "plan_list_items", {"plan": "e2e-test"}, msg_id=4)
             ids = [i["id"] for i in raw.get("items", [])]
             assert "E2E01" in ids, f"E2E01 not in list after create: {raw}"
         finally:
@@ -289,7 +289,12 @@ class TestPlanningMcpServer:
             assert result.get("ok") is True
             assert result.get("state") == "completed"
 
-            raw = _call(proc, "plan_list_items", {"state": "completed"}, msg_id=5)
+            raw = _call(
+                proc,
+                "plan_list_items",
+                {"plan": "e2e-test", "state": "completed"},
+                msg_id=5,
+            )
             ids = [i["id"] for i in raw.get("items", [])]
             assert "E2E02" in ids, f"E2E02 not in completed list: {raw}"
         finally:
@@ -302,7 +307,7 @@ class TestPlanningMcpServer:
             del_result = _call(proc, "plan_delete_item", {"item_id": "E2E03"}, msg_id=4)
             assert del_result.get("ok") is True
 
-            raw = _call(proc, "plan_list_items", {}, msg_id=5)
+            raw = _call(proc, "plan_list_items", {"plan": "e2e-test"}, msg_id=5)
             ids = [i["id"] for i in raw.get("items", [])]
             assert "E2E03" not in ids, f"E2E03 still present after delete: {raw}"
         finally:

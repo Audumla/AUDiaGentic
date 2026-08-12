@@ -9,7 +9,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TextIO
+from typing import Any, Literal, TextIO, get_args
 
 from audiagentic.components.providers.protocols.streaming.base_extractor import (
     BaseEventExtractor,
@@ -22,8 +22,18 @@ from audiagentic.components.providers.protocols.streaming.sinks import (
     StreamSink,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.system.supervised_process import (
+    spawn_supervised,
+)
 
 logger = logging.getLogger(__name__)
+
+# Shared by sink-error-policy and control-validation-policy only — these are
+# the one pair of streaming policy fields with genuinely identical values and
+# role ("how strict should validation be"). termination-policy,
+# overflow_policy, and invalid_event_policy (sinks.py) have distinct
+# membership and stay independently spelled — see CC51.
+StreamValidationPolicy = Literal["warn", "fail", "normalize"]
 
 
 @dataclass
@@ -69,7 +79,7 @@ def _string_or_none(value: Any) -> str | None:
 
 
 def validate_stream_controls(
-    stream_controls: dict[str, Any], policy: str = "normalize"
+    stream_controls: dict[str, Any], policy: StreamValidationPolicy = "normalize"
 ) -> dict[str, Any]:
     """Validate and normalize stream controls.
 
@@ -98,7 +108,7 @@ def validate_stream_controls(
     result = copy.deepcopy(defaults)
     result.update({k: v for k, v in stream_controls.items() if v is not None})
 
-    valid_policies = {"warn", "fail", "normalize"}
+    valid_policies = set(get_args(StreamValidationPolicy))
     if result.get("sink-error-policy") not in valid_policies:
         if policy == "fail":
             raise AudiaGenticError(
@@ -232,17 +242,14 @@ def run_streaming_command(
     timeout_seconds: float | None = None,
     termination_policy: str = "warn-only",
 ) -> StreamedCommandResult:
-    process = subprocess.Popen(
+    supervised = spawn_supervised(
         command,
         cwd=str(cwd) if cwd is not None else None,
         stdin=subprocess.PIPE if input_text is not None else None,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        bufsize=1,
     )
+    process = supervised.process
 
     stdout_memory = next(
         (sink for sink in stdout_sinks if isinstance(sink, InMemorySink)), None
@@ -274,6 +281,7 @@ def run_streaming_command(
     start_time = time.monotonic()
     timed_out = False
     warning_emitted = False
+    terminated = False
 
     try:
         while True:
@@ -295,12 +303,9 @@ def run_streaming_command(
             if timeout_seconds and elapsed >= timeout_seconds:
                 timed_out = True
                 if termination_policy == "graceful-kill":
-                    process.terminate()
-                    try:
-                        process.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
-                        process.wait()
+                    # Let SupervisedProcess handle tree teardown
+                    supervised.close()
+                    terminated = True
                 elif termination_policy == "warn-only":
                     logger.warning(
                         "stream timeout reached (%.1fs) but termination-policy is warn-only; process will continue",
@@ -310,11 +315,17 @@ def run_streaming_command(
 
             time.sleep(0.1)
     finally:
+        if not terminated:
+            supervised.close()
         stdout_thread.join(timeout=2)
         stderr_thread.join(timeout=2)
 
     if timed_out and termination_policy == "graceful-kill":
         returncode = -1
+
+    # If the process is still alive after warn-only timeout, poll once more.
+    if returncode is None:
+        returncode = process.poll() or 0
 
     return StreamedCommandResult(
         returncode=returncode,

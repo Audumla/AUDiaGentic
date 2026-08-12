@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.contracts.output import ComponentOutputEvent, ComponentOutputSink
+from audiagentic.foundation.contracts.output import ComponentOutputSink, emit_or_push_status
 from audiagentic.foundation.io import atomic_write_text
 from audiagentic.foundation.logging.redaction import DEFAULT_REDACT_PATTERNS
 
@@ -36,21 +36,16 @@ def _check_surface_content(content: str) -> None:
 
 
 def _emit(output: ComponentOutputSink | None, message: str, level: str = "info", **data: Any) -> None:
-    if output is not None:
-        output(ComponentOutputEvent(message=message, kind="log", level=level, data=data))
+    emit_or_push_status(output, "providers", message, level=level, **data)
 
 
 def _active_feature_providers(project_root: Path, kind: str) -> set[str]:
     """Providers whose feature of `kind` resolves active (enabled-aware projection)."""
     from audiagentic.components.providers.services.config.feature_resolution import (
-        resolve_active_provider_features,
+        active_provider_ids,
     )
 
-    return {
-        resolved.provider_id
-        for resolved in resolve_active_provider_features(project_root)
-        if resolved.kind == kind
-    }
+    return active_provider_ids(project_root, kind)
 
 
 def build_provider_surface_blocks(

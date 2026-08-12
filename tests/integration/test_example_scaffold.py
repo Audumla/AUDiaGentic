@@ -23,17 +23,15 @@ def _validate(schema_name: str, payload: dict) -> None:
 def test_scaffold_seed_creates_layout(tmp_path: Path) -> None:
     target = tmp_path / "project"
     seed_example_project.seed_example_project(target)
-    assert (target / ".audiagentic" / "config" / "runtime" / "providers.yaml").is_file()
+    assert (target / ".audiagentic" / "config" / "provider-policy.yaml").is_file()
     assert not (target / ".audiagentic" / "config" / "execution" / "prompt-syntax.yaml").exists()
-    # The ag-review prompt is a required managed baseline asset (see release ledger).
-    assert (target / ".audiagentic" / "prompts" / "ag-review" / "default.md").is_file()
+    assert (target / ".audiagentic" / "skills" / "ag-ledger" / "skill.md").is_file()
     assert (target / ".github" / "workflows" / "release.yml").is_file()
 
 
 def test_scaffold_configs_validate(tmp_path: Path) -> None:
     target = tmp_path / "project"
     seed_example_project.seed_example_project(target)
-    _validate("provider-config", _load_yaml(target / ".audiagentic" / "config" / "runtime" / "providers.yaml"))
     _validate("prompt-syntax", load_prompt_syntax(target))
 
 
@@ -52,8 +50,8 @@ def test_seed_refuses_non_empty_target(tmp_path: Path) -> None:
 def test_seed_is_idempotent_with_overwrite(tmp_path: Path) -> None:
     target = tmp_path / "project"
     seed_example_project.seed_example_project(target)
-    providers = target / ".audiagentic" / "config" / "runtime" / "providers.yaml"
-    first = providers.read_text(encoding="utf-8")
+    project_config = target / ".audiagentic" / "config" / "project.yaml"
+    first = project_config.read_text(encoding="utf-8")
     seed_example_project.seed_example_project(target, overwrite=True)
-    second = providers.read_text(encoding="utf-8")
+    second = project_config.read_text(encoding="utf-8")
     assert first == second

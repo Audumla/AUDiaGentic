@@ -21,7 +21,7 @@ install_provider_cli path tests/integration/providers/harness.py uses for
 its own clean-room recipe tests (see gateway_docker_harness.install_provider)
 — never assumed to already be present on the container's PATH.
 
-Provisioning goes through gateway_docker_harness.py for the agent-profile and
+Provisioning goes through gateway_docker_harness.py for the execution-profile and
 provider-CLI-install pieces. The harness runtime config
 (.audiagentic/config/harness/ag.yaml) and the rig HTTP handler stay local to
 this file: the harness config format is genuine project-authored config (no
@@ -45,7 +45,7 @@ from tests.integration.agents.gateway_docker_harness import (
     gateway_rig_compatible_npm_provider_ids,
     install_provider,
     wait_for,
-    write_agent_profile,
+    write_execution_profile,
 )
 from tests.integration.providers.harness import (
     assert_health_ok,
@@ -203,12 +203,12 @@ def _provision_provider_project(tmp_path: Path, provider_id: str, monkeypatch) -
     monkeypatch.setenv("AUDIAGENTIC_GATEWAY_MODE", "in-process")
     monkeypatch.setenv("AUDIAGENTIC_RIG_API_KEY", "dummy")
 
-    write_agent_profile(
+    write_execution_profile(
         tmp_path,
         profile_id="docker-harness-rig",
         provider_id=provider_id,
         model_id=_FULL_MODEL_REF,
-        max_concurrency=1,
+        virtual_capacity=1,
     )
     _write_harness_config(tmp_path, provider_id)
     harness_runtime = tmp_path / "harness-runtime"
@@ -266,7 +266,7 @@ def test_gateway_runs_real_cli_provider_against_local_rig(
         pytest.skip("opt-in Docker gate; set AUDIAGENTIC_GATEWAY_OPENCODE_DOCKER=1")
     _skip_if_none_discovered()
 
-    from audiagentic.components.agents.agents_gateway_client import (
+    from audiagentic.components.agents.gateway.client import (
         get_gateway_client,
         reset_gateway_client,
     )
@@ -310,9 +310,9 @@ def test_gateway_runs_real_cli_provider_against_local_rig(
     reset_gateway_client()
     client = get_gateway_client()
     try:
-        result = client.run_llm_request(
+        result = client.run_execution_request(
             tmp_path,
-            agent_profile_id="docker-harness-rig",
+            execution_profile_id="docker-harness-rig",
             prompt_body="Reply exactly GATEWAY_HARNESS_OK",
             timeout_seconds=90,
         )
@@ -336,7 +336,7 @@ def test_gateway_cancel_of_real_provider_request_reaches_terminal_state(
         pytest.skip("opt-in Docker gate; set AUDIAGENTIC_GATEWAY_OPENCODE_DOCKER=1")
     _skip_if_none_discovered()
 
-    from audiagentic.components.agents.agents_gateway_client import (
+    from audiagentic.components.agents.gateway.client import (
         get_gateway_client,
         reset_gateway_client,
     )
@@ -347,23 +347,23 @@ def test_gateway_cancel_of_real_provider_request_reaches_terminal_state(
     reset_gateway_client()
     client = get_gateway_client()
     try:
-        submitted = client.submit_llm_request(
+        submitted = client.submit_execution_request(
             tmp_path,
-            agent_profile_id="docker-harness-rig",
+            execution_profile_id="docker-harness-rig",
             prompt_body="Reply exactly GATEWAY_HARNESS_OK",
             mode="async",
         )
         request_id = submitted["request-id"]
 
         wait_for(
-            lambda: client.get_llm_request(tmp_path, request_id)["state"] == "running",
+            lambda: client.get_execution_request(tmp_path, request_id)["state"] == "running",
             timeout=30, what=f"{provider_id} request to start running",
         )
 
-        client.cancel_llm_request(tmp_path, request_id)
+        client.cancel_execution_request(tmp_path, request_id)
         _RigHandler.hold.set()  # let the held HTTP call return so the process can wind down
 
-        final = client.wait_llm_request(tmp_path, request_id, timeout_seconds=30)
+        final = client.wait_execution_request(tmp_path, request_id, timeout_seconds=30)
         assert final["state"] in {"cancelled", "failed", "completed"}, final
         assert final["state"] != "running"
     finally:
@@ -374,14 +374,14 @@ def test_gateway_cancel_of_real_provider_request_reaches_terminal_state(
 def test_gateway_rejects_unresolvable_profile_without_touching_provider(
     provider_id: str, tmp_path: Path, monkeypatch, rig_server
 ) -> None:
-    """Negative path, cheap: an unresolvable agent-profile-id is rejected up
+    """Negative path, cheap: an unresolvable execution-profile-id is rejected up
     front — no provider process is spawned for a request that can never
     succeed."""
     if os.environ.get("AUDIAGENTIC_GATEWAY_OPENCODE_DOCKER") != "1":
         pytest.skip("opt-in Docker gate; set AUDIAGENTIC_GATEWAY_OPENCODE_DOCKER=1")
     _skip_if_none_discovered()
 
-    from audiagentic.components.agents.agents_gateway_client import (
+    from audiagentic.components.agents.gateway.client import (
         get_gateway_client,
         reset_gateway_client,
     )
@@ -393,9 +393,9 @@ def test_gateway_rejects_unresolvable_profile_without_touching_provider(
     client = get_gateway_client()
     try:
         with pytest.raises(AudiaGenticError):
-            client.submit_llm_request(
+            client.submit_execution_request(
                 tmp_path,
-                agent_profile_id="profile-that-does-not-exist",
+                execution_profile_id="profile-that-does-not-exist",
                 prompt_body="should never reach the provider",
                 mode="async",
             )

@@ -14,7 +14,9 @@ def _as_strings(raw: Any) -> tuple[str, ...]:
     return tuple(item for item in raw if isinstance(item, str) and item)
 
 
-def _contributions_from_data(data: dict[str, Any], component_id: str) -> list[SurfaceContribution]:
+def _contributions_from_data(
+    data: dict[str, Any], component_id: str, project_root: Path | None = None
+) -> list[SurfaceContribution]:
     # Unified `contributions:` key; fall back to legacy `surface-contributions:`.
     raw_list = data.get("contributions") or data.get("surface-contributions") or []
     contributions: list[SurfaceContribution] = []
@@ -46,6 +48,31 @@ def _contributions_from_data(data: dict[str, Any], component_id: str) -> list[Su
             )
         )
     return contributions
+
+
+def load_project_surface_contributions(project_root: Path | None) -> list[SurfaceContribution]:
+    """Load instructions owned by the target project itself."""
+    if project_root is None:
+        return []
+    directory = project_root / ".audiagentic" / "config" / "project" / "instructions"
+    if not directory.exists():
+        return []
+    result: list[SurfaceContribution] = []
+    for path in sorted(directory.glob("*.yaml")):
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if not isinstance(data, dict):
+            continue
+        body = data.get("content", {}).get("body") if isinstance(data.get("content"), dict) else None
+        if not isinstance(data.get("title"), str) or not isinstance(body, str):
+            continue
+        result.append(SurfaceContribution(
+            contribution_id=f"project/instruction/{path.stem}",
+            owner_component="project",
+            title=data["title"],
+            body=body,
+            preferred_targets=tuple(data.get("preferred-targets") or ("instruction",)),
+        ))
+    return result
 
 
 def active_tag_ids(project_root: Path | None = None) -> set[str]:
@@ -103,8 +130,7 @@ def load_tag_surface_contributions(project_root: Path | None = None) -> list[Sur
 def _build_canonical_tags_body(tags: dict) -> str:
     """Build the canonical-tags summary block body from all loaded tags.
 
-    Tag-routing doctrine lives in the agent-jobs/prompt-tags block; this block is
-    just the canonical tag list plus where definitions are managed.
+    This block contains only the dynamically registered action tags.
     """
     lines = ["Canonical tags (route the raw tagged prompt through the repo-owned bridge):\n"]
     for tag_id in sorted(tags):
@@ -138,7 +164,7 @@ def build_summary_contributions(project_root: Path | None = None) -> list[Surfac
     return [
         SurfaceContribution(
             contribution_id="agent-jobs/canonical-rule",
-            owner_component="agent-jobs",  # cross-component: prompt-tags contributions are owned by agent-jobs
+            owner_component="agent-jobs",
             title="Canonical workflow tags",
             body=_build_canonical_tags_body(tags),
         ),
@@ -167,6 +193,7 @@ def load_surface_contributions(
 
     # Per-tag contributions from tag descriptors
     contributions.extend(load_tag_surface_contributions(project_root=project_root))
+    contributions.extend(load_project_surface_contributions(project_root))
 
     # Synthetic cross-tag summaries — only if agent-jobs component is installed+enabled
     if project_root is None or (

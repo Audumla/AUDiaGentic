@@ -112,7 +112,7 @@ class TestLoadValidTriggers:
     def test_optional_fields_round_trip(self, tmp_path: Path) -> None:
         trigger = _valid_trigger(
             {
-                "agent-profile-id": "codex-default",
+                "execution-profile-id": "codex-default",
                 "workflow-profile": "strict",
                 "target": {"kind": "adhoc", "adhoc-id": "adhoc-1"},
                 "metadata-propagation": {"correlation_id": True},
@@ -122,7 +122,7 @@ class TestLoadValidTriggers:
 
         triggers = load_event_triggers(tmp_path)
         t = triggers[0]
-        assert t.agent_profile_id == "codex-default"
+        assert t.execution_profile_id == "codex-default"
         assert t.workflow_profile == "strict"
         assert t.target == {"kind": "adhoc", "adhoc-id": "adhoc-1"}
         assert t.metadata_propagation == {"correlation_id": True}

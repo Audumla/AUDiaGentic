@@ -50,10 +50,6 @@ jobs:
             dockerfile: Dockerfile.packaging
             tag: audia-packaging
             base: false
-          - name: provider-cli
-            dockerfile: Dockerfile.provider-cli-test
-            tag: audia-provider-cli-test
-            base: true
           - name: provider-cli-comprehensive
             dockerfile: Dockerfile.provider-cli-comprehensive
             tag: audia-provider-cli-comprehensive
@@ -90,6 +86,10 @@ jobs:
             dockerfile: Dockerfile.gateway-pi-smoke
             tag: audiagentic-gateway-pi-smoke
             base: true
+          - name: gateway-session-orphan # AS91 real session orphan/reaper lifecycle
+            dockerfile: Dockerfile.gateway-session-orphan
+            tag: audiagentic-gateway-session-orphan
+            base: true
           - name: pi-rpc-tap-e2e         # AS40 real pi-acp RPC tee shim, tapped conversational turn
             dockerfile: Dockerfile.pi-rpc-tap-e2e
             tag: audiagentic-pi-rpc-tap-e2e
@@ -121,6 +121,10 @@ jobs:
           - name: rig-recipe-live        # llama.cpp rig recipe against a real toolchain
             dockerfile: Dockerfile.rig-recipe-live
             tag: audiagentic-rig-recipe-live
+            base: true
+          - name: reconciliation-policy-e2e  # real-CLI reconciliation policy acceptance
+            dockerfile: Dockerfile.reconciliation-policy-e2e
+            tag: audiagentic-reconciliation-policy-e2e
             base: true
     steps:
       - uses: actions/checkout@v4

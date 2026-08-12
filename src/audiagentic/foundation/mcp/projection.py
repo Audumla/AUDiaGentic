@@ -76,7 +76,7 @@ def collect_component_mcp_entries(
 
         for declaration in descriptor.mcp_servers:
             if propagation_target in declaration.propagate:
-                _add_entry(servers, entry_from_mcp_declaration(declaration))
+                _add_entry(servers, entry_from_mcp_declaration(declaration, root))
 
         probe_cache = get_external_probe_results(component_id, root)
         for declaration in descriptor.external_mcp_servers:

@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.agents import agents_gateway_store as store
-from audiagentic.components.agents.agents_event_topics import LLM_INTERRUPTED_TOPIC
-from audiagentic.components.agents.agents_gateway_queue import (
+from audiagentic.components.agents.gateway import store as store
+from audiagentic.components.agents.gateway.event_topics import EXECUTION_INTERRUPTED_TOPIC
+from audiagentic.components.agents.gateway.queue.queue import (
     _LIFECYCLE_SUFFIX_TOPIC_MAP,
     _TERMINAL_EVENT_SUFFIXES,
     _publish_lifecycle_event,
@@ -17,17 +17,17 @@ from audiagentic.foundation.event import get_bus
 # ---------------------------------------------------------------------------
 
 class TestInterruptedTopicRegistration:
-    """C11: agents.llm.interrupted is registered and conforms."""
+    """C11: agents.execution.interrupted is registered and conforms."""
 
     def test_constant_value(self):
-        assert LLM_INTERRUPTED_TOPIC == "agents.llm.interrupted"
+        assert EXECUTION_INTERRUPTED_TOPIC == "agents.execution.interrupted"
 
     def test_in_terminal_suffixes(self):
         assert "interrupted" in _TERMINAL_EVENT_SUFFIXES
 
     def test_in_lifecycle_map(self):
         assert "interrupted" in _LIFECYCLE_SUFFIX_TOPIC_MAP
-        assert _LIFECYCLE_SUFFIX_TOPIC_MAP["interrupted"] == LLM_INTERRUPTED_TOPIC
+        assert _LIFECYCLE_SUFFIX_TOPIC_MAP["interrupted"] == EXECUTION_INTERRUPTED_TOPIC
 
     def test_topic_is_registered(self):
         import audiagentic.foundation.event.topic_registry as mod
@@ -38,7 +38,7 @@ class TestInterruptedTopicRegistration:
         mod._registry_instance = None
         load_all_event_topics()
         registry = get_topic_registry()
-        assert registry.is_registered(LLM_INTERRUPTED_TOPIC)
+        assert registry.is_registered(EXECUTION_INTERRUPTED_TOPIC)
 
     def test_topic_payload_has_replay_required(self):
         """The registered topic declares replay_required as optional payload."""
@@ -50,7 +50,7 @@ class TestInterruptedTopicRegistration:
         mod._registry_instance = None
         load_all_event_topics()
         registry = get_topic_registry()
-        spec = registry.get_topic(LLM_INTERRUPTED_TOPIC)
+        spec = registry.get_topic(EXECUTION_INTERRUPTED_TOPIC)
         assert spec is not None
         assert "replay_required" in (spec.payload_optional or [])
 
@@ -63,7 +63,7 @@ class TestInterruptedLifecycleEventPublish:
     """C11: publishing interrupted terminal carries replay_required."""
 
     def test_interrupted_terminal_carries_replay_required(self, tmp_path):
-        record = store.build_record(agent_profile_id="default", prompt_body="test")
+        record = store.build_record(execution_profile_id="default", prompt_body="test")
         record["state"] = "interrupted"
         record["recovery"] = {"outcome": "replay-required"}
         captured = {}
@@ -71,14 +71,14 @@ class TestInterruptedLifecycleEventPublish:
         def handler(topic: str, payload: dict, metadata: dict) -> None:
             captured[topic] = payload
 
-        handle = get_bus().subscribe(LLM_INTERRUPTED_TOPIC, handler)
+        handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, handler)
         try:
             _publish_lifecycle_event("interrupted", record)
-            assert LLM_INTERRUPTED_TOPIC in captured
-            ev = captured[LLM_INTERRUPTED_TOPIC]
+            assert EXECUTION_INTERRUPTED_TOPIC in captured
+            ev = captured[EXECUTION_INTERRUPTED_TOPIC]
             assert ev["state"] == "interrupted"
             assert "request-id" in ev
-            assert "agent-profile-id" in ev
+            assert "execution-profile-id" in ev
             # Terminal fields present
             assert "provider-id" in ev
             assert "model-id" in ev
@@ -91,7 +91,7 @@ class TestInterruptedLifecycleEventPublish:
 
     def test_interrupted_stale_running_has_replay_required_false(self, tmp_path):
         """Stale running recovery sets resubmit-required → replay_required=False in event."""
-        record = store.build_record(agent_profile_id="default", prompt_body="test")
+        record = store.build_record(execution_profile_id="default", prompt_body="test")
         record["state"] = "interrupted"
         record["recovery"] = {"outcome": "resubmit-required"}
         captured = {}
@@ -99,43 +99,43 @@ class TestInterruptedLifecycleEventPublish:
         def handler(topic: str, payload: dict, metadata: dict) -> None:
             captured[topic] = payload
 
-        handle = get_bus().subscribe(LLM_INTERRUPTED_TOPIC, handler)
+        handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, handler)
         try:
             _publish_lifecycle_event("interrupted", record)
-            ev = captured[LLM_INTERRUPTED_TOPIC]
+            ev = captured[EXECUTION_INTERRUPTED_TOPIC]
             assert ev["replay_required"] is False
         finally:
             get_bus().unsubscribe(handle)
 
     def test_interrupted_no_recovery_outcome_defaults_false(self, tmp_path):
-        record = store.build_record(agent_profile_id="default", prompt_body="test")
+        record = store.build_record(execution_profile_id="default", prompt_body="test")
         record["state"] = "interrupted"
         captured = {}
 
         def handler(topic: str, payload: dict, metadata: dict) -> None:
             captured[topic] = payload
 
-        handle = get_bus().subscribe(LLM_INTERRUPTED_TOPIC, handler)
+        handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, handler)
         try:
             _publish_lifecycle_event("interrupted", record)
-            ev = captured[LLM_INTERRUPTED_TOPIC]
+            ev = captured[EXECUTION_INTERRUPTED_TOPIC]
             assert ev["replay_required"] is False
         finally:
             get_bus().unsubscribe(handle)
 
     def test_interrupted_redacts_no_prompt(self, tmp_path):
         """The event payload must not contain prompt body."""
-        record = store.build_record(agent_profile_id="default", prompt_body="test")
+        record = store.build_record(execution_profile_id="default", prompt_body="test")
         record["state"] = "interrupted"
         captured = {}
 
         def handler(topic: str, payload: dict, metadata: dict) -> None:
             captured[topic] = payload
 
-        handle = get_bus().subscribe(LLM_INTERRUPTED_TOPIC, handler)
+        handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, handler)
         try:
             _publish_lifecycle_event("interrupted", record)
-            ev = captured[LLM_INTERRUPTED_TOPIC]
+            ev = captured[EXECUTION_INTERRUPTED_TOPIC]
             assert "prompt-body" not in ev
         finally:
             get_bus().unsubscribe(handle)
@@ -146,13 +146,13 @@ class TestInterruptedLifecycleEventPublish:
 # ---------------------------------------------------------------------------
 
 def _record(project_root: Path, prompt: str = "hello") -> dict:
-    record = store.build_record(agent_profile_id="default", prompt_body=prompt)
+    record = store.build_record(execution_profile_id="default", prompt_body=prompt)
     store.write_record(project_root, record)
     return record
 
 
 class TestRecoveryInterruptedExactlyOnce:
-    """C11: recovery publishes agents.llm.interrupted exactly once per request."""
+    """C11: recovery publishes agents.execution.interrupted exactly once per request."""
 
     def test_recovery_interrupted_publishes_event(self, tmp_path: Path) -> None:
         service_root = tmp_path / "service"
@@ -178,9 +178,9 @@ class TestRecoveryInterruptedExactlyOnce:
         def handler(topic: str, payload: dict, metadata: dict) -> None:
             events_received.append(topic)
 
-        handle = get_bus().subscribe(LLM_INTERRUPTED_TOPIC, handler)
+        handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, handler)
         try:
-            from audiagentic.components.agents import agents_gateway_recovery as recovery
+            from audiagentic.components.agents.gateway.queue import recovery as recovery
 
             report = recovery.recover_gateway_requests(
                 service_root, live_owner_epoch="new-epoch"
@@ -189,7 +189,7 @@ class TestRecoveryInterruptedExactlyOnce:
             get_bus().unsubscribe(handle)
 
         assert report.interrupted == 1
-        assert events_received == [LLM_INTERRUPTED_TOPIC]
+        assert events_received == [EXECUTION_INTERRUPTED_TOPIC]
 
     def test_duplicate_recovery_does_not_republish(self, tmp_path: Path) -> None:
         """Second recovery pass on already-interrupted request publishes nothing."""
@@ -216,9 +216,9 @@ class TestRecoveryInterruptedExactlyOnce:
         def handler(topic: str, payload: dict, metadata: dict) -> None:
             events_received.append(topic)
 
-        handle = get_bus().subscribe(LLM_INTERRUPTED_TOPIC, handler)
+        handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, handler)
         try:
-            from audiagentic.components.agents import agents_gateway_recovery as recovery
+            from audiagentic.components.agents.gateway.queue import recovery as recovery
 
             # First pass: transitions to interrupted, publishes event
             report1 = recovery.recover_gateway_requests(
@@ -257,9 +257,9 @@ class TestRecoveryInterruptedExactlyOnce:
         def handler(topic: str, payload: dict, metadata: dict) -> None:
             events_received.append(topic)
 
-        handle = get_bus().subscribe(LLM_INTERRUPTED_TOPIC, handler)
+        handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, handler)
         try:
-            from audiagentic.components.agents import agents_gateway_recovery as recovery
+            from audiagentic.components.agents.gateway.queue import recovery as recovery
 
             report = recovery.recover_gateway_requests(
                 service_root, live_owner_epoch="new-epoch"
@@ -268,7 +268,7 @@ class TestRecoveryInterruptedExactlyOnce:
             get_bus().unsubscribe(handle)
 
         assert report.replay_required == 1
-        assert events_received == [LLM_INTERRUPTED_TOPIC]
+        assert events_received == [EXECUTION_INTERRUPTED_TOPIC]
 
     def test_recovery_queued_event_has_replay_required_true(self, tmp_path: Path) -> None:
         """End-to-end: queued recovery → replay-required outcome → event replay_required=True."""
@@ -288,9 +288,9 @@ class TestRecoveryInterruptedExactlyOnce:
         def handler(topic: str, payload: dict, metadata: dict) -> None:
             events_payload.append(payload)
 
-        handle = get_bus().subscribe(LLM_INTERRUPTED_TOPIC, handler)
+        handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, handler)
         try:
-            from audiagentic.components.agents import agents_gateway_recovery as recovery
+            from audiagentic.components.agents.gateway.queue import recovery as recovery
 
             recovery.recover_gateway_requests(
                 service_root, live_owner_epoch="new-epoch"
@@ -328,9 +328,9 @@ class TestRecoveryInterruptedExactlyOnce:
         def handler(topic: str, payload: dict, metadata: dict) -> None:
             events_payload.append(payload)
 
-        handle = get_bus().subscribe(LLM_INTERRUPTED_TOPIC, handler)
+        handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, handler)
         try:
-            from audiagentic.components.agents import agents_gateway_recovery as recovery
+            from audiagentic.components.agents.gateway.queue import recovery as recovery
 
             recovery.recover_gateway_requests(
                 service_root, live_owner_epoch="new-epoch"
@@ -356,13 +356,13 @@ class TestAgentJobsInterruptedMapping:
             GW_OUTCOME_TOPICS,
         )
 
-        assert LLM_INTERRUPTED_TOPIC in GW_OUTCOME_TOPICS
+        assert EXECUTION_INTERRUPTED_TOPIC in GW_OUTCOME_TOPICS
 
     def test_interrupted_maps_to_failed(self):
         from audiagentic.components.agent_jobs.event_observer import EventObserver
 
         mapping = EventObserver.GW_OUTCOME_MAP
-        assert mapping.get(LLM_INTERRUPTED_TOPIC) == "failed"
+        assert mapping.get(EXECUTION_INTERRUPTED_TOPIC) == "failed"
 
     def test_interrupted_topic_registered_for_conformance(self):
         """The agent-jobs mirror constant is a registered topic."""
@@ -375,7 +375,7 @@ class TestAgentJobsInterruptedMapping:
         load_all_event_topics()
         registry = get_topic_registry()
 
-        assert registry.is_registered(LLM_INTERRUPTED_TOPIC)
+        assert registry.is_registered(EXECUTION_INTERRUPTED_TOPIC)
 
 
 # ---------------------------------------------------------------------------
@@ -386,7 +386,7 @@ class TestInterruptedProgressRedaction:
     """C11: public progress projection shows interrupted without leaking internals."""
 
     def test_interrupted_phase_is_terminal_in_progress(self):
-        from audiagentic.components.agents.agents_gateway_progress import (
+        from audiagentic.components.agents.gateway.queue.progress import (
             _TERMINAL_PHASES,
             _TERMINAL_STATE_TO_PHASE,
         )

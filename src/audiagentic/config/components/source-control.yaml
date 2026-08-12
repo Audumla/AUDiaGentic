@@ -6,6 +6,11 @@ description: Source control — installs and manages official git and GitHub MCP
 depends-on:
   - project
 
+files:
+  - path: .audiagentic/skills/ag-check-in-prep/skill.md
+    lifecycle: required-managed
+    description: ag-check-in-prep skill source
+
 dependencies:
   git:
     display-name: Git
@@ -71,7 +76,10 @@ mcp-servers:
 external-mcp-servers:
   - name: git
     command: uvx
-    args: [mcp-server-git, --repository, .]
+    # mcp-server-git currently resolves MCP 2.x when unconstrained, but its
+    # server implementation still uses the MCP 1.x Server.list_tools API.
+    # Keep its isolated uvx runtime compatible with the client/server API.
+    args: [--with, "mcp==1.27.0", mcp-server-git, --repository, .]
     requires: [uvx]
     propagate: audiagentic,providers
     description: Local git operations via official mcp-server-git
@@ -103,5 +111,7 @@ contributions:
     content:
       body: |
         Do not invoke git or GitHub APIs directly — use the MCP tools.
-
+        Never use `git stash` — this is a shared, multi-agent working tree and a stash
+        can silently collide with another session's live edits. If work needs to be set
+        aside, split it into its own deliberate check-in group or leave it uncommitted.
 

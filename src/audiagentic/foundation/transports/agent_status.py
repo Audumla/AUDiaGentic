@@ -33,6 +33,7 @@ ERR_STATUS_INVALID_PROJECTED_AT: Final = "VAL-STATUS-003"
 # Enums (closed sets)
 # ---------------------------------------------------------------------------
 
+
 class AgentStatusScope(StrEnum):
     """Scope at which the status projection is evaluated."""
 
@@ -95,9 +96,11 @@ class StatusEvidenceConfidence(StrEnum):
     INSUFFICIENT = "insufficient"
     REJECTED = "rejected"
 
+
 # ---------------------------------------------------------------------------
 # Frozen dataclasses
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class AgentStatusDecisions:
@@ -150,17 +153,20 @@ class AgentStatusSnapshot:
         # --- scope validation ---
         if not isinstance(self.scope, AgentStatusScope):
             raise make_error(
-                prefix="VAL", component="STATUS", number=1,
+                prefix="VAL",
+                component="STATUS",
+                number=1,
                 kind="agent-status-validation",
-                message=f"scope must be an AgentStatusScope value, "
-                        f"got {self.scope!r}",
+                message=f"scope must be an AgentStatusScope value, got {self.scope!r}",
                 details={"value": self.scope},
             )
 
         # --- projected_at validation ---
         if not isinstance(self.projected_at, str) or not self.projected_at:
             raise make_error(
-                prefix="VAL", component="STATUS", number=3,
+                prefix="VAL",
+                component="STATUS",
+                number=3,
                 kind="agent-status-validation",
                 message="projected_at must be a non-empty string (ISO-8601)",
             )
@@ -168,7 +174,9 @@ class AgentStatusSnapshot:
         # --- lifecycle / outcome invariants ---
         if self.lifecycle == AgentLifecycle.TERMINAL and self.outcome is None:
             raise make_error(
-                prefix="VAL", component="STATUS", number=1,
+                prefix="VAL",
+                component="STATUS",
+                number=1,
                 kind="agent-status-validation",
                 message="terminal lifecycle requires a non-None outcome",
                 details={"lifecycle": self.lifecycle.value},
@@ -176,9 +184,10 @@ class AgentStatusSnapshot:
 
         if self.lifecycle != AgentLifecycle.TERMINAL and self.outcome is not None:
             raise make_error(
-                prefix="VAL", component="STATUS", number=2,
+                prefix="VAL",
+                component="STATUS",
+                number=2,
                 kind="agent-status-validation",
-                message=f"outcome must be None for non-terminal lifecycle "
-                        f"{self.lifecycle.value}",
+                message=f"outcome must be None for non-terminal lifecycle {self.lifecycle.value}",
                 details={"lifecycle": self.lifecycle.value, "outcome": str(self.outcome)},
             )

@@ -18,4 +18,4 @@ ENV AUDIAGENTIC_HOME=/tmp/audiagentic-test-home/.audiagentic
 COPY pyproject.toml README.md ./
 COPY src ./src
 COPY tests ./tests
-CMD ["bash", "-c", "export PATH=/root/.local/bin:$PATH && uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp]' pytest pytest-timeout pytest-xdist pytest-asyncio tomli-w && /venv/bin/pytest tests/integration/providers/test_provider_full_lifecycle.py tests/integration/providers/test_provider_prompt_launch_e2e.py -v --tb=short --timeout=300"]
+CMD ["bash", "-c", "export PATH=/tmp/audiagentic-test-home/.local/bin:/root/.local/bin:$PATH && uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp]' pytest pytest-timeout pytest-xdist pytest-asyncio tomli-w && /venv/bin/pytest tests/integration/providers/test_provider_full_lifecycle.py tests/integration/providers/test_provider_prompt_launch_e2e.py -v --tb=short --timeout=300"]

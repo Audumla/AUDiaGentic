@@ -30,6 +30,7 @@ resume-after-death here (deferred to AS10).
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
@@ -37,7 +38,7 @@ from contextlib import AsyncExitStack, suppress
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.agent_session import (
@@ -54,6 +55,12 @@ from audiagentic.foundation.transports.agent_session import (
     TransportObservation,
     TransportObservationKind,
 )
+from audiagentic.foundation.transports.session_binding import ProviderSessionRef
+
+if TYPE_CHECKING:
+    from acp import RequestPermissionResponse
+
+logger = logging.getLogger(__name__)
 
 # Registered error codes
 ERR_SDK_MISSING = "CFG-ACP-001"
@@ -74,6 +81,34 @@ ERR_TERMINAL_OPERATION_FAILED = "EXT-ACP-005"
 # Default output cap for a terminal with no agent-supplied output_byte_limit
 # (ACP's own MAX_TOTAL_BYTES-equivalent for a single terminal's lifetime).
 _DEFAULT_TERMINAL_OUTPUT_LIMIT = 8 * 1024 * 1024  # 8 MiB
+
+
+async def _terminate_and_reap_process(proc: Any, *, timeout: float) -> bool:
+    """Boundedly terminate and reap one owned subprocess; never raise."""
+    if getattr(proc, "returncode", None) is None:
+        with suppress(Exception):
+            proc.terminate()
+
+    wait = getattr(proc, "wait", None)
+    if wait is None:
+        return getattr(proc, "returncode", None) is not None
+
+    try:
+        await asyncio.wait_for(wait(), timeout=timeout)
+        return True
+    except (Exception, asyncio.CancelledError):  # noqa: BLE001 - close never raises
+        pass
+
+    if getattr(proc, "returncode", None) is None:
+        with suppress(Exception):
+            proc.kill()
+
+    try:
+        await asyncio.wait_for(wait(), timeout=timeout)
+        return True
+    except (Exception, asyncio.CancelledError):  # noqa: BLE001 - close never raises
+        logger.warning("owned ACP subprocess did not exit within the final reap deadline")
+        return False
 
 # Bounded delivery defaults (overridable per call)
 MAX_EVENTS = 10_000
@@ -100,11 +135,21 @@ _TURN_DRAIN_SLEEP_SECONDS = 0.01
 MAX_OVERFLOW_TEXT_BYTES = 1024 * 1024  # 1 MiB
 
 # Canonical kind vocabulary (closed set; new kinds require MA18 review)
-_KIND_VOCABULARY = frozenset({
-    "assistant-message", "thought", "status", "usage",
-    "tool-call", "file-change", "terminal-output", "plan-update",
-    "permission-request", "error", "result",
-})
+_KIND_VOCABULARY = frozenset(
+    {
+        "assistant-message",
+        "thought",
+        "status",
+        "usage",
+        "tool-call",
+        "file-change",
+        "terminal-output",
+        "plan-update",
+        "permission-request",
+        "error",
+        "result",
+    }
+)
 
 # Mapping: raw ACP sessionUpdate values → canonical kind.
 # The left column must cover the REAL wire vocabulary (agent_thought_chunk,
@@ -144,6 +189,7 @@ class ProviderLaunch:
     carries no requester identity, mode, or policy, only the three fields a
     process launch needs.
     """
+
     executable: str
     args: tuple[str, ...] = ()
     environment: Mapping[str, str] = field(default_factory=dict)
@@ -197,7 +243,9 @@ class AuxiliaryObservationSource(Protocol):
     """
 
     async def poll(
-        self, ag_session_id: str, turn_id: str | None,
+        self,
+        ag_session_id: str,
+        turn_id: str | None,
     ) -> TransportObservation | None:
         """Return the next available observation, or ``None`` if none is
         currently pending. Must never block waiting for one — the transport
@@ -406,9 +454,7 @@ class _TurnPipeline:
         ext: dict[str, Any] = {"acp": acp_ext}
         ext_bytes = len(str(ext).encode("utf-8"))
 
-        _, ext_was_cut = _truncate_bytes(
-            str(ext).encode("utf-8"), MAX_PAYLOAD_BYTES
-        )
+        _, ext_was_cut = _truncate_bytes(str(ext).encode("utf-8"), MAX_PAYLOAD_BYTES)
         if ext_was_cut:
             ext["_truncated"] = True  # type: ignore[literal-required]
 
@@ -437,7 +483,11 @@ class _TurnPipeline:
         await self._emit_callback(event)
 
     async def emit_error(
-        self, session_id: str, code: str, message: str, payload_excerpt: dict[str, Any] | None = None
+        self,
+        session_id: str,
+        code: str,
+        message: str,
+        payload_excerpt: dict[str, Any] | None = None,
     ) -> None:
         """Emit a non-terminal error-kind event (malformed update)."""
         while len(self.events) >= MAX_EVENTS:
@@ -677,9 +727,7 @@ class AcpSessionTransport:
         """
         stack, connection, proc = await self._spawn_and_initialize()
         try:
-            session = await connection.new_session(
-                cwd=str(self._cwd.resolve()), mcp_servers=[]
-            )
+            session = await connection.new_session(cwd=str(self._cwd.resolve()), mcp_servers=[])
         except (Exception, asyncio.CancelledError) as exc:
             with suppress(Exception, asyncio.CancelledError):
                 await stack.aclose()
@@ -694,6 +742,7 @@ class AcpSessionTransport:
                 },
             ) from exc
         self._finish_open(stack, connection, proc, str(session.session_id))
+        assert self._session_id is not None
         return self._session_id
 
     async def open_resumed(self, provider_session_ref: str) -> str:
@@ -729,6 +778,13 @@ class AcpSessionTransport:
             with suppress(Exception, asyncio.CancelledError):
                 await stack.aclose()
             self._dead = True
+            # RequestError's own message is always the generic JSON-RPC
+            # string ("Invalid params", "Internal error", ...) -- the actual
+            # reason a provider rejected the resume lives in .data, which is
+            # otherwise silently lost here, forcing anyone debugging a resume
+            # failure to go spelunking through the provider's own source.
+            error_detail = str(exc)
+            error_data = getattr(exc, "data", None)
             raise AudiaGenticError(
                 code=ERR_EXECUTION_FAILED,
                 kind="execution",
@@ -737,11 +793,14 @@ class AcpSessionTransport:
                     "executable": self._launch.executable,
                     "provider-session-ref": provider_session_ref,
                     "error-type": type(exc).__name__,
+                    "error-detail": error_detail,
+                    "error-data": error_data,
                 },
             ) from exc
         # LoadSessionResponse carries no session_id — the loaded session IS
         # the caller-supplied provider_session_ref (ACP session/load contract).
         self._finish_open(stack, connection, proc, provider_session_ref)
+        assert self._session_id is not None
         return self._session_id
 
     async def _spawn_and_initialize(self) -> tuple[AsyncExitStack, Any, Any]:
@@ -779,6 +838,7 @@ class AcpSessionTransport:
             ) -> RequestPermissionResponse:
                 """Default-deny unless policy_fn grants access."""
                 from acp import RequestPermissionResponse
+
                 turn = transport._current_turn
                 if turn is not None:
                     tc_info = {
@@ -805,7 +865,9 @@ class AcpSessionTransport:
                     return
                 try:
                     payload = _plain(update)
-                    await turn.emit(session_id, str(payload.get("sessionUpdate", "update")), payload)
+                    await turn.emit(
+                        session_id, str(payload.get("sessionUpdate", "update")), payload
+                    )
                 except Exception as exc:
                     # Malformed update: normalize to error event, continue.
                     # Do not re-serialize the update — it may be the same object
@@ -847,20 +909,26 @@ class AcpSessionTransport:
                 except Exception as exc:
                     if turn is not None:
                         await turn.emit_error(
-                            session_id, ERR_FS_OPERATION_FAILED,
+                            session_id,
+                            ERR_FS_OPERATION_FAILED,
                             f"write_text_file failed: {type(exc).__name__}",
                             {"path": path},
                         )
                     raise AudiaGenticError(
-                        code=ERR_FS_OPERATION_FAILED, kind="execution",
+                        code=ERR_FS_OPERATION_FAILED,
+                        kind="execution",
                         message="ACP write_text_file failed",
                         details={"path": path, "error-type": type(exc).__name__},
                     ) from exc
                 if turn is not None:
                     await turn.emit(
-                        session_id, "file_change",
-                        {"path": str(target), "action": "write",
-                         "bytes": len(content.encode("utf-8"))},
+                        session_id,
+                        "file_change",
+                        {
+                            "path": str(target),
+                            "action": "write",
+                            "bytes": len(content.encode("utf-8")),
+                        },
                     )
                 return WriteTextFileResponse()
 
@@ -881,26 +949,34 @@ class AcpSessionTransport:
                 except Exception as exc:
                     if turn is not None:
                         await turn.emit_error(
-                            session_id, ERR_FS_OPERATION_FAILED,
+                            session_id,
+                            ERR_FS_OPERATION_FAILED,
                             f"read_text_file failed: {type(exc).__name__}",
                             {"path": path},
                         )
                     raise AudiaGenticError(
-                        code=ERR_FS_OPERATION_FAILED, kind="execution",
+                        code=ERR_FS_OPERATION_FAILED,
+                        kind="execution",
                         message="ACP read_text_file failed",
                         details={"path": path, "error-type": type(exc).__name__},
                     ) from exc
                 if turn is not None:
                     await turn.emit(
-                        session_id, "file_change",
-                        {"path": str(target), "action": "read",
-                         "bytes": len(text.encode("utf-8"))},
+                        session_id,
+                        "file_change",
+                        {"path": str(target), "action": "read", "bytes": len(text.encode("utf-8"))},
                     )
                 return ReadTextFileResponse(content=text)
 
             async def create_terminal(
-                self, session_id, command, args=None, env=None, cwd=None,
-                output_byte_limit=None, **kwargs,
+                self,
+                session_id,
+                command,
+                args=None,
+                env=None,
+                cwd=None,
+                output_byte_limit=None,
+                **kwargs,
             ):
                 from acp import CreateTerminalResponse
 
@@ -917,22 +993,37 @@ class AcpSessionTransport:
                         if name is not None:
                             env_map[str(name)] = "" if value is None else str(value)
                     proc = await asyncio.create_subprocess_exec(
-                        command, *(args or ()),
-                        cwd=str(term_cwd), env=env_map,
+                        command,
+                        *(args or ()),
+                        cwd=str(term_cwd),
+                        env=env_map,
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.STDOUT,
                     )
+                    # Adopt the terminal process into a kill-on-close Job Object
+                    # (Windows) so it cannot outlive this shim even if hard-killed.
+                    # Bridge solution until async spawn_supervised exists.
+                    try:
+                        from audiagentic.foundation.system.supervised_process import (
+                            adopt_pid_into_kill_job,
+                        )
+
+                        adopt_pid_into_kill_job(proc.pid)
+                    except Exception:  # noqa: BLE001 — best effort, degrade gracefully
+                        pass
                 except AudiaGenticError:
                     raise
                 except Exception as exc:
                     if turn is not None:
                         await turn.emit_error(
-                            session_id, ERR_TERMINAL_OPERATION_FAILED,
+                            session_id,
+                            ERR_TERMINAL_OPERATION_FAILED,
                             f"create_terminal failed: {type(exc).__name__}",
                             {"command": command},
                         )
                     raise AudiaGenticError(
-                        code=ERR_TERMINAL_OPERATION_FAILED, kind="execution",
+                        code=ERR_TERMINAL_OPERATION_FAILED,
+                        kind="execution",
                         message="ACP create_terminal failed",
                         details={"command": command, "error-type": type(exc).__name__},
                     ) from exc
@@ -944,7 +1035,8 @@ class AcpSessionTransport:
                 transport._terminals[terminal_id] = handle
                 if turn is not None:
                     await turn.emit(
-                        session_id, "terminal_output",
+                        session_id,
+                        "terminal_output",
                         {"terminal_id": terminal_id, "status": "started", "command": command},
                     )
                 return CreateTerminalResponse(terminal_id=terminal_id)
@@ -955,7 +1047,8 @@ class AcpSessionTransport:
                 handle = transport._terminals.get(terminal_id)
                 if handle is None:
                     raise AudiaGenticError(
-                        code=ERR_UNKNOWN_TERMINAL, kind="execution",
+                        code=ERR_UNKNOWN_TERMINAL,
+                        kind="execution",
                         message="Unknown ACP terminal id",
                         details={"terminal-id": terminal_id},
                     )
@@ -984,7 +1077,8 @@ class AcpSessionTransport:
                 handle = transport._terminals.get(terminal_id)
                 if handle is None:
                     raise AudiaGenticError(
-                        code=ERR_UNKNOWN_TERMINAL, kind="execution",
+                        code=ERR_UNKNOWN_TERMINAL,
+                        kind="execution",
                         message="Unknown ACP terminal id",
                         details={"terminal-id": terminal_id},
                     )
@@ -998,9 +1092,14 @@ class AcpSessionTransport:
                 turn = transport._current_turn
                 if turn is not None:
                     await turn.emit(
-                        session_id, "terminal_output",
-                        {"terminal_id": terminal_id, "status": "exited",
-                         "exit_code": status.exit_code, "signal": status.signal},
+                        session_id,
+                        "terminal_output",
+                        {
+                            "terminal_id": terminal_id,
+                            "status": "exited",
+                            "exit_code": status.exit_code,
+                            "signal": status.signal,
+                        },
                     )
                 return WaitForTerminalExitResponse(exit_code=status.exit_code, signal=status.signal)
 
@@ -1074,7 +1173,9 @@ class AcpSessionTransport:
             ) from exc
         return stack, connection, proc
 
-    def _finish_open(self, stack: AsyncExitStack, connection: Any, proc: Any, session_id: str) -> None:
+    def _finish_open(
+        self, stack: AsyncExitStack, connection: Any, proc: Any, session_id: str
+    ) -> None:
         """Common tail of open()/open_resumed(): adopt state once a session id is known."""
         self._stack = stack
         self._connection = connection
@@ -1168,7 +1269,10 @@ class AcpSessionTransport:
                     await turn.emit_terminal(
                         str(self._session_id),
                         "cancelled",
-                        error={"code": ERR_CHILD_EXIT, "message": "Agent process cancelled unexpectedly"},
+                        error={
+                            "code": ERR_CHILD_EXIT,
+                            "message": "Agent process cancelled unexpectedly",
+                        },
                     )
                     raise AudiaGenticError(
                         code=ERR_EXECUTION_FAILED,
@@ -1217,9 +1321,7 @@ class AcpSessionTransport:
                 details={"executable": self._launch.executable},
             )
 
-        stop_reason = (
-            str(response.stop_reason) if response.stop_reason is not None else None
-        )
+        stop_reason = str(response.stop_reason) if response.stop_reason is not None else None
         terminal = await turn.emit_terminal(str(self._session_id), stop_reason)
         return turn.build_result(str(self._session_id), stop_reason, terminal)
 
@@ -1239,12 +1341,21 @@ class AcpSessionTransport:
         # outlive this transport — cancel their drain tasks and kill the
         # subprocess directly (release_terminal's polite path was never
         # called by the agent, so this is the only remaining guarantee).
-        for handle in list(self._terminals.values()):
+        terminal_handles = list(self._terminals.values())
+        for handle in terminal_handles:
             if handle.drain_task is not None:
                 handle.drain_task.cancel()
-            if getattr(handle.proc, "returncode", None) is None:
-                with suppress(Exception):
-                    handle.proc.kill()
+        if terminal_handles:
+            await asyncio.gather(
+                *(
+                    _terminate_and_reap_process(
+                        handle.proc,
+                        timeout=CANCEL_GRACE_SECONDS,
+                    )
+                    for handle in terminal_handles
+                ),
+                return_exceptions=True,
+            )
         self._terminals.clear()
 
         stack, proc = self._stack, self._proc
@@ -1258,22 +1369,12 @@ class AcpSessionTransport:
             # bounded WITHOUT cancellation; on timeout let it finish in the
             # background and force-kill the child ourselves below.
             aclose_task = asyncio.ensure_future(stack.aclose())
-            aclose_task.add_done_callback(
-                lambda task: task.cancelled() or task.exception()
-            )
+            aclose_task.add_done_callback(lambda task: task.cancelled() or task.exception())
             with suppress(Exception, asyncio.CancelledError):
                 await asyncio.wait({aclose_task}, timeout=CANCEL_GRACE_SECONDS)
 
-        if proc is not None and getattr(proc, "returncode", None) is None:
-            with suppress(Exception):
-                proc.terminate()
-            wait = getattr(proc, "wait", None)
-            if wait is not None:
-                try:
-                    await asyncio.wait_for(wait(), timeout=CANCEL_GRACE_SECONDS)
-                except (Exception, asyncio.CancelledError, asyncio.TimeoutError):
-                    with suppress(Exception):
-                        proc.kill()
+        if proc is not None:
+            await _terminate_and_reap_process(proc, timeout=CANCEL_GRACE_SECONDS)
 
         # AS17: close the foundation adopted-child token last.
         # Windows: closing the Job Object handle triggers kill-on-close for
@@ -1295,9 +1396,7 @@ class AcpSessionTransport:
             except Exception:  # noqa: BLE001 — hook teardown is best-effort
                 import logging
 
-                logging.getLogger(__name__).warning(
-                    "pre-spawn hook on_close failed", exc_info=True
-                )
+                logging.getLogger(__name__).warning("pre-spawn hook on_close failed", exc_info=True)
             self._hook_state = None
 
 
@@ -1470,15 +1569,20 @@ class AcpAgentSessionTransport:
         launch: AcpLaunch,
         *,
         cwd: Path,
+        ag_session_id: str,
         policy_fn: PolicyCallback | None = None,
         compact_events: bool = False,
         resume_provider_ref: str | None = None,
         pre_spawn_hook: PreSpawnHook | None = None,
     ) -> None:
         self._inner: AcpSessionTransport = AcpSessionTransport(
-            launch, cwd=cwd, policy_fn=policy_fn, compact_events=compact_events,
+            launch,
+            cwd=cwd,
+            policy_fn=policy_fn,
+            compact_events=compact_events,
             pre_spawn_hook=pre_spawn_hook,
         )
+        self._configured_ag_session_id = ag_session_id
         self._ag_session_id: str | None = None
         self._closed = False
         # Per-turn cancel signal for CANCEL_TURN control.
@@ -1510,17 +1614,26 @@ class AcpAgentSessionTransport:
             await self._inner.open_resumed(self._resume_provider_ref)
         else:
             await self._inner.open()
-        # Use the ACP-provided session id as the canonical AG session id.
-        # (AS30 binding will later map provider session ref ↔ AG session id.)
-        session_id = self._inner.session_id
-        if session_id is None:
+        provider_session_id = self._inner.session_id
+        if provider_session_id is None:
             raise AudiaGenticError(
                 code="CON-ACP-002",
                 kind="execution",
                 message="ACP transport opened without a session id",
             )
-        self._ag_session_id = session_id
-        return SessionOpenResult(ag_session_id=session_id)
+        self._ag_session_id = self._configured_ag_session_id
+        # Surface the raw provider-native session id in metadata too (not just
+        # as ag_session_id/provider_session_ref internally) so callers can see
+        # and independently use the underlying harness's own session identity
+        # -- e.g. to resume against it directly with the provider's own tools,
+        # long after AUDiaGentic's own session record has been closed or
+        # pruned, since the harness itself (pi, opencode, ...) keeps its own
+        # session store independently of ours.
+        return SessionOpenResult(
+            ag_session_id=self._configured_ag_session_id,
+            provider_session_ref=ProviderSessionRef(provider_session_id),
+            metadata={"provider-session-id": provider_session_id},
+        )
 
     async def prompt(
         self,
@@ -1542,10 +1655,34 @@ class AcpAgentSessionTransport:
         _final_summary_parts: list[str] = []
 
         # Build the neutral observation sink that maps AcpEvent → TransportObservation.
+        # Track whether model has started to emit ACTIVITY on first assistant-message,
+        # then IN_PROGRESS for subsequent ones — this allows the projector to fire
+        # TURN_MODEL_STARTED once, then repeated TURN_MODEL_IN_PROGRESS events.
+        _model_started = False
+
         async def _wrapped_sink(acp_event: AcpEvent) -> None:
-            nonlocal delivered_count
+            nonlocal delivered_count, _model_started
             try:
                 obs = _map_acp_event_to_observation(acp_event, ag_sid, turn_id)
+                # Map subsequent assistant-messages to IN_PROGRESS after first ACTIVITY
+                if acp_event.kind == "assistant-message":
+                    if not _model_started:
+                        _model_started = True
+                    else:
+                        from audiagentic.foundation.transports.agent_session import (
+                            TransportObservation,
+                            TransportObservationKind,
+                        )
+
+                        obs = TransportObservation(
+                            ag_session_id=ag_sid,
+                            turn_id=turn_id,
+                            sequence=obs.sequence,
+                            kind=TransportObservationKind.IN_PROGRESS,
+                            observed_at=obs.observed_at,
+                            correlation_quality=obs.correlation_quality,
+                            attributes={"model_activity": "generating"},
+                        )
                 result = sink(obs)
                 if asyncio.iscoroutine(result):
                     await result
@@ -1707,8 +1844,6 @@ async def run_acp_prompt(
     transport = AcpSessionTransport(launch, cwd=cwd, policy_fn=policy_fn)
     try:
         await transport.open()
-        return await transport.prompt(
-            prompt, on_event=on_event, cancel_signal=cancel_signal
-        )
+        return await transport.prompt(prompt, on_event=on_event, cancel_signal=cancel_signal)
     finally:
         await transport.close()

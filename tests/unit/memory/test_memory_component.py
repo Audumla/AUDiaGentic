@@ -1,12 +1,16 @@
 """Tests for the memory component — descriptor loading, implementation selection,
 config validation, and dynamic contributions.
 """
+# The local source-path insertion below intentionally precedes package imports.
+# ruff: noqa: E402
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 
 import pytest
+
+pytestmark = pytest.mark.no_parallel
 
 # Ensure package is importable
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))

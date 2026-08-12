@@ -71,6 +71,12 @@ def finalize(project_root: Path, release_id: str) -> dict[str, Any]:
     renders CHANGELOG.md etc. from the archived ledger state.
     After this returns, the agent should call the GitHub MCP server create_release_tag tool.
     """
+    # The release API can be called directly by the release workflow, without
+    # importing the ledger MCP surface first. Ensure the event consumer is
+    # registered at this composition boundary before publishing synchronously.
+    from audiagentic.components.ledger import ledger_events
+
+    ledger_events.register()
     archive_result: dict[str, Any] = {}
     get_bus().publish(
         RELEASE_LEDGER_ARCHIVE_REQUESTED,

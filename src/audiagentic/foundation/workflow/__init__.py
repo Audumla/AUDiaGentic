@@ -5,6 +5,7 @@ actions, frontmatter assembly, relationships, and ID generation.
 """
 
 from .actions import WorkflowActionExecutor, render
+from .evidence_policy import EvidenceDecision, EvidencePolicy
 from .frontmatter import FrontmatterBuilder
 from .id_gen import next_id
 from .interfaces import ItemView, WorkflowConfig, WorkflowContext
@@ -21,6 +22,8 @@ from .util import Relationships, body_has_section, extract_ref_ids, now_iso, slu
 
 __all__ = [
     "FrontmatterBuilder",
+    "EvidenceDecision",
+    "EvidencePolicy",
     "ItemView",
     "Relationships",
     "StateMachine",

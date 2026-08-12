@@ -9,7 +9,7 @@ from audiagentic.components.coding_lsp import (
     lsp_session_resolution,
     lsp_status_ops,
 )
-from audiagentic.components.coding_lsp.coding_lsp_config import write_lsp_config
+from audiagentic.components.coding_lsp.coding_lsp_config import get_coding_lsp_dir, write_lsp_config
 from audiagentic.components.coding_lsp.lsp_lifecycle import ServerConfig
 from audiagentic.foundation.features import registry as feature_registry
 from audiagentic.foundation.features.base import (
@@ -33,14 +33,22 @@ def test_resolve_project_root_prefers_repo_root_for_nested_file(tmp_path: Path) 
     assert lsp_api.resolve_project_root(nested) == tmp_path
 
 
-def test_definition_uses_repo_root_and_correct_language_for_explicit_config(tmp_path: Path, monkeypatch) -> None:
+def test_definition_uses_repo_root_and_correct_language_for_explicit_config(
+    tmp_path: Path, monkeypatch
+) -> None:
     (tmp_path / ".audiagentic").mkdir()
     nested = tmp_path / "src" / "pkg" / "mod.rs"
     nested.parent.mkdir(parents=True)
     nested.write_text("fn main() {}\n", encoding="utf-8")
 
-    rust_server = ServerConfig(command=["rust-analyzer"], file_extensions=[".rs"], label="rust", server_id="rust")
-    monkeypatch.setattr(lsp_session_resolution, "discover_servers_multi", lambda project_root: {"rust": [rust_server]})
+    rust_server = ServerConfig(
+        command=["rust-analyzer"], file_extensions=[".rs"], label="rust", server_id="rust"
+    )
+    monkeypatch.setattr(
+        lsp_session_resolution,
+        "discover_servers_multi",
+        lambda project_root: {"rust": [rust_server]},
+    )
 
     mock_session = MagicMock()
     mock_session.definition.return_value = [{"uri": "file:///def.rs"}]
@@ -88,10 +96,14 @@ def test_diagnostics_uses_session_manager_public_api(monkeypatch) -> None:
 
 
 def test_diagnostics_initializes_active_sessions(monkeypatch) -> None:
-    server = ServerConfig(command=["pyright-langserver", "--stdio"], file_extensions=[".py"], server_id="pyright")
+    server = ServerConfig(
+        command=["pyright-langserver", "--stdio"], file_extensions=[".py"], server_id="pyright"
+    )
     initialized: list[tuple[Path, str, ServerConfig]] = []
 
-    monkeypatch.setattr(lsp_status_ops, "resolve_active_runtime_servers", lambda project_root: {"python": [server]})
+    monkeypatch.setattr(
+        lsp_status_ops, "resolve_active_runtime_servers", lambda project_root: {"python": [server]}
+    )
 
     def _fake_get_or_create(project_root, language, server_config):
         initialized.append((project_root, language, server_config))
@@ -106,7 +118,9 @@ def test_diagnostics_initializes_active_sessions(monkeypatch) -> None:
 
 
 def test_diagnostics_skips_broken_sessions(monkeypatch) -> None:
-    pyright = ServerConfig(command=["pyright-langserver", "--stdio"], file_extensions=[".py"], server_id="pyright")
+    pyright = ServerConfig(
+        command=["pyright-langserver", "--stdio"], file_extensions=[".py"], server_id="pyright"
+    )
     ruff = ServerConfig(command=["ruff", "server"], file_extensions=[".py"], server_id="ruff")
     attempted: list[str] = []
 
@@ -146,7 +160,7 @@ def test_config_status_reports_missing_config(tmp_path: Path) -> None:
 
 def test_config_status_reports_invalid_config(tmp_path: Path) -> None:
     (tmp_path / ".audiagentic").mkdir()
-    lsp_json = tmp_path / ".coding-lsp" / "lsp.json"
+    lsp_json = get_coding_lsp_dir(tmp_path) / "lsp.json"
     lsp_json.parent.mkdir(parents=True)
     lsp_json.write_text("{bad json", encoding="utf-8")
     status = lsp_config_api.config_status(str(tmp_path))
@@ -155,14 +169,19 @@ def test_config_status_reports_invalid_config(tmp_path: Path) -> None:
     assert status["projection_cache"]["errors"]
 
 
-def test_config_status_reports_feature_state_and_implementation(tmp_path: Path, monkeypatch) -> None:
+def test_config_status_reports_feature_state_and_implementation(
+    tmp_path: Path, monkeypatch
+) -> None:
     (tmp_path / ".audiagentic").mkdir()
-    write_lsp_config(tmp_path / ".coding-lsp" / "lsp.json", {
-        "python": {
-            "command": ["pyright-langserver", "--stdio"],
-            "file_extensions": [".py"],
+    write_lsp_config(
+        get_coding_lsp_dir(tmp_path) / "lsp.json",
+        {
+            "python": {
+                "command": ["pyright-langserver", "--stdio"],
+                "file_extensions": [".py"],
+            },
         },
-    })
+    )
     feature_registry.register(
         BindingDescriptor(
             parent="coding-lsp",
@@ -191,10 +210,14 @@ def test_config_status_reports_feature_state_and_implementation(tmp_path: Path, 
 def test_list_and_select_implementations(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / ".audiagentic").mkdir()
     feature_registry.register(
-        ImplementationDescriptor(parent="coding-lsp", implementation_id="ag-lsp", display_name="AG LSP")
+        ImplementationDescriptor(
+            parent="coding-lsp", implementation_id="ag-lsp", display_name="AG LSP"
+        )
     )
     feature_registry.register(
-        ImplementationDescriptor(parent="coding-lsp", implementation_id="blackwell-agent-lsp", display_name="Agent LSP")
+        ImplementationDescriptor(
+            parent="coding-lsp", implementation_id="blackwell-agent-lsp", display_name="Agent LSP"
+        )
     )
     synced: list[Path] = []
     monkeypatch.setattr(lsp_config_api, "_sync_to_providers", lambda root: synced.append(root))
@@ -211,10 +234,14 @@ def test_list_and_select_implementations(tmp_path: Path, monkeypatch) -> None:
 def test_language_feature_state_survives_implementation_switch(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / ".audiagentic").mkdir()
     feature_registry.register(
-        ImplementationDescriptor(parent="coding-lsp", implementation_id="ag-lsp", display_name="AG LSP")
+        ImplementationDescriptor(
+            parent="coding-lsp", implementation_id="ag-lsp", display_name="AG LSP"
+        )
     )
     feature_registry.register(
-        ImplementationDescriptor(parent="coding-lsp", implementation_id="blackwell-agent-lsp", display_name="Agent LSP")
+        ImplementationDescriptor(
+            parent="coding-lsp", implementation_id="blackwell-agent-lsp", display_name="Agent LSP"
+        )
     )
     monkeypatch.setattr(lsp_config_api, "_sync_to_providers", lambda root: None)
     lsp_config_api._set_language_feature_enabled(tmp_path, "python", True)
@@ -248,7 +275,11 @@ def test_open_file_session_uses_sync_document(tmp_path: Path, monkeypatch) -> No
     )
 
     mock_session = MagicMock()
-    monkeypatch.setattr(lsp_api._session_manager, "get_or_create", lambda project_root, language, server: mock_session)
+    monkeypatch.setattr(
+        lsp_api._session_manager,
+        "get_or_create",
+        lambda project_root, language, server: mock_session,
+    )
 
     lsp_api.document_symbols(str(nested))
 
@@ -321,7 +352,11 @@ def test_resolve_language_server_matches_makefile_basename(tmp_path: Path, monke
     monkeypatch.setattr(
         lsp_session_resolution,
         "resolve_active_runtime_servers",
-        lambda project_root: {"make": [ServerConfig(command=["make-ls"], file_extensions=["Makefile"], server_id="make")]},
+        lambda project_root: {
+            "make": [
+                ServerConfig(command=["make-ls"], file_extensions=["Makefile"], server_id="make")
+            ]
+        },
     )
 
     result = lsp_api.document_symbols(str(mk))
@@ -366,19 +401,26 @@ def test_resolve_language_server_auto_enables_yaml(tmp_path: Path, monkeypatch) 
 
 # ── CAP02: Python pull diagnostics ──────────────────────────────────────────
 
-def test_file_diagnostics_uses_pull_when_server_advertises_diagnostic_provider(tmp_path: Path, monkeypatch) -> None:
+
+def test_file_diagnostics_uses_pull_when_server_advertises_diagnostic_provider(
+    tmp_path: Path, monkeypatch
+) -> None:
     """When server advertises diagnosticProvider, file_diagnostics uses pull path."""
     (tmp_path / ".audiagentic").mkdir()
     py_file = tmp_path / "test.py"
     py_file.write_text("x = 1\n", encoding="utf-8")
 
     server = ServerConfig(command=["ruff", "server"], file_extensions=[".py"], server_id="ruff")
-    monkeypatch.setattr(lsp_session_resolution, "discover_servers_multi", lambda pr: {"python": [server]})
+    monkeypatch.setattr(
+        lsp_session_resolution, "discover_servers_multi", lambda pr: {"python": [server]}
+    )
 
     mock_session = MagicMock()
     mock_session._supports_document_diagnostic.return_value = True
     mock_session.file_diagnostics.return_value = [{"message": "unused", "severity": 2}]
-    monkeypatch.setattr(lsp_api._session_manager, "get_or_create", lambda pr, lang, cfg: mock_session)
+    monkeypatch.setattr(
+        lsp_api._session_manager, "get_or_create", lambda pr, lang, cfg: mock_session
+    )
 
     result = lsp_api.file_diagnostics(str(py_file))
     assert len(result) == 1
@@ -392,13 +434,19 @@ def test_file_diagnostics_falls_back_to_push_when_no_pull(tmp_path: Path, monkey
     py_file = tmp_path / "test.py"
     py_file.write_text("x = 1\n", encoding="utf-8")
 
-    server = ServerConfig(command=["pyright-langserver"], file_extensions=[".py"], server_id="pyright")
-    monkeypatch.setattr(lsp_session_resolution, "discover_servers_multi", lambda pr: {"python": [server]})
+    server = ServerConfig(
+        command=["pyright-langserver"], file_extensions=[".py"], server_id="pyright"
+    )
+    monkeypatch.setattr(
+        lsp_session_resolution, "discover_servers_multi", lambda pr: {"python": [server]}
+    )
 
     mock_session = MagicMock()
     mock_session._supports_document_diagnostic.return_value = False
     mock_session.file_diagnostics.return_value = [{"message": "type error", "severity": 1}]
-    monkeypatch.setattr(lsp_api._session_manager, "get_or_create", lambda pr, lang, cfg: mock_session)
+    monkeypatch.setattr(
+        lsp_api._session_manager, "get_or_create", lambda pr, lang, cfg: mock_session
+    )
 
     result = lsp_api.file_diagnostics(str(py_file))
     assert len(result) == 1
@@ -407,21 +455,32 @@ def test_file_diagnostics_falls_back_to_push_when_no_pull(tmp_path: Path, monkey
 
 # ── CAP04: Read-only tools ──────────────────────────────────────────────────
 
+
 def test_type_hierarchy_returns_supertypes(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / ".audiagentic").mkdir()
     py_file = tmp_path / "test.py"
     py_file.write_text("class Foo: pass\n", encoding="utf-8")
 
-    server = ServerConfig(command=["pyright-langserver"], file_extensions=[".py"], server_id="pyright")
-    monkeypatch.setattr(lsp_session_resolution, "discover_servers_multi", lambda pr: {"python": [server]})
+    server = ServerConfig(
+        command=["pyright-langserver"], file_extensions=[".py"], server_id="pyright"
+    )
+    monkeypatch.setattr(
+        lsp_session_resolution, "discover_servers_multi", lambda pr: {"python": [server]}
+    )
 
     mock_session = MagicMock()
     mock_session.has_capability.return_value = True
     mock_session.type_hierarchy_supertypes.return_value = [
-        {"name": "object", "kind": 5, "location": {"uri": lsp_api.file_to_uri(py_file), "range": {}}}
+        {
+            "name": "object",
+            "kind": 5,
+            "location": {"uri": lsp_api.file_to_uri(py_file), "range": {}},
+        }
     ]
     mock_session.sync_document = MagicMock()
-    monkeypatch.setattr(lsp_api._session_manager, "get_or_create", lambda pr, lang, cfg: mock_session)
+    monkeypatch.setattr(
+        lsp_api._session_manager, "get_or_create", lambda pr, lang, cfg: mock_session
+    )
 
     result = lsp_api.type_hierarchy(str(py_file), "1:8")
     assert len(result) == 1
@@ -430,13 +489,16 @@ def test_type_hierarchy_returns_supertypes(tmp_path: Path, monkeypatch) -> None:
 
 # ── CAP05: Mutation gating ──────────────────────────────────────────────────
 
+
 def test_rename_preview_blocked_when_mutation_disabled(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / ".audiagentic").mkdir()
     py_file = tmp_path / "test.py"
     py_file.write_text("x = 1\n", encoding="utf-8")
 
     set_implementation_state(
-        tmp_path, "coding-lsp", "ag-lsp",
+        tmp_path,
+        "coding-lsp",
+        "ag-lsp",
         ImplementationState(enabled=True, options={"mutation-enabled": False}),
     )
 
@@ -452,18 +514,26 @@ def test_rename_preview_allowed_when_mutation_enabled(tmp_path: Path, monkeypatc
     py_file.write_text("x = 1\n", encoding="utf-8")
 
     set_implementation_state(
-        tmp_path, "coding-lsp", "ag-lsp",
+        tmp_path,
+        "coding-lsp",
+        "ag-lsp",
         ImplementationState(enabled=True, options={"mutation-enabled": True}),
     )
 
-    server = ServerConfig(command=["pyright-langserver"], file_extensions=[".py"], server_id="pyright")
-    monkeypatch.setattr(lsp_session_resolution, "discover_servers_multi", lambda pr: {"python": [server]})
+    server = ServerConfig(
+        command=["pyright-langserver"], file_extensions=[".py"], server_id="pyright"
+    )
+    monkeypatch.setattr(
+        lsp_session_resolution, "discover_servers_multi", lambda pr: {"python": [server]}
+    )
 
     mock_session = MagicMock()
     mock_session.has_capability.return_value = True
     mock_session.rename.return_value = {"changes": {}}
     mock_session.sync_document = MagicMock()
-    monkeypatch.setattr(lsp_api._session_manager, "get_or_create", lambda pr, lang, cfg: mock_session)
+    monkeypatch.setattr(
+        lsp_api._session_manager, "get_or_create", lambda pr, lang, cfg: mock_session
+    )
 
     result = lsp_api.rename_preview(str(py_file), "1:1", "new_name")
     assert result is not None
@@ -476,7 +546,9 @@ def test_apply_workspace_edit_blocked_when_mutation_disabled(tmp_path: Path, mon
     py_file.write_text("x = 1\n", encoding="utf-8")
 
     set_implementation_state(
-        tmp_path, "coding-lsp", "ag-lsp",
+        tmp_path,
+        "coding-lsp",
+        "ag-lsp",
         ImplementationState(enabled=True, options={"mutation-enabled": False}),
     )
 
@@ -487,34 +559,61 @@ def test_apply_workspace_edit_blocked_when_mutation_disabled(tmp_path: Path, mon
 
 # ── CAP06: Capability matrix ────────────────────────────────────────────────
 
-def test_server_capabilities_includes_type_hierarchy_when_supported(tmp_path: Path, monkeypatch) -> None:
+
+def test_server_capabilities_includes_type_hierarchy_when_supported(
+    tmp_path: Path, monkeypatch
+) -> None:
     (tmp_path / ".audiagentic").mkdir()
     py_file = tmp_path / "test.py"
     py_file.write_text("x = 1\n", encoding="utf-8")
 
-    server = ServerConfig(command=["pyright-langserver"], file_extensions=[".py"], server_id="pyright")
-    monkeypatch.setattr(lsp_session_resolution, "discover_servers_multi", lambda pr: {"python": [server]})
+    server = ServerConfig(
+        command=["pyright-langserver"], file_extensions=[".py"], server_id="pyright"
+    )
+    monkeypatch.setattr(
+        lsp_session_resolution, "discover_servers_multi", lambda pr: {"python": [server]}
+    )
 
     mock_session = MagicMock()
-    mock_session.has_capability.side_effect = lambda m: m in (
-        "textDocument/definition", "textDocument/hover",
-        "textDocument/typeHierarchy", "workspace/symbol",
+    mock_session.has_capability.side_effect = lambda m: (
+        m
+        in (
+            "textDocument/definition",
+            "textDocument/hover",
+            "textDocument/typeHierarchy",
+            "workspace/symbol",
+        )
     )
     mock_session.capabilities.return_value = {"typeHierarchyProvider": True}
-    monkeypatch.setattr(lsp_api._session_manager, "get_or_create", lambda pr, lang, cfg: mock_session)
+    monkeypatch.setattr(
+        lsp_api._session_manager, "get_or_create", lambda pr, lang, cfg: mock_session
+    )
 
     result = lsp_api.server_capabilities(str(py_file))
     assert "typeHierarchy" in result["supported"]
 
 
-def test_server_capabilities_skips_failed_server_and_reports_it(tmp_path: Path, monkeypatch) -> None:
+def test_server_capabilities_skips_failed_server_and_reports_it(
+    tmp_path: Path, monkeypatch
+) -> None:
     (tmp_path / ".audiagentic").mkdir()
     py_file = tmp_path / "test.py"
     py_file.write_text("x = 1\n", encoding="utf-8")
 
-    broken = ServerConfig(command=["pyright-langserver"], file_extensions=[".py"], server_id="pyright", label="Python (pyright)")
-    good = ServerConfig(command=["ruff", "server"], file_extensions=[".py"], server_id="ruff", label="Python (ruff)")
-    monkeypatch.setattr(lsp_session_resolution, "discover_servers_multi", lambda pr: {"python": [broken], "python-ruff": [good]})
+    broken = ServerConfig(
+        command=["pyright-langserver"],
+        file_extensions=[".py"],
+        server_id="pyright",
+        label="Python (pyright)",
+    )
+    good = ServerConfig(
+        command=["ruff", "server"], file_extensions=[".py"], server_id="ruff", label="Python (ruff)"
+    )
+    monkeypatch.setattr(
+        lsp_session_resolution,
+        "discover_servers_multi",
+        lambda pr: {"python": [broken], "python-ruff": [good]},
+    )
 
     good_session = MagicMock()
     good_session.has_capability.side_effect = lambda m: m == "textDocument/hover"
@@ -538,9 +637,15 @@ def test_open_file_session_skips_failed_server(tmp_path: Path, monkeypatch) -> N
     py_file = tmp_path / "test.py"
     py_file.write_text("x = 1\n", encoding="utf-8")
 
-    broken = ServerConfig(command=["pyright-langserver"], file_extensions=[".py"], server_id="pyright")
+    broken = ServerConfig(
+        command=["pyright-langserver"], file_extensions=[".py"], server_id="pyright"
+    )
     good = ServerConfig(command=["ruff", "server"], file_extensions=[".py"], server_id="ruff")
-    monkeypatch.setattr(lsp_session_resolution, "discover_servers_multi", lambda pr: {"python": [broken], "python-ruff": [good]})
+    monkeypatch.setattr(
+        lsp_session_resolution,
+        "discover_servers_multi",
+        lambda pr: {"python": [broken], "python-ruff": [good]},
+    )
 
     good_session = MagicMock()
     good_session.has_capability.return_value = True
@@ -561,9 +666,11 @@ def test_open_file_session_skips_failed_server(tmp_path: Path, monkeypatch) -> N
 
 # ── CAP07: Install recipe validation ────────────────────────────────────────
 
+
 def test_ruff_language_spec_has_dependency_recipe() -> None:
     """Verify ruff language spec includes install recipe via dependency."""
     from audiagentic.components.coding_lsp import language_registry
+
     spec = language_registry.get_language("python-ruff")
     assert spec is not None
     assert spec.dependency is not None

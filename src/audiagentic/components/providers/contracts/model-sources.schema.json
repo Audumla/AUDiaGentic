@@ -106,6 +106,15 @@
         "default": {
           "type": "boolean",
           "description": "True marks this source's model as the default selection when a job/profile omits an explicit model."
+        },
+        "resource-id": {
+          "type": "string",
+          "description": "AS105/AS101: local-endpoint only. Groups sources that share one physical/compute resource (e.g. multiple models behind one llama-swap host, or the same model loaded on two GPUs). Sources sharing a resource-id contend for that resource's capacity; a swap-capable resource cannot run two different resource-id-sharing sources' models at once. Machine-wide fact -- expected to be declared at the user-global config tier, not per-project, since the resource itself is shared infrastructure."
+        },
+        "concurrency": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "AS105/AS101: local-endpoint only. Max concurrent requests this source's model can run when it is the active/loaded model on its resource-id. A larger model on the same hardware typically supports fewer concurrent sequences than a smaller one -- concurrency is per source, never a flat per-resource number."
         }
       },
       "additionalProperties": false,

@@ -7,27 +7,23 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from audiagentic.components.agents import (
-    agents_gateway_api as gateway,
+from audiagentic.components.agents.gateway import api as gateway
+from audiagentic.components.agents.gateway import store as store
+from audiagentic.components.agents.gateway.queue import progress as progress_mod
+from audiagentic.components.agents.models.execution_profile_api import (
+    create_execution_profile,
 )
-from audiagentic.components.agents import (
-    agents_gateway_progress as progress_mod,
-)
-from audiagentic.components.agents import (
-    agents_gateway_store as store,
-)
-from audiagentic.components.agents.agents_api import create_profile
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state
 
 
 def _make_profile(project_root: Path, profile_id: str, provider_id: str, **params) -> None:
-    create_profile(
+    create_execution_profile(
         project_root,
         {
             "profile_id": profile_id,
             "provider_id": provider_id,
-            "model_id": "gpt-4o",
+            "instances": ["gpt-4o"],
             "is_default": True,
             "params": params,
         },
@@ -45,7 +41,7 @@ def _result(data: dict) -> SimpleNamespace:
 
 
 def test_running_with_model_event_gives_model_active(tmp_path: Path) -> None:
-    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
     record["state"] = "running"
     record["started-at"] = "2026-01-01T00:00:00Z"
 
@@ -67,7 +63,7 @@ def test_running_with_model_event_gives_model_active(tmp_path: Path) -> None:
 
 
 def test_running_no_session_event_gives_launching(tmp_path: Path) -> None:
-    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
     record["state"] = "running"
     record["started-at"] = "2026-01-01T00:00:00Z"
 
@@ -79,7 +75,7 @@ def test_running_no_session_event_gives_launching(tmp_path: Path) -> None:
 
 
 def test_stale_progress_when_no_evidence_past_threshold(tmp_path: Path) -> None:
-    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
     record["state"] = "running"
     # Started 610 seconds ago, no session event since then
     record["started-at"] = "2026-01-01T00:00:00Z"
@@ -91,8 +87,120 @@ def test_stale_progress_when_no_evidence_past_threshold(tmp_path: Path) -> None:
     assert projection["stale-reason"] == "no-turn-evidence-past-threshold"
 
 
+def test_stale_threshold_is_provider_neutral_across_execution_profiles() -> None:
+    now = datetime.datetime(2026, 1, 1, 0, 10, 10, tzinfo=datetime.timezone.utc)
+    for profile_id in ("fake", "acp", "mcp-a2a"):
+        record = store.build_record(execution_profile_id=profile_id, prompt_body="hello")
+        record["state"] = "running"
+        record["started-at"] = "2026-01-01T00:00:00Z"
+        projection = progress_mod.project_request_progress(record, now=now)
+        assert projection["stale-progress"] is True
+        assert projection["stale-reason"] == "no-turn-evidence-past-threshold"
+
+
+def test_stale_threshold_isolated_between_projects() -> None:
+    now = datetime.datetime(2026, 1, 1, 0, 10, 10, tzinfo=datetime.timezone.utc)
+    old_record = store.build_record(execution_profile_id="default", prompt_body="old")
+    old_record["state"] = "running"
+    old_record["started-at"] = "2026-01-01T00:00:00Z"
+    fresh_record = store.build_record(execution_profile_id="default", prompt_body="fresh")
+    fresh_record["state"] = "running"
+    fresh_record["started-at"] = "2026-01-01T00:09:30Z"
+
+    old_projection = progress_mod.project_request_progress(old_record, now=now)
+    fresh_projection = progress_mod.project_request_progress(fresh_record, now=now)
+
+    assert old_projection["stale-progress"] is True
+    assert fresh_projection["stale-progress"] is False
+
+
+def test_provider_neutral_cancellation_clears_stale_progress() -> None:
+    now = datetime.datetime(2026, 1, 1, 0, 10, 10, tzinfo=datetime.timezone.utc)
+    for profile_id in ("fake", "acp", "mcp-a2a"):
+        record = store.build_record(execution_profile_id=profile_id, prompt_body="cancel")
+        record["state"] = "cancelled"
+        record["started-at"] = "2026-01-01T00:00:00Z"
+        record["finished-at"] = "2026-01-01T00:00:05Z"
+        projection = progress_mod.project_request_progress(record, now=now)
+        assert projection["phase"] == "cancelled"
+        assert projection["stale-progress"] is False
+
+
+def test_cancelled_progress_survives_restart_round_trip() -> None:
+    record = store.build_record(execution_profile_id="acp", prompt_body="cancel")
+    record["state"] = "cancelled"
+    record["started-at"] = "2026-01-01T00:00:00Z"
+    record["finished-at"] = "2026-01-01T00:00:05Z"
+    reloaded = json.loads(json.dumps(record))
+    projection = progress_mod.project_request_progress(
+        reloaded,
+        now=datetime.datetime(2026, 1, 1, 1, 0, 0, tzinfo=datetime.timezone.utc),
+    )
+    assert projection["phase"] == "cancelled"
+    assert projection["stale-progress"] is False
+
+
+def test_completed_and_failed_progress_survive_restart_across_profiles() -> None:
+    now = datetime.datetime(2026, 1, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)
+    for profile_id in ("fake", "acp", "mcp-a2a"):
+        for terminal_state in ("completed", "failed"):
+            record = store.build_record(execution_profile_id=profile_id, prompt_body="terminal")
+            record["state"] = terminal_state
+            record["started-at"] = "2026-01-01T00:00:00Z"
+            record["finished-at"] = "2026-01-01T00:00:05Z"
+            reloaded = json.loads(json.dumps(record))
+            projection = progress_mod.project_request_progress(reloaded, now=now)
+            assert projection["phase"] == terminal_state
+            assert projection["stale-progress"] is False
+
+
+def test_deterministic_multi_project_soak_has_no_cross_record_state() -> None:
+    now = datetime.datetime(2026, 1, 1, 0, 10, 0, tzinfo=datetime.timezone.utc)
+    projections: list[dict[str, object]] = []
+    profiles = ("fake", "acp", "mcp-a2a")
+    for index in range(20):
+        record = store.build_record(execution_profile_id=profiles[index % len(profiles)], prompt_body="soak")
+        record["state"] = "cancelled" if index % 5 == 0 else "running"
+        record["started-at"] = "2026-01-01T00:00:00Z"
+        if record["state"] == "cancelled":
+            record["finished-at"] = "2026-01-01T00:00:05Z"
+            record = json.loads(json.dumps(record))
+        projections.append(progress_mod.project_request_progress(record, now=now))
+    assert sum(bool(item["stale-progress"]) for item in projections) == 16
+
+
+def test_source_loss_then_progress_event_recovers_without_terminalizing() -> None:
+    record = store.build_record(execution_profile_id="mcp-a2a", prompt_body="recover")
+    record["state"] = "running"
+    record["started-at"] = "2026-01-01T00:00:00Z"
+    now = datetime.datetime(2026, 1, 1, 0, 10, 0, tzinfo=datetime.timezone.utc)
+    stale = progress_mod.project_request_progress(record, now=now)
+    assert stale["stale-progress"] is True
+    recovered = progress_mod.project_request_progress(
+        record,
+        latest_session_event={"kind": "assistant-message", "timestamp": "2026-01-01T00:09:55Z"},
+        now=now,
+    )
+    assert recovered["phase"] == "model-active"
+    assert recovered["stale-progress"] is False
+
+
+def test_source_loss_then_explicit_failure_is_terminal_not_stale() -> None:
+    record = store.build_record(execution_profile_id="acp", prompt_body="fail")
+    record["state"] = "running"
+    record["started-at"] = "2026-01-01T00:00:00Z"
+    now = datetime.datetime(2026, 1, 1, 0, 10, 0, tzinfo=datetime.timezone.utc)
+    stale = progress_mod.project_request_progress(record, now=now)
+    assert stale["stale-progress"] is True
+    record["state"] = "failed"
+    record["finished-at"] = "2026-01-01T00:10:01Z"
+    terminal = progress_mod.project_request_progress(record, now=now)
+    assert terminal["phase"] == "failed"
+    assert terminal["stale-progress"] is False
+
+
 def test_stale_progress_with_session_event_past_threshold(tmp_path: Path) -> None:
-    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
     record["state"] = "running"
     record["started-at"] = "2026-01-01T00:00:00Z"
 
@@ -116,7 +224,7 @@ def test_stale_progress_with_session_event_past_threshold(tmp_path: Path) -> Non
 
 def test_terminal_record_phase_and_not_stale(tmp_path: Path) -> None:
     for terminal_state in ("completed", "failed", "cancelled", "rejected"):
-        record = store.build_record(agent_profile_id="default", prompt_body="hello")
+        record = store.build_record(execution_profile_id="default", prompt_body="hello")
         record["state"] = terminal_state
         record["started-at"] = "2026-01-01T00:00:00Z"
         record["finished-at"] = "2026-01-01T00:00:05Z"
@@ -130,7 +238,7 @@ def test_terminal_record_phase_and_not_stale(tmp_path: Path) -> None:
 
 
 def test_terminal_interrupted_maps_to_interrupted(tmp_path: Path) -> None:
-    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
     record["state"] = "interrupted"
 
     projection = progress_mod.project_request_progress(record)
@@ -139,7 +247,7 @@ def test_terminal_interrupted_maps_to_interrupted(tmp_path: Path) -> None:
 
 
 def test_queued_phase(tmp_path: Path) -> None:
-    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
     assert record["state"] == "queued"
 
     projection = progress_mod.project_request_progress(record)
@@ -147,7 +255,7 @@ def test_queued_phase(tmp_path: Path) -> None:
 
 
 def test_claimed_phase_when_dispatch_owner_epoch_set(tmp_path: Path) -> None:
-    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
     record["dispatch-owner-epoch"] = "service-a"
 
     projection = progress_mod.project_request_progress(record)
@@ -155,7 +263,7 @@ def test_claimed_phase_when_dispatch_owner_epoch_set(tmp_path: Path) -> None:
 
 
 def test_tool_event_gives_tool_active(tmp_path: Path) -> None:
-    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
     record["state"] = "running"
     record["started-at"] = "2026-01-01T00:00:00Z"
 
@@ -175,7 +283,7 @@ def test_tool_event_gives_tool_active(tmp_path: Path) -> None:
 
 
 def test_turn_start_event_gives_turn_starting(tmp_path: Path) -> None:
-    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
     record["state"] = "running"
     record["started-at"] = "2026-01-01T00:00:00Z"
 
@@ -196,7 +304,7 @@ def test_turn_start_event_gives_turn_starting(tmp_path: Path) -> None:
 
 
 def test_unknown_state_gives_unknown_phase(tmp_path: Path) -> None:
-    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
     record["state"] = "some-weird-state"
 
     projection = progress_mod.project_request_progress(record)
@@ -205,7 +313,7 @@ def test_unknown_state_gives_unknown_phase(tmp_path: Path) -> None:
 
 def test_redaction_no_forbidden_values_leak(tmp_path: Path) -> None:
     """Adversarial session event carrying forbidden fields must be stripped."""
-    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
     record["state"] = "running"
     record["started-at"] = "2026-01-01T00:00:00Z"
 
@@ -244,7 +352,7 @@ def test_redaction_no_forbidden_values_leak(tmp_path: Path) -> None:
 
 
 def test_last_progress_source_request_transition(tmp_path: Path) -> None:
-    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
     record["state"] = "running"
     record["started-at"] = "2026-01-01T00:00:10Z"
 
@@ -264,7 +372,7 @@ def test_last_progress_source_request_transition(tmp_path: Path) -> None:
 
 
 def test_last_progress_source_session_event(tmp_path: Path) -> None:
-    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
     record["state"] = "running"
     record["started-at"] = "2026-01-01T00:00:05Z"
 
@@ -284,7 +392,7 @@ def test_last_progress_source_session_event(tmp_path: Path) -> None:
 
 
 def test_running_seconds_none_when_not_started(tmp_path: Path) -> None:
-    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
     # queued state, no started-at
 
     projection = progress_mod.project_request_progress(record)
@@ -292,7 +400,7 @@ def test_running_seconds_none_when_not_started(tmp_path: Path) -> None:
 
 
 def test_all_keys_present() -> None:
-    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
     projection = progress_mod.project_request_progress(record)
 
     expected_keys = {
@@ -320,11 +428,11 @@ def test_request_runtime_status_includes_progress(tmp_path: Path, monkeypatch) -
         )
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
         fake_execute_provider,
     )
 
-    gateway.run_llm_request(tmp_path, prompt_body="hi")
+    gateway.run_execution_request(tmp_path, prompt_body="hi")
 
     records = store.list_records(tmp_path)
     req_id = records[0]["request-id"]
@@ -347,18 +455,18 @@ def test_wait_timeout_marker_on_non_terminal(tmp_path: Path, monkeypatch) -> Non
         )
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
         slow_execute_provider,
     )
 
-    submitted = gateway.submit_llm_request(tmp_path, prompt_body="hi")
-    result = gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=0.2)
+    submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
+    result = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=0.2)
 
     assert result["wait-timeout"] is True
     assert "progress" in result
 
     hold.set()
-    gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=5)
+    gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=5)
 
 
 def test_gateway_overview_includes_runtime_fingerprint(tmp_path: Path, monkeypatch) -> None:
@@ -370,11 +478,11 @@ def test_gateway_overview_includes_runtime_fingerprint(tmp_path: Path, monkeypat
         )
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
         fake_execute_provider,
     )
 
-    gateway.run_llm_request(tmp_path, prompt_body="hi")
+    gateway.run_execution_request(tmp_path, prompt_body="hi")
 
     overview = gateway.gateway_overview(tmp_path)
 
@@ -420,11 +528,11 @@ def test_terminal_wait_does_not_add_timeout_marker(tmp_path: Path, monkeypatch) 
         )
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
         fake_execute_provider,
     )
 
-    result = gateway.run_llm_request(tmp_path, prompt_body="hi")
+    result = gateway.run_execution_request(tmp_path, prompt_body="hi")
 
     assert "wait-timeout" not in result
     assert result["state"] == "completed"
@@ -452,7 +560,7 @@ def _write_timeline(project_root: Path, session_id: str, entries: list[dict]) ->
 
 def test_progress_summary_includes_event_kind_counts(tmp_path: Path) -> None:
     """SH15: build_session_progress_summary produces event-kind-counts."""
-    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
 
     _write_timeline(
         tmp_path,
@@ -499,7 +607,7 @@ def test_progress_summary_includes_event_kind_counts(tmp_path: Path) -> None:
 
 def test_progress_summary_tool_active_completed_failed_counts(tmp_path: Path) -> None:
     """SH15: tool status tracking produces active/completed/failed counts."""
-    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
 
     _write_timeline(
         tmp_path,
@@ -553,7 +661,7 @@ def test_progress_summary_tool_active_completed_failed_counts(tmp_path: Path) ->
 
 def test_progress_summary_latest_sequence_and_timestamp(tmp_path: Path) -> None:
     """SH15: latest-sequence and latest-timestamp reflect the most recent event."""
-    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
 
     _write_timeline(
         tmp_path,
@@ -580,7 +688,7 @@ def test_progress_summary_latest_sequence_and_timestamp(tmp_path: Path) -> None:
 
 def test_progress_summary_stop_reason_from_turn_finished(tmp_path: Path) -> None:
     """SH15: stop-reason from turn.finished entry is captured."""
-    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
 
     _write_timeline(
         tmp_path,
@@ -611,7 +719,7 @@ def test_progress_summary_stop_reason_from_turn_finished(tmp_path: Path) -> None
 
 def test_progress_summary_dropped_events_and_total_events(tmp_path: Path) -> None:
     """SH15: dropped-events and total-events from turn.finished are captured."""
-    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
 
     _write_timeline(
         tmp_path,
@@ -646,7 +754,7 @@ def test_progress_summary_dropped_events_and_total_events(tmp_path: Path) -> Non
 
 def test_progress_summary_callback_disabled_true(tmp_path: Path) -> None:
     """SH15: callback-disabled=true when the transport disables callbacks."""
-    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
 
     _write_timeline(
         tmp_path,
@@ -672,7 +780,7 @@ def test_progress_summary_callback_disabled_true(tmp_path: Path) -> None:
 
 def test_progress_summary_assistant_thought_chunk_count(tmp_path: Path) -> None:
     """SH15: assistant-thought-chunk-count reflects combined assistant+thought events."""
-    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
 
     _write_timeline(
         tmp_path,
@@ -703,7 +811,7 @@ def test_progress_summary_assistant_thought_chunk_count(tmp_path: Path) -> None:
 
 def test_project_request_progress_with_summary_includes_richer_fields() -> None:
     """SH15: project_request_progress includes progress-summary fields when provided."""
-    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
     record["state"] = "running"
     record["started-at"] = "2026-01-01T00:00:00Z"
 
@@ -752,7 +860,7 @@ def test_project_request_progress_with_summary_includes_richer_fields() -> None:
 
 def test_project_request_progress_without_summary_is_backward_compat() -> None:
     """SH15: when no progress_summary is provided, output keys match baseline."""
-    record = store.build_record(agent_profile_id="default", prompt_body="hello")
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
     projection = progress_mod.project_request_progress(record)
 
     expected_keys = {
@@ -769,7 +877,7 @@ def test_project_request_progress_without_summary_is_backward_compat() -> None:
 
 
 def test_wait_timeout_includes_progress_summary(tmp_path: Path, monkeypatch) -> None:
-    """SH15: wait_llm_request timeout path includes richer progress summary."""
+    """SH15: wait_execution_request timeout path includes richer progress summary."""
     _make_profile(tmp_path, "default", "local-openai")
     import threading
 
@@ -782,12 +890,12 @@ def test_wait_timeout_includes_progress_summary(tmp_path: Path, monkeypatch) -> 
         )
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
         slow_execute_provider,
     )
 
-    submitted = gateway.submit_llm_request(tmp_path, prompt_body="hi")
-    result = gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=0.2)
+    submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
+    result = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=0.2)
 
     assert result["wait-timeout"] is True
     assert "progress" in result
@@ -797,12 +905,12 @@ def test_wait_timeout_includes_progress_summary(tmp_path: Path, monkeypatch) -> 
     assert "phase" in result["progress"]
 
     hold.set()
-    gateway.wait_llm_request(tmp_path, submitted["request-id"], timeout_seconds=5)
+    gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=5)
 
 
 def test_progress_summary_request_id_filtering(tmp_path: Path) -> None:
     """SH15: build_session_progress_summary filters by request-id when provided."""
-    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
 
     _write_timeline(
         tmp_path,
@@ -836,7 +944,7 @@ def test_progress_summary_request_id_filtering(tmp_path: Path) -> None:
 
 def test_progress_summary_none_when_no_timeline(tmp_path: Path) -> None:
     """SH15: build_session_progress_summary returns None when no timeline exists."""
-    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
 
     summary = session_store.build_session_progress_summary(tmp_path, "ses_missing", "req_01")
     assert summary is None
@@ -844,7 +952,7 @@ def test_progress_summary_none_when_no_timeline(tmp_path: Path) -> None:
 
 def test_progress_summary_tool_status_updates(tmp_path: Path) -> None:
     """SH15: tool status can transition from active to completed/failed."""
-    from audiagentic.components.agents import agents_gateway_sessions_store as session_store
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
 
     _write_timeline(
         tmp_path,
@@ -898,11 +1006,11 @@ def test_request_runtime_status_includes_sh15_progress_summary(tmp_path: Path, m
         )
 
     monkeypatch.setattr(
-        "audiagentic.components.agents.agents_gateway_worker.execute_isolated_provider_turn",
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
         slow_execute_provider,
     )
 
-    submitted = gateway.submit_llm_request(tmp_path, prompt_body="hi")
+    submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
     req_id = submitted["request-id"]
 
     # Give the worker time to start (but it'll block on hold)
@@ -914,4 +1022,4 @@ def test_request_runtime_status_includes_sh15_progress_summary(tmp_path: Path, m
     assert "progress" in status
 
     hold.set()
-    gateway.wait_llm_request(tmp_path, req_id, timeout_seconds=5)
+    gateway.wait_execution_request(tmp_path, req_id, timeout_seconds=5)

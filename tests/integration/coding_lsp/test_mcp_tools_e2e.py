@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 import time
 from pathlib import Path
 
@@ -470,6 +471,15 @@ def e2e_project(e2e_lsp_cache: Path, tmp_path_factory) -> Path:
             (root / rel).write_text(body, encoding="utf-8")
         (root / cfg["file"]).write_text(cfg["content"], encoding="utf-8")
 
+    subprocess.run(
+        ["npm", "install", "--no-audit", "--no-fund", "--ignore-scripts", "typescript@5.9.3"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    os.environ["NODE_PATH"] = str(root / "node_modules")
+
     return root
 
 
@@ -577,7 +587,6 @@ def test_lsp_doc_symbols_returns_outline(e2e_project: Path, language: str) -> No
 @pytest.mark.parametrize("language", ["python", "typescript", "rust"], indirect=["language"])
 def test_lsp_workspace_symbols_finds_marker(e2e_project: Path, language: str) -> None:
     """lsp_symbols should find workspace symbols for each language."""
-    sample = e2e_project / LANG_CONFIGS[language]["file"]
     query_map = {
         "python": "Calculator",
         "typescript": "Shape",

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.components.agents.agents_gateway_session_resume import (
+from audiagentic.components.agents.gateway.session.resume import (
     ERR_EXECUTION_CONTEXT_MISMATCH,
     ERR_IDENTITY_MISMATCH,
     ERR_SOURCE_NOT_TERMINAL,

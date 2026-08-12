@@ -51,7 +51,7 @@ class FakeStandaloneClient:
         self.calls.append(("service_stop", {"force": force}))
         if not force:
             # Simulate busy gateway refusing graceful stop
-            from audiagentic.components.agents.agents_gateway_lifecycle import (
+            from audiagentic.components.agents.gateway.service.lifecycle import (
                 lifecycle_conflict_error,
             )
             raise lifecycle_conflict_error(
@@ -78,7 +78,7 @@ class FakeRecoverUnprovable:
     ) -> dict:
         self.calls.append({"service_root": service_root, "confirm": confirm, "reason": reason})
         if not confirm:
-            from audiagentic.components.agents.agents_gateway_lifecycle import (
+            from audiagentic.components.agents.gateway.service.lifecycle import (
                 lifecycle_validation_error,
             )
             raise lifecycle_validation_error(
@@ -118,7 +118,7 @@ class TestGatewayStatus:
 
         from audiagentic.commands.gateway import cmd_gateway_status
         with mock.patch(
-            "audiagentic.components.agents.agents_gateway_remote_client.StandaloneGatewayClient",
+            "audiagentic.components.agents.gateway.remote_client.StandaloneGatewayClient",
             return_value=fake,
         ):
             rc = cmd_gateway_status(mock.MagicMock(), tmp_path)
@@ -136,7 +136,7 @@ class TestGatewayDrain:
 
         from audiagentic.commands.gateway import cmd_gateway_drain
         with mock.patch(
-            "audiagentic.components.agents.agents_gateway_remote_client.StandaloneGatewayClient",
+            "audiagentic.components.agents.gateway.remote_client.StandaloneGatewayClient",
             return_value=fake,
         ):
             rc = cmd_gateway_drain(mock.MagicMock(), tmp_path)
@@ -154,7 +154,7 @@ class TestGatewayResume:
 
         from audiagentic.commands.gateway import cmd_gateway_resume
         with mock.patch(
-            "audiagentic.components.agents.agents_gateway_remote_client.StandaloneGatewayClient",
+            "audiagentic.components.agents.gateway.remote_client.StandaloneGatewayClient",
             return_value=fake,
         ):
             rc = cmd_gateway_resume(mock.MagicMock(), tmp_path)
@@ -174,7 +174,7 @@ class TestGatewayStop:
         from audiagentic.commands.gateway import cmd_gateway_stop
         args = mock.MagicMock(force=True)
         with mock.patch(
-            "audiagentic.components.agents.agents_gateway_remote_client.StandaloneGatewayClient",
+            "audiagentic.components.agents.gateway.remote_client.StandaloneGatewayClient",
             return_value=fake,
         ):
             rc = cmd_gateway_stop(args, tmp_path)
@@ -192,7 +192,7 @@ class TestGatewayStop:
         from audiagentic.commands.gateway import cmd_gateway_stop
         args = mock.MagicMock(force=False)
         with mock.patch(
-            "audiagentic.components.agents.agents_gateway_remote_client.StandaloneGatewayClient",
+            "audiagentic.components.agents.gateway.remote_client.StandaloneGatewayClient",
             return_value=fake,
         ):
             from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -213,14 +213,14 @@ class TestGatewayRecover:
         fake_recover = FakeRecoverUnprovable()
 
         from audiagentic.commands.gateway import cmd_gateway_recover
-        from audiagentic.components.agents import agents_gateway_lifecycle as lc_mod
+        from audiagentic.components.agents.gateway.service import lifecycle as lc_mod
 
         args = mock.MagicMock(confirm=True, reason="stale-owner")
         with mock.patch.object(lc_mod, "recover_unprovable_owner", fake_recover):
             rc = cmd_gateway_recover(args, tmp_path)
 
         assert rc == 0
-        assert fake_recover.calls == [{"service_root": tmp_path, "confirm": True, "reason": "stale-owner"}]
+        assert fake_recover.calls == [{"service_root": None, "confirm": True, "reason": "stale-owner"}]
         out = json.loads(capsys.readouterr().out)
         assert out["recovered"] is True
         assert out["diagnostics"]["failure-class"] == "unprovable-owner-recovered"
@@ -233,7 +233,7 @@ class TestGatewayRecover:
         fake_recover = FakeRecoverUnprovable()
 
         from audiagentic.commands.gateway import cmd_gateway_recover
-        from audiagentic.components.agents import agents_gateway_lifecycle as lc_mod
+        from audiagentic.components.agents.gateway.service import lifecycle as lc_mod
         from audiagentic.foundation.contracts.errors import AudiaGenticError
 
         args = mock.MagicMock(confirm=False, reason=None)
@@ -249,10 +249,10 @@ class TestGatewayRecover:
         fake_recover = FakeRecoverUnprovable()
 
         from audiagentic.commands.gateway import cmd_gateway_recover
-        from audiagentic.components.agents import agents_gateway_lifecycle as lc_mod
+        from audiagentic.components.agents.gateway.service import lifecycle as lc_mod
         args = mock.MagicMock(confirm=True, reason="test")
         with mock.patch(
-            "audiagentic.components.agents.agents_gateway_remote_client.StandaloneGatewayClient",
+            "audiagentic.components.agents.gateway.remote_client.StandaloneGatewayClient",
             side_effect=AssertionError("HTTP client created!"),
         ):
             with mock.patch.object(lc_mod, "recover_unprovable_owner", fake_recover):
@@ -268,7 +268,7 @@ class TestGatewayRecover:
         fake_recover = FakeRecoverUnprovable()
 
         from audiagentic.commands.gateway import cmd_gateway_recover
-        from audiagentic.components.agents import agents_gateway_lifecycle as lc_mod
+        from audiagentic.components.agents.gateway.service import lifecycle as lc_mod
 
         args = mock.MagicMock(confirm=True, reason="operator-confirmed unprovable owner")
         with mock.patch.object(lc_mod, "recover_unprovable_owner", fake_recover):
@@ -305,7 +305,7 @@ class TestNoLifecycleMutationInCli:
         source = cli_module_path.read_text(encoding="utf-8")
 
         # The only allowed lifecycle import is recover_unprovable_owner
-        assert "from audiagentic.components.agents.agents_gateway_lifecycle import" in source
+        assert "from audiagentic.components.agents.gateway.service.lifecycle import" in source
         # But no other lifecycle symbols should be imported
         assert "GatewayLifecycleController" not in source
         assert "gateway_quiescence_facts" not in source
@@ -383,6 +383,95 @@ class TestLauncherDispatch:
             env={**os.environ, "PYTHONPATH": str(_SRC)},
         )
         assert "unrecognized arguments" not in result.stderr
+
+    def test_shutdown_signal_handler_calls_lifecycle_request_stop_forced(self) -> None:
+        """SH10 Slice B: an OS shutdown signal goes straight to a forced stop
+        -- no interactive way to "drain first" in response to SIGTERM."""
+        from audiagentic.commands.gateway import _install_shutdown_signals
+
+        class _FakeLifecycle:
+            def __init__(self) -> None:
+                self.calls: list[dict] = []
+
+            def request_stop(self, *, force: bool = False) -> dict:
+                self.calls.append({"force": force})
+                return {"stopping": True, "forced": force}
+
+        class _FakeHost:
+            def __init__(self) -> None:
+                self.lifecycle = _FakeLifecycle()
+                self.shutdown_calls = 0
+
+            def shutdown(self) -> None:
+                self.shutdown_calls += 1
+
+        host = _FakeHost()
+        state = _install_shutdown_signals(host)
+
+        import signal as signal_module
+        handler = signal_module.getsignal(signal_module.SIGTERM)
+        handler(signal_module.SIGTERM, None)
+
+        assert host.lifecycle.calls == [{"force": True}]
+        assert host.shutdown_calls == 0
+        assert state.forced_fallback is False
+
+        signal_module.signal(signal_module.SIGTERM, signal_module.SIG_DFL)
+
+    def test_shutdown_signal_handler_falls_back_to_raw_shutdown_on_error(self) -> None:
+        """If the lifecycle-mediated stop itself fails, fall back to a raw
+        server shutdown so the process still exits rather than hanging --
+        and record that the fallback path was taken."""
+        from audiagentic.commands.gateway import _install_shutdown_signals
+
+        class _FailingLifecycle:
+            def request_stop(self, *, force: bool = False) -> dict:
+                raise RuntimeError("lifecycle store unavailable")
+
+        class _FakeHost:
+            def __init__(self) -> None:
+                self.lifecycle = _FailingLifecycle()
+                self.shutdown_calls = 0
+
+            def shutdown(self) -> None:
+                self.shutdown_calls += 1
+
+        host = _FakeHost()
+        state = _install_shutdown_signals(host)
+
+        import signal as signal_module
+        handler = signal_module.getsignal(signal_module.SIGTERM)
+        handler(signal_module.SIGTERM, None)
+
+        assert host.shutdown_calls == 1
+        assert state.forced_fallback is True
+
+        signal_module.signal(signal_module.SIGTERM, signal_module.SIG_DFL)
+
+    def test_shutdown_signal_handler_uses_raw_shutdown_when_no_lifecycle(self) -> None:
+        """Embedded/no-lifecycle hosts (idle_grace<=0) still exit cleanly on
+        a shutdown signal, via a direct server shutdown."""
+        from audiagentic.commands.gateway import _install_shutdown_signals
+
+        class _FakeHost:
+            def __init__(self) -> None:
+                self.lifecycle = None
+                self.shutdown_calls = 0
+
+            def shutdown(self) -> None:
+                self.shutdown_calls += 1
+
+        host = _FakeHost()
+        state = _install_shutdown_signals(host)
+
+        import signal as signal_module
+        handler = signal_module.getsignal(signal_module.SIGTERM)
+        handler(signal_module.SIGTERM, None)
+
+        assert host.shutdown_calls == 1
+        assert state.forced_fallback is False
+
+        signal_module.signal(signal_module.SIGTERM, signal_module.SIG_DFL)
 
     def test_gateway_serve_still_works(self, tmp_path: Path) -> None:
         """The existing 'gateway serve' must still parse and dispatch correctly."""

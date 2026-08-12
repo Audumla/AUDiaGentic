@@ -8,9 +8,9 @@ from typing import Any
 from audiagentic.foundation.features.lifecycle import enable_implementation
 from audiagentic.foundation.features.registry import get_implementations, is_default_implementation
 from audiagentic.foundation.mcp.component_server import (
-    log_tool_call,
     mcp_server,
     project_root_from_env,
+    tool_boundary,
 )
 
 logger = logging.getLogger(__name__)
@@ -27,14 +27,14 @@ def _active_implementation(project_root: Path) -> str:
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def planning_status() -> dict[str, Any]:
     from audiagentic.components.planning.planning_api import planning_status as _status
     return _status(project_root_from_env()).to_dict()
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def planning_list_implementations() -> dict[str, Any]:
     root = project_root_from_env()
     impls = get_implementations(_COMPONENT_ID)
@@ -52,14 +52,14 @@ def planning_list_implementations() -> dict[str, Any]:
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def planning_select_implementation(implementation: str) -> dict[str, Any]:
     root = project_root_from_env()
     return enable_implementation(root, _COMPONENT_ID, implementation)
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def planning_get_config(implementation_id: str | None = None) -> dict[str, Any]:
     """Return resolved config plus the settable-option schema for an implementation.
 
@@ -74,7 +74,7 @@ def planning_get_config(implementation_id: str | None = None) -> dict[str, Any]:
 
 
 @mcp.tool()
-@log_tool_call
+@tool_boundary
 def planning_set_config(implementation_id: str, updates: dict[str, Any]) -> dict[str, Any]:
     """Validate and persist config updates for a planning implementation.
 

@@ -24,7 +24,9 @@ def _cli(*args: str, project: Path | None = None, expect_rc: int = 0) -> dict | 
     cmd += list(args)
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join([str(_ROOT / "src"), env.get("PYTHONPATH", "")])
-    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", env=env)
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env
+    )
     assert result.returncode == expect_rc, (
         f"CLI {args!r} rc={result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}"
     )
@@ -38,13 +40,6 @@ def _cli(*args: str, project: Path | None = None, expect_rc: int = 0) -> dict | 
 
 
 # ── project file content ───────────────────────────────────────────────
-
-def test_install_project_creates_prompt_files(tmp_path):
-    _cli("component", "install", "project", project=tmp_path)
-    prompt = tmp_path / ".audiagentic" / "prompts" / "ag-review" / "default.md"
-    assert prompt.is_file(), f"expected prompt file at {prompt}"
-    assert prompt.stat().st_size > 0
-
 
 def test_install_release_creates_release_workflow(tmp_path):
     _cli("component", "install", "project", project=tmp_path)
@@ -66,15 +61,6 @@ def test_install_project_seeds_project_yaml(tmp_path):
     assert project_yaml.stat().st_size > 0
 
 
-def test_reinstall_project_preserves_prompts_create_if_missing(tmp_path):
-    _cli("component", "install", "project", project=tmp_path)
-    prompt = tmp_path / ".audiagentic" / "prompts" / "ag-review" / "default.md"
-    prompt.write_text("custom content", encoding="utf-8")
-
-    _cli("component", "install", "project", project=tmp_path)
-    assert prompt.read_text(encoding="utf-8") == "custom content"
-
-
 def test_reinstall_project_preserves_create_if_missing(tmp_path):
     _cli("component", "install", "project", project=tmp_path)
     project_yaml = tmp_path / ".audiagentic" / "config" / "project.yaml"
@@ -82,15 +68,6 @@ def test_reinstall_project_preserves_create_if_missing(tmp_path):
 
     _cli("component", "install", "project", project=tmp_path)
     assert "my-project" in project_yaml.read_text(encoding="utf-8")
-
-
-
-def test_install_agent_jobs_creates_skill_files(tmp_path):
-    _cli("component", "install", "project", project=tmp_path)
-    _cli("component", "install", "agent-jobs", project=tmp_path)
-    skill = tmp_path / ".audiagentic" / "skills" / "ag-review" / "skill.md"
-    assert skill.is_file(), f"expected skill file at {skill}"
-    assert skill.stat().st_size > 0
 
 
 # ── uninstall removes required-managed files for optional components ──────────
@@ -104,19 +81,6 @@ def test_uninstall_removes_release_required_managed_files(tmp_path):
 
     _cli("component", "uninstall", "release", project=tmp_path)
     assert not workflow.exists()
-
-
-def test_uninstall_preserves_create_if_missing_without_flag(tmp_path):
-    _cli("component", "install", "project", project=tmp_path)
-    _cli("component", "install", "agent-jobs", project=tmp_path)
-    skill = tmp_path / ".audiagentic" / "skills" / "ag-review" / "skill.md"
-    marker = tmp_path / ".audiagentic" / "components" / "agent-jobs.yaml"
-    assert skill.exists()
-    assert marker.exists()
-
-    _cli("component", "uninstall", "agent-jobs", project=tmp_path)
-    assert not skill.exists()
-    assert not marker.exists()
 
 
 def test_uninstall_removes_configs_with_flag(tmp_path):
