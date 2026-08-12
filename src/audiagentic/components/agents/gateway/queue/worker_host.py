@@ -131,11 +131,34 @@ def main() -> int:
         heartbeat_stop = threading.Event()
         heartbeat_thread: threading.Thread | None = None
         sequence = 0
+        # A provider may opt into richer progress vocabulary through the
+        # authenticated worker boundary.  The default remains heartbeat;
+        # test rigs can deterministically exercise provider/tool progress by
+        # setting this process-local fixture knob.
+        activity_sources = tuple(
+            source.strip()
+            for source in os.environ.get("AUDIAGENTIC_WORKER_ACTIVITY_SOURCES", "worker-heartbeat").split(",")
+            if source.strip()
+        ) or ("worker-heartbeat",)
+        try:
+            activity_interval = max(
+                0.05, float(os.environ.get("AUDIAGENTIC_WORKER_ACTIVITY_INTERVAL_SECONDS", "5"))
+            )
+        except ValueError:
+            activity_interval = 5.0
+        try:
+            stall_after = int(os.environ.get("AUDIAGENTIC_WORKER_ACTIVITY_STALL_AFTER", "0"))
+        except ValueError:
+            stall_after = 0
+
         def emit_activity() -> None:
             nonlocal sequence
-            while not heartbeat_stop.wait(5.0):
+            while not heartbeat_stop.wait(activity_interval):
                 sequence += 1
-                _write(WorkerActivityEnvelope(identity, evidence, sequence, "worker-heartbeat"))
+                if stall_after > 0 and sequence > stall_after:
+                    continue
+                source = activity_sources[(sequence - 1) % len(activity_sources)]
+                _write(WorkerActivityEnvelope(identity, evidence, sequence, source))
 
         heartbeat_thread = threading.Thread(target=emit_activity, name="worker-activity", daemon=True)
         heartbeat_thread.start()

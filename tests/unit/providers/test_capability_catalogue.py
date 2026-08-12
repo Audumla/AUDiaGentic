@@ -193,11 +193,12 @@ def test_val_pcap_013_typoed_mechanism_rejected():
 def test_all_providers_validate_against_catalogue():
     """Every capability_id in all shipped provider YAMLs resolves to a catalogue kind.
 
-    CC53: kilo/zed/crush gained minimal registered descriptors (stub launch,
-    own harness_observability entries) — 16 + 3 = 19.
+    The repository-owned activity-rig is also a registered synthetic provider
+    used by deterministic gateway tests, so the shipped registry currently
+    contains 21 descriptors.
     """
     descriptors = all_descriptors()
-    assert len(descriptors) == 20, f"Expected 20 providers, got {len(descriptors)}"
+    assert len(descriptors) == 21, f"Expected 21 providers, got {len(descriptors)}"
 
     for pid, desc in descriptors.items():
         validate_provider_capability_facts(desc)  # raises if any fact fails

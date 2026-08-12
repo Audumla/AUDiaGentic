@@ -88,6 +88,11 @@ _PASSTHROUGH_ENV = frozenset(
         "SYSTEMROOT",
         "TERM",
         "WINDIR",
+        # Controlled activity-rig fixture knobs. These remain provider-neutral
+        # and are propagated only to the disposable worker process.
+        "AUDIAGENTIC_WORKER_ACTIVITY_SOURCES",
+        "AUDIAGENTIC_WORKER_ACTIVITY_INTERVAL_SECONDS",
+        "AUDIAGENTIC_WORKER_ACTIVITY_STALL_AFTER",
     }
 )
 _PROTECTED_WORKER_ENV = frozenset(
@@ -159,6 +164,20 @@ def _replacement_environment(component_profile: str, private_home: Path) -> dict
             "PYTHONIOENCODING": "utf-8",
         }
     )
+    # Controlled activity-rig fixture knobs are explicitly scoped and copied
+    # into disposable workers; no arbitrary caller environment crosses the
+    # isolation boundary.
+    for name in (
+        "AUDIAGENTIC_WORKER_ACTIVITY_SOURCES",
+        "AUDIAGENTIC_WORKER_ACTIVITY_INTERVAL_SECONDS",
+        "AUDIAGENTIC_WORKER_ACTIVITY_STALL_AFTER",
+        "AUDIAGENTIC_ACTIVITY_RIG_PAUSE",
+        "AUDIAGENTIC_ACTIVITY_RIG_PAUSE_SECONDS",
+        "AUDIAGENTIC_ACTIVITY_RIG_STALL",
+        "AUDIAGENTIC_ACTIVITY_RIG_STALL_SECONDS",
+    ):
+        if name in os.environ:
+            environment[name] = os.environ[name]
     if component_profile:
         environment["AUDIAGENTIC_COMPONENT_PROFILE"] = component_profile
     return environment

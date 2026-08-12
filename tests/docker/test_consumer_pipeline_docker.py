@@ -11,6 +11,10 @@ and subprocess spawning to prove the consumer pipeline works in isolation.
 """
 from __future__ import annotations
 
+# Imports below the Docker-harness marker are intentionally grouped by
+# consumer surface for readability.
+# ruff: noqa: E402
+
 import asyncio
 import json
 import os
@@ -165,13 +169,16 @@ class TestAS19ObserverIngressDocker:
         loop = asyncio.new_event_loop()
         try:
             asyncio.set_event_loop(loop)
-            ingress.deliver_observation(
-                binding_id=binding_id,
-                token=token,
-                observation=observation,
-                session_id=session_id,
-                project_root=str(project_root),
-            )
+            async def deliver() -> None:
+                assert ingress.deliver_observation(
+                    binding_id=binding_id,
+                    token=token,
+                    observation=observation,
+                    session_id=session_id,
+                    project_root=str(project_root),
+                ) is True
+
+            loop.run_until_complete(deliver())
             # Give the task a moment to run.
             loop.run_until_complete(asyncio.sleep(0.1))
         finally:
@@ -322,6 +329,7 @@ record = session_store.build_session_record(
     execution_profile_id="default",
     provider_id="test-provider",
     provider_session_ref="ref-cross",
+    surface_id="test-surface",
 )
 session_store.write_session_record(project_root, record)
 try:
@@ -331,7 +339,7 @@ except Exception as e:
     if "duplicate owned" in str(e):
         print("DUPLICATE_REJECTED")
     else:
-        print(f"UNEXPECTED: {e}")
+        print(f"UNEXPECTED: {{e}}")
 """,
             ],
             capture_output=True,
