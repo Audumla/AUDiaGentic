@@ -165,7 +165,7 @@ def _resolve_implementation_id(project_root: Path | None) -> tuple[str, str]:
        (``foundation.features.registry.resolve_active_implementation``),
        which itself falls through to the descriptor-declared default
        (``embedded``) when nothing was ever explicitly selected.
-    3. "embedded" as a final, hardcoded fallback -- only reachable if the
+    3. "automatic" as a final production fallback -- only reachable if the
        registry itself is unavailable (e.g. descriptors not loaded), so
        resolution never raises merely for lack of project context.
 
@@ -193,7 +193,7 @@ def _resolve_implementation_id(project_root: Path | None) -> tuple[str, str]:
         if implementation_id:
             return implementation_id, "component-config"
 
-    return "embedded", "schema-default"
+    return ("automatic", "schema-default") if project_root is not None else ("embedded", "schema-default")
 
 
 def get_gateway_client(project_root: Path | None = None) -> GatewayClient:

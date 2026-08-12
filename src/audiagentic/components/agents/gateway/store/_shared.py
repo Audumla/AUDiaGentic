@@ -25,7 +25,7 @@ from audiagentic.foundation.workflow import (
 )
 
 _SCHEMA_STEM = "agent-execution-record"
-_CONTRACT_VERSION = "v4"
+_CONTRACT_VERSION = "v5"
 _WORKFLOW = load_workflow(Path(__file__).parent.parent.parent / "workflows.yaml", "gateway-request")
 TERMINAL_STATES: set[str] = set(states_in_set(_WORKFLOW, "terminal"))
 

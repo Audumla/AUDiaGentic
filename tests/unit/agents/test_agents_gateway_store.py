@@ -607,14 +607,14 @@ def test_read_migrates_v1_record_under_request_lock(tmp_path: Path) -> None:
 
     migrated = store.read_record(tmp_path, legacy["request-id"])
 
-    assert migrated["contract-version"] == "v4"
+    assert migrated["contract-version"] == "v5"
     assert migrated["dispatch-owner-epoch"] is None
     assert migrated["recovery"] is None
     assert migrated["resolved-source-id"] is None
     assert migrated["resolved-capacity-generation"] is None
     assert migrated["activity-sequence"] == 0
     assert migrated["last-activity-at"] is None
-    assert json.loads(path.read_text(encoding="utf-8"))["contract-version"] == "v4"
+    assert json.loads(path.read_text(encoding="utf-8"))["contract-version"] == "v5"
     assert load_ndjson(gateway_timeline_path(tmp_path, legacy["request-id"]))[-1]["event"] == "record.migrated"
 
 
@@ -628,7 +628,7 @@ def test_read_repairs_partial_v4_activity_cutover(tmp_path: Path) -> None:
         raw.pop(field, None)
     atomic_write_json(path, raw)
     repaired = store.read_record(tmp_path, record["request-id"])
-    assert repaired["contract-version"] == "v4"
+    assert repaired["contract-version"] == "v5"
     assert repaired["activity-sequence"] == 0
     assert repaired["activity-source"] is None
 

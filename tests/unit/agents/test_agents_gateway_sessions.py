@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import functools
 import multiprocessing
+import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -29,6 +31,7 @@ from audiagentic.foundation.io import load_ndjson
 from audiagentic.foundation.system.adopted_process import (
     AdoptedChild,
     OwnershipCheckResult,
+    adopt_child,
 )
 from audiagentic.foundation.system.managed_process import ProcessEvidence
 from audiagentic.foundation.transports.agent_session import (
@@ -1472,6 +1475,88 @@ def test_reaper_unknown_owned_child_evidence_does_not_clean_up_busy_turn(rig, mo
     worker.join(timeout=3)
     assert not worker.is_alive()
     assert outcome == []
+    runtime.close_session(tmp_path, session_id)
+
+
+def test_reaper_real_owned_subprocess_death_emits_once_and_releases_turn(rig, tmp_path):
+    """AS91 process-boundary proof: a real adopted child exits mid-turn.
+
+    The reaper consumes foundation's authenticated creation-identity evidence;
+    no synthetic observation is injected.  This is intentionally kept
+    deterministic by terminating the child ourselves, then sweeping once.
+    """
+    runtime, _clock, transports, _fixture_root = rig
+    record = _open(runtime, tmp_path)
+    session_id = record["session-id"]
+    transports[0].block_event = threading.Event()
+
+    child_cmd = (sys.executable, "-c", "import time; time.sleep(60)")
+    child_proc = subprocess.Popen(child_cmd)
+    adopted = adopt_child(pid=child_proc.pid, command=child_cmd, owner_epoch="real-owner")
+    assert isinstance(adopted, AdoptedChild)
+    _attach_adopted_child(runtime, session_id, adopted)
+
+    outcome: list[BaseException] = []
+
+    def run_turn() -> None:
+        try:
+            runtime.prompt_in_session(tmp_path, session_id, "blocked", request_id="req_real_orphan")
+        except BaseException as exc:  # cancellation is the owner cleanup signal
+            outcome.append(exc)
+
+    worker = threading.Thread(target=run_turn)
+    worker.start()
+    assert _wait_for(
+        lambda: runtime.session_runtime_status(session_id).get("current-request-id") == "req_real_orphan"
+    )
+    child_proc.terminate()
+    child_proc.wait(timeout=5)
+
+    runtime._call(runtime._reap_once(), timeout=2)  # noqa: SLF001 - deterministic sweep
+    worker.join(timeout=3)
+    assert not worker.is_alive()
+    assert outcome
+    durable = session_store.read_session_record(tmp_path, session_id)
+    assert durable["state"] == "failed"
+    assert durable["close-reason"] == "orphaned"
+    timeline = load_ndjson(session_store.gateway_session_timeline_path(tmp_path, session_id))
+    assert [entry["event"] for entry in timeline].count("session.orphaned") == 1
+
+
+def test_reaper_real_external_subprocess_is_never_touched(rig, tmp_path):
+    """AS91 negative process-boundary proof: external child is diagnostics-only."""
+    runtime, _clock, transports, _fixture_root = rig
+    record = _open(runtime, tmp_path)
+    session_id = record["session-id"]
+    transports[0].block_event = threading.Event()
+
+    child_cmd = (sys.executable, "-c", "import time; time.sleep(60)")
+    child_proc = subprocess.Popen(child_cmd)
+    adopted = adopt_child(
+        pid=child_proc.pid,
+        command=child_cmd,
+        owner_epoch="external-owner",
+        is_external=True,
+    )
+    assert isinstance(adopted, AdoptedChild)
+    _attach_adopted_child(runtime, session_id, adopted)
+
+    worker = threading.Thread(
+        target=lambda: runtime.prompt_in_session(
+            tmp_path, session_id, "blocked", request_id="req_external_orphan"
+        )
+    )
+    worker.start()
+    assert _wait_for(
+        lambda: runtime.session_runtime_status(session_id).get("current-request-id") == "req_external_orphan"
+    )
+    child_proc.terminate()
+    child_proc.wait(timeout=5)
+    runtime._call(runtime._reap_once(), timeout=2)  # noqa: SLF001
+    assert worker.is_alive()
+    assert session_store.read_session_record(tmp_path, session_id)["state"] == "active"
+    assert runtime.request_cancel("req_external_orphan") is True
+    worker.join(timeout=3)
     runtime.close_session(tmp_path, session_id)
 
 

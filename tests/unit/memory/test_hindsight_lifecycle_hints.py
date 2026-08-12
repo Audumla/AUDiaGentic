@@ -9,8 +9,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 import audiagentic.components.providers  # noqa: F401 — register provider descriptors
 from audiagentic.components.memory.hindsight import provision as prov
 from audiagentic.components.memory.hindsight.export import HindsightBackendConfig
@@ -93,8 +91,9 @@ class TestLifecycleHint:
         from audiagentic.components.providers.descriptors.registry import get_descriptor
 
         desc = get_descriptor("gemini")
-        if desc is None or not getattr(desc, "deprecated", False):
-            pytest.skip("gemini not marked deprecated in current config")
+        assert desc is not None and getattr(desc, "deprecated", False), (
+            "gemini must remain marked deprecated while this migration hint is covered"
+        )
 
         results = [
             {

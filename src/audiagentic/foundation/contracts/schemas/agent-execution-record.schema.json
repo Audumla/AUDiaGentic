@@ -31,7 +31,7 @@
   "additionalProperties": false,
   "properties": {
     "contract-version": {
-      "const": "v4"
+      "const": "v5"
     },
     "request-id": {
       "type": "string"
@@ -64,9 +64,6 @@
       "type": ["string", "null"]
     },
     "gateway-profile-config-digest": {
-      "type": ["string", "null"]
-    },
-    "gateway-execution-lane-key": {
       "type": ["string", "null"]
     },
     "resolved-provider-id": {
@@ -126,17 +123,6 @@
       "description": "AS105/AS101: the admitted compatible model-sources.yaml source-id set (ResolvedExecutionProfile.instances at admission time). Absent on records predating the free-instance dispatch migration -- snapshot_from_record() fails closed on those rather than misparsing them.",
       "type": ["array", "null"],
       "items": {"type": "string"}
-    },
-    "resolved-queue-limits": {
-      "type": ["object", "null"],
-      "properties": {
-        "virtual-capacity": {"type": "integer"},
-        "pending-capacity": {"type": "integer"}
-      },
-      "additionalProperties": false
-    },
-    "admission-policy-digest": {
-      "type": ["string", "null"]
     },
     "mode": {
       "type": "string",
