@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from audiagentic.components.agents.capabilities.contracts import CapabilityRequirementId
 from audiagentic.components.agents.models.execution_profile_api import (
     create_execution_profile,
 )
@@ -91,8 +92,8 @@ def test_role_from_dict_minimal():
     r = role_from_dict(_make_role())
     assert r.role_id == "test-role"
     assert r.instructions == "Review the diff for correctness."
-    assert r.required_capabilities == []
-    assert r.output_guidance is None
+    assert r.required_capabilities == ()
+    assert r.output_guidance == ""
     assert r.runtime_tool_policy_ref is None
     assert r.description == ""
 
@@ -108,7 +109,7 @@ def test_role_from_dict_full():
     }
     r = role_from_dict(data)
     assert r.role_id == "reviewer"
-    assert r.required_capabilities == ["read-files"]
+    assert r.required_capabilities == (CapabilityRequirementId("read-files"),)
     assert r.output_guidance == "Be concise."
     assert r.runtime_tool_policy_ref == "policy://placeholder"
     assert r.description == "Reviewer role"
@@ -136,7 +137,7 @@ def test_role_from_dict_accepts_hyphen_keys():
         "runtime-tool-policy-ref": "policy://x",
     }
     r = role_from_dict(data)
-    assert r.required_capabilities == ["a"]
+    assert r.required_capabilities == (CapabilityRequirementId("a"),)
     assert r.output_guidance == "concise"
     assert r.runtime_tool_policy_ref == "policy://x"
 
@@ -149,7 +150,7 @@ def test_role_to_dict_includes_all_fields():
     r = Role(
         role_id="x",
         instructions="do it",
-        required_capabilities=["a"],
+        required_capabilities=(CapabilityRequirementId("a"),),
         output_guidance="concise",
         runtime_tool_policy_ref="policy://x",
         description="desc",

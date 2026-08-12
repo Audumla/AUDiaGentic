@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 from audiagentic.components.agents.contracts.execution_context import (
-    ENVELOPE_SCHEMA_VERSION,
     ExecutionManifest,
     ManifestIdentity,
     SubmissionEnvelope,
@@ -229,14 +228,14 @@ class TestRedaction:
 
 
 class TestVersionNegotiation:
-    @pytest.mark.parametrize("version", [0, 2, 99])
+    @pytest.mark.parametrize("version", [0, 3, 99])
     def test_unsupported_version_yields_stable_error(self, tmp_path: Path, version: int) -> None:
         envelope = _envelope(tmp_path, schema_version=version)
         with pytest.raises(AudiaGenticError) as exc:
             envelope.validate()
         assert exc.value.code == "VAL-AGW-069"
         assert exc.value.details["requested"] == version
-        assert exc.value.details["supported_min"] == ENVELOPE_SCHEMA_VERSION
+        assert exc.value.details["supported_min"] == 1
 
     def test_provider_without_model_rejected(self, tmp_path: Path) -> None:
         envelope = _envelope(tmp_path, provider_id="opencode")

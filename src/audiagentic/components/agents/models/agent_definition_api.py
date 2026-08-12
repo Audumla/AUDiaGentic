@@ -10,14 +10,16 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.agents.agents_paths import agent_definitions_path
+from audiagentic.components.agents.agents_paths import agents_config_path
+from audiagentic.components.agents.configuration.contracts import AgentsConfigDocument
+from audiagentic.components.agents.configuration.repository import AgentsConfigRepository
 from audiagentic.components.agents.models.agent_definition import (
     AgentDefinitionStore,
     agent_definition_from_dict,
     agent_definition_to_dict,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import load_yaml_file, save_yaml_file
+from audiagentic.foundation.io import load_yaml_file
 
 logger = logging.getLogger(__name__)
 
@@ -51,33 +53,8 @@ def load_agent_definitions(project_root: Path) -> AgentDefinitionStore:
     Raises AudiaGenticError(IO-AGD-001) on read failure.
     Raises AudiaGenticError(VAL-AGD-002) on contract-version mismatch.
     """
-    path = agent_definitions_path(project_root)
-    data = _load_yaml_lenient(path)
-    if not data:
-        return AgentDefinitionStore()
-    cv = data.get("contract-version")
-    if cv and cv != "v1":
-        raise AudiaGenticError(
-            code="VAL-AGD-002",
-            kind="agents",
-            message="unsupported agent definitions contract version",
-            details={"contract-version": cv, "expected": "v1"},
-        )
-    entries = data.get("agent-definitions", [])
-    if not isinstance(entries, list):
-        return AgentDefinitionStore()
-    store = AgentDefinitionStore()
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        try:
-            definition = agent_definition_from_dict(entry)
-            store._definitions[definition.agent_id] = definition
-        except AudiaGenticError:
-            logger.warning(
-                "Skipping invalid agent definition entry: %s", entry.get("agent_id", "<unknown>")
-            )
-    return store
+    snapshot = AgentsConfigRepository().read(project_root)
+    return AgentDefinitionStore.from_dicts(list(snapshot.document.agents))
 
 
 def save_agent_definitions(project_root: Path, store: AgentDefinitionStore) -> None:
@@ -85,20 +62,17 @@ def save_agent_definitions(project_root: Path, store: AgentDefinitionStore) -> N
 
     Raises AudiaGenticError(IO-AGD-002) on write failure.
     """
-    path = agent_definitions_path(project_root)
-    payload = {
-        "contract-version": "v1",
-        "agent-definitions": store.to_dicts(),
-    }
+    repository = AgentsConfigRepository()
+    snapshot = repository.read(project_root)
+    document = AgentsConfigDocument(snapshot.document.contract_version, snapshot.document.prompts, snapshot.document.roles, snapshot.document.execution_profiles, tuple(store.to_dicts()))
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        save_yaml_file(path, payload, sort_keys=False, atomic=True)
+        repository.replace(project_root, document, expected_digest=(snapshot.digest if agents_config_path(project_root).exists() else None))
     except Exception as exc:
         raise AudiaGenticError(
             code="IO-AGD-002",
             kind="agents",
             message="failed to write agent definitions config",
-            details={"path": str(path), "error": str(exc)},
+            details={"path": "agents.yaml", "error": str(exc)},
         ) from exc
 
 
@@ -156,7 +130,8 @@ def update_agent_definition(
     allowed_keys = {
         "name",
         "execution_profile_id",
-        "role_id",
+        "role_ids",
+        "prompt_id",
         "description",
         "advertised_skills",
         "internal",
@@ -226,13 +201,14 @@ def resolve_agent_definition(
 
     definition = get_agent_definition(project_root, agent_id)
     profile = execution_profile_lookup(project_root, definition["execution_profile_id"])
-    role = role_lookup(project_root, definition["role_id"])
+    role_ids = definition.get("role_ids") or [definition.get("role_id")]
+    roles = [role_lookup(project_root, role_id) for role_id in role_ids if role_id]
 
     return {
         "agent_id": definition["agent_id"],
         "name": definition["name"],
         "execution_profile": profile,
-        "role": role,
+        "roles": roles,
         "advertised_skills": definition["advertised_skills"],
         "publication": {
             "internal": definition["internal"],

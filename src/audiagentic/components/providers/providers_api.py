@@ -16,10 +16,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
-logger = logging.getLogger(__name__)
 
 from audiagentic.components.providers.contracts.cli_lifecycle import (
     CliLifecycleMode,
@@ -91,6 +90,29 @@ from audiagentic.foundation.transports.harness_status_observer import (
     StatusObserverResult,
 )
 from audiagentic.foundation.transports.session_surface import PreparedSessionTransport
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderCapabilityEvidenceSnapshot:
+    """One provider-owned evidence read for an admission decision."""
+
+    provider_id: str
+    surface_id: str | None
+    facts: tuple[Any, ...]
+
+
+def read_provider_capability_evidence(
+    provider_id: str,
+    *,
+    surface_id: str | None = None,
+) -> ProviderCapabilityEvidenceSnapshot:
+    """Read provider capability facts through the public provider boundary."""
+    from audiagentic.components.providers.descriptors.registry import get_descriptor
+
+    descriptor = get_descriptor(provider_id)
+    return ProviderCapabilityEvidenceSnapshot(provider_id, surface_id, tuple(descriptor.capability_facts))
 
 
 def get_provider_execution_isolation_tier(provider_id: str) -> ProviderIsolationTier:
@@ -1940,6 +1962,8 @@ __all__ = [
     "get_reconciliation_policy",
     "set_reconciliation_policy",
     "list_provider_descriptors",
+    "ProviderCapabilityEvidenceSnapshot",
+    "read_provider_capability_evidence",
     "list_provider_models",
     "refresh_provider_catalog",
     "describe_provider",

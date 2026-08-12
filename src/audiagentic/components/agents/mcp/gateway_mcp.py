@@ -5,8 +5,8 @@ plus status/cancel/list/overview/session (AS63).
 execution_profile_id submission surface (`agent_execution_submit`) was
 removed once its only real callers turned out to be its own tests and docs
 (AS63 step 7) — direct execution_profile_id submission bypassing Agent
-Definition resolution is still available programmatically via
-`AgentTaskFactory.submit_raw`/`submit_execution_request`, just not over MCP
+Definition resolution is still available programmatically through the public
+GatewayClient seam, just not over MCP
 (MCP is a deliberately restrictive layer over the fuller Python API).
 """
 
@@ -173,15 +173,14 @@ def agent_task_submit(
     agent definition.
 
     This is the sole submission surface over MCP (RV891). Direct
-    provider/model execution bypassing agent selection is available
-    programmatically via `AgentTaskFactory.submit_raw`/
-    `submit_execution_request`, not over MCP."""
-    from audiagentic.components.agents.models.agent_task_api import (
-        AgentTaskFactory,
-    )
+    provider/model execution bypassing agent selection is not exposed over MCP."""
+    project_root = project_root_from_env()
+    from audiagentic.components.agents.models.agent_definition_api import get_agent_definition
 
-    task = AgentTaskFactory(project_root_from_env()).submit(
-        agent_id,
+    definition = get_agent_definition(project_root, agent_id)
+    status = get_gateway_client(project_root).submit_execution_request(
+        project_root,
+        execution_profile_id=definition["execution_profile_id"],
         prompt_body=prompt_body,
         timeout_seconds=timeout_seconds,
         source=source,
@@ -191,7 +190,6 @@ def agent_task_submit(
         session_idle_timeout_seconds=session_idle_timeout_seconds,
         session_max_lifetime_seconds=session_max_lifetime_seconds,
     )
-    status = task.status()
     return {
         "request-id": status.get("request-id"),
         "state": status.get("state"),

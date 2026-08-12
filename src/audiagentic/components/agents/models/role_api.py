@@ -10,14 +10,16 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.agents.agents_paths import roles_path
+from audiagentic.components.agents.agents_paths import agents_config_path
+from audiagentic.components.agents.configuration.contracts import AgentsConfigDocument
+from audiagentic.components.agents.configuration.repository import AgentsConfigRepository
 from audiagentic.components.agents.models.role import (
     RoleStore,
     role_from_dict,
     role_to_dict,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import load_yaml_file, save_yaml_file
+from audiagentic.foundation.io import load_yaml_file
 
 logger = logging.getLogger(__name__)
 
@@ -51,31 +53,8 @@ def load_roles(project_root: Path) -> RoleStore:
     Raises AudiaGenticError(IO-ROL-001) on read failure.
     Raises AudiaGenticError(VAL-ROL-002) on contract-version mismatch.
     """
-    path = roles_path(project_root)
-    data = _load_yaml_lenient(path)
-    if not data:
-        return RoleStore()
-    cv = data.get("contract-version")
-    if cv and cv != "v1":
-        raise AudiaGenticError(
-            code="VAL-ROL-002",
-            kind="agents",
-            message="unsupported roles contract version",
-            details={"contract-version": cv, "expected": "v1"},
-        )
-    entries = data.get("roles", [])
-    if not isinstance(entries, list):
-        return RoleStore()
-    store = RoleStore()
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        try:
-            role = role_from_dict(entry)
-            store._roles[role.role_id] = role
-        except AudiaGenticError:
-            logger.warning("Skipping invalid role entry: %s", entry.get("role_id", "<unknown>"))
-    return store
+    snapshot = AgentsConfigRepository().read(project_root)
+    return RoleStore.from_dicts(list(snapshot.document.roles))
 
 
 def save_roles(project_root: Path, store: RoleStore) -> None:
@@ -83,20 +62,17 @@ def save_roles(project_root: Path, store: RoleStore) -> None:
 
     Raises AudiaGenticError(IO-ROL-002) on write failure.
     """
-    path = roles_path(project_root)
-    payload = {
-        "contract-version": "v1",
-        "roles": store.to_dicts(),
-    }
+    repository = AgentsConfigRepository()
+    snapshot = repository.read(project_root)
+    document = AgentsConfigDocument(snapshot.document.contract_version, snapshot.document.prompts, tuple(store.to_dicts()), snapshot.document.execution_profiles, snapshot.document.agents)
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        save_yaml_file(path, payload, sort_keys=False, atomic=True)
+        repository.replace(project_root, document, expected_digest=(snapshot.digest if agents_config_path(project_root).exists() else None))
     except Exception as exc:
         raise AudiaGenticError(
             code="IO-ROL-002",
             kind="agents",
             message="failed to write roles config",
-            details={"path": str(path), "error": str(exc)},
+            details={"path": "agents.yaml", "error": str(exc)},
         ) from exc
 
 

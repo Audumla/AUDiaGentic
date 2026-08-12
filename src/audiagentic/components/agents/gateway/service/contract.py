@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-PROTOCOL_VERSION = "gateway-service-v2"
+PROTOCOL_VERSION = "gateway-service-v3"
 HEALTH_ROUTE = "/v1/health"
 CALL_ROUTE = "/v1/call"
 LEASE_ACQUIRE_ROUTE = "/v1/client-leases/acquire"

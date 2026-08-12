@@ -92,7 +92,7 @@ class TurnWorkflowConfig:
 @dataclass(frozen=True)
 class GptAutoConfig:
     contract_version: str
-    project_url: str
+    project_url: str | None
     browser: BrowserConfig
     cdp: CdpConfig
     chat: ChatConfig
@@ -112,10 +112,15 @@ class GptAutoConfig:
             settings,
             {"contract-version", "project-url", "browser", "cdp", "chat", "turn", "workflow"},
             "settings",
+            required={"contract-version", "browser", "cdp", "chat", "turn", "workflow"},
         )
         if settings.get("contract-version") != "v1":
             _invalid("contract-version must be v1")
-        project_url = _chatgpt_url(settings.get("project-url"))
+        project_url = (
+            _chatgpt_url(settings.get("project-url"))
+            if settings.get("project-url") is not None
+            else None
+        )
 
         browser_data = _mapping(settings, "browser")
         _exact_keys(
@@ -220,9 +225,15 @@ def _invalid(message: str) -> NoReturn:
     raise AudiaGenticError(code="VAL-GPTAUTO-001", kind="providers", message=message, details={})
 
 
-def _exact_keys(data: dict[str, Any], expected: set[str], section: str) -> None:
+def _exact_keys(
+    data: dict[str, Any],
+    expected: set[str],
+    section: str,
+    *,
+    required: set[str] | None = None,
+) -> None:
     unknown = set(data) - expected
-    missing = expected - set(data)
+    missing = (expected if required is None else required) - set(data)
     if unknown or missing:
         _invalid(f"{section} has unknown or missing keys")
 

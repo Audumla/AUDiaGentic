@@ -53,6 +53,16 @@ class GatewayClient(Protocol):
     def resume_execution_session(
         self, project_root: Path, source_session_id: str, **kwargs: Any
     ) -> dict[str, Any]: ...
+    def open_agent_context(self, project_root: Path, agent_id: str, title: str | None = None) -> dict[str, Any]: ...
+    def get_agent_context(self, project_root: Path, context_id: str) -> dict[str, Any]: ...
+    def list_agent_contexts(self, project_root: Path) -> list[dict[str, Any]]: ...
+    def close_agent_context(self, project_root: Path, context_id: str) -> dict[str, Any]: ...
+    def submit_agent_work(self, project_root: Path, context_id: str, message: dict[str, Any], **kwargs: Any) -> dict[str, Any]: ...
+    def get_agent_work(self, project_root: Path, work_id: str) -> dict[str, Any]: ...
+    def list_agent_work(self, project_root: Path) -> list[dict[str, Any]]: ...
+    def add_agent_work_message(self, project_root: Path, work_id: str, message: dict[str, Any]) -> dict[str, Any]: ...
+    def cancel_agent_work(self, project_root: Path, work_id: str) -> dict[str, Any]: ...
+    def read_agent_work_output(self, project_root: Path, work_id: str) -> dict[str, Any]: ...
 
 
 class EmbeddedGatewayClient:
@@ -104,6 +114,36 @@ class EmbeddedGatewayClient:
         self, project_root: Path, source_session_id: str, **kwargs: Any
     ) -> dict[str, Any]:
         return self._application.resume_execution_session(project_root, source_session_id, **kwargs)
+
+    def open_agent_context(self, project_root: Path, agent_id: str, title: str | None = None) -> dict[str, Any]:
+        return self._application.open_agent_context(project_root, agent_id, title)
+
+    def get_agent_context(self, project_root: Path, context_id: str) -> dict[str, Any]:
+        return self._application.get_agent_context(project_root, context_id)
+
+    def list_agent_contexts(self, project_root: Path) -> list[dict[str, Any]]:
+        return self._application.list_agent_contexts(project_root)
+
+    def close_agent_context(self, project_root: Path, context_id: str) -> dict[str, Any]:
+        return self._application.close_agent_context(project_root, context_id)
+
+    def submit_agent_work(self, project_root: Path, context_id: str, message: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        return self._application.submit_agent_work(project_root, context_id, message, **kwargs)
+
+    def get_agent_work(self, project_root: Path, work_id: str) -> dict[str, Any]:
+        return self._application.get_agent_work(project_root, work_id)
+
+    def list_agent_work(self, project_root: Path) -> list[dict[str, Any]]:
+        return self._application.list_agent_work(project_root)
+
+    def add_agent_work_message(self, project_root: Path, work_id: str, message: dict[str, Any]) -> dict[str, Any]:
+        return self._application.add_agent_work_message(project_root, work_id, message)
+
+    def cancel_agent_work(self, project_root: Path, work_id: str) -> dict[str, Any]:
+        return self._application.cancel_agent_work(project_root, work_id)
+
+    def read_agent_work_output(self, project_root: Path, work_id: str) -> dict[str, Any]:
+        return self._application.read_agent_work_output(project_root, work_id)
 
 
 _CLIENT_LOCK = threading.Lock()

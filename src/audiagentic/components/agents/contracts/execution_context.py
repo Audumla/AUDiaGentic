@@ -28,17 +28,15 @@ if TYPE_CHECKING:
     # eager adapter-loading __init__.py unprotected, corrupting the worker's
     # stdout-framed IPC protocol (CC51 finding). The runtime value set below is
     # a deliberate, documented duplicate for that reason.
-    from audiagentic.components.providers.contracts.provider_execution import (
-        ProviderIsolationTier as IsolationTier,
-    )
+    IsolationTier = Any
 else:
     IsolationTier = Literal["full-isolation", "partial-isolation", "no-isolation"]
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
-ENVELOPE_SCHEMA_VERSION = 1
-MANIFEST_SCHEMA_VERSION = 1
-SUPPORTED_ENVELOPE_VERSIONS: tuple[int, ...] = (1,)
+ENVELOPE_SCHEMA_VERSION = 2
+MANIFEST_SCHEMA_VERSION = 2
+SUPPORTED_ENVELOPE_VERSIONS: tuple[int, ...] = (1, 2)
 
 _ISOLATION_TIERS = {"full-isolation", "partial-isolation", "no-isolation"}
 _MODES = {"async", "blocking"}
@@ -169,6 +167,12 @@ class SubmissionEnvelope:
     session: SessionSpec = field(default_factory=SessionSpec)
     prompt_body: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    work_id: str | None = None
+    context_id: str | None = None
+    message_id: str | None = None
+    agent_config_fingerprint: str | None = None
+    role_manifest_fingerprint: str | None = None
+    eligible_instance_ids: tuple[str, ...] = ()
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> SubmissionEnvelope:
@@ -193,6 +197,12 @@ class SubmissionEnvelope:
             session=SessionSpec.from_mapping(session),
             prompt_body=value.get("prompt_body"),
             metadata=dict(metadata),
+            work_id=value.get("work_id"),
+            context_id=value.get("context_id"),
+            message_id=value.get("message_id"),
+            agent_config_fingerprint=value.get("agent_config_fingerprint"),
+            role_manifest_fingerprint=value.get("role_manifest_fingerprint"),
+            eligible_instance_ids=tuple(value.get("eligible_instance_ids") or ()),
         )
 
     def to_mapping(self) -> dict[str, Any]:
@@ -211,6 +221,12 @@ class SubmissionEnvelope:
             "session": self.session.to_mapping(),
             "prompt_body": self.prompt_body,
             "metadata": dict(self.metadata),
+            "work_id": self.work_id,
+            "context_id": self.context_id,
+            "message_id": self.message_id,
+            "agent_config_fingerprint": self.agent_config_fingerprint,
+            "role_manifest_fingerprint": self.role_manifest_fingerprint,
+            "eligible_instance_ids": list(self.eligible_instance_ids),
         }
 
     def validate(self, *, windows: bool | None = None) -> CanonicalRoot:
@@ -497,6 +513,12 @@ class ExecutionManifest:
     mode: str
     timeout_seconds: float | None
     prompt_digest: str
+    work_id: str | None = None
+    context_id: str | None = None
+    message_id: str | None = None
+    agent_config_fingerprint: str | None = None
+    role_manifest_fingerprint: str | None = None
+    eligible_instance_ids: tuple[str, ...] = ()
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> ExecutionManifest:
@@ -511,6 +533,12 @@ class ExecutionManifest:
             mode=value.get("mode", "async"),
             timeout_seconds=value.get("timeout_seconds"),
             prompt_digest=value["prompt_digest"],
+            work_id=value.get("work_id"),
+            context_id=value.get("context_id"),
+            message_id=value.get("message_id"),
+            agent_config_fingerprint=value.get("agent_config_fingerprint"),
+            role_manifest_fingerprint=value.get("role_manifest_fingerprint"),
+            eligible_instance_ids=tuple(value.get("eligible_instance_ids") or ()),
         )
 
     def to_mapping(self) -> dict[str, Any]:
@@ -525,6 +553,12 @@ class ExecutionManifest:
             "mode": self.mode,
             "timeout_seconds": self.timeout_seconds,
             "prompt_digest": self.prompt_digest,
+            "work_id": self.work_id,
+            "context_id": self.context_id,
+            "message_id": self.message_id,
+            "agent_config_fingerprint": self.agent_config_fingerprint,
+            "role_manifest_fingerprint": self.role_manifest_fingerprint,
+            "eligible_instance_ids": list(self.eligible_instance_ids),
         }
 
 

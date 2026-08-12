@@ -90,6 +90,42 @@ async function handle(method, params) {
     case "create_window_page": { const page = await browser.newPage(); return {pageHandle:bindPage(page)}; }
     case "close_page": await requirePage(params.pageHandle).close(); return {closed:true};
     case "navigate": await requirePage(params.pageHandle).goto(params.url, {waitUntil:"domcontentloaded",timeout:params.timeoutMs}); return {url:requirePage(params.pageHandle).url()};
+    case "find_project_url": {
+      const p=requirePage(params.pageHandle);
+      const wanted=String(params.projectName || "").trim().toLowerCase();
+      if (!wanted) throw new Error("project name is required");
+      await p.waitForFunction((name) => {
+        const normalize = value => String(value || "").replace(/\s+/g, " ").trim();
+        const wantedName = normalize(name).toLowerCase();
+        return Array.from(document.querySelectorAll('[role="row"]')).some(row =>
+          [
+            ...Array.from(row.querySelectorAll('[role="cell"], [role="gridcell"]')).map(cell => cell.innerText || cell.textContent),
+            ...(row.innerText || row.textContent || "").split(/\r?\n/),
+          ].map(normalize).some(value => value.toLowerCase() === wantedName)
+        );
+      }, {timeout:params.timeoutMs}, params.projectName);
+      const rows = await p.$$('[role="row"]');
+      let matchedRow = null;
+      let matchedName = null;
+      for (const row of rows) {
+        const texts = await row.evaluate(element => {
+          const normalize = value => String(value || "").replace(/\s+/g, " ").trim();
+          return [
+            ...Array.from(element.querySelectorAll('[role="cell"], [role="gridcell"]')).map(cell => cell.innerText || cell.textContent),
+            ...(element.innerText || element.textContent || "").split(/\r?\n/),
+          ].map(normalize).filter(Boolean);
+        });
+        const exact = texts.find(value => value.toLowerCase() === wanted);
+        if (exact) { matchedRow = row; matchedName = exact; break; }
+      }
+      if (!matchedRow) throw new Error(`ChatGPT project not found: ${params.projectName}`);
+      await p.bringToFront();
+      const box = await matchedRow.boundingBox();
+      if (!box) throw new Error(`ChatGPT project row is not visible: ${params.projectName}`);
+      await p.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await p.waitForFunction(() => /\/g\/g-p-[^/]+/.test(location.pathname), {timeout:params.timeoutMs});
+      return {url:p.url(), name:matchedName};
+    }
     case "page_url": return {url:requirePage(params.pageHandle).url()};
     case "keep_page_active": { const p=requirePage(params.pageHandle); await p.bringToFront(); await p.evaluate(() => { window.focus(); document.dispatchEvent(new Event("visibilitychange")); }); return {ok:true}; }
     case "snapshot": return snapshot(requirePage(params.pageHandle), params.signals || []);

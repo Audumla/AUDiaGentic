@@ -146,12 +146,17 @@ class ManagedServiceStarter:
                 raise conflict_error(27, "live process remains on non-running service record")
             return None
         if record.protocol_version != declaration.protocol_version:
-            raise conflict_error(
-                23,
-                "service protocol version is incompatible",
-                expected=declaration.protocol_version,
-                actual=record.protocol_version,
-            )
+            # A dead stale record is recoverable: the next declaration owns
+            # the restart and may upgrade the service protocol.  Only fail
+            # closed when an incompatible process is still demonstrably live.
+            if record.process is not None and self._observe(record.process) is not None:
+                raise conflict_error(
+                    23,
+                    "service protocol version is incompatible",
+                    expected=declaration.protocol_version,
+                    actual=record.protocol_version,
+                )
+            return None
         if record.endpoint is not None and record.endpoint != declaration.endpoint:
             raise conflict_error(24, "service endpoint identity is incompatible")
         if record.state not in ("starting", "running") or record.process is None:

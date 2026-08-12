@@ -6,7 +6,7 @@ Run from the repository root:
 
 The first turn establishes a disposable ChatGPT conversation.  A second CDP
 client then observes only configured DOM-signal transitions while two follow-up
-review turns run through AgentTaskFactory and the production Gateway path.
+review turns run through the public GatewayClient and production Gateway path.
 """
 
 from __future__ import annotations
@@ -21,7 +21,6 @@ from typing import Any
 import yaml
 
 from audiagentic.components.agents.gateway.client import get_gateway_client
-from audiagentic.components.agents.models.agent_task_api import AgentTaskFactory
 from audiagentic.components.providers.adapters.gpt_auto.bridge import PuppeteerBridge
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.urls import (
@@ -34,9 +33,9 @@ SOURCE = "gpt-auto-dom-policy-monitor"
 
 
 def _submit(
-    factory: AgentTaskFactory, prompt: str, *, session_id: str | None = None, stage: int
+    client, prompt: str, *, session_id: str | None = None, stage: int
 ) -> dict[str, Any]:
-    task = factory.submit(
+    task = client.submit_execution_request(
         "gpt-auto-reviewer-agent",
         prompt_body=prompt,
         session_id=session_id,
@@ -45,7 +44,7 @@ def _submit(
         source=SOURCE,
         metadata={"plan-item-id": "SH10", "monitor-stage": stage},
     )
-    return task.wait(3930)
+    return client.wait_execution_request(ROOT, task["request-id"], 3930)
 
 
 async def _monitor(
@@ -146,13 +145,13 @@ def _monitor_thread(
 
 
 def main() -> int:
-    factory = AgentTaskFactory(ROOT)
+    client = get_gateway_client(ROOT)
     session_id: str | None = None
     stop = threading.Event()
     thread: threading.Thread | None = None
     try:
         first = _submit(
-            factory,
+            client,
             "Review SH10's reconnect-at-deadline proof. Name two acceptance risks.",
             stage=1,
         )
@@ -177,7 +176,7 @@ def main() -> int:
         results = [first]
         results.append(
             _submit(
-                factory,
+                client,
                 "Challenge that review with three concrete false-pass modes. Keep it concise.",
                 session_id=session_id,
                 stage=2,

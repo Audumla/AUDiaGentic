@@ -15,21 +15,22 @@ which is slated for rework. See project memory
 from __future__ import annotations
 
 import logging
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from typing import Any
 
+from audiagentic.components.agents.capabilities.contracts import CapabilityRequirementId
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Role:
     """A small reusable behavioral definition, independent of provider/model."""
     role_id: str
-    instructions: str
-    required_capabilities: list[str] = field(default_factory=list)
-    output_guidance: str | None = None
+    instructions: str = ""
+    required_capabilities: tuple[CapabilityRequirementId, ...] = ()
+    output_guidance: str = ""
     runtime_tool_policy_ref: str | None = None
     description: str = ""
 
@@ -48,10 +49,12 @@ def validate_role(role: dict[str, Any]) -> list[str]:
         issues.append("instructions is required and must be a non-empty string")
     if "required_capabilities" in role and role["required_capabilities"] is not None:
         capabilities = role["required_capabilities"]
-        if not isinstance(capabilities, list) or not all(
+        if not isinstance(capabilities, (list, tuple)) or not all(
             isinstance(item, str) for item in capabilities
         ):
-            issues.append("required_capabilities must be a list of strings")
+            issues.append("required_capabilities must be a sequence of strings")
+        elif len(capabilities) != len(set(capabilities)):
+            issues.append("required_capabilities must not contain duplicates")
     if "output_guidance" in role and role["output_guidance"] is not None:
         if not isinstance(role["output_guidance"], str):
             issues.append("output_guidance must be a string or null")
@@ -88,10 +91,8 @@ def role_from_dict(data: dict[str, Any]) -> Role:
     return Role(
         role_id=str(normalized["role_id"]).strip(),
         instructions=str(normalized["instructions"]),
-        required_capabilities=list(normalized.get("required_capabilities") or []),
-        output_guidance=(
-            str(normalized["output_guidance"]) if normalized.get("output_guidance") else None
-        ),
+        required_capabilities=tuple(CapabilityRequirementId(str(item).strip()) for item in normalized.get("required_capabilities") or []),
+        output_guidance=str(normalized.get("output_guidance") or ""),
         runtime_tool_policy_ref=(
             str(normalized["runtime_tool_policy_ref"])
             if normalized.get("runtime_tool_policy_ref")
@@ -103,7 +104,12 @@ def role_from_dict(data: dict[str, Any]) -> Role:
 
 def role_to_dict(role: Role) -> dict[str, Any]:
     """Serialize a Role to a dict for YAML round-trip."""
-    return asdict(role)
+    data = asdict(role)
+    data["required_capabilities"] = [
+        item.value if isinstance(item, CapabilityRequirementId) else item
+        for item in role.required_capabilities
+    ]
+    return data
 
 
 class RoleStore:

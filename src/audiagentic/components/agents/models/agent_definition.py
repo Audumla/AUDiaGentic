@@ -24,18 +24,55 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 logger = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(init=False)
 class AgentDefinition:
-    """A logical agent: identity plus one Execution Profile and one Role."""
+    """A logical agent with one prompt, many roles, and one profile.
+
+    ``role_id`` remains accepted by the constructor and parser as a
+    migration input, but ``role_ids`` is the only serialized authority.
+    """
     agent_id: str
     name: str
+    prompt_id: str | None
+    role_ids: tuple[str, ...]
     execution_profile_id: str
-    role_id: str
     description: str = ""
     advertised_skills: list[str] = field(default_factory=list)
     internal: bool = True
     acp: bool = False
     a2a: bool = False
+
+    def __init__(
+        self,
+        *,
+        agent_id: str,
+        name: str,
+        execution_profile_id: str,
+        role_ids: tuple[str, ...] | list[str] | None = None,
+        prompt_id: str | None = None,
+        role_id: str | None = None,
+        description: str = "",
+        advertised_skills: list[str] | None = None,
+        internal: bool = True,
+        acp: bool = False,
+        a2a: bool = False,
+    ) -> None:
+        selected_roles = tuple(role_ids or ((role_id,) if role_id else ()))
+        self.agent_id = agent_id
+        self.name = name
+        self.prompt_id = prompt_id
+        self.role_ids = selected_roles
+        self.execution_profile_id = execution_profile_id
+        self.description = description
+        self.advertised_skills = list(advertised_skills or [])
+        self.internal = internal
+        self.acp = acp
+        self.a2a = a2a
+
+    @property
+    def role_id(self) -> str:
+        """Compatibility read for pre-v2 callers; serialization uses role_ids."""
+        return self.role_ids[0] if self.role_ids else ""
 
 
 def validate_agent_definition(definition: dict[str, Any]) -> list[str]:
@@ -53,12 +90,16 @@ def validate_agent_definition(definition: dict[str, Any]) -> list[str]:
     profile_id = definition.get("execution_profile_id")
     if not profile_id or not isinstance(profile_id, str):
         issues.append("execution_profile_id is required and must be a non-empty string")
-    role_id = definition.get("role_id")
-    if not role_id or not isinstance(role_id, str):
-        issues.append("role_id is required and must be a non-empty string")
+    role_ids = definition.get("role_ids", definition.get("role-id"))
+    if role_ids is None and definition.get("role_id") is not None:
+        role_ids = [definition["role_id"]]
+    if not isinstance(role_ids, (list, tuple)) or not role_ids or not all(
+        isinstance(item, str) and item.strip() for item in role_ids
+    ):
+        issues.append("role_ids is required and must be a non-empty list of strings")
     if "advertised_skills" in definition and definition["advertised_skills"] is not None:
         skills = definition["advertised_skills"]
-        if not isinstance(skills, list) or not all(isinstance(item, str) for item in skills):
+        if not isinstance(skills, (list, tuple)) or not all(isinstance(item, str) for item in skills):
             issues.append("advertised_skills must be a list of strings")
     for flag in ("internal", "acp", "a2a"):
         if flag in definition and not isinstance(definition[flag], bool):
@@ -79,6 +120,7 @@ def agent_definition_from_dict(data: dict[str, Any]) -> AgentDefinition:
     for hyphen_key, underscore_key in (
         ("execution-profile-id", "execution_profile_id"),
         ("role-id", "role_id"),
+        ("role-ids", "role_ids"),
         ("advertised-skills", "advertised_skills"),
     ):
         if hyphen_key in normalized and underscore_key not in normalized:
@@ -91,11 +133,15 @@ def agent_definition_from_dict(data: dict[str, Any]) -> AgentDefinition:
             message="agent definition failed validation",
             details={"agent_id": normalized.get("agent_id"), "issues": issues},
         )
+    role_values = normalized.get("role_ids")
+    if role_values is None and normalized.get("role_id") is not None:
+        role_values = [normalized["role_id"]]
     return AgentDefinition(
         agent_id=str(normalized["agent_id"]).strip(),
         name=str(normalized["name"]).strip(),
         execution_profile_id=str(normalized["execution_profile_id"]).strip(),
-        role_id=str(normalized["role_id"]).strip(),
+        prompt_id=(str(normalized["prompt_id"]).strip() if normalized.get("prompt_id") else None),
+        role_ids=tuple(str(value).strip() for value in role_values),
         description=str(normalized.get("description") or "").strip(),
         advertised_skills=list(normalized.get("advertised_skills") or []),
         internal=bool(normalized.get("internal", True)),
@@ -106,7 +152,9 @@ def agent_definition_from_dict(data: dict[str, Any]) -> AgentDefinition:
 
 def agent_definition_to_dict(definition: AgentDefinition) -> dict[str, Any]:
     """Serialize an AgentDefinition to a dict for YAML round-trip."""
-    return asdict(definition)
+    data = asdict(definition)
+    data["role_ids"] = list(definition.role_ids)
+    return data
 
 
 class AgentDefinitionStore:

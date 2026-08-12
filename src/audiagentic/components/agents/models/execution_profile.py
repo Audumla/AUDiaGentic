@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -55,7 +56,7 @@ def validate_execution_profile(profile: dict[str, Any]) -> list[str]:
         if not isinstance(profile["model_alias"], str):
             issues.append("model_alias must be a string or null")
     if "params" in profile and profile["params"] is not None:
-        if not isinstance(profile["params"], dict):
+        if not isinstance(profile["params"], Mapping):
             issues.append("params must be a mapping or null")
     if "is_default" in profile and not isinstance(profile["is_default"], bool):
         issues.append("is_default must be a boolean")
