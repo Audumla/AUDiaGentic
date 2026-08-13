@@ -20,6 +20,8 @@ profiles:
     model_alias: null
     surface_id: gpt-auto-cdp
     params:
+      virtual-capacity: 8
+      pending-capacity: 16
       session-turn-timeout-seconds: 3900
       session-silence-timeout-seconds: 0
       session-idle-timeout-seconds: 0

@@ -11,6 +11,7 @@ from audiagentic.foundation.workflow import TransitionConfig, TransitionEngine
 from .browser_process import BrowserProcessController
 from .cdp.bridge import PythonCdpBridge
 from .config import GptAutoConfig
+from .status.status_page import STATUS_PAGE_URL, render_status_page
 
 if TYPE_CHECKING:
     from .chat import PersistentChat
@@ -116,7 +117,37 @@ class GptAutoProviderRuntime:
             self._dedicated_window_anchor = None
         page = await self.bridge.call("create_window_page")
         self._dedicated_window_anchor = str(page["pageHandle"])
+        await self.bridge.call(
+            "navigate",
+            {
+                "pageHandle": self._dedicated_window_anchor,
+                "url": STATUS_PAGE_URL,
+            },
+        )
+        await self.refresh_status_page()
         return self._dedicated_window_anchor
+
+    async def refresh_status_page(self) -> None:
+        """Render current shared-runtime/session facts in the anchor tab."""
+        if not self._dedicated_window_anchor or not self._bridge:
+            return
+        rows = [
+            {
+                "session": chat.ag_session_id,
+                "project": chat.project_name,
+                "state": chat.state.value,
+                "page": chat.page_handle,
+                "turn": chat.active_turn_id,
+            }
+            for chat in self._chats.values()
+        ]
+        payload = {
+            "runtime": self.state.value,
+            "sessions": rows,
+            "queue": {"running": sum(1 for row in rows if row["state"] in {"busy", "generating", "running"}), "queued": 0},
+            "updated": asyncio.get_running_loop().time(),
+        }
+        await render_status_page(self.bridge, self._dedicated_window_anchor, payload)
 
     async def _route_events(self, bridge: PythonCdpBridge) -> None:
         while self._bridge is bridge:
@@ -147,6 +178,7 @@ class GptAutoProviderRuntime:
         if existing is not None and existing is not chat:
             raise RuntimeError("duplicate gpt-auto gateway session")
         self._chats[chat.ag_session_id] = chat
+        await self.refresh_status_page()
 
     def claim_page(self, chat: PersistentChat, page_handle: str) -> bool:
         owner = self._page_owners.get(page_handle)
@@ -163,6 +195,8 @@ class GptAutoProviderRuntime:
         if self._chats.get(chat.ag_session_id) is chat:
             self._chats.pop(chat.ag_session_id, None)
         self.release_page(chat, chat.page_handle)
+        if getattr(self, "_dedicated_window_anchor", None) and self._bridge:
+            asyncio.create_task(self.refresh_status_page())
 
     async def shutdown(self) -> None:
         async with self._lifecycle_lock:
