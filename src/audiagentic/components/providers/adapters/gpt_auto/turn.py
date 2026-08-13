@@ -101,7 +101,7 @@ class GptAutoTurn:
 
     async def run(self) -> SessionTurnResult:
         self.chat.active_turn_id = self.request.turn_id
-        self.chat.state = ChatState.BUSY
+        self._set_chat_state(ChatState.BUSY)
         try:
             return await self._run()
         except asyncio.CancelledError:
@@ -111,7 +111,7 @@ class GptAutoTurn:
         except Exception:
             if not _ENGINE.is_terminal(self.state.value):
                 self._move(TurnState.FAILED)
-            self.chat.state = ChatState.FAILED
+            self._set_chat_state(ChatState.FAILED)
             raise
         finally:
             if self._stop_task is not None:
@@ -121,7 +121,7 @@ class GptAutoTurn:
             if refresh is not None:
                 await refresh()
             if self.chat.state not in {ChatState.FAILED, ChatState.CLOSED, ChatState.RECOVERING}:
-                self.chat.state = ChatState.READY
+                self._set_chat_state(ChatState.READY)
 
     async def _run(self) -> SessionTurnResult:
         if self.cancel_event.is_set():
@@ -141,7 +141,7 @@ class GptAutoTurn:
             # submission into a success.
             await self._capture_provider_identity_after_ambiguous_submission()
             self._move(TurnState.TIMED_OUT)
-            self.chat.state = ChatState.FAILED
+            self._set_chat_state(ChatState.FAILED)
             raise AudiaGenticError(
                 code="EXT-GPTAUTO-003",
                 kind="providers",
@@ -188,12 +188,12 @@ class GptAutoTurn:
                 page = await browser.page_by_handle(self.chat.page_handle)
                 result = await browser.submit(
                     page, self.request.body,
-                    timeout=self.chat.runtime.config.turn.submission_timeout_seconds,
+                    timeout=self.chat.config.turn.submission_timeout_seconds,
                 )
             else:
                 result = await self.chat.runtime.bridge.call(
                     "submit_prompt", {"pageHandle": self.chat.page_handle, "text": self.request.body},
-                    timeout=self.chat.runtime.config.turn.submission_timeout_seconds,
+                    timeout=self.chat.config.turn.submission_timeout_seconds,
                 )
         except TimeoutError as exc:
             raise AudiaGenticError(
@@ -214,7 +214,7 @@ class GptAutoTurn:
     async def _await_submission_proof(self, baseline: ChatSnapshot) -> ChatSnapshot | None:
         deadline = (
             asyncio.get_running_loop().time()
-            + self.chat.runtime.config.turn.submission_timeout_seconds
+            + self.chat.config.turn.submission_timeout_seconds
         )
         expected = _normal(self.request.body)
         while asyncio.get_running_loop().time() < deadline:
@@ -249,7 +249,7 @@ class GptAutoTurn:
             current = await self.chat.snapshot()
             now = loop.time()
             facts = _facts(baseline, previous, current)
-            failed = self.chat.runtime.config.workflow.policy("response-failed").evaluate(facts)
+            failed = self.chat.config.workflow.policy("response-failed").evaluate(facts)
             if failed.satisfied:
                 logger.warning(
                     "gpt-auto response failure policy matched",
@@ -262,7 +262,7 @@ class GptAutoTurn:
                     message="ChatGPT DOM reported a failed response state",
                     details={"turn-id": self.request.turn_id, "evidence": sorted(failed.matched)},
                 )
-            started = self.chat.runtime.config.workflow.policy("response-started").evaluate(facts)
+            started = self.chat.config.workflow.policy("response-started").evaluate(facts)
             if started.satisfied and not response_started:
                 response_started = True
                 last_activity_at = now
@@ -277,7 +277,7 @@ class GptAutoTurn:
                 )
                 emitted = True
             fingerprint = _fingerprint(current)
-            active = self.chat.runtime.config.workflow.policy("response-active").evaluate(facts)
+            active = self.chat.config.workflow.policy("response-active").evaluate(facts)
             if response_started and active.satisfied and fingerprint != previous_fingerprint:
                 last_activity_at = now
                 logger.debug(
@@ -289,7 +289,7 @@ class GptAutoTurn:
                     {"model_activity": "response-progress"},
                 )
                 emitted = True
-            complete = self.chat.runtime.config.workflow.policy("response-complete").evaluate(facts)
+            complete = self.chat.config.workflow.policy("response-complete").evaluate(facts)
             if complete.satisfied and current.latest_assistant_text:
                 if not emitted:
                     await self._emit(
@@ -308,11 +308,11 @@ class GptAutoTurn:
                 elif (
                     stable_since is not None
                     and now - stable_since
-                    >= self.chat.runtime.config.turn.response_stability_seconds
+                    >= self.chat.config.turn.response_stability_seconds
                 ):
                     verify = await self.chat.snapshot()
                     verify_facts = _facts(baseline, current, verify)
-                    verified = self.chat.runtime.config.workflow.policy(
+                    verified = self.chat.config.workflow.policy(
                         "response-complete"
                     ).evaluate(verify_facts)
                     if verified.satisfied and verify.latest_assistant_text == stable_text:
@@ -327,7 +327,7 @@ class GptAutoTurn:
                 stable_text = None
                 stable_since = None
 
-            timers = self.chat.runtime.config.turn
+            timers = self.chat.config.turn
             if (
                 not response_started
                 and timers.response_start_timeout_seconds
@@ -344,11 +344,11 @@ class GptAutoTurn:
                 self._raise_response_timeout("response-total-timeout")
             previous = current
             previous_fingerprint = fingerprint
-            await asyncio.sleep(self.chat.runtime.config.turn.poll_interval_seconds)
+            await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
 
     def _raise_response_timeout(self, policy: str) -> None:
         self._move(TurnState.TIMED_OUT)
-        self.chat.state = ChatState.FAILED
+        self._set_chat_state(ChatState.FAILED)
         raise AudiaGenticError(
             code="EXT-GPTAUTO-002",
             kind="providers",
@@ -382,6 +382,13 @@ class GptAutoTurn:
                 extra={"turn-id": self.request.turn_id},
                 exc_info=True,
             )
+
+    def _set_chat_state(self, state: ChatState) -> None:
+        move = getattr(self.chat, "_move", None)
+        if move is None:
+            self.chat.state = state
+        else:
+            move(state)
 
     def _result(self, reason: str) -> SessionTurnResult:
         metadata: dict[str, Any] = {"project-url": self.chat.project_url}

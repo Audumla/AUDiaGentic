@@ -647,18 +647,42 @@ def load_gateway_registry_from_config(path: Path) -> InMemoryExecutionProfileReg
             details={"path": str(path)},
         ) from exc
 
+    if not isinstance(data, dict) or not isinstance(data.get("profiles", []), list):
+        raise AudiaGenticError(
+            code="IO-AGW-107",
+            kind="agents",
+            message="gateway profiles config must contain a profiles list",
+            details={"path": str(path)},
+        )
     registry = InMemoryExecutionProfileRegistry()
-    for entry in (data or {}).get("profiles", []):
+    for index, entry in enumerate(data.get("profiles", [])):
+        if not isinstance(entry, dict):
+            raise AudiaGenticError(
+                code="IO-AGW-107", kind="agents",
+                message="gateway profile entry must be a mapping",
+                details={"path": str(path), "index": index},
+            )
         profile_id = entry.get("profile_id") or entry.get("profile-id")
         provider_id = entry.get("provider_id") or entry.get("provider-id")
         instances = entry.get("instances")
-        if not profile_id or not provider_id or not instances:
-            logger.warning(
-                "skipping gateway profile config entry missing profile_id/provider_id/instances",
-                extra={"path": str(path)},
+        if (
+            not isinstance(profile_id, str) or not profile_id.strip()
+            or not isinstance(provider_id, str) or not provider_id.strip()
+            or not isinstance(instances, list) or not instances
+            or not all(isinstance(instance, str) and instance.strip() for instance in instances)
+        ):
+            raise AudiaGenticError(
+                code="IO-AGW-107", kind="agents",
+                message="gateway profile entry requires profile-id, provider-id, and instances",
+                details={"path": str(path), "index": index},
             )
-            continue
-        params = entry.get("params") or {}
+        params = entry.get("params", {})
+        if not isinstance(params, dict):
+            raise AudiaGenticError(
+                code="IO-AGW-107", kind="agents",
+                message="gateway profile params must be a mapping",
+                details={"path": str(path), "index": index},
+            )
         registry.register(
             profile_id,
             provider_id=provider_id,

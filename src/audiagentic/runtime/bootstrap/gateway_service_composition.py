@@ -24,6 +24,8 @@ config file so it never collides with the launcher root's `composition.yaml`.
 from __future__ import annotations
 
 from pathlib import Path
+import asyncio
+import threading
 from typing import Any
 
 from audiagentic.foundation.composition import (
@@ -41,6 +43,7 @@ CONFIG_NAMESPACE = "gateway-service-composition"
 
 EXECUTION_PROFILE_REGISTRY = ServiceId("agents.execution-profile-registry")
 QUEUE_MANAGER = ServiceId("agents.gateway-queue-manager")
+GPT_AUTO_RUNTIME_OWNER = ServiceId("providers.gpt-auto-runtime-owner")
 
 
 def _pkg_default_path() -> Path:
@@ -108,6 +111,32 @@ def _uninstall_gateway_queue_manager(_manager: Any) -> None:
     gateway_api.set_queue_manager(queue_mod.GatewayQueueManager())
 
 
+def _build_gpt_auto_runtime_owner() -> object:
+    """Declare the gateway process as the lifetime owner of shared GPT CDP."""
+    return object()
+
+
+def _shutdown_gpt_auto_runtimes(_owner: object) -> None:
+    """Run async provider teardown from this synchronous composition hook."""
+    from audiagentic.components.providers.adapters.gpt_auto.runtime_registry import (
+        shutdown_all_runtimes,
+    )
+
+    failure: list[BaseException] = []
+
+    def run() -> None:
+        try:
+            asyncio.run(shutdown_all_runtimes())
+        except BaseException as exc:  # finalizer logging owns reporting
+            failure.append(exc)
+
+    thread = threading.Thread(target=run, name="gateway-gpt-auto-shutdown")
+    thread.start()
+    thread.join()
+    if failure:
+        raise failure[0]
+
+
 def builtin_contributions(gateway_profiles_config: Path | None) -> tuple[ServiceContribution, ...]:
     """Every implementation this process can be configured to use."""
     return (
@@ -122,6 +151,12 @@ def builtin_contributions(gateway_profiles_config: Path | None) -> tuple[Service
             implementation_id=ImplementationId("agents.gateway-queue-manager"),
             factory=_build_gateway_queue_manager,
             finalizer=_uninstall_gateway_queue_manager,
+        ),
+        ServiceContribution(
+            service_id=GPT_AUTO_RUNTIME_OWNER,
+            implementation_id=ImplementationId("providers.shared-gpt-auto-runtime"),
+            factory=_build_gpt_auto_runtime_owner,
+            finalizer=_shutdown_gpt_auto_runtimes,
         ),
     )
 

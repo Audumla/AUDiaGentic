@@ -133,6 +133,7 @@ def build_gpt_auto_session_transport(
         project_name=_active_project_name(project_root),
         project_url=project_url,
         runtime=runtime,
+        config=parsed,
         binding_sink=binding_sink,
         provider_session_id=resume_provider_ref,
         chat_url=chat_url,
