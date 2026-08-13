@@ -11,6 +11,7 @@ import asyncio
 import json
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 try:
@@ -40,10 +41,12 @@ class CdpClient:
         *,
         default_timeout: float = 30.0,
         connect_timeout: float | None = None,
+        devtools_active_port_file: Path | None = None,
     ) -> None:
         self.endpoint = endpoint.rstrip("/")
         self.default_timeout = default_timeout
         self.connect_timeout = connect_timeout or default_timeout
+        self.devtools_active_port_file = devtools_active_port_file
         self._socket: ClientConnection | None = None
         self._reader_task: asyncio.Task[None] | None = None
         self._pending: dict[int, asyncio.Future[Any]] = {}
@@ -56,9 +59,7 @@ class CdpClient:
         if self._socket is not None:
             return
         self._stopping = False
-        websocket_url = await asyncio.to_thread(
-            self._discover_websocket_url, self.connect_timeout
-        )
+        websocket_url = await asyncio.to_thread(self._discover_websocket_url, self.connect_timeout)
         self._socket = await connect(
             websocket_url, max_size=None, open_timeout=self.connect_timeout
         )
@@ -68,12 +69,29 @@ class CdpClient:
         if self.endpoint.startswith(("ws://", "wss://")):
             return self.endpoint
         url = self.endpoint + "/json/version"
-        with urllib.request.urlopen(url, timeout=timeout or self.default_timeout) as response:
-            payload = json.load(response)
+        try:
+            with urllib.request.urlopen(url, timeout=timeout or self.default_timeout) as response:
+                payload = json.load(response)
+        except (OSError, ValueError):
+            return self._discover_from_active_port_file()
         value = payload.get("webSocketDebuggerUrl")
         if not isinstance(value, str) or not value:
             raise CdpError("CDP /json/version did not provide webSocketDebuggerUrl")
         return value
+
+    def _discover_from_active_port_file(self) -> str:
+        path = self.devtools_active_port_file
+        if path is None:
+            raise CdpError("CDP discovery failed and no DevToolsActivePort file is configured")
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+            port = int(lines[0])
+            socket_path = lines[1].strip()
+        except (OSError, ValueError, IndexError) as exc:
+            raise CdpError("DevToolsActivePort file is missing or malformed") from exc
+        if not 1 <= port <= 65535 or not socket_path.startswith("/devtools/browser/"):
+            raise CdpError("DevToolsActivePort file contains unsafe endpoint data")
+        return f"ws://127.0.0.1:{port}{socket_path}"
 
     async def command(
         self,

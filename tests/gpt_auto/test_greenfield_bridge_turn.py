@@ -6,13 +6,21 @@ import pytest
 
 from audiagentic.components.providers.adapters.gpt_auto.chat import ChatState
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
+from audiagentic.components.providers.adapters.gpt_auto.session_transport import (
+    GptAutoSessionTransport,
+)
 from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatSnapshot
 from audiagentic.components.providers.adapters.gpt_auto.turn import (
     GptAutoTurn,
     TurnState,
     _facts,
 )
-from audiagentic.foundation.transports.agent_session import SessionPrompt
+from audiagentic.foundation.transports.agent_session import (
+    ControlDisposition,
+    SessionControlAction,
+    SessionControlRequest,
+    SessionPrompt,
+)
 
 from .test_greenfield_config_urls import valid_config
 
@@ -90,8 +98,7 @@ class _Chat:
                     response_timeout_seconds=0.2,
                     response_stability_seconds=0,
                     poll_interval_seconds=0,
-                )
-                ,
+                ),
                 workflow=GptAutoConfig.from_dict(valid_config()).workflow,
             ),
         )
@@ -184,9 +191,7 @@ async def test_unproven_submission_fails_chat_instead_of_returning_empty_success
 
     chat.snapshot = unchanged_snapshot
     chat.runtime.config.turn.submission_timeout_seconds = 0.01
-    turn = GptAutoTurn(
-        chat, SessionPrompt(turn_id="turn-1", body="Review SH10"), lambda _: None
-    )
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-1", body="Review SH10"), lambda _: None)
     with pytest.raises(Exception, match="could not prove"):
         await turn.run()
     assert turn.state is TurnState.TIMED_OUT
@@ -200,13 +205,42 @@ async def test_unproven_submission_fails_chat_instead_of_returning_empty_success
 async def test_inner_submission_timeout_is_not_mislabeled_as_absolute_timeout():
     chat = _Chat()
     chat.runtime.bridge = _TimeoutBridge()
-    turn = GptAutoTurn(
-        chat, SessionPrompt(turn_id="turn-1", body="Review SH10"), lambda _: None
-    )
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-1", body="Review SH10"), lambda _: None)
     with pytest.raises(Exception, match="composer operation timed out"):
         await turn.run()
     assert turn.state is TurnState.FAILED
     assert chat.state is ChatState.FAILED
+
+
+@pytest.mark.asyncio
+async def test_real_chat_transition_is_terminalized_exactly_once_on_policy_failure():
+    chat = _Chat()
+    transitions = []
+
+    def move(state):
+        if chat.state is state:
+            raise RuntimeError("duplicate transition")
+        transitions.append((chat.state, state))
+        chat.state = state
+
+    chat._move = move
+    failed = snap(users=1, user="Review SH10", extra_signals=("error-page",))
+    chat._snapshots = iter([snap(), snap(users=1, user="Review SH10"), failed])
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-1", body="Review SH10"), lambda _: None)
+
+    with pytest.raises(Exception, match="failed response state"):
+        await turn.run()
+
+    assert transitions.count((ChatState.BUSY, ChatState.FAILED)) == 1
+
+
+def test_prompt_identity_preserves_case_spacing_and_indentation():
+    from audiagentic.components.providers.adapters.gpt_auto.turn import _normal
+
+    assert _normal("Return Foo") != _normal("return foo")
+    assert _normal("x  y") != _normal("x y")
+    assert _normal("if ok:\n    run()") != _normal("if ok:\nrun()")
+    assert _normal("line\r\n") == "line"
 
 
 @pytest.mark.asyncio
@@ -223,7 +257,9 @@ async def test_configured_dom_failure_policy_fails_the_workflow():
     turn.state = TurnState.AWAITING_RESPONSE
     with pytest.raises(Exception, match="failed response state"):
         await turn._await_response(snap(), snap(users=1, user="Review SH10"))
-    assert chat.state is ChatState.FAILED
+    # Inner response policy owns only the turn terminal state.  run() is the
+    # single owner of chat terminalisation, preventing FAILED -> FAILED.
+    assert chat.state is ChatState.BUSY
 
 
 def test_old_assistant_text_mutation_is_not_a_fresh_response():
@@ -245,9 +281,12 @@ def test_old_assistant_text_mutation_is_not_a_fresh_response():
     )
     facts = _facts(baseline, baseline, mutated)
     assert not facts["assistant-fresh"]
-    assert not GptAutoConfig.from_dict(valid_config()).workflow.policy(
-        "response-complete"
-    ).evaluate(facts).satisfied
+    assert (
+        not GptAutoConfig.from_dict(valid_config())
+        .workflow.policy("response-complete")
+        .evaluate(facts)
+        .satisfied
+    )
 
 
 @pytest.mark.asyncio
@@ -268,7 +307,7 @@ async def test_response_start_timeout_is_a_named_policy_not_total_completion_tim
         await turn._await_response(snap(), waiting)
     assert exc_info.value.details["timeout-policy"] == "response-start-timeout"
     assert turn.state is TurnState.TIMED_OUT
-    assert chat.state is ChatState.FAILED
+    assert chat.state is ChatState.BUSY
 
 
 @pytest.mark.asyncio
@@ -286,3 +325,41 @@ async def test_cancellation_is_terminal_and_never_retries_submit():
     assert chat.runtime.bridge.submit_calls == 0
     await turn._stop_task
     assert chat.runtime.bridge.stop_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_cancel_after_submit_blocks_ready_when_quiescence_is_unproven():
+    chat = _Chat()
+
+    async def not_quiescent():
+        raise RuntimeError("still generating")
+
+    chat.wait_quiescent = not_quiescent
+    chat.state = ChatState.BUSY
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-1", body="Review"), lambda _: None)
+    turn.state = TurnState.GENERATING
+    turn.side_effect_attempted = True
+
+    turn.cancel()
+    await turn._stop_task
+
+    assert chat.state is ChatState.RECOVERING
+    assert chat.runtime.bridge.stop_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_delayed_cancel_for_old_turn_does_not_cancel_active_turn():
+    chat = _Chat()
+    transport = GptAutoSessionTransport(chat)
+    active = GptAutoTurn(chat, SessionPrompt(turn_id="turn-2", body="Next"), lambda _: None)
+    transport._active_turn = active
+    request = SessionControlRequest(
+        ag_session_id=chat.ag_session_id,
+        turn_id="turn-1",
+        action=SessionControlAction.CANCEL_TURN,
+    )
+
+    result = await transport.control(request)
+
+    assert result.disposition is ControlDisposition.ALREADY_TERMINAL
+    assert not active.cancel_event.is_set()

@@ -6,7 +6,6 @@ import asyncio
 from enum import StrEnum
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-
 from audiagentic.foundation.transports.session_binding import (
     ProviderSessionBindingSink,
     ProviderSessionBindingUpdate,
@@ -14,8 +13,8 @@ from audiagentic.foundation.transports.session_binding import (
 )
 from audiagentic.foundation.workflow import TransitionConfig, TransitionEngine
 
-from .runtime import GptAutoProviderRuntime
 from .config import GptAutoConfig
+from .runtime import GptAutoProviderRuntime
 from .snapshot import ChatSnapshot
 from .urls import (
     canonical_chat_url,
@@ -24,6 +23,7 @@ from .urls import (
     parse_provider_session_id,
     url_matches_provider_session,
 )
+
 
 class ChatState(StrEnum):
     OPENING = "opening"
@@ -93,7 +93,9 @@ class PersistentChat:
     def _move(self, target: ChatState) -> None:
         failure = _CHAT_ENGINE.check(self.state.value, target.value)
         if failure:
-            raise RuntimeError(f"illegal gpt-auto chat transition {self.state}->{target}: {failure}")
+            raise RuntimeError(
+                f"illegal gpt-auto chat transition {self.state}->{target}: {failure}"
+            )
         self.state = target
         if target is ChatState.RECOVERING:
             self._recovery_ready.clear()
@@ -150,6 +152,9 @@ class PersistentChat:
         for page in pages:
             if (
                 self.provider_session_id
+                and getattr(self.runtime, "page_belongs_to_dedicated_window", lambda _page: True)(
+                    page
+                )
                 and url_matches_provider_session(
                     str(page.get("url") or ""), self.provider_session_id
                 )
@@ -173,10 +178,12 @@ class PersistentChat:
                     match = await browser.find_project_url(page, self.project_name)
                 else:
                     await self.runtime.bridge.call(
-                        "navigate", {"pageHandle": self.page_handle, "url": "https://chatgpt.com/projects"}
+                        "navigate",
+                        {"pageHandle": self.page_handle, "url": "https://chatgpt.com/projects"},
                     )
                     match = await self.runtime.bridge.call(
-                        "find_project_url", {"pageHandle": self.page_handle, "projectName": self.project_name}
+                        "find_project_url",
+                        {"pageHandle": self.page_handle, "projectName": self.project_name},
                     )
                 self.project_url = canonical_project_url(str(match["url"])) + "/project"
                 target = self.project_url
@@ -201,15 +208,28 @@ class PersistentChat:
         self._move(ChatState.READY)
 
     async def _wait_ready(self) -> None:
-        deadline = (
-            asyncio.get_running_loop().time() + self.config.chat.ready_timeout_seconds
-        )
+        await self.wait_quiescent(allow_recovering=True)
+
+    async def wait_quiescent(self, *, allow_recovering: bool = False) -> ChatSnapshot:
+        """Prove the provider conversation is idle across two observations.
+
+        A composer can remain mounted while ChatGPT is generating.  Admission,
+        recovery, and cancellation therefore share this stronger boundary.
+        """
+        deadline = asyncio.get_running_loop().time() + self.config.chat.ready_timeout_seconds
+        stable = 0
+        last: ChatSnapshot | None = None
         while asyncio.get_running_loop().time() < deadline:
-            snap = await self.snapshot(allow_recovering=True)
-            if snap.composer_present:
-                return
+            snap = await self.snapshot(allow_recovering=allow_recovering)
+            if provider_quiescent(snap):
+                stable = stable + 1 if last is not None and _same_quiescent_state(last, snap) else 1
+                if stable >= 2:
+                    return snap
+            else:
+                stable = 0
+            last = snap
             await asyncio.sleep(0.25)
-        raise RuntimeError("ChatGPT composer did not become ready")
+        raise RuntimeError("ChatGPT conversation did not become quiescent")
 
     async def snapshot(self, *, allow_recovering: bool = False) -> ChatSnapshot:
         if self.state is ChatState.RECOVERING:
@@ -224,9 +244,9 @@ class PersistentChat:
         if not self.page_handle:
             raise RuntimeError("chat page is not bound")
         page = await self._gpt_browser().page_by_handle(self.page_handle)
-        snapshot = ChatSnapshot.from_bridge(await self._gpt_browser().snapshot(
-            page, signals=self.config.workflow.bridge_signals()
-        ))
+        snapshot = ChatSnapshot.from_bridge(
+            await self._gpt_browser().snapshot(page, signals=self.config.workflow.bridge_signals())
+        )
         self._last_url = snapshot.url
         self._last_snapshot = snapshot
         return snapshot
@@ -239,9 +259,7 @@ class PersistentChat:
 
     async def acquire_provider_identity(self, initial: ChatSnapshot | None = None) -> ChatSnapshot:
         self._move(ChatState.ACQUIRING_SESSION_ID)
-        deadline = (
-            asyncio.get_running_loop().time() + self.config.chat.navigation_timeout_seconds
-        )
+        deadline = asyncio.get_running_loop().time() + self.config.chat.navigation_timeout_seconds
         snap = initial
         while asyncio.get_running_loop().time() < deadline:
             snap = snap or await self.snapshot()
@@ -331,9 +349,15 @@ class PersistentChat:
             return
         if self.provider_session_id:
             for page in pages:
-                if url_matches_provider_session(
-                    str(page.get("url") or ""), self.provider_session_id
-                ) and self._claim_page(str(page["pageHandle"])):
+                if (
+                    getattr(self.runtime, "page_belongs_to_dedicated_window", lambda _page: True)(
+                        page
+                    )
+                    and url_matches_provider_session(
+                        str(page.get("url") or ""), self.provider_session_id
+                    )
+                    and self._claim_page(str(page["pageHandle"]))
+                ):
                     self.page_handle = str(page["pageHandle"])
                     self._move(ChatState.BUSY if self.active_turn_id else ChatState.READY)
                     return
@@ -400,3 +424,32 @@ def _recoverable_turn_failure(error: BaseException) -> bool:
         "EXT-GPTAUTO-002",
         "EXT-GPTAUTO-003",
     }
+
+
+def provider_quiescent(snapshot: ChatSnapshot) -> bool:
+    """One provider-neutral-in-the-adapter definition of safe next-turn admission."""
+    busy_signals = {"stop-control", "streaming-indicator", "thinking-indicator", "busy-indicator"}
+    failed_signals = {"auth-required", "error-page", "error-alert"}
+    return bool(
+        snapshot.composer_present
+        and snapshot.composer_editable
+        and not snapshot.generating
+        and not snapshot.error_present
+        and not snapshot.dom_signals.intersection(busy_signals | failed_signals)
+    )
+
+
+def _same_quiescent_state(left: ChatSnapshot, right: ChatSnapshot) -> bool:
+    return (
+        left.url,
+        left.user_count,
+        left.assistant_count,
+        left.latest_assistant_id,
+        left.latest_assistant_text,
+    ) == (
+        right.url,
+        right.user_count,
+        right.assistant_count,
+        right.latest_assistant_id,
+        right.latest_assistant_text,
+    )
