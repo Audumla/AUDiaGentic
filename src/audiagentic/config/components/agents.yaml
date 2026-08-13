@@ -192,6 +192,7 @@ mcp-servers:
       - agent_gateway_select_implementation
       - agent_gateway_get_config
       - agent_gateway_set_config
+      - agent_gateway_restart
       - agent_gateway_create_operation
       - agent_gateway_get_operation
       - agent_gateway_list_operations
@@ -204,6 +205,7 @@ mcp-servers:
       agent_gateway_select_implementation: Select the project gateway implementation.
       agent_gateway_get_config: Read gateway implementation configuration.
       agent_gateway_set_config: Update validated gateway implementation configuration.
+      agent_gateway_restart: Restart the managed gateway service when explicitly authorized.
       agent_gateway_create_operation: Create bounded provider-neutral gateway administration work.
       agent_gateway_get_operation: Read bounded gateway administration work status.
       agent_gateway_list_operations: List bounded gateway administration work.

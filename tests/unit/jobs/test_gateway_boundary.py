@@ -62,7 +62,7 @@ def test_agent_jobs_scope_is_enumerated():
     files = _inspected_files()
     names = {f.relative_to(_AGENT_JOBS_ROOT).as_posix() for f in files}
     # Spot-check known members so an accidental root-path change fails loudly.
-    for expected in ("event_observer.py", "event_triggers.py", "control.py", "prompt_launch.py"):
+    for expected in ("event_observer.py", "event_triggers.py", "prompt_launch.py"):
         assert expected in names, f"expected {expected} in inspected scope; got {sorted(names)}"
 
 

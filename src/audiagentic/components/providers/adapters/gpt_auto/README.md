@@ -1,8 +1,8 @@
 # gpt-auto adapter
 
 The gateway owns durable AUDiaGentic sessions. One project-scoped
-`GptAutoProviderRuntime` owns a shared Brave/CDP connection and concurrent
-Puppeteer bridge. Each gateway session owns a `PersistentChat`; its page handle
+`GptAutoProviderRuntime` owns a shared Brave/CDP connection and an in-process
+Python CDP bridge. Each gateway session owns a `PersistentChat`; its page handle
 is volatile and its ChatGPT `/c/<id>` binding is durably installed through the
 gateway after the first accepted turn.
 
@@ -13,7 +13,7 @@ Important invariants:
 
 - Gateway ID, ChatGPT conversation ID, request ID, and page handle are distinct.
 - page handles and browser process facts are never durable session identity.
-- one browser/helper serves many chats; closing one chat does not stop either.
+- one browser/CDP bridge serves many chats; closing one chat does not stop either.
 - positive user-message evidence is required before a turn is `submitted`.
 - response workflow transitions are driven by configured named DOM signals and
   declarative evidence policies, not selectors embedded in the Python loop.

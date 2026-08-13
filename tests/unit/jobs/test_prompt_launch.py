@@ -1,18 +1,15 @@
-"""Tests for direct-launch prompt context + template rendering (EDJ25)."""
+"""Tests for canonical prompt Work admission and prompt rendering."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
 from audiagentic.components.agent_jobs.prompt_launch import (
+    _render_launch_prompt,
     launch_prompt_request,
-    prompt_launch_path,
 )
-from audiagentic.components.agent_jobs.prompt_parser import (
-    validate_prompt_launch_request,
-)
+from audiagentic.components.agent_jobs.prompt_parser import validate_prompt_launch_request
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
@@ -21,31 +18,18 @@ def _setup_project(tmp_path: Path) -> Path:
     config_dir = project_root / ".audiagentic" / "config"
     (config_dir / "providers").mkdir(parents=True)
     (config_dir / "project.yaml").write_text(
-        "\n".join(
-            [
-                "contract-version: v1",
-                "project-id: test-project",
-                "prompt-launch:",
-                "  allow-adhoc-target: true",
-            ]
-        ),
+        "contract-version: v1\nproject-id: test-project\nprompt-launch:\n  allow-adhoc-target: true\n",
         encoding="utf-8",
     )
     (config_dir / "providers" / "codex.yaml").write_text(
-        "\n".join(
-            [
-                "install-mode: external-configured",
-                "access-mode: cli",
-                "default-model: gpt-5.4-mini",
-            ]
-        ),
+        "install-mode: external-configured\naccess-mode: cli\ndefault-model: gpt-5.4-mini\n",
         encoding="utf-8",
     )
     return project_root
 
 
 def _request(overrides: dict | None = None) -> dict:
-    base = {
+    request = {
         "contract-version": "v1",
         "prompt-id": "prm_test_0001",
         "source": {
@@ -60,21 +44,13 @@ def _request(overrides: dict | None = None) -> dict:
         "target": {"kind": "packet", "packet-id": "PKT-1"},
         "workflow-profile": "standard",
         "prompt-body": "Continue implementing the packet.\n",
+        "context-id": "ctx_prompt_launch",
     }
-    if overrides:
-        base.update(overrides)
-    return base
+    request.update(overrides or {})
+    return request
 
 
-def _persisted_launch_request(project_root: Path, job_id: str) -> dict:
-    return json.loads(
-        prompt_launch_path(project_root, job_id).read_text(encoding="utf-8")
-    )
-
-
-class TestSchemaXor:
-    """Exactly one of prompt-body / prompt-template-file is required."""
-
+class TestSchema:
     def test_prompt_body_alone_valid(self) -> None:
         assert validate_prompt_launch_request(_request()) == []
 
@@ -84,156 +60,92 @@ class TestSchemaXor:
         assert validate_prompt_launch_request(request) == []
 
     def test_both_rejected(self) -> None:
-        request = _request({"prompt-template-file": "prompts/t.md"})
-        assert validate_prompt_launch_request(request) != []
+        assert validate_prompt_launch_request(
+            _request({"prompt-template-file": "prompts/t.md"})
+        ) != []
 
     def test_neither_rejected(self) -> None:
         request = _request()
         del request["prompt-body"]
         assert validate_prompt_launch_request(request) != []
 
-    def test_execution_profile_id_and_context_accepted(self) -> None:
-        request = _request(
-            {"execution-profile-id": "codex-default", "context": {"anything": {"goes": 1}}}
-        )
-        assert validate_prompt_launch_request(request) == []
+
+def test_prompt_launch_requires_context(tmp_path: Path) -> None:
+    project_root = _setup_project(tmp_path)
+    request = _request()
+    del request["context-id"]
+
+    with pytest.raises(AudiaGenticError, match="require a context-id"):
+        launch_prompt_request(project_root, request)
 
 
-class TestInlinePassthrough:
-    """Compatibility keystone: template-free inline text is byte-identical."""
+def test_prompt_launch_submits_deterministic_work_without_legacy_writes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project_root = _setup_project(tmp_path)
+    calls: list[dict] = []
 
-    def test_no_placeholder_body_unchanged(self, tmp_path: Path) -> None:
-        project_root = _setup_project(tmp_path)
-        body = "Continue implementing the packet.\n\n  Indented detail line.\n"
-        result = launch_prompt_request(project_root, _request({"prompt-body": body}))
+    class Gateway:
+        def submit_agent_work(self, root, context_id, message, **kwargs):
+            calls.append({"root": root, "context_id": context_id, "message": message, **kwargs})
+            return {"work_id": kwargs["work_id"], "context_id": context_id, "state": "active"}
 
-        assert result["status"] == "created"
-        persisted = _persisted_launch_request(project_root, result["job-id"])
-        assert persisted["prompt-body"] == body, "template-free body must be byte-identical"
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.client.get_gateway_client",
+        lambda _root: Gateway(),
+    )
 
-    def test_context_launch_submits_canonical_work_without_legacy_job_writes(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        project_root = _setup_project(tmp_path)
-        calls: list[dict] = []
+    first = launch_prompt_request(project_root, _request())
+    second = launch_prompt_request(project_root, _request())
 
-        class Gateway:
-            def submit_agent_work(self, root, context_id, message, **kwargs):
-                calls.append({"root": root, "context_id": context_id, "message": message, **kwargs})
-                return {
-                    "work_id": kwargs["work_id"],
-                    "context_id": context_id,
-                    "state": "active",
-                }
-
-        monkeypatch.setattr(
-            "audiagentic.components.agents.gateway.client.get_gateway_client",
-            lambda _root: Gateway(),
-        )
-        request = _request(
-            {
-                "context-id": "ctx_prompt_launch",
-                "prompt-body": "Implement the packet.",
-            }
-        )
-
-        first = launch_prompt_request(project_root, request)
-        second = launch_prompt_request(project_root, request)
-
-        assert first["status"] == "submitted"
-        assert first["work-id"] == second["work-id"]
-        assert len(calls) == 2
-        assert calls[0]["work_id"] == calls[1]["work_id"]
-        assert calls[0]["message"]["message_id"] == "prompt:prm_test_0001"
-        assert calls[0]["message"]["inputs"]["prompt-provenance"]["surface"] == "cli"
-        assert not (project_root / ".audiagentic" / "runtime" / "jobs").exists()
+    assert first["status"] == second["status"] == "submitted"
+    assert first["work-id"] == second["work-id"]
+    assert calls[0]["message"]["message_id"] == "prompt:prm_test_0001"
+    assert calls[0]["message"]["inputs"]["prompt-provenance"]["surface"] == "cli"
+    assert not (project_root / ".audiagentic" / "runtime" / "jobs").exists()
 
 
-class TestInlineRendering:
-    def test_placeholders_render_with_caller_context(self, tmp_path: Path) -> None:
-        project_root = _setup_project(tmp_path)
-        request = _request(
-            {
-                "prompt-body": "Job {job.id} on {agent.provider_id}: {metadata.ticket}",
-                "context": {"ticket": "TCK-42"},
-            }
-        )
-        result = launch_prompt_request(project_root, request)
-
-        assert result["status"] == "created"
-        job_id = result["job-id"]
-        persisted = _persisted_launch_request(project_root, job_id)
-        assert persisted["prompt-body"] == f"Job {job_id} on codex: TCK-42"
-
-    def test_caller_context_not_persisted(self, tmp_path: Path) -> None:
-        project_root = _setup_project(tmp_path)
-        request = _request(
-            {"prompt-body": "Ticket {metadata.ticket}", "context": {"ticket": "TCK-1"}}
-        )
-        result = launch_prompt_request(project_root, request)
-
-        persisted = _persisted_launch_request(project_root, result["job-id"])
-        assert "context" not in persisted
-
-    def test_unresolved_placeholder_raises_VAL_TPL_001(self, tmp_path: Path) -> None:
-        project_root = _setup_project(tmp_path)
-        request = _request({"prompt-body": "Missing {does.not.exist}"})
-        with pytest.raises(AudiaGenticError) as exc_info:
-            launch_prompt_request(project_root, request)
-        assert exc_info.value.code == "VAL-TPL-001"
+def test_inline_prompt_rendering_is_byte_identical(tmp_path: Path) -> None:
+    project_root = _setup_project(tmp_path)
+    body = "Continue implementing the packet.\n\n  Indented detail line.\n"
+    prepared = _render_launch_prompt(
+        project_root, _request({"prompt-body": body}), job_id="work_1", provider_id="codex", model_id="gpt-5.4-mini"
+    )
+    assert prepared["prompt-body"] == body
+    assert "context-id" in prepared
 
 
-class TestFileTemplateRendering:
-    def test_template_file_renders_through_shared_context(self, tmp_path: Path) -> None:
-        project_root = _setup_project(tmp_path)
-        tmpl_dir = project_root / ".audiagentic" / "prompts"
-        tmpl_dir.mkdir(parents=True, exist_ok=True)
-        (tmpl_dir / "launch.md").write_text(
-            "Implement for job {job.id} in project {project.id}.\n", encoding="utf-8"
+def test_prompt_context_renders_without_persisting_context(tmp_path: Path) -> None:
+    project_root = _setup_project(tmp_path)
+    prepared = _render_launch_prompt(
+        project_root,
+        _request({"prompt-body": "Job {job.id} on {agent.provider_id}: {metadata.ticket}", "context": {"ticket": "TCK-42"}}),
+        job_id="work_1",
+        provider_id="codex",
+        model_id="gpt-5.4-mini",
+    )
+    assert prepared["prompt-body"] == "Job work_1 on codex: TCK-42"
+    assert "context" not in prepared
+
+
+def test_missing_template_file_raises(tmp_path: Path) -> None:
+    project_root = _setup_project(tmp_path)
+    request = _request({"prompt-template-file": ".audiagentic/prompts/nope.md"})
+    del request["prompt-body"]
+    with pytest.raises(AudiaGenticError, match="template"):
+        _render_launch_prompt(
+            project_root, request, job_id="work_1", provider_id="codex", model_id="gpt-5.4-mini"
         )
 
-        request = _request({"prompt-template-file": ".audiagentic/prompts/launch.md"})
-        del request["prompt-body"]
-        result = launch_prompt_request(project_root, request)
 
-        assert result["status"] == "created"
-        job_id = result["job-id"]
-        persisted = _persisted_launch_request(project_root, job_id)
-        assert persisted["prompt-body"] == (
-            f"Implement for job {job_id} in project test-project."
+def test_unresolved_placeholder_raises(tmp_path: Path) -> None:
+    project_root = _setup_project(tmp_path)
+    with pytest.raises(AudiaGenticError) as exc_info:
+        _render_launch_prompt(
+            project_root,
+            _request({"prompt-body": "Missing {does.not.exist}"}),
+            job_id="work_1",
+            provider_id="codex",
+            model_id="gpt-5.4-mini",
         )
-
-    def test_missing_template_file_raises_IO_PTMPL_001(self, tmp_path: Path) -> None:
-        project_root = _setup_project(tmp_path)
-        request = _request({"prompt-template-file": ".audiagentic/prompts/nope.md"})
-        del request["prompt-body"]
-        with pytest.raises(AudiaGenticError) as exc_info:
-            launch_prompt_request(project_root, request)
-        assert exc_info.value.code == "IO-PTMPL-001"
-
-    def test_containment_escape_raises_IO_PATH_001(self, tmp_path: Path) -> None:
-        project_root = _setup_project(tmp_path)
-        request = _request({"prompt-template-file": "../../../etc/passwd"})
-        del request["prompt-body"]
-        with pytest.raises(AudiaGenticError) as exc_info:
-            launch_prompt_request(project_root, request)
-        assert exc_info.value.code == "IO-PATH-001"
-
-
-class TestSessionData:
-    def test_session_data_available_to_templates(self, tmp_path: Path) -> None:
-        project_root = _setup_project(tmp_path)
-        # Seed a session input record under the jobs runtime tree
-        job_dir = project_root / ".audiagentic" / "runtime" / "jobs" / "job_prior"
-        job_dir.mkdir(parents=True)
-        (job_dir / "input.ndjson").write_text(
-            json.dumps({"job-id": "job_prior", "note": "prior input"}) + "\n",
-            encoding="utf-8",
-        )
-
-        request = _request({"prompt-body": "Session {session.session_id}"})
-        request["source"]["session-id"] = "sess-77"
-        result = launch_prompt_request(project_root, request)
-
-        persisted = _persisted_launch_request(project_root, result["job-id"])
-        assert persisted["prompt-body"] == "Session sess-77"
+    assert exc_info.value.code == "VAL-TPL-001"

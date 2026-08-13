@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING
 
 from audiagentic.foundation.workflow import TransitionConfig, TransitionEngine
 
-from .bridge import PuppeteerBridge
 from .browser_process import BrowserProcessController
+from .cdp.bridge import PythonCdpBridge
 from .config import GptAutoConfig
 
 if TYPE_CHECKING:
@@ -47,17 +47,18 @@ class GptAutoProviderRuntime:
         self.config = config
         self.state = ProviderState.STOPPED
         self._lifecycle_lock = asyncio.Lock()
-        self._bridge: PuppeteerBridge | None = None
+        self._bridge: PythonCdpBridge | None = None
         self._chats: dict[str, PersistentChat] = {}
         # A browser page is an execution resource.  Never let two live
         # provider sessions drive the same tab concurrently, even when both
         # happen to resolve the same project or ChatGPT URL.
         self._page_owners: dict[str, str] = {}
         self._event_task: asyncio.Task[None] | None = None
+        self._dedicated_window_anchor: str | None = None
         self._browser = BrowserProcessController(config.browser, cdp_probe=self._cdp_available)
 
     @property
-    def bridge(self) -> PuppeteerBridge:
+    def bridge(self) -> PythonCdpBridge:
         if not self._bridge:
             raise RuntimeError("gpt-auto provider runtime is unavailable")
         return self._bridge
@@ -92,7 +93,7 @@ class GptAutoProviderRuntime:
                     self._move(ProviderState.STARTING)
                     await self._browser.ensure_browser_for_cdp()
                     self._move(ProviderState.CONNECTING)
-                bridge = PuppeteerBridge(self.config)
+                bridge = PythonCdpBridge(self.config)
                 await bridge.start()
                 self._bridge = bridge
                 self._move(ProviderState.AVAILABLE)
@@ -102,7 +103,22 @@ class GptAutoProviderRuntime:
                     self._move(ProviderState.FAILED)
                 raise
 
-    async def _route_events(self, bridge: PuppeteerBridge) -> None:
+    async def ensure_dedicated_window_anchor(self) -> str:
+        """Create one persistent anchor tab for the shared GPT-auto window."""
+        await self.ensure_available()
+        if self._dedicated_window_anchor:
+            try:
+                pages = await self.bridge.call("list_pages")
+                if any(str(p.get("pageHandle")) == self._dedicated_window_anchor for p in pages):
+                    return self._dedicated_window_anchor
+            except Exception:
+                pass
+            self._dedicated_window_anchor = None
+        page = await self.bridge.call("create_window_page")
+        self._dedicated_window_anchor = str(page["pageHandle"])
+        return self._dedicated_window_anchor
+
+    async def _route_events(self, bridge: PythonCdpBridge) -> None:
         while self._bridge is bridge:
             event = await bridge.events.get()
             if event.name in {"browser_disconnected", "helper_disconnected"}:
@@ -158,6 +174,14 @@ class GptAutoProviderRuntime:
                 self._move(ProviderState.STOPPING)
             for chat in tuple(self._chats.values()):
                 await chat.close()
+            if self._dedicated_window_anchor and self._bridge:
+                try:
+                    await self._bridge.call(
+                        "close_page", {"pageHandle": self._dedicated_window_anchor}
+                    )
+                except Exception:
+                    pass
+                self._dedicated_window_anchor = None
             if self._bridge:
                 await self._bridge.stop()
                 self._bridge = None
