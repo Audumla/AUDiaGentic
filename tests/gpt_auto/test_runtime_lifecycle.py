@@ -508,6 +508,47 @@ async def test_active_reconcile_prefers_stable_target_before_stale_url() -> None
 
 
 @pytest.mark.asyncio
+async def test_lazy_recovery_reacquires_ambiguous_first_turn_target(monkeypatch) -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    runtime = SimpleNamespace(
+        claim_page=lambda _chat, _handle: True,
+        release_page=lambda _chat, _handle: None,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-ambiguous-first-turn",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+    )
+    chat.state = ChatState.RECOVERING
+    chat.target_id = "retained-target"
+    chat.active_turn_id = None
+    observed: list[bool] = []
+
+    async def quiescent(*, allow_recovering=False):
+        observed.append(allow_recovering)
+        return SimpleNamespace()
+
+    monkeypatch.setattr(chat, "wait_quiescent", quiescent)
+
+    await chat.reconcile(
+        [
+            {
+                "pageHandle": "retained-handle",
+                "targetId": "retained-target",
+                "url": "https://chatgpt.com/g/g-p-project/c/new-conversation",
+            }
+        ]
+    )
+
+    assert observed == [True]
+    assert chat.page_handle == "retained-handle"
+    assert chat.state is ChatState.READY
+
+
+@pytest.mark.asyncio
 async def test_anchor_rediscovery_uses_immutable_url_not_mutable_title(monkeypatch) -> None:
     runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
     runtime.state = ProviderState.AVAILABLE
