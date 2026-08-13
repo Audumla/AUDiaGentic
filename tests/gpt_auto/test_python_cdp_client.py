@@ -47,3 +47,15 @@ async def test_cdp_client_correlates_concurrent_out_of_order_commands():
         assert [value["echo"]["value"] for value in values] == list(range(20))
     finally:
         await client.stop()
+
+
+@pytest.mark.asyncio
+async def test_cdp_client_publishes_disconnect_when_socket_closes_cleanly():
+    client = CdpClient("ws://unused")
+    socket = _Socket()
+    client._socket = socket
+    client._reader_task = asyncio.create_task(client._read_loop())
+    await socket.messages.put(None)
+    event = await asyncio.wait_for(client.events.get(), timeout=1)
+    assert event.method == "cdp.disconnected"
+    await client.stop()

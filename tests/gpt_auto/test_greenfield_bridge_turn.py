@@ -95,6 +95,7 @@ class _Chat:
                 workflow=GptAutoConfig.from_dict(valid_config()).workflow,
             ),
         )
+        self.config = self.runtime.config
         self._snapshots = iter(
             [
                 snap(),

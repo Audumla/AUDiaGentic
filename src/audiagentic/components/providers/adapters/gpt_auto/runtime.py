@@ -32,10 +32,10 @@ _ENGINE = TransitionEngine(
     TransitionConfig(
         transitions={
             "stopped": frozenset({"connecting"}),
-            "connecting": frozenset({"available", "starting", "failed"}),
-            "starting": frozenset({"connecting", "failed"}),
+            "connecting": frozenset({"available", "starting", "failed", "stopping"}),
+            "starting": frozenset({"connecting", "failed", "stopping"}),
             "available": frozenset({"recovering", "stopping"}),
-            "recovering": frozenset({"connecting", "starting", "failed"}),
+            "recovering": frozenset({"connecting", "starting", "failed", "stopping"}),
             "failed": frozenset({"connecting", "stopping"}),
             "stopping": frozenset({"stopped"}),
         },
@@ -49,6 +49,7 @@ class GptAutoProviderRuntime:
         self.config = config
         self.state = ProviderState.STOPPED
         self._lifecycle_lock = asyncio.Lock()
+        self._owner_loop: asyncio.AbstractEventLoop | None = None
         self._bridge: PythonCdpBridge | None = None
         self._gpt_browser: GptAutoCdpBrowserController | None = None
         self._chats: dict[str, PersistentChat] = {}
@@ -91,6 +92,7 @@ class GptAutoProviderRuntime:
             return False
 
     async def ensure_available(self) -> None:
+        self._owner_loop = asyncio.get_running_loop()
         async with self._lifecycle_lock:
             if self.state is ProviderState.AVAILABLE and self._bridge:
                 return
@@ -103,8 +105,7 @@ class GptAutoProviderRuntime:
                     self._move(ProviderState.STARTING)
                     await self._browser.ensure_browser_for_cdp()
                     self._move(ProviderState.CONNECTING)
-                bridge = PythonCdpBridge(self.config)
-                await bridge.start()
+                bridge = await self._connect_bridge()
                 self._bridge = bridge
                 self._gpt_browser = GptAutoCdpBrowserController(bridge)
                 self._move(ProviderState.AVAILABLE)
@@ -113,6 +114,31 @@ class GptAutoProviderRuntime:
                 if self.state in {ProviderState.CONNECTING, ProviderState.STARTING}:
                     self._move(ProviderState.FAILED)
                 raise
+
+    async def _connect_bridge(self) -> PythonCdpBridge:
+        """Connect only after the CDP endpoint is actually ready.
+
+        Browser process creation and DevTools readiness are distinct states.
+        Keep that transient retry policy in the runtime lifecycle boundary,
+        rather than leaking it into session/chat workflows.
+        """
+        deadline = asyncio.get_running_loop().time() + self.config.cdp.connect_timeout_seconds
+        delay = 0.05
+        last_error: Exception | None = None
+        while asyncio.get_running_loop().time() < deadline:
+            bridge = PythonCdpBridge(self.config)
+            try:
+                remaining = max(0.01, deadline - asyncio.get_running_loop().time())
+                await bridge.start(connect_timeout=remaining)
+                return bridge
+            except Exception as exc:  # endpoint may still be starting
+                last_error = exc
+                await bridge.stop()
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, 0.5)
+        raise RuntimeError(
+            "CDP endpoint did not become ready before connect timeout"
+        ) from last_error
 
     async def ensure_dedicated_window_anchor(self) -> str:
         """Create one persistent anchor tab for the shared GPT-auto window."""
@@ -184,7 +210,10 @@ class GptAutoProviderRuntime:
             if event.name in {"browser_disconnected", "helper_disconnected"}:
                 asyncio.create_task(self.recover())
                 return
-            if event.page_handle:
+            # Navigation, target metadata changes and lifecycle notifications
+            # are normal page activity.  Only bridge-classified terminal
+            # target loss may invalidate a chat's page binding.
+            if event.name in {"page_closed", "page_crashed"} and event.page_handle:
                 for chat in tuple(self._chats.values()):
                     if chat.page_handle == event.page_handle:
                         await chat.page_lost(event.page_handle)
@@ -196,12 +225,29 @@ class GptAutoProviderRuntime:
             self._move(ProviderState.RECOVERING)
             old, self._bridge = self._bridge, None
             self._gpt_browser = None
+            # Handles are allocated by each bridge instance. Never carry a
+            # handle or ownership claim into the next bridge generation.
+            self._dedicated_window_anchor = None
+            self._page_owners.clear()
+            for chat in tuple(self._chats.values()):
+                chat.bridge_replaced()
             if old:
                 await old.stop()
         await self.ensure_available()
         pages = await self.bridge.call("list_pages")
         for chat in tuple(self._chats.values()):
             await chat.reconcile(pages)
+
+    async def create_chat_page(self) -> str:
+        """Create a session page through the one shared-window admission path."""
+        if self.config.browser.dedicated_window:
+            anchor = await self.ensure_dedicated_window_anchor()
+            page = await self.bridge.call(
+                "create_page_in_window", {"anchorPageHandle": anchor}
+            )
+        else:
+            page = await self.bridge.call("create_page")
+        return str(page["pageHandle"])
 
     async def register_chat(self, chat: PersistentChat) -> None:
         existing = self._chats.get(chat.ag_session_id)
@@ -234,7 +280,12 @@ class GptAutoProviderRuntime:
                 return
             if self.state is ProviderState.AVAILABLE:
                 self._move(ProviderState.STOPPING)
-            elif self.state in {ProviderState.FAILED}:
+            elif self.state in {
+                ProviderState.CONNECTING,
+                ProviderState.STARTING,
+                ProviderState.FAILED,
+                ProviderState.RECOVERING,
+            }:
                 self._move(ProviderState.STOPPING)
             for chat in tuple(self._chats.values()):
                 await chat.close()
@@ -254,3 +305,13 @@ class GptAutoProviderRuntime:
             if self._event_task and not self._event_task.done():
                 self._event_task.cancel()
             self._move(ProviderState.STOPPED)
+
+    async def shutdown_from_owner(self) -> None:
+        """Marshal teardown to the loop that owns CDP transports and locks."""
+        owner = self._owner_loop
+        current = asyncio.get_running_loop()
+        if owner is None or owner is current or not owner.is_running():
+            await self.shutdown()
+            return
+        future = asyncio.run_coroutine_threadsafe(self.shutdown(), owner)
+        await asyncio.wrap_future(future)

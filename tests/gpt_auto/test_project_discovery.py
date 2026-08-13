@@ -6,9 +6,11 @@ from types import SimpleNamespace
 import pytest
 
 from audiagentic.components.providers.adapters.gpt_auto.chat import PersistentChat
+from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.session_transport import (
     _active_project_name,
 )
+from .test_greenfield_config_urls import valid_config
 
 
 class _Bridge:
@@ -60,6 +62,7 @@ async def test_initial_chat_discovers_project_by_active_project_name(monkeypatch
         project_name="bigcherry",
         project_url=None,
         runtime=runtime,
+        config=GptAutoConfig.from_dict(valid_config()),
         binding_sink=lambda update: None,
     )
 

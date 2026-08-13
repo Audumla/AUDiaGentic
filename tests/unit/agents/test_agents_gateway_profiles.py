@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 from audiagentic.components.agents.gateway import profiles as profiles_mod
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 class TestStripSecrets:
@@ -31,6 +32,29 @@ class TestStripSecrets:
 
     def test_empty_params(self):
         assert profiles_mod._strip_secrets({}) == {}
+
+
+def test_machine_gateway_profile_config_rejects_invalid_present_entry(tmp_path):
+    path = tmp_path / "gateway-profiles.yaml"
+    path.write_text("profiles:\n  - profile-id: review\n", encoding="utf-8")
+    with pytest.raises(AudiaGenticError) as raised:
+        profiles_mod.load_gateway_registry_from_config(path)
+    assert raised.value.code == "IO-AGW-107"
+
+
+def test_machine_gateway_profile_config_rejects_non_mapping_params(tmp_path):
+    path = tmp_path / "gateway-profiles.yaml"
+    path.write_text(
+        "profiles:\n"
+        "  - profile-id: review\n"
+        "    provider-id: gpt-auto\n"
+        "    instances: [gpt-auto]\n"
+        "    params: []\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(AudiaGenticError) as raised:
+        profiles_mod.load_gateway_registry_from_config(path)
+    assert raised.value.code == "IO-AGW-107"
 
 
 class TestConfigDigest:
