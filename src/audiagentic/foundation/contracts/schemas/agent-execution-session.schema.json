@@ -61,6 +61,13 @@
         "predecessor-binding-id": {"type": ["string", "null"]},
         "identity-context-fingerprint": {"type": "string"},
         "execution-context-fingerprint": {"type": "string"},
+        "context-id": {"type": ["string", "null"]},
+        "agent-definition-id": {"type": ["string", "null"]},
+        "agent-definition-digest": {"type": ["string", "null"]},
+        "role-ids": {"type": ["array", "null"], "items": {"type": "string"}},
+        "role-set-digest": {"type": ["string", "null"]},
+        "execution-profile-digest": {"type": ["string", "null"]},
+        "effective-capability-digest": {"type": ["string", "null"]},
         "created-at": {"type": "string"}
       }
     },

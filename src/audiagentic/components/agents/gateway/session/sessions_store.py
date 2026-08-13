@@ -172,6 +172,13 @@ def build_session_record(
     max_lifetime_seconds: float | None = None,
     identity_context_fingerprint: str | None = None,
     execution_context_fingerprint: str | None = None,
+    context_id: str | None = None,
+    agent_definition_id: str | None = None,
+    agent_definition_digest: str | None = None,
+    role_ids: tuple[str, ...] | list[str] | None = None,
+    role_set_digest: str | None = None,
+    execution_profile_digest: str | None = None,
+    effective_capability_digest: str | None = None,
 ) -> dict[str, Any]:
     """Build a new session record in the initial 'active' state."""
     # 0 is a valid value for both bounds: it DISABLES that bound (RV513 —
@@ -197,6 +204,13 @@ def build_session_record(
         surface_id=surface_id,
         identity_context_fingerprint=identity_context_fingerprint,
         execution_context_fingerprint=execution_context_fingerprint,
+        context_id=context_id,
+        agent_definition_id=agent_definition_id,
+        agent_definition_digest=agent_definition_digest,
+        role_ids=role_ids,
+        role_set_digest=role_set_digest,
+        execution_profile_digest=execution_profile_digest,
+        effective_capability_digest=effective_capability_digest,
     )
     payload: dict[str, Any] = {
         "contract-version": "v3",
@@ -440,6 +454,13 @@ def install_initial_provider_binding(
     provider_session_ref: str,
     identity_context_fingerprint: str | None = None,
     execution_context_fingerprint: str | None = None,
+    context_id: str | None = None,
+    agent_definition_id: str | None = None,
+    agent_definition_digest: str | None = None,
+    role_ids: tuple[str, ...] | list[str] | None = None,
+    role_set_digest: str | None = None,
+    execution_profile_digest: str | None = None,
+    effective_capability_digest: str | None = None,
     metadata: dict[str, str | int | float | bool | None] | None = None,
 ) -> dict[str, Any]:
     """Install a session's first provider-native binding exactly once.
@@ -470,6 +491,13 @@ def install_initial_provider_binding(
                 surface_id=surface_id,
                 identity_context_fingerprint=identity_context_fingerprint,
                 execution_context_fingerprint=execution_context_fingerprint,
+                context_id=context_id,
+                agent_definition_id=agent_definition_id,
+                agent_definition_digest=agent_definition_digest,
+                role_ids=role_ids,
+                role_set_digest=role_set_digest,
+                execution_profile_digest=execution_profile_digest,
+                effective_capability_digest=effective_capability_digest,
             )
             record["binding"] = current
 

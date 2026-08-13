@@ -4,6 +4,13 @@ from __future__ import annotations
 from typing import Any
 
 from audiagentic.components.agents.gateway.client import get_gateway_client
+from audiagentic.components.agents.work.work_api import (
+    add_message,
+    answer,
+    cancel,
+    get_status,
+    list_status,
+)
 from audiagentic.foundation.mcp.component_server import (
     mcp_server,
     project_root_from_env,
@@ -55,34 +62,54 @@ def agent_work_submit(context_id: str, message_id: str, text: str, inputs: dict[
 
 @mcp.tool()
 @tool_boundary
+def agent_work_submit_packet(context_id: str, packet_id: str, text: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Submit/replay one deterministic packet as canonical Work."""
+    from audiagentic.components.agents.work.work_api import submit_packet
+
+    return submit_packet(
+        project_root_from_env(),
+        context_id=context_id,
+        packet_id=packet_id,
+        text=text,
+        metadata=metadata,
+    )
+
+
+@mcp.tool()
+@tool_boundary
 def agent_work_list() -> list[dict[str, Any]]:
     root = project_root_from_env()
-    return get_gateway_client(root).list_agent_work(root)
+    return list_status(root)
 
 
 @mcp.tool()
 @tool_boundary
 def agent_work_get(work_id: str) -> dict[str, Any]:
     root = project_root_from_env()
-    return get_gateway_client(root).get_agent_work(root, work_id)
+    return get_status(root, work_id)
 
 
 @mcp.tool()
 @tool_boundary
 def agent_work_message(work_id: str, message_id: str, text: str, inputs: dict[str, Any] | None = None) -> dict[str, Any]:
     root = project_root_from_env()
-    return get_gateway_client(root).add_agent_work_message(
-        root,
-        work_id,
-        {"message_id": message_id, "text": text, "inputs": inputs or {}, "created_at": f"mcp:{message_id}"},
+    return add_message(
+        root, work_id, message_id=message_id, text=text, inputs=inputs,
     )
+
+
+@mcp.tool()
+@tool_boundary
+def agent_work_answer(work_id: str, choice: str | None = None, details: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Answer the Foundation interaction currently blocking Work."""
+    return answer(project_root_from_env(), work_id, choice=choice, details=details)
 
 
 @mcp.tool()
 @tool_boundary
 def agent_work_cancel(work_id: str) -> dict[str, Any]:
     root = project_root_from_env()
-    return get_gateway_client(root).cancel_agent_work(root, work_id)
+    return cancel(root, work_id)
 
 
 @mcp.tool()
@@ -94,11 +121,31 @@ def agent_work_output(work_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 @tool_boundary
+def agent_event_failures_list() -> list[dict[str, Any]]:
+    """List redacted canonical event-ingress failure records."""
+    from audiagentic.components.agents.work.work_api import list_event_failures
+
+    return list_event_failures(project_root_from_env())
+
+
+@mcp.tool()
+@tool_boundary
+def agent_work_overview() -> dict[str, Any]:
+    """Return a redacted Work and canonical event-ingress overview."""
+    from audiagentic.components.agents.work.work_api import overview
+
+    return overview(project_root_from_env())
+
+
+@mcp.tool()
+@tool_boundary
 def agent_work_submit_child(parent_work_id: str, message_id: str, text: str, inputs: dict[str, Any] | None = None) -> dict[str, Any]:
     root = project_root_from_env()
-    from audiagentic.components.agents.work.work_api import submit_child
-
-    return submit_child(root, parent_work_id, message_id=message_id, text=text, inputs=inputs)
+    return get_gateway_client(root).submit_agent_work_child(
+        root,
+        parent_work_id,
+        {"message_id": message_id, "text": text, "inputs": inputs or {}, "created_at": f"mcp:{message_id}"},
+    )
 
 
 def main() -> None:

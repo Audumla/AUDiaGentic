@@ -321,6 +321,12 @@ def submit_execution_request(
         },
         "prompt_body": prompt_body,
         "metadata": raw_metadata,
+        "work_id": raw_metadata.get("work-id"),
+        "context_id": raw_metadata.get("context-id"),
+        "message_id": raw_metadata.get("message-id"),
+        "agent_config_fingerprint": raw_metadata.get("agent-config-fingerprint"),
+        "role_manifest_fingerprint": raw_metadata.get("role-manifest-fingerprint"),
+        "eligible_instance_ids": raw_metadata.get("eligible-instance-ids", ()),
     }
     envelope = SubmissionEnvelope.from_mapping(envelope_mapping)
     canonical_root = envelope.validate()
@@ -406,6 +412,12 @@ def submit_execution_request(
         model_id=resolved_model_id,  # type: ignore[arg-type]
         provider_isolation_tier=isolation_tier,
         agent_runtime_digest=agent_runtime_digest,
+        work_id=envelope.work_id,
+        context_id=envelope.context_id,
+        message_id=envelope.message_id,
+        agent_config_fingerprint=envelope.agent_config_fingerprint,
+        role_manifest_fingerprint=envelope.role_manifest_fingerprint,
+        eligible_instance_ids=envelope.eligible_instance_ids,
     )
 
     # Derive idempotency key (client-supplied wins, else deterministic)
@@ -880,6 +892,13 @@ def resume_execution_session(
     control_id: str,
     identity_context_fingerprint: str | None = None,
     execution_context_fingerprint: str | None = None,
+    context_id: str | None = None,
+    agent_definition_id: str | None = None,
+    agent_definition_digest: str | None = None,
+    role_ids: tuple[str, ...] | list[str] | None = None,
+    role_set_digest: str | None = None,
+    execution_profile_digest: str | None = None,
+    effective_capability_digest: str | None = None,
     model_id: str | None = None,
 ) -> dict[str, Any]:
     """AS49: explicitly resume a terminal session as a new linked generation.
@@ -925,6 +944,13 @@ def resume_execution_session(
         control_id=control_id,
         identity_context_fingerprint=identity_context_fingerprint,
         execution_context_fingerprint=execution_context_fingerprint,
+        context_id=context_id,
+        agent_definition_id=agent_definition_id,
+        agent_definition_digest=agent_definition_digest,
+        role_ids=role_ids,
+        role_set_digest=role_set_digest,
+        execution_profile_digest=execution_profile_digest,
+        effective_capability_digest=effective_capability_digest,
         model_id=model_id,
     )
     return _public_session_projection(record)

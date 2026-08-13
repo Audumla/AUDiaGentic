@@ -20,6 +20,21 @@ ENV PIP_BREAK_SYSTEM_PACKAGES=1
 #   docker run --rm audiagentic-gateway-pi-smoke:local
 COPY pyproject.toml README.md ./
 COPY src ./src
+
+# Build the application environment once, rather than paying for the editable
+# install every time the container starts.  The CI workflow caches the image's
+# layers, and the test still invokes the real provider lifecycle API below.
+RUN uv venv /venv \
+    && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp,test]'
+
+# Provision the pinned llama.cpp server and the small local smoke model in the
+# image layer.  This is only an asset cache: the test still calls
+# provision_embedded_rig(), which verifies the pinned binary and model before
+# dispatch.  Keeping HOME identical at build and run time lets that API take
+# its normal already-provisioned path instead of downloading the same assets on
+# every container start.
+RUN /venv/bin/python -c "from pathlib import Path; from audiagentic.foundation.paths.home import global_harness_runtime; from audiagentic.runtime.harness.provisioning import provision_embedded_rig; provision_embedded_rig(global_harness_runtime(), Path('/app'))"
+
 COPY tests ./tests
 
-CMD ["bash", "-c", "python -m pip install -q --no-cache-dir --break-system-packages uv && uv venv /venv && uv pip install --python /venv/bin/python -q --no-compile -e '.[mcp,test]' && /venv/bin/pytest tests/integration/agents/test_gateway_pi_smoke.py -q --tb=short --timeout=900"]
+CMD ["/venv/bin/pytest", "tests/integration/agents/test_gateway_pi_smoke.py", "-q", "--tb=short", "--timeout=480"]

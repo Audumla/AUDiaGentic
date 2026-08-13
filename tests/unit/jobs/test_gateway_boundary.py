@@ -66,6 +66,12 @@ def test_agent_jobs_scope_is_enumerated():
         assert expected in names, f"expected {expected} in inspected scope; got {sorted(names)}"
 
 
+def test_legacy_job_operator_surfaces_are_not_packaged():
+    """The retired job overview wrappers must not reappear as public surfaces."""
+    names = {f.name for f in _inspected_files()}
+    assert not names.intersection({"jobs_api.py", "jobs_mcp.py", "event_overview.py"})
+
+
 def test_agent_jobs_never_imports_gateway_python_api():
     all_violations: list[str] = []
     for path in _inspected_files():

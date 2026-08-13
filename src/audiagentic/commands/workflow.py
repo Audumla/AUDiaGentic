@@ -8,47 +8,45 @@ from audiagentic.foundation.cli_io import print_error, print_json
 from audiagentic.foundation.components.registry import get_descriptor
 
 
-def cmd_job_control(args: argparse.Namespace, project_root: Path) -> int:
-    if not get_descriptor("agent-jobs"):
-        print_error("agent_jobs component not available")
-        return 1
+def cmd_session_input(args: argparse.Namespace, project_root: Path) -> int:
+    from hashlib import sha256
 
-    from audiagentic.components.agent_jobs.control import (
-        build_job_control_request,
-        request_job_control,
-    )
-    from audiagentic.components.agent_jobs.jobs_store import read_job_record
+    from audiagentic.components.agents.work import work_api
 
-    control_root = Path(args.project_root).resolve() if args.project_root else project_root
-    job = read_job_record(control_root, args.job_id)
-    payload = build_job_control_request(
-        job_id=args.job_id,
-        project_id=job["project-id"],
-        requested_action=args.action,
-        requested_by=args.requested_by,
-        reason=args.reason,
-    )
-    print_json(request_job_control(control_root, payload), sort_keys=True)
+    input_root = Path(args.project_root).resolve() if args.project_root else project_root
+    work = work_api.get_status(input_root, args.work_id)
+    if work.get("current_interaction_id"):
+        result = work_api.answer(
+            input_root,
+            args.work_id,
+            details={"message": args.message, "event-kind": args.event_kind},
+        )
+    else:
+        message_id = "input_" + sha256(
+            f"{args.work_id}:{args.event_kind}:{args.message}".encode()
+        ).hexdigest()[:20]
+        result = work_api.add_message(
+            input_root,
+            args.work_id,
+            message_id=message_id,
+            text=args.message,
+            inputs={"event-kind": args.event_kind},
+        )
+    print_json({"status": "recorded", "work": result}, sort_keys=True)
     return 0
 
 
-def cmd_session_input(args: argparse.Namespace, project_root: Path) -> int:
-    from audiagentic.components.agent_jobs.session_input_store import (
-        build_and_persist_session_input,
-    )
+def cmd_work_control(args: argparse.Namespace, project_root: Path) -> int:
+    """Control canonical Work without touching the retired job store."""
+    from audiagentic.components.agents.gateway.client import get_gateway_client
 
-    input_root = Path(args.project_root).resolve() if args.project_root else project_root
-    record = build_and_persist_session_input(
-        input_root,
-        job_id=args.job_id,
-        prompt_id=args.prompt_id,
-        provider_id=args.provider_id,
-        surface=args.surface,
-        stage=args.stage,
-        event_kind=args.event_kind,
-        message=args.message,
-    )
-    print_json({"status": "recorded", "record": record}, sort_keys=True)
+    control_root = Path(args.project_root).resolve() if args.project_root else project_root
+    client = get_gateway_client(control_root)
+    if args.action == "cancel":
+        result = client.cancel_agent_work(control_root, args.work_id)
+    else:
+        result = client.get_agent_work(control_root, args.work_id)
+    print_json(result, sort_keys=True)
     return 0
 
 

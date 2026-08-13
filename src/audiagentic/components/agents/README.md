@@ -1,16 +1,18 @@
 # Agents Component
 
-Execution profile management — bind a provider to a specific model with optional
-execution parameters. Profiles are stored per-project in
-`.audiagentic/config/execution-profiles.yaml` and resolved at job launch time.
+Agent composition — prompts, roles, execution profiles, agent definitions, and
+triggers are stored together in the canonical per-project
+`.audiagentic/config/agents.yaml` document and resolved at admission time.
 
 ## Architecture
 
 - `models.py` — ExecutionProfile dataclass, ExecutionProfileStore, validation
-- `agents_paths.py` — Path resolution for profile config files
+- `agents_paths.py` — Path resolution for canonical Agent config and runtime data
 - `agents_api.py` — Pure-logic CRUD API (load, save, list, get, create, update, delete, resolve), agent_status status-hook
-- `agents_manage_mcp.py` — Management MCP server (CRUD tools, CLI-side only)
-- `agents_mcp.py` — Operational MCP server (resolve tools, provider-facing)
+- `mcp/config_mcp.py` — Canonical Agents configuration MCP server (operator-side only)
+- `mcp/runtime_mcp.py` — Canonical Context/Work runtime MCP server (operator-side only)
+- `mcp/gateway_mcp.py` — Agent Execution Gateway MCP server (provider-facing)
+- `mcp/admin_mcp.py` — Privileged gateway administration MCP server (operator-side only)
 - `agents_gateway_store/` — Gateway request/result record contract and persisted state (AG08), split into _shared,_admission, _records,_transitions (SH18)
 - `agents_gateway_queue.py` — Per-profile FIFO queue, concurrency limiting, cancel, wait, lifecycle events (AG09)
 - `agents_gateway_dispatch.py` — Provider dispatch, retry, fallback (AG10)
@@ -25,9 +27,11 @@ execution parameters. Profiles are stored per-project in
 - `agents_gateway_remote_client.py` — Explicit standalone client with bounded attach semantics
 - `agents_gateway_service_host.py` — Foundation managed-service host composition; also the sole caller of `runtime/bootstrap/gateway_service_composition.py`'s second composition root (AS60 step 7 / RV888), which composes the shared-gateway execution-profile registry as install/uninstall around this host's own construction/close
 
-## Two-server pattern (profiles)
+## MCP surface split
 
-Management (`ag-agents-mgmt`, propagate: `audiagentic`) handles admin operations.
+Configuration (`ag-agents-config`, propagate: `audiagentic`) handles Agent
+composition CRUD. Privileged Gateway administration is isolated on
+`ag-agents-admin`.
 Operational (`ag-agents-gateway`, propagate: `providers`) exposes `agent_task_submit`
 and status/cancel/session management to provider CLIs during job execution.
 

@@ -10,6 +10,7 @@ from audiagentic.components.agents.configuration.configuration_api import Agents
 from audiagentic.foundation.event.event_bus import SubscriptionHandle, get_bus
 
 from .contracts import AgentWorkRecord
+from .event_failures import record_event_failure
 from .service import get_work
 from .work_api import submit_trigger_event
 
@@ -86,7 +87,16 @@ class WorkEventIngress:
 
     def _handler(self, trigger: Mapping[str, Any]):
         def handle(event_type: str, payload: dict[str, Any], metadata: dict[str, Any]) -> None:
-            self.submit(trigger, event_type, payload, metadata)
+            try:
+                self.submit(trigger, event_type, payload, metadata)
+            except Exception as exc:  # noqa: BLE001 - bus subscriber isolation boundary
+                record_event_failure(
+                    self._project_root,
+                    trigger_id=str(trigger.get("trigger-id", trigger.get("trigger_id", "event"))),
+                    event_type=event_type,
+                    correlation_id=str(metadata.get("correlation-id") or metadata.get("correlation_id") or ""),
+                    error_code=getattr(exc, "code", "INT-AGW-EVENT-001"),
+                )
 
         return handle
 

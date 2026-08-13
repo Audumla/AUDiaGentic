@@ -24,6 +24,7 @@ dependencies = [
 # Standards-based streaming agent transport. Kept optional because CLI-stream
 # providers remain supported without ACP.
 acp = ["agent-client-protocol==0.11.0"]
+a2a = ["a2a-sdk==1.1.2"]
 # MCP server support for the planning tool surface
 mcp = ["mcp==1.27.0", "tomli-w>=1.0"]
 # Browser automation for gpt-auto provider

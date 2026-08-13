@@ -41,7 +41,6 @@ The active core of job orchestration. Contains all modules that drive a prompt r
 | `stages.py` | Job stage definitions and orchestration |
 | `event_triggers.py` | Event-trigger config load/validation and filter evaluation |
 | `event_observer.py` | Bus subscription, trigger firing, trigger audit, outcome propagation |
-| `event_overview.py` | Read-only operator aggregation over audit + job records |
 | `dead_letter.py` | Durable redacted records for failed async handlers |
 
 ## Event-driven jobs
@@ -145,7 +144,6 @@ Join keys: `job-id` / `correlation_id` / `trigger-id` / `request-id`.
 | `.audiagentic/runtime/agent-jobs/dead-letter.ndjson` | redacted records for failed handlers (`payload_summary`, allowlisted `metadata`, per `dead_letter.py`'s required-keys set) |
 | `.audiagentic/runtime/jobs/<job-id>/job.json` + `timeline.ndjson` | durable job state and canonical timeline events |
 | gateway request record + timeline (agents component) | per-request execution detail |
-| `event_jobs_overview` MCP tool (`jobs_mcp.py`) | per-trigger counts, event-job states, 5 most recent failures |
 | `agent_task_gateway_overview` MCP tool (agents) | gateway-side request counts and queue depths |
 
 Sidecar record semantics (append-only ndjson, redaction rules, event vs log

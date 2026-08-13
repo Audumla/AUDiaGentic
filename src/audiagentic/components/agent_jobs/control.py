@@ -211,6 +211,58 @@ def write_job_control(project_root: Path, payload: dict[str, Any]) -> Path:
     return path
 
 
+def _canonical_work_id(job: dict[str, Any]) -> str | None:
+    """Return the canonical Work identity carried by a migrated job.
+
+    The legacy record remains readable for compatibility, but once it has a
+    Work identity the Work API is the only owner allowed to change execution
+    lifecycle state.  Older records without this marker continue through the
+    compatibility path below until they are migrated.
+    """
+    work_id = job.get("work-id") or job.get("canonical-work-id")
+    if isinstance(work_id, str) and work_id:
+        return work_id
+    for artifact in job.get("artifacts") or []:
+        if isinstance(artifact, dict) and artifact.get("kind") == "work":
+            work_id = artifact.get("work-id")
+            if isinstance(work_id, str) and work_id:
+                return work_id
+    return None
+
+
+def _cancel_canonical_work(project_root: Path, job: dict[str, Any]) -> bool:
+    """Cancel migrated Work and report whether delegation occurred."""
+    work_id = _canonical_work_id(job)
+    if work_id is None:
+        return False
+    from audiagentic.components.agents.work import work_api
+
+    work_api.cancel(project_root, work_id)
+    return True
+
+
+def _apply_canonical_control(
+    project_root: Path,
+    payload: dict[str, Any],
+    job: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Delegate migrated control without persisting a second lifecycle.
+
+    A compatibility job record may still be present for callers that have not
+    migrated, but its ``work-id`` makes canonical Work the sole lifecycle
+    owner.  In that case the adapter returns the legacy-shaped result for API
+    compatibility and deliberately avoids writing job-control or timeline
+    records.
+    """
+    if _canonical_work_id(job) is None:
+        return None
+    _cancel_canonical_work(project_root, job)
+    result = dict(payload)
+    result["result"] = "applied"
+    result["applied-at"] = now_iso_z()
+    return result
+
+
 def request_job_control(
     project_root: Path,
     payload: dict[str, Any],
@@ -237,6 +289,9 @@ def request_job_control(
         >>> print(result["result"])  # "applied", "pending", or "ignored"
     """
     job = store.read_job_record(project_root, payload["job-id"])
+    canonical = _apply_canonical_control(project_root, payload, job)
+    if canonical is not None:
+        return canonical
     if job["state"] in TERMINAL_STATES:
         payload = dict(payload)
         payload["result"] = "ignored"
@@ -265,8 +320,10 @@ def request_job_control(
 
     payload = dict(payload)
     if job["state"] in {"ready", "awaiting-approval"}:
-        transition_and_persist(project_root, payload["job-id"], "cancelled")
-        _publish_gateway_cancel_requested(project_root, job)
+        delegated = _cancel_canonical_work(project_root, job)
+        if not delegated:
+            transition_and_persist(project_root, payload["job-id"], "cancelled")
+            _publish_gateway_cancel_requested(project_root, job)
         payload["result"] = "applied"
         payload["applied-at"] = now_iso_z()
     else:
@@ -330,6 +387,9 @@ def apply_pending_job_control(
     if control.get("requested-action") not in {"cancel", "stop", "kill"}:
         return control
     job = store.read_job_record(project_root, job_id)
+    canonical = _apply_canonical_control(project_root, control, job)
+    if canonical is not None:
+        return canonical
     if job["state"] in TERMINAL_STATES:
         control["result"] = "ignored"
         control["applied-at"] = now_iso_z()
@@ -354,8 +414,10 @@ def apply_pending_job_control(
             payload=control,
         )
         return control
-    transition_and_persist(project_root, job_id, "cancelled")
-    _publish_gateway_cancel_requested(project_root, job)
+    delegated = _cancel_canonical_work(project_root, job)
+    if not delegated:
+        transition_and_persist(project_root, job_id, "cancelled")
+        _publish_gateway_cancel_requested(project_root, job)
     control["result"] = "applied"
     control["applied-at"] = now_iso_z()
     write_job_control(project_root, control)

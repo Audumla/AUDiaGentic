@@ -574,6 +574,12 @@ def build_manifest(
     model_id: str | None,
     provider_isolation_tier: str,
     agent_runtime_digest: str,
+    work_id: str | None = None,
+    context_id: str | None = None,
+    message_id: str | None = None,
+    agent_config_fingerprint: str | None = None,
+    role_manifest_fingerprint: str | None = None,
+    eligible_instance_ids: tuple[str, ...] = (),
 ) -> ExecutionManifest:
     """Freeze one admission's resolution into an immutable manifest.
 
@@ -600,6 +606,12 @@ def build_manifest(
         mode=envelope.mode,
         timeout_seconds=envelope.timeout_seconds,
         prompt_digest=compute_prompt_digest(envelope.prompt_body),
+        work_id=work_id,
+        context_id=context_id,
+        message_id=message_id,
+        agent_config_fingerprint=agent_config_fingerprint,
+        role_manifest_fingerprint=role_manifest_fingerprint,
+        eligible_instance_ids=tuple(eligible_instance_ids),
     )
 
 

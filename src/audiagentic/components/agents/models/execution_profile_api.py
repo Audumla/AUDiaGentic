@@ -79,7 +79,14 @@ def save_execution_profiles(project_root: Path, store: ExecutionProfileStore) ->
     """
     repository = AgentsConfigRepository()
     snapshot = repository.read(project_root)
-    document = AgentsConfigDocument(snapshot.document.contract_version, snapshot.document.prompts, snapshot.document.roles, tuple(store.to_dicts()), snapshot.document.agents)
+    document = AgentsConfigDocument(
+        snapshot.document.contract_version,
+        snapshot.document.prompts,
+        snapshot.document.roles,
+        tuple(store.to_dicts()),
+        snapshot.document.agents,
+        snapshot.document.triggers,
+    )
     try:
         repository.replace(project_root, document, expected_digest=(snapshot.digest if agents_config_path(project_root).exists() else None))
     except Exception as exc:

@@ -45,7 +45,7 @@ pytestmark = [
     pytest.mark.opt_in,
     pytest.mark.mutates_host,
     pytest.mark.requires_npm,
-    pytest.mark.timeout(900),
+    pytest.mark.timeout(480),
 ]
 
 _DOCKER_GATE_ENV = "AUDIAGENTIC_GATEWAY_PI_SMOKE_DOCKER"
@@ -123,7 +123,11 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
     # _should_provision_embedded_rig) this also downloads real llama-server
     # binaries and seeds/downloads a real local GGUF model — see
     # runtime/harness/pi/install/__init__.py.
-    install_result = install_provider_cli("pi", timeout=900, project_root=tmp_path)
+    # Installation must remain a real lifecycle operation, but a hung npm
+    # registry/process must not consume the whole Docker gate.  The image
+    # caches Python and rig assets; it intentionally does not pre-install Pi,
+    # so this call continues to exercise clean provider installation.
+    install_result = install_provider_cli("pi", timeout=300, project_root=tmp_path)
     assert_install_result_ok("pi", install_result)
 
     harness_runtime = global_harness_runtime()
@@ -170,12 +174,12 @@ def test_gateway_dispatches_real_pi_provider_via_full_isolation_worker(
                 tmp_path,
                 execution_profile_id="pi-smoke",
                 prompt_body=_PROMPT,
-                timeout_seconds=180,
+                timeout_seconds=90,
             )
             result = client.wait_execution_request(
                 tmp_path,
                 result["request-id"],
-                timeout_seconds=180,
+                timeout_seconds=90,
             )
         finally:
             reset_gateway_client()

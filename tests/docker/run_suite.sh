@@ -9,7 +9,9 @@ set -uo pipefail
 
 BASE_MARK="not mutates_host and not requires_container and not opt_in and not docker"
 
-pytest -n "${AUDIAGENTIC_XDIST_WORKERS:-8}" --dist loadgroup -m "(${BASE_MARK}) and not no_parallel" -q
+# Four workers is the safe default for the suite's filesystem-heavy tests.
+# Callers can raise it explicitly after validating their Docker host.
+pytest -n "${AUDIAGENTIC_XDIST_WORKERS:-4}" --dist loadgroup -m "(${BASE_MARK}) and not no_parallel" -q
 parallel_rc=$?
 
 AUDIAGENTIC_SERIAL_PHASE=1 pytest -m "(${BASE_MARK}) and no_parallel" -q

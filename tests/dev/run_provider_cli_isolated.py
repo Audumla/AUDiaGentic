@@ -7,6 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src"
+RUN_LABEL = "com.audiagentic.test-run=provider-matrix"
 for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
@@ -23,10 +24,24 @@ def _mount_path(path: Path) -> str:
     return resolved.as_posix()
 
 
+def _cleanup_orphaned_containers() -> None:
+    result = subprocess.run(
+        ["docker", "ps", "-aq", "--filter", f"label={RUN_LABEL}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    ids = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    if ids:
+        subprocess.run(["docker", "rm", "-f", *ids], check=False)
+
+
 def _run_for_provider(provider_id: str, *, image: str, mount: str | None) -> tuple[bool, str]:
     create_cmd = [
         "docker",
         "create",
+        "--label",
+        RUN_LABEL,
         "-e",
         "PYTHONPATH=/app/src",
         "-e",
@@ -79,6 +94,7 @@ def main() -> int:
         help="Bind-mount repo into container for faster iteration; less deterministic than copy-based mode.",
     )
     args = parser.parse_args()
+    _cleanup_orphaned_containers()
 
     mount = _mount_path(ROOT) if args.bind_mount else None
     selected = args.providers or provider_ids()

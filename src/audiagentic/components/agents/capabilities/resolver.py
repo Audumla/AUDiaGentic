@@ -15,6 +15,20 @@ def resolve_role_manifest(roles: tuple[Role, ...], vocabulary: CapabilityVocabul
     role_ids = tuple(sorted(role.role_id for role in roles))
     if len(role_ids) != len(set(role_ids)):
         raise ValueError("duplicate role IDs")
+    raw_facts = getattr(evidence, "facts", evidence)
+    if isinstance(evidence, dict):
+        raw_facts = evidence.get("facts", evidence.get("capabilities", ()))
+    if raw_facts is None or isinstance(raw_facts, (str, bytes)):
+        facts = ()
+    else:
+        try:
+            facts = tuple(raw_facts)
+        except TypeError:
+            facts = ()
+
+    def fact_value(fact: Any, key: str, default: Any = None) -> Any:
+        return fact.get(key, default) if isinstance(fact, dict) else getattr(fact, key, default)
+
     capabilities: dict[str, ResolvedCapability] = {}
     for role in sorted(roles, key=lambda item: item.role_id):
         for requirement in role.required_capabilities:
@@ -22,7 +36,15 @@ def resolve_role_manifest(roles: tuple[Role, ...], vocabulary: CapabilityVocabul
             if capability_id.value in capabilities:
                 continue
             launch = vocabulary.resolve(capability_id)
-            capabilities[capability_id.value] = ResolvedCapability(capability_id, (), launch)
+            matching = [fact for fact in facts if fact_value(fact, "capability_id") == capability_id.value]
+            supported = [fact for fact in matching if str(fact_value(fact, "support_assessment", "supported")).lower() not in {"no", "unsupported", "blocked", "false"}]
+            if not supported:
+                raise ValueError(f"required capability lacks positive provider evidence: {capability_id.value}")
+            evidence_ids = tuple(
+                str(fact_value(fact, "evidence_id") or fact_value(fact, "source") or f"provider-capability:{capability_id.value}")
+                for fact in supported
+            )
+            capabilities[capability_id.value] = ResolvedCapability(capability_id, evidence_ids, launch)
     canonical = [
         {
             "id": item.requirement_id.value,
