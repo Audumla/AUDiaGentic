@@ -188,6 +188,7 @@ mcp-servers:
     module: audiagentic.components.agents.mcp.admin_mcp
     direct-tools:
       - agent_gateway_status
+      - agent_gateway_health
       - agent_gateway_list_implementations
       - agent_gateway_select_implementation
       - agent_gateway_get_config
@@ -201,6 +202,7 @@ mcp-servers:
     propagate: none
     tool-descriptions:
       agent_gateway_status: Active gateway management implementation and status.
+      agent_gateway_health: Read the gateway health and readiness state.
       agent_gateway_list_implementations: List available gateway implementations.
       agent_gateway_select_implementation: Select the project gateway implementation.
       agent_gateway_get_config: Read gateway implementation configuration.

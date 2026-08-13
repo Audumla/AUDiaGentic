@@ -114,6 +114,9 @@ class GptAutoTurn:
             raise
         finally:
             self.chat.active_turn_id = None
+            refresh = getattr(self.chat.runtime, "refresh_status_page", None)
+            if refresh is not None:
+                await refresh()
             if self.chat.state not in {ChatState.FAILED, ChatState.CLOSED, ChatState.RECOVERING}:
                 self.chat.state = ChatState.READY
 
