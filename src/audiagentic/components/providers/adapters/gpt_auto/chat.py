@@ -153,6 +153,11 @@ class PersistentChat:
             return
         target = self.chat_url if self.provider_session_id else self.project_url
         if self.provider_session_id:
+            claim_conversation = getattr(self.runtime, "claim_conversation", None)
+            if claim_conversation is not None and not claim_conversation(
+                self, self.provider_session_id
+            ):
+                raise RuntimeError("gpt-auto provider conversation is already owned")
             find_page = getattr(self.runtime, "find_conversation_page", None)
             page = (
                 await find_page(
@@ -162,7 +167,9 @@ class PersistentChat:
                 if find_page is not None
                 else None
             )
-            if page is not None and self._claim_page(str(page["pageHandle"])):
+            if page is not None:
+                if not self._claim_page(str(page["pageHandle"])):
+                    raise RuntimeError("gpt-auto retained conversation page is already owned")
                 self._bind_page(page)
         if self.page_handle is None:
             create_page = getattr(self.runtime, "create_chat_page", None)
@@ -306,7 +313,15 @@ class PersistentChat:
                     await result
                 self.provider_session_id = provider_id
                 self.chat_url = chat_url
-                self._move(ChatState.BUSY)
+                claim_conversation = getattr(self.runtime, "claim_conversation", None)
+                if claim_conversation is not None and not claim_conversation(self, provider_id):
+                    self._move(ChatState.FAILED)
+                    raise RuntimeError("gpt-auto provider conversation is already owned")
+                # Cancellation/recovery may have won the race while the
+                # conversation URL was being acquired.  Persist identity,
+                # but never promote a recovering chat back into admission.
+                if self.state is not ChatState.RECOVERING:
+                    self._move(ChatState.BUSY)
                 return snap
             snap = None
             await asyncio.sleep(0.2)
@@ -474,6 +489,7 @@ def _recoverable_turn_failure(error: BaseException) -> bool:
     return isinstance(error, AudiaGenticError) and error.code in {
         "EXT-GPTAUTO-002",
         "EXT-GPTAUTO-003",
+        "EXT-GPTAUTO-004",
     }
 
 

@@ -49,6 +49,7 @@ class ChatSnapshot:
     dom_signals: frozenset[str]
     error_present: bool
     generating: bool = False
+    latest_user_id: str | None = None
 
     @classmethod
     def from_bridge(cls, value: dict[str, Any]) -> ChatSnapshot:
@@ -68,6 +69,7 @@ class ChatSnapshot:
             ),
             error_present=bool(value.get("errorPresent")),
             generating=bool(value.get("generating")),
+            latest_user_id=_text(value.get("latestUserId")),
         )
 
     def observe(
@@ -91,7 +93,9 @@ class ChatSnapshot:
             markers.add("composer-ready")
         if self.latest_assistant_text:
             markers.add("text-present")
-        user_fresh = self.user_count > baseline.user_count
+        user_fresh = bool(
+            self.latest_user_id and self.latest_user_id != baseline.latest_user_id
+        ) or self.user_count > baseline.user_count
         assistant_fresh = bool(
             self.latest_assistant_id
             and self.latest_assistant_id != baseline.latest_assistant_id
