@@ -40,6 +40,7 @@ import os
 import shutil
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -47,6 +48,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DOCKER_DIR = REPO_ROOT / "tests" / "docker"
 
 BASE_IMAGE = "audia-test-base:latest"
+RUN_LABEL = "com.audiagentic.test-run=run-all"
 
 # Docker image registry. The historical per-scenario sprawl is collapsed only
 # where it is SAFE to do so:
@@ -103,6 +105,30 @@ def banner(text: str) -> None:
 def run(cmd: list[str], **kw) -> int:
     print(_c("$ " + " ".join(cmd), "2"))
     return subprocess.run(cmd, cwd=REPO_ROOT, **kw).returncode
+
+
+def cleanup_orphaned_run_containers() -> None:
+    """Remove containers left by an externally terminated test launcher.
+
+    ``docker run --rm`` only removes a container after its process exits.  If
+    the host-side launcher is terminated while attached to the container,
+    Docker can leave that container running.  A stable label lets the next
+    invocation reclaim only containers created by this runner.
+    """
+    try:
+        result = subprocess.run(
+            ["docker", "ps", "-aq", "--filter", f"label={RUN_LABEL}"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+        ids = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        if ids:
+            subprocess.run(["docker", "rm", "-f", *ids], timeout=60, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        # Docker availability is checked separately; cleanup is best effort.
+        pass
 
 
 def docker_daemon_available() -> bool:
@@ -164,7 +190,7 @@ def build_and_run(img: Img, failures: list[str]) -> None:
     banner(f"DOCKER: {img.tag}  ({img.note})")
     if build_image(img) != 0:
         failures.append(f"{img.tag}:build")
-    elif run(["docker", "run", "--rm", img.tag]) != 0:
+    elif run(["docker", "run", "--rm", "--label", RUN_LABEL, img.tag]) != 0:
         failures.append(img.tag)
 
 
@@ -192,14 +218,24 @@ def docker_phase(include_lsp_install: bool, *, include_host_docker_tests: bool) 
     state never leaks between tests.
     """
     failures: list[str] = []
+    cleanup_orphaned_run_containers()
 
     banner("DOCKER: build base image")
     if build_image(Img(BASE_IMAGE, "Dockerfile.test-base")) != 0:
         print(_c("base image build failed - aborting docker phase", "1;31"))
         return 1
 
-    build_and_run(SUITE, failures)
-    build_and_run(PACKAGING, failures)
+    # These two lanes are fully independent: both are clean, non-mutating
+    # containers and neither shares a volume or provider-install state. Keep
+    # this deliberately bounded to two Docker operations; recipe images below
+    # remain serial because their value is isolated install/uninstall state and
+    # several exercise heavyweight local toolchains.
+    clean_failures: list[str] = []
+    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="docker-clean") as pool:
+        futures = [pool.submit(build_and_run, img, clean_failures) for img in (SUITE, PACKAGING)]
+        for future in futures:
+            future.result()
+    failures.extend(clean_failures)
     for img in RECIPE_IMAGES:
         if img.tag == "audia-provider-cli-comprehensive:latest":
             build_and_run_provider_cli_matrix(img, failures)

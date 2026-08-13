@@ -13,6 +13,9 @@ from audiagentic.components.agents.configuration.resolution import AgentConfigId
 from audiagentic.components.agents.context.contracts import AgentContextRecord, AgentContextState
 from audiagentic.foundation.io import atomic_write_json, load_json_file
 from audiagentic.foundation.system.process import StartupLock
+from audiagentic.foundation.workflow import load_workflow, transition_allowed
+
+_WORKFLOW = load_workflow(Path(__file__).parent.parent / "workflows.yaml", "agent-context")
 
 
 class AgentContextStore:
@@ -43,7 +46,7 @@ class AgentContextStore:
             current = _from_mapping(load_json_file(path))
             if current.revision != expected_revision:
                 raise RuntimeError("context revision conflict")
-            if current.state is AgentContextState.CLOSED or target is AgentContextState.OPEN:
+            if not transition_allowed(_WORKFLOW, current.state.value, target.value):
                 raise ValueError("illegal context transition")
             updated = AgentContextRecord(current.context_id, current.composition, target, current.title, current.revision + 1, current.created_at, _now())
             atomic_write_json(path, updated.to_mapping())

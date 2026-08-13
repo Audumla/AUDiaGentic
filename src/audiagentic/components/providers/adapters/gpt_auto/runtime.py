@@ -49,6 +49,10 @@ class GptAutoProviderRuntime:
         self._lifecycle_lock = asyncio.Lock()
         self._bridge: PuppeteerBridge | None = None
         self._chats: dict[str, PersistentChat] = {}
+        # A browser page is an execution resource.  Never let two live
+        # provider sessions drive the same tab concurrently, even when both
+        # happen to resolve the same project or ChatGPT URL.
+        self._page_owners: dict[str, str] = {}
         self._event_task: asyncio.Task[None] | None = None
         self._browser = BrowserProcessController(config.browser, cdp_probe=self._cdp_available)
 
@@ -128,9 +132,21 @@ class GptAutoProviderRuntime:
             raise RuntimeError("duplicate gpt-auto gateway session")
         self._chats[chat.ag_session_id] = chat
 
+    def claim_page(self, chat: PersistentChat, page_handle: str) -> bool:
+        owner = self._page_owners.get(page_handle)
+        if owner is not None and owner != chat.ag_session_id:
+            return False
+        self._page_owners[page_handle] = chat.ag_session_id
+        return True
+
+    def release_page(self, chat: PersistentChat, page_handle: str | None) -> None:
+        if page_handle and self._page_owners.get(page_handle) == chat.ag_session_id:
+            self._page_owners.pop(page_handle, None)
+
     def unregister_chat(self, chat: PersistentChat) -> None:
         if self._chats.get(chat.ag_session_id) is chat:
             self._chats.pop(chat.ag_session_id, None)
+        self.release_page(chat, chat.page_handle)
 
     async def shutdown(self) -> None:
         async with self._lifecycle_lock:

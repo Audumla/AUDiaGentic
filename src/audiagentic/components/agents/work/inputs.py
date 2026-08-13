@@ -30,3 +30,12 @@ def append_work_input(project_root: Path, work_id: str, message: WorkInputMessag
 
 def new_work_input(message_id: str, text: str, inputs: dict | None = None) -> WorkInputMessage:
     return WorkInputMessage(message_id, text, inputs or {}, datetime.now(timezone.utc).isoformat())
+
+
+def latest_work_input(project_root: Path, work_id: str) -> WorkInputMessage:
+    path = agent_work_inputs_path(project_root, work_id)
+    values = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    if not values:
+        raise ValueError(f"Work {work_id!r} has no input message")
+    value = values[-1]
+    return WorkInputMessage(value["message_id"], value["text"], value.get("inputs") or {}, value["created_at"])

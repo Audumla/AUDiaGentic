@@ -8,6 +8,26 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 # ── existing test (AS19) ─────────────────────────────────────
 
 
+def test_build_binding_persists_as88_composition_identity() -> None:
+    binding = bindings.build_binding(
+        provider_id="provider-a",
+        provider_session_ref="opaque-ref",
+        surface_id="surface-a",
+        context_id="ctx-1",
+        agent_definition_id="agent-a",
+        agent_definition_digest="agent-digest",
+        role_ids=("reviewer", "operator"),
+        role_set_digest="roles-digest",
+        execution_profile_digest="profile-digest",
+        effective_capability_digest="capabilities-digest",
+    )
+    assert binding is not None
+    assert binding["context-id"] == "ctx-1"
+    assert binding["agent-definition-id"] == "agent-a"
+    assert binding["role-ids"] == ["reviewer", "operator"]
+    assert binding["effective-capability-digest"] == "capabilities-digest"
+
+
 def test_project_session_capabilities_drops_unsafe_nested_fields() -> None:
     record = {
         "capability-snapshot": {

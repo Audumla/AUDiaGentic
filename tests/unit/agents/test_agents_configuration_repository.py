@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 import pytest
@@ -28,6 +29,43 @@ def _document() -> AgentsConfigDocument:
 
 def test_agents_config_path_is_canonical(tmp_path: Path) -> None:
     assert agents_config_path(tmp_path) == tmp_path / ".audiagentic" / "config" / "agents.yaml"
+
+
+def test_agents_component_does_not_depend_on_legacy_agent_jobs() -> None:
+    root = Path(__file__).resolve().parents[3] / "src" / "audiagentic" / "components" / "agents"
+    violations: list[str] = []
+    for path in root.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                names = [node.module or ""]
+            else:
+                continue
+            if any("components.agent_jobs" in name for name in names):
+                violations.append(f"{path}:{node.lineno}")
+    assert not violations, "Agents must not import legacy agent_jobs: " + ", ".join(violations)
+
+
+def test_agents_public_surfaces_have_no_legacy_agent_jobs_imports() -> None:
+    root = Path(__file__).resolve().parents[3] / "src" / "audiagentic" / "components" / "agents"
+    surface_parts = {"mcp", "configuration", "runtime", "delegation", "admin"}
+    violations: list[str] = []
+    for path in root.rglob("*.py"):
+        relative_parts = set(path.relative_to(root).parts)
+        if not relative_parts.intersection(surface_parts):
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            imported = []
+            if isinstance(node, ast.Import):
+                imported = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                imported = [node.module or ""]
+            if any("components.agent_jobs" in name for name in imported):
+                violations.append(f"{path}:{node.lineno}")
+    assert not violations, "Agents public surfaces must not import legacy agent_jobs: " + ", ".join(violations)
 
 
 def test_agents_config_repository_round_trip_and_digest(tmp_path: Path) -> None:

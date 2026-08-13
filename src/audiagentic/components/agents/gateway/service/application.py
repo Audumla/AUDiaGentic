@@ -236,6 +236,13 @@ class GatewayServiceApplication:
                     "control_id",
                     "identity_context_fingerprint",
                     "execution_context_fingerprint",
+                    "context_id",
+                    "agent_definition_id",
+                    "agent_definition_digest",
+                    "role_ids",
+                    "role_set_digest",
+                    "execution_profile_digest",
+                    "effective_capability_digest",
                     "model_id",
                 },
             )
@@ -248,6 +255,15 @@ class GatewayServiceApplication:
                 ),
                 execution_context_fingerprint=_optional_string(
                     arguments, "execution_context_fingerprint"
+                ),
+                context_id=_optional_string(arguments, "context_id"),
+                agent_definition_id=_optional_string(arguments, "agent_definition_id"),
+                agent_definition_digest=_optional_string(arguments, "agent_definition_digest"),
+                role_ids=_optional_string_list(arguments, "role_ids"),
+                role_set_digest=_optional_string(arguments, "role_set_digest"),
+                execution_profile_digest=_optional_string(arguments, "execution_profile_digest"),
+                effective_capability_digest=_optional_string(
+                    arguments, "effective_capability_digest"
                 ),
                 model_id=_optional_string(arguments, "model_id"),
             )
@@ -265,6 +281,11 @@ class GatewayServiceApplication:
             if not isinstance(message, dict):
                 raise service_validation_error(32, "work message must be an object")
             return self._application.submit_agent_work(root, _required(arguments, "context_id"), message, work_id=arguments.get("work_id"))
+        if operation == "submit_agent_work_child":
+            message = arguments.get("message")
+            if not isinstance(message, dict):
+                raise service_validation_error(34, "child work message must be an object")
+            return self._application.submit_agent_work_child(root, _required(arguments, "parent_work_id"), message, work_id=arguments.get("work_id"), target_agent_id=arguments.get("target_agent_id"), timeout_seconds=arguments.get("timeout_seconds"))
         if operation == "get_agent_work":
             return self._application.get_agent_work(root, _required(arguments, "work_id"))
         if operation == "list_agent_work":
@@ -431,6 +452,17 @@ def _optional_string(arguments: dict[str, Any], name: str) -> str | None:
         return None
     if not isinstance(value, str) or not value:
         raise service_validation_error(23, "gateway service parameter must be a string", field=name)
+    return value
+
+
+def _optional_string_list(arguments: dict[str, Any], name: str) -> list[str] | None:
+    value = arguments.get(name)
+    if value is None:
+        return None
+    if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
+        raise service_validation_error(
+            25, "gateway service parameter must be a list of non-empty strings", field=name
+        )
     return value
 
 

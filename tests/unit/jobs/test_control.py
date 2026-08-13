@@ -64,6 +64,30 @@ def _collect_cancel_events():
 
 
 class TestGatewayCancelPropagation:
+    def test_migrated_job_delegates_cancellation_to_canonical_work(self, tmp_path):
+        project_root = _setup_project(tmp_path)
+        _write_job(project_root, "job-work-01", "ready")
+        record = read_job_record(project_root, "job-work-01")
+        record["work-id"] = "work_01"
+        write_job_record(project_root, record)
+
+        with patch(
+            "audiagentic.components.agents.work.work_api.cancel",
+            return_value={"work_id": "work_01", "state": "cancelled"},
+        ) as cancel_work:
+            result = job_control.request_job_control(
+                project_root, _control_payload("job-work-01")
+            )
+
+        assert result["result"] == "applied"
+        cancel_work.assert_called_once_with(project_root, "work_01")
+        # The compatibility record is not a second lifecycle owner.
+        assert read_job_record(project_root, "job-work-01")["state"] == "ready"
+        legacy_root = project_root / ".audiagentic" / "runtime" / "jobs" / "job-work-01"
+        assert not (legacy_root / "job-control.json").exists()
+        assert not (legacy_root / "control-events.ndjson").exists()
+        assert not (legacy_root / "timeline.ndjson").exists()
+
     def test_cancel_with_gateway_artifact_publishes_cancel_requested(self, tmp_path):
         project_root = _setup_project(tmp_path)
         reset_bus()
@@ -92,7 +116,11 @@ class TestGatewayCancelPropagation:
         timeline_path = (
             project_root / ".audiagentic" / "runtime" / "jobs" / "job-cancel-01" / "timeline.ndjson"
         )
-        entries = [json.loads(l) for l in timeline_path.read_text().strip().split("\n") if l.strip()]
+        entries = [
+            json.loads(line)
+            for line in timeline_path.read_text().strip().split("\n")
+            if line.strip()
+        ]
         cancel_entries = [e for e in entries if e.get("event") == "job.gateway-cancel-requested"]
         assert len(cancel_entries) == 1
         assert (cancel_entries[0].get("attributes") or {}).get("request-id") == "req_abc123"
@@ -179,7 +207,11 @@ class TestGatewayCancelPropagation:
 
         dl_path = project_root / ".audiagentic" / "runtime" / "agent-jobs" / "dead-letter.ndjson"
         assert dl_path.exists(), "publish failure must dead-letter"
-        entries = [json.loads(l) for l in dl_path.read_text().strip().split("\n") if l.strip()]
+        entries = [
+            json.loads(line)
+            for line in dl_path.read_text().strip().split("\n")
+            if line.strip()
+        ]
         assert any(
             e.get("event_type") == "agents.execution.gateway.cancel-requested"
             and e.get("job_id") == "job-cancel-05"

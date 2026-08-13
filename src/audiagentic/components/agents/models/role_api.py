@@ -64,7 +64,14 @@ def save_roles(project_root: Path, store: RoleStore) -> None:
     """
     repository = AgentsConfigRepository()
     snapshot = repository.read(project_root)
-    document = AgentsConfigDocument(snapshot.document.contract_version, snapshot.document.prompts, tuple(store.to_dicts()), snapshot.document.execution_profiles, snapshot.document.agents)
+    document = AgentsConfigDocument(
+        snapshot.document.contract_version,
+        snapshot.document.prompts,
+        tuple(store.to_dicts()),
+        snapshot.document.execution_profiles,
+        snapshot.document.agents,
+        snapshot.document.triggers,
+    )
     try:
         repository.replace(project_root, document, expected_digest=(snapshot.digest if agents_config_path(project_root).exists() else None))
     except Exception as exc:

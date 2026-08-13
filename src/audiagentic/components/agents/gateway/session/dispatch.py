@@ -125,6 +125,19 @@ def _dispatch_session_request(
     profile = resolve_execution_profile(project_root, execution_profile_id)
     provider_id = profile["provider_id"]
     params = profile.get("params", {})
+    # AS88 composition facts are admission-owned.  Dispatch forwards only
+    # identifiers/digests already present on the admitted request; it never
+    # re-resolves or copies Agent/Role/Profile definitions into a session.
+    composition = record.get("composition")
+    if not isinstance(composition, dict):
+        composition = {}
+    context_id = record.get("context-id") or composition.get("context-id")
+    agent_definition_id = record.get("agent-definition-id") or composition.get("agent-definition-id")
+    agent_definition_digest = record.get("agent-definition-digest") or composition.get("agent-definition-digest")
+    role_ids = record.get("role-ids") or composition.get("role-ids")
+    role_set_digest = record.get("role-set-digest") or composition.get("role-set-digest")
+    execution_profile_digest = record.get("execution-profile-digest") or composition.get("execution-profile-digest")
+    effective_capability_digest = record.get("effective-capability-digest") or composition.get("effective-capability-digest")
 
     session_id = record.get("session-id")
     started_at = now_iso_z()
@@ -170,6 +183,13 @@ def _dispatch_session_request(
                 mcp_entries=mcp_entries,
                 identity_context_fingerprint=manifest_context_fingerprint,
                 execution_context_fingerprint=manifest_context_fingerprint,
+                context_id=context_id,
+                agent_definition_id=agent_definition_id,
+                agent_definition_digest=agent_definition_digest,
+                role_ids=role_ids,
+                role_set_digest=role_set_digest,
+                execution_profile_digest=execution_profile_digest,
+                effective_capability_digest=effective_capability_digest,
                 # Request value wins over profile params; 0 disables the bound
                 # (RV513) — use explicit None checks so 0 survives resolution.
                 idle_timeout_seconds=(

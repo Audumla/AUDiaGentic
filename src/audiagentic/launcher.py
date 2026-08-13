@@ -40,9 +40,9 @@ from audiagentic.commands.internal import cmd_mcp
 from audiagentic.commands.launch import _cmd_launch
 from audiagentic.commands.update import cmd_update
 from audiagentic.commands.workflow import (
-    cmd_job_control,
     cmd_release_bootstrap,
     cmd_session_input,
+    cmd_work_control,
 )
 from audiagentic.foundation.cli_io import print_error
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -66,8 +66,8 @@ _COMMAND_HANDLERS: dict[str, Callable] = {
     "gateway": cmd_gateway,  # legacy: only 'serve' (argparse dispatch)
     "update": cmd_update,
     "config": cmd_config_sync,
-    "job-control": cmd_job_control,
     "session-input": cmd_session_input,
+    "work-control": cmd_work_control,
     "release-bootstrap": cmd_release_bootstrap,
     "mcp": cmd_mcp,
 }
@@ -174,22 +174,18 @@ def _main(argv: list[str] | None = None) -> int:
 
     subparsers.add_parser("update", help="Check for a new audiagentic version and update")
 
-    job_control_parser = subparsers.add_parser("job-control", help="Request job control action")
-    job_control_parser.add_argument("--project-root", metavar="PATH")
-    job_control_parser.add_argument("--job-id", required=True)
-    job_control_parser.add_argument("--action", required=True, choices=["cancel", "stop", "kill"])
-    job_control_parser.add_argument("--requested-by", required=True)
-    job_control_parser.add_argument("--reason", required=True)
-
     session_input_parser = subparsers.add_parser("session-input", help="Record live session input")
     session_input_parser.add_argument("--project-root", metavar="PATH")
-    session_input_parser.add_argument("--job-id", required=True)
-    session_input_parser.add_argument("--prompt-id")
-    session_input_parser.add_argument("--provider-id")
-    session_input_parser.add_argument("--surface", required=True)
-    session_input_parser.add_argument("--stage", required=True)
+    session_input_parser.add_argument("--work-id", required=True)
     session_input_parser.add_argument("--event-kind", default="user-input")
     session_input_parser.add_argument("--message", required=True)
+
+    work_control_parser = subparsers.add_parser(
+        "work-control", help="Read or cancel canonical Agent Work"
+    )
+    work_control_parser.add_argument("--project-root", metavar="PATH")
+    work_control_parser.add_argument("--work-id", required=True)
+    work_control_parser.add_argument("--action", required=True, choices=["status", "cancel"])
 
     release_parser = subparsers.add_parser(
         "release-bootstrap", help="Bootstrap release workflow for a project"

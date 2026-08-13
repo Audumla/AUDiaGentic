@@ -111,6 +111,43 @@ class TestInlinePassthrough:
         persisted = _persisted_launch_request(project_root, result["job-id"])
         assert persisted["prompt-body"] == body, "template-free body must be byte-identical"
 
+    def test_context_launch_submits_canonical_work_without_legacy_job_writes(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        project_root = _setup_project(tmp_path)
+        calls: list[dict] = []
+
+        class Gateway:
+            def submit_agent_work(self, root, context_id, message, **kwargs):
+                calls.append({"root": root, "context_id": context_id, "message": message, **kwargs})
+                return {
+                    "work_id": kwargs["work_id"],
+                    "context_id": context_id,
+                    "state": "active",
+                }
+
+        monkeypatch.setattr(
+            "audiagentic.components.agents.gateway.client.get_gateway_client",
+            lambda _root: Gateway(),
+        )
+        request = _request(
+            {
+                "context-id": "ctx_prompt_launch",
+                "prompt-body": "Implement the packet.",
+            }
+        )
+
+        first = launch_prompt_request(project_root, request)
+        second = launch_prompt_request(project_root, request)
+
+        assert first["status"] == "submitted"
+        assert first["work-id"] == second["work-id"]
+        assert len(calls) == 2
+        assert calls[0]["work_id"] == calls[1]["work_id"]
+        assert calls[0]["message"]["message_id"] == "prompt:prm_test_0001"
+        assert calls[0]["message"]["inputs"]["prompt-provenance"]["surface"] == "cli"
+        assert not (project_root / ".audiagentic" / "runtime" / "jobs").exists()
+
 
 class TestInlineRendering:
     def test_placeholders_render_with_caller_context(self, tmp_path: Path) -> None:

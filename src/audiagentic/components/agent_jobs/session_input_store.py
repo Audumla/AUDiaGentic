@@ -24,7 +24,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.agent_jobs import jobs_store as _default_store
 from audiagentic.components.agent_jobs.paths import (
     job_input_events_path,
     job_input_path,
@@ -90,6 +89,26 @@ def persist_session_input(project_root: Path, record: dict[str, Any]) -> dict[st
             message="session input record requires a job id",
             details={},
         )
+    work_id = record.get("work-id")
+    if isinstance(work_id, str) and work_id:
+        from audiagentic.components.agents.work.work_api import add_message
+
+        message_id = record.get("message-id") or (
+            f"session-input:{record.get('event-kind', 'input')}:{record['timestamp']}"
+        )
+        add_message(
+            project_root,
+            work_id,
+            message_id=message_id,
+            text=record.get("message", ""),
+            inputs={
+                "event-kind": record.get("event-kind"),
+                "surface": record.get("surface"),
+                "stage": record.get("stage"),
+                **dict(record.get("details") or {}),
+            },
+        )
+        return record
     _append_ndjson(job_input_path(project_root, record["job-id"]), record)
     _append_ndjson(job_input_events_path(project_root, record["job-id"]), record)
     message = record.get("message")
@@ -110,7 +129,8 @@ def build_and_persist_session_input(
     message: str,
     timestamp: str | None = None,
     details: dict[str, Any] | None = None,
-    job_store: JobStoreInterface = _default_store.read_job_record,
+    work_id: str | None = None,
+    job_store: JobStoreInterface | None = None,
 ) -> dict[str, Any]:
     """Build and persist a session input record.
 
@@ -125,7 +145,8 @@ def build_and_persist_session_input(
         message: Input message content
         timestamp: Optional ISO timestamp (defaults to current UTC time)
         details: Optional additional details dict
-        job_store: Optional job store function for reading job records (defaults to global store)
+        job_store: Optional job store function for reading legacy job records. It is
+            resolved lazily only for the no-Work compatibility path.
 
     Returns:
         Built and persisted session input record
@@ -134,7 +155,11 @@ def build_and_persist_session_input(
         For test isolation, pass explicit job_store:
         `build_and_persist_session_input(..., job_store=mock_store.read_job_record)`
     """
-    if provider_id is None:
+    if provider_id is None and not work_id:
+        if job_store is None:
+            from audiagentic.components.agent_jobs.jobs_store import read_job_record
+
+            job_store = read_job_record
         job = job_store(project_root, job_id)
         provider_id = job.get("provider-id")
 
@@ -149,4 +174,6 @@ def build_and_persist_session_input(
         timestamp=timestamp,
         details=details,
     )
+    if work_id:
+        record["work-id"] = work_id
     return persist_session_input(project_root, record)

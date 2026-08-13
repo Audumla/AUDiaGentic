@@ -45,17 +45,17 @@ def agent_work_inputs_path(project_root: Path, work_id: str) -> Path:
 
 
 def execution_profiles_path(project_root: Path) -> Path:
-    """Return the path to the execution profiles YAML config file."""
+    """Return the legacy profile path used only by one-time migration."""
     return project_marker_path(project_root) / "config" / "execution-profiles.yaml"
 
 
 def roles_path(project_root: Path) -> Path:
-    """Return the path to the roles YAML config file."""
+    """Return the legacy roles path used only by one-time migration."""
     return project_marker_path(project_root) / "config" / "roles.yaml"
 
 
 def agent_definitions_path(project_root: Path) -> Path:
-    """Return the path to the agent definitions YAML config file."""
+    """Return the legacy definitions path used only by one-time migration."""
     return project_marker_path(project_root) / "config" / "agent-definitions.yaml"
 
 

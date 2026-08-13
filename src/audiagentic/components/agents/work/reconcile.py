@@ -49,7 +49,26 @@ def reconcile_work(project_root: Path, work: AgentWorkRecord, *, execution_state
 def reconcile_linked_execution(project_root: Path, work: AgentWorkRecord) -> AgentWorkRecord:
     """Read gateway status and project it onto Work after restart/recovery."""
     if not work.active_execution_id:
-        return work
+        # The Gateway idempotency index is the recovery authority for the
+        # admitted-but-not-yet-linked crash window. Re-submit through the
+        # public application seam with the deterministic Work message key;
+        # Gateway admission returns the original request on replay.
+        from audiagentic.components.agents.gateway.client import get_gateway_client
+        from audiagentic.components.agents.work.inputs import latest_work_input
+
+        message = latest_work_input(project_root, work.work_id)
+        replayed = get_gateway_client(project_root).submit_agent_work(
+            project_root,
+            work.context_id,
+            {
+                "message_id": message.message_id,
+                "text": message.text,
+                "inputs": dict(message.inputs),
+                "created_at": message.created_at,
+            },
+            work_id=work.work_id,
+        )
+        return AgentWorkStore().get(project_root, replayed["work_id"])
     from audiagentic.components.agents.gateway.client import get_gateway_client
 
     execution = get_gateway_client(project_root).get_execution_request(

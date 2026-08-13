@@ -73,6 +73,40 @@ def _send(proc: subprocess.Popen, obj: dict) -> None:
     proc.stdin.flush()
 
 
+def _answer_server_request(proc: subprocess.Popen, message: dict) -> bool:
+    """Answer ACP requests emitted while a prompt is streaming.
+
+    ACP is duplex during ``session/prompt``: an agent may ask its client for
+    permission before completing a tool call.  These tests are the client,
+    so merely draining notifications leaves Pi waiting forever and makes the
+    subsequent EOF look like an RPC/tap teardown failure.  Select the first
+    offered permission option (the Docker fixture is intentionally isolated)
+    and keep draining the same stream.
+    """
+    method = message.get("method")
+    request_id = message.get("id")
+    if request_id is None or method != "session/request_permission":
+        return False
+    params = message.get("params") or {}
+    options = params.get("options") or []
+    option_id = options[0].get("optionId") if options and isinstance(options[0], dict) else None
+    if not option_id:
+        _send(
+            proc,
+            {"jsonrpc": "2.0", "id": request_id, "result": {"outcome": {"outcome": "cancelled"}}},
+        )
+    else:
+        _send(
+            proc,
+            {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {"outcome": {"outcome": "selected", "optionId": option_id}},
+            },
+        )
+    return True
+
+
 def test_real_pi_rpc_transcript_through_the_tap_covers_a_full_prompt_turn(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -217,6 +251,8 @@ def test_real_pi_rpc_transcript_through_the_tap_covers_a_full_prompt_turn(
                 if not line:
                     break
                 message = json.loads(line)
+                if _answer_server_request(proc, message):
+                    continue
                 if message.get("id") == 3:
                     prompt_resp = message
                     break
@@ -424,6 +460,8 @@ def test_real_pi_rpc_transcript_captures_tool_call_frame_types(
                     break
                 message = json.loads(line)
                 observed_messages.append(message)
+                if _answer_server_request(proc, message):
+                    continue
                 if message.get("id") == 3:
                     prompt_resp = message
                     break

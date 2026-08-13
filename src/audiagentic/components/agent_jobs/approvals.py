@@ -117,6 +117,54 @@ def _approval_to_interaction_payload(approval: dict[str, Any]) -> dict[str, Any]
     }
 
 
+def _canonical_work_id(job: dict[str, Any]) -> str | None:
+    work_id = job.get("work-id") or job.get("canonical-work-id")
+    return work_id if isinstance(work_id, str) and work_id else None
+
+
+def _request_work_approval(project_root: Path, approval: dict[str, Any], work_id: str) -> dict[str, Any]:
+    """Create the interaction and put canonical Work into its approval wait."""
+    from audiagentic.components.agents.work.contracts import AgentWorkWaitReason
+    from audiagentic.components.agents.work.service import get_work
+    from audiagentic.components.agents.work.store import AgentWorkStore
+
+    work = get_work(project_root, work_id)
+    existing = _list_pending(
+        project_root,
+        approval["project-id"],
+        approval["kind"],
+        approval["source-id"],
+    )
+    if existing:
+        if work.state.value not in {"waiting", "completed", "failed", "cancelled", "rejected"}:
+            AgentWorkStore().set_waiting(
+                project_root,
+                work_id,
+                interaction_id=existing["approval-id"],
+                reason=AgentWorkWaitReason.APPROVAL,
+                expected_revision=work.revision,
+            )
+        return existing
+    interaction_id = interaction.request_interaction(
+        project_root=project_root,
+        **_approval_to_interaction_payload(approval),
+    )
+    result = _interaction_to_approval(
+        {
+            **interaction.read_record(project_root, interaction_id),
+            "project_id": approval["project-id"],
+        }
+    )
+    AgentWorkStore().set_waiting(
+        project_root,
+        work_id,
+        interaction_id=interaction_id,
+        reason=AgentWorkWaitReason.APPROVAL,
+        expected_revision=work.revision,
+    )
+    return result
+
+
 def _list_pending(project_root: Path, project_id: str, kind: str, source_id: str) -> dict[str, Any] | None:
     root = _approvals_root(project_root)
     if not root.exists():
@@ -189,7 +237,13 @@ def read_approval(project_root: Path, approval_id: str) -> dict[str, Any]:
     return approval
 
 
-def update_approval_state(project_root: Path, approval_id: str, new_state: str) -> dict[str, Any]:
+def update_approval_state(
+    project_root: Path,
+    approval_id: str,
+    new_state: str,
+    *,
+    work_id: str | None = None,
+) -> dict[str, Any]:
     payload = read_approval(project_root, approval_id)
     payload["state"] = new_state
     issues = _validate_approval(payload)
@@ -201,7 +255,22 @@ def update_approval_state(project_root: Path, approval_id: str, new_state: str) 
             details={"approval-id": approval_id, "issues": issues},
         )
     if new_state in {"approved", "rejected", "cancelled"}:
-        interaction.respond(approval_id, new_state, details={"project_id": payload["project-id"]}, project_root=project_root)
+        if work_id is not None:
+            from audiagentic.components.agents.work.work_api import answer
+
+            answer(
+                project_root,
+                work_id,
+                choice=new_state,
+                details={"project_id": payload["project-id"]},
+            )
+        else:
+            interaction.respond(
+                approval_id,
+                new_state,
+                details={"project_id": payload["project-id"]},
+                project_root=project_root,
+            )
     elif new_state == "expired":
         record = interaction.read_record(project_root, approval_id)
         record["state"] = "expired"
@@ -227,8 +296,22 @@ def request_job_approval(
     summary: str,
     approval_id: str,
     now_ts: str | None = None,
+    work_id: str | None = None,
 ) -> dict[str, Any]:
-    job = store.read_job_record(project_root, job_id)
+    job = None if work_id is not None else store.read_job_record(project_root, job_id)
+    work_id = work_id or _canonical_work_id(job or {})
+    if work_id is not None:
+        approval = build_approval_request(
+            approval_id=approval_id,
+            project_id=project_id,
+            kind=kind,
+            source_kind="agent-work",
+            source_id=work_id,
+            summary=summary,
+            requested_at=now_ts or now_iso_z(),
+            expires_at=None,
+        )
+        return _request_work_approval(project_root, approval, work_id)
     if job["state"] != "running":
         raise AudiaGenticError(
             code="CON-APPROVE-001",
@@ -267,14 +350,32 @@ def check_job_approval(
     job_id: str,
     approval_id: str,
     now_ts: str | None = None,
+    work_id: str | None = None,
 ) -> dict[str, Any]:
     now_ts = now_ts or now_iso_z()
+    job = None if work_id is not None else store.read_job_record(project_root, job_id)
+    work_id = work_id or _canonical_work_id(job or {})
     approval = read_approval(project_root, approval_id)
     if approval["state"] == "pending" and _is_expired(approval, now_ts):
         approval = update_approval_state(project_root, approval_id, "expired")
-        transition_and_persist(project_root, job_id, "cancelled")
+        if work_id is not None:
+            from audiagentic.components.agents.work.service import cancel_work
+
+            cancel_work(project_root, work_id)
+        else:
+            transition_and_persist(project_root, job_id, "cancelled")
     elif approval["state"] == "approved":
-        transition_and_persist(project_root, job_id, "running")
+        if work_id is not None:
+            from audiagentic.components.agents.work.interactions import resume_after_interaction
+
+            resume_after_interaction(project_root, work_id)
+        else:
+            transition_and_persist(project_root, job_id, "running")
     elif approval["state"] in {"rejected", "cancelled"}:
-        transition_and_persist(project_root, job_id, "cancelled")
+        if work_id is not None:
+            from audiagentic.components.agents.work.service import cancel_work
+
+            cancel_work(project_root, work_id)
+        else:
+            transition_and_persist(project_root, job_id, "cancelled")
     return approval

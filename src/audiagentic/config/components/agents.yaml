@@ -1,25 +1,18 @@
 type: component
 contract-version: v1
 id: agents
-display-name: Execution Profiles
+display-name: Agents
 description: >
-  Execution profile management — bind a provider to a specific model with optional
-  execution parameters. Profiles are stored per-project and resolved at job launch.
+  Canonical Agent composition, Context, Work, execution admission, and protocol projections.
 depends-on:
   - project
 implementation-cardinality: exclusive
 lifecycle-observer: audiagentic.components.agents.gateway.events
 status-hook: audiagentic.components.agents.models.execution_profile_api.agent_status
 files:
-  - path: .audiagentic/config/execution-profiles.yaml
+  - path: .audiagentic/config/agents.yaml
     lifecycle: create-if-missing
-    description: Per-project execution profile configurations
-  - path: .audiagentic/config/roles.yaml
-    lifecycle: create-if-missing
-    description: Per-project role configurations (AS61)
-  - path: .audiagentic/config/agent-definitions.yaml
-    lifecycle: create-if-missing
-    description: Per-project agent definition configurations (AS62)
+    description: Canonical per-project Agent, Role, Prompt, Profile, and Trigger configuration
   - path: .audiagentic/runtime/agent-execution-gateway
     lifecycle: runtime-only
     recursive: true
@@ -33,12 +26,16 @@ mcp-servers:
       - agent_context_list
       - agent_context_close
       - agent_work_submit
+      - agent_work_submit_packet
       - agent_work_list
       - agent_work_get
       - agent_work_message
+      - agent_work_answer
       - agent_work_cancel
       - agent_work_output
       - agent_work_submit_child
+      - agent_event_failures_list
+      - agent_work_overview
     description: Canonical logical Context/Work runtime operations.
     propagate: audiagentic
     instructions: >
@@ -51,15 +48,27 @@ mcp-servers:
       agent_context_list: List Agent Contexts.
       agent_context_close: Close an Agent Context.
       agent_work_submit: Submit one Work input in a Context.
+      agent_work_submit_packet: Submit/replay one deterministic packet as Work.
       agent_work_list: List Agent Work records.
       agent_work_get: Read one Agent Work record.
       agent_work_message: Append one caller message to Work.
+      agent_work_answer: Answer a Foundation interaction and resume Work.
       agent_work_cancel: Cancel Work and linked execution.
       agent_work_output: Project gateway-owned output for Work.
       agent_work_submit_child: Create child Work linked to a parent Work.
-  - name: ag-agents-mgmt
-    module: audiagentic.components.agents.mcp.manage_mcp
+      agent_event_failures_list: List redacted canonical event-ingress failures.
+      agent_work_overview: Summarize canonical Work states and event-ingress failures.
+  - name: ag-agents-config
+    module: audiagentic.components.agents.mcp.config_mcp
     direct-tools:
+      - agent_config_read
+      - agent_config_describe
+      - agent_config_apply
+      - agent_config_put
+      - agent_config_delete
+      - agent_config_validate
+      - agent_config_get
+      - agent_resolve
       - agent_list_execution_profiles
       - agent_get_execution_profile
       - agent_create_execution_profile
@@ -75,16 +84,7 @@ mcp-servers:
       - agent_create_definition
       - agent_update_definition
       - agent_delete_definition
-      - agent_gateway_status
-      - agent_gateway_list_implementations
-      - agent_gateway_select_implementation
-      - agent_gateway_get_config
-      - agent_gateway_set_config
-      - agent_gateway_create_operation
-      - agent_gateway_get_operation
-      - agent_gateway_list_operations
-      - agent_gateway_get_retention_policy
-    description: Execution profile, role, agent definition, and gateway-management (SH11) — CRUD for provider+model bindings, behavioral role definitions, their composition into logical agents, and declarative selection of the gateway management implementation (embedded/standalone/automatic)
+    description: Execution profile, role, and agent-definition configuration — CRUD for provider+model bindings, behavioral role definitions, and their composition into logical agents
     propagate: audiagentic
     instructions: >
       CRUD for execution profiles (provider+model bindings), roles (small,
@@ -100,6 +100,14 @@ mcp-servers:
       alter harness runtime tools, or imply a selected session surface
       supports ACP/A2A.
     tool-descriptions:
+      agent_config_read: Read the canonical Agents configuration document.
+      agent_config_describe: Describe the canonical Agents configuration contract and digest.
+      agent_config_apply: Replace the canonical Agents configuration with an expected-digest guard.
+      agent_config_put: Create or update one canonical Agents configuration item.
+      agent_config_delete: Delete one canonical Agents configuration item.
+      agent_config_validate: Validate the canonical Agents configuration document.
+      agent_config_get: Read one canonical Agents configuration item by kind and id.
+      agent_resolve: Resolve one Agent Definition into its execution profile and role.
       agent_list_execution_profiles: List all execution profiles with summary information.
       agent_get_execution_profile:
         description: >
@@ -176,61 +184,33 @@ mcp-servers:
         description: Delete an agent definition by ID.
         parameters:
           agent_id: "Agent definition identifier to delete"
-      agent_gateway_status: >
-        Return the active gateway management implementation (embedded/standalone/automatic)
-        and whether it was explicitly selected or is only active by descriptor default.
-      agent_gateway_list_implementations: >
-        List all registered gateway management implementations with their display name,
-        description, default flag, and which one is currently active.
-      agent_gateway_select_implementation:
-        description: >
-          Switch the active gateway management implementation for this project
-          (SH11). Declarative alternative to the AUDIAGENTIC_GATEWAY_MODE env
-          override, which still takes precedence when set.
-        parameters:
-          implementation_id: "One of: embedded, standalone, automatic"
-      agent_gateway_get_config:
-        description: >
-          Return resolved config plus the settable-option schema for a gateway
-          implementation. The schema field describes every option it accepts
-          (type, description, required, default, allowed values). Use with
-          agent_gateway_set_config.
-        parameters:
-          implementation_id: "Implementation to inspect; defaults to the active one"
-      agent_gateway_set_config:
-        description: >
-          Validate and persist config updates for a gateway implementation.
-          See agent_gateway_get_config for the option schema it accepts.
-        parameters:
-          implementation_id: "Implementation to configure"
-          updates: "Partial options dict — only specified keys are validated and set"
-      agent_gateway_create_operation:
-        description: >
-          Create durable provider-neutral gateway operator work. The returned
-          acknowledgement only records accepted work; poll get operation for
-          completion. Scope never accepts prompts, outputs, credentials, or
-          provider-native handles.
-        parameters:
-          operation_id: "Caller idempotency identifier for this operation"
-          kind: "One of: reconcile, archive, purge"
-          scope: "Safe JSON selector mapping; reconcile requires absolute project-root"
-          correlation_id: "Optional safe correlation identifier"
-      agent_gateway_get_operation:
-        description: "Return the redacted durable state/result of gateway operator work."
-        parameters:
-          operation_id: "Gateway operator operation identifier"
-      agent_gateway_list_operations:
-        description: "Read-only bounded list of redacted gateway operations for maintenance inspection."
-        parameters:
-          limit: "Maximum number of records to return (1-1000)"
-      agent_gateway_get_retention_policy:
-        description: "Return the redacted machine-owned archive retention policy; no policy path or project data is exposed."
-        parameters: {}
-
+  - name: ag-agents-admin
+    module: audiagentic.components.agents.mcp.admin_mcp
+    direct-tools:
+      - agent_gateway_status
+      - agent_gateway_list_implementations
+      - agent_gateway_select_implementation
+      - agent_gateway_get_config
+      - agent_gateway_set_config
+      - agent_gateway_create_operation
+      - agent_gateway_get_operation
+      - agent_gateway_list_operations
+      - agent_gateway_get_retention_policy
+    description: Privileged gateway administration and lifecycle configuration.
+    propagate: none
+    tool-descriptions:
+      agent_gateway_status: Active gateway management implementation and status.
+      agent_gateway_list_implementations: List available gateway implementations.
+      agent_gateway_select_implementation: Select the project gateway implementation.
+      agent_gateway_get_config: Read gateway implementation configuration.
+      agent_gateway_set_config: Update validated gateway implementation configuration.
+      agent_gateway_create_operation: Create bounded provider-neutral gateway administration work.
+      agent_gateway_get_operation: Read bounded gateway administration work status.
+      agent_gateway_list_operations: List bounded gateway administration work.
+      agent_gateway_get_retention_policy: Read the redacted gateway retention policy.
   - name: ag-agents-gateway
     module: audiagentic.components.agents.mcp.gateway_mcp
     direct-tools:
-      - agent_list_definitions
       - agent_task_submit
       - agent_task_status
       - agent_task_cancel
@@ -279,9 +259,6 @@ mcp-servers:
       or agent_task_list_requests to see what's happening without already
       knowing a request-id.
     tool-descriptions:
-      agent_list_definitions: >
-        List all agent definitions available to the gateway, including their
-        execution-profile and role references.
       agent_task_submit: >
         Submit an async request as agent_id (resolves the agent's execution
         profile automatically). Returns structured response with:
@@ -359,8 +336,9 @@ contributions:
     content:
       body: |
         Execution profiles bind a provider to a specific model with optional
-        execution parameters. They are stored in .audiagentic/config/
-        execution-profiles.yaml.
+        execution parameters. They are stored in the canonical
+        .audiagentic/config/agents.yaml document alongside prompts, roles,
+        agent definitions, and triggers.
 
         ## When to use
         - A job needs a predefined provider+model configuration
@@ -371,7 +349,8 @@ contributions:
         ## Resolution precedence at job launch
         1. Explicit `execution-profile-id` in job request
         2. Explicit provider-id / model-id in job request
-        3. Default execution profile (marked `is-default: true`)
+        3. Execution profile selected by the Agent Definition
+        4. Default execution profile (marked `is-default: true`)
 
         ## Naming
         Use `execution-profile-id` (NOT `profile-id`) in job requests to avoid

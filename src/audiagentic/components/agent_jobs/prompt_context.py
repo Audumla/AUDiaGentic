@@ -14,6 +14,7 @@ from typing import Any
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.event.envelope import EventEnvelope
 from audiagentic.foundation.logging.redaction import is_bulk_key, is_sensitive_key
+from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
 # Sensitive-key matching delegated to foundation/logging/redaction.py.
@@ -444,4 +445,3 @@ def _now_iso() -> str:
 def _loads_json(text: str) -> Any:
     import json as _json
     return _json.loads(text)
-from audiagentic.foundation.time import now_iso_z

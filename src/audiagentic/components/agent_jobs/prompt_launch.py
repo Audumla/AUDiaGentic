@@ -37,6 +37,87 @@ from audiagentic.foundation.templates import has_placeholders
 from audiagentic.foundation.time import now_iso_z
 
 
+def _canonical_work_context_id(request: dict[str, Any]) -> str | None:
+    """Return the caller-owned Context for a migrated prompt launch.
+
+    A Context is deliberately required here.  Creating one implicitly from a
+    legacy prompt request would give replay a new Context and would violate
+    the canonical Context/Work identity contract.
+    """
+    value = request.get("context-id") or request.get("context_id")
+    return value if isinstance(value, str) and value else None
+
+
+def _submit_canonical_work(
+    project_root: Path,
+    request: dict[str, Any],
+    *,
+    now_fn=None,
+) -> dict[str, Any] | None:
+    """Submit a Context-backed prompt through Agents Work/Gateway.
+
+    ``None`` means this request is still on the compatibility path.  Once a
+    Context is supplied, this function is the only writer: prompt_launch does
+    not create a legacy job, launch artifact, subject manifest, or timeline.
+    """
+    context_id = _canonical_work_context_id(request)
+    if context_id is None:
+        return None
+
+    from audiagentic.components.agents.gateway.client import get_gateway_client
+    from audiagentic.components.agents.work.ingress import deterministic_work_id
+
+    provider_id, resolved_model, resolved_alias = _resolve_agent_provider_model(
+        project_root, request
+    )
+    selection = resolve_launch_model(
+        project_root,
+        provider_id=provider_id,
+        model_id=resolved_model or request["source"].get("model-id"),
+        model_alias=resolved_alias or request["source"].get("model-alias"),
+    )
+    work_id = deterministic_work_id(
+        source="prompt-launch",
+        delivery_id=f"{context_id}:{request['prompt-id']}",
+    )
+    prepared = _render_launch_prompt(
+        project_root,
+        request,
+        job_id=work_id,
+        provider_id=provider_id,
+        model_id=selection.get("model-id"),
+    )
+    source = prepared.get("source") if isinstance(prepared.get("source"), dict) else {}
+    provenance = {
+        "prompt-id": prepared["prompt-id"],
+        "surface": source.get("surface"),
+        "session-id": source.get("session-id"),
+        "provider-id": provider_id,
+        "model-id": selection.get("model-id"),
+        "model-alias": selection.get("model-alias"),
+        "tag": prepared["tag"],
+        "target": prepared["target"],
+        "workflow-profile": prepared["workflow-profile"],
+    }
+    record = get_gateway_client(project_root).submit_agent_work(
+        project_root,
+        context_id,
+        {
+            "message_id": f"prompt:{prepared['prompt-id']}",
+            "text": prepared.get("prompt-body", ""),
+            "inputs": {"prompt-provenance": provenance},
+            "created_at": (now_fn or now_iso_z)(),
+        },
+        work_id=work_id,
+    )
+    return {
+        "status": "submitted",
+        "work-id": record["work_id"],
+        "context-id": record["context_id"],
+        "work": record,
+    }
+
+
 def load_project_config(project_root: Path) -> dict[str, Any]:
     path = project_root / ".audiagentic" / "config" / "project.yaml"
     return load_yaml_file(path)
@@ -380,9 +461,29 @@ def launch_prompt_request(
     # ``adhoc`` is the generic fallback when no review action is registered;
     # it must never accidentally enter the review pipeline.
     if review_tag != "adhoc" and request["tag"] == review_tag:
-        from audiagentic.components.agent_jobs.review_launch import launch_review_request
+        parent_work_id = request.get("parent-work-id") or request.get("work-id")
+        if not isinstance(parent_work_id, str) or not parent_work_id:
+            raise AudiaGenticError(
+                code="VAL-AGW-REVIEW-001",
+                kind="agents",
+                message="review prompts must be submitted as child Work with a parent work-id",
+            )
+        from audiagentic.components.agents.work.work_api import submit_review
 
-        return {"status": "ok", **launch_review_request(project_root, request, now_fn=now_fn)}
+        source = request.get("source") if isinstance(request.get("source"), dict) else {}
+        reviewer_key = ":".join(
+            str(source.get(key) or "") for key in ("provider-id", "surface", "session-id")
+        ).strip(":")
+        child = submit_review(
+            project_root,
+            parent_work_id,
+            review_key=f"{request['prompt-id']}:{reviewer_key or 'default'}",
+            prompt=str(request.get("prompt-body") or "Review the parent Work."),
+        )
+        return {"status": "submitted", "work-id": child["work_id"], "parent-work-id": parent_work_id}
+    canonical = _submit_canonical_work(project_root, request, now_fn=now_fn)
+    if canonical is not None:
+        return canonical
     if request.get("existing-job-id") or request["target"]["kind"] == "job":
         job = _resume_job_from_request(project_root, request, now_fn=now_fn)
         return {"status": "resumed", "job-id": job["job-id"], "job": job}

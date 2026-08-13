@@ -19,6 +19,7 @@ def submit_work(
     *,
     work_id: str | None = None,
     parent_work_id: str | None = None,
+    activate: bool = True,
 ) -> AgentWorkRecord:
     context = get_context(project_root, context_id)
     if context.state.value != "open":
@@ -47,7 +48,7 @@ def submit_work(
         }:
             return work
     append_work_input(project_root, work.work_id, message)
-    if work.state != AgentWorkState.SUBMITTED:
+    if not activate or work.state != AgentWorkState.SUBMITTED:
         return work
     return store.transition(project_root, work.work_id, AgentWorkState.ACTIVE, expected_revision=work.revision)
 
@@ -74,8 +75,28 @@ def submit_child_work(
     message: WorkInputMessage,
     *,
     work_id: str | None = None,
+    delegation_target_agent_id: str | None = None,
+    delegation_timeout_seconds: float | None = None,
 ) -> AgentWorkRecord:
     parent = get_work(project_root, parent_work_id)
+    depth = 0
+    cursor = parent
+    while cursor.parent_work_id is not None:
+        depth += 1
+        cursor = get_work(project_root, cursor.parent_work_id)
+    if depth >= 8:
+        raise ValueError("delegation depth limit exceeded")
+    if delegation_target_agent_id is not None:
+        message = WorkInputMessage(
+            message.message_id,
+            message.text,
+            {
+                **dict(message.inputs),
+                "delegation-target-agent-id": delegation_target_agent_id,
+                **({"delegation-timeout-seconds": delegation_timeout_seconds} if delegation_timeout_seconds is not None else {}),
+            },
+            message.created_at,
+        )
     return submit_work(
         project_root,
         parent.context_id,
@@ -98,7 +119,11 @@ def cancel_work(project_root: Path, work_id: str) -> AgentWorkRecord:
     work = get_work(project_root, work_id)
     if work.state in {AgentWorkState.COMPLETED, AgentWorkState.FAILED, AgentWorkState.CANCELLED, AgentWorkState.REJECTED}:
         return work
-    return AgentWorkStore().transition(project_root, work_id, AgentWorkState.CANCELLED, expected_revision=work.revision)
+    result = AgentWorkStore().transition(project_root, work_id, AgentWorkState.CANCELLED, expected_revision=work.revision)
+    for child in child_work(project_root, work_id):
+        if child.state not in {AgentWorkState.COMPLETED, AgentWorkState.FAILED, AgentWorkState.CANCELLED, AgentWorkState.REJECTED}:
+            cancel_work(project_root, child.work_id)
+    return result
 
 
 def read_work_output(project_root: Path, work_id: str) -> dict:

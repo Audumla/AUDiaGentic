@@ -15,8 +15,9 @@ from audiagentic.components.providers.providers_api import read_provider_capabil
 def test_role_manifest_fingerprint_is_independent_of_role_order() -> None:
     vocabulary = CapabilityVocabulary({CapabilityRequirementId("files"): LaunchContribution(arguments=("--files",))})
     roles = (Role("b", required_capabilities=(CapabilityRequirementId("files"),)), Role("a"))
-    first = resolve_role_manifest(roles, vocabulary, object())
-    second = resolve_role_manifest(tuple(reversed(roles)), vocabulary, object())
+    evidence = {"facts": ({"capability_id": "files", "support_assessment": "supported", "source": "test"},)}
+    first = resolve_role_manifest(roles, vocabulary, evidence)
+    second = resolve_role_manifest(tuple(reversed(roles)), vocabulary, evidence)
     assert first.fingerprint == second.fingerprint
 
 

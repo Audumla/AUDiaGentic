@@ -117,10 +117,32 @@ class InProcessGatewayApplication:
     def submit_agent_work(self, project_root: Path, context_id: str, message: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
         from audiagentic.components.agents.context.service import get_context
         from audiagentic.components.agents.work.contracts import WorkInputMessage
+        from audiagentic.components.agents.work.ingress import deterministic_work_id
         from audiagentic.components.agents.work.service import link_work_execution, submit_work
 
-        work = submit_work(project_root, context_id, WorkInputMessage(**message), **kwargs)
+        requested_work_id = kwargs.pop("work_id", None)
+        work_id = requested_work_id or deterministic_work_id(
+            source="work-message",
+            delivery_id=f"{context_id}:{message['message_id']}",
+        )
+        work = submit_work(
+            project_root,
+            context_id,
+            WorkInputMessage(**message),
+            activate=False,
+            work_id=work_id,
+            **kwargs,
+        )
         if work.active_execution_id:
+            if work.state.value == "submitted":
+                from audiagentic.components.agents.work.contracts import AgentWorkState
+                from audiagentic.components.agents.work.store import AgentWorkStore
+                work = AgentWorkStore().transition(
+                    project_root,
+                    work.work_id,
+                    AgentWorkState.ACTIVE,
+                    expected_revision=work.revision,
+                )
             return work.to_mapping()
         context = get_context(project_root, context_id)
         execution = self.submit_execution_request(
@@ -130,15 +152,36 @@ class InProcessGatewayApplication:
             metadata={
                 "context-id": context_id,
                 "work-id": work.work_id,
+                "message-id": message["message_id"],
+                "idempotency_key": f"agent-work:{work.work_id}:message:{message['message_id']}",
                 "agent-config-fingerprint": context.composition.fingerprint,
             },
         )
-        return link_work_execution(
+        linked = link_work_execution(
             project_root,
             work.work_id,
             execution["request-id"],
             expected_revision=work.revision,
+        )
+        from audiagentic.components.agents.work.contracts import AgentWorkState
+        from audiagentic.components.agents.work.store import AgentWorkStore
+        return AgentWorkStore().transition(
+            project_root,
+            work.work_id,
+            AgentWorkState.ACTIVE,
+            expected_revision=linked.revision,
         ).to_mapping()
+
+    def submit_agent_work_child(self, project_root: Path, parent_work_id: str, message: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        from audiagentic.components.agents.work.service import get_work
+        parent = get_work(project_root, parent_work_id)
+        return self.submit_agent_work(
+            project_root,
+            parent.context_id,
+            message,
+            work_id=kwargs.get("work_id"),
+            parent_work_id=parent_work_id,
+        )
 
     def get_agent_work(self, project_root: Path, work_id: str) -> dict[str, Any]:
         from audiagentic.components.agents.work.service import get_work

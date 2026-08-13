@@ -8,12 +8,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.agent_jobs import control as job_control
-from audiagentic.components.agent_jobs import jobs_store as store
-from audiagentic.components.agent_jobs.profiles import load_profile
-from audiagentic.components.agent_jobs.records import build_job_record
-from audiagentic.components.agent_jobs.stages import execute_stage
-from audiagentic.components.agent_jobs.state_machine import transition_and_persist
 from audiagentic.components.providers.providers_api import list_canonical_provider_ids
 from audiagentic.foundation.contracts.canonical_ids import validate_ids
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -77,6 +71,8 @@ def _should_stop_stage_loop(output: dict[str, Any]) -> bool:
 
 
 def _apply_pending_control(project_root: Path, job_id: str) -> dict[str, Any] | None:
+    from audiagentic.components.agent_jobs import control as job_control
+
     return job_control.apply_pending_job_control(project_root, job_id)
 
 
@@ -98,6 +94,7 @@ def run_packet(
     project_id: str,
     provider_id: str,
     workflow_profile: str,
+    context_id: str | None = None,
     job_id: str | None = None,
     overrides: dict[str, Any] | None = None,
     stage_executor: StageExecutor | None = None,
@@ -105,6 +102,13 @@ def run_packet(
     provider_adapter: ProviderAdapter | None = None,
     now_fn: Callable[[], str] | None = None,
 ) -> dict[str, Any]:
+    """Run or submit a packet.
+
+    A Work context selects the canonical path: packet admission is delegated
+    to the Agents Gateway and no legacy job record or state-machine transition
+    is created.  The callback-driven path remains temporarily available for
+    the legacy stage contract while its callers migrate to Work.
+    """
     if not provider_id:
         raise AudiaGenticError(
             code="VAL-RUN-002",
@@ -113,6 +117,41 @@ def run_packet(
             details={},
         )
     _validate_provider_id(provider_id)
+
+    if context_id is not None:
+        if stage_executor is not None or stage_handler is not None or provider_adapter is not None:
+            raise AudiaGenticError(
+                code="VAL-RUN-003",
+                kind="agent-jobs",
+                message="canonical packet Work cannot use local stage or provider callbacks",
+                details={"packet-id": packet_id, "context-id": context_id},
+            )
+        from audiagentic.components.agents.work.work_api import submit_packet
+
+        return submit_packet(
+            project_root,
+            context_id=context_id,
+            packet_id=packet_id,
+            text=(
+                f"Execute packet {packet_id} for project {project_id} "
+                f"using provider {provider_id} and workflow profile {workflow_profile}."
+            ),
+            metadata={
+                "project-id": project_id,
+                "provider-id": provider_id,
+                "workflow-profile": workflow_profile,
+                **(overrides or {}),
+            },
+        )
+
+    # The no-Work callback path is temporary compatibility. Keep all of its
+    # persistence and state-machine dependencies out of canonical Work import
+    # and admission paths.
+    from audiagentic.components.agent_jobs import jobs_store as store
+    from audiagentic.components.agent_jobs.profiles import load_profile
+    from audiagentic.components.agent_jobs.records import build_job_record
+    from audiagentic.components.agent_jobs.stages import execute_stage
+    from audiagentic.components.agent_jobs.state_machine import transition_and_persist
 
     job_id = job_id or generate_job_id(project_root)
     timestamp = (now_fn or now_iso_z)()

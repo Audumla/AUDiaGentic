@@ -16,7 +16,7 @@ from audiagentic.foundation.event import get_bus
 # Topic registration / conformance
 # ---------------------------------------------------------------------------
 
-class TestInterruptedTopicRegistration:
+class TestInterruptedTopicRegistrationCanonical:
     """C11: agents.execution.interrupted is registered and conforms."""
 
     def test_constant_value(self):
@@ -345,27 +345,13 @@ class TestRecoveryInterruptedExactlyOnce:
 
 
 # ---------------------------------------------------------------------------
-# Agent-jobs mapping: interrupted -> failed
+# Gateway topic registration: canonical Work owns outcome lifecycle.
 # ---------------------------------------------------------------------------
 
-class TestAgentJobsInterruptedMapping:
-    """C11: agent-jobs maps interrupted gateway outcome to failed job state."""
-
-    def test_interrupted_in_gw_outcome_topics(self):
-        from audiagentic.components.agent_jobs.event_observer import (
-            GW_OUTCOME_TOPICS,
-        )
-
-        assert EXECUTION_INTERRUPTED_TOPIC in GW_OUTCOME_TOPICS
-
-    def test_interrupted_maps_to_failed(self):
-        from audiagentic.components.agent_jobs.event_observer import EventObserver
-
-        mapping = EventObserver.GW_OUTCOME_MAP
-        assert mapping.get(EXECUTION_INTERRUPTED_TOPIC) == "failed"
+class TestInterruptedTopicRegistration:
+    """C11: the canonical Gateway topic remains registered."""
 
     def test_interrupted_topic_registered_for_conformance(self):
-        """The agent-jobs mirror constant is a registered topic."""
         import audiagentic.foundation.event.topic_registry as mod
         from audiagentic.foundation.event.topic_registry import (
             get_topic_registry,

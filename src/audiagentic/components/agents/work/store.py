@@ -16,6 +16,9 @@ from audiagentic.components.agents.work.contracts import (
 )
 from audiagentic.foundation.io import atomic_write_json, load_json_file
 from audiagentic.foundation.system.process import StartupLock
+from audiagentic.foundation.workflow import load_workflow, transition_allowed
+
+_WORKFLOW = load_workflow(Path(__file__).parent.parent / "workflows.yaml", "agent-work")
 
 
 class AgentWorkStore:
@@ -46,8 +49,7 @@ class AgentWorkStore:
             current = _from_mapping(load_json_file(path))
             if current.revision != expected_revision:
                 raise RuntimeError("work revision conflict")
-            allowed = {AgentWorkState.SUBMITTED: {AgentWorkState.ACTIVE, AgentWorkState.REJECTED, AgentWorkState.CANCELLED, AgentWorkState.FAILED}, AgentWorkState.ACTIVE: {AgentWorkState.WAITING, AgentWorkState.COMPLETED, AgentWorkState.FAILED, AgentWorkState.CANCELLED}, AgentWorkState.WAITING: {AgentWorkState.ACTIVE, AgentWorkState.FAILED, AgentWorkState.CANCELLED}}
-            if target not in allowed.get(current.state, set()):
+            if not transition_allowed(_WORKFLOW, current.state.value, target.value):
                 raise ValueError("illegal work transition")
             updated = AgentWorkRecord(current.work_id, current.context_id, target, current.wait_reason, active_execution_id or current.active_execution_id, current.parent_work_id, current.current_interaction_id, current.revision + 1, current.created_at, _now())
             atomic_write_json(path, updated.to_mapping())

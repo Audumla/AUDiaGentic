@@ -117,11 +117,11 @@ def test_set_config_never_adds_implementation_specific_tools() -> None:
     gateway-specific tool (e.g. a hardcoded automatic-only setter) exists
     on the management server -- get_config/set_config are the only
     settable surface."""
-    manage_mcp_path = (
+    admin_mcp_path = (
         Path(__file__).resolve().parents[3]
-        / "src" / "audiagentic" / "components" / "agents" / "mcp" / "manage_mcp.py"
+        / "src" / "audiagentic" / "components" / "agents" / "mcp" / "admin_mcp.py"
     )
-    source = manage_mcp_path.read_text(encoding="utf-8")
+    source = admin_mcp_path.read_text(encoding="utf-8")
     forbidden_patterns = [
         "def agent_gateway_set_automatic",
         "def agent_gateway_set_standalone",

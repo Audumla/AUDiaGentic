@@ -4,7 +4,7 @@ shutdown-gate, or process-kill policy (SH10 Slice C).
 Module names corrected for the post-SH18 module layout -- the fat
 ``agents_gateway_mcp.py``/``agents_gateway_events.py``/``agents_gateway_lifecycle.py``
 this item originally named no longer exist. The real modules are
-``mcp/gateway_mcp.py``, ``mcp/manage_mcp.py``, ``gateway/events.py``
+``mcp/gateway_mcp.py``, ``mcp/admin_mcp.py``, ``gateway/events.py``
 (adapters), and ``gateway/service/lifecycle.py`` (the lifecycle authority
 itself, checked by the inverse assertion below).
 """
@@ -17,7 +17,7 @@ SRC = Path(__file__).resolve().parents[3] / "src" / "audiagentic"
 ADAPTER_FILES = [
     "commands/gateway.py",
     "components/agents/mcp/gateway_mcp.py",
-    "components/agents/mcp/manage_mcp.py",
+    "components/agents/mcp/admin_mcp.py",
     "components/agents/gateway/events.py",
 ]
 
