@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.components.providers.adapters.gpt_auto import runtime as runtime_module
 from audiagentic.components.providers.adapters.gpt_auto.cdp.bridge import BridgeEvent
 from audiagentic.components.providers.adapters.gpt_auto.chat import ChatState, PersistentChat
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
@@ -13,7 +13,8 @@ from audiagentic.components.providers.adapters.gpt_auto.runtime import (
     GptAutoProviderRuntime,
     ProviderState,
 )
-from audiagentic.components.providers.adapters.gpt_auto import runtime as runtime_module
+from audiagentic.components.providers.adapters.gpt_auto.status.status_page import STATUS_PAGE_URL
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 from .test_greenfield_config_urls import valid_config
 
@@ -95,15 +96,23 @@ class _OpenRuntime:
 async def test_fast_open_claims_page_before_ready_and_rejects_second_session() -> None:
     runtime = _OpenRuntime()
     first = PersistentChat(
-        ag_session_id="session-a", project_name="project", project_url=None,
-        runtime=runtime, config=runtime.config, binding_sink=lambda _update: None,
+        ag_session_id="session-a",
+        project_name="project",
+        project_url=None,
+        runtime=runtime,
+        config=runtime.config,
+        binding_sink=lambda _update: None,
     )
     await first.open()
     assert first.page_handle == "page-1"
 
     second = PersistentChat(
-        ag_session_id="session-b", project_name="project", project_url=None,
-        runtime=runtime, config=runtime.config, binding_sink=lambda _update: None,
+        ag_session_id="session-b",
+        project_name="project",
+        project_url=None,
+        runtime=runtime,
+        config=runtime.config,
+        binding_sink=lambda _update: None,
     )
     with pytest.raises(RuntimeError, match="already owned"):
         await second.open()
@@ -189,6 +198,69 @@ async def test_chat_recovery_retains_page_after_recoverable_turn_failure() -> No
     assert retained is True
     assert chat.state.value == "ready"
     assert chat.page_handle == "page-1"
+
+
+@pytest.mark.asyncio
+async def test_chat_readiness_requires_two_stable_quiescent_snapshots() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    values = iter(
+        [
+            {
+                "url": "https://chatgpt.com/g/g-p-project/project",
+                "composerPresent": True,
+                "composerEditable": True,
+                "generating": True,
+                "userCount": 1,
+                "assistantCount": 0,
+                "domSignals": {"stop-control": True},
+            },
+            {
+                "url": "https://chatgpt.com/g/g-p-project/project",
+                "composerPresent": True,
+                "composerEditable": True,
+                "generating": False,
+                "userCount": 1,
+                "assistantCount": 1,
+                "latestAssistantId": "a1",
+                "latestAssistantText": "done",
+                "domSignals": {},
+            },
+            {
+                "url": "https://chatgpt.com/g/g-p-project/project",
+                "composerPresent": True,
+                "composerEditable": True,
+                "generating": False,
+                "userCount": 1,
+                "assistantCount": 1,
+                "latestAssistantId": "a1",
+                "latestAssistantText": "done",
+                "domSignals": {},
+            },
+        ]
+    )
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle)
+
+        async def snapshot(self, _page, *, signals=None):
+            return next(values)
+
+    runtime = SimpleNamespace(gpt_browser=_Browser(), bridge=SimpleNamespace())
+    chat = PersistentChat(
+        ag_session_id="session-quiescent",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+    )
+    chat.page_handle = "page-1"
+    chat.state = ChatState.RECOVERING
+
+    result = await chat.wait_quiescent(allow_recovering=True)
+
+    assert result.latest_assistant_text == "done"
 
 
 @pytest.mark.asyncio
@@ -296,6 +368,52 @@ async def test_recovery_invalidates_bridge_local_handles_before_reconciliation(m
     assert chat.reconciled == [{"pageHandle": "page-1", "targetId": "new-target"}]
     assert runtime._page_owners == {}
     assert runtime._dedicated_window_anchor is None
+
+
+def test_dedicated_window_ownership_rejects_duplicate_url_in_manual_window() -> None:
+    runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
+    runtime._dedicated_window_id = 41
+
+    assert runtime.page_belongs_to_dedicated_window({"windowId": 41})
+    assert not runtime.page_belongs_to_dedicated_window({"windowId": 99})
+
+
+@pytest.mark.asyncio
+async def test_anchor_rediscovery_uses_immutable_url_not_mutable_title(monkeypatch) -> None:
+    runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
+    runtime.state = ProviderState.AVAILABLE
+
+    class _Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages"
+            return [
+                {
+                    "pageHandle": "manual",
+                    "url": "data:text/html,other",
+                    "title": "GPT-auto",
+                    "windowId": 1,
+                },
+                {
+                    "pageHandle": "anchor",
+                    "url": STATUS_PAGE_URL,
+                    "title": "Agent gateway · available",
+                    "windowId": 7,
+                },
+            ]
+
+    runtime._bridge = _Bridge()  # type: ignore[assignment]
+
+    async def available():
+        return None
+
+    async def refreshed():
+        return None
+
+    monkeypatch.setattr(runtime, "ensure_available", available)
+    monkeypatch.setattr(runtime, "refresh_status_page", refreshed)
+
+    assert await runtime.ensure_dedicated_window_anchor() == "anchor"
+    assert runtime._dedicated_window_id == 7
 
 
 async def _done() -> None:

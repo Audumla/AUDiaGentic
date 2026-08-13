@@ -23,9 +23,9 @@ config file so it never collides with the launcher root's `composition.yaml`.
 
 from __future__ import annotations
 
-from pathlib import Path
 import asyncio
 import threading
+from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.composition import (
@@ -151,7 +151,11 @@ def _shutdown_session_runtime(_owner: object) -> None:
 
     runtime = peek_session_runtime()
     if runtime is not None:
-        runtime.shutdown()
+        from audiagentic.components.providers.adapters.gpt_auto.runtime_registry import (
+            shutdown_all_runtimes,
+        )
+
+        runtime.shutdown(before_loop_stop=shutdown_all_runtimes)
         reset_session_runtime()
 
 

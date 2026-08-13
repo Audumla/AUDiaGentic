@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 class TurnState(StrEnum):
     PREPARING = "preparing"
     SUBMITTING = "submitting"
+    SIDE_EFFECT_ATTEMPTED = "side-effect-attempted"
     SUBMITTED = "submitted"
     AWAITING_RESPONSE = "awaiting-response"
     GENERATING = "generating"
@@ -50,7 +51,8 @@ _ENGINE = TransitionEngine(
     TransitionConfig(
         transitions={
             "preparing": frozenset({"submitting", "cancelled", "failed"}),
-            "submitting": frozenset({"submitted", "cancelled", "failed", "timed-out"}),
+            "submitting": frozenset({"side-effect-attempted", "cancelled", "failed", "timed-out"}),
+            "side-effect-attempted": frozenset({"submitted", "cancelled", "failed", "timed-out"}),
             "submitted": frozenset(
                 {"awaiting-response", "generating", "complete", "cancelled", "failed", "timed-out"}
             ),
@@ -72,6 +74,7 @@ class GptAutoTurn:
         self.sink = sink
         self.state = TurnState.PREPARING
         self.submission_confirmed = False
+        self.side_effect_attempted = False
         self.cancel_event = asyncio.Event()
         self._stop_task: asyncio.Task[None] | None = None
         self._sequence = 0
@@ -108,10 +111,18 @@ class GptAutoTurn:
             if not _ENGINE.is_terminal(self.state.value):
                 self._move(TurnState.CANCELLED)
             return self._result("cancelled")
-        except Exception:
+        except Exception as exc:
             if not _ENGINE.is_terminal(self.state.value):
                 self._move(TurnState.FAILED)
-            self._set_chat_state(ChatState.FAILED)
+            if self.chat.state not in {ChatState.FAILED, ChatState.CLOSED}:
+                self._set_chat_state(ChatState.FAILED)
+            if self.side_effect_attempted and not isinstance(exc, AudiaGenticError):
+                raise AudiaGenticError(
+                    code="EXT-GPTAUTO-003",
+                    kind="providers",
+                    message="gpt-auto lost deterministic observation after submission was attempted",
+                    details={"turn-id": self.request.turn_id, "submission-ambiguous": True},
+                ) from exc
             raise
         finally:
             if self._stop_task is not None:
@@ -141,7 +152,6 @@ class GptAutoTurn:
             # submission into a success.
             await self._capture_provider_identity_after_ambiguous_submission()
             self._move(TurnState.TIMED_OUT)
-            self._set_chat_state(ChatState.FAILED)
             raise AudiaGenticError(
                 code="EXT-GPTAUTO-003",
                 kind="providers",
@@ -183,16 +193,20 @@ class GptAutoTurn:
         if self.submission_confirmed or self.state is not TurnState.SUBMITTING:
             raise RuntimeError("prompt submission is no longer legal")
         try:
+            self.side_effect_attempted = True
+            self._move(TurnState.SIDE_EFFECT_ATTEMPTED)
             browser = getattr(self.chat.runtime, "gpt_browser", None)
             if browser is not None:
                 page = await browser.page_by_handle(self.chat.page_handle)
                 result = await browser.submit(
-                    page, self.request.body,
+                    page,
+                    self.request.body,
                     timeout=self.chat.config.turn.submission_timeout_seconds,
                 )
             else:
                 result = await self.chat.runtime.bridge.call(
-                    "submit_prompt", {"pageHandle": self.chat.page_handle, "text": self.request.body},
+                    "submit_prompt",
+                    {"pageHandle": self.chat.page_handle, "text": self.request.body},
                     timeout=self.chat.config.turn.submission_timeout_seconds,
                 )
         except TimeoutError as exc:
@@ -213,15 +227,22 @@ class GptAutoTurn:
 
     async def _await_submission_proof(self, baseline: ChatSnapshot) -> ChatSnapshot | None:
         deadline = (
-            asyncio.get_running_loop().time()
-            + self.chat.config.turn.submission_timeout_seconds
+            asyncio.get_running_loop().time() + self.chat.config.turn.submission_timeout_seconds
         )
         expected = _normal(self.request.body)
         while asyncio.get_running_loop().time() < deadline:
             if self.cancel_event.is_set():
                 self._move(TurnState.CANCELLED)
                 return None
-            snap = await self.chat.snapshot()
+            try:
+                snap = await self.chat.snapshot()
+            except Exception:  # noqa: BLE001 - reconcile after attempted side effect
+                logger.info(
+                    "gpt-auto submission proof observation interrupted; awaiting same conversation",
+                    extra={"turn-id": self.request.turn_id},
+                )
+                await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
+                continue
             if snap.user_count > baseline.user_count and _matches(
                 expected, _normal(snap.latest_user_text or "")
             ):
@@ -246,7 +267,15 @@ class GptAutoTurn:
                 await asyncio.gather(self._stop_task, return_exceptions=True)
                 self._move(TurnState.CANCELLED)
                 return None
-            current = await self.chat.snapshot()
+            try:
+                current = await self.chat.snapshot()
+            except Exception:  # noqa: BLE001 - never re-submit after an attempted send
+                logger.info(
+                    "gpt-auto response observation interrupted; awaiting conversation recovery",
+                    extra={"turn-id": self.request.turn_id},
+                )
+                await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
+                continue
             now = loop.time()
             facts = _facts(baseline, previous, current)
             failed = self.chat.config.workflow.policy("response-failed").evaluate(facts)
@@ -255,7 +284,6 @@ class GptAutoTurn:
                     "gpt-auto response failure policy matched",
                     extra={"turn-id": self.request.turn_id, "evidence": sorted(failed.matched)},
                 )
-                self.chat.state = ChatState.FAILED
                 raise AudiaGenticError(
                     code="EXT-GPTAUTO-003",
                     kind="providers",
@@ -307,14 +335,17 @@ class GptAutoTurn:
                     )
                 elif (
                     stable_since is not None
-                    and now - stable_since
-                    >= self.chat.config.turn.response_stability_seconds
+                    and now - stable_since >= self.chat.config.turn.response_stability_seconds
                 ):
-                    verify = await self.chat.snapshot()
+                    try:
+                        verify = await self.chat.snapshot()
+                    except Exception:  # noqa: BLE001 - verification resumes on next poll
+                        await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
+                        continue
                     verify_facts = _facts(baseline, current, verify)
-                    verified = self.chat.config.workflow.policy(
-                        "response-complete"
-                    ).evaluate(verify_facts)
+                    verified = self.chat.config.workflow.policy("response-complete").evaluate(
+                        verify_facts
+                    )
                     if verified.satisfied and verify.latest_assistant_text == stable_text:
                         assert stable_text is not None
                         logger.info(
@@ -340,7 +371,10 @@ class GptAutoTurn:
                 and now - last_activity_at >= timers.response_stall_timeout_seconds
             ):
                 self._raise_response_timeout("response-stall-timeout")
-            if timers.response_timeout_seconds and now - started_at >= timers.response_timeout_seconds:
+            if (
+                timers.response_timeout_seconds
+                and now - started_at >= timers.response_timeout_seconds
+            ):
                 self._raise_response_timeout("response-total-timeout")
             previous = current
             previous_fingerprint = fingerprint
@@ -348,7 +382,6 @@ class GptAutoTurn:
 
     def _raise_response_timeout(self, policy: str) -> None:
         self._move(TurnState.TIMED_OUT)
-        self._set_chat_state(ChatState.FAILED)
         raise AudiaGenticError(
             code="EXT-GPTAUTO-002",
             kind="providers",
@@ -369,18 +402,34 @@ class GptAutoTurn:
             self._stop_task = asyncio.create_task(self._stop_generation_best_effort())
 
     async def _stop_generation_best_effort(self) -> None:
+        stopped = False
         try:
             browser = getattr(self.chat.runtime, "gpt_browser", None)
             if browser is not None:
                 page = await browser.page_by_handle(self.chat.page_handle)
-                await browser.stop_generation(page)
+                result = await browser.stop_generation(page)
+                stopped = bool(result.get("stopped")) if isinstance(result, dict) else bool(result)
             else:
-                await self.chat.runtime.bridge.call("stop_generation", {"pageHandle": self.chat.page_handle})
+                result = await self.chat.runtime.bridge.call(
+                    "stop_generation", {"pageHandle": self.chat.page_handle}
+                )
+                stopped = bool(result.get("stopped")) if isinstance(result, dict) else bool(result)
         except Exception:  # noqa: BLE001 - cancellation must remain best effort
             logger.debug(
                 "gpt-auto stop control could not be clicked during cancellation",
                 extra={"turn-id": self.request.turn_id},
                 exc_info=True,
+            )
+        if not self.side_effect_attempted:
+            return
+        try:
+            await self.chat.wait_quiescent()
+        except Exception:  # noqa: BLE001 - uncertainty must block the next prompt
+            if self.chat.state is ChatState.BUSY:
+                self._set_chat_state(ChatState.RECOVERING)
+            logger.warning(
+                "gpt-auto cancellation did not prove provider quiescence",
+                extra={"turn-id": self.request.turn_id, "stop-executed": stopped},
             )
 
     def _set_chat_state(self, state: ChatState) -> None:
@@ -410,7 +459,10 @@ class GptAutoTurn:
 
 
 def _normal(text: str) -> str:
-    return " ".join(text.split()).casefold()
+    # Browser text surfaces may normalize line endings and append one terminal
+    # newline.  Case, indentation, repeated spaces, and interior blank lines
+    # remain semantically significant for coding prompts.
+    return text.replace("\r\n", "\n").replace("\r", "\n").removesuffix("\n")
 
 
 def _matches(expected: str, actual: str) -> bool:

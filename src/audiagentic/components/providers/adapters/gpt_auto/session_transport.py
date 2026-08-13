@@ -93,6 +93,10 @@ class GptAutoSessionTransport:
                 return SessionControlResult(
                     ControlDisposition.ALREADY_TERMINAL, CorrelationQuality.REQUEST_SCOPED
                 )
+            if request.turn_id != self._active_turn.request.turn_id:
+                return SessionControlResult(
+                    ControlDisposition.ALREADY_TERMINAL, CorrelationQuality.REQUEST_SCOPED
+                )
             self._active_turn.cancel()
             return SessionControlResult(
                 ControlDisposition.ACCEPTED, CorrelationQuality.REQUEST_SCOPED
