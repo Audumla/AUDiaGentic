@@ -37,6 +37,8 @@ from audiagentic.foundation.system.managed_process import ProcessEvidence
 from audiagentic.foundation.transports.agent_session import (
     CorrelationQuality,
     ProviderSessionRef,
+    SessionControlAction,
+    SessionFailureDisposition,
     SessionOpenResult,
     SessionTurnResult,
 )
@@ -65,6 +67,7 @@ class FakeAgentSessionTransport:
         self.on_event_emitter: Any = None  # callable((on_event, session_id) -> None)
         self.provider_session_ref = "prov-ses-1"
         self.ag_session_id = "ag-s-fake"
+        self._turn_failure_disposition = SessionFailureDisposition.TERMINATE
 
     async def open(self) -> SessionOpenResult:
         self.opened = True
@@ -76,6 +79,9 @@ class FakeAgentSessionTransport:
 
     def is_alive(self) -> bool:
         return self.alive and not self.closed
+
+    def turn_failure_disposition(self) -> SessionFailureDisposition:
+        return self._turn_failure_disposition
 
     async def prompt(self, prompt, sink=None, **kwargs) -> SessionTurnResult:
         """Support both ACP callback and neutral SessionPrompt signatures.
@@ -169,6 +175,26 @@ class FakeAgentSessionTransport:
     async def close(self) -> None:
         self.closed = True
         self.alive = False
+
+
+class _RecoverableFailureTransport(FakeAgentSessionTransport):
+    """A provider transport whose state machine retains its live session."""
+
+    async def prompt(self, prompt, sink=None, **kwargs):
+        self._turn_failure_disposition = SessionFailureDisposition.RETAIN
+        raise AudiaGenticError(
+            code="EXT-TEST-001",
+            kind="providers",
+            message="turn failed but the provider session remains usable",
+            details={},
+        )
+
+
+class _OpenFailureTransport(FakeAgentSessionTransport):
+    async def open(self) -> SessionOpenResult:
+        self.opened = True
+        self.alive = True
+        raise RuntimeError("provider open failed")
 
 
 def _build_fake_surface() -> Any:
@@ -437,6 +463,33 @@ def test_open_failure_cleans_partial_runtime(tmp_path):
         runtime.shutdown()
 
 
+def test_transport_open_failure_is_closed_before_error_escapes(tmp_path):
+    transport = _OpenFailureTransport()
+
+    def prepare_fn(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
+        transport.ag_session_id = kwargs["ag_session_id"]
+        return _build_fake_prepared(transport)
+
+    runtime = SessionRuntime(
+        clock=_Clock(),
+        reap_interval_seconds=60,
+        provider_prepare_fn=prepare_fn,
+    )
+    try:
+        with pytest.raises(RuntimeError, match="provider open failed"):
+            runtime.open_session(
+                tmp_path,
+                execution_profile_id="profile-1",
+                provider_id="opencode",
+                model_id="m1",
+                surface_hint=None,
+            )
+        assert transport.closed is True
+        assert runtime.live_session_ids() == []
+    finally:
+        runtime.shutdown()
+
+
 def test_open_prompt_close_lifecycle(rig):
     runtime, clock, transports, tmp_path = rig
     record = _open(runtime, tmp_path)
@@ -462,12 +515,57 @@ def test_open_prompt_close_lifecycle(rig):
     assert runtime.live_session_ids() == []
 
 
+def test_recoverable_turn_failure_retains_live_session(tmp_path):
+    """A provider recovery decision must not close its browser/session handle."""
+    clock = _Clock()
+    transport = _RecoverableFailureTransport()
+
+    def prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
+        transport.ag_session_id = kwargs["ag_session_id"]
+        return _build_fake_prepared(transport)
+
+    runtime = SessionRuntime(
+        clock=clock,
+        reap_interval_seconds=0.05,
+        provider_prepare_fn=prepare,
+    )
+    try:
+        record = _open(runtime, tmp_path)
+        session_id = record["session-id"]
+        with pytest.raises(AudiaGenticError, match="turn failed"):
+            runtime.prompt_in_session(tmp_path, session_id, "review", request_id="req-failed")
+
+        assert transport.closed is False
+        assert runtime.live_session_ids() == [session_id]
+        stored = session_store.read_session_record(tmp_path, session_id)
+        assert stored["state"] == "active"
+        assert stored.get("close-reason") is None
+    finally:
+        if runtime.live_session_ids():
+            runtime.close_session(tmp_path, runtime.live_session_ids()[0])
+        runtime.shutdown()
+
+
 def test_close_is_idempotent(rig):
     runtime, clock, transports, tmp_path = rig
     record = _open(runtime, tmp_path)
     runtime.close_session(tmp_path, record["session-id"])
     again = runtime.close_session(tmp_path, record["session-id"])
     assert again["state"] == "closed"
+
+
+def test_close_session_control_owns_durable_gateway_transition(rig):
+    runtime, clock, transports, tmp_path = rig
+    record = _open(runtime, tmp_path)
+    result = runtime.control_session(
+        record["session-id"],
+        turn_id=None,
+        action=SessionControlAction.CLOSE_SESSION,
+        control_id="ctl-close",
+    )
+    assert result["disposition"] == "accepted"
+    assert runtime.live_session_ids() == []
+    assert session_store.read_session_record(tmp_path, record["session-id"])["state"] == "closed"
 
 
 def test_prompt_on_unknown_session_raises(rig):

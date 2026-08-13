@@ -1,0 +1,71 @@
+from __future__ import annotations
+
+from audiagentic.components.providers.adapters.gpt_auto.snapshot import (
+    ChatSnapshot,
+    PageObservationState,
+)
+
+
+def _snapshot(**overrides: object) -> ChatSnapshot:
+    values: dict[str, object] = {
+        "url": "https://chatgpt.com/g/g-p-test/project",
+        "composer_present": True,
+        "composer_editable": True,
+        "user_count": 0,
+        "assistant_count": 0,
+        "latest_assistant_id": None,
+        "latest_user_text": None,
+        "latest_assistant_text": None,
+        "dom_signals": frozenset(),
+        "error_present": False,
+        "generating": False,
+    }
+    values.update(overrides)
+    return ChatSnapshot(**values)  # type: ignore[arg-type]
+
+
+def test_page_observation_distinguishes_lifecycle_substates() -> None:
+    baseline = _snapshot()
+
+    assert _snapshot(url="", composer_present=False).observe().state is PageObservationState.LOADING
+    assert (
+        _snapshot(user_count=1, latest_user_text="review this").observe(baseline=baseline).state
+        is PageObservationState.SUBMITTING
+    )
+    assert (
+        _snapshot(generating=True, dom_signals=frozenset({"stop-control"})).observe(
+            baseline=baseline
+        ).state
+        is PageObservationState.GENERATING
+    )
+
+    assistant = _snapshot(
+        assistant_count=1,
+        latest_assistant_id="a1",
+        latest_assistant_text="partial review",
+    )
+    assert assistant.observe(baseline=baseline).state is PageObservationState.AWAITING_COMPLETION
+    completed = _snapshot(
+        assistant_count=1,
+        latest_assistant_id="a1",
+        latest_assistant_text="complete review",
+        dom_signals=frozenset({"completion-control"}),
+    )
+    assert completed.observe(baseline=baseline).state is PageObservationState.COMPLETED
+
+
+def test_page_observation_prioritizes_auth_and_failure_evidence() -> None:
+    assert (
+        _snapshot(dom_signals=frozenset({"auth-required"})).observe().state
+        is PageObservationState.AUTH_REQUIRED
+    )
+    assert (
+        _snapshot(error_present=True).observe().state is PageObservationState.FAILED
+    )
+
+
+def test_observation_mapping_is_sparse_but_keeps_evidence() -> None:
+    mapping = _snapshot().observe().as_mapping()
+    assert mapping["state"] == "ready"
+    assert "markers" in mapping
+

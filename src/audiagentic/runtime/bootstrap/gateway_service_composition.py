@@ -44,6 +44,7 @@ CONFIG_NAMESPACE = "gateway-service-composition"
 EXECUTION_PROFILE_REGISTRY = ServiceId("agents.execution-profile-registry")
 QUEUE_MANAGER = ServiceId("agents.gateway-queue-manager")
 GPT_AUTO_RUNTIME_OWNER = ServiceId("providers.gpt-auto-runtime-owner")
+SESSION_RUNTIME_OWNER = ServiceId("agents.gateway-session-runtime-owner")
 
 
 def _pkg_default_path() -> Path:
@@ -137,6 +138,23 @@ def _shutdown_gpt_auto_runtimes(_owner: object) -> None:
         raise failure[0]
 
 
+def _build_session_runtime_owner() -> object:
+    """Declare the gateway SessionRuntime as a process-owned dependency."""
+    return object()
+
+
+def _shutdown_session_runtime(_owner: object) -> None:
+    from audiagentic.components.agents.gateway.session.sessions import (
+        peek_session_runtime,
+        reset_session_runtime,
+    )
+
+    runtime = peek_session_runtime()
+    if runtime is not None:
+        runtime.shutdown()
+        reset_session_runtime()
+
+
 def builtin_contributions(gateway_profiles_config: Path | None) -> tuple[ServiceContribution, ...]:
     """Every implementation this process can be configured to use."""
     return (
@@ -157,6 +175,12 @@ def builtin_contributions(gateway_profiles_config: Path | None) -> tuple[Service
             implementation_id=ImplementationId("providers.shared-gpt-auto-runtime"),
             factory=_build_gpt_auto_runtime_owner,
             finalizer=_shutdown_gpt_auto_runtimes,
+        ),
+        ServiceContribution(
+            service_id=SESSION_RUNTIME_OWNER,
+            implementation_id=ImplementationId("agents.gateway-session-runtime"),
+            factory=_build_session_runtime_owner,
+            finalizer=_shutdown_session_runtime,
         ),
     )
 

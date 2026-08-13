@@ -25,13 +25,35 @@ from audiagentic.foundation.mcp.component_server import (
 mcp = mcp_server(__name__)
 
 
+def _sparse(value: Any) -> Any:
+    """Remove absent values from public MCP payloads without losing false/zero."""
+    if isinstance(value, dict):
+        compact: dict[str, Any] = {}
+        for key, raw in value.items():
+            cleaned = _sparse(raw)
+            if cleaned is None or cleaned == "" or cleaned == {} or cleaned == []:
+                continue
+            compact[key] = cleaned
+        return compact
+    if isinstance(value, list):
+        return [
+            cleaned
+            for item in value
+            if (cleaned := _sparse(item)) is not None
+            and cleaned != ""
+            and cleaned != {}
+            and cleaned != []
+        ]
+    return value
+
+
 def agent_list_definitions() -> list[dict[str, Any]]:
     """Internal discovery helper; configuration MCP owns the public export."""
     from audiagentic.components.agents.models.agent_definition_api import (
         list_agent_definitions,
     )
 
-    return list_agent_definitions(project_root_from_env())
+    return _sparse(list_agent_definitions(project_root_from_env()))
 
 
 @mcp.tool()
@@ -39,7 +61,7 @@ def agent_list_definitions() -> list[dict[str, Any]]:
 def agent_task_status(request_id: str) -> dict[str, Any]:
     """Return the current persisted state of a gateway request."""
     project_root = project_root_from_env()
-    return get_gateway_client(project_root).get_execution_request(project_root, request_id)
+    return _sparse(get_gateway_client(project_root).get_execution_request(project_root, request_id))
 
 
 @mcp.tool()
@@ -47,7 +69,7 @@ def agent_task_status(request_id: str) -> dict[str, Any]:
 def agent_task_cancel(request_id: str) -> dict[str, Any]:
     """Cancel a queued request, or best-effort mark a running one cancel-requested."""
     project_root = project_root_from_env()
-    return get_gateway_client(project_root).cancel_execution_request(project_root, request_id)
+    return _sparse(get_gateway_client(project_root).cancel_execution_request(project_root, request_id))
 
 
 @mcp.tool()
@@ -62,8 +84,10 @@ def agent_task_list_requests(
     earlier process — unlike queue depths, which are in-memory only.
     """
     project_root = project_root_from_env()
-    return get_gateway_client(project_root).list_execution_requests(
-        project_root, state=state, limit=limit
+    return _sparse(
+        get_gateway_client(project_root).list_execution_requests(
+            project_root, state=state, limit=limit
+        )
     )
 
 
@@ -73,7 +97,7 @@ def agent_task_gateway_overview() -> dict[str, Any]:
     """Operator-facing summary: persisted request counts by state, the 5 most
     recent failures (with redacted error), and in-process per-profile queue depths."""
     project_root = project_root_from_env()
-    return get_gateway_client(project_root).gateway_overview(project_root)
+    return _sparse(get_gateway_client(project_root).gateway_overview(project_root))
 
 
 @mcp.tool()
@@ -83,7 +107,9 @@ def agent_task_session_list(state: str | None = None) -> list[dict[str, Any]]:
     'live' flag: true when the session's agent process is held by this gateway
     process (only live sessions can accept new turns)."""
     project_root = project_root_from_env()
-    return get_gateway_client(project_root).list_execution_sessions(project_root, state=state)
+    return _sparse(
+        get_gateway_client(project_root).list_execution_sessions(project_root, state=state)
+    )
 
 
 @mcp.tool()
@@ -92,7 +118,9 @@ def agent_task_session_close(session_id: str) -> dict[str, Any]:
     """Close a live agent session (terminates its agent process). Idempotent —
     an already-closed or orphaned session returns its final record."""
     project_root = project_root_from_env()
-    return get_gateway_client(project_root).close_execution_session(project_root, session_id)
+    return _sparse(
+        get_gateway_client(project_root).close_execution_session(project_root, session_id)
+    )
 
 
 @mcp.tool()
@@ -110,13 +138,15 @@ def agent_task_session_control(
     state; callers continue to observe that through request status.
     """
     project_root = project_root_from_env()
-    return get_gateway_client(project_root).control_execution_session(
-        project_root,
-        session_id,
-        action=action,
-        control_id=control_id,
-        turn_id=turn_id,
-        payload=payload,
+    return _sparse(
+        get_gateway_client(project_root).control_execution_session(
+            project_root,
+            session_id,
+            action=action,
+            control_id=control_id,
+            turn_id=turn_id,
+            payload=payload,
+        )
     )
 
 
@@ -128,16 +158,22 @@ def agent_task_session_resume(
     identity_context_fingerprint: str | None = None,
     execution_context_fingerprint: str | None = None,
     model_id: str | None = None,
+    component_profile: str | None = None,
 ) -> dict[str, Any]:
     """Resume a validated durable provider conversation in a new session."""
     project_root = project_root_from_env()
-    return get_gateway_client(project_root).resume_execution_session(
-        project_root,
-        source_session_id,
-        control_id=control_id,
-        identity_context_fingerprint=identity_context_fingerprint,
-        execution_context_fingerprint=execution_context_fingerprint,
-        model_id=model_id,
+    kwargs: dict[str, Any] = {
+        "control_id": control_id,
+        "identity_context_fingerprint": identity_context_fingerprint,
+        "execution_context_fingerprint": execution_context_fingerprint,
+        "model_id": model_id,
+    }
+    if component_profile is not None:
+        kwargs["component_profile"] = component_profile
+    return _sparse(
+        get_gateway_client(project_root).resume_execution_session(
+            project_root, source_session_id, **kwargs
+        )
     )
 
 
@@ -162,9 +198,9 @@ def agent_task_submit(
       request-id:       unique identifier for this request
       state:            current state ("queued")
       session-id:       session identifier — auto-generated when session_keep_alive
-                        is true and no session_id is provided; omit when no session
-      metadata:         the sanitized metadata supplied on submit (or {})
-      provider-metadata: adapter-owned session metadata when available
+                        is true and no session_id is provided; omitted when absent
+      metadata:         sanitized metadata supplied on submit; omitted when empty
+      provider-metadata: adapter-owned session metadata; omitted when unavailable
 
     Immediately — poll with `agent_task_status` using the returned request-id.
     Raises RES-AGD-001 if `agent_id` is not a configured
@@ -188,13 +224,13 @@ def agent_task_submit(
         session_idle_timeout_seconds=session_idle_timeout_seconds,
         session_max_lifetime_seconds=session_max_lifetime_seconds,
     )
-    return {
+    return _sparse({
         "request-id": status.get("request-id"),
         "state": status.get("state"),
         "session-id": status.get("session-id"),
         "metadata": status.get("metadata") or {},
         "provider-metadata": status.get("provider-metadata") or {},
-    }
+    })
 
 
 def main() -> None:

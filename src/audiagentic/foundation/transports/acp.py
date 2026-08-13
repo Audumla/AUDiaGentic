@@ -49,6 +49,7 @@ from audiagentic.foundation.transports.agent_session import (
     SessionControlAction,
     SessionControlRequest,
     SessionControlResult,
+    SessionFailureDisposition,
     SessionOpenResult,
     SessionPrompt,
     SessionTurnResult,
@@ -1822,6 +1823,10 @@ class AcpAgentSessionTransport:
     def is_alive(self) -> bool:
         """True while transport is open and child has not exited."""
         return not self._closed and self._inner.is_alive()
+
+    def turn_failure_disposition(self) -> SessionFailureDisposition:
+        """ACP has no provider-local recovery after a failed turn."""
+        return SessionFailureDisposition.TERMINATE
 
 
 async def run_acp_prompt(
