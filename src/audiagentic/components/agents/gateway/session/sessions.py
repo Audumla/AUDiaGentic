@@ -37,7 +37,7 @@ import atexit
 import logging
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, cast
 
@@ -76,9 +76,9 @@ from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports.agent_session import (
     SessionControlAction,
     SessionControlRequest,
+    SessionFailureDisposition,
     SessionPrompt,
     SessionTurnResult,
-    SessionFailureDisposition,
 )
 from audiagentic.foundation.transports.session_surface import PreparedSessionTransport
 
@@ -386,7 +386,17 @@ class SessionRuntime:
             None if timeout is None else timeout + 15.0,
             extra={"session-runtime-phase": "call.begin"},
         )
-        loop = self._ensure_loop()
+        try:
+            loop = self._ensure_loop()
+        except BaseException:
+            # Public methods construct their coroutine before entering this
+            # boundary.  If admission fails synchronously (for example after
+            # shutdown), explicitly close it so Python does not report an
+            # un-awaited coroutine and no captured resources linger.
+            close = getattr(coro, "close", None)
+            if close is not None:
+                close()
+            raise
         if timeout is None:
             result = asyncio.run_coroutine_threadsafe(coro, loop).result()
             logger.info(
@@ -850,7 +860,11 @@ class SessionRuntime:
         """
         self._observer_ingress.invalidate_binding(binding_id)
 
-    def shutdown(self) -> None:
+    def shutdown(
+        self,
+        *,
+        before_loop_stop: Callable[[], Awaitable[None]] | None = None,
+    ) -> None:
         """Close every live session and stop accepting new ones. Idempotent."""
         with self._loop_lock:
             self._shutdown = True
@@ -858,11 +872,17 @@ class SessionRuntime:
         if loop is None:
             return
         try:
+
             async def _shutdown_loop() -> None:
                 await self._close_all(reason="shutdown")
                 if self._reaper_task is not None and not self._reaper_task.done():
                     self._reaper_task.cancel()
                     await asyncio.gather(self._reaper_task, return_exceptions=True)
+                if before_loop_stop is not None:
+                    # Provider transports and their CDP sockets are bound to
+                    # this loop. Finalize them after sessions are drained but
+                    # before the owning event loop is stopped.
+                    await before_loop_stop()
 
             asyncio.run_coroutine_threadsafe(_shutdown_loop(), loop).result(
                 timeout=_CLOSE_TIMEOUT_SECONDS
@@ -987,6 +1007,7 @@ class SessionRuntime:
                 execution_profile_digest=execution_profile_digest,
                 effective_capability_digest=effective_capability_digest,
             )
+
         # AS28 slice 4a: resolve provider-neutral transport via the public
         # prepare seam. No AcpLaunch / AcpSessionTransport construction here.
         prepare_kwargs = {
@@ -1011,7 +1032,10 @@ class SessionRuntime:
             "gateway open phase prepare-provider complete elapsed-ms=%.1f transport=%s",
             (time.monotonic() - prepare_started) * 1000,
             type(prepared.transport).__name__ if prepared.transport is not None else None,
-            extra={"session-runtime-phase": "open.prepare.complete", "correlation-id": correlation_id},
+            extra={
+                "session-runtime-phase": "open.prepare.complete",
+                "correlation-id": correlation_id,
+            },
         )
         if prepared.transport is None:
             raise AudiaGenticError(
@@ -1031,7 +1055,10 @@ class SessionRuntime:
         logger.info(
             "gateway open phase transport-open begin transport=%s",
             type(transport).__name__,
-            extra={"session-runtime-phase": "open.transport.begin", "correlation-id": correlation_id},
+            extra={
+                "session-runtime-phase": "open.transport.begin",
+                "correlation-id": correlation_id,
+            },
         )
         try:
             open_result = await transport.open()
@@ -1039,7 +1066,10 @@ class SessionRuntime:
             logger.exception(
                 "gateway open phase transport-open failed elapsed-ms=%.1f",
                 (time.monotonic() - transport_started) * 1000,
-                extra={"session-runtime-phase": "open.transport.failed", "correlation-id": correlation_id},
+                extra={
+                    "session-runtime-phase": "open.transport.failed",
+                    "correlation-id": correlation_id,
+                },
             )
             await _close_failed_transport(transport)
             raise
@@ -1047,7 +1077,10 @@ class SessionRuntime:
             "gateway open phase transport-open complete elapsed-ms=%.1f provider-ref-present=%s",
             (time.monotonic() - transport_started) * 1000,
             bool(getattr(open_result, "provider_session_ref", None)),
-            extra={"session-runtime-phase": "open.transport.complete", "correlation-id": correlation_id},
+            extra={
+                "session-runtime-phase": "open.transport.complete",
+                "correlation-id": correlation_id,
+            },
         )
         if open_result.ag_session_id != session_id:
             await _close_failed_transport(transport)
@@ -1083,7 +1116,10 @@ class SessionRuntime:
             logger.info(
                 "gateway open phase bookkeeping begin session-id=%s",
                 session_id,
-                extra={"session-runtime-phase": "open.bookkeeping.begin", "correlation-id": correlation_id},
+                extra={
+                    "session-runtime-phase": "open.bookkeeping.begin",
+                    "correlation-id": correlation_id,
+                },
             )
             session_store.write_session_record(project_root, record)
             binding_store.register_open_binding(project_root, record)
@@ -1091,7 +1127,10 @@ class SessionRuntime:
                 "gateway open phase bookkeeping complete elapsed-ms=%.1f session-id=%s",
                 (time.monotonic() - bookkeeping_started) * 1000,
                 session_id,
-                extra={"session-runtime-phase": "open.bookkeeping.complete", "correlation-id": correlation_id},
+                extra={
+                    "session-runtime-phase": "open.bookkeeping.complete",
+                    "correlation-id": correlation_id,
+                },
             )
         except BaseException:
             # Never leak a child because bookkeeping failed.
@@ -1431,7 +1470,9 @@ class SessionRuntime:
             if opening_request_ids:
                 from audiagentic.components.agents.agents_paths import gateway_request_dir
 
-                request_runtime_root = gateway_request_dir(project_root, opening_request_ids[0]) / "runtime"
+                request_runtime_root = (
+                    gateway_request_dir(project_root, opening_request_ids[0]) / "runtime"
+                )
 
         # ── Dispatch exactly one provider-local resume operation ──
         prepare_kwargs: dict[str, Any] = {
@@ -1584,11 +1625,47 @@ class SessionRuntime:
         )
         handle.child_pid = child_pid
         handle.adopted_child = getattr(transport, "_adopted_child", None)
-        # AS19 status-observer lease / observer binding are NOT wired here —
-        # unlike _open_session, a resumed session does not acquire one. Not
-        # in AS49's own scope (that's AS19/AS41 territory); flagged so nobody
-        # assumes resumed sessions get the same live status projection as a
-        # freshly opened one.
+        # A resumed provider conversation must have the same observation
+        # surface as a fresh session.  Reacquire both leases before exposing
+        # the handle so lifecycle evidence is not silently weakened by resume.
+        try:
+            from audiagentic.components.providers import providers_api
+            from audiagentic.foundation.transports.harness_status_observer import (
+                StatusObserverRequest,
+            )
+
+            observer_request = StatusObserverRequest(
+                project_root=str(project_root),
+                provider_id=provider_id,
+                surface_id=surface_id,
+                session_id=session_id,
+                request_id=None,
+                correlation_id=correlation_id,
+            )
+            observer_result, observer_lease = providers_api.open_harness_status_observer(
+                observer_request,
+                agents_enabled=True,
+            )
+            if observer_result.ok and observer_lease is not None:
+                handle.observer_lease = observer_lease
+        except Exception:  # noqa: BLE001 - observer remains best effort
+            logger.debug(
+                "harness status observer resolution failed on session resume",
+                extra={"session-id": session_id},
+                exc_info=True,
+            )
+        try:
+            binding_id, _token, _ingress_endpoint = self._observer_ingress.create_observer_binding(
+                session_id=session_id,
+                project_root=str(project_root),
+            )
+            handle.observer_binding_id = binding_id
+        except AudiaGenticError:
+            logger.warning(
+                "failed to create observer binding on session resume",
+                extra={"session-id": session_id},
+                exc_info=True,
+            )
         self._handles[session_id] = handle
 
         try:
@@ -1908,10 +1985,14 @@ class SessionRuntime:
                 "session-id": session_id,
                 "execution-profile-id": handle.execution_profile_id,
                 "state": "active",
-                "provider-id": session_store.session_provider_id(turn_record) if turn_record else None,
+                "provider-id": session_store.session_provider_id(turn_record)
+                if turn_record
+                else None,
                 "model-id": session_store.session_model_id(turn_record) if turn_record else None,
                 "request-id": request_id,
-                "turn-count": session_store.session_turn_count(turn_record) if turn_record else None,
+                "turn-count": session_store.session_turn_count(turn_record)
+                if turn_record
+                else None,
                 "stop-reason": result.stop_reason,
             },
             correlation_id=correlation_id,

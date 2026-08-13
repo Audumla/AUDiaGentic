@@ -73,6 +73,7 @@ class GptAutoProviderRuntime:
         self._event_task: asyncio.Task[None] | None = None
         self._status_refresh_task: asyncio.Task[None] | None = None
         self._dedicated_window_anchor: str | None = None
+        self._dedicated_window_id: int | None = None
         self._dedicated_window_lock = asyncio.Lock()
         self._browser = BrowserProcessController(config.browser, cdp_probe=self._cdp_available)
 
@@ -163,25 +164,28 @@ class GptAutoProviderRuntime:
             if self._dedicated_window_anchor and any(
                 str(p.get("pageHandle")) == self._dedicated_window_anchor for p in pages
             ):
+                anchor_page = next(
+                    p for p in pages if str(p.get("pageHandle")) == self._dedicated_window_anchor
+                )
+                self._dedicated_window_id = _window_id(anchor_page)
                 return self._dedicated_window_anchor
             # Gateway/runtime recovery can lose the in-memory handle while the
             # browser tab survives. Reuse the first existing dashboard anchor.
             existing = next(
-                (
-                    str(p["pageHandle"])
-                    for p in pages
-                    if str(p.get("url") or "").startswith("data:text/html")
-                    and "GPT-auto" in str(p.get("title") or "")
-                ),
+                (str(p["pageHandle"]) for p in pages if str(p.get("url") or "") == STATUS_PAGE_URL),
                 None,
             )
             if existing:
                 self._dedicated_window_anchor = existing
+                self._dedicated_window_id = _window_id(
+                    next(p for p in pages if str(p.get("pageHandle")) == existing)
+                )
                 await self.refresh_status_page()
                 return existing
             self._dedicated_window_anchor = None
             page = await self.bridge.call("create_window_page")
             self._dedicated_window_anchor = str(page["pageHandle"])
+            self._dedicated_window_id = _window_id(page)
             await self.bridge.call(
                 "navigate",
                 {
@@ -197,22 +201,29 @@ class GptAutoProviderRuntime:
         if not self._dedicated_window_anchor or not self._bridge:
             return
         rows = [
-            _compact_row({
-                "provider": "gpt-auto",
-                "session": chat.ag_session_id,
-                "project": chat.project_name,
-                "state": chat.state.value,
-                "page": chat.page_handle,
-                "turn": chat.active_turn_id,
-                "observed": getattr(chat, "observed_status", lambda: {})(),
-            })
+            _compact_row(
+                {
+                    "provider": "gpt-auto",
+                    "session": chat.ag_session_id,
+                    "project": chat.project_name,
+                    "state": chat.state.value,
+                    "page": chat.page_handle,
+                    "turn": chat.active_turn_id,
+                    "observed": getattr(chat, "observed_status", lambda: {})(),
+                }
+            )
             for chat in self._chats.values()
         ]
         payload = {
             "runtime": self.state.value,
             "providers": [{"provider_id": "gpt-auto", "state": self.state.value}],
             "sessions": rows,
-            "queue": {"running": sum(1 for row in rows if row["state"] in {"busy", "generating", "running"}), "queued": 0},
+            "queue": {
+                "running": sum(
+                    1 for row in rows if row["state"] in {"busy", "generating", "running"}
+                ),
+                "queued": 0,
+            },
             "updated": asyncio.get_running_loop().time(),
         }
         try:
@@ -221,6 +232,7 @@ class GptAutoProviderRuntime:
             # The dashboard is observability only. A stale/closed anchor must
             # never prevent a provider session from opening or completing.
             self._dedicated_window_anchor = None
+            self._dedicated_window_id = None
 
     async def _status_refresh_loop(self) -> None:
         """Keep the operator projection live between event-driven updates.
@@ -235,6 +247,7 @@ class GptAutoProviderRuntime:
                 await self.refresh_status_page()
         except asyncio.CancelledError:
             raise
+
     async def _route_events(self, bridge: PythonCdpBridge) -> None:
         while self._bridge is bridge:
             event = await bridge.events.get()
@@ -266,6 +279,7 @@ class GptAutoProviderRuntime:
             # Handles are allocated by each bridge instance. Never carry a
             # handle or ownership claim into the next bridge generation.
             self._dedicated_window_anchor = None
+            self._dedicated_window_id = None
             self._page_owners.clear()
             for chat in tuple(self._chats.values()):
                 chat.bridge_replaced()
@@ -293,12 +307,16 @@ class GptAutoProviderRuntime:
         """Create a session page through the one shared-window admission path."""
         if self.config.browser.dedicated_window:
             anchor = await self.ensure_dedicated_window_anchor()
-            page = await self.bridge.call(
-                "create_page_in_window", {"anchorPageHandle": anchor}
-            )
+            page = await self.bridge.call("create_page_in_window", {"anchorPageHandle": anchor})
         else:
             page = await self.bridge.call("create_page")
         return str(page["pageHandle"])
+
+    def page_belongs_to_dedicated_window(self, page: dict) -> bool:
+        """Constrain resume/recovery candidates to the managed GPT window."""
+        return not self.config.browser.dedicated_window or (
+            self._dedicated_window_id is not None and _window_id(page) == self._dedicated_window_id
+        )
 
     async def register_chat(self, chat: PersistentChat) -> None:
         existing = self._chats.get(chat.ag_session_id)
@@ -356,13 +374,21 @@ class GptAutoProviderRuntime:
                 await self._bridge.stop()
                 self._bridge = None
                 self._gpt_browser = None
-            await self._browser.shutdown()
+            # Normal gateway/runtime teardown detaches CDP but preserves a
+            # provider-launched browser.  Durable conversation tabs must
+            # survive process restarts; terminating the browser is an explicit
+            # destructive operation through shutdown_browser().
             if self._event_task and not self._event_task.done():
                 self._event_task.cancel()
             if self._status_refresh_task and not self._status_refresh_task.done():
                 self._status_refresh_task.cancel()
             self._status_refresh_task = None
             self._move(ProviderState.STOPPED)
+
+    async def shutdown_browser(self) -> None:
+        """Explicitly terminate only a browser process this runtime launched."""
+        await self.shutdown()
+        await self._browser.shutdown()
 
     async def shutdown_from_owner(self) -> None:
         """Marshal teardown to the loop that owns CDP transports and locks."""
@@ -373,3 +399,8 @@ class GptAutoProviderRuntime:
             return
         future = asyncio.run_coroutine_threadsafe(self.shutdown(), owner)
         await asyncio.wrap_future(future)
+
+
+def _window_id(page: dict) -> int | None:
+    value = page.get("windowId")
+    return int(value) if value is not None else None

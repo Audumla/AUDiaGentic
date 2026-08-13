@@ -8,6 +8,25 @@ import pytest
 from audiagentic.components.providers.adapters.gpt_auto.cdp.client import CdpClient, CdpError
 
 
+def test_devtools_active_port_fallback_is_local_and_validated(tmp_path):
+    marker = tmp_path / "DevToolsActivePort"
+    marker.write_text("9333\n/devtools/browser/browser-id\n", encoding="utf-8")
+    client = CdpClient("http://127.0.0.1:9222", devtools_active_port_file=marker)
+
+    assert client._discover_from_active_port_file() == (
+        "ws://127.0.0.1:9333/devtools/browser/browser-id"
+    )
+
+
+def test_devtools_active_port_rejects_non_browser_socket(tmp_path):
+    marker = tmp_path / "DevToolsActivePort"
+    marker.write_text("9333\n/ws/untrusted\n", encoding="utf-8")
+    client = CdpClient("http://127.0.0.1:9222", devtools_active_port_file=marker)
+
+    with pytest.raises(CdpError, match="unsafe endpoint"):
+        client._discover_from_active_port_file()
+
+
 class _Socket:
     def __init__(self) -> None:
         self.messages: asyncio.Queue[str | None] = asyncio.Queue()

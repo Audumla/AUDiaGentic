@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
 import asyncio
+from typing import Any
 
 from .cdp.cdp_browser import CdpBrowserController, CdpPageRef, CdpWindowBounds
 from .urls import canonical_project_url, parse_project_id
@@ -72,7 +72,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
     async def stop_generation(self, page: CdpPageRef) -> dict[str, bool]:
         stopped = await self.evaluate(
             page,
-            r'''() => {
+            r"""() => {
               const selectors = [
                 '[data-testid="stop-button"]',
                 '[data-testid="stop-generating"]',
@@ -92,7 +92,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
               if (!button) return false;
               button.click();
               return true;
-            }''',
+            }""",
         )
         return {"stopped": bool(stopped)}
 
@@ -101,9 +101,11 @@ class GptAutoCdpBrowserController(CdpBrowserController):
     ) -> dict[str, Any]:
         if not isinstance(text, str) or not text.strip():
             raise ValueError("text must be a non-empty string")
-        typed = await self.evaluate(
-            page,
-            """(text) => {
+
+        async def _submit() -> dict[str, Any]:
+            typed = await self.evaluate(
+                page,
+                """(text) => {
               const editor = document.querySelector('.ProseMirror');
               if (!editor) throw new Error('composer not found');
               editor.focus();
@@ -113,20 +115,25 @@ class GptAutoCdpBrowserController(CdpBrowserController):
               editor.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertText', data: text}));
               return (editor.innerText || editor.textContent || '').trim();
             }""",
-            text,
-        )
-        sent = await self.evaluate(
-            page,
-            """async () => {
+                text,
+            )
+            sent = await self.evaluate(
+                page,
+                """async () => {
               await new Promise(resolve => setTimeout(resolve, 25));
               const button = document.querySelector('[data-testid="send-button"], button[aria-label*="Send" i]');
               if (!button || button.disabled || button.getAttribute('aria-disabled') === 'true') return false;
               button.click(); return true;
             }""",
-        )
-        if not sent:
-            await self.bridge.call("dispatch_enter", {"pageHandle": self._handle(page)})
-        return {"actionComplete": True, "typedText": typed}
+            )
+            if not sent:
+                await self.bridge.call("dispatch_enter", {"pageHandle": self._handle(page)})
+            return {"actionComplete": True, "typedText": typed}
+
+        if timeout is None:
+            return await _submit()
+        async with asyncio.timeout(timeout):
+            return await _submit()
 
     async def find_project_url(self, page: CdpPageRef, project_name: str) -> dict[str, str]:
         result = await self.evaluate(
@@ -149,24 +156,33 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         return {"url": str(result["url"]), "name": str(result.get("name") or project_name)}
 
     async def open_project_page(
-        self, *, project_name: str, project_url: str | None,
-        anchor_page: CdpPageRef | None, navigation_timeout: float, ready_timeout: float,
+        self,
+        *,
+        project_name: str,
+        project_url: str | None,
+        anchor_page: CdpPageRef | None,
+        navigation_timeout: float,
+        ready_timeout: float,
     ) -> dict[str, Any]:
         page = await self.new_tab(in_window=anchor_page) if anchor_page else await self.new_window()
         target = project_url
         try:
             if not target or not parse_project_id(target):
-                await self.navigate(page, _PROJECTS_URL)
+                async with asyncio.timeout(navigation_timeout):
+                    await self.navigate(page, _PROJECTS_URL)
                 match = await self.find_project_url(page, project_name)
                 target = canonical_project_url(match["url"]) + "/project"
             if not target:
                 raise RuntimeError("gpt-auto could not resolve a ChatGPT project URL")
-            page = await self.navigate(page, target)
+            async with asyncio.timeout(navigation_timeout):
+                page = await self.navigate(page, target)
             await self.wait_for_composer(page, timeout=ready_timeout)
             return {"page": page, "projectUrl": target}
         except Exception as exc:
             await self.close(page)
-            raise RuntimeError(f"gpt-auto project page open failed: {type(exc).__name__}: {exc}") from exc
+            raise RuntimeError(
+                f"gpt-auto project page open failed: {type(exc).__name__}: {exc}"
+            ) from exc
 
 
 __all__ = ["GptAutoCdpBrowserController", "CdpPageRef", "CdpWindowBounds"]
