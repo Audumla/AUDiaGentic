@@ -1,4 +1,4 @@
-"""Small asynchronous Chrome DevTools Protocol client for gpt-auto."""
+"""Provider-neutral asynchronous Chrome DevTools Protocol primitives."""
 
 from .bridge import PythonCdpBridge
 from .cdp_browser import CdpBrowserController, CdpPageRef, CdpWindowBounds

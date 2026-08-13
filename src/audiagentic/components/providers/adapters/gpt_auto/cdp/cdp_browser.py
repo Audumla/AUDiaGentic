@@ -70,6 +70,15 @@ class CdpBrowserController:
             for i in raw
         )
 
+    async def page_by_handle(self, handle: str) -> CdpPageRef:
+        for page in await self.pages():
+            if page.handle == handle:
+                return page
+        raise RuntimeError(f"unknown or closed page handle: {handle}")
+
+    async def page(self, handle: str) -> CdpPageRef:
+        return await self.page_by_handle(handle)
+
     async def new_window(self) -> CdpPageRef:
         return await self._page(await self.bridge.call("create_window_page"))
 
@@ -92,13 +101,6 @@ class CdpBrowserController:
             raise ValueError("url must include a scheme")
         await self.bridge.call("navigate", {"pageHandle": self._handle(page), "url": url})
         return CdpPageRef(page.handle, page.target_id, page.window_id, url, page.title)
-
-    async def snapshot(
-        self, page: CdpPageRef, *, signals: list[dict[str, Any]] | None = None
-    ) -> dict[str, Any]:
-        return await self.bridge.call(
-            "snapshot", {"pageHandle": self._handle(page), "signals": signals or []}
-        )
 
     async def evaluate(self, page: CdpPageRef, function: str, argument: Any = None) -> Any:
         return await self.bridge.evaluate(self._handle(page), function, argument)

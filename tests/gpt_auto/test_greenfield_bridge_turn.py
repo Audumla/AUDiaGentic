@@ -50,12 +50,16 @@ def snap(
 class _Bridge:
     def __init__(self, typed_text: str | None = None) -> None:
         self.submit_calls = 0
+        self.stop_calls = 0
         self.typed_text = typed_text
 
     async def call(self, method, params, **kwargs):
         if method == "submit_prompt":
             self.submit_calls += 1
             return {"actionComplete": True, "typedText": self.typed_text or params["text"]}
+        if method == "stop_generation":
+            self.stop_calls += 1
+            return {"stopped": True}
         return {"ok": True}
 
 
@@ -279,3 +283,5 @@ async def test_cancellation_is_terminal_and_never_retries_submit():
     assert result.stop_reason == "cancelled"
     assert turn.state is TurnState.CANCELLED
     assert chat.runtime.bridge.submit_calls == 0
+    await turn._stop_task
+    assert chat.runtime.bridge.stop_calls == 1

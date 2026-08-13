@@ -73,6 +73,7 @@ class GptAutoTurn:
         self.state = TurnState.PREPARING
         self.submission_confirmed = False
         self.cancel_event = asyncio.Event()
+        self._stop_task: asyncio.Task[None] | None = None
         self._sequence = 0
         self._delivered = 0
 
@@ -113,6 +114,8 @@ class GptAutoTurn:
             self.chat.state = ChatState.FAILED
             raise
         finally:
+            if self._stop_task is not None:
+                await asyncio.gather(self._stop_task, return_exceptions=True)
             self.chat.active_turn_id = None
             refresh = getattr(self.chat.runtime, "refresh_status_page", None)
             if refresh is not None:
@@ -180,17 +183,18 @@ class GptAutoTurn:
         if self.submission_confirmed or self.state is not TurnState.SUBMITTING:
             raise RuntimeError("prompt submission is no longer legal")
         try:
-            result = await self.chat.runtime.bridge.call(
-                "submit_prompt",
-                {
-                    "pageHandle": self.chat.page_handle,
-                    "text": self.request.body,
-                    "timeoutMs": int(
-                        self.chat.runtime.config.turn.submission_timeout_seconds * 1000
-                    ),
-                },
-                timeout=self.chat.runtime.config.turn.submission_timeout_seconds,
-            )
+            browser = getattr(self.chat.runtime, "gpt_browser", None)
+            if browser is not None:
+                page = await browser.page_by_handle(self.chat.page_handle)
+                result = await browser.submit(
+                    page, self.request.body,
+                    timeout=self.chat.runtime.config.turn.submission_timeout_seconds,
+                )
+            else:
+                result = await self.chat.runtime.bridge.call(
+                    "submit_prompt", {"pageHandle": self.chat.page_handle, "text": self.request.body},
+                    timeout=self.chat.runtime.config.turn.submission_timeout_seconds,
+                )
         except TimeoutError as exc:
             raise AudiaGenticError(
                 code="EXT-GPTAUTO-003",
@@ -237,12 +241,9 @@ class GptAutoTurn:
         emitted = False
         while True:
             if self.cancel_event.is_set():
-                try:
-                    await self.chat.runtime.bridge.call(
-                        "stop_generation", {"pageHandle": self.chat.page_handle}
-                    )
-                except Exception:
-                    pass
+                if self._stop_task is None:
+                    self._stop_task = asyncio.create_task(self._stop_generation_best_effort())
+                await asyncio.gather(self._stop_task, return_exceptions=True)
                 self._move(TurnState.CANCELLED)
                 return None
             current = await self.chat.snapshot()
@@ -361,6 +362,26 @@ class GptAutoTurn:
 
     def cancel(self) -> None:
         self.cancel_event.set()
+        # Cancellation is synchronous at the transport boundary.  Schedule
+        # the browser-side stop immediately so a generation is interrupted
+        # even while submission/proof polling is in progress.
+        if self._stop_task is None or self._stop_task.done():
+            self._stop_task = asyncio.create_task(self._stop_generation_best_effort())
+
+    async def _stop_generation_best_effort(self) -> None:
+        try:
+            browser = getattr(self.chat.runtime, "gpt_browser", None)
+            if browser is not None:
+                page = await browser.page_by_handle(self.chat.page_handle)
+                await browser.stop_generation(page)
+            else:
+                await self.chat.runtime.bridge.call("stop_generation", {"pageHandle": self.chat.page_handle})
+        except Exception:  # noqa: BLE001 - cancellation must remain best effort
+            logger.debug(
+                "gpt-auto stop control could not be clicked during cancellation",
+                extra={"turn-id": self.request.turn_id},
+                exc_info=True,
+            )
 
     def _result(self, reason: str) -> SessionTurnResult:
         metadata: dict[str, Any] = {"project-url": self.chat.project_url}
