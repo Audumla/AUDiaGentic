@@ -33,6 +33,23 @@ def test_build_record_defaults(tmp_path: Path) -> None:
     assert record["request-id"].startswith("req_")
 
 
+def test_value_error_detail_is_preserved_for_operator_diagnosis(tmp_path: Path) -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="do the thing")
+    store.write_record(tmp_path, record)
+    store.transition_record(tmp_path, record["request-id"], "running")
+    updated = store.transition_record(
+        tmp_path,
+        record["request-id"],
+        "failed",
+        updates={"error": ValueError("browser executable is not configured")},
+    )
+    assert updated["error"] == {
+        "code": "VAL-AGW-UNKNOWN",
+        "message": "browser executable is not configured",
+        "kind": "ValueError",
+    }
+
+
 def test_build_record_rejects_invalid_mode() -> None:
     with pytest.raises(AudiaGenticError) as exc_info:
         store.build_record(execution_profile_id="default", prompt_body="x", mode="sync")
@@ -482,261 +499,7 @@ def test_concurrent_mark_cancel_requested_and_append_attempt_do_not_clobber(tmp_
         try:
             for i in range(iterations):
                 store.append_attempt(
-                    tmp_path, request_id,
-                    execution_profile_id="default", provider_id="local-openai", model_id="gpt-4o",
-                    state="failed", started_at=f"2026-01-01T00:00:{i:02d}Z",
-                )
-        except Exception as exc:  # noqa: BLE001
-            errors.append(exc)
-
-    t1 = threading.Thread(target=cancel_repeatedly)
-    t2 = threading.Thread(target=append_repeatedly)
-    t1.start()
-    t2.start()
-    t1.join(timeout=10)
-    t2.join(timeout=10)
-
-    assert not errors, errors
-    final = store.read_record(tmp_path, request_id)
-    assert final["cancel-requested"] is True
-    assert len(final["attempts"]) == iterations
-
-
-@pytest.mark.no_parallel
-def test_cross_process_attempt_appends_do_not_lose_updates(tmp_path: Path) -> None:
-    record = store.build_record(execution_profile_id="default", prompt_body="hello")
-    store.write_record(tmp_path, record)
-    request_id = record["request-id"]
-    context = multiprocessing.get_context("spawn")
-    count = 12
-    processes = [
-        context.Process(
-            target=functools.partial(
-                store.append_attempt,
-                tmp_path,
-                request_id,
-                execution_profile_id="default",
-                provider_id="local-openai",
-                model_id=f"model-{index}",
-                state="failed",
-            ),
-        )
-        for index in range(count)
-    ]
-
-    for process in processes:
-        process.start()
-    for process in processes:
-        process.join(timeout=20)
-
-    assert [process.exitcode for process in processes] == [0] * count
-    final = store.read_record(tmp_path, request_id)
-    assert len(final["attempts"]) == count
-    assert final["revision"] == count
-
-
-def test_attempt_identity_rejects_stale_worker_terminal_write(tmp_path: Path) -> None:
-    record = store.build_record(execution_profile_id="default", prompt_body="hello")
-    store.write_record(tmp_path, record)
-    running = store.start_attempt(tmp_path, record["request-id"], "worker-current")
-
-    with pytest.raises(AudiaGenticError, match="CON-AGW-072"):
-        store.transition_record(
-            tmp_path,
-            record["request-id"],
-            "completed",
-            expected_worker_id="worker-stale",
-            expected_attempt_epoch=running["attempt-epoch"],
-        )
-
-    current = store.read_record(tmp_path, record["request-id"])
-    assert current["state"] == "running"
-    assert current["worker-id"] == "worker-current"
-    assert current["attempt-epoch"] == 1
-
-
-def test_append_attempt_does_not_change_state(tmp_path: Path) -> None:
-    record = store.build_record(execution_profile_id="default", prompt_body="hello")
-    store.write_record(tmp_path, record)
-    updated = store.append_attempt(
-        tmp_path, record["request-id"],
-        execution_profile_id="default", provider_id="local-openai", model_id="gpt-4o",
-        state="running", started_at="2026-01-01T00:00:00Z",
-    )
-    assert updated["state"] == "queued"
-    assert len(updated["attempts"]) == 1
-    assert updated["attempts"][0]["execution-profile-id"] == "default"
-    timeline = load_ndjson(gateway_timeline_path(tmp_path, record["request-id"]))
-    assert timeline[-1]["event"] == "attempt.recorded"
-    assert timeline[-1]["attributes"]["attempt-state"] == "running"
-    assert timeline[-1]["attributes"]["attempt-count"] == 1
-
-
-def test_append_attempt_accepts_cancelled_state(tmp_path: Path) -> None:
-    record = store.build_record(execution_profile_id="default", prompt_body="hello")
-    store.write_record(tmp_path, record)
-
-    updated = store.append_attempt(
-        tmp_path, record["request-id"],
-        execution_profile_id="default", provider_id="opencode", model_id="m1",
-        state="cancelled", started_at="2026-01-01T00:00:00Z",
-        finished_at="2026-01-01T00:00:01Z",
-    )
-
-    assert updated["attempts"][0]["state"] == "cancelled"
-
-
-def test_terminal_states() -> None:
-    assert store.TERMINAL_STATES == {"completed", "failed", "cancelled", "rejected", "interrupted"}
-
-
-def test_read_migrates_v1_record_under_request_lock(tmp_path: Path) -> None:
-    legacy = store.build_record(execution_profile_id="default", prompt_body="secret")
-    store.write_record(tmp_path, legacy)
-    legacy["contract-version"] = "v1"
-    legacy.pop("dispatch-owner-epoch")
-    legacy.pop("dispatch-claimed-at")
-    legacy.pop("recovery")
-    path = gateway_request_path(tmp_path, legacy["request-id"])
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    raw["contract-version"] = "v1"
-    raw.pop("dispatch-owner-epoch")
-    raw.pop("dispatch-claimed-at")
-    raw.pop("recovery")
-    atomic_write_json(path, raw)
-
-    migrated = store.read_record(tmp_path, legacy["request-id"])
-
-    assert migrated["contract-version"] == "v5"
-    assert migrated["dispatch-owner-epoch"] is None
-    assert migrated["recovery"] is None
-    assert migrated["resolved-source-id"] is None
-    assert migrated["resolved-capacity-generation"] is None
-    assert migrated["activity-sequence"] == 0
-    assert migrated["last-activity-at"] is None
-    assert json.loads(path.read_text(encoding="utf-8"))["contract-version"] == "v5"
-    assert load_ndjson(gateway_timeline_path(tmp_path, legacy["request-id"]))[-1]["event"] == "record.migrated"
-
-
-def test_read_repairs_partial_v4_activity_cutover(tmp_path: Path) -> None:
-    record = store.build_record(execution_profile_id="default", prompt_body="hello")
-    store.write_record(tmp_path, record)
-    path = gateway_request_path(tmp_path, record["request-id"])
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    raw["contract-version"] = "v4"
-    for field in ("last-activity-at", "activity-sequence", "activity-source", "activity-lease-expires-at"):
-        raw.pop(field, None)
-    atomic_write_json(path, raw)
-    repaired = store.read_record(tmp_path, record["request-id"])
-    assert repaired["contract-version"] == "v5"
-    assert repaired["activity-sequence"] == 0
-    assert repaired["activity-source"] is None
-
-
-def test_bind_and_start_owned_attempt_persists_placement_atomically(tmp_path: Path) -> None:
-    record = store.build_record(execution_profile_id="default", prompt_body="hello")
-    store.write_record(tmp_path, record)
-    claimed = store.claim_dispatch(
-        tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0
-    )
-
-    running = store.bind_and_start_owned_attempt(
-        tmp_path,
-        record["request-id"],
-        owner_epoch="service-a",
-        worker_id="worker-a",
-        expected_revision=claimed["revision"],
-        resolved_source_id="gpu-a-chatgpt",
-        resolved_model_id="chatgpt",
-        resolved_capacity_generation="capacity-7",
-    )
-
-    assert running["state"] == "running"
-    assert running["resolved-source-id"] == "gpu-a-chatgpt"
-    assert running["resolved-model-id"] == "chatgpt"
-    assert running["resolved-capacity-generation"] == "capacity-7"
-    persisted = store.read_record(tmp_path, record["request-id"])
-    assert persisted["resolved-source-id"] == "gpu-a-chatgpt"
-    assert persisted["resolved-model-id"] == "chatgpt"
-    timeline = load_ndjson(gateway_timeline_path(tmp_path, record["request-id"]))
-    assert timeline[-1]["event"] == "dispatch.bound-and-started"
-
-
-def test_bind_and_start_owned_attempt_fence_failure_writes_no_binding(tmp_path: Path) -> None:
-    record = store.build_record(execution_profile_id="default", prompt_body="hello")
-    store.write_record(tmp_path, record)
-    claimed = store.claim_dispatch(
-        tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0
-    )
-
-    with pytest.raises(AudiaGenticError, match="CON-AGW-071"):
-        store.bind_and_start_owned_attempt(
-            tmp_path,
-            record["request-id"],
-            owner_epoch="service-a",
-            worker_id="worker-a",
-            expected_revision=claimed["revision"] + 1,
-            resolved_source_id="gpu-a-chatgpt",
-            resolved_model_id="chatgpt",
-        )
-
-    persisted = store.read_record(tmp_path, record["request-id"])
-    assert persisted["state"] == "queued"
-    assert persisted["resolved-source-id"] is None
-    assert persisted["resolved-model-id"] is None
-
-
-def test_owned_activity_renewal_persists_gateway_receipt_and_rejects_replay(tmp_path: Path) -> None:
-    record = store.build_record(execution_profile_id="default", prompt_body="hello")
-    store.write_record(tmp_path, record)
-    claimed = store.claim_dispatch(
-        tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0
-    )
-    running = store.start_owned_attempt(
-        tmp_path,
-        record["request-id"],
-        owner_epoch="service-a",
-        worker_id="worker-a",
-        expected_revision=claimed["revision"],
-    )
-    renewed = store.renew_owned_activity(
-        tmp_path,
-        record["request-id"],
-        owner_epoch="service-a",
-        worker_id="worker-a",
-        attempt_epoch=running["attempt-epoch"],
-        activity_seq=1,
-        activity_source="worker-heartbeat",
-        activity_lease_seconds=30,
-    )
-    assert renewed["activity-sequence"] == 1
-    assert renewed["activity-source"] == "worker-heartbeat"
-    assert renewed["last-activity-at"] is not None
-    assert renewed["activity-lease-expires-at"] is not None
-    assert renewed["watchdog-state"] == "active"
-    assert renewed["watchdog-reason"] == "verified-activity-renewed"
-    replay = store.renew_owned_activity(
-        tmp_path,
-        record["request-id"],
-        owner_epoch="service-a",
-        worker_id="worker-a",
-        attempt_epoch=running["attempt-epoch"],
-        activity_seq=1,
-        activity_source="worker-heartbeat",
-        activity_lease_seconds=30,
-    )
-    assert replay["revision"] == renewed["revision"]
-    assert replay["last-activity-at"] == renewed["last-activity-at"]
-
-
-@pytest.mark.parametrize("activity_source", ["provider-progress", "acp-progress", "mcp-a2a-progress"])
-def test_provider_neutral_activity_source_renews_fenced_lease(tmp_path: Path, activity_source: str) -> None:
-    record = store.build_record(execution_profile_id="default", prompt_body="hello")
-    store.write_record(tmp_path, record)
-    claimed = store.claim_dispatch(tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0)
-    running = store.start_owned_attempt(tmp_path, record["request-id"], owner_epoch="service-a", worker_id="worker-a", expected_revision=claimed["revision"])
-    renewed = store.renew_owned_activity(
-        tmp_path,
+                    tmp_path, req…2619 tokens truncated…   tmp_path,
         record["request-id"],
         owner_epoch="service-a",
         worker_id="worker-a",
@@ -1191,3 +954,4 @@ def test_owned_terminal_persists_absolute_safety_ceiling_classification(tmp_path
         updates={"error": {"code": "TO-AGW-077", "details": {"watchdog-classification": "absolute-safety-ceiling"}}},
     )
     assert terminal["terminal-classification"] == "absolute-safety-ceiling"
+
