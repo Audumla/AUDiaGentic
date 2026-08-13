@@ -379,6 +379,135 @@ def test_dedicated_window_ownership_rejects_duplicate_url_in_manual_window() -> 
 
 
 @pytest.mark.asyncio
+async def test_find_conversation_page_restores_window_before_selecting_retained_tab(
+    monkeypatch,
+) -> None:
+    runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
+    runtime.state = ProviderState.AVAILABLE
+    calls: list[str] = []
+
+    async def ensure_anchor() -> str:
+        calls.append("anchor")
+        runtime._dedicated_window_id = 7
+        return "anchor"
+
+    class _Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages"
+            calls.append("pages")
+            return [
+                {
+                    "pageHandle": "manual-copy",
+                    "targetId": "target-manual",
+                    "windowId": 99,
+                    "url": "https://chatgpt.com/c/provider-session",
+                },
+                {
+                    "pageHandle": "retained",
+                    "targetId": "target-retained",
+                    "windowId": 7,
+                    "url": "https://chatgpt.com/c/provider-session",
+                },
+            ]
+
+    runtime._bridge = _Bridge()  # type: ignore[assignment]
+    monkeypatch.setattr(runtime, "ensure_dedicated_window_anchor", ensure_anchor)
+
+    page = await runtime.find_conversation_page(
+        "provider-session",
+        preferred_target_id="target-retained",
+    )
+
+    assert calls == ["anchor", "pages"]
+    assert page is not None
+    assert page["pageHandle"] == "retained"
+
+
+@pytest.mark.asyncio
+async def test_reconcile_proves_quiescence_before_ready(monkeypatch) -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    page = {
+        "pageHandle": "retained",
+        "targetId": "target-retained",
+        "url": "https://chatgpt.com/c/provider-session",
+    }
+
+    class _Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages"
+            return [page]
+
+    async def find_page(_provider_session_id, *, preferred_target_id=None):
+        return page
+
+    runtime = SimpleNamespace(
+        bridge=_Bridge(),
+        find_conversation_page=find_page,
+        claim_page=lambda _chat, _handle: True,
+        release_page=lambda _chat, _handle: None,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-recovering",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+    )
+    chat.state = ChatState.RECOVERING
+    observed: list[bool] = []
+
+    async def quiescent(*, allow_recovering=False):
+        observed.append(allow_recovering)
+        return SimpleNamespace()
+
+    monkeypatch.setattr(chat, "wait_quiescent", quiescent)
+
+    await chat.ensure_ready()
+
+    assert observed == [True]
+    assert chat.state is ChatState.READY
+    assert chat.page_handle == "retained"
+    assert chat.target_id == "target-retained"
+
+
+@pytest.mark.asyncio
+async def test_active_reconcile_prefers_stable_target_before_stale_url() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    runtime = SimpleNamespace(
+        claim_page=lambda _chat, _handle: True,
+        release_page=lambda _chat, _handle: None,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-active-recovery",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+    )
+    chat.state = ChatState.RECOVERING
+    chat.active_turn_id = "turn-1"
+    chat.target_id = "stable-target"
+    chat._last_url = "https://chatgpt.com/g/g-p-project/project"
+
+    await chat.reconcile(
+        [
+            {
+                "pageHandle": "replacement-handle",
+                "targetId": "stable-target",
+                "url": "https://chatgpt.com/g/g-p-project/c/new-conversation",
+            }
+        ]
+    )
+
+    assert chat.page_handle == "replacement-handle"
+    assert chat.target_id == "stable-target"
+    assert chat.state is ChatState.BUSY
+
+
+@pytest.mark.asyncio
 async def test_anchor_rediscovery_uses_immutable_url_not_mutable_title(monkeypatch) -> None:
     runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
     runtime.state = ProviderState.AVAILABLE

@@ -10,6 +10,7 @@ from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoCon
 from audiagentic.components.providers.adapters.gpt_auto.session_transport import (
     _active_project_name,
 )
+
 from .test_greenfield_config_urls import valid_config
 
 
@@ -79,14 +80,13 @@ async def test_initial_chat_discovers_project_by_active_project_name(monkeypatch
     assert chat.project_url == "https://chatgpt.com/g/g-p-bigcherry/project"
     methods = [method for method, _ in runtime.bridge.calls]
     assert methods == [
-        "list_pages",
         "create_page",
         "navigate",
         "find_project_url",
         "navigate",
     ]
-    assert runtime.bridge.calls[2][1]["url"] == "https://chatgpt.com/projects"
-    assert runtime.bridge.calls[4][1]["url"] == chat.project_url
+    assert runtime.bridge.calls[1][1]["url"] == "https://chatgpt.com/projects"
+    assert runtime.bridge.calls[3][1]["url"] == chat.project_url
 
 
 def test_active_project_name_uses_config_then_directory(tmp_path: Path):
