@@ -53,7 +53,13 @@ class BrowserProcessController:
         if matching:
             if self.config.existing_browser_policy is ExistingBrowserPolicy.FAIL:
                 raise RuntimeError("configured browser is running without usable CDP")
-            await self._stop_matching(matching)
+            # Executable identity is not ownership evidence. A restart policy
+            # must never terminate unrelated user windows; only a process
+            # launched and recorded by this controller may be stopped.
+            raise RuntimeError(
+                "configured browser is running without usable CDP; restart refused "
+                "because process ownership cannot be proven"
+            )
         self._launched = await asyncio.create_subprocess_exec(
             str(self.config.executable),
             f"--remote-debugging-port={self.config.remote_debugging_port}",

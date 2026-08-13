@@ -160,6 +160,18 @@ class ControlDisposition(StrEnum):
     UNCERTAIN = "uncertain"
 
 
+class SessionFailureDisposition(StrEnum):
+    """What the session runtime should do after a turn raises.
+
+    Most transports cannot safely continue after a turn-level failure and
+    therefore terminate their session.  A provider with an explicit recovery
+    state machine may retain the live session and accept a later turn.
+    """
+
+    RETAIN = "retain"
+    TERMINATE = "terminate"
+
+
 # ---------------------------------------------------------------------------
 # Scalar type alias and validators
 # ---------------------------------------------------------------------------
@@ -583,4 +595,8 @@ class AgentSessionTransport(Protocol):
 
     def is_alive(self) -> bool:
         """True while the transport is open and its child has not exited."""
+        ...
+
+    def turn_failure_disposition(self) -> SessionFailureDisposition:
+        """Return the state-machine decision after the latest failed turn."""
         ...

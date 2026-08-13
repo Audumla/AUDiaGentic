@@ -12,6 +12,7 @@ from audiagentic.foundation.transports.agent_session import (
     SessionControlAction,
     SessionControlRequest,
     SessionControlResult,
+    SessionFailureDisposition,
     SessionOpenResult,
     SessionPrompt,
     SessionTurnResult,
@@ -43,6 +44,7 @@ class GptAutoSessionTransport:
         self.chat = chat
         self._active_turn: GptAutoTurn | None = None
         self._closed = False
+        self._turn_failure_disposition = SessionFailureDisposition.TERMINATE
 
     @property
     def ag_session_id(self) -> str:
@@ -69,10 +71,19 @@ class GptAutoSessionTransport:
     async def prompt(self, request: SessionPrompt, sink: ObservationSink) -> SessionTurnResult:
         if self._closed or self.chat.state is not ChatState.READY:
             raise RuntimeError("gpt-auto chat is not ready")
+        self._turn_failure_disposition = SessionFailureDisposition.TERMINATE
         turn = GptAutoTurn(self.chat, request, sink)
         self._active_turn = turn
         try:
             return await turn.run()
+        except Exception as exc:
+            retained = await self.chat.retain_after_turn_failure(exc)
+            self._turn_failure_disposition = (
+                SessionFailureDisposition.RETAIN
+                if retained
+                else SessionFailureDisposition.TERMINATE
+            )
+            raise
         finally:
             self._active_turn = None
 
@@ -87,9 +98,8 @@ class GptAutoSessionTransport:
                 ControlDisposition.ACCEPTED, CorrelationQuality.REQUEST_SCOPED
             )
         if request.action is SessionControlAction.CLOSE_SESSION:
-            await self.close()
             return SessionControlResult(
-                ControlDisposition.ACCEPTED, CorrelationQuality.REQUEST_SCOPED
+                ControlDisposition.UNSUPPORTED, CorrelationQuality.UNCERTAIN
             )
         return SessionControlResult(ControlDisposition.UNSUPPORTED, CorrelationQuality.UNCERTAIN)
 
@@ -103,6 +113,9 @@ class GptAutoSessionTransport:
 
     def is_alive(self) -> bool:
         return not self._closed and self.chat.state not in {ChatState.FAILED, ChatState.CLOSED}
+
+    def turn_failure_disposition(self) -> SessionFailureDisposition:
+        return self._turn_failure_disposition
 
 
 def build_gpt_auto_session_transport(

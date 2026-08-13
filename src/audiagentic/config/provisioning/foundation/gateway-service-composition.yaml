@@ -12,6 +12,8 @@ gateway-service-composition:
     - agents.execution-profile-registry
     - agents.gateway-queue-manager
     - providers.gpt-auto-runtime-owner
+    # Constructed after GPT-auto so reverse finalization closes sessions first.
+    - agents.gateway-session-runtime-owner
 
   bindings:
     # Shared-gateway resolution is the only implementation this process
@@ -22,3 +24,4 @@ gateway-service-composition:
     # composed for its per-process lifetime, not for swappable implementations.
     agents.gateway-queue-manager: agents.gateway-queue-manager
     providers.gpt-auto-runtime-owner: providers.shared-gpt-auto-runtime
+    agents.gateway-session-runtime-owner: agents.gateway-session-runtime

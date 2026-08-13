@@ -78,10 +78,26 @@ from audiagentic.foundation.transports.agent_session import (
     SessionControlRequest,
     SessionPrompt,
     SessionTurnResult,
+    SessionFailureDisposition,
 )
 from audiagentic.foundation.transports.session_surface import PreparedSessionTransport
 
 logger = logging.getLogger(__name__)
+
+
+async def _close_failed_transport(transport: Any) -> None:
+    """Bound cleanup for a transport whose open transaction did not commit."""
+    close = getattr(transport, "close", None)
+    if close is None:
+        return
+    task = asyncio.create_task(close())
+    try:
+        await asyncio.wait_for(asyncio.shield(task), timeout=5.0)
+    except BaseException:  # noqa: BLE001 - cleanup must not mask the open error
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        logger.warning("failed to close transport after unsuccessful open", exc_info=True)
 
 
 # ── AS28 slice 4a: default provider preparation seam ──────────────
@@ -774,6 +790,19 @@ class SessionRuntime:
             handle = self._handles.get(session_id)
             if handle is None:
                 return {"disposition": "already-terminal"}
+            if action is SessionControlAction.CLOSE_SESSION:
+                # Session closure is a gateway lifecycle transition. Do not
+                # let a provider close its transport underneath an active
+                # durable handle; close only after the serialized turn queue
+                # is quiescent.
+                if not handle.quiescent():
+                    return {"disposition": "rejected", "error-code": "CON-AGW-004"}
+                await self._close(handle.project_root, session_id, reason="client-request")
+                return {
+                    "disposition": "accepted",
+                    "correlation-quality": "request-scoped",
+                    "error-code": None,
+                }
             request = SessionControlRequest(
                 ag_session_id=session_id,
                 turn_id=turn_id,
@@ -829,11 +858,28 @@ class SessionRuntime:
         if loop is None:
             return
         try:
-            asyncio.run_coroutine_threadsafe(self._close_all(reason="shutdown"), loop).result(
+            async def _shutdown_loop() -> None:
+                await self._close_all(reason="shutdown")
+                if self._reaper_task is not None and not self._reaper_task.done():
+                    self._reaper_task.cancel()
+                    await asyncio.gather(self._reaper_task, return_exceptions=True)
+
+            asyncio.run_coroutine_threadsafe(_shutdown_loop(), loop).result(
                 timeout=_CLOSE_TIMEOUT_SECONDS
             )
-        except Exception:  # noqa: BLE001 — shutdown must never raise
+        except Exception:  # noqa: BLE001 — continue loop teardown after close failures
             logger.warning("session runtime shutdown incomplete", exc_info=True)
+        finally:
+            loop.call_soon_threadsafe(loop.stop)
+            thread = self._loop_thread
+            if thread is not None and thread is not threading.current_thread():
+                thread.join(timeout=_CLOSE_TIMEOUT_SECONDS)
+            if not loop.is_running() and not loop.is_closed():
+                loop.close()
+            with self._loop_lock:
+                self._loop = None
+                self._loop_thread = None
+                self._reaper_task = None
 
     # ── loop-side implementation ─────────────────────────────────
 
@@ -995,6 +1041,7 @@ class SessionRuntime:
                 (time.monotonic() - transport_started) * 1000,
                 extra={"session-runtime-phase": "open.transport.failed", "correlation-id": correlation_id},
             )
+            await _close_failed_transport(transport)
             raise
         logger.info(
             "gateway open phase transport-open complete elapsed-ms=%.1f provider-ref-present=%s",
@@ -1003,7 +1050,7 @@ class SessionRuntime:
             extra={"session-runtime-phase": "open.transport.complete", "correlation-id": correlation_id},
         )
         if open_result.ag_session_id != session_id:
-            await transport.close()
+            await _close_failed_transport(transport)
             raise AudiaGenticError(
                 code="CON-AGW-121",
                 kind="agents",
@@ -1046,9 +1093,9 @@ class SessionRuntime:
                 session_id,
                 extra={"session-runtime-phase": "open.bookkeeping.complete", "correlation-id": correlation_id},
             )
-        except Exception:
+        except BaseException:
             # Never leak a child because bookkeeping failed.
-            await transport.close()
+            await _close_failed_transport(transport)
             raise
         # AS17/RV681: capture OS process facts for the child at open time so
         # diagnostics and reaping have real evidence, not just a transport flag.
@@ -1416,7 +1463,11 @@ class SessionRuntime:
         transport = prepared.transport
         try:
             open_result = await transport.open()
+        except asyncio.CancelledError:
+            await _close_failed_transport(transport)
+            raise
         except Exception as exc:  # noqa: BLE001 — provider rejection, not a fallback path
+            await _close_failed_transport(transport)
             wrapped = AudiaGenticError(
                 code="EXT-AGW-118",
                 kind="agents",
@@ -1437,7 +1488,7 @@ class SessionRuntime:
             raise wrapped from exc
 
         if open_result.ag_session_id != successor_session_id:
-            await transport.close()
+            await _close_failed_transport(transport)
             raise AudiaGenticError(
                 code="CON-AGW-121",
                 kind="agents",
@@ -1445,7 +1496,7 @@ class SessionRuntime:
                 details={"session-id": successor_session_id},
             )
         if open_result.provider_session_ref is None:
-            await transport.close()
+            await _close_failed_transport(transport)
             raise AudiaGenticError(
                 code="CON-AGW-123",
                 kind="agents",
@@ -1491,7 +1542,21 @@ class SessionRuntime:
             # Provider resume succeeded but persistence failed: never expose a
             # live new generation the client cannot look up. Detach/close per
             # ownership and remove no provisional index state was written.
-            await transport.close()
+            await _close_failed_transport(transport)
+            try:
+                failed_record = session_store.transition_session_record(
+                    project_root,
+                    session_id,
+                    "failed",
+                    updates={"close-reason": "resume-persistence-failed", "closed-at": now_iso_z()},
+                )
+                binding_store.retire_binding(project_root, failed_record, state="failed")
+            except Exception:  # noqa: BLE001 - preserve the original persistence failure
+                logger.warning(
+                    "failed to roll back resumed session record",
+                    extra={"session-id": session_id},
+                    exc_info=True,
+                )
             wrapped = AudiaGenticError(
                 code="IO-AGW-119",
                 kind="agents",
@@ -1767,8 +1832,30 @@ class SessionRuntime:
                 # The neutral transport decides any provider-owned deadline.
                 result = await handle.transport.prompt(session_prompt, _observation_sink)
             except Exception:
-                # Transport marks itself dead on turn failure; reflect it durably.
-                await self._fail_session(handle, reason="failed")
+                # A provider may have an explicit recovery state machine.  In
+                # that case retain the live handle and its browser/session
+                # binding; all other transports keep the historical terminal
+                # failure behaviour.
+                if self._retain_after_turn_failure(handle):
+                    try:
+                        session_store.record_session_timeline(
+                            project_root,
+                            session_id,
+                            "session.turn.failed",
+                            state="active",
+                            attributes={
+                                "request-id": request_id,
+                                "recoverable": True,
+                            },
+                        )
+                    except Exception:  # noqa: BLE001 - diagnostics must not mask turn failure
+                        logger.debug(
+                            "failed to record recoverable turn failure",
+                            extra={"session-id": session_id, "request-id": request_id},
+                            exc_info=True,
+                        )
+                else:
+                    await self._fail_session(handle, reason="failed")
                 raise
             finally:
                 handle.last_activity_clock = self._clock()
@@ -1873,6 +1960,17 @@ class SessionRuntime:
                 exc_info=True,
             )
 
+    @staticmethod
+    def _retain_after_turn_failure(handle: _SessionHandle) -> bool:
+        """Ask a provider state machine whether a failed turn is resumable."""
+        try:
+            disposition = handle.transport.turn_failure_disposition()
+            return SessionFailureDisposition(disposition) is SessionFailureDisposition.RETAIN
+        except (AttributeError, TypeError, ValueError):
+            # Existing transports and test doubles predate this optional
+            # capability; their safe default is to terminate the session.
+            return False
+
     async def _close(
         self,
         project_root: Path,
@@ -1880,6 +1978,18 @@ class SessionRuntime:
         *,
         reason: str,
     ) -> dict[str, Any]:
+        handle = self._handles.get(session_id)
+        if handle is not None and reason != "shutdown" and not handle.quiescent():
+            deadline = self._clock() + _CLOSE_TIMEOUT_SECONDS
+            while not handle.quiescent() and self._clock() < deadline:
+                await asyncio.sleep(0.05)
+            if not handle.quiescent():
+                raise AudiaGenticError(
+                    code="CON-AGW-004",
+                    kind="agents",
+                    message="session is busy and could not be closed safely",
+                    details={"session-id": session_id},
+                )
         handle = self._handles.pop(session_id, None)
         if handle is not None:
             await handle.transport.close()
@@ -2114,3 +2224,11 @@ def peek_session_runtime() -> SessionRuntime | None:
     """
     with _SESSION_RUNTIME_LOCK:
         return _SESSION_RUNTIME
+
+
+def reset_session_runtime() -> None:
+    """Forget a shut-down singleton so a later composed host starts cleanly."""
+    global _SESSION_RUNTIME
+    with _SESSION_RUNTIME_LOCK:
+        if _SESSION_RUNTIME is not None and _SESSION_RUNTIME._shutdown:
+            _SESSION_RUNTIME = None

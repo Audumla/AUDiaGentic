@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 from enum import StrEnum
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+
 from audiagentic.foundation.transports.session_binding import (
     ProviderSessionBindingSink,
     ProviderSessionBindingUpdate,
@@ -75,6 +77,9 @@ class PersistentChat:
         self.binding_sink = binding_sink
         self._lost_during_turn = False
         self._last_url: str | None = None
+        self._last_snapshot: ChatSnapshot | None = None
+        self._recovery_ready = asyncio.Event()
+        self._recovery_ready.set()
 
     def _claim_page(self, page_handle: str) -> bool:
         """Claim a page when the runtime exposes ownership tracking.
@@ -90,12 +95,27 @@ class PersistentChat:
         if failure:
             raise RuntimeError(f"illegal gpt-auto chat transition {self.state}->{target}: {failure}")
         self.state = target
+        if target is ChatState.RECOVERING:
+            self._recovery_ready.clear()
+        else:
+            self._recovery_ready.set()
 
     def _gpt_browser(self):
         browser = getattr(self.runtime, "gpt_browser", None)
         return browser if browser is not None else self.runtime.bridge
 
     async def open(self) -> None:
+        """Open transactionally; release every resource on partial failure."""
+        try:
+            await self._open_impl()
+        except BaseException:
+            try:
+                await self.close()
+            except BaseException:  # noqa: BLE001 - preserve the original open error
+                pass
+            raise
+
+    async def _open_impl(self) -> None:
         await self.runtime.ensure_available()
         await self.runtime.register_chat(self)
         browser = self._gpt_browser()
@@ -185,23 +205,22 @@ class PersistentChat:
             asyncio.get_running_loop().time() + self.config.chat.ready_timeout_seconds
         )
         while asyncio.get_running_loop().time() < deadline:
-            snap = await self.snapshot()
+            snap = await self.snapshot(allow_recovering=True)
             if snap.composer_present:
                 return
             await asyncio.sleep(0.25)
         raise RuntimeError("ChatGPT composer did not become ready")
 
-    async def snapshot(self) -> ChatSnapshot:
+    async def snapshot(self, *, allow_recovering: bool = False) -> ChatSnapshot:
         if self.state is ChatState.RECOVERING:
-            deadline = (
-                asyncio.get_running_loop().time() + self.config.cdp.recovery_timeout_seconds
-            )
-            while (
-                self.state is ChatState.RECOVERING and asyncio.get_running_loop().time() < deadline
-            ):
-                await asyncio.sleep(0.05)
-            if self.state is ChatState.RECOVERING:
-                raise RuntimeError("gpt-auto chat recovery timed out")
+            if not allow_recovering:
+                try:
+                    await asyncio.wait_for(
+                        self._recovery_ready.wait(),
+                        timeout=self.config.cdp.recovery_timeout_seconds,
+                    )
+                except TimeoutError as exc:
+                    raise RuntimeError("gpt-auto chat recovery timed out") from exc
         if not self.page_handle:
             raise RuntimeError("chat page is not bound")
         page = await self._gpt_browser().page_by_handle(self.page_handle)
@@ -209,7 +228,14 @@ class PersistentChat:
             page, signals=self.config.workflow.bridge_signals()
         ))
         self._last_url = snapshot.url
+        self._last_snapshot = snapshot
         return snapshot
+
+    def observed_status(self) -> dict[str, object]:
+        """Return sparse page evidence for status projections."""
+        if self._last_snapshot is None:
+            return {}
+        return self._last_snapshot.observe().as_mapping()
 
     async def acquire_provider_identity(self, initial: ChatSnapshot | None = None) -> ChatSnapshot:
         self._move(ChatState.ACQUIRING_SESSION_ID)
@@ -246,20 +272,59 @@ class PersistentChat:
         raise RuntimeError("ChatGPT accepted the turn but no provider session id appeared")
 
     async def page_lost(self, handle: str) -> None:
-        if handle != self.page_handle:
+        if handle != self.page_handle or self.state in {ChatState.RECOVERING, ChatState.CLOSED}:
             return
         self.page_handle = None
         self.runtime.release_page(self, handle)
         self._lost_during_turn = self.active_turn_id is not None
         self._move(ChatState.RECOVERING)
-        pages = await self.runtime.bridge.call("list_pages")
-        await self.reconcile(pages)
+        try:
+            pages = await self.runtime.bridge.call("list_pages")
+            await self.reconcile(pages)
+        except BaseException:
+            if self.state is ChatState.RECOVERING:
+                self._move(ChatState.FAILED)
+            raise
+
+    async def retain_after_turn_failure(self, error: BaseException) -> bool:
+        """Return to READY when a failed turn left this browser chat usable.
+
+        A turn proof/response failure is not equivalent to browser or session
+        destruction.  Keep the durable ChatGPT conversation bound so the
+        gateway can resume it, while still using the chat transition engine to
+        validate every recovery edge.  Unknown failures remain terminal.
+        """
+        if not _recoverable_turn_failure(error) or self.state is ChatState.CLOSED:
+            return False
+        try:
+            if self.state is not ChatState.RECOVERING:
+                self._move(ChatState.RECOVERING)
+            if self.page_handle:
+                # The page may still be present after a proof timeout.  Do not
+                # navigate away from it: the prompt may already have landed.
+                await self._wait_ready()
+                self._move(ChatState.READY)
+                return True
+            if not self.provider_session_id:
+                return False
+            pages = await self.runtime.bridge.call("list_pages")
+            await self.reconcile(pages)
+            return self.state is ChatState.READY
+        except Exception:  # noqa: BLE001 - failed recovery is terminal below
+            if self.state is ChatState.RECOVERING:
+                self._move(ChatState.FAILED)
+            return False
 
     def bridge_replaced(self) -> None:
         """Invalidate bridge-local binding before runtime-level recovery."""
         self.page_handle = None
         if self.state is not ChatState.RECOVERING:
             self._move(ChatState.RECOVERING)
+
+    def mark_recovery_failed(self) -> None:
+        """Terminalize an isolated recovery failure through the chat graph."""
+        if self.state is ChatState.RECOVERING:
+            self._move(ChatState.FAILED)
 
     async def reconcile(self, pages: list[dict]) -> None:
         if self.state is ChatState.CLOSED:
@@ -327,3 +392,11 @@ class PersistentChat:
                 await self.runtime.bridge.call("close_page", {"pageHandle": handle})
             except Exception:
                 pass
+
+
+def _recoverable_turn_failure(error: BaseException) -> bool:
+    """Classify only provider turn failures known to preserve the page."""
+    return isinstance(error, AudiaGenticError) and error.code in {
+        "EXT-GPTAUTO-002",
+        "EXT-GPTAUTO-003",
+    }

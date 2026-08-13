@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -16,6 +17,18 @@ from .status.status_page import STATUS_PAGE_URL, render_status_page
 
 if TYPE_CHECKING:
     from .chat import PersistentChat
+
+
+logger = logging.getLogger(__name__)
+
+
+def _compact_row(row: dict[str, object]) -> dict[str, object]:
+    """Drop absent dashboard fields without dropping meaningful false/zero."""
+    return {
+        key: value
+        for key, value in row.items()
+        if value is not None and value != "" and value != {} and value != []
+    }
 
 
 class ProviderState(StrEnum):
@@ -58,6 +71,7 @@ class GptAutoProviderRuntime:
         # happen to resolve the same project or ChatGPT URL.
         self._page_owners: dict[str, str] = {}
         self._event_task: asyncio.Task[None] | None = None
+        self._status_refresh_task: asyncio.Task[None] | None = None
         self._dedicated_window_anchor: str | None = None
         self._dedicated_window_lock = asyncio.Lock()
         self._browser = BrowserProcessController(config.browser, cdp_probe=self._cdp_available)
@@ -110,6 +124,7 @@ class GptAutoProviderRuntime:
                 self._gpt_browser = GptAutoCdpBrowserController(bridge)
                 self._move(ProviderState.AVAILABLE)
                 self._event_task = asyncio.create_task(self._route_events(bridge))
+                self._status_refresh_task = asyncio.create_task(self._status_refresh_loop())
             except Exception:
                 if self.state in {ProviderState.CONNECTING, ProviderState.STARTING}:
                     self._move(ProviderState.FAILED)
@@ -182,17 +197,20 @@ class GptAutoProviderRuntime:
         if not self._dedicated_window_anchor or not self._bridge:
             return
         rows = [
-            {
+            _compact_row({
+                "provider": "gpt-auto",
                 "session": chat.ag_session_id,
                 "project": chat.project_name,
                 "state": chat.state.value,
                 "page": chat.page_handle,
                 "turn": chat.active_turn_id,
-            }
+                "observed": getattr(chat, "observed_status", lambda: {})(),
+            })
             for chat in self._chats.values()
         ]
         payload = {
             "runtime": self.state.value,
+            "providers": [{"provider_id": "gpt-auto", "state": self.state.value}],
             "sessions": rows,
             "queue": {"running": sum(1 for row in rows if row["state"] in {"busy", "generating", "running"}), "queued": 0},
             "updated": asyncio.get_running_loop().time(),
@@ -204,6 +222,19 @@ class GptAutoProviderRuntime:
             # never prevent a provider session from opening or completing.
             self._dedicated_window_anchor = None
 
+    async def _status_refresh_loop(self) -> None:
+        """Keep the operator projection live between event-driven updates.
+
+        CDP pages do not have a gateway endpoint to poll (the dashboard is a
+        data URL), so the shared runtime periodically pushes a fresh snapshot.
+        The loop is observability-only and is cancelled with the runtime.
+        """
+        try:
+            while self._bridge is not None:
+                await asyncio.sleep(1.0)
+                await self.refresh_status_page()
+        except asyncio.CancelledError:
+            raise
     async def _route_events(self, bridge: PythonCdpBridge) -> None:
         while self._bridge is bridge:
             event = await bridge.events.get()
@@ -216,7 +247,14 @@ class GptAutoProviderRuntime:
             if event.name in {"page_closed", "page_crashed"} and event.page_handle:
                 for chat in tuple(self._chats.values()):
                     if chat.page_handle == event.page_handle:
-                        await chat.page_lost(event.page_handle)
+                        try:
+                            await chat.page_lost(event.page_handle)
+                        except Exception:  # noqa: BLE001 - isolate one chat from the router
+                            self._mark_chat_failed(chat)
+                            logger.exception(
+                                "gpt-auto page recovery failed",
+                                extra={"session-id": chat.ag_session_id},
+                            )
 
     async def recover(self) -> None:
         async with self._lifecycle_lock:
@@ -236,7 +274,20 @@ class GptAutoProviderRuntime:
         await self.ensure_available()
         pages = await self.bridge.call("list_pages")
         for chat in tuple(self._chats.values()):
-            await chat.reconcile(pages)
+            try:
+                await chat.reconcile(pages)
+            except Exception:  # noqa: BLE001 - isolate one session's recovery
+                self._mark_chat_failed(chat)
+                logger.exception(
+                    "gpt-auto bridge recovery failed for session",
+                    extra={"session-id": chat.ag_session_id},
+                )
+
+    @staticmethod
+    def _mark_chat_failed(chat: PersistentChat) -> None:
+        mark_failed = getattr(chat, "mark_recovery_failed", None)
+        if mark_failed is not None:
+            mark_failed()
 
     async def create_chat_page(self) -> str:
         """Create a session page through the one shared-window admission path."""
@@ -304,6 +355,9 @@ class GptAutoProviderRuntime:
             await self._browser.shutdown()
             if self._event_task and not self._event_task.done():
                 self._event_task.cancel()
+            if self._status_refresh_task and not self._status_refresh_task.done():
+                self._status_refresh_task.cancel()
+            self._status_refresh_task = None
             self._move(ProviderState.STOPPED)
 
     async def shutdown_from_owner(self) -> None:
