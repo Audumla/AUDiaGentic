@@ -151,6 +151,11 @@ def _redact_error(error: BaseException | dict[str, Any] | None) -> dict[str, Any
     if isinstance(error, AudiaGenticError):
         return {"code": error.code, "message": error.message, "kind": error.kind}
     if isinstance(error, BaseException):
+        # Preserve ordinary validation detail for operator diagnosis; secret
+        # material is not expected in ValueError messages and the outer error
+        # boundary still redacts provider/authentication exceptions.
+        if isinstance(error, ValueError) and str(error):
+            return {"code": "VAL-AGW-UNKNOWN", "message": str(error), "kind": type(error).__name__}
         return {
             "code": "UNKNOWN",
             "message": "unexpected error (see server logs)",
