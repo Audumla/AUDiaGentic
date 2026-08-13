@@ -37,10 +37,14 @@ class PythonCdpBridge:
             raise RuntimeError("Python CDP bridge is not running")
         return self._client
 
-    async def start(self) -> None:
+    async def start(self, *, connect_timeout: float | None = None) -> None:
         if self._client is not None:
             return
-        client = CdpClient(self.config.cdp_url, default_timeout=self.config.cdp.protocol_timeout_seconds)
+        client = CdpClient(
+            self.config.cdp_url,
+            default_timeout=self.config.cdp.protocol_timeout_seconds,
+            connect_timeout=connect_timeout or self.config.cdp.connect_timeout_seconds,
+        )
         await client.start()
         self._client = client
         self._reader_task = asyncio.create_task(self._route_events(client))

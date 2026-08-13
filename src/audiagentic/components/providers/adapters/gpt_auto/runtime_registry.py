@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import replace
 from pathlib import Path
 
 from .config import GptAutoConfig
@@ -26,10 +25,10 @@ def get_runtime(project_root: Path, config: GptAutoConfig) -> GptAutoProviderRun
     key = _shared_key(config)
     current = _runtimes.get(key)
     if current is not None:
-        # Project URLs/workflow identity belong to individual chats; transport
-        # and browser settings must remain stable for the shared runtime.
-        if replace(current.config, project_url=None) != replace(config, project_url=None):
-            raise RuntimeError("gpt-auto configuration changed while runtime is active")
+        # Only browser/CDP ownership is machine-scoped. Project workflow,
+        # timeouts and URLs stay on each PersistentChat.
+        if (current.config.browser, current.config.cdp) != (config.browser, config.cdp):
+            raise RuntimeError("gpt-auto machine runtime configuration changed while active")
         return current
     current = GptAutoProviderRuntime(config)
     _runtimes[key] = current
@@ -45,4 +44,6 @@ async def shutdown_runtime(project_root: Path) -> None:
 async def shutdown_all_runtimes() -> None:
     runtimes = list(_runtimes.values())
     _runtimes.clear()
-    await asyncio.gather(*(runtime.shutdown() for runtime in runtimes), return_exceptions=True)
+    await asyncio.gather(
+        *(runtime.shutdown_from_owner() for runtime in runtimes), return_exceptions=True
+    )

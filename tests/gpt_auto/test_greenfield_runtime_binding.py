@@ -60,13 +60,15 @@ async def test_running_configured_browser_fail_policy_does_not_terminate():
         await controller.ensure_browser_for_cdp()
 
 
-def test_runtime_registry_shares_one_runtime_and_rejects_live_config_change(tmp_path):
+def test_runtime_registry_shares_machine_runtime_but_allows_project_turn_policy(tmp_path):
     _runtimes.clear()
     config = GptAutoConfig.from_dict(valid_config())
     assert get_runtime(tmp_path, config) is get_runtime(tmp_path, config)
     changed = valid_config()
     changed["turn"]["poll-interval-seconds"] = 2
-    with pytest.raises(RuntimeError, match="configuration changed"):
+    assert get_runtime(tmp_path, GptAutoConfig.from_dict(changed)) is get_runtime(tmp_path, config)
+    changed["cdp"]["protocol-timeout-seconds"] = 31
+    with pytest.raises(RuntimeError, match="machine runtime configuration"):
         get_runtime(tmp_path, GptAutoConfig.from_dict(changed))
     _runtimes.clear()
 

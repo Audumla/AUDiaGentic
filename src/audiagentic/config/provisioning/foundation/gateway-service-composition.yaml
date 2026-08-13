@@ -11,6 +11,7 @@ gateway-service-composition:
   roots:
     - agents.execution-profile-registry
     - agents.gateway-queue-manager
+    - providers.gpt-auto-runtime-owner
 
   bindings:
     # Shared-gateway resolution is the only implementation this process
@@ -20,3 +21,4 @@ gateway-service-composition:
     # The queue manager has one implementation too (AS63 step 9/10) -- it is
     # composed for its per-process lifetime, not for swappable implementations.
     agents.gateway-queue-manager: agents.gateway-queue-manager
+    providers.gpt-auto-runtime-owner: providers.shared-gpt-auto-runtime
