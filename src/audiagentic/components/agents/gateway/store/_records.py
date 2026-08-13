@@ -41,6 +41,11 @@ def _redact_error(error: BaseException | dict[str, Any] | None) -> dict[str, Any
     if isinstance(error, AudiaGenticError):
         return {"code": error.code, "message": error.message, "kind": error.kind}
     if isinstance(error, BaseException):
+        # Preserve ordinary validation/configuration detail so operators can
+        # correct the failing input.  ValueError messages are bounded by the
+        # gateway error projection and must never include raw traceback/data.
+        if isinstance(error, ValueError) and str(error):
+            return {"code": "VAL-AGW-UNKNOWN", "message": str(error), "kind": type(error).__name__}
         return {"code": "UNKNOWN", "message": "unexpected error (see server logs)", "kind": type(error).__name__}
     return {k: v for k, v in error.items() if k in _shared._REDACTED_ERROR_KEYS}
 
@@ -468,3 +473,4 @@ def list_records(project_root: Path) -> list[dict[str, Any]]:
         except AudiaGenticError:
             logger.warning("skipping unreadable gateway request", extra={"request-id": entry.name}, exc_info=True)
     return records
+
