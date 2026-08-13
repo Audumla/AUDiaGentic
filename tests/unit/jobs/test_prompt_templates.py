@@ -7,7 +7,6 @@ import pytest
 
 from audiagentic.components.agent_jobs.prompt_templates import (
     load_prompt_from_file,
-    load_prompt_template,
     render_prompt_template,
 )
 from audiagentic.foundation.contracts.error_resolutions import (

@@ -432,6 +432,13 @@ class SessionRuntime:
         mcp_entries=(),
         identity_context_fingerprint: str | None = None,
         execution_context_fingerprint: str | None = None,
+        context_id: str | None = None,
+        agent_definition_id: str | None = None,
+        agent_definition_digest: str | None = None,
+        role_ids: tuple[str, ...] | list[str] | None = None,
+        role_set_digest: str | None = None,
+        execution_profile_digest: str | None = None,
+        effective_capability_digest: str | None = None,
     ) -> dict[str, Any]:
         """Open a live session; returns the persisted session record.
 
@@ -486,6 +493,13 @@ class SessionRuntime:
                 mcp_entries=tuple(mcp_entries),
                 identity_context_fingerprint=identity_context_fingerprint,
                 execution_context_fingerprint=execution_context_fingerprint,
+                context_id=context_id,
+                agent_definition_id=agent_definition_id,
+                agent_definition_digest=agent_definition_digest,
+                role_ids=role_ids,
+                role_set_digest=role_set_digest,
+                execution_profile_digest=execution_profile_digest,
+                effective_capability_digest=effective_capability_digest,
             ),
             timeout=_OPEN_TIMEOUT_SECONDS,
         )
@@ -520,6 +534,13 @@ class SessionRuntime:
         control_id: str,
         identity_context_fingerprint: str | None = None,
         execution_context_fingerprint: str | None = None,
+        context_id: str | None = None,
+        agent_definition_id: str | None = None,
+        agent_definition_digest: str | None = None,
+        role_ids: tuple[str, ...] | list[str] | None = None,
+        role_set_digest: str | None = None,
+        execution_profile_digest: str | None = None,
+        effective_capability_digest: str | None = None,
         model_id: str | None = None,
         idle_timeout_seconds: float | None = None,
         max_lifetime_seconds: float | None = None,
@@ -548,6 +569,13 @@ class SessionRuntime:
                 control_id=control_id,
                 identity_context_fingerprint=identity_context_fingerprint,
                 execution_context_fingerprint=execution_context_fingerprint,
+                context_id=context_id,
+                agent_definition_id=agent_definition_id,
+                agent_definition_digest=agent_definition_digest,
+                role_ids=role_ids,
+                role_set_digest=role_set_digest,
+                execution_profile_digest=execution_profile_digest,
+                effective_capability_digest=effective_capability_digest,
                 model_id=model_id,
                 idle_timeout_seconds=(
                     DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS
@@ -869,6 +897,13 @@ class SessionRuntime:
         mcp_entries,
         identity_context_fingerprint: str | None = None,
         execution_context_fingerprint: str | None = None,
+        context_id: str | None = None,
+        agent_definition_id: str | None = None,
+        agent_definition_digest: str | None = None,
+        role_ids: tuple[str, ...] | list[str] | None = None,
+        role_set_digest: str | None = None,
+        execution_profile_digest: str | None = None,
+        effective_capability_digest: str | None = None,
     ) -> dict[str, Any]:
         started = time.monotonic()
         logger.info(
@@ -898,6 +933,13 @@ class SessionRuntime:
                 metadata=dict(update.metadata),
                 identity_context_fingerprint=identity_context_fingerprint,
                 execution_context_fingerprint=execution_context_fingerprint,
+                context_id=context_id,
+                agent_definition_id=agent_definition_id,
+                agent_definition_digest=agent_definition_digest,
+                role_ids=role_ids,
+                role_set_digest=role_set_digest,
+                execution_profile_digest=execution_profile_digest,
+                effective_capability_digest=effective_capability_digest,
             )
         # AS28 slice 4a: resolve provider-neutral transport via the public
         # prepare seam. No AcpLaunch / AcpSessionTransport construction here.
@@ -1182,6 +1224,13 @@ class SessionRuntime:
         control_id: str,
         identity_context_fingerprint: str | None,
         execution_context_fingerprint: str | None,
+        context_id: str | None,
+        agent_definition_id: str | None,
+        agent_definition_digest: str | None,
+        role_ids: tuple[str, ...] | list[str] | None,
+        role_set_digest: str | None,
+        execution_profile_digest: str | None,
+        effective_capability_digest: str | None,
         model_id: str | None,
         idle_timeout_seconds: float,
         max_lifetime_seconds: float,
@@ -1241,6 +1290,26 @@ class SessionRuntime:
             _record_failure(exc)
             raise
         source_binding = session_store.read_session_binding(project_root, source_session_id)
+        requested_composition = {
+            "context-id": context_id,
+            "agent-definition-id": agent_definition_id,
+            "agent-definition-digest": agent_definition_digest,
+            "role-ids": list(role_ids) if role_ids is not None else None,
+            "role-set-digest": role_set_digest,
+            "execution-profile-digest": execution_profile_digest,
+            "effective-capability-digest": effective_capability_digest,
+        }
+        if source_binding:
+            for key, requested in requested_composition.items():
+                if requested is not None and requested != source_binding.get(key):
+                    exc = AudiaGenticError(
+                        code="CON-AGW-124",
+                        kind="agents",
+                        message="requested session composition does not match the source generation",
+                        details={"session-id": source_session_id, "field": key},
+                    )
+                    _record_failure(exc)
+                    raise exc
         provider_id = (source_binding or {}).get("provider-id")
         surface_id = (source_binding or {}).get("surface-id")
         if not isinstance(surface_id, str) or not surface_id.strip():
@@ -1396,6 +1465,13 @@ class SessionRuntime:
             idle_timeout_seconds=idle_timeout_seconds,
             max_lifetime_seconds=max_lifetime_seconds,
             provider_metadata=dict(open_result.metadata),
+            context_id=source_binding.get("context-id"),
+            agent_definition_id=source_binding.get("agent-definition-id"),
+            agent_definition_digest=source_binding.get("agent-definition-digest"),
+            role_ids=source_binding.get("role-ids"),
+            role_set_digest=source_binding.get("role-set-digest"),
+            execution_profile_digest=source_binding.get("execution-profile-digest"),
+            effective_capability_digest=source_binding.get("effective-capability-digest"),
         )
         session_id = record["session-id"]
         record["binding"] = binding_store.resume_binding(

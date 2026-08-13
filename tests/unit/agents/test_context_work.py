@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,10 @@ from audiagentic.components.agents.models.prompt_definition import PromptDefinit
 from audiagentic.components.agents.work.contracts import AgentWorkWaitReason
 from audiagentic.components.agents.work.delegation import delegate_child_work
 from audiagentic.components.agents.work.event_adapter import dispatch_trigger_event
+from audiagentic.components.agents.work.event_failures import (
+    read_event_failures,
+    record_event_failure,
+)
 from audiagentic.components.agents.work.event_ingress import WorkEventIngress
 from audiagentic.components.agents.work.ingress import deterministic_work_id, submit_event_work
 from audiagentic.components.agents.work.inputs import new_work_input
@@ -31,7 +36,16 @@ from audiagentic.components.agents.work.service import (
     submit_work,
 )
 from audiagentic.components.agents.work.triggers import event_pattern_matches, trigger_matches
-from audiagentic.components.agents.work.work_api import submit_review
+from audiagentic.components.agents.work.work_api import (
+    add_message,
+    answer,
+    cancel,
+    get_status,
+    list_status,
+    overview,
+    submit_packet,
+    submit_review,
+)
 
 
 def _seed(root: Path) -> None:
@@ -42,6 +56,17 @@ def _seed(root: Path) -> None:
         ({"agent_id": "a", "name": "A", "prompt_id": "p", "role_ids": ["r"], "execution_profile_id": "p"},),
     )
     AgentsConfigRepository().replace(root, document, expected_digest=None)
+
+
+def test_context_and_work_transitions_use_foundation_workflow_authority() -> None:
+    from audiagentic.components.agents.context import store as context_store
+    from audiagentic.components.agents.work import store as work_store
+
+    for module in (context_store, work_store):
+        source = inspect.getsource(module)
+        assert "load_workflow" in source
+        assert "transition_allowed" in source
+        assert "_TRANSITIONS" not in source
 
 
 def test_context_is_logical_and_work_input_is_idempotent(tmp_path: Path) -> None:
@@ -90,6 +115,44 @@ def test_work_links_gateway_execution_without_copying_output(tmp_path: Path) -> 
     linked = link_work_execution(tmp_path, work.work_id, "req_1", expected_revision=work.revision)
     assert linked.active_execution_id == "req_1"
     assert "output" not in linked.to_mapping()
+
+
+def test_gateway_work_admission_replay_uses_one_deterministic_request(tmp_path: Path, monkeypatch) -> None:
+    _seed(tmp_path)
+    context = open_context(tmp_path, "a")
+    from audiagentic.components.agents.gateway.application import InProcessGatewayApplication
+
+    app = InProcessGatewayApplication()
+    admissions: list[str] = []
+
+    def admit(_root, **kwargs):
+        key = kwargs["metadata"]["idempotency_key"]
+        admissions.append(key)
+        return {"request-id": "req_once", "state": "queued"}
+
+    app.submit_execution_request = admit  # type: ignore[method-assign]
+    original_link = __import__(
+        "audiagentic.components.agents.work.service", fromlist=["link_work_execution"]
+    ).link_work_execution
+    failed_once = True
+
+    def crash_before_link(*args, **kwargs):
+        nonlocal failed_once
+        if failed_once:
+            failed_once = False
+            raise RuntimeError("simulated crash after gateway admission")
+        return original_link(*args, **kwargs)
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.work.service.link_work_execution",
+        crash_before_link,
+    )
+    message = {"message_id": "m-crash", "text": "hello", "inputs": {}, "created_at": "test"}
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        app.submit_agent_work(tmp_path, context.context_id, message)
+    replayed = app.submit_agent_work(tmp_path, context.context_id, message)
+    assert replayed["active_execution_id"] == "req_once"
+    assert admissions == ["agent-work:" + replayed["work_id"] + ":message:m-crash"] * 2
 
 
 def test_gateway_application_cancellation_controls_linked_execution_first(tmp_path: Path) -> None:
@@ -364,3 +427,72 @@ def test_public_review_api_is_deterministic_child_work(tmp_path: Path) -> None:
     replay = submit_review(tmp_path, parent.work_id, review_key="review-1", prompt="check it")
     assert first["work_id"] == replay["work_id"]
     assert replay["parent_work_id"] == parent.work_id
+
+
+def test_public_work_control_api_projects_status_message_and_cancel(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    context = open_context(tmp_path, "a")
+    parent = submit_work(tmp_path, context.context_id, new_work_input("control", "control"))
+    assert get_status(tmp_path, parent.work_id)["work_id"] == parent.work_id
+    assert any(item["work_id"] == parent.work_id for item in list_status(tmp_path))
+    add_message(tmp_path, parent.work_id, message_id="answer-1", text="continue")
+    result = cancel(tmp_path, parent.work_id)
+    assert result["state"] == "cancelled"
+
+
+def test_canonical_event_failure_record_is_redacted_and_operational(tmp_path: Path) -> None:
+    record_event_failure(
+        tmp_path,
+        trigger_id="trigger-a",
+        event_type="orders.created",
+        correlation_id="corr-1",
+        error_code="VAL-1",
+    )
+    records = read_event_failures(tmp_path)
+    assert records[0]["trigger_id"] == "trigger-a"
+    assert "payload" not in records[0]
+    assert "prompt" not in records[0]
+
+
+def test_public_work_overview_is_read_only_and_redacted(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    context = open_context(tmp_path, "a")
+    submit_work(tmp_path, context.context_id, new_work_input("overview", "hello"))
+    summary = overview(tmp_path)
+    assert summary["work-count"] == 1
+    assert "prompt" not in summary
+    assert "output" not in summary
+
+
+def test_public_work_answer_resumes_foundation_interaction(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    context = open_context(tmp_path, "a")
+    work = submit_work(tmp_path, context.context_id, new_work_input("answer", "question"))
+    waiting = wait_for_interaction(
+        tmp_path,
+        work.work_id,
+        kind="approval",
+        title="Approve Work",
+        reason=AgentWorkWaitReason.APPROVAL,
+    )
+    resumed = answer(tmp_path, waiting.work_id, choice="approve")
+    assert resumed["state"] == "active"
+
+
+def test_packet_submission_is_deterministic_work_without_job_state(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    context = open_context(tmp_path, "a")
+    first = submit_packet(
+        tmp_path,
+        context_id=context.context_id,
+        packet_id="packet-1",
+        text="Implement packet one",
+    )
+    replay = submit_packet(
+        tmp_path,
+        context_id=context.context_id,
+        packet_id="packet-1",
+        text="Implement packet one",
+    )
+    assert first["work_id"] == replay["work_id"]
+    assert not (tmp_path / ".audiagentic" / "runtime" / "jobs").exists()

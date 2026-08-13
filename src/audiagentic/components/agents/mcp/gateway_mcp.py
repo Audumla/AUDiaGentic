@@ -25,10 +25,8 @@ from audiagentic.foundation.mcp.component_server import (
 mcp = mcp_server(__name__)
 
 
-@mcp.tool()
-@tool_boundary
 def agent_list_definitions() -> list[dict[str, Any]]:
-    """List the agent definitions available to the gateway."""
+    """Internal discovery helper; configuration MCP owns the public export."""
     from audiagentic.components.agents.models.agent_definition_api import (
         list_agent_definitions,
     )

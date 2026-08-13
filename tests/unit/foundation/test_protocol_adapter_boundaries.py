@@ -81,6 +81,12 @@ def test_legacy_agent_task_api_is_retired() -> None:
     assert not (COMPONENTS / "agents" / "models" / "agent_task_api.py").exists()
 
 
+def test_legacy_job_control_cli_is_retired() -> None:
+    source = (ROOT / "src" / "audiagentic" / "launcher.py").read_text(encoding="utf-8")
+    assert '"job-control"' not in source
+    assert "cmd_job_control" not in source
+
+
 def test_gateway_core_owns_no_mcp_timeout_constant() -> None:
     source = (COMPONENTS / "agents" / "gateway" / "api.py").read_text(encoding="utf-8")
     assert "MCP_BLOCKING_TIMEOUT_SECONDS" not in source

@@ -70,6 +70,13 @@ def build_binding(
     predecessor_binding_id: str | None = None,
     identity_context_fingerprint: str | None = None,
     execution_context_fingerprint: str | None = None,
+    context_id: str | None = None,
+    agent_definition_id: str | None = None,
+    agent_definition_digest: str | None = None,
+    role_ids: tuple[str, ...] | list[str] | None = None,
+    role_set_digest: str | None = None,
+    execution_profile_digest: str | None = None,
+    effective_capability_digest: str | None = None,
 ) -> dict[str, Any] | None:
     if provider_session_ref is None:
         return None
@@ -101,6 +108,13 @@ def build_binding(
         "predecessor-binding-id": predecessor_binding_id,
         "identity-context-fingerprint": identity_context_fingerprint or DEFAULT_IDENTITY_CONTEXT,
         "execution-context-fingerprint": execution_context_fingerprint or DEFAULT_EXECUTION_CONTEXT,
+        "context-id": context_id,
+        "agent-definition-id": agent_definition_id,
+        "agent-definition-digest": agent_definition_digest,
+        "role-ids": list(role_ids) if role_ids is not None else None,
+        "role-set-digest": role_set_digest,
+        "execution-profile-digest": execution_profile_digest,
+        "effective-capability-digest": effective_capability_digest,
         "created-at": now_iso_z(),
     }
 
@@ -142,6 +156,13 @@ def public_binding_projection(binding: dict[str, Any] | None) -> dict[str, Any] 
         "relation": binding.get("relation"),
         "ownership": binding.get("ownership"),
         "predecessor-binding-id": binding.get("predecessor-binding-id"),
+        "context-id": binding.get("context-id"),
+        "agent-definition-id": binding.get("agent-definition-id"),
+        "agent-definition-digest": binding.get("agent-definition-digest"),
+        "role-ids": binding.get("role-ids"),
+        "role-set-digest": binding.get("role-set-digest"),
+        "execution-profile-digest": binding.get("execution-profile-digest"),
+        "effective-capability-digest": binding.get("effective-capability-digest"),
         "provider-ref-key-prefix": key[:12] if key else None,
     }
 

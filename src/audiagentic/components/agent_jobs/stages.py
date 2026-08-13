@@ -6,10 +6,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.agent_jobs.paths import job_stages_dir
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.io import atomic_write_json
 
 logger = logging.getLogger(__name__)
-from audiagentic.foundation.io import atomic_write_json
 
 StageHandler = Callable[
     [dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any] | None],
@@ -20,12 +21,8 @@ STAGE_RESULTS = {"success", "failure", "skipped"}
 NEXT_STAGE_RECOMMENDATIONS = {"continue", "stop", "escalate"}
 
 
-def _stage_dir(project_root: Path, job_id: str) -> Path:
-    return project_root / ".audiagentic" / "runtime" / "jobs" / job_id / "stages"
-
-
 def stage_output_path(project_root: Path, job_id: str, stage_id: str) -> Path:
-    return _stage_dir(project_root, job_id) / f"{stage_id}.json"
+    return job_stages_dir(project_root, job_id) / f"{stage_id}.json"
 
 
 def _validate_stage_output(payload: dict[str, Any]) -> list[str]:

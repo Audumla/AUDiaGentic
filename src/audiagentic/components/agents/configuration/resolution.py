@@ -9,6 +9,7 @@ from typing import Any
 
 from audiagentic.components.agents.capabilities.contracts import RoleManifest
 from audiagentic.components.agents.capabilities.resolver import resolve_role_manifest
+from audiagentic.components.agents.capabilities.source_filter import eligible_instance_ids
 from audiagentic.components.agents.capabilities.vocabulary import CapabilityVocabulary
 from audiagentic.components.agents.models.agent_definition import agent_definition_from_dict
 from audiagentic.components.agents.models.execution_profile import execution_profile_from_dict
@@ -117,7 +118,16 @@ def resolve_agent_admission(
 ) -> AgentAdmission:
     vocabulary = vocabulary or CapabilityVocabulary({})
     manifest = resolve_role_manifest(composition.roles, vocabulary, provider_evidence)
-    eligible = tuple(composition.execution_profile.instances)
+    eligible_hint = getattr(provider_evidence, "eligible_instance_ids", None)
+    if isinstance(provider_evidence, dict):
+        eligible_hint = provider_evidence.get("eligible_instance_ids")
+    allowed = set(eligible_hint) if eligible_hint is not None else None
+    eligible = eligible_instance_ids(
+        composition.execution_profile.instances,
+        compatible=(lambda instance: instance in allowed) if allowed is not None else None,
+    )
+    if not eligible:
+        raise ValueError("execution profile has no capability-compatible instances")
     return AgentAdmission(composition.identity, manifest, eligible, composition.prompt, composition.execution_profile)
 
 

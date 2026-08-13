@@ -19,14 +19,10 @@ from typing import Any
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Import targets — these must exist when the implementation lands.
-# ---------------------------------------------------------------------------
-
-try:
-    from audiagentic.components.agents.status import terminal_quality as tq
-except ImportError:
-    tq = None  # tests are skipped until the module exists
+# The classifier is part of the current Agents surface.  Import it directly so
+# a removed or broken implementation fails collection instead of leaving a
+# misleading "tests are skipped until the module exists" compatibility stub.
+from audiagentic.components.agents.status import terminal_quality as tq
 
 # ---------------------------------------------------------------------------
 # Mark all tests in this module as unit-level (no real I/O).
