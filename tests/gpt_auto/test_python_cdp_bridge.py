@@ -83,14 +83,14 @@ async def test_python_bridge_serializes_page_creation_and_returns_window_identit
 
 
 @pytest.mark.asyncio
-async def test_python_bridge_uses_page_session_for_navigation_and_snapshot():
+async def test_python_bridge_uses_page_session_for_navigation_and_evaluation():
     bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
     fake = _FakeClient()
     bridge._client = fake
     page = await bridge.call("create_page")
 
     await bridge.call("navigate", {"pageHandle": page["pageHandle"], "url": "about:blank"})
-    await bridge.call("snapshot", {"pageHandle": page["pageHandle"], "signals": []})
+    await bridge.evaluate(page["pageHandle"], "() => ({ok: true})")
 
     assert any(call[0] == "Target.attachToTarget" for call in fake.calls)
     assert any(call[0] == "Page.navigate" for call in fake.calls)
@@ -156,8 +156,9 @@ async def test_generic_browser_api_supports_common_page_composites():
     reason="set AUDIAGENTIC_GPT_AUTO_LIVE=1 to use the existing CDP browser",
 )
 async def test_python_bridge_live_page_and_window_lifecycle():
-    """Smoke test only: creates and closes blank pages, never submits GPT work."""
+    """Smoke test for generic lifecycle plus the GPT adapter boundary."""
     bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
+    api = GptAutoCdpBrowserController(bridge)
     pages: list[str] = []
     await bridge.start()
     try:
@@ -190,16 +191,17 @@ async def test_python_bridge_live_page_and_window_lifecycle():
             "</body></html>"
         )
         await bridge.call("navigate", {"pageHandle": page["pageHandle"], "url": html})
-        snapshot = await bridge.wait_for_composer(page["pageHandle"], timeout=5)
+        page_ref = await api.page_by_handle(page["pageHandle"])
+        snapshot = await api.wait_for_composer(page_ref, timeout=5)
         assert snapshot["composerPresent"] is True
         assert snapshot["composerEditable"] is True
         await bridge.call("keep_page_active", {"pageHandle": page["pageHandle"]})
-        submitted = await bridge.submit_prompt_verified(page["pageHandle"], "CDP bridge live smoke")
+        submitted = await api.submit(page_ref, "CDP bridge live smoke")
         assert submitted == {
             "actionComplete": True,
             "typedText": "CDP bridge live smoke",
         }
-        stopped = await bridge.call("stop_generation", {"pageHandle": page["pageHandle"]})
+        stopped = await api.stop_generation(page_ref)
         assert stopped["stopped"] is False
         target_id = await bridge._target(page["pageHandle"])
         await bridge.client.command("Target.closeTarget", {"targetId": target_id})

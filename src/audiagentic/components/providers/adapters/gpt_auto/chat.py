@@ -21,9 +21,6 @@ from .urls import (
     url_matches_provider_session,
 )
 
-_PROJECTS_URL = "https://chatgpt.com/projects"
-
-
 class ChatState(StrEnum):
     OPENING = "opening"
     READY = "ready"
@@ -68,10 +65,14 @@ class PersistentChat:
         claim = getattr(self.runtime, "claim_page", None)
         return True if claim is None else bool(claim(self, page_handle))
 
+    def _gpt_browser(self):
+        return getattr(self.runtime, "gpt_browser", self.runtime.bridge)
+
     async def open(self) -> None:
         await self.runtime.ensure_available()
         await self.runtime.register_chat(self)
-        composite_open = getattr(self.runtime.bridge, "open_project_page", None)
+        browser = self._gpt_browser()
+        composite_open = getattr(browser, "open_project_page", None)
         if self.provider_session_id is None and composite_open is not None:
             anchor = None
             if self.runtime.config.browser.dedicated_window:
@@ -81,11 +82,11 @@ class PersistentChat:
             result = await composite_open(
                 project_name=self.project_name,
                 project_url=self.project_url,
-                anchor_page_handle=anchor,
+                anchor_page=await browser.page(anchor) if anchor else None,
                 navigation_timeout=self.runtime.config.chat.navigation_timeout_seconds,
                 ready_timeout=self.runtime.config.chat.ready_timeout_seconds,
             )
-            self.page_handle = str(result["pageHandle"])
+            self.page_handle = result["page"].handle
             self.project_url = str(result["projectUrl"])
             self.state = ChatState.READY
             return
@@ -114,26 +115,17 @@ class PersistentChat:
             if not self._claim_page(self.page_handle):
                 raise RuntimeError("gpt-auto created a page already owned by another session")
             if not self.provider_session_id and not parse_project_id(self.project_url or ""):
-                await self.runtime.bridge.call(
-                    "navigate",
-                    {
-                        "pageHandle": self.page_handle,
-                        "url": _PROJECTS_URL,
-                        "timeoutMs": int(
-                            self.runtime.config.chat.navigation_timeout_seconds * 1000
-                        ),
-                    },
-                    timeout=self.runtime.config.chat.navigation_timeout_seconds + 2,
-                )
-                match = await self.runtime.bridge.call(
-                    "find_project_url",
-                    {
-                        "pageHandle": self.page_handle,
-                        "projectName": self.project_name,
-                        "timeoutMs": int(self.runtime.config.chat.ready_timeout_seconds * 1000),
-                    },
-                    timeout=self.runtime.config.chat.ready_timeout_seconds + 2,
-                )
+                if hasattr(browser, "page_by_handle"):
+                    page = await browser.page_by_handle(self.page_handle)
+                    await browser.navigate(page, "https://chatgpt.com/projects")
+                    match = await browser.find_project_url(page, self.project_name)
+                else:
+                    await self.runtime.bridge.call(
+                        "navigate", {"pageHandle": self.page_handle, "url": "https://chatgpt.com/projects"}
+                    )
+                    match = await self.runtime.bridge.call(
+                        "find_project_url", {"pageHandle": self.page_handle, "projectName": self.project_name}
+                    )
                 self.project_url = canonical_project_url(str(match["url"])) + "/project"
                 target = self.project_url
             if not target:
@@ -180,15 +172,10 @@ class PersistentChat:
                 raise RuntimeError("gpt-auto chat recovery timed out")
         if not self.page_handle:
             raise RuntimeError("chat page is not bound")
-        snapshot = ChatSnapshot.from_bridge(
-            await self.runtime.bridge.call(
-                "snapshot",
-                {
-                    "pageHandle": self.page_handle,
-                    "signals": self.runtime.config.workflow.bridge_signals(),
-                },
-            )
-        )
+        page = await self._gpt_browser().page_by_handle(self.page_handle)
+        snapshot = ChatSnapshot.from_bridge(await self._gpt_browser().snapshot(
+            page, signals=self.runtime.config.workflow.bridge_signals()
+        ))
         self._last_url = snapshot.url
         return snapshot
 

@@ -11,6 +11,7 @@ from audiagentic.foundation.workflow import TransitionConfig, TransitionEngine
 from .browser_process import BrowserProcessController
 from .cdp.bridge import PythonCdpBridge
 from .config import GptAutoConfig
+from .gpt_auto_cdp import GptAutoCdpBrowserController
 from .status.status_page import STATUS_PAGE_URL, render_status_page
 
 if TYPE_CHECKING:
@@ -49,6 +50,7 @@ class GptAutoProviderRuntime:
         self.state = ProviderState.STOPPED
         self._lifecycle_lock = asyncio.Lock()
         self._bridge: PythonCdpBridge | None = None
+        self._gpt_browser: GptAutoCdpBrowserController | None = None
         self._chats: dict[str, PersistentChat] = {}
         # A browser page is an execution resource.  Never let two live
         # provider sessions drive the same tab concurrently, even when both
@@ -56,6 +58,7 @@ class GptAutoProviderRuntime:
         self._page_owners: dict[str, str] = {}
         self._event_task: asyncio.Task[None] | None = None
         self._dedicated_window_anchor: str | None = None
+        self._dedicated_window_lock = asyncio.Lock()
         self._browser = BrowserProcessController(config.browser, cdp_probe=self._cdp_available)
 
     @property
@@ -63,6 +66,12 @@ class GptAutoProviderRuntime:
         if not self._bridge:
             raise RuntimeError("gpt-auto provider runtime is unavailable")
         return self._bridge
+
+    @property
+    def gpt_browser(self) -> GptAutoCdpBrowserController:
+        if self._gpt_browser is None:
+            raise RuntimeError("gpt-auto browser adapter is unavailable")
+        return self._gpt_browser
 
     def _move(self, target: ProviderState) -> None:
         failure = _ENGINE.check(self.state.value, target.value)
@@ -97,6 +106,7 @@ class GptAutoProviderRuntime:
                 bridge = PythonCdpBridge(self.config)
                 await bridge.start()
                 self._bridge = bridge
+                self._gpt_browser = GptAutoCdpBrowserController(bridge)
                 self._move(ProviderState.AVAILABLE)
                 self._event_task = asyncio.create_task(self._route_events(bridge))
             except Exception:
@@ -106,26 +116,40 @@ class GptAutoProviderRuntime:
 
     async def ensure_dedicated_window_anchor(self) -> str:
         """Create one persistent anchor tab for the shared GPT-auto window."""
-        await self.ensure_available()
-        if self._dedicated_window_anchor:
-            try:
-                pages = await self.bridge.call("list_pages")
-                if any(str(p.get("pageHandle")) == self._dedicated_window_anchor for p in pages):
-                    return self._dedicated_window_anchor
-            except Exception:
-                pass
+        async with self._dedicated_window_lock:
+            await self.ensure_available()
+            pages = await self.bridge.call("list_pages")
+            if self._dedicated_window_anchor and any(
+                str(p.get("pageHandle")) == self._dedicated_window_anchor for p in pages
+            ):
+                return self._dedicated_window_anchor
+            # Gateway/runtime recovery can lose the in-memory handle while the
+            # browser tab survives. Reuse the first existing dashboard anchor.
+            existing = next(
+                (
+                    str(p["pageHandle"])
+                    for p in pages
+                    if str(p.get("url") or "").startswith("data:text/html")
+                    and "GPT-auto" in str(p.get("title") or "")
+                ),
+                None,
+            )
+            if existing:
+                self._dedicated_window_anchor = existing
+                await self.refresh_status_page()
+                return existing
             self._dedicated_window_anchor = None
-        page = await self.bridge.call("create_window_page")
-        self._dedicated_window_anchor = str(page["pageHandle"])
-        await self.bridge.call(
-            "navigate",
-            {
-                "pageHandle": self._dedicated_window_anchor,
-                "url": STATUS_PAGE_URL,
-            },
-        )
-        await self.refresh_status_page()
-        return self._dedicated_window_anchor
+            page = await self.bridge.call("create_window_page")
+            self._dedicated_window_anchor = str(page["pageHandle"])
+            await self.bridge.call(
+                "navigate",
+                {
+                    "pageHandle": self._dedicated_window_anchor,
+                    "url": STATUS_PAGE_URL,
+                },
+            )
+            await self.refresh_status_page()
+            return self._dedicated_window_anchor
 
     async def refresh_status_page(self) -> None:
         """Render current shared-runtime/session facts in the anchor tab."""
@@ -147,7 +171,12 @@ class GptAutoProviderRuntime:
             "queue": {"running": sum(1 for row in rows if row["state"] in {"busy", "generating", "running"}), "queued": 0},
             "updated": asyncio.get_running_loop().time(),
         }
-        await render_status_page(self.bridge, self._dedicated_window_anchor, payload)
+        try:
+            await render_status_page(self.bridge, self._dedicated_window_anchor, payload)
+        except Exception:
+            # The dashboard is observability only. A stale/closed anchor must
+            # never prevent a provider session from opening or completing.
+            self._dedicated_window_anchor = None
 
     async def _route_events(self, bridge: PythonCdpBridge) -> None:
         while self._bridge is bridge:
@@ -166,6 +195,7 @@ class GptAutoProviderRuntime:
                 return
             self._move(ProviderState.RECOVERING)
             old, self._bridge = self._bridge, None
+            self._gpt_browser = None
             if old:
                 await old.stop()
         await self.ensure_available()
@@ -219,6 +249,7 @@ class GptAutoProviderRuntime:
             if self._bridge:
                 await self._bridge.stop()
                 self._bridge = None
+                self._gpt_browser = None
             await self._browser.shutdown()
             if self._event_task and not self._event_task.done():
                 self._event_task.cancel()
