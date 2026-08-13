@@ -1509,20 +1509,25 @@ class SessionRuntime:
             raise
         except Exception as exc:  # noqa: BLE001 — provider rejection, not a fallback path
             await _close_failed_transport(transport)
+            cause_message = str(exc).strip()
+            underlying_details = getattr(exc, "details", None)
             wrapped = AudiaGenticError(
                 code="EXT-AGW-118",
                 kind="agents",
                 message="provider rejected the resume operation",
                 details={
-                    "provider-id": provider_id,
-                    "surface-id": surface_id,
-                    "error-type": type(exc).__name__,
-                    # AudiaGenticError from a lower layer already carries the
-                    # real reason in its own .details (see open_resumed's
-                    # error-detail/error-data) -- surface it here too instead
-                    # of flattening every resume rejection down to a bare
-                    # exception class name.
-                    "underlying-details": getattr(exc, "details", None),
+                    key: value
+                    for key, value in {
+                        "provider-id": provider_id,
+                        "surface-id": surface_id,
+                        "error-type": type(exc).__name__,
+                        "error-message": cause_message,
+                        # AudiaGenticError from a lower layer already carries
+                        # the real reason in its own .details. Surface it here
+                        # without emitting a null placeholder.
+                        "underlying-details": underlying_details,
+                    }.items()
+                    if value is not None and value != "" and value != {}
                 },
             )
             _record_failure(wrapped)
