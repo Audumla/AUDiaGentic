@@ -15,6 +15,7 @@ from audiagentic.components.providers.adapters.gpt_auto.turn import (
     TurnState,
     _facts,
 )
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.agent_session import (
     ControlDisposition,
     SessionControlAction,
@@ -158,6 +159,31 @@ async def test_turn_proves_submission_once_and_completes_from_atomic_snapshots()
     assert turn.submission_confirmed
     assert turn.state is TurnState.COMPLETE
     assert chat.state is ChatState.READY
+
+
+@pytest.mark.asyncio
+async def test_post_submit_observer_failure_preserves_phase_and_cause():
+    chat = _Chat()
+
+    def failed_sink(_observation):
+        raise ValueError("observer lease is stale")
+
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-observer", body="Review AU01"),
+        failed_sink,
+    )
+
+    with pytest.raises(AudiaGenticError) as captured:
+        await turn.run()
+
+    error = captured.value
+    assert error.code == "EXT-GPTAUTO-004"
+    assert "turn-accepted-observation" in error.message
+    assert "ValueError: observer lease is stale" in error.message
+    assert error.details["phase"] == "turn-accepted-observation"
+    assert error.details["cause-type"] == "ValueError"
+    assert error.details["submission-proven"] is True
 
 
 @pytest.mark.asyncio

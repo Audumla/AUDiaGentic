@@ -69,8 +69,9 @@ class GptAutoSessionTransport:
         )
 
     async def prompt(self, request: SessionPrompt, sink: ObservationSink) -> SessionTurnResult:
-        if self._closed or self.chat.state is not ChatState.READY:
+        if self._closed:
             raise RuntimeError("gpt-auto chat is not ready")
+        await self.chat.ensure_ready()
         self._turn_failure_disposition = SessionFailureDisposition.TERMINATE
         turn = GptAutoTurn(self.chat, request, sink)
         self._active_turn = turn
