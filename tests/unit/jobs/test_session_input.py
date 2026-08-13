@@ -76,14 +76,11 @@ def test_persist_session_input_for_work_uses_canonical_message(monkeypatch, tmp_
     assert not list(tmp_path.rglob("*.ndjson"))
 
 
-def test_build_work_input_does_not_read_legacy_job_store(monkeypatch, tmp_path) -> None:
+def test_build_work_input_requires_canonical_work(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
         "audiagentic.components.agents.work.work_api.add_message",
         lambda *args, **kwargs: {"work_id": "work-1"},
     )
-
-    def unexpected_job_read(*args, **kwargs):
-        raise AssertionError("canonical Work input must not read the legacy job store")
 
     record = build_and_persist_session_input(
         tmp_path,
@@ -96,7 +93,6 @@ def test_build_work_input_does_not_read_legacy_job_store(monkeypatch, tmp_path) 
         event_kind="user.input",
         message="answer",
         timestamp="2026-08-13T00:00:00Z",
-        job_store=unexpected_job_read,
     )
 
     assert record["work-id"] == "work-1"

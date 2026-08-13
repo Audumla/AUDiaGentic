@@ -403,10 +403,7 @@ class TestMirrorTopicEquality:
             "agents.execution.interrupted",
         }
 
-        # Agent-jobs mirror constants (defined in event_observer.py, control.py)
-        from audiagentic.components.agent_jobs.control import (
-            GW_TOPIC_CANCEL_REQUESTED as CONTROL_CANCEL_MIRROR,
-        )
+        # Agent-jobs mirror constants (defined in event_observer.py)
         from audiagentic.components.agent_jobs.event_observer import (
             GW_OUTCOME_TOPICS,
             GW_TOPIC_CANCEL_REQUESTED,
@@ -417,7 +414,6 @@ class TestMirrorTopicEquality:
         mirrors = {
             "GW_TOPIC_REQUESTED": GW_TOPIC_REQUESTED,
             "GW_TOPIC_CANCEL_REQUESTED": GW_TOPIC_CANCEL_REQUESTED,
-            "CONTROL_GW_TOPIC_CANCEL_REQUESTED": CONTROL_CANCEL_MIRROR,
         }
         for name, value in mirrors.items():
             assert registry.is_registered(value), (
@@ -427,7 +423,6 @@ class TestMirrorTopicEquality:
         # Mirror strings must equal the owner's registered topic exactly
         assert GW_TOPIC_REQUESTED == "agents.execution.gateway.requested"
         assert GW_TOPIC_CANCEL_REQUESTED == "agents.execution.gateway.cancel-requested"
-        assert CONTROL_CANCEL_MIRROR == "agents.execution.gateway.cancel-requested"
 
         # Gateway outcome topics all registered
         for topic in GW_OUTCOME_TOPICS:
@@ -435,4 +430,3 @@ class TestMirrorTopicEquality:
                 f"GW_OUTCOME_TOPICS member {topic!r} not registered"
             )
         assert set(GW_OUTCOME_TOPICS).issubset(owner_topics)
-

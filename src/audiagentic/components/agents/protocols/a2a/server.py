@@ -1,9 +1,9 @@
 """A2A 1.0 semantic adapter over public Agents application ports."""
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any, Protocol
-from uuid import uuid4
 
 from .agent_card import build_agent_card
 from .mapping import text_message, work_status
@@ -45,11 +45,23 @@ class A2aServerAdapter:
                 raise ValueError("taskId and contextId identify different objects")
             return self._task(work)
         if context_id:
-            self.ports.get_agent_context(self.project_root, str(context_id))
+            context = self.ports.get_agent_context(self.project_root, str(context_id))
+            # A2A context IDs map directly to canonical Agent Contexts. A
+            # closed context cannot accept another message; accepting it here
+            # would create Work outside the Context lifecycle.
+            if context.get("state") != "open":
+                raise ValueError("A2A messages require an OPEN Agent Context")
         else:
             context_id = self.ports.open_agent_context(self.project_root, self.agent_id)["context_id"]
         text = text_message(payload["message"])
-        work = self.ports.submit_agent_work(self.project_root, str(context_id), {"message_id": f"a2a:{uuid4().hex}", "text": text, "inputs": {}, "source": "a2a"}, work_id=None)
+        message_id = _message_id(str(context_id), text)
+        work_id = f"work_a2a_{hashlib.sha256(message_id.encode('utf-8')).hexdigest()[:24]}"
+        work = self.ports.submit_agent_work(
+            self.project_root,
+            str(context_id),
+            {"message_id": message_id, "text": text, "inputs": {}, "source": "a2a"},
+            work_id=work_id,
+        )
         return self._task(work)
 
     def cancel(self, task_id: str) -> dict[str, Any]:
@@ -60,3 +72,8 @@ class A2aServerAdapter:
         if work_status(work) == "completed":
             result["output"] = self.ports.read_agent_work_output(self.project_root, work["work_id"])
         return result
+
+
+def _message_id(context_id: str, text: str) -> str:
+    digest = hashlib.sha256(f"{context_id}\0{text}".encode()).hexdigest()[:24]
+    return f"a2a:{context_id}:{digest}"

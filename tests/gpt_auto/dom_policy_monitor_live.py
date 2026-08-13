@@ -21,7 +21,7 @@ from typing import Any
 import yaml
 
 from audiagentic.components.agents.gateway.client import get_gateway_client
-from audiagentic.components.providers.adapters.gpt_auto.bridge import PuppeteerBridge
+from audiagentic.components.providers.adapters.gpt_auto.cdp.bridge import PythonCdpBridge
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.urls import (
     parse_provider_session_id,
@@ -54,7 +54,7 @@ async def _monitor(
         (ROOT / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
     )
     config = GptAutoConfig.from_dict(provider_document)
-    bridge = PuppeteerBridge(config)
+    bridge = PythonCdpBridge(config)
     transitions: list[dict[str, Any]] = []
     stage_summaries: dict[int, dict[str, Any]] = {}
     try:

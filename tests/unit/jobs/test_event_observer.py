@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import yaml
+import pytest
 
 from audiagentic.components.agents.configuration.contracts import AgentsConfigDocument
 from audiagentic.components.agents.configuration.repository import AgentsConfigRepository
@@ -29,20 +30,19 @@ def _seed(root: Path) -> str:
 
 
 def _write_trigger(root: Path, *, trigger_id: str = "t-01") -> None:
-    path = root / ".audiagentic" / "config" / "agent-jobs" / "event-triggers.yaml"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.safe_dump({"triggers": [{
-        "contract-version": "v1",
-        "trigger-id": trigger_id,
-        "kind": "event",
-        "enabled": True,
+    path = root / ".audiagentic" / "config" / "agents.yaml"
+    document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    document["triggers"] = {trigger_id: {
+        "trigger_id": trigger_id,
         "event-pattern": "planning.item.created",
         "prompt-template": "Review {event.type}",
-    }]}), encoding="utf-8")
+        "enabled": True,
+    }}
+    path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
 
 
 def _audit(root: Path) -> list[dict]:
-    path = root / ".audiagentic" / "runtime" / "agent-jobs" / "trigger-audit.ndjson"
+    path = root / ".audiagentic" / "runtime" / "agents" / "trigger-audit.ndjson"
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
@@ -93,10 +93,6 @@ def test_observer_without_context_fails_closed_without_legacy_job(tmp_path: Path
     _write_trigger(tmp_path)
     reset_bus()
     observer = EventObserver()
-    observer.initialize(tmp_path)
-    get_bus().publish("planning.item.created", {"item": "no-context"}, metadata={"event-id": "evt-2"})
-
-    failed = [entry for entry in _audit(tmp_path) if entry["status"] == "failed"]
-    assert failed and failed[-1]["error_message"]
+    with pytest.raises(ValueError, match="context_id"):
+        observer.initialize(tmp_path)
     assert not (tmp_path / ".audiagentic" / "runtime" / "jobs").exists()
-
