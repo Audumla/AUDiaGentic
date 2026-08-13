@@ -33,6 +33,23 @@ def test_build_record_defaults(tmp_path: Path) -> None:
     assert record["request-id"].startswith("req_")
 
 
+def test_value_error_detail_is_preserved_for_operator_diagnosis(tmp_path: Path) -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="do the thing")
+    store.write_record(tmp_path, record)
+    store.transition_record(tmp_path, record["request-id"], "running")
+    updated = store.transition_record(
+        tmp_path,
+        record["request-id"],
+        "failed",
+        updates={"error": ValueError("browser executable is not configured")},
+    )
+    assert updated["error"] == {
+        "code": "VAL-AGW-UNKNOWN",
+        "message": "browser executable is not configured",
+        "kind": "ValueError",
+    }
+
+
 def test_build_record_rejects_invalid_mode() -> None:
     with pytest.raises(AudiaGenticError) as exc_info:
         store.build_record(execution_profile_id="default", prompt_body="x", mode="sync")
