@@ -387,7 +387,7 @@ class PersistentChat:
         self.runtime.release_page(self, handle)
         self._move(ChatState.CLOSED)
         self.runtime.unregister_chat(self)
-        if handle:
+        if handle and self.runtime.config.browser.close_tabs_on_session_close:
             try:
                 await self.runtime.bridge.call("close_page", {"pageHandle": handle})
             except Exception:

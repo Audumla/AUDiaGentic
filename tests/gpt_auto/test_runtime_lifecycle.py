@@ -192,6 +192,78 @@ async def test_chat_recovery_retains_page_after_recoverable_turn_failure() -> No
 
 
 @pytest.mark.asyncio
+async def test_chat_close_retains_tab_by_default_for_gateway_resume() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+
+    class _Bridge:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict]] = []
+
+        async def call(self, method: str, params: dict) -> None:
+            self.calls.append((method, params))
+
+    bridge = _Bridge()
+    runtime = SimpleNamespace(
+        bridge=bridge,
+        config=config,
+        release_page=lambda _chat, _handle: None,
+        unregister_chat=lambda _chat: None,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-retain",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+    )
+    chat.page_handle = "page-1"
+    chat.state = ChatState.READY
+
+    await chat.close()
+
+    assert chat.state is ChatState.CLOSED
+    assert chat.page_handle is None
+    assert bridge.calls == []
+
+
+@pytest.mark.asyncio
+async def test_chat_close_can_opt_in_to_closing_tab() -> None:
+    value = valid_config()
+    value["browser"]["close-tabs-on-session-close"] = True
+    config = GptAutoConfig.from_dict(value)
+
+    class _Bridge:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict]] = []
+
+        async def call(self, method: str, params: dict) -> None:
+            self.calls.append((method, params))
+
+    bridge = _Bridge()
+    runtime = SimpleNamespace(
+        bridge=bridge,
+        config=config,
+        release_page=lambda _chat, _handle: None,
+        unregister_chat=lambda _chat: None,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-close-tab",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+    )
+    chat.page_handle = "page-1"
+    chat.state = ChatState.READY
+
+    await chat.close()
+
+    assert bridge.calls == [("close_page", {"pageHandle": "page-1"})]
+
+
+@pytest.mark.asyncio
 async def test_recovery_invalidates_bridge_local_handles_before_reconciliation(monkeypatch) -> None:
     runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
     old = SimpleNamespace(stop=lambda: _done())
