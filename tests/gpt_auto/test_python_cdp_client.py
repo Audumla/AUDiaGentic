@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from audiagentic.components.providers.adapters.gpt_auto.cdp.client import CdpClient
+from audiagentic.components.providers.adapters.gpt_auto.cdp.client import CdpClient, CdpError
 
 
 class _Socket:
@@ -59,3 +59,59 @@ async def test_cdp_client_publishes_disconnect_when_socket_closes_cleanly():
     event = await asyncio.wait_for(client.events.get(), timeout=1)
     assert event.method == "cdp.disconnected"
     await client.stop()
+
+
+class _ScriptedSocket(_Socket):
+    def __init__(self, response: str | None = None, *, delay: float = 0) -> None:
+        super().__init__()
+        self.response = response
+        self.delay = delay
+
+    async def send(self, raw: str) -> None:
+        request = json.loads(raw)
+        if self.delay:
+            await asyncio.sleep(self.delay)
+        if self.response is not None:
+            await self.messages.put(self.response.replace("$ID", str(request["id"])))
+
+
+@pytest.mark.asyncio
+async def test_cdp_client_surfaces_protocol_errors_and_cleans_pending():
+    client = CdpClient("ws://unused")
+    socket = _ScriptedSocket('{"id":$ID,"error":{"code":-32601,"message":"missing"}}')
+    client._socket = socket
+    client._reader_task = asyncio.create_task(client._read_loop())
+    try:
+        with pytest.raises(CdpError, match="missing"):
+            await client.command("Missing.method")
+        assert client._pending == {}
+    finally:
+        await client.stop()
+
+
+@pytest.mark.asyncio
+async def test_cdp_client_command_timeout_removes_pending_and_late_reply_is_ignored():
+    client = CdpClient("ws://unused")
+    socket = _ScriptedSocket()
+    client._socket = socket
+    client._reader_task = asyncio.create_task(client._read_loop())
+    try:
+        with pytest.raises(TimeoutError):
+            await client.command("Slow.method", timeout=0.01)
+        assert client._pending == {}
+        await socket.messages.put('{"id":1,"result":{"late":true}}')
+        await asyncio.sleep(0.01)
+        assert client._pending == {}
+    finally:
+        await client.stop()
+
+
+@pytest.mark.asyncio
+async def test_cdp_client_stop_is_idempotent_and_does_not_publish_disconnect():
+    client = CdpClient("ws://unused")
+    socket = _Socket()
+    client._socket = socket
+    client._reader_task = asyncio.create_task(client._read_loop())
+    await client.stop()
+    await client.stop()
+    assert client.events.empty()

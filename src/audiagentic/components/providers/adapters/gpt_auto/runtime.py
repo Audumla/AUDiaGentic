@@ -340,7 +340,11 @@ class GptAutoProviderRuntime:
                 self._move(ProviderState.STOPPING)
             for chat in tuple(self._chats.values()):
                 await chat.close()
-            if self._dedicated_window_anchor and self._bridge:
+            if (
+                self._dedicated_window_anchor
+                and self._bridge
+                and self.config.browser.close_tabs_on_session_close
+            ):
                 try:
                     await self._bridge.call(
                         "close_page", {"pageHandle": self._dedicated_window_anchor}
