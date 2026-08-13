@@ -60,6 +60,21 @@ async def test_running_configured_browser_fail_policy_does_not_terminate():
         await controller.ensure_browser_for_cdp()
 
 
+@pytest.mark.asyncio
+async def test_restart_policy_refuses_unowned_browser_process():
+    value = valid_config()
+    value["browser"]["existing-browser-policy"] = "restart"
+    config = GptAutoConfig.from_dict(value).browser
+    controller = BrowserProcessController(
+        config,
+        cdp_probe=lambda: _false(),
+        process_lookup=lambda path: [123],
+        port_owner=lambda port: None,
+    )
+    with pytest.raises(RuntimeError, match="ownership cannot be proven"):
+        await controller.ensure_browser_for_cdp()
+
+
 def test_runtime_registry_shares_machine_runtime_but_allows_project_turn_policy(tmp_path):
     _runtimes.clear()
     config = GptAutoConfig.from_dict(valid_config())

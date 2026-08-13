@@ -42,8 +42,22 @@ async def shutdown_runtime(project_root: Path) -> None:
 
 
 async def shutdown_all_runtimes() -> None:
-    runtimes = list(_runtimes.values())
-    _runtimes.clear()
-    await asyncio.gather(
-        *(runtime.shutdown_from_owner() for runtime in runtimes), return_exceptions=True
+    entries = list(_runtimes.items())
+    if not entries:
+        return
+    results = await asyncio.gather(
+        *(runtime.shutdown_from_owner() for _, runtime in entries), return_exceptions=True
     )
+    failures: list[Exception] = []
+    for (key, _runtime), result in zip(entries, results, strict=True):
+        if isinstance(result, BaseException):
+            _runtimes[key] = _runtime
+            failures.append(
+                result
+                if isinstance(result, Exception)
+                else RuntimeError(f"gpt-auto runtime shutdown was cancelled: {result!r}")
+            )
+        else:
+            _runtimes.pop(key, None)
+    if failures:
+        raise ExceptionGroup("gpt-auto runtime shutdown failed", failures)

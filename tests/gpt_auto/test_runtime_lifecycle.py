@@ -5,8 +5,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.components.providers.adapters.gpt_auto.cdp.bridge import BridgeEvent
-from audiagentic.components.providers.adapters.gpt_auto.chat import PersistentChat
+from audiagentic.components.providers.adapters.gpt_auto.chat import ChatState, PersistentChat
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.runtime import (
     GptAutoProviderRuntime,
@@ -138,6 +139,56 @@ async def test_runtime_shutdown_is_legal_during_connection_start() -> None:
     runtime.state = ProviderState.CONNECTING
     await runtime.shutdown()
     assert runtime.state is ProviderState.STOPPED
+
+
+@pytest.mark.asyncio
+async def test_chat_recovery_retains_page_after_recoverable_turn_failure() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle)
+
+        async def snapshot(self, _page, *, signals=None):
+            return {
+                "url": "https://chatgpt.com/g/g-p-project/project",
+                "composerPresent": True,
+                "composerEditable": True,
+                "userCount": 0,
+                "assistantCount": 0,
+                "domSignals": {},
+                "errorPresent": False,
+            }
+
+    runtime = SimpleNamespace(
+        gpt_browser=_Browser(),
+        bridge=SimpleNamespace(),
+        claim_page=lambda _chat, _handle: True,
+        release_page=lambda _chat, _handle: None,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-recover",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+    )
+    chat.page_handle = "page-1"
+    chat.state = ChatState.FAILED
+
+    retained = await chat.retain_after_turn_failure(
+        AudiaGenticError(
+            code="EXT-GPTAUTO-003",
+            kind="providers",
+            message="prompt proof was ambiguous",
+            details={"submission-ambiguous": True},
+        )
+    )
+
+    assert retained is True
+    assert chat.state.value == "ready"
+    assert chat.page_handle == "page-1"
 
 
 @pytest.mark.asyncio

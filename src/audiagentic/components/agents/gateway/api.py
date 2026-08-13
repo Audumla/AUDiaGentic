@@ -841,6 +841,7 @@ def _compute_current_context_fingerprint(
     execution_profile_id: str,
     provider_id: str,
     model_id: str | None,
+    component_profile: str | None = None,
 ) -> str:
     """Freshly compute the SH02 manifest identity fingerprint for the CURRENT
     resolution of a profile/provider/model.
@@ -848,11 +849,9 @@ def _compute_current_context_fingerprint(
     Mirrors build_manifest's admission-time computation exactly (same
     ManifestIdentity fields, same agent_runtime_digest inputs) -- replicated
     here because AS49 resume is a direct API call, not a queued admission,
-    so it has no manifest of its own to read this off of. component_profile
-    is "" (base components): the vast majority of callers, including every
-    current path to resume_execution_session, never select a non-default
-    component profile, and CLAUDE.md's one-profile-per-process doctrine means
-    a session's whole process lifetime shares one value anyway.
+    so it has no manifest of its own to read this off of. The active component
+    profile is part of the current process identity and must be included just
+    as it is during normal admission.
     """
     from audiagentic.components.agents.contracts.execution_context import (
         ManifestIdentity,
@@ -863,14 +862,16 @@ def _compute_current_context_fingerprint(
     from audiagentic.components.providers.providers_api import (
         get_provider_runtime_config_state,
     )
+    from audiagentic.foundation.paths.names import get_active_profile
 
+    component_profile = get_active_profile() if component_profile is None else component_profile
     profile = _resolve_profile_for_submit(project_root, execution_profile_id)
     isolation_tier = _resolve_provider_isolation_tier(provider_id)
     provider_cfg = get_provider_runtime_config_state(project_root, provider_id)
     agent_runtime_digest = compute_agent_runtime_digest(
         resolved_profile=profile,
         provider_config_state=provider_cfg,
-        component_overlay={"component-profile": ""},
+        component_overlay={"component-profile": component_profile or ""},
     )
     canonical_root = canonicalize_project_root(str(project_root))
     identity = ManifestIdentity(
@@ -879,7 +880,7 @@ def _compute_current_context_fingerprint(
         provider_id=provider_id,
         model_id=model_id,
         provider_isolation_tier=isolation_tier,
-        component_profile="",
+        component_profile=component_profile or "",
         agent_runtime_digest=agent_runtime_digest,
     )
     return compute_context_fingerprint(identity)
@@ -900,6 +901,7 @@ def resume_execution_session(
     execution_profile_digest: str | None = None,
     effective_capability_digest: str | None = None,
     model_id: str | None = None,
+    component_profile: str | None = None,
 ) -> dict[str, Any]:
     """AS49: explicitly resume a terminal session as a new linked generation.
 
@@ -933,6 +935,7 @@ def resume_execution_session(
             execution_profile_id=source_record["execution-profile-id"],
             provider_id=session_store.session_provider_id(source_record) or "unknown-provider",
             model_id=model_id or session_store.session_model_id(source_record),
+            component_profile=component_profile,
         )
         identity_context_fingerprint = identity_context_fingerprint or fresh_fingerprint
         execution_context_fingerprint = execution_context_fingerprint or fresh_fingerprint

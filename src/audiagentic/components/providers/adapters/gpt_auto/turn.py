@@ -420,19 +420,22 @@ def _matches(expected: str, actual: str) -> bool:
 def _facts(
     baseline: ChatSnapshot, previous: ChatSnapshot, current: ChatSnapshot
 ) -> dict[str, bool]:
-    assistant_fresh = bool(
-        current.latest_assistant_id
-        and current.latest_assistant_id != baseline.latest_assistant_id
-    )
-    facts = {name: True for name in current.dom_signals}
+    observation = current.observe(baseline=baseline, previous=previous)
+    facts = {name: True for name in observation.markers}
     facts.update(
         {
-            "assistant-fresh": assistant_fresh,
+            "assistant-fresh": "assistant-fresh" in observation.markers,
             "text-present": bool(current.latest_assistant_text),
-            "text-changed": current.latest_assistant_text != previous.latest_assistant_text,
+            "text-changed": "text-changed" in observation.markers,
             "composer-present": current.composer_present,
             "composer-editable": current.composer_editable,
             "composer-unavailable": not current.composer_present or not current.composer_editable,
+            "page-ready": observation.state.value == "ready",
+            "page-submitting": observation.state.value == "submitting",
+            "page-generating": observation.state.value == "generating",
+            "page-awaiting-completion": observation.state.value == "awaiting-completion",
+            "page-completed": observation.state.value == "completed",
+            "page-failed": observation.state.value == "failed",
         }
     )
     return facts
@@ -450,4 +453,5 @@ def _fingerprint(snapshot: ChatSnapshot) -> tuple[Any, ...]:
         snapshot.composer_editable,
         snapshot.dom_signals,
         snapshot.error_present,
+        snapshot.generating,
     )
