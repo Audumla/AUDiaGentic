@@ -61,7 +61,11 @@ class _ScenarioClient:
         if method == "Target.attachToTarget":
             return {"sessionId": f"session-{params['targetId']}"}
         if method == "Page.navigate":
-            return {"errorText": "simulated navigation error"} if self.fail_method == "Page.navigate:error" else {}
+            return (
+                {"errorText": "simulated navigation error"}
+                if self.fail_method == "Page.navigate:error"
+                else {}
+            )
         if method == "Runtime.evaluate":
             if "window.open" in str(params.get("expression") or ""):
                 anchor_target = (session_id or "").removeprefix("session-")
@@ -78,9 +82,21 @@ class _ScenarioClient:
         if method == "Browser.getVersion":
             return {"Browser": "Fake/1", "Protocol-Version": "1.3"}
         if method == "Browser.getWindowBounds":
-            return {"bounds": {"left": 0, "top": 0, "width": 800, "height": 600, "windowState": "normal"}}
+            return {
+                "bounds": {
+                    "left": 0,
+                    "top": 0,
+                    "width": 800,
+                    "height": 600,
+                    "windowState": "normal",
+                }
+            }
         if method == "Target.getTargetInfo":
-            return {"targetInfo": self.targets.get(params["targetId"], {"targetId": params["targetId"], "type": "page"})}
+            return {
+                "targetInfo": self.targets.get(
+                    params["targetId"], {"targetId": params["targetId"], "type": "page"}
+                )
+            }
         if method in {"Browser.setWindowBounds", "Target.activateTarget", "Target.closeTarget"}:
             if method == "Target.closeTarget":
                 self.targets.pop(params["targetId"], None)
@@ -171,9 +187,35 @@ async def test_bridge_event_classification_only_marks_terminal_targets_as_page_l
     bridge, fake = _bridge()
     page = await bridge.call("create_page")
     target = page["targetId"]
-    await fake.events.put(type("Event", (), {"method": "Target.targetInfoChanged", "params": {"targetId": target}, "session_id": None})())
-    await fake.events.put(type("Event", (), {"method": "Page.lifecycleEvent", "params": {"targetId": target}, "session_id": None})())
-    await fake.events.put(type("Event", (), {"method": "Target.targetDestroyed", "params": {"targetId": target}, "session_id": None})())
+    await fake.events.put(
+        type(
+            "Event",
+            (),
+            {
+                "method": "Target.targetInfoChanged",
+                "params": {"targetId": target},
+                "session_id": None,
+            },
+        )()
+    )
+    await fake.events.put(
+        type(
+            "Event",
+            (),
+            {"method": "Page.lifecycleEvent", "params": {"targetId": target}, "session_id": None},
+        )()
+    )
+    await fake.events.put(
+        type(
+            "Event",
+            (),
+            {
+                "method": "Target.targetDestroyed",
+                "params": {"targetId": target},
+                "session_id": None,
+            },
+        )()
+    )
     task = asyncio.create_task(bridge._route_events(fake))
     changed = await asyncio.wait_for(bridge.events.get(), timeout=1)
     lifecycle = await asyncio.wait_for(bridge.events.get(), timeout=1)
@@ -214,6 +256,21 @@ class _GptOperationBridge:
         if method == "dispatch_enter":
             return {"ok": True}
         return {"ok": True}
+
+
+class _NavigationOnClickBridge(_GptOperationBridge):
+    async def evaluate(self, page_handle, function, argument=None, **kwargs):
+        if "send-button" in function:
+            assert "async" not in function
+        return await super().evaluate(page_handle, function, argument, **kwargs)
+
+
+@pytest.mark.asyncio
+async def test_gpt_provider_send_click_is_synchronous_after_python_settle_delay():
+    bridge = _NavigationOnClickBridge()
+    browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]
+    result = await browser.submit(CdpPageRef("page-1", "target-1"), "stable send")
+    assert result == {"actionComplete": True, "typedText": "stable send"}
 
 
 @pytest.mark.asyncio

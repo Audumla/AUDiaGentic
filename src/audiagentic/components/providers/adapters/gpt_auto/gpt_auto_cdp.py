@@ -117,10 +117,15 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             }""",
                 text,
             )
+            # Keep the settling delay outside the page execution context.  A
+            # ChatGPT send click can synchronously replace/navigate the React
+            # tree; awaiting a browser-side timer across that replacement can
+            # make CDP report "Promise was collected" even though the click
+            # side effect was accepted.
+            await asyncio.sleep(0.025)
             sent = await self.evaluate(
                 page,
-                """async () => {
-              await new Promise(resolve => setTimeout(resolve, 25));
+                """() => {
               const button = document.querySelector('[data-testid="send-button"], button[aria-label*="Send" i]');
               if (!button || button.disabled || button.getAttribute('aria-disabled') === 'true') return false;
               button.click(); return true;
