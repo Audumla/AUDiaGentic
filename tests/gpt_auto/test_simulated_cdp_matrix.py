@@ -17,9 +17,13 @@ from audiagentic.components.providers.adapters.gpt_auto.cdp.bridge import (
 )
 from audiagentic.components.providers.adapters.gpt_auto.cdp.cdp_browser import (
     CdpBrowserController,
+    CdpPageRef,
     CdpWindowBounds,
 )
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
+from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+    GptAutoCdpBrowserController,
+)
 
 from .test_greenfield_config_urls import valid_config
 
@@ -188,3 +192,55 @@ async def test_tab_creation_is_serialized_under_concurrency():
     creates = [call for call in fake.calls if call[0] == "Target.createTarget"]
     assert len(creates) == 12
     assert [call[1]["newWindow"] for call in creates].count(True) == 0
+
+
+class _GptOperationBridge:
+    def __init__(self, *, send_enabled: bool = True, stop_visible: bool = True) -> None:
+        self.send_enabled = send_enabled
+        self.stop_visible = stop_visible
+        self.calls: list[tuple[str, dict]] = []
+
+    async def evaluate(self, page_handle, function, argument=None, **kwargs):
+        if "execCommand" in function:
+            return str(argument or "")
+        if "send-button" in function:
+            return self.send_enabled
+        if "stop-button" in function or "stop-generating" in function:
+            return self.stop_visible
+        return {"ok": True}
+
+    async def call(self, method, params=None, **kwargs):
+        self.calls.append((method, params or {}))
+        if method == "dispatch_enter":
+            return {"ok": True}
+        return {"ok": True}
+
+
+@pytest.mark.asyncio
+async def test_gpt_provider_submit_and_stop_use_fake_dom_responses():
+    bridge = _GptOperationBridge()
+    browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]
+    page = CdpPageRef("page-1", "target-1")
+    submitted = await browser.submit(page, "review gateway")
+    assert submitted == {"actionComplete": True, "typedText": "review gateway"}
+    assert (await browser.stop_generation(page))["stopped"] is True
+
+
+@pytest.mark.asyncio
+async def test_gpt_provider_submit_falls_back_to_enter_when_send_is_disabled():
+    bridge = _GptOperationBridge(send_enabled=False)
+    browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]
+    page = CdpPageRef("page-1", "target-1")
+    result = await browser.submit(page, "fallback")
+    assert result["actionComplete"] is True
+    assert any(method == "dispatch_enter" for method, _ in bridge.calls)
+
+
+@pytest.mark.asyncio
+async def test_gpt_provider_rejects_blank_prompt_and_reports_no_stop_control():
+    bridge = _GptOperationBridge(stop_visible=False)
+    browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]
+    page = CdpPageRef("page-1", "target-1")
+    with pytest.raises(ValueError, match="non-empty"):
+        await browser.submit(page, "   ")
+    assert (await browser.stop_generation(page))["stopped"] is False

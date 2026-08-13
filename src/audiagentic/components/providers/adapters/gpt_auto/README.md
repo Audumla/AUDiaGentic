@@ -14,6 +14,9 @@ Important invariants:
 - Gateway ID, ChatGPT conversation ID, request ID, and page handle are distinct.
 - page handles and browser process facts are never durable session identity.
 - one browser/CDP bridge serves many chats; closing one chat does not stop either.
+- provider tabs are retained when sessions close or the shared runtime stops by
+  default, so durable ChatGPT conversations remain resumable; set
+  `browser.close-tabs-on-session-close: true` to opt into destructive tab cleanup.
 - positive user-message evidence is required before a turn is `submitted`.
 - response workflow transitions are driven by configured named DOM signals and
   declarative evidence policies, not selectors embedded in the Python loop.

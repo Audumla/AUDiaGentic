@@ -25,6 +25,7 @@ class BrowserConfig:
     shutdown_timeout_seconds: float
     force_kill: bool
     dedicated_window: bool
+    close_tabs_on_session_close: bool
 
 
 @dataclass(frozen=True)
@@ -132,8 +133,17 @@ class GptAutoConfig:
                 "shutdown-timeout-seconds",
                 "force-kill",
                 "dedicated-window",
+                "close-tabs-on-session-close",
             },
             "browser",
+            required={
+                "executable",
+                "remote-debugging-port",
+                "existing-browser-policy",
+                "shutdown-timeout-seconds",
+                "force-kill",
+                "dedicated-window",
+            },
         )
         executable = Path(_string(browser_data, "executable"))
         if not executable.is_file():
@@ -152,6 +162,11 @@ class GptAutoConfig:
             shutdown_timeout_seconds=_positive(browser_data, "shutdown-timeout-seconds"),
             force_kill=_boolean(browser_data, "force-kill"),
             dedicated_window=_boolean(browser_data, "dedicated-window"),
+            # Keep provider tabs available for explicit gateway resume by
+            # default.  Closing them remains an opt-in destructive action.
+            close_tabs_on_session_close=_optional_boolean(
+                browser_data, "close-tabs-on-session-close", default=False
+            ),
         )
 
         cdp_data = _mapping(settings, "cdp")
@@ -261,6 +276,13 @@ def _integer(data: dict[str, Any], key: str) -> int:
 
 def _boolean(data: dict[str, Any], key: str) -> bool:
     value = data.get(key)
+    if not isinstance(value, bool):
+        _invalid(f"{key} must be a boolean")
+    return value
+
+
+def _optional_boolean(data: dict[str, Any], key: str, *, default: bool) -> bool:
+    value = data.get(key, default)
     if not isinstance(value, bool):
         _invalid(f"{key} must be a boolean")
     return value
