@@ -416,16 +416,17 @@ class PersistentChat:
             else:
                 self._move(ChatState.READY)
             return
-        if self.active_turn_id:
-            stable = [
-                page
-                for page in pages
-                if self.target_id and str(page.get("targetId") or "") == self.target_id
-            ]
+        if self.target_id:
+            stable = [page for page in pages if str(page.get("targetId") or "") == self.target_id]
             if len(stable) == 1 and self._claim_page(str(stable[0]["pageHandle"])):
                 self._bind_page(stable[0])
-                self._move(ChatState.BUSY)
+                if self.active_turn_id:
+                    self._move(ChatState.BUSY)
+                else:
+                    await self.wait_quiescent(allow_recovering=True)
+                    self._move(ChatState.READY)
                 return
+        if self.active_turn_id:
             exact = [page for page in pages if page.get("url") == self._last_url]
             if len(exact) == 1 and self._claim_page(str(exact[0]["pageHandle"])):
                 self._bind_page(exact[0])
