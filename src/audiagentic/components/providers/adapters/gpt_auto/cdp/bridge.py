@@ -71,6 +71,8 @@ class PythonCdpBridge:
                         event.params,
                     )
                 )
+                self._pages.pop(handle, None)
+                self._sessions.pop(target_id, None)
             elif event.method == "Target.targetCreated":
                 await self.events.put(BridgeEvent("target_created", handle, event.params))
             elif event.method == "Target.targetInfoChanged":
@@ -91,11 +93,7 @@ class PythonCdpBridge:
             if info.get("type") != "page":
                 continue
             target_id = str(info["targetId"])
-            handle = next((h for h, value in self._pages.items() if value == target_id), None)
-            if handle is None:
-                handle = f"page-{self._next_page}"
-                self._next_page += 1
-                self._pages[handle] = target_id
+            handle = self._handle_for_target(target_id)
             result.append(
                 {
                     "pageHandle": handle,
@@ -106,6 +104,16 @@ class PythonCdpBridge:
                 }
             )
         return result
+
+    def _handle_for_target(self, target_id: str) -> str:
+        """Return one stable handle per physical CDP target."""
+        existing = next((h for h, value in self._pages.items() if value == target_id), None)
+        if existing is not None:
+            return existing
+        handle = f"page-{self._next_page}"
+        self._next_page += 1
+        self._pages[handle] = target_id
+        return handle
 
     async def _window_id(self, target_id: str) -> int | None:
         result = await self.client.command("Browser.getWindowForTarget", {"targetId": target_id})
@@ -125,11 +133,15 @@ class PythonCdpBridge:
             "Target.attachToTarget", {"targetId": target_id, "flatten": True}
         )
         session = str(result["sessionId"])
+        try:
+            await self.client.command("Page.enable", session_id=session)
+            await self.client.command(
+                "Page.setLifecycleEventsEnabled", {"enabled": True}, session_id=session
+            )
+        except BaseException:
+            self._sessions.pop(target_id, None)
+            raise
         self._sessions[target_id] = session
-        await self.client.command("Page.enable", session_id=session)
-        await self.client.command(
-            "Page.setLifecycleEventsEnabled", {"enabled": True}, session_id=session
-        )
         return session
 
     async def evaluate(
@@ -171,9 +183,7 @@ class PythonCdpBridge:
                     timeout=timeout,
                 )
                 target_id = str(result["targetId"])
-                handle = f"page-{self._next_page}"
-                self._next_page += 1
-                self._pages[handle] = target_id
+                handle = self._handle_for_target(target_id)
                 return {
                     "pageHandle": handle,
                     "targetId": target_id,
@@ -211,9 +221,7 @@ class PythonCdpBridge:
                     await asyncio.sleep(0.05)
                 if target_id is None:
                     raise RuntimeError("window.open did not create a page target")
-                handle = f"page-{self._next_page}"
-                self._next_page += 1
-                self._pages[handle] = target_id
+                handle = self._handle_for_target(target_id)
                 return {
                     "pageHandle": handle,
                     "targetId": target_id,

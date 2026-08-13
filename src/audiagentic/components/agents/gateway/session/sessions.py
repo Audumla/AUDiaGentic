@@ -1441,14 +1441,40 @@ class SessionRuntime:
         successor_session_id = session_store.generate_session_id()
 
         async def resume_binding_sink(update: Any) -> None:
-            # Immediate-identity transports (ACP and established gpt-auto)
-            # return their ref from open(); this sink exists for the neutral
-            # preparation contract but is not legal before the record exists.
-            raise AudiaGenticError(
-                code="CON-AGW-122",
-                kind="agents",
-                message="resumed transport attempted delayed initial binding during open",
-                details={"session-id": successor_session_id},
+            # The successor record is created before a resumed GPT-auto turn
+            # can publish prompt/assistant message IDs.  Reusing the immutable
+            # provider ref makes this an idempotent metadata refresh rather
+            # than a new binding generation.
+            if not getattr(update, "provider_session_ref", None):
+                raise AudiaGenticError(
+                    code="CON-AGW-122",
+                    kind="agents",
+                    message="resumed transport binding update has no provider ref",
+                    details={"session-id": successor_session_id},
+                )
+            if update.provider_session_ref.value != source_binding["provider-session-ref"]:
+                raise AudiaGenticError(
+                    code="CON-AGW-120",
+                    kind="agents",
+                    message="resumed transport attempted to replace its provider binding",
+                    details={"session-id": successor_session_id},
+                )
+            session_store.install_initial_provider_binding(
+                project_root,
+                successor_session_id,
+                provider_id=provider_id,
+                surface_id=surface_id,
+                provider_session_ref=update.provider_session_ref.value,
+                metadata=dict(update.metadata),
+                identity_context_fingerprint=identity_context_fingerprint,
+                execution_context_fingerprint=execution_context_fingerprint,
+                context_id=source_binding.get("context-id"),
+                agent_definition_id=source_binding.get("agent-definition-id"),
+                agent_definition_digest=source_binding.get("agent-definition-digest"),
+                role_ids=source_binding.get("role-ids"),
+                role_set_digest=source_binding.get("role-set-digest"),
+                execution_profile_digest=source_binding.get("execution-profile-digest"),
+                effective_capability_digest=source_binding.get("effective-capability-digest"),
             )
 
         # AS49: reuse the ORIGINAL request's runtime root, where a provider's

@@ -113,7 +113,16 @@ class GptAutoSessionTransport:
             return
         self._closed = True
         if self._active_turn:
-            self._active_turn.cancel()
+            turn = self._active_turn
+            turn.cancel()
+            try:
+                await turn.wait_done(
+                    timeout=max(1.0, self.chat.config.chat.ready_timeout_seconds)
+                )
+            except TimeoutError:
+                # Detach is still safe because GPT-auto retains physical tabs
+                # by default; do not hold gateway shutdown indefinitely.
+                pass
         await self.chat.close()
 
     def is_alive(self) -> bool:

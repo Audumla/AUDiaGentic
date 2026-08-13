@@ -69,3 +69,30 @@ def test_observation_mapping_is_sparse_but_keeps_evidence() -> None:
     assert mapping["state"] == "ready"
     assert "markers" in mapping
 
+
+def test_message_id_proves_a_fresh_prompt_even_when_virtualized_count_is_stable() -> None:
+    baseline = _snapshot(user_count=4, latest_user_id="prompt-old", latest_user_text="old")
+    current = _snapshot(user_count=4, latest_user_id="prompt-new", latest_user_text="new")
+
+    observed = current.observe(baseline=baseline)
+
+    assert "user-fresh" in observed.markers
+    assert observed.state is PageObservationState.SUBMITTING
+
+
+def test_bridge_snapshot_preserves_latest_user_message_id() -> None:
+    snapshot = ChatSnapshot.from_bridge(
+        {
+            "url": "https://chatgpt.com/g/g-p-test/c/c1",
+            "composerPresent": True,
+            "composerEditable": True,
+            "userCount": 2,
+            "assistantCount": 1,
+            "latestUserId": "prompt-2",
+            "latestAssistantId": "answer-1",
+            "latestUserText": "review",
+            "latestAssistantText": "done",
+        }
+    )
+
+    assert snapshot.latest_user_id == "prompt-2"

@@ -33,6 +33,7 @@ def snap(
     user=None,
     assistant=None,
     assistant_id=None,
+    user_id=None,
     generating=False,
     complete=False,
     extra_signals=(),
@@ -53,6 +54,7 @@ def snap(
         latest_assistant_text=assistant,
         dom_signals=frozenset(signals),
         error_present=False,
+        latest_user_id=user_id or (f"prompt-{users}" if users else None),
     )
 
 
@@ -159,6 +161,23 @@ async def test_turn_proves_submission_once_and_completes_from_atomic_snapshots()
     assert turn.submission_confirmed
     assert turn.state is TurnState.COMPLETE
     assert chat.state is ChatState.READY
+    assert result.metadata["prompt-message-id"] == "prompt-1"
+    assert result.metadata["assistant-message-id"] == "assistant-1"
+
+
+@pytest.mark.asyncio
+async def test_prompt_and_response_message_ids_are_published_for_resume_metadata():
+    chat = _Chat()
+    updates = []
+    chat.binding_sink = lambda update: updates.append(update)
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-identities", body="Review AU01"), lambda _: None
+    )
+
+    await turn.run()
+
+    assert any(update.metadata.get("prompt-message-id") == "prompt-1" for update in updates)
+    assert any(update.metadata.get("assistant-message-id") == "assistant-1" for update in updates)
 
 
 @pytest.mark.asyncio

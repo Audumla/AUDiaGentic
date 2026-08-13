@@ -71,6 +71,7 @@ class GptAutoProviderRuntime:
         # provider sessions drive the same tab concurrently, even when both
         # happen to resolve the same project or ChatGPT URL.
         self._page_owners: dict[str, str] = {}
+        self._conversation_owners: dict[str, str] = {}
         self._event_task: asyncio.Task[None] | None = None
         self._status_refresh_task: asyncio.Task[None] | None = None
         self._dedicated_window_anchor: str | None = None
@@ -323,6 +324,18 @@ class GptAutoProviderRuntime:
         if self.config.browser.dedicated_window:
             await self.ensure_dedicated_window_anchor()
         pages = await self.bridge.call("list_pages")
+        if preferred_target_id:
+            preferred = next(
+                (
+                    page
+                    for page in pages
+                    if str(page.get("targetId") or "") == preferred_target_id
+                    and self.page_belongs_to_dedicated_window(page)
+                ),
+                None,
+            )
+            if preferred is not None:
+                return preferred
         matches = [
             page
             for page in pages
@@ -332,17 +345,6 @@ class GptAutoProviderRuntime:
                 provider_session_id,
             )
         ]
-        if preferred_target_id:
-            preferred = next(
-                (
-                    page
-                    for page in matches
-                    if str(page.get("targetId") or "") == preferred_target_id
-                ),
-                None,
-            )
-            if preferred is not None:
-                return preferred
         return matches[0] if matches else None
 
     async def page_record(self, page_handle: str) -> dict | None:
@@ -363,8 +365,21 @@ class GptAutoProviderRuntime:
         existing = self._chats.get(chat.ag_session_id)
         if existing is not None and existing is not chat:
             raise RuntimeError("duplicate gpt-auto gateway session")
+        provider_id = chat.provider_session_id
+        if provider_id:
+            owner = self._conversation_owners.get(provider_id)
+            if owner is not None and owner != chat.ag_session_id:
+                raise RuntimeError("gpt-auto provider conversation is already owned")
+            self._conversation_owners[provider_id] = chat.ag_session_id
         self._chats[chat.ag_session_id] = chat
         await self.refresh_status_page()
+
+    def claim_conversation(self, chat: PersistentChat, provider_session_id: str) -> bool:
+        owner = self._conversation_owners.get(provider_session_id)
+        if owner is not None and owner != chat.ag_session_id:
+            return False
+        self._conversation_owners[provider_session_id] = chat.ag_session_id
+        return True
 
     def claim_page(self, chat: PersistentChat, page_handle: str) -> bool:
         owner = self._page_owners.get(page_handle)
@@ -381,6 +396,8 @@ class GptAutoProviderRuntime:
         if self._chats.get(chat.ag_session_id) is chat:
             self._chats.pop(chat.ag_session_id, None)
         self.release_page(chat, chat.page_handle)
+        if chat.provider_session_id and self._conversation_owners.get(chat.provider_session_id) == chat.ag_session_id:
+            self._conversation_owners.pop(chat.provider_session_id, None)
         if getattr(self, "_dedicated_window_anchor", None) and self._bridge:
             asyncio.create_task(self.refresh_status_page())
 
