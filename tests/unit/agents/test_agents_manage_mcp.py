@@ -147,6 +147,17 @@ def test_gateway_operation_mcp_tools_delegate_to_management_api():
     get.assert_called_once_with(_ROOT, "op_001")
 
 
+def test_gateway_health_mcp_tool_delegates_to_management_api():
+    expected = {"healthy": True, "state": "running"}
+    with _patch_roots(), patch(
+        "audiagentic.components.agents.gateway.management_api.gateway_health",
+        return_value=expected,
+    ) as mock:
+        result = admin_mcp.agent_gateway_health()
+    assert result == expected
+    mock.assert_called_once_with(_ROOT)
+
+
 def test_gateway_retention_policy_mcp_tool_delegates_to_management_api():
     expected = {
         "available": True,
@@ -163,3 +174,14 @@ def test_gateway_retention_policy_mcp_tool_delegates_to_management_api():
         result = admin_mcp.agent_gateway_get_retention_policy()
     assert result == expected
     mock.assert_called_once_with(_ROOT)
+
+
+def test_gateway_restart_mcp_tool_delegates_to_management_api():
+    expected = {"restarted": True, "status": {"state": "running"}}
+    with _patch_roots(), patch(
+        "audiagentic.components.agents.gateway.management_api.gateway_restart",
+        return_value=expected,
+    ) as mock:
+        result = admin_mcp.agent_gateway_restart(force=True)
+    assert result == expected
+    mock.assert_called_once_with(_ROOT, force=True)

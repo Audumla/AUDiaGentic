@@ -38,7 +38,7 @@ COPY src ./src
 # python3 -m pip ensures the correct Python's pip is used (not a shell alias).
 RUN python3 -m pip install --no-cache-dir --break-system-packages build && \
     python3 -m build --wheel --outdir /dist
-RUN python3 -m pip install --no-cache-dir --no-compile --break-system-packages /dist/*.whl "mcp==1.27.0" pytest pytest-asyncio pytest-timeout
+RUN python3 -m pip install --no-cache-dir --no-compile --break-system-packages /dist/*.whl "mcp==1.27.0" "websockets>=13" pytest pytest-asyncio pytest-timeout
 
 WORKDIR /app
 COPY pyproject.toml ./pyproject.toml

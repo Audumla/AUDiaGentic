@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import asyncio
-import json
 from types import SimpleNamespace
 
 import pytest
 
-from audiagentic.components.providers.adapters.gpt_auto.bridge import PuppeteerBridge
 from audiagentic.components.providers.adapters.gpt_auto.chat import ChatState
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatSnapshot
@@ -18,43 +15,6 @@ from audiagentic.components.providers.adapters.gpt_auto.turn import (
 from audiagentic.foundation.transports.agent_session import SessionPrompt
 
 from .test_greenfield_config_urls import valid_config
-
-
-class _FakeStdin:
-    def __init__(self, reader: asyncio.StreamReader) -> None:
-        self.reader = reader
-        self.latest = b""
-
-    def write(self, value: bytes) -> None:
-        self.latest = value
-
-    async def drain(self) -> None:
-        request = json.loads(self.latest)
-        delay = (21 - request["id"]) / 10_000
-        asyncio.get_running_loop().call_later(
-            delay,
-            self.reader.feed_data,
-            (
-                json.dumps({"id": request["id"], "result": request["params"]["value"]}) + "\n"
-            ).encode(),
-        )
-
-
-@pytest.mark.asyncio
-async def test_bridge_correlates_twenty_out_of_order_calls():
-    bridge = PuppeteerBridge(GptAutoConfig.from_dict(valid_config()))
-    reader = asyncio.StreamReader()
-    bridge._proc = SimpleNamespace(stdin=_FakeStdin(reader), stdout=reader, returncode=None)
-    bridge._reader_task = asyncio.create_task(bridge._read_stdout())
-    try:
-        results = await asyncio.gather(
-            *(bridge.call("echo", {"value": value}) for value in range(20))
-        )
-        assert results == list(range(20))
-        assert bridge._pending == {}
-    finally:
-        reader.feed_eof()
-        await bridge._reader_task
 
 
 def snap(

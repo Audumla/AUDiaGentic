@@ -288,6 +288,10 @@
     "execution-profile-id": {
       "type": "string"
     },
+    "context-id": {
+      "type": "string",
+      "minLength": 1
+    },
     "context": {
       "type": "object",
       "additionalProperties": true

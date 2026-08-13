@@ -12,7 +12,9 @@ import pytest
 from audiagentic.components.agents.gateway.management_api import (
     gateway_get_config,
     gateway_get_retention_policy,
+    gateway_health,
     gateway_list_implementations,
+    gateway_restart,
     gateway_select_implementation,
     gateway_set_config,
     gateway_status,
@@ -153,3 +155,62 @@ def test_retention_policy_projection_is_machine_owned_and_redacted(
     assert projection["policy-id"] == "ops"
     assert "secret-path" not in projection
     assert str(policy_path) not in str(projection)
+
+
+def test_gateway_restart_stops_then_reacquires_service(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Client:
+        def __init__(self, label: str) -> None:
+            self.label = label
+            self.closed = False
+
+        def service_stop(self, project_root: Path, *, force: bool = False) -> dict:
+            assert project_root == tmp_path
+            assert force is True
+            return {"stopping": True, "forced": True}
+
+        def service_status(self, project_root: Path) -> dict:
+            assert project_root == tmp_path
+            return {"state": "running", "owner-epoch": "new"}
+
+        def close(self) -> None:
+            self.closed = True
+
+    clients = iter((_Client("old"), _Client("new")))
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.service.bootstrap.start_or_attach_gateway",
+        lambda: next(clients),
+    )
+
+    result = gateway_restart(tmp_path, force=True)
+
+    assert result == {
+        "stopping": {"stopping": True, "forced": True},
+        "restarted": True,
+        "status": {"state": "running", "owner-epoch": "new"},
+    }
+
+
+def test_gateway_health_combines_service_and_runtime_facts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Client:
+        def service_status(self, project_root: Path) -> dict:
+            return {"state": "running", "owner-epoch": "epoch", "quiescence": {"running-requests": 0}}
+
+        def gateway_overview(self, project_root: Path) -> dict:
+            return {"diagnostics": {"providers_loaded": 21, "skipped_count": 0}, "runtime-fingerprint": {"process-instance-id": "proc"}}
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.service.bootstrap.start_or_attach_gateway",
+        lambda: _Client(),
+    )
+    assert gateway_health(tmp_path) == {
+        "healthy": True,
+        "state": "running",
+        "owner-epoch": "epoch",
+        "process-instance-id": "proc",
+        "providers-loaded": 21,
+        "providers-skipped": 0,
+        "quiescence": {"running-requests": 0},
+    }

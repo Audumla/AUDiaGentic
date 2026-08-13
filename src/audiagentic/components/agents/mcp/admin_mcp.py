@@ -24,6 +24,13 @@ def agent_gateway_status() -> dict:
 
 @mcp.tool()
 @tool_boundary
+def agent_gateway_health() -> dict:
+    """Return a read-only health check for the shared gateway service."""
+    return _call("gateway_health")
+
+
+@mcp.tool()
+@tool_boundary
 def agent_gateway_list_implementations() -> dict:
     return _call("gateway_list_implementations")
 
@@ -50,6 +57,13 @@ def agent_gateway_set_config(implementation_id: str, updates: dict) -> dict:
 @tool_boundary
 def agent_gateway_get_retention_policy() -> dict:
     return _call("gateway_get_retention_policy")
+
+
+@mcp.tool()
+@tool_boundary
+def agent_gateway_restart(force: bool = False) -> dict:
+    """Restart the managed machine-scoped gateway service only."""
+    return _call("gateway_restart", force=force)
 
 
 @mcp.tool()

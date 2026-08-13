@@ -28,7 +28,7 @@ a2a = ["a2a-sdk==1.1.2"]
 # MCP server support for the planning tool surface
 mcp = ["mcp==1.27.0", "tomli-w>=1.0"]
 # Browser automation for gpt-auto provider
-gpt-auto = ["playwright>=1.40.0"]
+gpt-auto = ["websockets>=13.0"]
 # Test dependencies
 test = [
   "pytest>=9.0",

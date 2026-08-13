@@ -19,21 +19,6 @@ access_mode: none
 receive_lsp_mcp: false
 
 capabilities:
-  cli-install:
-    mechanism:
-      package_manager: "npm-runtime"
-      package_name: "puppeteer-core"
-      executable: "gpt-auto"
-      install:
-        type: callable
-        id: install
-        fn: "audiagentic.components.providers.adapters.gpt_auto.install:_install"
-      uninstall:
-        type: callable
-        id: uninstall
-        fn: "audiagentic.components.providers.adapters.gpt_auto.install:_uninstall"
-      probe_fn: "audiagentic.components.providers.adapters.gpt_auto.install:_probe"
-
   permissions:
     mechanism:
       can_write_files: false
@@ -73,7 +58,7 @@ capabilities:
 # see harness_observability_inventory.py for the domain semantics).
 harness_observability:
   - surface_id: gpt-auto-browser
-    candidate_source: shared Puppeteer/CDP browser runtime
+    candidate_source: shared Python CDP/browser runtime
     evidence:
       validated: true
       reference: tests/gpt_auto/test_session_transport_live.py

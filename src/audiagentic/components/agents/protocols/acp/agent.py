@@ -1,6 +1,7 @@
 """Thin ACP 0.11 adapter over the public Agents GatewayClient seam."""
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -77,11 +78,17 @@ class AcpAgent:
 
     async def prompt(self, session_id: str, prompt: list[Any], **_: Any) -> PromptResponse:
         text = text_from_prompt(prompt)
-        message_id = f"acp:{session_id}:{len(self._active_work)}"
+        # ACP retries must address the same canonical Work.  The adapter does
+        # not own a retry counter or a second lifecycle; identity is derived
+        # solely from the protocol session and message content.
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:24]
+        message_id = f"acp:{session_id}:{digest}"
+        work_id = f"work_acp_{hashlib.sha256(message_id.encode('utf-8')).hexdigest()[:24]}"
         work = self.ports.submit_agent_work(
             self.project_root,
             session_id,
             {"message_id": message_id, "text": text, "inputs": {}, "source": "acp"},
+            work_id=work_id,
         )
         work_id = str(work["work_id"])
         self._active_work[session_id] = work_id

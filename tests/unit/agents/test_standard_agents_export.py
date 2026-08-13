@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from audiagentic.components.agents.export.standard_agents import (
@@ -28,3 +30,15 @@ def test_standard_export_is_deterministic_and_multi_role_is_not_dual_ai():
 def test_dynamic_profile_is_not_lied_about_as_a_standard_model():
     with pytest.raises(NonPortableProjectionError, match="multi-instance"):
         project_agent(_composition([{"provider_id": "a", "model_id": "m"}, {"provider_id": "b", "model_id": "m"}]))
+
+
+def test_protocol_and_export_surfaces_do_not_own_legacy_jobs() -> None:
+    package_root = Path(__file__).parents[3] / "src" / "audiagentic" / "components" / "agents"
+    roots = (package_root / "protocols", package_root / "export")
+    offenders = [
+        str(path)
+        for root in roots
+        for path in root.rglob("*.py")
+        if "components.agent_jobs" in path.read_text(encoding="utf-8")
+    ]
+    assert offenders == []

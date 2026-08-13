@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-import json
+# These integration tests bootstrap the repository and source roots before
+# importing the application under test.
+# ruff: noqa: E402, I001
+
 import sys
 from pathlib import Path
 
@@ -10,11 +13,9 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from tests.helpers import sandbox as sandbox_helper
-
-from audiagentic.components.agent_jobs.jobs_store import job_record_path
 from audiagentic.components.agent_jobs.prompt_launch import launch_prompt_request
 from audiagentic.components.agent_jobs.prompt_parser import parse_prompt_launch_request
+from tests.helpers import sandbox as sandbox_helper
 
 
 def _write_project_and_provider_config(sandbox) -> None:
@@ -100,7 +101,7 @@ def _write_project_and_provider_config(sandbox) -> None:
     )
 
 
-def test_prompt_launch_creates_job_and_launch_artifact(tmp_path: Path) -> None:
+def test_prompt_launch_submits_canonical_work(tmp_path: Path, monkeypatch) -> None:
     sandbox = sandbox_helper.create(tmp_path, "prompt-launch")
     try:
         _write_project_and_provider_config(sandbox)
@@ -113,19 +114,20 @@ def test_prompt_launch_creates_job_and_launch_artifact(tmp_path: Path) -> None:
             workflow_profile="standard",
             prompt_id="prm_20260330_0001",
         )
+        request["context-id"] = "ctx_prompt_launch"
+        monkeypatch.setattr(
+            "audiagentic.components.agents.gateway.client.get_gateway_client",
+            lambda _root: _Gateway(),
+        )
         result = launch_prompt_request(sandbox.repo, request)
-        assert result["status"] == "created"
-        job = result["job"]
-        assert job["launch-tag"] == "adhoc"
-        assert job["model-id"] == "gpt-5.4-mini"
-        assert job_record_path(sandbox.repo, job["job-id"]).exists()
-        launch_path = sandbox.repo / ".audiagentic" / "runtime" / "jobs" / job["job-id"] / "launch-request.json"
-        assert json.loads(launch_path.read_text(encoding="utf-8"))["prompt-id"] == "prm_20260330_0001"
+        assert result["status"] == "submitted"
+        assert result["context-id"] == "ctx_prompt_launch"
+        assert not (sandbox.repo / ".audiagentic" / "runtime" / "jobs").exists()
     finally:
         sandbox.cleanup()
 
 
-def test_prompt_launch_defaults_model_and_job_subject_from_provider_shorthand(tmp_path: Path) -> None:
+def test_prompt_launch_defaults_model_from_provider_shorthand(tmp_path: Path, monkeypatch) -> None:
     sandbox = sandbox_helper.create(tmp_path, "prompt-launch-defaults")
     try:
         _write_project_and_provider_config(sandbox)
@@ -137,14 +139,23 @@ def test_prompt_launch_defaults_model_and_job_subject_from_provider_shorthand(tm
             workflow_profile="standard",
             prompt_id="prm_20260330_0010",
         )
+        request["context-id"] = "ctx_prompt_launch_defaults"
+        monkeypatch.setattr(
+            "audiagentic.components.agents.gateway.client.get_gateway_client",
+            lambda _root: _Gateway(),
+        )
         result = launch_prompt_request(sandbox.repo, request)
-        assert result["status"] == "created"
-        job = result["job"]
-        assert job["provider-id"] == "codex"
-        assert job["model-id"] == "gpt-5.4-mini"
-        assert job["default-model"] == "gpt-5.4-mini"
-        assert job["launch-target"]["kind"] == "adhoc"
-        assert job["launch-target"]["adhoc-id"] == "adh_20260330_0010"
-        assert job["job-id"].startswith("job_")
+        assert result["status"] == "submitted"
+        assert result["context-id"] == "ctx_prompt_launch_defaults"
     finally:
         sandbox.cleanup()
+
+
+class _Gateway:
+    def submit_agent_work(self, root, context_id, message, **kwargs):
+        return {
+            "work_id": kwargs["work_id"],
+            "context_id": context_id,
+            "state": "active",
+            "message": message,
+        }

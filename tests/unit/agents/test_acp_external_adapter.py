@@ -28,7 +28,7 @@ class FakeAgentsPort:
         return {"context_id": context_id, "state": "closed"}
 
     def submit_agent_work(self, root, context_id, message, **kwargs):
-        self.calls.append(("submit", message["text"]))
+        self.calls.append(("submit", message["text"], message["message_id"], kwargs.get("work_id")))
         return {"work_id": "work_1", "context_id": context_id, "state": "completed"}
 
     def get_agent_work(self, root, work_id):
@@ -61,7 +61,10 @@ def test_acp_projects_context_and_work_through_public_ports(tmp_path: Path) -> N
     created, result = asyncio.run(scenario())
     assert created.sessionId == "ctx_1"
     assert result.stopReason == "end_turn"
-    assert ("submit", "hello") in ports.calls
+    submission = next(call for call in ports.calls if call[0] == "submit")
+    assert submission[1].startswith("hello")
+    assert submission[2].startswith("acp:ctx_1:")
+    assert submission[3].startswith("work_acp_")
     assert ("close", "ctx_1") in ports.calls
 
 
@@ -77,3 +80,16 @@ def test_acp_rejects_client_owned_extensions(tmp_path: Path) -> None:
         pass
     else:
         raise AssertionError("client MCP injection must be rejected")
+
+
+def test_acp_replay_uses_the_same_work_identity(tmp_path: Path) -> None:
+    ports = FakeAgentsPort()
+    adapter = AcpAgent(tmp_path, "agent-test", ports)
+
+    async def scenario():
+        await adapter.prompt("ctx_1", [TextContentBlock(type="text", text="retry me")])
+        await adapter.prompt("ctx_1", [TextContentBlock(type="text", text="retry me")])
+
+    asyncio.run(scenario())
+    submissions = [call for call in ports.calls if call[0] == "submit"]
+    assert submissions[0][2:] == submissions[1][2:]

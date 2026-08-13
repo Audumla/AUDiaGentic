@@ -50,7 +50,7 @@ RUN mkdir -p .audiagentic/runtime
 ENV PATH="/venv/bin:$PATH"
 RUN uv venv /venv && \
     uv pip install --python /venv/bin/python -q --no-compile \
-        -e '.[mcp,acp]' pytest pytest-asyncio pytest-timeout pytest-xdist psutil agent-client-protocol==0.11.0
+        -e '.[mcp,acp]' pytest pytest-asyncio pytest-timeout pytest-xdist psutil 'websockets>=13' agent-client-protocol==0.11.0
 
 # Whole non-mutating suite, parallel.
 CMD ["bash", "tests/docker/run_suite.sh"]

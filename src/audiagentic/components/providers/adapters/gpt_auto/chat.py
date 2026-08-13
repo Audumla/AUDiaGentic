@@ -59,25 +59,59 @@ class PersistentChat:
         self._lost_during_turn = False
         self._last_url: str | None = None
 
+    def _claim_page(self, page_handle: str) -> bool:
+        """Claim a page when the runtime exposes ownership tracking.
+
+        The fallback keeps small adapter test doubles compatible while the
+        production runtime always supplies the exclusive ownership method.
+        """
+        claim = getattr(self.runtime, "claim_page", None)
+        return True if claim is None else bool(claim(self, page_handle))
+
     async def open(self) -> None:
         await self.runtime.ensure_available()
         await self.runtime.register_chat(self)
+        composite_open = getattr(self.runtime.bridge, "open_project_page", None)
+        if self.provider_session_id is None and composite_open is not None:
+            anchor = None
+            if self.runtime.config.browser.dedicated_window:
+                ensure_anchor = getattr(self.runtime, "ensure_dedicated_window_anchor", None)
+                if ensure_anchor is not None:
+                    anchor = await ensure_anchor()
+            result = await composite_open(
+                project_name=self.project_name,
+                project_url=self.project_url,
+                anchor_page_handle=anchor,
+                navigation_timeout=self.runtime.config.chat.navigation_timeout_seconds,
+                ready_timeout=self.runtime.config.chat.ready_timeout_seconds,
+            )
+            self.page_handle = str(result["pageHandle"])
+            self.project_url = str(result["projectUrl"])
+            self.state = ChatState.READY
+            return
         pages = await self.runtime.bridge.call("list_pages")
         target = self.chat_url if self.provider_session_id else self.project_url
         for page in pages:
-            if self.provider_session_id and url_matches_provider_session(
-                str(page.get("url") or ""), self.provider_session_id
-            ) and self.runtime.claim_page(self, str(page["pageHandle"])):
+            if (
+                self.provider_session_id
+                and url_matches_provider_session(
+                    str(page.get("url") or ""), self.provider_session_id
+                )
+                and self._claim_page(str(page["pageHandle"]))
+            ):
                 self.page_handle = str(page["pageHandle"])
                 break
         if self.page_handle is None:
-            result = await self.runtime.bridge.call(
-                "create_window_page"
-                if self.runtime.config.browser.dedicated_window
-                else "create_page"
-            )
+            if self.runtime.config.browser.dedicated_window:
+                ensure_anchor = getattr(self.runtime, "ensure_dedicated_window_anchor", None)
+                anchor = await ensure_anchor() if ensure_anchor is not None else None
+                result = await self.runtime.bridge.call(
+                    "create_page_in_window", {"anchorPageHandle": anchor}
+                ) if anchor else await self.runtime.bridge.call("create_window_page")
+            else:
+                result = await self.runtime.bridge.call("create_page")
             self.page_handle = str(result["pageHandle"])
-            if not self.runtime.claim_page(self, self.page_handle):
+            if not self._claim_page(self.page_handle):
                 raise RuntimeError("gpt-auto created a page already owned by another session")
             if not self.provider_session_id and not parse_project_id(self.project_url or ""):
                 await self.runtime.bridge.call(
@@ -96,9 +130,7 @@ class PersistentChat:
                     {
                         "pageHandle": self.page_handle,
                         "projectName": self.project_name,
-                        "timeoutMs": int(
-                            self.runtime.config.chat.ready_timeout_seconds * 1000
-                        ),
+                        "timeoutMs": int(self.runtime.config.chat.ready_timeout_seconds * 1000),
                     },
                     timeout=self.runtime.config.chat.ready_timeout_seconds + 2,
                 )
@@ -211,7 +243,7 @@ class PersistentChat:
             for page in pages:
                 if url_matches_provider_session(
                     str(page.get("url") or ""), self.provider_session_id
-                ) and self.runtime.claim_page(self, str(page["pageHandle"])):
+                ) and self._claim_page(str(page["pageHandle"])):
                     self.page_handle = str(page["pageHandle"])
                     self.state = ChatState.BUSY if self.active_turn_id else ChatState.READY
                     return
@@ -232,7 +264,7 @@ class PersistentChat:
             return
         if self.active_turn_id:
             exact = [page for page in pages if page.get("url") == self._last_url]
-            if len(exact) == 1 and self.runtime.claim_page(self, str(exact[0]["pageHandle"])):
+            if len(exact) == 1 and self._claim_page(str(exact[0]["pageHandle"])):
                 self.page_handle = str(exact[0]["pageHandle"])
                 self.state = ChatState.BUSY
                 return
@@ -240,7 +272,7 @@ class PersistentChat:
             return
         result = await self.runtime.bridge.call("create_page")
         self.page_handle = str(result["pageHandle"])
-        if not self.runtime.claim_page(self, self.page_handle):
+        if not self._claim_page(self.page_handle):
             raise RuntimeError("gpt-auto created a page already owned by another session")
         await self.runtime.bridge.call(
             "navigate",

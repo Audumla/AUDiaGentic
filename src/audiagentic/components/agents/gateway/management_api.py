@@ -44,6 +44,33 @@ def gateway_status(project_root: Path) -> dict[str, Any]:
     }
 
 
+def gateway_health(project_root: Path) -> dict[str, Any]:
+    """Return a read-only health projection for the shared gateway service."""
+    from audiagentic.components.agents.gateway.service.bootstrap import start_or_attach_gateway
+
+    client = start_or_attach_gateway()
+    try:
+        service = client.service_status(project_root)
+        overview = client.gateway_overview(project_root)
+    finally:
+        client.close()
+    diagnostics = overview.get("diagnostics") or {}
+    healthy = (
+        service.get("state") == "running"
+        and int(diagnostics.get("skipped_count", 0)) == 0
+        and int(service.get("quiescence", {}).get("running-requests", 0)) >= 0
+    )
+    return {
+        "healthy": healthy,
+        "state": service.get("state"),
+        "owner-epoch": service.get("owner-epoch"),
+        "process-instance-id": overview.get("runtime-fingerprint", {}).get("process-instance-id"),
+        "providers-loaded": diagnostics.get("providers_loaded", 0),
+        "providers-skipped": diagnostics.get("skipped_count", 0),
+        "quiescence": service.get("quiescence", {}),
+    }
+
+
 def gateway_list_implementations(project_root: Path) -> dict[str, Any]:
     from audiagentic.foundation.features.registry import (
         get_implementations,
@@ -238,3 +265,26 @@ def gateway_get_retention_policy(project_root: Path) -> dict[str, Any]:
         "policy-id": policy.policy_id,
         "policy-digest": policy.digest,
     }
+
+
+def gateway_restart(project_root: Path, *, force: bool = False) -> dict[str, Any]:
+    """Restart the machine-scoped gateway service through its managed lifecycle.
+
+    The caller's project root is only the admission context; the service itself
+    remains machine-scoped.  The old service is stopped before a fresh managed
+    instance is started, and no unrelated MCP stdio processes are touched.
+    """
+    from audiagentic.components.agents.gateway.service.bootstrap import start_or_attach_gateway
+
+    client = start_or_attach_gateway()
+    try:
+        stopping = client.service_stop(project_root, force=force)
+    finally:
+        client.close()
+
+    replacement = start_or_attach_gateway()
+    try:
+        status = replacement.service_status(project_root)
+    finally:
+        replacement.close()
+    return {"stopping": stopping, "restarted": True, "status": status}
