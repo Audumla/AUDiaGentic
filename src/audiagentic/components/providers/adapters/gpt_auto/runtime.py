@@ -14,6 +14,7 @@ from .cdp.bridge import PythonCdpBridge
 from .config import GptAutoConfig
 from .gpt_auto_cdp import GptAutoCdpBrowserController
 from .status.status_page import STATUS_PAGE_URL, render_status_page
+from .urls import url_matches_provider_session
 
 if TYPE_CHECKING:
     from .chat import PersistentChat
@@ -311,6 +312,46 @@ class GptAutoProviderRuntime:
         else:
             page = await self.bridge.call("create_page")
         return str(page["pageHandle"])
+
+    async def find_conversation_page(
+        self,
+        provider_session_id: str,
+        *,
+        preferred_target_id: str | None = None,
+    ) -> dict | None:
+        """Re-establish window identity, then find one retained conversation page."""
+        if self.config.browser.dedicated_window:
+            await self.ensure_dedicated_window_anchor()
+        pages = await self.bridge.call("list_pages")
+        matches = [
+            page
+            for page in pages
+            if self.page_belongs_to_dedicated_window(page)
+            and url_matches_provider_session(
+                str(page.get("url") or ""),
+                provider_session_id,
+            )
+        ]
+        if preferred_target_id:
+            preferred = next(
+                (
+                    page
+                    for page in matches
+                    if str(page.get("targetId") or "") == preferred_target_id
+                ),
+                None,
+            )
+            if preferred is not None:
+                return preferred
+        return matches[0] if matches else None
+
+    async def page_record(self, page_handle: str) -> dict | None:
+        """Return the current bridge record for a handle without changing ownership."""
+        pages = await self.bridge.call("list_pages")
+        return next(
+            (page for page in pages if str(page.get("pageHandle") or "") == page_handle),
+            None,
+        )
 
     def page_belongs_to_dedicated_window(self, page: dict) -> bool:
         """Constrain resume/recovery candidates to the managed GPT window."""

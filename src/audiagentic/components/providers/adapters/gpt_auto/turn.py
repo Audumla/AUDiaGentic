@@ -79,6 +79,7 @@ class GptAutoTurn:
         self._stop_task: asyncio.Task[None] | None = None
         self._sequence = 0
         self._delivered = 0
+        self._phase = "initialization"
 
     def _move(self, target: TurnState) -> None:
         failure = _ENGINE.check(self.state.value, target.value)
@@ -117,11 +118,37 @@ class GptAutoTurn:
             if self.chat.state not in {ChatState.FAILED, ChatState.CLOSED}:
                 self._set_chat_state(ChatState.FAILED)
             if self.side_effect_attempted and not isinstance(exc, AudiaGenticError):
+                cause = str(exc).strip() or "no exception message"
+                observation_failure = self._phase in {
+                    "submission-proof",
+                    "turn-accepted-observation",
+                    "response-observation",
+                    "terminal-observation",
+                }
                 raise AudiaGenticError(
-                    code="EXT-GPTAUTO-003",
+                    code="EXT-GPTAUTO-004" if observation_failure else "EXT-GPTAUTO-003",
                     kind="providers",
-                    message="gpt-auto lost deterministic observation after submission was attempted",
-                    details={"turn-id": self.request.turn_id, "submission-ambiguous": True},
+                    message=(
+                        "gpt-auto lost deterministic observation during "
+                        f"{self._phase}: {type(exc).__name__}: {cause}"
+                    ),
+                    details={
+                        key: value
+                        for key, value in {
+                            "turn-id": self.request.turn_id,
+                            "phase": self._phase,
+                            "cause-type": type(exc).__name__,
+                            "cause-message": cause,
+                            "submission-attempted": True,
+                            "submission-proven": self.submission_confirmed,
+                            "turn-state": self.state.value,
+                            "chat-state": self.chat.state.value,
+                            "page-handle": self.chat.page_handle,
+                            "target-id": getattr(self.chat, "target_id", None),
+                            "provider-session-id": self.chat.provider_session_id,
+                        }.items()
+                        if value is not None and value != ""
+                    },
                 ) from exc
             raise
         finally:
@@ -138,9 +165,12 @@ class GptAutoTurn:
         if self.cancel_event.is_set():
             self._move(TurnState.CANCELLED)
             return self._result("cancelled")
+        self._phase = "baseline-observation"
         baseline = await self.chat.snapshot()
         self._move(TurnState.SUBMITTING)
+        self._phase = "submission"
         await self._submit_once()
+        self._phase = "submission-proof"
         proof = await self._await_submission_proof(baseline)
         if proof is None:
             if self.state is TurnState.CANCELLED:
@@ -160,16 +190,19 @@ class GptAutoTurn:
             )
         self.submission_confirmed = True
         self._move(TurnState.SUBMITTED)
+        self._phase = "turn-accepted-observation"
         await self._emit(TransportObservationKind.TURN_ACCEPTED, {"reason": "provider-accepted"})
         if self.chat.provider_session_id is None:
             proof = await self.chat.acquire_provider_identity(proof)
         self._move(TurnState.AWAITING_RESPONSE)
+        self._phase = "response-observation"
         final = await self._await_response(baseline, proof)
         if self.state is TurnState.CANCELLED:
             return self._result("cancelled")
         if final is None:
             raise RuntimeError("cancelled response wait returned without cancelled state")
         self._move(TurnState.COMPLETE)
+        self._phase = "terminal-observation"
         await self._emit(TransportObservationKind.TERMINAL, {"stop_reason": "end-turn"})
         result = self._result("end-turn")
         return SessionTurnResult(**{**result.__dict__, "final_summary": final})

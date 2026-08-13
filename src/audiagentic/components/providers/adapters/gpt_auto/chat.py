@@ -70,6 +70,7 @@ class PersistentChat:
         self.provider_session_id = provider_session_id
         self.chat_url = chat_url
         self.page_handle: str | None = None
+        self.target_id: str | None = None
         self.active_turn_id: str | None = None
         self.state = ChatState.OPENING
         self.runtime = runtime
@@ -136,6 +137,9 @@ class PersistentChat:
                 ready_timeout=self.config.chat.ready_timeout_seconds,
             )
             self.page_handle = result["page"].handle
+            target_id = str(getattr(result["page"], "target_id", "") or "")
+            if target_id:
+                self.target_id = target_id
             self.project_url = str(result["projectUrl"])
             if not self._claim_page(self.page_handle):
                 try:
@@ -147,21 +151,19 @@ class PersistentChat:
                 raise RuntimeError("gpt-auto opened a page already owned by another session")
             self._move(ChatState.READY)
             return
-        pages = await self.runtime.bridge.call("list_pages")
         target = self.chat_url if self.provider_session_id else self.project_url
-        for page in pages:
-            if (
-                self.provider_session_id
-                and getattr(self.runtime, "page_belongs_to_dedicated_window", lambda _page: True)(
-                    page
+        if self.provider_session_id:
+            find_page = getattr(self.runtime, "find_conversation_page", None)
+            page = (
+                await find_page(
+                    self.provider_session_id,
+                    preferred_target_id=self.target_id,
                 )
-                and url_matches_provider_session(
-                    str(page.get("url") or ""), self.provider_session_id
-                )
-                and self._claim_page(str(page["pageHandle"]))
-            ):
-                self.page_handle = str(page["pageHandle"])
-                break
+                if find_page is not None
+                else None
+            )
+            if page is not None and self._claim_page(str(page["pageHandle"])):
+                self._bind_page(page)
         if self.page_handle is None:
             create_page = getattr(self.runtime, "create_chat_page", None)
             if create_page is not None:
@@ -171,6 +173,11 @@ class PersistentChat:
                 self.page_handle = str(result["pageHandle"])
             if not self._claim_page(self.page_handle):
                 raise RuntimeError("gpt-auto created a page already owned by another session")
+            page_record = getattr(self.runtime, "page_record", None)
+            if page_record is not None:
+                record = await page_record(self.page_handle)
+                if record is not None:
+                    self._bind_page(record)
             if not self.provider_session_id and not parse_project_id(self.project_url or ""):
                 if hasattr(browser, "page_by_handle"):
                     page = await browser.page_by_handle(self.page_handle)
@@ -206,6 +213,20 @@ class PersistentChat:
             self._move(ChatState.FAILED)
             raise RuntimeError("gpt-auto resumed page has conflicting provider session id")
         self._move(ChatState.READY)
+
+    def _bind_page(self, page: dict) -> None:
+        self.page_handle = str(page["pageHandle"])
+        target_id = str(page.get("targetId") or "")
+        if target_id:
+            self.target_id = target_id
+
+    async def ensure_ready(self) -> None:
+        """Lazily recover admission and only expose READY after quiescence."""
+        if self.state is ChatState.RECOVERING:
+            pages = await self.runtime.bridge.call("list_pages")
+            await self.reconcile(pages)
+        if self.state is not ChatState.READY:
+            raise RuntimeError(f"gpt-auto chat is not ready (state={self.state.value})")
 
     async def _wait_ready(self) -> None:
         await self.wait_quiescent(allow_recovering=True)
@@ -244,6 +265,9 @@ class PersistentChat:
         if not self.page_handle:
             raise RuntimeError("chat page is not bound")
         page = await self._gpt_browser().page_by_handle(self.page_handle)
+        target_id = str(getattr(page, "target_id", "") or "")
+        if target_id:
+            self.target_id = target_id
         snapshot = ChatSnapshot.from_bridge(
             await self._gpt_browser().snapshot(page, signals=self.config.workflow.bridge_signals())
         )
@@ -348,19 +372,33 @@ class PersistentChat:
         if self.state is ChatState.CLOSED:
             return
         if self.provider_session_id:
-            for page in pages:
-                if (
-                    getattr(self.runtime, "page_belongs_to_dedicated_window", lambda _page: True)(
-                        page
-                    )
-                    and url_matches_provider_session(
-                        str(page.get("url") or ""), self.provider_session_id
-                    )
-                    and self._claim_page(str(page["pageHandle"]))
-                ):
-                    self.page_handle = str(page["pageHandle"])
-                    self._move(ChatState.BUSY if self.active_turn_id else ChatState.READY)
-                    return
+            find_page = getattr(self.runtime, "find_conversation_page", None)
+            page = (
+                await find_page(
+                    self.provider_session_id,
+                    preferred_target_id=self.target_id,
+                )
+                if find_page is not None
+                else next(
+                    (
+                        item
+                        for item in pages
+                        if url_matches_provider_session(
+                            str(item.get("url") or ""),
+                            self.provider_session_id,
+                        )
+                    ),
+                    None,
+                )
+            )
+            if page is not None and self._claim_page(str(page["pageHandle"])):
+                self._bind_page(page)
+                if self.active_turn_id:
+                    self._move(ChatState.BUSY)
+                else:
+                    await self.wait_quiescent(allow_recovering=True)
+                    self._move(ChatState.READY)
+                return
             self.page_handle = await self._create_recovery_page()
             if not self.runtime.claim_page(self, self.page_handle):
                 raise RuntimeError("gpt-auto created a page already owned by another session")
@@ -373,12 +411,24 @@ class PersistentChat:
                 },
             )
             await self._wait_ready()
-            self._move(ChatState.BUSY if self.active_turn_id else ChatState.READY)
+            if self.active_turn_id:
+                self._move(ChatState.BUSY)
+            else:
+                self._move(ChatState.READY)
             return
         if self.active_turn_id:
+            stable = [
+                page
+                for page in pages
+                if self.target_id and str(page.get("targetId") or "") == self.target_id
+            ]
+            if len(stable) == 1 and self._claim_page(str(stable[0]["pageHandle"])):
+                self._bind_page(stable[0])
+                self._move(ChatState.BUSY)
+                return
             exact = [page for page in pages if page.get("url") == self._last_url]
             if len(exact) == 1 and self._claim_page(str(exact[0]["pageHandle"])):
-                self.page_handle = str(exact[0]["pageHandle"])
+                self._bind_page(exact[0])
                 self._move(ChatState.BUSY)
                 return
             self._move(ChatState.FAILED)
