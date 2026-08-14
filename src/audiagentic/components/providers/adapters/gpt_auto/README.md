@@ -12,6 +12,18 @@ The contract is strict: unknown or legacy keys fail instead of being aliased.
 Important invariants:
 
 - Gateway ID, ChatGPT conversation ID, request ID, and page handle are distinct.
+- A durable gateway session is the project/chat URL pair (`/g/<project>/c/<chat>`),
+  not one prompt. Each `agent_task_submit` against that session is a separate
+  turn with its own request/turn record and optional provider message IDs.
+- Continuing a completed conversation uses the same `session_id` with a new
+  prompt; it does not call the unresolved-turn recovery path or create a new
+  ChatGPT conversation. Resuming a terminal gateway generation reopens the
+  same project/chat URL first, proves quiescence, and then accepts the new turn.
+- If a prior turn was interrupted, recovery first matches its provider message
+  ID when available, then falls back to one unique bounded prompt-text match.
+  Missing IDs are evidence gaps, not automatic failures; ambiguous matches
+  remain `RECOVERING` with diagnostics and a resubmit suggestion, and never
+  trigger an automatic duplicate send.
 - page handles and browser process facts are never durable session identity.
 - one browser/CDP bridge serves many chats; closing one chat does not stop either.
 - provider tabs are retained when sessions close or the shared runtime stops by
