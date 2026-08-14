@@ -398,6 +398,7 @@ _SUBMISSION_ARGUMENTS = {
     "session_keep_alive",
     "session_idle_timeout_seconds",
     "session_max_lifetime_seconds",
+    "execution_context_fingerprint",
     "component_profile",
 }
 
