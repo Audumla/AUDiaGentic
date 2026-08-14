@@ -20,6 +20,7 @@ VAL-AGW-024: "An execution profile's instances must be either all gated (resourc
 VAL-AGW-030: "execution profile params.retry-count must be a non-negative integer (not bool, float, or negative). Check the profile configuration."
 VAL-AGW-031: "The provider referenced by this execution profile is not enabled in provider config. Enable the provider or use a different profile."
 INT-AGW-001: "The dispatch retry loop exited unexpectedly without a result or error. This indicates an internal logic defect — check server logs."
+INT-AGW-098: "The gateway caught an unexpected provider boundary failure. Read the preserved error message and provider diagnostics; retry only after confirming whether the provider prompt was submitted."
 VAL-AGW-050: "Session idle_timeout_seconds must be positive, or 0 to disable the idle timeout. Omit it to use the gateway default."
 VAL-AGW-051: "Session max_lifetime_seconds must be positive, or 0 to disable the lifetime cap. Omit it to use the gateway default."
 VAL-AGW-052: "The gateway session record failed schema validation after construction. Review the built record fields."
