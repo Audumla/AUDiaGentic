@@ -593,7 +593,6 @@ class SessionRuntime:
         role_set_digest: str | None = None,
         execution_profile_digest: str | None = None,
         effective_capability_digest: str | None = None,
-        capacity_source_id: str | None = None,
         model_id: str | None = None,
         idle_timeout_seconds: float | None = None,
         max_lifetime_seconds: float | None = None,
