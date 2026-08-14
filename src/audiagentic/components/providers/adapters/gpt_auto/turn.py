@@ -81,6 +81,7 @@ class GptAutoTurn:
         self._sequence = 0
         self._delivered = 0
         self._phase = "initialization"
+        self._composer_verification_mismatch: dict[str, Any] | None = None
         self._prompt_message_id: str | None = None
         self._response_message_id: str | None = None
         self._submission_settled = asyncio.Event()
@@ -329,6 +330,14 @@ class GptAutoTurn:
         typed_text = result.get("typedText") if isinstance(result, dict) else None
         action_complete = result.get("actionComplete") if isinstance(result, dict) else None
         if action_complete is not True:
+            enter_dispatched = bool(result.get("enterDispatched")) if isinstance(result, dict) else False
+            clear_unresolved = getattr(self.chat, "clear_unresolved_turn", None)
+            if clear_unresolved is not None and not enter_dispatched:
+                # The browser only entered the text or attempted Enter; it
+                # did not attempt a provider submission.  Do not strand the
+                # session as unresolved when no provider message could have
+                # been sent.
+                clear_unresolved()
             raise AudiaGenticError(
                 code="EXT-GPTAUTO-003",
                 kind="providers",
@@ -337,20 +346,32 @@ class GptAutoTurn:
                     "turn-id": self.request.turn_id,
                     "failure-reason": "composer-action-not-confirmed",
                     "action-complete": action_complete,
+                    "send-button-clicked": result.get("sendButtonClicked")
+                    if isinstance(result, dict)
+                    else None,
+                    "enter-dispatched": result.get("enterDispatched")
+                    if isinstance(result, dict)
+                    else None,
                     **self._diagnostics(expected_prompt=self.request.body),
                 },
             )
         if _normal(str(typed_text or "")) != _normal(self.request.body):
-            raise AudiaGenticError(
-                code="EXT-GPTAUTO-003",
-                kind="providers",
-                message="gpt-auto composer verification did not match the requested prompt",
-                details={
-                    "turn-id": self.request.turn_id,
-                    "failure-reason": "composer-typed-text-mismatch",
-                    "typed-text-length": len(str(typed_text or "")),
-                    **self._diagnostics(expected_prompt=self.request.body),
-                },
+            # The browser has already reported a completed send action.  The
+            # editor's read-back text is only a local pre-flight signal and
+            # can differ from the eventual conversation text because React/
+            # ProseMirror normalizes whitespace while replacing the composer.
+            # Do not retry here: that could duplicate a prompt.  Continue to
+            # the authoritative conversation-level proof below; if it cannot
+            # prove the exact prompt, the turn remains ambiguous and the
+            # unresolved-session barrier prevents another prompt from racing.
+            self._composer_verification_mismatch = {
+                "failure-reason": "composer-typed-text-mismatch",
+                "typed-text-length": len(str(typed_text or "")),
+                "typed-text-match": False,
+            }
+            logger.warning(
+                "gpt-auto composer read-back differed; awaiting conversation proof",
+                extra={"turn-id": self.request.turn_id},
             )
 
     async def _await_submission_proof(self, baseline: ChatSnapshot) -> ChatSnapshot | None:
@@ -724,6 +745,8 @@ class GptAutoTurn:
             "provider-session-id": self.chat.provider_session_id,
             **_message_ids(self),
         }
+        if self._composer_verification_mismatch:
+            details.update(self._composer_verification_mismatch)
         snapshot = self._last_snapshot
         if snapshot is not None:
             details.update(_snapshot_diagnostics(snapshot, expected_prompt=expected_prompt))

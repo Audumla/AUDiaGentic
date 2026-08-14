@@ -89,9 +89,10 @@ class PersistentChat:
             metadata, "assistant-before-message-id"
         )
         self.unresolved_prompt_text_digest = _metadata_text(metadata, "prompt-text-digest")
-        self.unresolved_turn_pending = _metadata_bool(metadata, "unresolved-turn-pending") or bool(
-            self.unresolved_prompt_message_id
-        )
+        # Message IDs are durable correlation evidence and remain present
+        # after a successful turn.  Only the explicit lifecycle marker says
+        # that a previous send still needs reconciliation.
+        self.unresolved_turn_pending = _metadata_bool(metadata, "unresolved-turn-pending")
         self._unresolved_match_fingerprint: tuple[object, ...] | None = None
         # Keep the last reconciliation decision separate from the durable
         # marker.  The marker says *a turn may still be outstanding*; this
@@ -469,9 +470,9 @@ class PersistentChat:
 
     def unresolved_metadata(self) -> dict[str, object]:
         """Return sparse correlation evidence for successor session records."""
-        values: dict[str, object] = {}
-        if self.unresolved_turn_pending:
-            values["unresolved-turn-pending"] = True
+        values: dict[str, object] = {
+            "unresolved-turn-pending": self.unresolved_turn_pending,
+        }
         for key, value in (
             ("prompt-message-id", self.unresolved_prompt_message_id),
             ("assistant-message-id", self.unresolved_assistant_message_id),

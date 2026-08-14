@@ -276,7 +276,12 @@ async def test_gpt_provider_send_click_is_synchronous_after_python_settle_delay(
     bridge = _NavigationOnClickBridge()
     browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]
     result = await browser.submit(CdpPageRef("page-1", "target-1"), "stable send")
-    assert result == {"actionComplete": True, "typedText": "stable send"}
+    assert result == {
+        "actionComplete": True,
+        "typedText": "stable send",
+        "sendButtonClicked": True,
+        "enterDispatched": False,
+    }
 
 
 @pytest.mark.asyncio
@@ -285,7 +290,12 @@ async def test_gpt_provider_submit_and_stop_use_fake_dom_responses():
     browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]
     page = CdpPageRef("page-1", "target-1")
     submitted = await browser.submit(page, "review gateway")
-    assert submitted == {"actionComplete": True, "typedText": "review gateway"}
+    assert submitted == {
+        "actionComplete": True,
+        "typedText": "review gateway",
+        "sendButtonClicked": True,
+        "enterDispatched": False,
+    }
     assert (await browser.stop_generation(page))["stopped"] is True
 
 
@@ -295,7 +305,9 @@ async def test_gpt_provider_submit_falls_back_to_enter_when_send_is_disabled():
     browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]
     page = CdpPageRef("page-1", "target-1")
     result = await browser.submit(page, "fallback")
-    assert result["actionComplete"] is True
+    assert result["actionComplete"] is False
+    assert result["sendButtonClicked"] is False
+    assert result["enterDispatched"] is True
     assert any(method == "dispatch_enter" for method, _ in bridge.calls)
 
 
