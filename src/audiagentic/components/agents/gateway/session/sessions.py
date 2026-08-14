@@ -2065,11 +2065,15 @@ class SessionRuntime:
 
         # AS15: signal that the turn actually started — re-acquire profile
         # concurrency slot from idle state (was released while waiting on turn_lock).
-        if request_id is not None:
-            from audiagentic.components.agents.gateway.queue.queue import notify_turn_starting
-
-            await notify_turn_starting(request_id)
+        # The acquisition itself is inside the lock-owning try/finally so a
+        # cancellation while waiting cannot strand this session's turn lock.
+        turn_slot_started = False
         try:
+            if request_id is not None:
+                from audiagentic.components.agents.gateway.queue.queue import notify_turn_starting
+
+                await notify_turn_starting(request_id)
+                turn_slot_started = True
             # Re-validate after the queued wait: the session may have been
             # closed, failed, or aged out while this turn waited its turn.
             if self._handles.get(session_id) is not handle:
@@ -2245,7 +2249,7 @@ class SessionRuntime:
                     self._turn_cancels.pop(request_id, None)
         finally:
             try:
-                if request_id is not None:
+                if request_id is not None and turn_slot_started:
                     from audiagentic.components.agents.gateway.queue.queue import notify_turn_done
 
                     await notify_turn_done(request_id)

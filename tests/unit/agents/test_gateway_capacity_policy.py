@@ -37,3 +37,9 @@ def test_legacy_virtual_capacity_remains_global_default() -> None:
     assert resolve_capacity_limits({"virtual-capacity": 3}) == {
         "global": 3, "global-explicit": False, "project": None, "session": None,
     }
+
+
+def test_explicit_null_global_capacity_is_unlimited() -> None:
+    assert resolve_capacity_limits({"global-capacity": None}) == {
+        "global": None, "global-explicit": True, "project": None, "session": None,
+    }

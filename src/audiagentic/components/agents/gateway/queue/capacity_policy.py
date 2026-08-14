@@ -58,7 +58,9 @@ def resolve_capacity_limits(params: dict[str, Any]) -> dict[str, int | None | bo
     project_keys = ("project-capacity", "project_capacity", "project-concurrency", "project_concurrency")
     session_keys = ("session-capacity", "session_capacity", "session-concurrency", "session_concurrency")
     global_value = first_present(params, *global_keys)
-    global_explicit = global_value is not None
+    # Key presence, rather than value truthiness, distinguishes an explicit
+    # YAML null (which is an intentional unlimited setting) from omission.
+    global_explicit = any(key in params for key in global_keys)
     global_limit = resolve_virtual_capacity(params) if not global_explicit else _optional_capacity(params, *global_keys)
     return {
         "global": global_limit,

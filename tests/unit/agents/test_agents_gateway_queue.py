@@ -145,6 +145,38 @@ def test_project_capacity_still_serializes_same_project(tmp_path: Path):
     assert manager.wait(project, second["request-id"], timeout_seconds=5)["state"] == "completed"
 
 
+def test_project_capacity_is_shared_across_profile_lanes(tmp_path: Path):
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    hold = threading.Event()
+    started = threading.Event()
+    runner = _blocking_runner(hold, started)
+    params = {"global-capacity": "unlimited", "project-capacity": 1}
+
+    first = _submit(manager, project, "profile-a", params, runner)
+    assert started.wait(timeout=2)
+    second = _submit(manager, project, "profile-b", params, runner)
+    assert manager.queue_depth("profile-b")["pending"] == 1
+
+    hold.set()
+    assert manager.wait(project, first["request-id"], timeout_seconds=5)["state"] == "completed"
+    assert manager.wait(project, second["request-id"], timeout_seconds=5)["state"] == "completed"
+
+
+def test_invalid_capacity_rejects_admitted_record_instead_of_stranding_it(tmp_path: Path):
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(execution_profile_id="invalid", prompt_body="x")
+    store.write_record(project, record)
+
+    result = manager.enqueue(project, record, {"project-capacity": 0}, _immediate_runner)
+
+    assert result["state"] == "rejected"
+    assert result["error"]["code"] == "VAL-AGW-020"
+
+
 # ---------------------------------------------------------------------------
 # concurrency
 # ---------------------------------------------------------------------------

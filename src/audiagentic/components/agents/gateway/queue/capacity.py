@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import threading
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -24,6 +25,62 @@ class CapacityReservation:
     capacity_source_id: str
     declared: bool
     concurrency: int | None
+
+
+@dataclass(frozen=True)
+class OverlayReservation:
+    """Atomic lease across global/project/session overlay dimensions."""
+
+    token: str
+    scope_keys: tuple[str, ...]
+
+
+class ScopedCapacityAuthority:
+    """Gateway-wide counters for optional policy dimensions.
+
+    Unlike profile runtime lanes, this authority is shared across all profile
+    generations. Each lease carries its requested limits; the effective limit
+    for a key is the strictest limit among currently active leases, preventing
+    two profiles from bypassing a shared global/project/session policy.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._usage: dict[str, int] = {}
+        self._limits: dict[str, dict[str, int]] = {}
+
+    def try_reserve(self, scopes: tuple[tuple[str, int], ...]) -> OverlayReservation | None:
+        with self._lock:
+            for key, limit in scopes:
+                active_limits = self._limits.get(key, {})
+                effective = min((*active_limits.values(), limit))
+                if self._usage.get(key, 0) >= effective:
+                    return None
+            token = uuid.uuid4().hex
+            for key, limit in scopes:
+                self._usage[key] = self._usage.get(key, 0) + 1
+                self._limits.setdefault(key, {})[token] = limit
+            return OverlayReservation(token, tuple(key for key, _ in scopes))
+
+    def release(self, reservation: OverlayReservation | None) -> None:
+        if reservation is None:
+            return
+        with self._lock:
+            for key in reservation.scope_keys:
+                current = self._usage.get(key, 0)
+                if current <= 1:
+                    self._usage.pop(key, None)
+                else:
+                    self._usage[key] = current - 1
+                limits = self._limits.get(key)
+                if limits is not None:
+                    limits.pop(reservation.token, None)
+                    if not limits:
+                        self._limits.pop(key, None)
+
+    def snapshot(self) -> dict[str, int]:
+        with self._lock:
+            return dict(self._usage)
 
 
 class _ResourceCapacity:
@@ -161,4 +218,4 @@ class SourceCapacityAuthority:
         return {resource_id: resource.snapshot() for resource_id, resource in resources}
 
 
-__all__ = ["CapacityReservation", "SourceCapacityAuthority"]
+__all__ = ["CapacityReservation", "OverlayReservation", "ScopedCapacityAuthority", "SourceCapacityAuthority"]

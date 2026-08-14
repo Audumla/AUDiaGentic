@@ -44,9 +44,15 @@ def _add_source(source_id: str, *, resource_id: str, concurrency: int, model_id:
     )
 
 
-def _snapshot_for(project_root: Path, profile_id: str, instances: tuple[str, ...]) -> profiles_mod.ResolvedExecutionProfile:
+def _snapshot_for(
+    project_root: Path,
+    profile_id: str,
+    instances: tuple[str, ...],
+    *,
+    params: dict | None = None,
+) -> profiles_mod.ResolvedExecutionProfile:
     return profiles_mod.snapshot_from_resolved_profile(
-        profile_id=profile_id, provider_id="local", instances=instances, params={},
+        profile_id=profile_id, provider_id="local", instances=instances, params=params or {},
     )
 
 
@@ -114,6 +120,42 @@ def test_same_model_two_instances_dispatches_to_whichever_is_free(tmp_path, home
     assert len(started) == 2
     assert set(started) == {"qwen3-27b"}
 
+    hold.set()
+
+
+def test_explicit_global_capacity_caps_declared_sources(tmp_path, home):
+    """An explicit global overlay applies above physical source capacity."""
+    _add_source("global-a", resource_id="global-res-a", concurrency=2)
+    _add_source("global-b", resource_id="global-res-b", concurrency=2)
+
+    manager = queue_mod.GatewayQueueManager()
+    hold = threading.Event()
+    started: list = []
+    lock = threading.Lock()
+    runner = _blocking_runner(hold, started, lock)
+    snapshot = _snapshot_for(
+        tmp_path, "explicit-global", ("global-a", "global-b"),
+        params={"global-capacity": 1},
+    )
+
+    def enqueue_with_policy():
+        record = store.build_record(
+            execution_profile_id=snapshot.profile_id,
+            prompt_body="x",
+            resolved_instance_ids=list(snapshot.instances),
+        )
+        store.write_record(tmp_path, record)
+        manager.enqueue(tmp_path, record, {"global-capacity": 1}, runner)
+
+    first = threading.Thread(target=enqueue_with_policy)
+    first.start()
+    first.join(timeout=5)
+    deadline = time.monotonic() + 2
+    while len(started) < 1 and time.monotonic() < deadline:
+        time.sleep(0.02)
+    enqueue_with_policy()
+    time.sleep(0.2)
+    assert len(started) == 1
     hold.set()
 
 
