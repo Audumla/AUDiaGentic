@@ -23,9 +23,15 @@ from audiagentic.components.providers.adapters.gpt_auto.cdp.cdp_browser import (
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
     GptAutoCdpBrowserController,
+    _SNAPSHOT_FN,
 )
 
 from .test_greenfield_config_urls import valid_config
+
+
+def test_snapshot_does_not_promote_static_streaming_animation_to_busy() -> None:
+    """The live ChatGPT DOM keeps this class after a response completes."""
+    assert 'selector !== ".streaming-animation"' in _SNAPSHOT_FN
 
 
 class _ScenarioClient:
