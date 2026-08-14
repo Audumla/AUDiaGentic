@@ -611,6 +611,8 @@ class PersistentChat:
                 if self.active_turn_id:
                     self._move(ChatState.BUSY)
                 else:
+                    if self.unresolved_turn_pending and not await self._reconcile_unresolved_turn():
+                        return
                     await self.wait_quiescent(allow_recovering=True)
                     self._move(ChatState.READY)
                 return
