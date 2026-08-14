@@ -291,6 +291,7 @@ class PersistentChat:
                         "prompt-id-available": bool(self.unresolved_prompt_message_id),
                         "prompt-text-digest-available": bool(self.unresolved_prompt_text_digest),
                         "suggestion": "resume the same session after the provider is idle, or resubmit only after confirming the prompt is absent",
+                        **_unresolved_observation_details(self._last_snapshot),
                     },
                 )
             raise RuntimeError(f"gpt-auto chat is not ready (state={self.state.value})")
@@ -850,3 +851,25 @@ def _same_quiescent_state(left: ChatSnapshot, right: ChatSnapshot) -> bool:
         right.latest_assistant_id,
         right.latest_assistant_text,
     )
+
+
+def _unresolved_observation_details(snapshot: ChatSnapshot | None) -> dict[str, object]:
+    """Expose sparse evidence explaining why an unresolved turn stayed gated."""
+    if snapshot is None:
+        return {}
+    details: dict[str, object] = {
+        "observed-url": snapshot.url,
+        "observed-user-count": snapshot.user_count,
+        "observed-assistant-count": snapshot.assistant_count,
+        "observed-composer-present": snapshot.composer_present,
+        "observed-composer-editable": snapshot.composer_editable,
+        "observed-generating": snapshot.generating,
+        "observed-error-present": snapshot.error_present,
+    }
+    if snapshot.latest_user_id:
+        details["observed-latest-user-id"] = snapshot.latest_user_id
+    if snapshot.latest_assistant_id:
+        details["observed-latest-assistant-id"] = snapshot.latest_assistant_id
+    if snapshot.dom_signals:
+        details["observed-dom-signals"] = sorted(snapshot.dom_signals)
+    return details
