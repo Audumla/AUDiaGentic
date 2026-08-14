@@ -282,6 +282,58 @@ class PersistentChat:
         self._last_snapshot = snapshot
         return snapshot
 
+    async def find_prompt_snapshot(
+        self, baseline: ChatSnapshot, expected_text: str
+    ) -> ChatSnapshot | None:
+        """Find a newly accepted prompt across duplicate retained tabs.
+
+        Browser tabs can momentarily diverge after a restart.  The durable
+        provider conversation URL is not enough to select the active tab, so
+        use the provider's stable user-message UUID (with text as a bounded
+        fallback) and rebind this chat to the matching target.
+        """
+        browser = self._gpt_browser()
+        pages = await self.runtime.bridge.call("list_pages")
+        if not isinstance(pages, list):
+            return None
+        old_handle = self.page_handle
+        belongs = getattr(self.runtime, "page_belongs_to_dedicated_window", lambda _: True)
+        for record in pages:
+            handle = str(record.get("pageHandle") or "")
+            if not handle or not belongs(record):
+                continue
+            if self.provider_session_id and not url_matches_provider_session(
+                str(record.get("url") or ""), self.provider_session_id
+            ):
+                continue
+            if handle != old_handle and not self._claim_page(handle):
+                continue
+            try:
+                page = await browser.page_by_handle(handle)
+                snapshot = ChatSnapshot.from_bridge(
+                    await browser.snapshot(
+                        page, signals=self.config.workflow.bridge_signals()
+                    )
+                )
+            except Exception:  # noqa: BLE001 - one stale tab must not abort scan
+                if handle != old_handle:
+                    self.runtime.release_page(self, handle)
+                continue
+            fresh = bool(
+                snapshot.latest_user_id
+                and snapshot.latest_user_id != baseline.latest_user_id
+            ) or snapshot.user_count > baseline.user_count
+            if fresh and _same_prompt(snapshot.latest_user_text, expected_text):
+                if old_handle and old_handle != handle:
+                    self.runtime.release_page(self, old_handle)
+                self._bind_page(record)
+                self._last_snapshot = snapshot
+                self._last_url = snapshot.url
+                return snapshot
+            if handle != old_handle:
+                self.runtime.release_page(self, handle)
+        return None
+
     def observed_status(self) -> dict[str, object]:
         """Return sparse page evidence for status projections."""
         if self._last_snapshot is None:
@@ -504,6 +556,12 @@ def provider_quiescent(snapshot: ChatSnapshot) -> bool:
         and not snapshot.error_present
         and not snapshot.dom_signals.intersection(busy_signals | failed_signals)
     )
+
+
+def _same_prompt(actual: str | None, expected: str) -> bool:
+    if not isinstance(actual, str):
+        return False
+    return actual.strip() == expected.strip()
 
 
 def _same_quiescent_state(left: ChatSnapshot, right: ChatSnapshot) -> bool:

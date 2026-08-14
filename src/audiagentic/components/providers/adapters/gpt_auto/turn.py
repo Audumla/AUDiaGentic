@@ -308,6 +308,12 @@ class GptAutoTurn:
             ):
                 self._prompt_message_id = snap.latest_user_id
                 return snap
+            finder = getattr(self.chat, "find_prompt_snapshot", None)
+            if finder is not None:
+                alternate = await finder(baseline, expected)
+                if alternate is not None:
+                    self._prompt_message_id = alternate.latest_user_id
+                    return alternate
             await asyncio.sleep(0.2)
         if last_observation_error is not None:
             raise AudiaGenticError(
