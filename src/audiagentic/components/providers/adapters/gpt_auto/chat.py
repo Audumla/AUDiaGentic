@@ -252,6 +252,14 @@ class PersistentChat:
 
     async def ensure_ready(self) -> None:
         """Lazily recover admission and only expose READY after quiescence."""
+        # Bridge page handles are local to one CDP connection and can be
+        # invalidated without the runtime seeing a Target event (for example,
+        # an operator closes a tab through a second CDP client).  A handle can
+        # even be recycled for an unrelated tab.  Validate the binding before
+        # admitting a turn so the turn never fails with an opaque
+        # ``unknown-or-closed-page`` error; recovery then rebinds by stable
+        # target/provider URL and, if necessary, recreates the conversation tab.
+        await self._validate_page_binding()
         if self.state is ChatState.RECOVERING:
             if self.page_handle and self.unresolved_turn_pending:
                 if await self._reconcile_unresolved_turn():
@@ -280,6 +288,34 @@ class PersistentChat:
                     },
                 )
             raise RuntimeError(f"gpt-auto chat is not ready (state={self.state.value})")
+
+    async def _validate_page_binding(self) -> None:
+        """Detect an externally closed or recycled page handle and recover it."""
+        if not self.page_handle or self.state in {ChatState.CLOSED, ChatState.FAILED}:
+            return
+        browser = self._gpt_browser()
+        handle = self.page_handle
+        try:
+            page = await browser.page_by_handle(handle)
+        except Exception:
+            page = None
+        if page is not None:
+            current_target = str(getattr(page, "target_id", "") or "")
+            current_url = str(getattr(page, "url", "") or "")
+            recycled = bool(self.target_id and current_target and current_target != self.target_id)
+            wrong_conversation = bool(
+                self.provider_session_id
+                and current_url
+                and not url_matches_provider_session(current_url, self.provider_session_id)
+            )
+            if not recycled and not wrong_conversation:
+                return
+        self.page_handle = None
+        self.runtime.release_page(self, handle)
+        if self.state is not ChatState.RECOVERING:
+            self._move(ChatState.RECOVERING)
+        pages = await self.runtime.bridge.call("list_pages")
+        await self.reconcile(pages if isinstance(pages, list) else [])
 
     async def _wait_ready(self) -> None:
         await self.wait_quiescent(allow_recovering=True)
