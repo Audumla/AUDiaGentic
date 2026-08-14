@@ -1,22 +1,63 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
 
 from audiagentic.components.providers.adapters.gpt_auto import runtime as runtime_module
 from audiagentic.components.providers.adapters.gpt_auto.cdp.bridge import BridgeEvent
-from audiagentic.components.providers.adapters.gpt_auto.chat import ChatState, PersistentChat
+from audiagentic.components.providers.adapters.gpt_auto.chat import (
+    ChatState,
+    PersistentChat,
+    _unresolved_prompt_match,
+)
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.runtime import (
     GptAutoProviderRuntime,
     ProviderState,
 )
 from audiagentic.components.providers.adapters.gpt_auto.status.status_page import STATUS_PAGE_URL
+from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatSnapshot
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 from .test_greenfield_config_urls import valid_config
+
+
+def test_unresolved_recovery_can_match_prompt_text_without_provider_message_id() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    chat = PersistentChat(
+        ag_session_id="session-text-fallback",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+    )
+    chat.mark_submission_unresolved("Review the current recovery state")
+    snapshot = ChatSnapshot(
+        url="https://chatgpt.com/g/g-p-project/c/provider-session",
+        composer_present=True,
+        composer_editable=True,
+        user_count=1,
+        assistant_count=1,
+        latest_assistant_id="assistant-1",
+        latest_user_text="Review the current recovery state",
+        latest_assistant_text="done",
+        dom_signals=frozenset({"completion-control"}),
+        error_present=False,
+        latest_user_id=None,
+        user_message_texts=("Review the current recovery state",),
+    )
+
+    assert _unresolved_prompt_match(chat, snapshot) == f"text:{chat.unresolved_prompt_text_digest}"
+
+    ambiguous = replace(
+        snapshot,
+        user_message_texts=(snapshot.latest_user_text, snapshot.latest_user_text),
+    )
+    assert _unresolved_prompt_match(chat, ambiguous) is None
 
 
 class _EventBridge:

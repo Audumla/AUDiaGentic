@@ -42,7 +42,8 @@ _SNAPSHOT_FN = r"""
       })
     );
   }
-  const text = (list) => list.length ? ((list[list.length - 1].innerText || "").trim() || null) : null;
+  const boundedText = (element) => ((element?.innerText || element?.textContent || "").trim()).slice(0, 20000) || null;
+  const text = (list) => list.length ? boundedText(list[list.length - 1]) : null;
   const selectors = '[data-testid="stop-button"], [data-testid="stop-generating"], .result-streaming, .result-thinking, [aria-busy="true"]';
   const generating = Array.from(document.querySelectorAll(selectors)).some(shown);
   const composer = document.querySelector(".ProseMirror");
@@ -51,6 +52,7 @@ _SNAPSHOT_FN = r"""
     composerEditable: !!composer && composer.isContentEditable && !composer.hasAttribute("disabled"),
     userCount: users.length, assistantCount: assistants.length,
     userMessageIds: users.map(e => e.getAttribute("data-message-id")).filter(Boolean),
+    userMessageTexts: users.map(boundedText).filter(Boolean).slice(-64),
     latestUserId: users.length ? users[users.length - 1].getAttribute("data-message-id") || null : null,
     latestAssistantId: latestAssistant?.getAttribute("data-message-id") || null,
     latestUserText: text(users), latestAssistantText: text(assistants), generating, domSignals,

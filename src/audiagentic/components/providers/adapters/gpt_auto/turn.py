@@ -121,9 +121,15 @@ class GptAutoTurn:
         try:
             return await self._run()
         except asyncio.CancelledError:
+            if self.side_effect_attempted:
+                mark_unresolved = getattr(self.chat, "mark_submission_unresolved", None)
+                if mark_unresolved is not None:
+                    mark_unresolved(self.request.body)
+                if self.chat.state not in {ChatState.CLOSED, ChatState.FAILED, ChatState.RECOVERING}:
+                    self._set_chat_state(ChatState.RECOVERING)
             if not _ENGINE.is_terminal(self.state.value):
                 self._move(TurnState.CANCELLED)
-            return self._result("cancelled")
+            raise
         except Exception as exc:
             if not _ENGINE.is_terminal(self.state.value):
                 self._move(TurnState.FAILED)
@@ -179,15 +185,14 @@ class GptAutoTurn:
         self._remember_snapshot(baseline)
         self._move(TurnState.SUBMITTING)
         self._phase = "submission"
-        await self._submit_once()
         mark_unresolved = getattr(self.chat, "mark_submission_unresolved", None)
-        if (
-            mark_unresolved is not None
-            and self.side_effect_attempted
-            and self._submission_settled.is_set()
-            and self.state is not TurnState.CANCELLED
-        ):
-            mark_unresolved()
+        if mark_unresolved is not None:
+            # Once the browser-side submit call starts, the Send may have
+            # reached ChatGPT even if CDP fails before returning a result.
+            mark_unresolved(self.request.body)
+            if self.chat.provider_session_id:
+                await self._publish_message_ids(strict=True)
+        await self._submit_once()
         if self.state is TurnState.CANCELLED:
             return self._result("cancelled")
         self._phase = "submission-proof"
@@ -222,7 +227,7 @@ class GptAutoTurn:
         if proof.latest_user_id:
             mark_prompt = getattr(self.chat, "mark_prompt_submitted", None)
             if mark_prompt is not None:
-                mark_prompt(proof.latest_user_id, baseline.latest_assistant_id)
+                mark_prompt(proof.latest_user_id, baseline.latest_assistant_id, self.request.body)
         self._move(TurnState.SUBMITTED)
         self._phase = "turn-accepted-observation"
         await self._emit(TransportObservationKind.TURN_ACCEPTED, {"reason": "provider-accepted"})
@@ -267,6 +272,7 @@ class GptAutoTurn:
                         self._baseline_snapshot.latest_assistant_id
                         if self._baseline_snapshot
                         else None,
+                        self.request.body,
                     )
             if self.chat.provider_session_id is None and parse_provider_session_id(current.url):
                 await self.chat.acquire_provider_identity(current)
@@ -540,6 +546,39 @@ class GptAutoTurn:
                         verify = await self.chat.snapshot()
                     except Exception as exc:  # noqa: BLE001 - verification resumes on next poll
                         self._last_observation_error = exc
+                        now = loop.time()
+                        timers = self.chat.config.turn
+                        timeout_policy = None
+                        if (
+                            response_started
+                            and timers.response_stall_timeout_seconds
+                            and now - last_activity_at >= timers.response_stall_timeout_seconds
+                        ):
+                            timeout_policy = "terminal-verification-stall-timeout"
+                        elif (
+                            timers.response_timeout_seconds
+                            and now - started_at >= timers.response_timeout_seconds
+                        ):
+                            timeout_policy = "terminal-verification-total-timeout"
+                        if timeout_policy:
+                            self._move(TurnState.TIMED_OUT)
+                            raise AudiaGenticError(
+                                code="EXT-GPTAUTO-004",
+                                kind="providers",
+                                message=(
+                                    "gpt-auto terminal verification failed until "
+                                    f"{timeout_policy}: {type(exc).__name__}: {exc}"
+                                ),
+                                details={
+                                    "turn-id": self.request.turn_id,
+                                    "phase": "terminal-verification",
+                                    "failure-reason": "terminal-verification-timeout",
+                                    "timeout-policy": timeout_policy,
+                                    "cause-type": type(exc).__name__,
+                                    "cause-message": str(exc),
+                                    **self._diagnostics(),
+                                },
+                            ) from exc
                         await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
                         continue
                     self._remember_snapshot(verify)
@@ -708,6 +747,9 @@ class GptAutoTurn:
                 }
             )
         metadata.update(_message_ids(self))
+        unresolved_metadata = getattr(self.chat, "unresolved_metadata", None)
+        if unresolved_metadata is not None:
+            metadata.update(unresolved_metadata())
         return SessionTurnResult(
             turn_id=self.request.turn_id,
             stop_reason=reason,
@@ -719,9 +761,12 @@ class GptAutoTurn:
 
     async def _publish_message_ids(self, *, strict: bool = False) -> None:
         """Persist proven prompt identity before response observation begins."""
-        if not self.chat.provider_session_id or not self._prompt_message_id:
+        if not self.chat.provider_session_id:
             return
         metadata = _message_ids(self)
+        unresolved_metadata = getattr(self.chat, "unresolved_metadata", None)
+        if unresolved_metadata is not None:
+            metadata.update(unresolved_metadata())
         if not metadata:
             return
         try:

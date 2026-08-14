@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import re
 from enum import StrEnum
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -86,7 +88,11 @@ class PersistentChat:
         self.unresolved_assistant_before_id = _metadata_text(
             metadata, "assistant-before-message-id"
         )
-        self.unresolved_turn_pending = bool(self.unresolved_prompt_message_id)
+        self.unresolved_prompt_text_digest = _metadata_text(metadata, "prompt-text-digest")
+        self.unresolved_turn_pending = _metadata_bool(metadata, "unresolved-turn-pending") or bool(
+            self.unresolved_prompt_message_id
+        )
+        self._unresolved_match_fingerprint: tuple[object, ...] | None = None
         self._recovery_ready = asyncio.Event()
         self._recovery_ready.set()
 
@@ -228,6 +234,14 @@ class PersistentChat:
         ):
             self._move(ChatState.FAILED)
             raise RuntimeError("gpt-auto resumed page has conflicting provider session id")
+        if self.provider_session_id and self.unresolved_turn_pending:
+            # A resumed conversation with an unresolved Send is not ordinary
+            # READY.  Keep admission closed until the exact prompt/response
+            # outcome is reconciled (or leave it RECOVERING for lazy retry).
+            self._move(ChatState.RECOVERING)
+            await self._reconcile_unresolved_turn()
+            if self.unresolved_turn_pending:
+                return
         self._move(ChatState.READY)
 
     def _bind_page(self, page: dict) -> None:
@@ -302,13 +316,11 @@ class PersistentChat:
         """Prove the retained prompt reached a terminal provider outcome."""
         if not self.unresolved_turn_pending:
             return True
-        # Without a provider user-message UUID there is no safe way to
-        # distinguish this turn's response from an older mounted block.  Keep
-        # the chat recovering until a later observation can establish identity.
-        if not self.unresolved_prompt_message_id:
-            return False
         snapshot = await self.snapshot(allow_recovering=True)
         if snapshot.generating or not provider_quiescent(snapshot):
+            return False
+        prompt_match = _unresolved_prompt_match(self, snapshot)
+        if prompt_match is None:
             return False
         assistant_id = snapshot.latest_assistant_id
         if not assistant_id or not snapshot.latest_assistant_text:
@@ -323,17 +335,45 @@ class PersistentChat:
             terminal = assistant_id != self.unresolved_assistant_before_id
         if not terminal:
             return False
+        match_fingerprint = (prompt_match, assistant_id, snapshot.latest_assistant_text)
+        if self._unresolved_match_fingerprint != match_fingerprint:
+            self._unresolved_match_fingerprint = match_fingerprint
+            return False
         self.clear_unresolved_turn()
         return True
 
-    def mark_submission_unresolved(self) -> None:
+    def unresolved_metadata(self) -> dict[str, object]:
+        """Return sparse correlation evidence for successor session records."""
+        values: dict[str, object] = {}
+        if self.unresolved_turn_pending:
+            values["unresolved-turn-pending"] = True
+        for key, value in (
+            ("prompt-message-id", self.unresolved_prompt_message_id),
+            ("assistant-message-id", self.unresolved_assistant_message_id),
+            ("assistant-before-message-id", self.unresolved_assistant_before_id),
+            ("prompt-text-digest", self.unresolved_prompt_text_digest),
+        ):
+            if value:
+                values[key] = value
+        return values
+
+    def mark_submission_unresolved(self, prompt_text: str | None = None) -> None:
         """Record that a send command completed but its provider identity is unknown."""
         self.unresolved_turn_pending = True
+        if prompt_text:
+            self.unresolved_prompt_text_digest = _prompt_text_digest(prompt_text)
 
-    def mark_prompt_submitted(self, prompt_id: str, assistant_before_id: str | None) -> None:
+    def mark_prompt_submitted(
+        self,
+        prompt_id: str,
+        assistant_before_id: str | None,
+        prompt_text: str | None = None,
+    ) -> None:
         self.unresolved_turn_pending = True
         self.unresolved_prompt_message_id = prompt_id
         self.unresolved_assistant_before_id = assistant_before_id
+        if prompt_text:
+            self.unresolved_prompt_text_digest = _prompt_text_digest(prompt_text)
 
     def mark_assistant_observed(self, assistant_id: str) -> None:
         self.unresolved_assistant_message_id = assistant_id
@@ -343,6 +383,8 @@ class PersistentChat:
         self.unresolved_prompt_message_id = None
         self.unresolved_assistant_message_id = None
         self.unresolved_assistant_before_id = None
+        self.unresolved_prompt_text_digest = None
+        self._unresolved_match_fingerprint = None
 
     async def find_prompt_snapshot(
         self, baseline: ChatSnapshot, expected_text: str
@@ -624,6 +666,11 @@ class PersistentChat:
                 return
             self._move(ChatState.FAILED)
             return
+        if self.unresolved_turn_pending:
+            # No provider URL or stable target remains.  A fresh project page
+            # cannot prove what happened to the prior Send, so retain the
+            # session in RECOVERING instead of admitting a new prompt.
+            return
         self.page_handle = await self._create_recovery_page()
         if not self._claim_page(self.page_handle):
             raise RuntimeError("gpt-auto created a page already owned by another session")
@@ -690,6 +737,43 @@ def _same_prompt(actual: str | None, expected: str) -> bool:
 def _metadata_text(metadata: dict[str, object], key: str) -> str | None:
     value = metadata.get(key)
     return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _metadata_bool(metadata: dict[str, object], key: str) -> bool:
+    return metadata.get(key) is True
+
+
+def _prompt_text_digest(value: str) -> str:
+    normalized = re.sub(r"\s+", " ", value).strip()
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _unresolved_prompt_match(chat: PersistentChat, snapshot: ChatSnapshot) -> str | None:
+    """Return a bounded prompt correlation key, or None when ambiguous.
+
+    Provider message IDs are strongest.  When ChatGPT does not expose one,
+    compare the mounted conversation sections by a persisted text digest.  A
+    digest match is accepted only when exactly one visible section matches;
+    repeated identical prompts remain unresolved instead of guessing.
+    """
+    prompt_id = chat.unresolved_prompt_message_id
+    if prompt_id:
+        if snapshot.latest_user_id == prompt_id and prompt_id in snapshot.user_message_ids:
+            return f"id:{prompt_id}"
+    digest = chat.unresolved_prompt_text_digest
+    if not digest:
+        return None
+    observed_texts = snapshot.user_message_texts or (
+        (snapshot.latest_user_text,) if snapshot.latest_user_text else ()
+    )
+    matches = [
+        text
+        for text in observed_texts
+        if _prompt_text_digest(text) == digest
+    ]
+    if len(matches) != 1:
+        return None
+    return f"text:{digest}"
 
 
 def _same_quiescent_state(left: ChatSnapshot, right: ChatSnapshot) -> bool:
