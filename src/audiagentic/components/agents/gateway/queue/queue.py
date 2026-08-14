@@ -937,7 +937,10 @@ class GatewayQueueManager:
 
                     runtime = peek_session_runtime()
                     if runtime is not None:
-                        runtime.request_cancel(request_id)
+                        runtime.request_cancel(
+                            request_id,
+                            session_id=updated.get("session-id"),
+                        )
                 except Exception:  # noqa: BLE001 — cancel stays best-effort
                     logger.debug(
                         "failed to signal session turn cancel",
