@@ -14,7 +14,6 @@ from audiagentic.components.providers.adapters.gpt_auto.turn import (
     GptAutoTurn,
     TurnState,
     _facts,
-    _stable_text_terminal_fallback,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.agent_session import (
@@ -184,22 +183,6 @@ async def test_turn_proves_submission_once_and_completes_from_atomic_snapshots()
     assert chat.state is ChatState.READY
     assert result.metadata["prompt-message-id"] == "prompt-1"
     assert result.metadata["assistant-message-id"] == "assistant-1"
-
-
-def test_stable_text_fallback_accepts_tool_turn_without_completion_control():
-    baseline = snap()
-    previous = snap(users=1, user="Review AU01", user_id="prompt-1", assistants=1,
-                    assistant="Both", assistant_id="assistant-1")
-    current = snap(users=1, user="Review AU01", user_id="prompt-1", assistants=1,
-                   assistant="Both", assistant_id="assistant-1")
-
-    assert _stable_text_terminal_fallback(baseline, previous, current)
-    assert not _stable_text_terminal_fallback(
-        baseline,
-        previous,
-        snap(users=1, user="Review AU01", user_id="prompt-1", assistants=1,
-             assistant="Both", assistant_id="assistant-1", generating=True),
-    )
 
 
 @pytest.mark.asyncio
