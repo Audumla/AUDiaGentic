@@ -147,6 +147,7 @@ class _Chat:
                 ),
             ]
         )
+        self.checkpoint_updates = []
 
     async def snapshot(self):
         return next(self._snapshots)
@@ -167,6 +168,22 @@ class _Chat:
         self.unresolved_assistant_before_id = assistant_before_id
         self.prompt_text = prompt_text
 
+    def clear_unresolved_turn(self):
+        self.unresolved_turn_pending = False
+
+    async def persist_unresolved_checkpoint(self, *, turn_id, baseline):
+        self.checkpoint_updates.append(
+            {
+                "turn-id": turn_id,
+                "recovery-state": "side-effect-may-have-started",
+                "unresolved-turn-pending": True,
+                "baseline-user-id": baseline.latest_user_id,
+            }
+        )
+
+    async def persist_unresolved_clear(self):
+        self.checkpoint_updates.append({"unresolved-turn-pending": False})
+
 
 @pytest.mark.asyncio
 async def test_turn_proves_submission_once_and_completes_from_atomic_snapshots():
@@ -184,6 +201,8 @@ async def test_turn_proves_submission_once_and_completes_from_atomic_snapshots()
     assert chat.state is ChatState.READY
     assert result.metadata["prompt-message-id"] == "prompt-1"
     assert result.metadata["assistant-message-id"] == "assistant-1"
+    assert chat.checkpoint_updates[0]["recovery-state"] == "side-effect-may-have-started"
+    assert chat.checkpoint_updates[-1] == {"unresolved-turn-pending": False}
 
 
 @pytest.mark.asyncio

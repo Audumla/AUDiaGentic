@@ -17,6 +17,7 @@ import pytest
 from audiagentic.components.agents.gateway import profiles as profiles_mod
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.queue import queue as queue_mod
+from audiagentic.components.agents.gateway.session import sessions_store
 from audiagentic.foundation.time import now_iso_z
 
 
@@ -119,8 +120,55 @@ def test_same_model_two_instances_dispatches_to_whichever_is_free(tmp_path, home
     # simultaneously (concurrency=1 each, two distinct resource-ids).
     assert len(started) == 2
     assert set(started) == {"qwen3-27b"}
-
     hold.set()
+
+
+def test_continuation_reuses_durable_session_source_affinity(tmp_path, home):
+    _add_source("m27b1", resource_id="local-gpu-0", concurrency=1, model_id="qwen3-27b")
+    _add_source("m27b2", resource_id="local-gpu-1", concurrency=1, model_id="qwen3-27b")
+    project = tmp_path / "project"
+    project.mkdir()
+    session = sessions_store.build_session_record(
+        session_id="ses-bound",
+        execution_profile_id="dual-instance",
+        provider_id="local",
+        provider_session_ref="provider-ref",
+        surface_id="surface",
+        provider_metadata={"gateway-capacity-source-id": "m27b1"},
+    )
+    sessions_store.write_session_record(project, session)
+
+    manager = queue_mod.GatewayQueueManager()
+    hold = threading.Event()
+    started: list[str] = []
+
+    def runner(root: Path, record: dict) -> dict:
+        started.append(record["resolved-source-id"])
+        hold.wait(timeout=5)
+        return store.transition_record(
+            root, record["request-id"], "completed",
+            updates={"output": "done", "finished-at": now_iso_z()},
+        )
+
+    snapshot = _snapshot_for(project, "dual-instance", ("m27b1", "m27b2"))
+    record = store.build_record(
+        execution_profile_id=snapshot.profile_id,
+        prompt_body="continuation",
+        session_id="ses-bound",
+        gateway_profile_id=snapshot.profile_id,
+        gateway_profile_generation=snapshot.generation,
+        gateway_profile_config_digest=snapshot.config_digest,
+        resolved_provider_id=snapshot.provider_id,
+        resolved_instance_ids=list(snapshot.instances),
+    )
+    store.write_record(project, record)
+    manager.enqueue(project, record, dict(snapshot.execution_params), runner)
+    deadline = time.monotonic() + 2
+    while not started and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert started == ["m27b1"]
+    hold.set()
+    assert manager.wait(project, record["request-id"], timeout_seconds=5)["state"] == "completed"
 
 
 def test_explicit_global_capacity_caps_declared_sources(tmp_path, home):

@@ -225,6 +225,7 @@ def _dispatch_session_request(
                 role_set_digest=role_set_digest,
                 execution_profile_digest=execution_profile_digest,
                 effective_capability_digest=effective_capability_digest,
+                capacity_source_id=record.get("resolved-source-id"),
                 # Request value wins over profile params; 0 disables the bound
                 # (RV513) — use explicit None checks so 0 survives resolution.
                 idle_timeout_seconds=(
