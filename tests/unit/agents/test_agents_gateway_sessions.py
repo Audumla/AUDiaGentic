@@ -1105,6 +1105,109 @@ def test_update_session_bounds_on_live_handle(rig):
     runtime.close_session(tmp_path, session_id)
 
 
+def test_continuation_policy_never_shortens_live_bounds(rig):
+    """Global/profile continuation settings use the more-open bound."""
+    runtime, clock, transports, tmp_path = rig
+    record = _open(runtime, tmp_path, idle_timeout_seconds=500, max_lifetime_seconds=1000)
+    session_id = record["session-id"]
+
+    runtime.update_session_bounds(
+        session_id,
+        idle_timeout_seconds=100,
+        max_lifetime_seconds=200,
+    )
+    clock.now += 250
+    time.sleep(0.2)
+    assert runtime.live_session_ids() == [session_id]
+    runtime.close_session(tmp_path, session_id)
+
+
+def test_rehydrate_active_generation_reuses_provider_binding(tmp_path):
+    """A missing process-local handle is reattached without a new session id."""
+    transports: list[FakeAgentSessionTransport] = []
+
+    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
+        transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
+        transport.provider_session_ref = kwargs.get("resume_provider_ref") or "prov-durable"
+        transports.append(transport)
+        return _build_fake_prepared(transport)
+
+    runtime = SessionRuntime(provider_prepare_fn=fake_prepare)
+    try:
+        record = runtime.open_session(
+            tmp_path,
+            execution_profile_id="profile-1",
+            provider_id="opencode",
+            model_id="m1",
+            surface_hint=None,
+        )
+        session_id = record["session-id"]
+        # Simulate a gateway process restart: durable record remains active,
+        # but this process has lost its ephemeral transport handle.
+        async def drop_handle() -> None:
+            runtime._handles.pop(session_id, None)
+
+        runtime._call(drop_handle(), timeout=5)
+        assert runtime.session_runtime_status(session_id)["available"] is False
+
+        restored = runtime.rehydrate_session(
+            tmp_path,
+            session_id,
+            execution_profile_id="profile-1",
+            provider_id="opencode",
+            model_id="m1",
+            surface_hint=None,
+        )
+        assert restored["session-id"] == session_id
+        assert runtime.session_runtime_status(session_id)["available"] is True
+        assert len(transports) == 2
+        assert transports[1].provider_session_ref == transports[0].provider_session_ref
+        runtime.prompt_in_session(tmp_path, session_id, "second turn")
+        assert transports[1].turns == ["second turn"]
+    finally:
+        runtime.shutdown()
+
+
+def test_rehydrate_rejects_provider_identity_swap_and_closes_transport(tmp_path):
+    """A resume that proves a different provider ref cannot leak a handle."""
+    transports: list[FakeAgentSessionTransport] = []
+
+    def fake_prepare(project_root, *, provider_id, surface_hint, model_id=None, **kwargs):
+        transport = FakeAgentSessionTransport()
+        transport.ag_session_id = kwargs["ag_session_id"]
+        transport.provider_session_ref = "prov-not-the-bound-session"
+        transports.append(transport)
+        return _build_fake_prepared(transport)
+
+    runtime = SessionRuntime(provider_prepare_fn=fake_prepare)
+    try:
+        # Seed a durable active record with the binding that the fake will
+        # deliberately violate on rehydration.
+        record = session_store.build_session_record(
+            session_id="ses_swap",
+            execution_profile_id="profile-1",
+            provider_id="opencode",
+            model_id="m1",
+            provider_session_ref="prov-bound",
+            surface_id="opencode-acp",
+        )
+        session_store.write_session_record(tmp_path, record)
+        with pytest.raises(AudiaGenticError, match="CON-AGW-121"):
+            runtime.rehydrate_session(
+                tmp_path,
+                "ses_swap",
+                execution_profile_id="profile-1",
+                provider_id="opencode",
+                model_id="m1",
+                surface_hint=None,
+            )
+        assert runtime.live_session_ids() == []
+        assert transports and transports[0].closed is True
+    finally:
+        runtime.shutdown()
+
+
 def test_update_session_bounds_unknown_session_raises(rig):
     """update_session_bounds on a non-live session raises RES-AGW-003."""
     runtime, clock, transports, tmp_path = rig

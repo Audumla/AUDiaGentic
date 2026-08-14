@@ -61,7 +61,7 @@ def test_ledger_link_deduplicates_existing_event_ids_and_bullet_styles(tmp_path)
     path = tmp_path / "docs" / "planning" / "active" / "test-plan" / "TST01.md"
     text = path.read_text(encoding="utf-8")
     text = text.replace("\n## Notes\n\n", "\n## Ledger-events\n\n- chg_dup\n\n## Notes\n\n")
-    text = text.rstrip() + "\n\n## Ledger events\n\n* chg_dup\n- chg_other\n"
+    text = text.rstrip() + "\n\n## Ledger events\n\n* chg_dup\n+ chg_other\n"
     path.write_text(text, encoding="utf-8")
 
     _on_ledger_event_recorded(
@@ -72,6 +72,9 @@ def test_ledger_link_deduplicates_existing_event_ids_and_bullet_styles(tmp_path)
 
     result = path.read_text(encoding="utf-8")
     assert result.count("## Ledger-events") == 1
+    assert "## Ledger events" not in result
+    assert "* chg_dup" not in result
+    assert "+ chg_other" not in result
     assert result.count("- chg_dup") == 1
     assert result.count("- chg_other") == 1
 

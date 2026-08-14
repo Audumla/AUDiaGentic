@@ -99,18 +99,20 @@ def _on_ledger_event_recorded(
                     body,
                     event_id,
                 )
-                if not linked:
+                normalized = updated_body != body
+                if not linked and not normalized:
                     logger.debug(
                         "ledger event already linked to plan item",
                         extra={"item_id": item_id, "event_id": event_id},
                     )
                     continue
-                updated_body = item_store.append_change_log(
-                    updated_body,
-                    datetime.now(timezone.utc).isoformat(),
-                    "updated-by",
-                    "Updated: section:ledger-events",
-                )
+                if linked:
+                    updated_body = item_store.append_change_log(
+                        updated_body,
+                        datetime.now(timezone.utc).isoformat(),
+                        "updated-by",
+                        "Updated: section:ledger-events",
+                    )
                 atomic_write_text(item_path, item_store.render_item(fm, updated_body))
             logger.info(
                 "linked ledger event to plan item",

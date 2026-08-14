@@ -121,7 +121,7 @@ _ITEM_ID_RE = re.compile(r"^([A-Z]+)(\d+)$", re.IGNORECASE)
 _CHANGE_LOG_HEADING = "## Change Log"
 _CHANGE_ENTRY_RE = re.compile(r"^- (\S+) \(([^)]+)\): (.*)$")
 _HEADING_RE = re.compile(r"^##\s+(.+?)\s*$")
-_LEDGER_ENTRY_RE = re.compile(r"^\s*[-*]\s+(chg_[^\s]+)\s*$")
+_LEDGER_ENTRY_RE = re.compile(r"^\s*[-+*]\s+(chg_[^\s]+)\s*$")
 
 _ITEM_LOCKS: dict[tuple[Path, str], threading.RLock] = {}
 _ITEM_LOCKS_GUARD = threading.Lock()

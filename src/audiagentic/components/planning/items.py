@@ -453,6 +453,7 @@ def update_item(project_root: Path, item_id: str, updates: dict[str, Any]) -> di
     return result
 
 
+@item_store.serialize_item_update
 def delete_item(project_root: Path, item_id: str) -> dict[str, Any]:
     """Permanently delete a plan item."""
     path = item_store.require_item(project_root, item_id)
