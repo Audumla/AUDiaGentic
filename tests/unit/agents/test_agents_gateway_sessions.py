@@ -25,6 +25,9 @@ from audiagentic.components.agents.agents_paths import gateway_session_binding_i
 from audiagentic.components.agents.gateway.session import bindings as binding_store
 from audiagentic.components.agents.gateway.session import sessions as sessions_module
 from audiagentic.components.agents.gateway.session import sessions_store as session_store
+from audiagentic.components.agents.gateway.session.dispatch import (
+    _terminal_session_diagnostics,
+)
 from audiagentic.components.agents.gateway.session.sessions import SessionRuntime
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import load_ndjson
@@ -288,6 +291,32 @@ def _wait_for(predicate, timeout=2.0):
             return True
         time.sleep(0.02)
     return False
+
+
+def test_terminal_session_diagnostics_preserve_recovery_path() -> None:
+    details = _terminal_session_diagnostics(
+        "ses-terminal",
+        {
+            "state": "failed",
+            "close-reason": "failed",
+            "timing": {
+                "updated-at": "2026-08-14T04:31:21Z",
+                "closed-at": "2026-08-14T04:31:21Z",
+            },
+            "provider": {
+                "metadata": {
+                    "provider-session-id": "provider-chat",
+                    "chat-url": "https://chatgpt.com/c/provider-chat",
+                    "unresolved-turn-pending": True,
+                }
+            },
+        },
+    )
+
+    assert details["suggestion"] == "call session_resume to continue the same provider conversation"
+    assert details["provider-provider-session-id"] == "provider-chat"
+    assert details["provider-unresolved-turn-pending"] is True
+    assert details["closed-at"] == "2026-08-14T04:31:21Z"
 
 
 # ── AS28 slice 4a: OPEN path provider preparation tests ─────────

@@ -72,7 +72,22 @@ class GptAutoSessionTransport:
     async def prompt(self, request: SessionPrompt, sink: ObservationSink) -> SessionTurnResult:
         if self._closed:
             raise RuntimeError("gpt-auto chat is not ready")
-        await self.chat.ensure_ready()
+        # Admission can fail before a GptAutoTurn exists (for example an
+        # unresolved prior send).  Route that failure through the same
+        # provider recovery disposition as failures raised by turn.run();
+        # otherwise the gateway would incorrectly terminate a still
+        # recoverable conversation and every later prompt would get
+        # RES-AGW-003.
+        try:
+            await self.chat.ensure_ready()
+        except Exception as exc:
+            retained = await self.chat.retain_after_turn_failure(exc)
+            self._turn_failure_disposition = (
+                SessionFailureDisposition.RETAIN
+                if retained
+                else SessionFailureDisposition.TERMINATE
+            )
+            raise
         self._turn_failure_disposition = SessionFailureDisposition.TERMINATE
         turn = GptAutoTurn(self.chat, request, sink)
         self._active_turn = turn
