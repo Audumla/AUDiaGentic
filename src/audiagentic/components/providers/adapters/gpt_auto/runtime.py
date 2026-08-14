@@ -373,7 +373,11 @@ class GptAutoProviderRuntime:
         if provider_id:
             owner = self._conversation_owners.get(provider_id)
             if owner is not None and owner != chat.ag_session_id:
-                raise RuntimeError("gpt-auto provider conversation is already owned")
+                prior = self._chats.get(owner)
+                if prior is None or _chat_terminal(prior):
+                    self._conversation_owners.pop(provider_id, None)
+                else:
+                    raise RuntimeError("gpt-auto provider conversation is already owned")
             self._conversation_owners[provider_id] = chat.ag_session_id
         self._chats[chat.ag_session_id] = chat
         await self.refresh_status_page()
@@ -381,7 +385,11 @@ class GptAutoProviderRuntime:
     def claim_conversation(self, chat: PersistentChat, provider_session_id: str) -> bool:
         owner = self._conversation_owners.get(provider_session_id)
         if owner is not None and owner != chat.ag_session_id:
-            return False
+            prior = self._chats.get(owner)
+            if prior is None or _chat_terminal(prior):
+                self._conversation_owners.pop(provider_session_id, None)
+            else:
+                return False
         self._conversation_owners[provider_session_id] = chat.ag_session_id
         return True
 
@@ -466,3 +474,9 @@ class GptAutoProviderRuntime:
 def _window_id(page: dict) -> int | None:
     value = page.get("windowId")
     return int(value) if value is not None else None
+
+
+def _chat_terminal(chat: PersistentChat) -> bool:
+    """Whether a retained provider owner can no longer make progress."""
+    state = getattr(chat, "state", None)
+    return getattr(state, "value", state) in {"failed", "closed"}
