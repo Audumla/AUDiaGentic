@@ -161,6 +161,7 @@ def build_gpt_auto_session_transport(
     binding_sink: Any,
     resume_provider_ref: str | None = None,
     resume_metadata_hint: dict[str, Any] | None = None,
+    checkpoint_sink: Any | None = None,
 ) -> GptAutoSessionTransport:
     parsed = GptAutoConfig.from_dict(config)
     runtime = get_runtime(project_root, parsed)
@@ -186,6 +187,7 @@ def build_gpt_auto_session_transport(
         provider_session_id=resume_provider_ref,
         chat_url=chat_url,
         resume_provider_metadata=metadata,
+        checkpoint_sink=checkpoint_sink,
     )
     return GptAutoSessionTransport(chat)
 

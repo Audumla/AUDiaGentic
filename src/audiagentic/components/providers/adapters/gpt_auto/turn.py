@@ -193,6 +193,9 @@ class GptAutoTurn:
             mark_unresolved(self.request.body)
             if self.chat.provider_session_id:
                 await self._publish_message_ids(strict=True)
+        persist_checkpoint = getattr(self.chat, "persist_unresolved_checkpoint", None)
+        if persist_checkpoint is not None:
+            await persist_checkpoint(turn_id=self.request.turn_id, baseline=baseline)
         await self._submit_once()
         if self.state is TurnState.CANCELLED:
             return self._result("cancelled")
@@ -229,6 +232,9 @@ class GptAutoTurn:
             mark_prompt = getattr(self.chat, "mark_prompt_submitted", None)
             if mark_prompt is not None:
                 mark_prompt(proof.latest_user_id, baseline.latest_assistant_id, self.request.body)
+                persist_checkpoint = getattr(self.chat, "persist_unresolved_checkpoint", None)
+                if persist_checkpoint is not None:
+                    await persist_checkpoint(turn_id=self.request.turn_id, baseline=baseline)
         self._move(TurnState.SUBMITTED)
         self._phase = "turn-accepted-observation"
         await self._emit(TransportObservationKind.TURN_ACCEPTED, {"reason": "provider-accepted"})
@@ -250,6 +256,9 @@ class GptAutoTurn:
         clear_unresolved = getattr(self.chat, "clear_unresolved_turn", None)
         if clear_unresolved is not None:
             clear_unresolved()
+            persist_clear = getattr(self.chat, "persist_unresolved_clear", None)
+            if persist_clear is not None:
+                await persist_clear()
         await self._emit(TransportObservationKind.TERMINAL, {"stop_reason": "end-turn"})
         result = self._result("end-turn")
         return SessionTurnResult(**{**result.__dict__, "final_summary": final})

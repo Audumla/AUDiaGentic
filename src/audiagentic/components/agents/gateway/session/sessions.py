@@ -113,6 +113,7 @@ def _default_prepare_fn(
     mcp_entries=None,
     resume_provider_ref: str | None = None,
     resume_provider_metadata: dict[str, Any] | None = None,
+    checkpoint_sink: Any | None = None,
 ) -> PreparedSessionTransport:
     """Default provider preparation via the public providers_api seam.
 
@@ -142,6 +143,7 @@ def _default_prepare_fn(
         require_isolated_mcp=mcp_entries is not None,
         resume_provider_ref=resume_provider_ref,
         resume_provider_metadata=resume_provider_metadata,
+        checkpoint_sink=checkpoint_sink,
     )
 
 
@@ -487,6 +489,7 @@ class SessionRuntime:
         role_set_digest: str | None = None,
         execution_profile_digest: str | None = None,
         effective_capability_digest: str | None = None,
+        capacity_source_id: str | None = None,
     ) -> dict[str, Any]:
         """Open a live session; returns the persisted session record.
 
@@ -548,6 +551,7 @@ class SessionRuntime:
                 role_set_digest=role_set_digest,
                 execution_profile_digest=execution_profile_digest,
                 effective_capability_digest=effective_capability_digest,
+                capacity_source_id=capacity_source_id,
             ),
             timeout=_OPEN_TIMEOUT_SECONDS,
         )
@@ -589,6 +593,7 @@ class SessionRuntime:
         role_set_digest: str | None = None,
         execution_profile_digest: str | None = None,
         effective_capability_digest: str | None = None,
+        capacity_source_id: str | None = None,
         model_id: str | None = None,
         idle_timeout_seconds: float | None = None,
         max_lifetime_seconds: float | None = None,
@@ -1114,6 +1119,20 @@ class SessionRuntime:
                 metadata=dict(getattr(update, "metadata", {}) or {}),
             )
 
+        async def checkpoint_sink(metadata: dict[str, Any]) -> None:
+            pending = bool(metadata.get("unresolved-turn-pending"))
+            remove = () if pending else (
+                "recovery-state",
+                "unresolved-turn-id",
+                "unresolved-baseline-user-id",
+                "unresolved-baseline-assistant-id",
+                "unresolved-baseline-user-count",
+                "unresolved-baseline-assistant-count",
+            )
+            session_store.update_provider_metadata(
+                project_root, session_id, metadata, remove_keys=remove
+            )
+
         prepare_kwargs: dict[str, Any] = {
             "provider_id": provider_id,
             "ag_session_id": session_id,
@@ -1122,6 +1141,7 @@ class SessionRuntime:
             "model_id": model_id or session_store.session_model_id(record),
             "resume_provider_ref": provider_ref,
             "resume_provider_metadata": session_store.session_provider_metadata(record),
+            "checkpoint_sink": checkpoint_sink,
         }
         if request_runtime_root is not None:
             prepare_kwargs["request_runtime_root"] = request_runtime_root
@@ -1241,6 +1261,7 @@ class SessionRuntime:
         role_set_digest: str | None = None,
         execution_profile_digest: str | None = None,
         effective_capability_digest: str | None = None,
+        capacity_source_id: str | None = None,
     ) -> dict[str, Any]:
         started = time.monotonic()
         logger.info(
@@ -1279,6 +1300,23 @@ class SessionRuntime:
                 effective_capability_digest=effective_capability_digest,
             )
 
+        async def checkpoint_sink(metadata: dict[str, Any]) -> None:
+            pending = bool(metadata.get("unresolved-turn-pending"))
+            remove = () if pending else (
+                "recovery-state",
+                "unresolved-turn-id",
+                "unresolved-baseline-user-id",
+                "unresolved-baseline-assistant-id",
+                "unresolved-baseline-user-count",
+                "unresolved-baseline-assistant-count",
+            )
+            session_store.update_provider_metadata(
+                project_root,
+                allocated_session_id,
+                metadata,
+                remove_keys=remove,
+            )
+
         # AS28 slice 4a: resolve provider-neutral transport via the public
         # prepare seam. No AcpLaunch / AcpSessionTransport construction here.
         prepare_kwargs = {
@@ -1287,6 +1325,7 @@ class SessionRuntime:
             "binding_sink": binding_sink,
             "surface_hint": surface_hint,
             "model_id": model_id,
+            "checkpoint_sink": checkpoint_sink,
         }
         if request_runtime_root is not None:
             prepare_kwargs["request_runtime_root"] = request_runtime_root
@@ -1367,6 +1406,11 @@ class SessionRuntime:
             else None
         )
         provider_metadata = dict(getattr(open_result, "metadata", {}) or {})
+        if capacity_source_id:
+            # This is session-specific placement identity, not a shared
+            # profile setting. Continuations must reacquire the same physical
+            # source as the transport they reuse.
+            provider_metadata["gateway-capacity-source-id"] = capacity_source_id
 
         record = session_store.build_session_record(
             session_id=session_id,

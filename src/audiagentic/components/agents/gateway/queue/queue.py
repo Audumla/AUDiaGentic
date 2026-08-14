@@ -275,6 +275,10 @@ class QueuedDispatch:
     runner: RequestRunner
     owner_epoch: str
     service_root: Path | None
+    # A continuation inherits the immutable physical source selected when
+    # the durable session was opened.  New sessions leave this unset until
+    # their first dispatch publishes the binding.
+    session_source_id: str | None = None
 
 
 # AS105/AS101 drain-before-swap: once a request for a different source
@@ -495,6 +499,9 @@ class GatewayQueueManager:
         # re-acquire pq.lock and deadlock (threading.Lock is not reentrant).
         # Keep the critical section limited to the bounded admission check
         # itself; do all I/O and event publish after releasing the lock (RV31).
+        session_source_id = self._durable_session_source_id(
+            project_root, record.get("session-id")
+        )
         entry = QueuedDispatch(
             request_id=request_id,
             project_root=project_root,
@@ -508,6 +515,7 @@ class GatewayQueueManager:
             runner=runner,
             owner_epoch=owner_epoch,
             service_root=dispatch_service_root,
+            session_source_id=session_source_id,
         )
         pending_count = 0
         with pq.lock:
@@ -646,7 +654,12 @@ class GatewayQueueManager:
             f"profile:{entry.snapshot.profile_id}/"
             f"{entry.snapshot.generation}/{entry.snapshot.config_digest}"
         )
-        for facts in entry.instance_facts:
+        compatible_facts = (
+            facts
+            for facts in entry.instance_facts
+            if entry.session_source_id is None or facts.source_id == entry.session_source_id
+        )
+        for facts in compatible_facts:
             declared = facts.resource_id is not None
             global_limit = limits["global"]
             virtual_bound = global_limit is not None
@@ -667,6 +680,22 @@ class GatewayQueueManager:
         return None
 
     @staticmethod
+    def _durable_session_source_id(project_root: Path, session_id: object) -> str | None:
+        """Read the immutable source binding for a continuation, if present."""
+        if not session_id:
+            return None
+        try:
+            from audiagentic.components.agents.gateway.session import sessions_store
+
+            record = sessions_store.read_session_record(project_root, str(session_id))
+        except Exception:  # noqa: BLE001 - admission remains compatible with new sessions
+            return None
+        value = sessions_store.session_provider_metadata(record).get(
+            "gateway-capacity-source-id"
+        )
+        return value.strip() if isinstance(value, str) and value.strip() else None
+
+    @staticmethod
     def _scope_keys(entry: QueuedDispatch) -> tuple[dict[str, int | None | bool], list[tuple[str, int]]]:
         limits = resolve_capacity_limits(dict(entry.snapshot.execution_params))
         keys: list[tuple[str, int]] = []
@@ -679,7 +708,12 @@ class GatewayQueueManager:
         if limits["project"] is not None:
             keys.append((f"project:{entry.project_key}", int(limits["project"])))
         if limits["session"] is not None and entry.session_key is not None:
-            keys.append((f"session:{entry.session_key}", int(limits["session"])))
+            # Session IDs are only unique within a project root. Include the
+            # canonical project key so imported/deterministic IDs in separate
+            # projects do not contend for one another's turn budget.
+            keys.append(
+                (f"session:{entry.project_key}:{entry.session_key}", int(limits["session"]))
+            )
         return limits, keys
 
     def _try_reserve_specific_source(

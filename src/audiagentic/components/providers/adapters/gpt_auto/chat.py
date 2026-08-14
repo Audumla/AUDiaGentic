@@ -63,6 +63,7 @@ class PersistentChat:
         runtime: GptAutoProviderRuntime,
         config: GptAutoConfig,
         binding_sink: ProviderSessionBindingSink,
+        checkpoint_sink=None,
         provider_session_id: str | None = None,
         chat_url: str | None = None,
         resume_provider_metadata: dict[str, object] | None = None,
@@ -79,6 +80,7 @@ class PersistentChat:
         self.runtime = runtime
         self.config = config
         self.binding_sink = binding_sink
+        self.checkpoint_sink = checkpoint_sink
         self._lost_during_turn = False
         self._last_url: str | None = None
         self._last_snapshot: ChatSnapshot | None = None
@@ -100,8 +102,57 @@ class PersistentChat:
         # intentionally ephemeral and is surfaced in the next boundary error.
         self._unresolved_recovery_reason: str | None = None
         self._unresolved_recovery_details: dict[str, object] = {}
+        self._checkpoint_metadata: dict[str, object] = {
+            key: metadata[key]
+            for key in (
+                "recovery-state",
+                "unresolved-turn-id",
+                "unresolved-baseline-user-id",
+                "unresolved-baseline-assistant-id",
+                "unresolved-baseline-user-count",
+                "unresolved-baseline-assistant-count",
+            )
+            if key in metadata and metadata[key] not in (None, "")
+        }
         self._recovery_ready = asyncio.Event()
         self._recovery_ready.set()
+
+    async def persist_unresolved_checkpoint(
+        self,
+        *,
+        turn_id: str,
+        baseline: ChatSnapshot | None,
+    ) -> None:
+        """Write the side-effect checkpoint before browser Send is invoked."""
+        self._checkpoint_metadata = {
+            "recovery-state": "side-effect-may-have-started",
+            "unresolved-turn-id": turn_id,
+        }
+        if baseline is not None:
+            for key, value in (
+                ("unresolved-baseline-user-id", baseline.latest_user_id),
+                ("unresolved-baseline-assistant-id", baseline.latest_assistant_id),
+                ("unresolved-baseline-user-count", baseline.user_message_count),
+                ("unresolved-baseline-assistant-count", baseline.assistant_message_count),
+            ):
+                if value is not None and value != "":
+                    self._checkpoint_metadata[key] = value
+        sink = self.checkpoint_sink
+        if sink is None:
+            return
+        result = sink({**self.unresolved_metadata(), **self._checkpoint_metadata})
+        if asyncio.iscoroutine(result):
+            await result
+
+    async def persist_unresolved_clear(self) -> None:
+        """Durably clear the checkpoint only after terminal proof."""
+        sink = self.checkpoint_sink
+        self._checkpoint_metadata = {}
+        if sink is None:
+            return
+        result = sink(self.unresolved_metadata())
+        if asyncio.iscoroutine(result):
+            await result
 
     def _claim_page(self, page_handle: str) -> bool:
         """Claim a page when the runtime exposes ownership tracking.
@@ -481,6 +532,7 @@ class PersistentChat:
         ):
             if value:
                 values[key] = value
+        values.update(self._checkpoint_metadata)
         return values
 
     def mark_submission_unresolved(self, prompt_text: str | None = None) -> None:

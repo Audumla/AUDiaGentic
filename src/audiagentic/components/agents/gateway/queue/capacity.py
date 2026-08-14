@@ -25,6 +25,7 @@ class CapacityReservation:
     capacity_source_id: str
     declared: bool
     concurrency: int | None
+    token: str = ""
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,7 @@ class ScopedCapacityAuthority:
         self._lock = threading.Lock()
         self._usage: dict[str, int] = {}
         self._limits: dict[str, dict[str, int]] = {}
+        self._leases: dict[str, tuple[str, ...]] = {}
 
     def try_reserve(self, scopes: tuple[tuple[str, int], ...]) -> OverlayReservation | None:
         with self._lock:
@@ -57,16 +59,21 @@ class ScopedCapacityAuthority:
                 if self._usage.get(key, 0) >= effective:
                     return None
             token = uuid.uuid4().hex
+            scope_keys = tuple(key for key, _ in scopes)
             for key, limit in scopes:
                 self._usage[key] = self._usage.get(key, 0) + 1
                 self._limits.setdefault(key, {})[token] = limit
-            return OverlayReservation(token, tuple(key for key, _ in scopes))
+            self._leases[token] = scope_keys
+            return OverlayReservation(token, scope_keys)
 
     def release(self, reservation: OverlayReservation | None) -> None:
         if reservation is None:
             return
         with self._lock:
-            for key in reservation.scope_keys:
+            scope_keys = self._leases.pop(reservation.token, None)
+            if scope_keys is None:
+                return
+            for key in scope_keys:
                 current = self._usage.get(key, 0)
                 if current <= 1:
                     self._usage.pop(key, None)
@@ -93,8 +100,9 @@ class _ResourceCapacity:
         self._active_source_id: str | None = None
         self._in_flight: dict[str, int] = {}
         self._waiting_since: dict[str, float] = {}
+        self._active_tokens: dict[str, set[str]] = {}
 
-    def try_reserve(self, source_id: str, concurrency: int) -> bool:
+    def try_reserve(self, source_id: str, concurrency: int, token: str) -> bool:
         now = self._clock()
         with self._lock:
             if self._active_source_id in (None, source_id):
@@ -112,6 +120,7 @@ class _ResourceCapacity:
                     return False
                 self._active_source_id = source_id
                 self._in_flight[source_id] = current + 1
+                self._active_tokens.setdefault(source_id, set()).add(token)
                 self._waiting_since.pop(source_id, None)
                 return True
 
@@ -119,13 +128,20 @@ class _ResourceCapacity:
             if active_in_flight == 0:
                 self._active_source_id = source_id
                 self._in_flight[source_id] = 1
+                self._active_tokens.setdefault(source_id, set()).add(token)
                 self._waiting_since.pop(source_id, None)
                 return True
             self._waiting_since.setdefault(source_id, now)
             return False
 
-    def release(self, source_id: str) -> None:
+    def release(self, source_id: str, token: str) -> None:
         with self._lock:
+            tokens = self._active_tokens.get(source_id)
+            if not tokens or token not in tokens:
+                return
+            tokens.remove(token)
+            if not tokens:
+                self._active_tokens.pop(source_id, None)
             current = self._in_flight.get(source_id, 0)
             if current > 0:
                 self._in_flight[source_id] = current - 1
@@ -164,7 +180,9 @@ class SourceCapacityAuthority:
         # It still receives a reservation so placement has one provider-neutral
         # contract rather than a legacy semaphore branch.
         if resource_id is None and concurrency is None:
-            return CapacityReservation(source_id, None, model_id, source_id, False, None)
+            return CapacityReservation(
+                source_id, None, model_id, source_id, False, None, uuid.uuid4().hex
+            )
         if not resource_id or concurrency is None or concurrency < 1:
             raise ValueError("declared source capacity is invalid")
         with self._lock:
@@ -173,10 +191,11 @@ class SourceCapacityAuthority:
                 resource = _ResourceCapacity(clock=self._clock, starvation_seconds=self._starvation_seconds)
                 self._resources[resource_id] = resource
         capacity_key = capacity_source_id or source_id
-        if not resource.try_reserve(capacity_key, concurrency):
+        token = uuid.uuid4().hex
+        if not resource.try_reserve(capacity_key, concurrency, token):
             return None
         return CapacityReservation(
-            source_id, resource_id, model_id, capacity_key, declared, concurrency,
+            source_id, resource_id, model_id, capacity_key, declared, concurrency, token,
         )
 
     def reserve_when_available(self, template: CapacityReservation) -> CapacityReservation:
@@ -201,7 +220,7 @@ class SourceCapacityAuthority:
         with self._lock:
             resource = self._resources.get(reservation.resource_id)
         if resource is not None:
-            resource.release(reservation.capacity_source_id)
+            resource.release(reservation.capacity_source_id, reservation.token)
         with self._available:
             self._available.notify_all()
 
