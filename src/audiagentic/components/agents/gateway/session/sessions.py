@@ -164,7 +164,7 @@ DEFAULT_REAP_INTERVAL_SECONDS = 30.0
 # keeps back-pressure visible instead of building an unbounded backlog (RV513).
 DEFAULT_SESSION_QUEUE_MAX = 8
 _OPEN_TIMEOUT_SECONDS = 120.0
-_CLOSE_TIMEOUT_SECONDS = 30.0
+_CLOSE_TIMEOUT_SECONDS = 60.0
 
 
 def _cleanup_preserving(path: Path, preserve: set[Path]) -> None:
