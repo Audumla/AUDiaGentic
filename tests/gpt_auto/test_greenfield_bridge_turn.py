@@ -82,6 +82,14 @@ class _TimeoutBridge(_Bridge):
         return await super().call(method, params, **kwargs)
 
 
+class _UnconfirmedBridge(_Bridge):
+    async def call(self, method, params, **kwargs):
+        if method == "submit_prompt":
+            self.submit_calls += 1
+            return {"actionComplete": False, "typedText": params["text"]}
+        return await super().call(method, params, **kwargs)
+
+
 class _Chat:
     def __init__(self) -> None:
         self.ag_session_id = "ag-session-1"
@@ -247,6 +255,31 @@ async def test_unproven_submission_fails_chat_instead_of_returning_empty_success
 
 
 @pytest.mark.asyncio
+async def test_unproven_submission_failure_keeps_bounded_last_observation_evidence():
+    chat = _Chat()
+
+    async def unchanged_snapshot():
+        return snap(users=0, assistants=0, extra_signals=("loading",))
+
+    chat.snapshot = unchanged_snapshot
+    chat.runtime.config.turn.submission_timeout_seconds = 0.01
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-diagnostics", body="Review SH10"), lambda _: None
+    )
+
+    with pytest.raises(AudiaGenticError) as captured:
+        await turn.run()
+
+    details = captured.value.details
+    assert details["failure-reason"] == "submission-proof-not-observed-before-deadline"
+    assert details["observation-state"] == "ready"
+    assert details["observed-user-count"] == 0
+    assert details["prompt-text-match"] is False
+    assert "latest-user-text" not in details
+    assert "latest-assistant-text" not in details
+
+
+@pytest.mark.asyncio
 async def test_inner_submission_timeout_is_not_mislabeled_as_absolute_timeout():
     chat = _Chat()
     chat.runtime.bridge = _TimeoutBridge()
@@ -255,6 +288,22 @@ async def test_inner_submission_timeout_is_not_mislabeled_as_absolute_timeout():
         await turn.run()
     assert turn.state is TurnState.FAILED
     assert chat.state is ChatState.FAILED
+
+
+@pytest.mark.asyncio
+async def test_unconfirmed_composer_action_fails_with_action_reason():
+    chat = _Chat()
+    chat.runtime.bridge = _UnconfirmedBridge()
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-action-unconfirmed", body="Review"), lambda _: None
+    )
+    turn.state = TurnState.SUBMITTING
+
+    with pytest.raises(AudiaGenticError) as captured:
+        await turn._submit_once()
+
+    assert captured.value.details["failure-reason"] == "composer-action-not-confirmed"
+    assert captured.value.details["action-complete"] is False
 
 
 @pytest.mark.asyncio
@@ -305,6 +354,29 @@ async def test_configured_dom_failure_policy_fails_the_workflow():
     # Inner response policy owns only the turn terminal state.  run() is the
     # single owner of chat terminalisation, preventing FAILED -> FAILED.
     assert chat.state is ChatState.BUSY
+
+
+@pytest.mark.asyncio
+async def test_provider_failure_policy_keeps_dom_evidence_without_message_bodies():
+    chat = _Chat()
+    failed = snap(users=1, user="Review SH10", extra_signals=("error-page",))
+
+    async def failed_snapshot():
+        return failed
+
+    chat.snapshot = failed_snapshot
+    chat.state = ChatState.BUSY
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-failure-evidence", body="Review SH10"), lambda _: None)
+    turn.state = TurnState.AWAITING_RESPONSE
+
+    with pytest.raises(AudiaGenticError) as captured:
+        await turn._await_response(snap(), snap(users=1, user="Review SH10"))
+
+    details = captured.value.details
+    assert details["failure-reason"] == "provider-failure-policy-matched"
+    assert details["observation-state"] == "failed"
+    assert "latest-user-text" not in details
+    assert "latest-assistant-text" not in details
 
 
 def test_old_assistant_text_mutation_is_not_a_fresh_response():

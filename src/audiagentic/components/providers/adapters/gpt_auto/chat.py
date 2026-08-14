@@ -86,6 +86,7 @@ class PersistentChat:
         self.unresolved_assistant_before_id = _metadata_text(
             metadata, "assistant-before-message-id"
         )
+        self.unresolved_turn_pending = bool(self.unresolved_prompt_message_id)
         self._recovery_ready = asyncio.Event()
         self._recovery_ready.set()
 
@@ -238,11 +239,15 @@ class PersistentChat:
     async def ensure_ready(self) -> None:
         """Lazily recover admission and only expose READY after quiescence."""
         if self.state is ChatState.RECOVERING:
-            pages = await self.runtime.bridge.call("list_pages")
-            await self.reconcile(pages)
-            if self.state is ChatState.RECOVERING and self.unresolved_prompt_message_id:
+            if self.page_handle and self.unresolved_turn_pending:
                 if await self._reconcile_unresolved_turn():
                     self._move(ChatState.READY)
+            else:
+                pages = await self.runtime.bridge.call("list_pages")
+                await self.reconcile(pages)
+                if self.state is ChatState.RECOVERING and self.unresolved_turn_pending:
+                    if await self._reconcile_unresolved_turn():
+                        self._move(ChatState.READY)
         if self.state is not ChatState.READY:
             raise RuntimeError(f"gpt-auto chat is not ready (state={self.state.value})")
 
@@ -295,13 +300,22 @@ class PersistentChat:
 
     async def _reconcile_unresolved_turn(self) -> bool:
         """Prove the retained prompt reached a terminal provider outcome."""
-        if not self.unresolved_prompt_message_id:
+        if not self.unresolved_turn_pending:
             return True
+        # Without a provider user-message UUID there is no safe way to
+        # distinguish this turn's response from an older mounted block.  Keep
+        # the chat recovering until a later observation can establish identity.
+        if not self.unresolved_prompt_message_id:
+            return False
         snapshot = await self.snapshot(allow_recovering=True)
         if snapshot.generating or not provider_quiescent(snapshot):
             return False
         assistant_id = snapshot.latest_assistant_id
         if not assistant_id or not snapshot.latest_assistant_text:
+            return False
+        # Quiescence alone is insufficient: a stopped/partial assistant can
+        # leave the composer idle before ChatGPT exposes its terminal marker.
+        if "completion-control" not in snapshot.dom_signals:
             return False
         if self.unresolved_assistant_message_id:
             terminal = assistant_id == self.unresolved_assistant_message_id
@@ -312,7 +326,12 @@ class PersistentChat:
         self.clear_unresolved_turn()
         return True
 
+    def mark_submission_unresolved(self) -> None:
+        """Record that a send command completed but its provider identity is unknown."""
+        self.unresolved_turn_pending = True
+
     def mark_prompt_submitted(self, prompt_id: str, assistant_before_id: str | None) -> None:
+        self.unresolved_turn_pending = True
         self.unresolved_prompt_message_id = prompt_id
         self.unresolved_assistant_before_id = assistant_before_id
 
@@ -320,6 +339,7 @@ class PersistentChat:
         self.unresolved_assistant_message_id = assistant_id
 
     def clear_unresolved_turn(self) -> None:
+        self.unresolved_turn_pending = False
         self.unresolved_prompt_message_id = None
         self.unresolved_assistant_message_id = None
         self.unresolved_assistant_before_id = None
@@ -504,7 +524,7 @@ class PersistentChat:
             if self.page_handle:
                 # The page may still be present after a proof timeout.  Do not
                 # navigate away from it: the prompt may already have landed.
-                if self.unresolved_prompt_message_id:
+                if self.unresolved_turn_pending:
                     if not await self._reconcile_unresolved_turn():
                         return True
                 await self._wait_ready()
@@ -560,7 +580,7 @@ class PersistentChat:
                 if self.active_turn_id:
                     self._move(ChatState.BUSY)
                 else:
-                    if self.unresolved_prompt_message_id and not await self._reconcile_unresolved_turn():
+                    if self.unresolved_turn_pending and not await self._reconcile_unresolved_turn():
                         return
                     await self.wait_quiescent(allow_recovering=True)
                     self._move(ChatState.READY)
@@ -580,7 +600,7 @@ class PersistentChat:
             if self.active_turn_id:
                 self._move(ChatState.BUSY)
             else:
-                if self.unresolved_prompt_message_id and not await self._reconcile_unresolved_turn():
+                if self.unresolved_turn_pending and not await self._reconcile_unresolved_turn():
                     return
                 self._move(ChatState.READY)
             return
