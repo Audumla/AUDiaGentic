@@ -2,6 +2,7 @@ CON-ARCHIVE-001: "The current ledger has no events to archive. Record change eve
 VAL-FRAGMENT-001: "The change event failed schema validation. Check the required fields in the event."
 CON-FRAGMENT-001: "A fragment with this event-id already exists with different content. Use a new event-id."
 CON-SYNCL-001: "Another process holds the sync lock. Wait for it to complete or remove the stale lock."
+CON-SYNCL-002: "The current release ledger is malformed or unreadable. Preserve the file, repair the invalid NDJSON entry, and retry synchronization."
 VAL-RELINST-001: "The release type is not supported. Supported types: python, node, java, go, rust, simple."
 INT-RELEASE-001: "The ledger archive event was not handled. Check that the ledger component is registered and functional."
 INT-RELEASE-002: "GitHub workflow dispatch HTTP request failed. Check network connectivity, token permissions, and workflow file existence."

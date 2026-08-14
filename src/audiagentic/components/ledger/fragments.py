@@ -71,12 +71,30 @@ def record_change_event(project_root: Path, event: dict[str, Any]) -> dict[str, 
                 message="fragment already exists with different content",
                 details={"event-id": event_id},
             )
+        plan_item_ids = event.get("plan-item-ids")
+        if isinstance(plan_item_ids, list) and plan_item_ids:
+            # Re-drive the projection on idempotent retries. The planning
+            # consumer deduplicates by event ID, so this repairs a missed
+            # async delivery without creating duplicate links.
+            publish_ledger_event_recorded(
+                event_id,
+                plan_item_ids,
+                project_root,
+                source=event.get("source"),
+                timestamp_utc=event.get("timestamp-utc"),
+            )
         return {"fragment-path": str(fragment_path), "event-id": event_id, "status": "exists"}
 
     atomic_write_text(fragment_path, json.dumps(event, indent=2, sort_keys=True))
 
     plan_item_ids = event.get("plan-item-ids")
     if isinstance(plan_item_ids, list) and plan_item_ids:
-        publish_ledger_event_recorded(event_id, plan_item_ids, project_root)
+        publish_ledger_event_recorded(
+            event_id,
+            plan_item_ids,
+            project_root,
+            source=event.get("source"),
+            timestamp_utc=event.get("timestamp-utc"),
+        )
 
     return {"fragment-path": str(fragment_path), "event-id": event_id, "status": "created"}
