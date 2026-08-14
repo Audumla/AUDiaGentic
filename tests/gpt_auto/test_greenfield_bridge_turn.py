@@ -236,16 +236,35 @@ async def test_submitted_turn_cannot_reenter_submission():
 
 
 @pytest.mark.asyncio
-async def test_composer_mismatch_fails_before_submission_can_be_accepted():
+async def test_composer_mismatch_waits_for_authoritative_submission_proof():
     chat = _Chat()
     chat.runtime.bridge = _Bridge("Cehra.l lBeen gceo nycoiusre .p")
     turn = GptAutoTurn(
         chat, SessionPrompt(turn_id="turn-1", body="Challenge your proposed order."), lambda _: None
     )
     turn.state = TurnState.SUBMITTING
-    with pytest.raises(Exception, match="composer verification"):
-        await turn._submit_once()
+    await turn._submit_once()
     assert not turn.submission_confirmed
+    assert turn._composer_verification_mismatch == {
+        "failure-reason": "composer-typed-text-mismatch",
+        "typed-text-length": len("Cehra.l lBeen gceo nycoiusre .p"),
+        "typed-text-match": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_composer_readback_mismatch_does_not_duplicate_when_prompt_is_proven():
+    chat = _Chat()
+    chat.runtime.bridge = _Bridge("formatting differs in the editor surface")
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-1", body="Review AU01"), lambda _: None
+    )
+
+    result = await turn.run()
+
+    assert result.stop_reason == "end-turn"
+    assert turn.submission_confirmed
+    assert chat.runtime.bridge.submit_calls == 1
 
 
 @pytest.mark.asyncio
