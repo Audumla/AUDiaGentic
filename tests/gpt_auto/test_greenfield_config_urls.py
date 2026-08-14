@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import pytest
+import yaml
 
 from audiagentic.components.providers.adapters.gpt_auto.config import (
     ExistingBrowserPolicy,
@@ -116,3 +118,14 @@ def test_chatgpt_url_identity_helpers_are_pure_and_exact():
     )
     assert url_matches_provider_session(url, "conversation-1")
     assert not url_matches_provider_session(url, "conversation-2")
+
+
+def test_live_workflow_does_not_treat_static_streaming_animation_as_busy() -> None:
+    root = Path(__file__).resolve().parents[2]
+    document = yaml.safe_load(
+        (root / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
+    )
+    config = GptAutoConfig.from_dict(document)
+    signals = {item["name"]: item for item in config.workflow.bridge_signals()}
+
+    assert ".streaming-animation" not in signals["streaming-indicator"]["selectors"]

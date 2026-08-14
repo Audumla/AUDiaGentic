@@ -26,7 +26,13 @@ _SNAPSHOT_FN = r"""
   const domSignals = {};
   for (const spec of signalSpecs) {
     const root = spec.scope === "latest-assistant-turn" ? assistantTurn : document;
-    domSignals[spec.name] = !!root && spec.selectors.some(selector =>
+    // ChatGPT currently leaves `.streaming-animation` on completed assistant
+    // messages.  It describes the renderer, not an active generation, so it
+    // must never be allowed to make the provider appear busy during resume.
+    const selectors = spec.name === "streaming-indicator"
+      ? spec.selectors.filter(selector => selector !== ".streaming-animation")
+      : spec.selectors;
+    domSignals[spec.name] = !!root && selectors.some(selector =>
       Array.from(root.querySelectorAll(selector)).some(el => {
         if (spec.visible && !shown(el)) return false;
         const fragments = spec.textContainsAny || [];
