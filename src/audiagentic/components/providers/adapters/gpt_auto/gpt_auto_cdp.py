@@ -44,6 +44,7 @@ _SNAPSHOT_FN = r"""
     url: location.href, composerPresent: !!composer,
     composerEditable: !!composer && composer.isContentEditable && !composer.hasAttribute("disabled"),
     userCount: users.length, assistantCount: assistants.length,
+    userMessageIds: users.map(e => e.getAttribute("data-message-id")).filter(Boolean),
     latestUserId: users.length ? users[users.length - 1].getAttribute("data-message-id") || null : null,
     latestAssistantId: latestAssistant?.getAttribute("data-message-id") || null,
     latestUserText: text(users), latestAssistantText: text(assistants), generating, domSignals,
