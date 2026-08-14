@@ -96,6 +96,8 @@ class _Chat:
         self.project_url = "https://chatgpt.com/g/g-p-project"
         self.provider_session_id = None
         self.chat_url = None
+        self.unresolved_prompt_message_id = None
+        self.unresolved_assistant_before_id = None
         self.page_handle = "page-1"
         self.active_turn_id = None
         self.state = ChatState.READY
@@ -153,6 +155,14 @@ class _Chat:
         self.chat_url = initial.url
         self.state = ChatState.BUSY
         return initial
+
+    def mark_submission_unresolved(self):
+        self.unresolved_turn_pending = True
+
+    def mark_prompt_submitted(self, prompt_id, assistant_before_id):
+        self.unresolved_turn_pending = True
+        self.unresolved_prompt_message_id = prompt_id
+        self.unresolved_assistant_before_id = assistant_before_id
 
 
 @pytest.mark.asyncio
@@ -252,6 +262,24 @@ async def test_unproven_submission_fails_chat_instead_of_returning_empty_success
     assert chat.runtime.bridge.submit_calls == 1
     assert chat.provider_session_id == "conversation-1"
     assert chat.chat_url.endswith("/c/conversation-1")
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_resume_captures_prompt_id_when_provider_identity_is_known():
+    chat = _Chat()
+    chat.provider_session_id = "conversation-1"
+    chat.chat_url = "https://chatgpt.com/g/g-p-project/c/conversation-1"
+    chat._snapshots = iter([snap(users=1, user="Review SH10", user_id="fresh-user")])
+    updates = []
+    chat.binding_sink = lambda update: updates.append(update)
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-known-resume", body="Review SH10"), lambda _: None)
+    turn._baseline_snapshot = snap()
+
+    await turn._capture_provider_identity_after_ambiguous_submission()
+
+    assert turn._prompt_message_id == "fresh-user"
+    assert chat.unresolved_prompt_message_id == "fresh-user"
+    assert any(update.metadata.get("prompt-message-id") == "fresh-user" for update in updates)
 
 
 @pytest.mark.asyncio
