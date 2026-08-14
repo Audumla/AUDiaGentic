@@ -201,6 +201,59 @@ async def test_chat_recovery_retains_page_after_recoverable_turn_failure() -> No
 
 
 @pytest.mark.asyncio
+async def test_unknown_submitted_turn_cannot_promote_idle_composer_to_ready() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle)
+
+        async def snapshot(self, _page, *, signals=None):
+            return {
+                "url": "https://chatgpt.com/g/g-p-project/c/conversation-1",
+                "composerPresent": True,
+                "composerEditable": True,
+                "userCount": 1,
+                "assistantCount": 1,
+                "latestAssistantId": "assistant-old",
+                "latestAssistantText": "older response",
+                "domSignals": {},
+                "errorPresent": False,
+            }
+
+    runtime = SimpleNamespace(
+        gpt_browser=_Browser(),
+        bridge=SimpleNamespace(),
+        claim_page=lambda _chat, _handle: True,
+        release_page=lambda _chat, _handle: None,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-unresolved",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+    )
+    chat.page_handle = "page-1"
+    chat.state = ChatState.RECOVERING
+    chat.mark_submission_unresolved()
+
+    retained = await chat.retain_after_turn_failure(
+        AudiaGenticError(
+            code="EXT-GPTAUTO-003",
+            kind="providers",
+            message="submission proof was ambiguous",
+        )
+    )
+
+    assert retained is True
+    assert chat.state is ChatState.RECOVERING
+    with pytest.raises(RuntimeError, match="not ready"):
+        await chat.ensure_ready()
+
+
+@pytest.mark.asyncio
 async def test_chat_readiness_requires_two_stable_quiescent_snapshots() -> None:
     config = GptAutoConfig.from_dict(valid_config())
     values = iter(

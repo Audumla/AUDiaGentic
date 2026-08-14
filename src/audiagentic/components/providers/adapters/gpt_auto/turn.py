@@ -85,6 +85,12 @@ class GptAutoTurn:
         self._response_message_id: str | None = None
         self._submission_settled = asyncio.Event()
         self._done = asyncio.Event()
+        # Keep the last bounded observation locally so an unprovable provider
+        # outcome can fail with evidence instead of a generic explanation.
+        # Never retain prompt/response bodies here: IDs, lengths and DOM
+        # markers are sufficient to diagnose the boundary safely.
+        self._last_snapshot: ChatSnapshot | None = None
+        self._last_observation_error: BaseException | None = None
 
     def _move(self, target: TurnState) -> None:
         failure = _ENGINE.check(self.state.value, target.value)
@@ -138,21 +144,13 @@ class GptAutoTurn:
                         f"{self._phase}: {type(exc).__name__}: {cause}"
                     ),
                     details={
-                        key: value
-                        for key, value in {
-                            "turn-id": self.request.turn_id,
-                            "phase": self._phase,
-                            "cause-type": type(exc).__name__,
-                            "cause-message": cause,
-                            "submission-attempted": True,
-                            "submission-proven": self.submission_confirmed,
-                            "turn-state": self.state.value,
-                            "chat-state": self.chat.state.value,
-                            "page-handle": self.chat.page_handle,
-                            "target-id": getattr(self.chat, "target_id", None),
-                            "provider-session-id": self.chat.provider_session_id,
-                        }.items()
-                        if value is not None and value != ""
+                        "turn-id": self.request.turn_id,
+                        "failure-reason": "unclassified-provider-boundary-exception",
+                        "cause-type": type(exc).__name__,
+                        "cause-message": cause,
+                        "submission-attempted": True,
+                        "submission-proven": self.submission_confirmed,
+                        **self._diagnostics(),
                     },
                 ) from exc
             raise
@@ -176,9 +174,18 @@ class GptAutoTurn:
             return self._result("cancelled")
         self._phase = "baseline-observation"
         baseline = await self.chat.snapshot()
+        self._remember_snapshot(baseline)
         self._move(TurnState.SUBMITTING)
         self._phase = "submission"
         await self._submit_once()
+        mark_unresolved = getattr(self.chat, "mark_submission_unresolved", None)
+        if (
+            mark_unresolved is not None
+            and self.side_effect_attempted
+            and self._submission_settled.is_set()
+            and self.state is not TurnState.CANCELLED
+        ):
+            mark_unresolved()
         if self.state is TurnState.CANCELLED:
             return self._result("cancelled")
         self._phase = "submission-proof"
@@ -199,7 +206,12 @@ class GptAutoTurn:
                 code="EXT-GPTAUTO-003",
                 kind="providers",
                 message="gpt-auto could not prove the submitted prompt exactly",
-                details={"turn-id": self.request.turn_id, "submission-ambiguous": True},
+                details={
+                    "turn-id": self.request.turn_id,
+                    "failure-reason": "submission-proof-not-observed-before-deadline",
+                    "submission-ambiguous": True,
+                    **self._diagnostics(expected_prompt=self.request.body),
+                },
             )
         self.submission_confirmed = True
         if proof.latest_user_id:
@@ -237,6 +249,7 @@ class GptAutoTurn:
             return
         try:
             current = await self.chat.snapshot()
+            self._remember_snapshot(current)
             if _matches(_normal(self.request.body), _normal(current.latest_user_text or "")) and current.latest_user_id:
                 self._prompt_message_id = current.latest_user_id
                 mark_prompt = getattr(self.chat, "mark_prompt_submitted", None)
@@ -245,7 +258,8 @@ class GptAutoTurn:
             if parse_provider_session_id(current.url):
                 await self.chat.acquire_provider_identity(current)
                 await self._publish_message_ids(strict=False)
-        except Exception:  # noqa: BLE001 - preservation is best effort
+        except Exception as exc:  # noqa: BLE001 - preservation is best effort
+            self._last_observation_error = exc
             logger.debug(
                 "could not preserve gpt-auto provider identity after ambiguous submission",
                 extra={"session-id": self.chat.ag_session_id},
@@ -283,17 +297,40 @@ class GptAutoTurn:
                 code="EXT-GPTAUTO-003",
                 kind="providers",
                 message="gpt-auto composer operation timed out before submission was proven",
-                details={"turn-id": self.request.turn_id, "submission-ambiguous": True},
+                details={
+                    "turn-id": self.request.turn_id,
+                    "failure-reason": "composer-operation-timeout",
+                    "submission-ambiguous": True,
+                    **self._diagnostics(expected_prompt=self.request.body),
+                },
             ) from exc
         finally:
             self._submission_settled.set()
         typed_text = result.get("typedText") if isinstance(result, dict) else None
+        action_complete = result.get("actionComplete") if isinstance(result, dict) else None
+        if action_complete is not True:
+            raise AudiaGenticError(
+                code="EXT-GPTAUTO-003",
+                kind="providers",
+                message="gpt-auto composer action was not confirmed by the browser",
+                details={
+                    "turn-id": self.request.turn_id,
+                    "failure-reason": "composer-action-not-confirmed",
+                    "action-complete": action_complete,
+                    **self._diagnostics(expected_prompt=self.request.body),
+                },
+            )
         if _normal(str(typed_text or "")) != _normal(self.request.body):
             raise AudiaGenticError(
                 code="EXT-GPTAUTO-003",
                 kind="providers",
                 message="gpt-auto composer verification did not match the requested prompt",
-                details={"turn-id": self.request.turn_id},
+                details={
+                    "turn-id": self.request.turn_id,
+                    "failure-reason": "composer-typed-text-mismatch",
+                    "typed-text-length": len(str(typed_text or "")),
+                    **self._diagnostics(expected_prompt=self.request.body),
+                },
             )
 
     async def _await_submission_proof(self, baseline: ChatSnapshot) -> ChatSnapshot | None:
@@ -310,6 +347,7 @@ class GptAutoTurn:
                 snap = await self.chat.snapshot()
             except Exception as exc:  # noqa: BLE001 - reconcile after attempted side effect
                 last_observation_error = exc
+                self._last_observation_error = exc
                 logger.info(
                     "gpt-auto submission proof observation interrupted; awaiting same conversation",
                     extra={"turn-id": self.request.turn_id},
@@ -317,6 +355,7 @@ class GptAutoTurn:
                 await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
                 continue
             last_observation_error = None
+            self._remember_snapshot(snap)
             if _new_user_message(baseline, snap) and _matches(
                 expected, _normal(snap.latest_user_text or "")
             ):
@@ -340,10 +379,11 @@ class GptAutoTurn:
                 details={
                     "turn-id": self.request.turn_id,
                     "phase": "submission-proof",
+                    "failure-reason": "submission-proof-observation-failed",
                     "cause-type": type(last_observation_error).__name__,
                     "cause-message": str(last_observation_error),
                     "submission-ambiguous": True,
-                    **_message_ids(self),
+                    **self._diagnostics(expected_prompt=self.request.body),
                 },
             ) from last_observation_error
         return None
@@ -370,6 +410,7 @@ class GptAutoTurn:
                 current = await self.chat.snapshot()
             except Exception as exc:  # noqa: BLE001 - never re-submit after an attempted send
                 last_observation_error = exc
+                self._last_observation_error = exc
                 logger.info(
                     "gpt-auto response observation interrupted; awaiting conversation recovery",
                     extra={"turn-id": self.request.turn_id},
@@ -395,14 +436,16 @@ class GptAutoTurn:
                         details={
                             "turn-id": self.request.turn_id,
                             "phase": "response-observation",
+                            "failure-reason": "response-observation-timeout",
                             "timeout-policy": timeout_policy,
                             "cause-type": type(exc).__name__,
                             "cause-message": str(exc),
-                            **_message_ids(self),
+                            **self._diagnostics(),
                         },
                     ) from exc
                 await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
                 continue
+            self._remember_snapshot(current)
             now = loop.time()
             if current.latest_assistant_id and current.latest_assistant_id != baseline.latest_assistant_id:
                 self._response_message_id = current.latest_assistant_id
@@ -421,7 +464,12 @@ class GptAutoTurn:
                     code="EXT-GPTAUTO-003",
                     kind="providers",
                     message="ChatGPT DOM reported a failed response state",
-                    details={"turn-id": self.request.turn_id, "evidence": sorted(failed.matched)},
+                    details={
+                        "turn-id": self.request.turn_id,
+                        "failure-reason": "provider-failure-policy-matched",
+                        "evidence": sorted(failed.matched),
+                        **self._diagnostics(),
+                    },
                 )
             started = self.chat.config.workflow.policy("response-started").evaluate(facts)
             if started.satisfied and not response_started:
@@ -473,9 +521,11 @@ class GptAutoTurn:
                 ):
                     try:
                         verify = await self.chat.snapshot()
-                    except Exception:  # noqa: BLE001 - verification resumes on next poll
+                    except Exception as exc:  # noqa: BLE001 - verification resumes on next poll
+                        self._last_observation_error = exc
                         await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
                         continue
+                    self._remember_snapshot(verify)
                     verify_facts = _facts(baseline, current, verify)
                     verified = self.chat.config.workflow.policy("response-complete").evaluate(
                         verify_facts
@@ -527,9 +577,10 @@ class GptAutoTurn:
             message="ChatGPT response policy timed out",
             details={
                 "turn-id": self.request.turn_id,
+                "failure-reason": "response-policy-timeout",
                 "timeout-policy": policy,
                 "submission-confirmed": True,
-                **_message_ids(self),
+                **self._diagnostics(),
             },
         )
 
@@ -602,6 +653,34 @@ class GptAutoTurn:
         else:
             move(state)
 
+    def _remember_snapshot(self, snapshot: ChatSnapshot) -> None:
+        self._last_snapshot = snapshot
+        self._last_observation_error = None
+
+    def _diagnostics(self, *, expected_prompt: str | None = None) -> dict[str, Any]:
+        """Return bounded, sparse evidence for a provider-boundary failure."""
+        details: dict[str, Any] = {
+            "phase": self._phase,
+            "turn-state": self.state.value,
+            "chat-state": self.chat.state.value,
+            "page-handle": self.chat.page_handle,
+            "target-id": getattr(self.chat, "target_id", None),
+            "provider-session-id": self.chat.provider_session_id,
+            **_message_ids(self),
+        }
+        snapshot = self._last_snapshot
+        if snapshot is not None:
+            details.update(_snapshot_diagnostics(snapshot, expected_prompt=expected_prompt))
+        error = self._last_observation_error
+        if error is not None:
+            details.update(
+                {
+                    "last-observation-error-type": type(error).__name__,
+                    "last-observation-error": str(error),
+                }
+            )
+        return {key: value for key, value in details.items() if value is not None and value != ""}
+
     def _result(self, reason: str) -> SessionTurnResult:
         metadata: dict[str, Any] = {"project-url": self.chat.project_url}
         if self.chat.provider_session_id:
@@ -648,9 +727,10 @@ class GptAutoTurn:
                     details={
                         "turn-id": self.request.turn_id,
                         "phase": self._phase,
+                        "failure-reason": "provider-message-identity-persistence-failed",
                         "cause-type": type(exc).__name__,
                         "cause-message": str(exc),
-                        **_message_ids(self),
+                        **self._diagnostics(),
                     },
                 ) from exc
             logger.warning(
@@ -729,3 +809,39 @@ def _message_ids(turn: GptAutoTurn) -> dict[str, str]:
         ),
     }
     return {key: value for key, value in values.items() if value}
+
+
+def _snapshot_diagnostics(
+    snapshot: ChatSnapshot, *, expected_prompt: str | None = None
+) -> dict[str, Any]:
+    """Project bounded DOM evidence into a provider-boundary failure."""
+    observation = snapshot.observe()
+    result: dict[str, Any] = {
+        "observed-url": snapshot.url,
+        "observation-state": observation.state.value,
+        "observed-user-count": snapshot.user_count,
+        "observed-assistant-count": snapshot.assistant_count,
+        "composer-present": snapshot.composer_present,
+        "composer-editable": snapshot.composer_editable,
+        "user-text-present": bool(snapshot.latest_user_text),
+        "assistant-text-length": len(snapshot.latest_assistant_text or ""),
+    }
+    if snapshot.latest_user_id:
+        result["observed-user-id"] = snapshot.latest_user_id
+    if snapshot.latest_assistant_id:
+        result["observed-assistant-id"] = snapshot.latest_assistant_id
+    if snapshot.generating:
+        result["generating"] = True
+    if snapshot.error_present:
+        result["error-present"] = True
+    if snapshot.dom_signals:
+        result["dom-signals"] = tuple(sorted(snapshot.dom_signals))
+    if observation.markers:
+        result["observation-markers"] = tuple(sorted(observation.markers))
+    if expected_prompt is not None:
+        result["expected-prompt-length"] = len(expected_prompt)
+        result["observed-user-text-length"] = len(snapshot.latest_user_text or "")
+        result["prompt-text-match"] = _matches(
+            _normal(expected_prompt), _normal(snapshot.latest_user_text or "")
+        )
+    return result
