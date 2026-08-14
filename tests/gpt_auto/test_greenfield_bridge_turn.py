@@ -156,13 +156,15 @@ class _Chat:
         self.state = ChatState.BUSY
         return initial
 
-    def mark_submission_unresolved(self):
+    def mark_submission_unresolved(self, prompt_text=None):
         self.unresolved_turn_pending = True
+        self.prompt_text = prompt_text
 
-    def mark_prompt_submitted(self, prompt_id, assistant_before_id):
+    def mark_prompt_submitted(self, prompt_id, assistant_before_id, prompt_text=None):
         self.unresolved_turn_pending = True
         self.unresolved_prompt_message_id = prompt_id
         self.unresolved_assistant_before_id = assistant_before_id
+        self.prompt_text = prompt_text
 
 
 @pytest.mark.asyncio

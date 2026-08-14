@@ -51,6 +51,7 @@ class ChatSnapshot:
     generating: bool = False
     latest_user_id: str | None = None
     user_message_ids: tuple[str, ...] = ()
+    user_message_texts: tuple[str, ...] = ()
 
     @classmethod
     def from_bridge(cls, value: dict[str, Any]) -> ChatSnapshot:
@@ -74,6 +75,11 @@ class ChatSnapshot:
             user_message_ids=tuple(
                 item.strip()
                 for item in (value.get("userMessageIds") or ())
+                if isinstance(item, str) and item.strip()
+            ),
+            user_message_texts=tuple(
+                item.strip()
+                for item in (value.get("userMessageTexts") or ())
                 if isinstance(item, str) and item.strip()
             ),
         )

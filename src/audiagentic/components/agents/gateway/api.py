@@ -262,6 +262,7 @@ def submit_execution_request(
     session_keep_alive: bool = False,
     session_idle_timeout_seconds: float | None = None,
     session_max_lifetime_seconds: float | None = None,
+    execution_context_fingerprint: str | None = None,
     component_profile: str | None = None,
     _dispatch_owner_epoch: str | None = None,
     _dispatch_service_root: str | None = None,
@@ -420,10 +421,33 @@ def submit_execution_request(
         eligible_instance_ids=envelope.eligible_instance_ids,
     )
 
+    # Continuations may intentionally run after a gateway process restart or
+    # code/config reload.  The session binding remains the authority for its
+    # execution context; expose an explicit fingerprint override so a caller
+    # can continue that same durable session without silently accepting a
+    # drifted context.  New sessions must always use the fresh manifest value.
+    request_context_fingerprint = manifest.context_fingerprint
+    if execution_context_fingerprint is not None:
+        if session_id is None:
+            raise AudiaGenticError(
+                code="VAL-AGW-104",
+                kind="agents",
+                message="execution context fingerprint override requires session_id",
+                details={},
+            )
+        if not isinstance(execution_context_fingerprint, str) or not execution_context_fingerprint:
+            raise AudiaGenticError(
+                code="VAL-AGW-105",
+                kind="agents",
+                message="execution context fingerprint override must be non-empty",
+                details={},
+            )
+        request_context_fingerprint = execution_context_fingerprint
+
     # Derive idempotency key (client-supplied wins, else deterministic)
     idempotency_key = derive_idempotency_key(
         envelope.idempotency_key,
-        context_fingerprint=manifest.context_fingerprint,
+        context_fingerprint=request_context_fingerprint,
         prompt_digest=manifest.prompt_digest,
         session_id=session_id,
     )
@@ -450,7 +474,7 @@ def submit_execution_request(
         session_max_lifetime_seconds=session_max_lifetime_seconds,
         # Manifest fields (persisted)
         manifest_id=manifest_id,
-        context_fingerprint=manifest.context_fingerprint,
+        context_fingerprint=request_context_fingerprint,
         prompt_digest=manifest.prompt_digest,
         idempotency_key=None,
         correlation_id=envelope.correlation_id,
@@ -496,7 +520,7 @@ def submit_execution_request(
                 "correlation_id": envelope.correlation_id,
                 "subject": persisted_metadata.get("subject"),
                 "manifest-id": manifest_id,
-                "context-fingerprint": manifest.context_fingerprint,
+                "context-fingerprint": request_context_fingerprint,
             },
         )
 
@@ -508,7 +532,7 @@ def submit_execution_request(
                 session_id if session_keep_alive and not envelope.session.session_id else None
             ),
             manifest_id=manifest.manifest_id,
-            context_fingerprint=manifest.context_fingerprint,
+            context_fingerprint=request_context_fingerprint,
             component_profile=manifest.identity.component_profile,
             provider_isolation_tier=manifest.identity.provider_isolation_tier,
             worker_timeout_seconds=manifest.timeout_seconds or DEFAULT_BLOCKING_TIMEOUT_SECONDS,

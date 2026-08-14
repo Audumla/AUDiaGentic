@@ -53,6 +53,7 @@ class GptAutoSessionTransport:
     async def open(self) -> SessionOpenResult:
         await self.chat.open()
         metadata: dict[str, Any] = {"project-url": self.chat.project_url}
+        metadata.update(self.chat.unresolved_metadata())
         ref = None
         if self.chat.provider_session_id:
             ref = ProviderSessionRef(self.chat.provider_session_id)
