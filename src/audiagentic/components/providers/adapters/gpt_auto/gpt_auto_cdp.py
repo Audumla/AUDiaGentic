@@ -43,7 +43,15 @@ _SNAPSHOT_FN = r"""
     );
   }
   const boundedText = (element) => ((element?.innerText || element?.textContent || "").trim()).slice(0, 20000) || null;
-  const text = (list) => list.length ? boundedText(list[list.length - 1]) : null;
+  // User messages are collapsible in the ChatGPT UI.  Reading the outer
+  // message node includes the presentation controls ("Show more" /
+  // "Show less"), which makes a durable prompt digest fail to match after a
+  // resume even though the submitted text is unchanged.  Hash only the
+  // message-content node when it exists.
+  const userText = (element) => boundedText(
+    element?.querySelector('[data-testid="collapsible-user-message-content"]') || element
+  );
+  const text = (list, reader = boundedText) => list.length ? reader(list[list.length - 1]) : null;
   const selectors = '[data-testid="stop-button"], [data-testid="stop-generating"], .result-streaming, .result-thinking, [aria-busy="true"]';
   const generating = Array.from(document.querySelectorAll(selectors)).some(shown);
   const composer = document.querySelector(".ProseMirror");
@@ -52,10 +60,10 @@ _SNAPSHOT_FN = r"""
     composerEditable: !!composer && composer.isContentEditable && !composer.hasAttribute("disabled"),
     userCount: users.length, assistantCount: assistants.length,
     userMessageIds: users.map(e => e.getAttribute("data-message-id")).filter(Boolean),
-    userMessageTexts: users.map(boundedText).filter(Boolean).slice(-64),
+    userMessageTexts: users.map(userText).filter(Boolean).slice(-64),
     latestUserId: users.length ? users[users.length - 1].getAttribute("data-message-id") || null : null,
     latestAssistantId: latestAssistant?.getAttribute("data-message-id") || null,
-    latestUserText: text(users), latestAssistantText: text(assistants), generating, domSignals,
+    latestUserText: text(users, userText), latestAssistantText: text(assistants), generating, domSignals,
     errorPresent: !!document.querySelector('.error-page, [data-testid*="error"]')
   };
 }
