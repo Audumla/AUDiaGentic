@@ -263,6 +263,22 @@ class PersistentChat:
                     if await self._reconcile_unresolved_turn():
                         self._move(ChatState.READY)
         if self.state is not ChatState.READY:
+            if self.state is ChatState.RECOVERING and self.unresolved_turn_pending:
+                raise AudiaGenticError(
+                    code="EXT-GPTAUTO-004",
+                    kind="providers",
+                    message=(
+                        "gpt-auto could not reconcile the previous turn; "
+                        "the conversation remains recoverable and no prompt was sent"
+                    ),
+                    details={
+                        "failure-reason": "unresolved-turn-not-reconciled",
+                        "state": self.state.value,
+                        "prompt-id-available": bool(self.unresolved_prompt_message_id),
+                        "prompt-text-digest-available": bool(self.unresolved_prompt_text_digest),
+                        "suggestion": "resume the same session after the provider is idle, or resubmit only after confirming the prompt is absent",
+                    },
+                )
             raise RuntimeError(f"gpt-auto chat is not ready (state={self.state.value})")
 
     async def _wait_ready(self) -> None:
@@ -324,10 +340,6 @@ class PersistentChat:
             return False
         assistant_id = snapshot.latest_assistant_id
         if not assistant_id or not snapshot.latest_assistant_text:
-            return False
-        # Quiescence alone is insufficient: a stopped/partial assistant can
-        # leave the composer idle before ChatGPT exposes its terminal marker.
-        if "completion-control" not in snapshot.dom_signals:
             return False
         if self.unresolved_assistant_message_id:
             terminal = assistant_id == self.unresolved_assistant_message_id

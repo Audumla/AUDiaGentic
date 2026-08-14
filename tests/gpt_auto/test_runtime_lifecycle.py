@@ -290,8 +290,10 @@ async def test_unknown_submitted_turn_cannot_promote_idle_composer_to_ready() ->
 
     assert retained is True
     assert chat.state is ChatState.RECOVERING
-    with pytest.raises(RuntimeError, match="not ready"):
+    with pytest.raises(AudiaGenticError, match="could not reconcile the previous turn") as error:
         await chat.ensure_ready()
+    assert error.value.code == "EXT-GPTAUTO-004"
+    assert error.value.details["failure-reason"] == "unresolved-turn-not-reconciled"
 
 
 @pytest.mark.asyncio
