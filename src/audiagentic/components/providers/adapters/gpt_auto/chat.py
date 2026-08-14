@@ -106,6 +106,12 @@ class PersistentChat:
         return True if claim is None else bool(claim(self, page_handle))
 
     def _move(self, target: ChatState) -> None:
+        # CDP target events and an admission call can observe the same loss at
+        # the same time.  The state transition itself is idempotent so the
+        # second observer cannot turn a successfully completed recovery into
+        # an illegal ``ready -> ready`` failure.
+        if self.state is target:
+            return
         failure = _CHAT_ENGINE.check(self.state.value, target.value)
         if failure:
             raise RuntimeError(

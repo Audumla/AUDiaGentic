@@ -474,6 +474,16 @@ def test_dedicated_window_ownership_rejects_duplicate_url_in_manual_window() -> 
     assert not runtime.page_belongs_to_dedicated_window({"windowId": 99})
 
 
+def test_terminal_conversation_owner_can_be_reclaimed_by_resume() -> None:
+    runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
+    runtime._conversation_owners["provider-session"] = "old-session"
+    runtime._chats["old-session"] = SimpleNamespace(state=ChatState.FAILED)
+    replacement = SimpleNamespace(ag_session_id="new-session")
+
+    assert runtime.claim_conversation(replacement, "provider-session") is True
+    assert runtime._conversation_owners["provider-session"] == "new-session"
+
+
 @pytest.mark.asyncio
 async def test_find_conversation_page_restores_window_before_selecting_retained_tab(
     monkeypatch,
