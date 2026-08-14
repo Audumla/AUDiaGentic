@@ -202,12 +202,16 @@ class GptAutoTurn:
                 details={"turn-id": self.request.turn_id, "submission-ambiguous": True},
             )
         self.submission_confirmed = True
+        if proof.latest_user_id:
+            mark_prompt = getattr(self.chat, "mark_prompt_submitted", None)
+            if mark_prompt is not None:
+                mark_prompt(proof.latest_user_id, baseline.latest_assistant_id)
         self._move(TurnState.SUBMITTED)
         self._phase = "turn-accepted-observation"
         await self._emit(TransportObservationKind.TURN_ACCEPTED, {"reason": "provider-accepted"})
         if self.chat.provider_session_id is None:
             proof = await self.chat.acquire_provider_identity(proof)
-        await self._publish_message_ids()
+        await self._publish_message_ids(strict=True)
         if self.state is TurnState.CANCELLED:
             return self._result("cancelled")
         self._move(TurnState.AWAITING_RESPONSE)
@@ -219,7 +223,10 @@ class GptAutoTurn:
             raise RuntimeError("cancelled response wait returned without cancelled state")
         self._move(TurnState.COMPLETE)
         self._phase = "terminal-observation"
-        await self._publish_message_ids()
+        await self._publish_message_ids(strict=True)
+        clear_unresolved = getattr(self.chat, "clear_unresolved_turn", None)
+        if clear_unresolved is not None:
+            clear_unresolved()
         await self._emit(TransportObservationKind.TERMINAL, {"stop_reason": "end-turn"})
         result = self._result("end-turn")
         return SessionTurnResult(**{**result.__dict__, "final_summary": final})
@@ -230,8 +237,14 @@ class GptAutoTurn:
             return
         try:
             current = await self.chat.snapshot()
+            if _matches(_normal(self.request.body), _normal(current.latest_user_text or "")) and current.latest_user_id:
+                self._prompt_message_id = current.latest_user_id
+                mark_prompt = getattr(self.chat, "mark_prompt_submitted", None)
+                if mark_prompt is not None:
+                    mark_prompt(current.latest_user_id, None)
             if parse_provider_session_id(current.url):
                 await self.chat.acquire_provider_identity(current)
+                await self._publish_message_ids(strict=False)
         except Exception:  # noqa: BLE001 - preservation is best effort
             logger.debug(
                 "could not preserve gpt-auto provider identity after ambiguous submission",
@@ -303,6 +316,7 @@ class GptAutoTurn:
                 )
                 await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
                 continue
+            last_observation_error = None
             if _new_user_message(baseline, snap) and _matches(
                 expected, _normal(snap.latest_user_text or "")
             ):
@@ -392,6 +406,10 @@ class GptAutoTurn:
             now = loop.time()
             if current.latest_assistant_id and current.latest_assistant_id != baseline.latest_assistant_id:
                 self._response_message_id = current.latest_assistant_id
+                mark_assistant = getattr(self.chat, "mark_assistant_observed", None)
+                if mark_assistant is not None:
+                    mark_assistant(current.latest_assistant_id)
+                await self._publish_message_ids(strict=True)
             facts = _facts(baseline, previous, current)
             failed = self.chat.config.workflow.policy("response-failed").evaluate(facts)
             if failed.satisfied:
@@ -566,6 +584,9 @@ class GptAutoTurn:
             if not stopped:
                 raise RuntimeError("provider stop control was not confirmed")
             await self.chat.wait_quiescent()
+            clear_unresolved = getattr(self.chat, "clear_unresolved_turn", None)
+            if clear_unresolved is not None:
+                clear_unresolved()
         except Exception:  # noqa: BLE001 - uncertainty must block the next prompt
             if self.chat.state not in {ChatState.CLOSED, ChatState.FAILED, ChatState.RECOVERING}:
                 self._set_chat_state(ChatState.RECOVERING)
@@ -600,7 +621,7 @@ class GptAutoTurn:
             metadata=metadata,
         )
 
-    async def _publish_message_ids(self) -> None:
+    async def _publish_message_ids(self, *, strict: bool = False) -> None:
         """Persist proven prompt identity before response observation begins."""
         if not self.chat.provider_session_id or not self._prompt_message_id:
             return
@@ -612,10 +633,26 @@ class GptAutoTurn:
                 provider_session_ref=ProviderSessionRef(self.chat.provider_session_id),
                 metadata=metadata,
             )
-            result = self.chat.binding_sink(update)
+            sink = getattr(self.chat, "binding_sink", None)
+            if sink is None:
+                return
+            result = sink(update)
             if asyncio.iscoroutine(result):
                 await result
-        except Exception:  # noqa: BLE001 - result metadata remains a fallback
+        except Exception as exc:  # noqa: BLE001 - durable identity is required after proof
+            if strict:
+                raise AudiaGenticError(
+                    code="EXT-GPTAUTO-004",
+                    kind="providers",
+                    message="gpt-auto could not durably persist provider message identity",
+                    details={
+                        "turn-id": self.request.turn_id,
+                        "phase": self._phase,
+                        "cause-type": type(exc).__name__,
+                        "cause-message": str(exc),
+                        **_message_ids(self),
+                    },
+                ) from exc
             logger.warning(
                 "gpt-auto could not persist provider message identity",
                 extra={"turn-id": self.request.turn_id},
@@ -636,7 +673,7 @@ def _matches(expected: str, actual: str) -> bool:
 
 def _new_user_message(baseline: ChatSnapshot, current: ChatSnapshot) -> bool:
     """Prefer the provider message UUID; counts remain a compatibility fallback."""
-    if current.latest_user_id and current.latest_user_id != baseline.latest_user_id:
+    if current.latest_user_id and current.latest_user_id not in set(baseline.user_message_ids):
         return True
     return current.user_count > baseline.user_count
 
@@ -687,5 +724,8 @@ def _message_ids(turn: GptAutoTurn) -> dict[str, str]:
     values = {
         "prompt-message-id": turn._prompt_message_id,
         "assistant-message-id": turn._response_message_id,
+        "assistant-before-message-id": getattr(
+            turn.chat, "unresolved_assistant_before_id", None
+        ),
     }
     return {key: value for key, value in values.items() if value}

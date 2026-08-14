@@ -63,6 +63,7 @@ class PersistentChat:
         binding_sink: ProviderSessionBindingSink,
         provider_session_id: str | None = None,
         chat_url: str | None = None,
+        resume_provider_metadata: dict[str, object] | None = None,
     ) -> None:
         self.ag_session_id = ag_session_id
         self.project_name = project_name
@@ -79,6 +80,12 @@ class PersistentChat:
         self._lost_during_turn = False
         self._last_url: str | None = None
         self._last_snapshot: ChatSnapshot | None = None
+        metadata = resume_provider_metadata or {}
+        self.unresolved_prompt_message_id = _metadata_text(metadata, "prompt-message-id")
+        self.unresolved_assistant_message_id = _metadata_text(metadata, "assistant-message-id")
+        self.unresolved_assistant_before_id = _metadata_text(
+            metadata, "assistant-before-message-id"
+        )
         self._recovery_ready = asyncio.Event()
         self._recovery_ready.set()
 
@@ -232,6 +239,9 @@ class PersistentChat:
         if self.state is ChatState.RECOVERING:
             pages = await self.runtime.bridge.call("list_pages")
             await self.reconcile(pages)
+            if self.state is ChatState.RECOVERING and self.unresolved_prompt_message_id:
+                if await self._reconcile_unresolved_turn():
+                    self._move(ChatState.READY)
         if self.state is not ChatState.READY:
             raise RuntimeError(f"gpt-auto chat is not ready (state={self.state.value})")
 
@@ -282,6 +292,37 @@ class PersistentChat:
         self._last_snapshot = snapshot
         return snapshot
 
+    async def _reconcile_unresolved_turn(self) -> bool:
+        """Prove the retained prompt reached a terminal provider outcome."""
+        if not self.unresolved_prompt_message_id:
+            return True
+        snapshot = await self.snapshot(allow_recovering=True)
+        if snapshot.generating or not provider_quiescent(snapshot):
+            return False
+        assistant_id = snapshot.latest_assistant_id
+        if not assistant_id or not snapshot.latest_assistant_text:
+            return False
+        if self.unresolved_assistant_message_id:
+            terminal = assistant_id == self.unresolved_assistant_message_id
+        else:
+            terminal = assistant_id != self.unresolved_assistant_before_id
+        if not terminal:
+            return False
+        self.clear_unresolved_turn()
+        return True
+
+    def mark_prompt_submitted(self, prompt_id: str, assistant_before_id: str | None) -> None:
+        self.unresolved_prompt_message_id = prompt_id
+        self.unresolved_assistant_before_id = assistant_before_id
+
+    def mark_assistant_observed(self, assistant_id: str) -> None:
+        self.unresolved_assistant_message_id = assistant_id
+
+    def clear_unresolved_turn(self) -> None:
+        self.unresolved_prompt_message_id = None
+        self.unresolved_assistant_message_id = None
+        self.unresolved_assistant_before_id = None
+
     async def find_prompt_snapshot(
         self, baseline: ChatSnapshot, expected_text: str
     ) -> ChatSnapshot | None:
@@ -321,7 +362,7 @@ class PersistentChat:
                 continue
             fresh = bool(
                 snapshot.latest_user_id
-                and snapshot.latest_user_id != baseline.latest_user_id
+                and snapshot.latest_user_id not in set(baseline.user_message_ids)
             ) or snapshot.user_count > baseline.user_count
             if fresh and _same_prompt(snapshot.latest_user_text, expected_text):
                 if old_handle and old_handle != handle:
@@ -411,6 +452,9 @@ class PersistentChat:
             if self.page_handle:
                 # The page may still be present after a proof timeout.  Do not
                 # navigate away from it: the prompt may already have landed.
+                if self.unresolved_prompt_message_id:
+                    if not await self._reconcile_unresolved_turn():
+                        return True
                 await self._wait_ready()
                 self._move(ChatState.READY)
                 return True
@@ -463,6 +507,8 @@ class PersistentChat:
                 if self.active_turn_id:
                     self._move(ChatState.BUSY)
                 else:
+                    if self.unresolved_prompt_message_id and not await self._reconcile_unresolved_turn():
+                        return
                     await self.wait_quiescent(allow_recovering=True)
                     self._move(ChatState.READY)
                 return
@@ -481,6 +527,8 @@ class PersistentChat:
             if self.active_turn_id:
                 self._move(ChatState.BUSY)
             else:
+                if self.unresolved_prompt_message_id and not await self._reconcile_unresolved_turn():
+                    return
                 self._move(ChatState.READY)
             return
         if self.target_id:
@@ -562,6 +610,11 @@ def _same_prompt(actual: str | None, expected: str) -> bool:
     if not isinstance(actual, str):
         return False
     return actual.strip() == expected.strip()
+
+
+def _metadata_text(metadata: dict[str, object], key: str) -> str | None:
+    value = metadata.get(key)
+    return value.strip() if isinstance(value, str) and value.strip() else None
 
 
 def _same_quiescent_state(left: ChatSnapshot, right: ChatSnapshot) -> bool:
