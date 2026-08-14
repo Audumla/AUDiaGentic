@@ -522,16 +522,7 @@ class GptAutoTurn:
                 )
                 emitted = True
             complete = self.chat.config.workflow.policy("response-complete").evaluate(facts)
-            # ChatGPT can omit the copy/completion control on tool-backed
-            # assistant turns.  Once a fresh non-empty assistant text is
-            # unchanged across observations and all active/error signals are
-            # absent, use that bounded evidence as a terminal fallback.  It
-            # is deliberately not a submit proof and never permits retrying a
-            # side effect; it only closes an already observed response.
-            stable_text_fallback = _stable_text_terminal_fallback(
-                baseline, previous, current
-            )
-            complete_satisfied = (complete.satisfied or stable_text_fallback) and not current.generating
+            complete_satisfied = complete.satisfied and not current.generating
             if complete_satisfied and current.latest_assistant_text:
                 if not emitted:
                     await self._emit(
@@ -595,9 +586,8 @@ class GptAutoTurn:
                     verified = self.chat.config.workflow.policy("response-complete").evaluate(
                         verify_facts
                     )
-                    verified_fallback = _stable_text_terminal_fallback(baseline, current, verify)
                     if (
-                        (verified.satisfied or verified_fallback)
+                        verified.satisfied
                         and not verify.generating
                         and verify.latest_assistant_text == stable_text
                     ):
@@ -831,22 +821,6 @@ def _new_user_message(baseline: ChatSnapshot, current: ChatSnapshot) -> bool:
     if current.latest_user_id and current.latest_user_id not in set(baseline.user_message_ids):
         return True
     return current.user_count > baseline.user_count
-
-
-def _stable_text_terminal_fallback(
-    baseline: ChatSnapshot, previous: ChatSnapshot, current: ChatSnapshot
-) -> bool:
-    """Recognize a terminal assistant response when UI controls are absent."""
-    busy = {"stop-control", "streaming-indicator", "thinking-indicator", "busy-indicator"}
-    return bool(
-        current.latest_assistant_id
-        and current.latest_assistant_id != baseline.latest_assistant_id
-        and current.latest_assistant_text
-        and current.latest_assistant_text == previous.latest_assistant_text
-        and not current.generating
-        and not current.error_present
-        and not busy.intersection(current.dom_signals)
-    )
 
 
 def _facts(

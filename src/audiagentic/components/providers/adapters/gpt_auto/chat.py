@@ -341,6 +341,12 @@ class PersistentChat:
         assistant_id = snapshot.latest_assistant_id
         if not assistant_id or not snapshot.latest_assistant_text:
             return False
+        # A stable partial assistant message can look idle while ChatGPT is
+        # still stalled in a tool-backed turn.  Require explicit terminal
+        # evidence before clearing the unresolved marker; the caller receives
+        # a structured recovery error when that evidence never appears.
+        if "completion-control" not in snapshot.dom_signals:
+            return False
         if self.unresolved_assistant_message_id:
             terminal = assistant_id == self.unresolved_assistant_message_id
         else:
