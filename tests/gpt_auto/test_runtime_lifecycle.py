@@ -100,6 +100,45 @@ def test_unresolved_prompt_diagnostics_distinguish_id_mismatch_and_digest_fallba
     assert details["observed-user-count"] == 1
 
 
+def test_completed_resume_message_ids_do_not_imply_unresolved_turn() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    chat = PersistentChat(
+        ag_session_id="session-completed-resume",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+        resume_provider_metadata={
+            "prompt-message-id": "prompt-1",
+            "assistant-message-id": "assistant-1",
+        },
+    )
+
+    assert chat.unresolved_turn_pending is False
+    assert chat.unresolved_metadata()["unresolved-turn-pending"] is False
+
+
+def test_explicit_unresolved_marker_remains_authoritative() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    chat = PersistentChat(
+        ag_session_id="session-pending-resume",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+        resume_provider_metadata={
+            "prompt-message-id": "prompt-1",
+            "assistant-message-id": "assistant-1",
+            "unresolved-turn-pending": True,
+        },
+    )
+
+    assert chat.unresolved_turn_pending is True
+    assert chat.unresolved_metadata()["unresolved-turn-pending"] is True
+
+
 class _EventBridge:
     def __init__(self) -> None:
         self.events: asyncio.Queue[BridgeEvent] = asyncio.Queue()

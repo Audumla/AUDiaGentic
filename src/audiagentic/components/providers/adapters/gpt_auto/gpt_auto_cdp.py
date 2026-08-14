@@ -151,7 +151,15 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             )
             if not sent:
                 await self.bridge.call("dispatch_enter", {"pageHandle": self._handle(page)})
-            return {"actionComplete": True, "typedText": typed}
+            # Enter dispatch is only a fallback attempt.  CDP has no proof
+            # that ChatGPT accepted it, so do not report a completed submit
+            # when the Send control was unavailable.
+            return {
+                "actionComplete": bool(sent),
+                "typedText": typed,
+                "sendButtonClicked": bool(sent),
+                "enterDispatched": not bool(sent),
+            }
 
         if timeout is None:
             return await _submit()
