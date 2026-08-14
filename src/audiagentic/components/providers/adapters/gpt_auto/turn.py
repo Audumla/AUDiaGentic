@@ -207,7 +207,10 @@ class GptAutoTurn:
             raise AudiaGenticError(
                 code="EXT-GPTAUTO-003",
                 kind="providers",
-                message="gpt-auto could not prove the submitted prompt exactly",
+                message=(
+                    "gpt-auto could not prove the submitted prompt: "
+                    "submission-proof-not-observed-before-deadline"
+                ),
                 details={
                     "turn-id": self.request.turn_id,
                     "failure-reason": "submission-proof-not-observed-before-deadline",
@@ -474,7 +477,10 @@ class GptAutoTurn:
                 raise AudiaGenticError(
                     code="EXT-GPTAUTO-003",
                     kind="providers",
-                    message="ChatGPT DOM reported a failed response state",
+                    message=(
+                        "gpt-auto provider failure policy matched: "
+                        + ",".join(sorted(failed.matched))
+                    ),
                     details={
                         "turn-id": self.request.turn_id,
                         "failure-reason": "provider-failure-policy-matched",
@@ -585,7 +591,7 @@ class GptAutoTurn:
         raise AudiaGenticError(
             code="EXT-GPTAUTO-002",
             kind="providers",
-            message="ChatGPT response policy timed out",
+            message=f"gpt-auto response policy timed out: {policy}",
             details={
                 "turn-id": self.request.turn_id,
                 "failure-reason": "response-policy-timeout",
@@ -734,7 +740,10 @@ class GptAutoTurn:
                 raise AudiaGenticError(
                     code="EXT-GPTAUTO-004",
                     kind="providers",
-                    message="gpt-auto could not durably persist provider message identity",
+                    message=(
+                        "gpt-auto could not durably persist provider message identity "
+                        f"during {self._phase}"
+                    ),
                     details={
                         "turn-id": self.request.turn_id,
                         "phase": self._phase,
