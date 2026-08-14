@@ -117,7 +117,12 @@ class GptAutoSessionTransport:
             turn.cancel()
             try:
                 await turn.wait_done(
-                    timeout=max(1.0, self.chat.config.chat.ready_timeout_seconds)
+                    timeout=max(
+                        1.0,
+                        self.chat.config.turn.submission_timeout_seconds
+                        + self.chat.config.chat.ready_timeout_seconds
+                        + 1.0,
+                    )
                 )
             except TimeoutError:
                 # Detach is still safe because GPT-auto retains physical tabs
@@ -164,6 +169,7 @@ def build_gpt_auto_session_transport(
         binding_sink=binding_sink,
         provider_session_id=resume_provider_ref,
         chat_url=chat_url,
+        resume_provider_metadata=metadata,
     )
     return GptAutoSessionTransport(chat)
 

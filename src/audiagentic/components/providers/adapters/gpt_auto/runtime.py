@@ -345,6 +345,10 @@ class GptAutoProviderRuntime:
                 provider_session_id,
             )
         ]
+        if len(matches) > 1:
+            raise RuntimeError(
+                "gpt-auto retained conversation is ambiguous across multiple managed tabs"
+            )
         return matches[0] if matches else None
 
     async def page_record(self, page_handle: str) -> dict | None:

@@ -50,6 +50,7 @@ class ChatSnapshot:
     error_present: bool
     generating: bool = False
     latest_user_id: str | None = None
+    user_message_ids: tuple[str, ...] = ()
 
     @classmethod
     def from_bridge(cls, value: dict[str, Any]) -> ChatSnapshot:
@@ -70,6 +71,11 @@ class ChatSnapshot:
             error_present=bool(value.get("errorPresent")),
             generating=bool(value.get("generating")),
             latest_user_id=_text(value.get("latestUserId")),
+            user_message_ids=tuple(
+                item.strip()
+                for item in (value.get("userMessageIds") or ())
+                if isinstance(item, str) and item.strip()
+            ),
         )
 
     def observe(
@@ -93,8 +99,10 @@ class ChatSnapshot:
             markers.add("composer-ready")
         if self.latest_assistant_text:
             markers.add("text-present")
+        baseline_user_ids = set(baseline.user_message_ids)
         user_fresh = bool(
-            self.latest_user_id and self.latest_user_id != baseline.latest_user_id
+            self.latest_user_id
+            and self.latest_user_id not in baseline_user_ids
         ) or self.user_count > baseline.user_count
         assistant_fresh = bool(
             self.latest_assistant_id
