@@ -350,7 +350,7 @@ async def test_real_chat_transition_is_terminalized_exactly_once_on_policy_failu
     chat._snapshots = iter([snap(), snap(users=1, user="Review SH10"), failed])
     turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-1", body="Review SH10"), lambda _: None)
 
-    with pytest.raises(Exception, match="failed response state"):
+    with pytest.raises(Exception, match="provider failure policy matched"):
         await turn.run()
 
     assert transitions.count((ChatState.BUSY, ChatState.FAILED)) == 1
@@ -377,7 +377,7 @@ async def test_configured_dom_failure_policy_fails_the_workflow():
     chat.state = ChatState.BUSY
     turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-1", body="Review SH10"), lambda _: None)
     turn.state = TurnState.AWAITING_RESPONSE
-    with pytest.raises(Exception, match="failed response state"):
+    with pytest.raises(Exception, match="provider failure policy matched"):
         await turn._await_response(snap(), snap(users=1, user="Review SH10"))
     # Inner response policy owns only the turn terminal state.  run() is the
     # single owner of chat terminalisation, preventing FAILED -> FAILED.
@@ -397,7 +397,7 @@ async def test_provider_failure_policy_keeps_dom_evidence_without_message_bodies
     turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-failure-evidence", body="Review SH10"), lambda _: None)
     turn.state = TurnState.AWAITING_RESPONSE
 
-    with pytest.raises(AudiaGenticError) as captured:
+    with pytest.raises(AudiaGenticError, match="provider failure policy matched") as captured:
         await turn._await_response(snap(), snap(users=1, user="Review SH10"))
 
     details = captured.value.details
