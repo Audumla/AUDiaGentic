@@ -569,6 +569,58 @@ async def test_reconcile_proves_quiescence_before_ready(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_ensure_ready_rebinds_when_external_cdp_close_invalidates_handle(monkeypatch) -> None:
+    """An operator-side tab close must recover before a new prompt is sent."""
+    config = GptAutoConfig.from_dict(valid_config())
+    replacement = {
+        "pageHandle": "replacement-handle",
+        "targetId": "stable-target",
+        "url": "https://chatgpt.com/g/g-p-project/project",
+    }
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            if handle == "stale-handle":
+                raise RuntimeError("unknown or closed page handle: stale-handle")
+            return SimpleNamespace(handle=handle, target_id="stable-target", url=replacement["url"])
+
+    class _Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages"
+            return [replacement]
+
+    runtime = SimpleNamespace(
+        gpt_browser=_Browser(),
+        bridge=_Bridge(),
+        claim_page=lambda _chat, _handle: True,
+        release_page=lambda _chat, _handle: None,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-external-close",
+        project_name="project",
+        project_url=replacement["url"],
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+    )
+    chat.page_handle = "stale-handle"
+    chat.target_id = "stable-target"
+    chat.state = ChatState.READY
+
+    async def quiescent(*, allow_recovering=False):
+        assert allow_recovering is True
+        return SimpleNamespace()
+
+    monkeypatch.setattr(chat, "wait_quiescent", quiescent)
+
+    await chat.ensure_ready()
+
+    assert chat.page_handle == "replacement-handle"
+    assert chat.target_id == "stable-target"
+    assert chat.state is ChatState.READY
+
+
+@pytest.mark.asyncio
 async def test_active_reconcile_prefers_stable_target_before_stale_url() -> None:
     config = GptAutoConfig.from_dict(valid_config())
     runtime = SimpleNamespace(
