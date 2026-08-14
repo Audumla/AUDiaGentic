@@ -167,6 +167,20 @@ _OPEN_TIMEOUT_SECONDS = 120.0
 _CLOSE_TIMEOUT_SECONDS = 60.0
 
 
+def _more_open_bound(current: float, requested: float) -> float:
+    """Return the less restrictive of two lifetime bounds.
+
+    ``0`` is the documented opt-out for a bound, so it dominates any
+    positive value.  Continuation requests may carry profile/global policy;
+    they must not accidentally shorten a conversation that is already live.
+    """
+    current = float(current)
+    requested = float(requested)
+    if current == 0 or requested == 0:
+        return 0.0
+    return max(current, requested)
+
+
 def _cleanup_preserving(path: Path, preserve: set[Path]) -> None:
     """Delete everything under *path* except entries in *preserve* (and
     whatever directories contain them).
@@ -286,10 +300,18 @@ class _SessionHandle:
         policy values; best-effort — no durable write here, just the in-memory
         handle (the persisted record retains its original values).
         """
+        # Continuation policy is a process/global admission setting, not a
+        # new identity for the provider conversation.  A narrower request
+        # must never shorten an already-live session; the most permissive
+        # bound wins (and zero means unbounded).
         if idle_timeout_seconds is not None:
-            self.idle_timeout_seconds = idle_timeout_seconds
+            self.idle_timeout_seconds = _more_open_bound(
+                self.idle_timeout_seconds, idle_timeout_seconds
+            )
         if max_lifetime_seconds is not None:
-            self.max_lifetime_seconds = max_lifetime_seconds
+            self.max_lifetime_seconds = _more_open_bound(
+                self.max_lifetime_seconds, max_lifetime_seconds
+            )
 
 
 class SessionRuntime:
@@ -703,6 +725,67 @@ class SessionRuntime:
 
         self._call(_update(), timeout=10)
 
+    def rehydrate_session(
+        self,
+        project_root: Path,
+        session_id: str,
+        *,
+        execution_profile_id: str,
+        provider_id: str,
+        model_id: str | None,
+        surface_hint: Any,
+        idle_timeout_seconds: float | None = None,
+        max_lifetime_seconds: float | None = None,
+        turn_timeout_seconds: float | None = None,
+        turn_silence_timeout_seconds: float | None = None,
+        correlation_id: str | None = None,
+        request_runtime_root: Path | None = None,
+        mcp_entries=(),
+    ) -> dict[str, Any]:
+        """Reattach an active durable generation after a runtime restart.
+
+        A gateway process owns only ephemeral transport handles.  The durable
+        session record, however, remains ``active`` across a process restart.
+        Continuation therefore reopens the exact provider binding in-place;
+        it is not a new chat and it does not create a successor generation.
+        The provider ref is mandatory and is checked both before and after
+        ``open()`` so a provider can never silently substitute a conversation.
+        """
+        return self._call(
+            self._rehydrate_session(
+                project_root,
+                session_id,
+                execution_profile_id=execution_profile_id,
+                provider_id=provider_id,
+                model_id=model_id,
+                surface_hint=surface_hint,
+                idle_timeout_seconds=(
+                    DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS
+                    if idle_timeout_seconds is None
+                    else idle_timeout_seconds
+                ),
+                max_lifetime_seconds=(
+                    DEFAULT_SESSION_MAX_LIFETIME_SECONDS
+                    if max_lifetime_seconds is None
+                    else max_lifetime_seconds
+                ),
+                turn_timeout_seconds=(
+                    DEFAULT_TURN_TIMEOUT_SECONDS
+                    if turn_timeout_seconds is None
+                    else turn_timeout_seconds
+                ),
+                turn_silence_timeout_seconds=(
+                    DEFAULT_TURN_SILENCE_TIMEOUT_SECONDS
+                    if turn_silence_timeout_seconds is None
+                    else turn_silence_timeout_seconds
+                ),
+                correlation_id=correlation_id,
+                request_runtime_root=request_runtime_root,
+                mcp_entries=tuple(mcp_entries),
+            ),
+            timeout=_OPEN_TIMEOUT_SECONDS,
+        )
+
     def session_is_quiescent(self, session_id: str) -> bool:
         """Check if a live session has no active or pending turns.
 
@@ -944,6 +1027,194 @@ class SessionRuntime:
             "lifecycle-decision": status_snapshot["lifecycle-decision"],
             "coarse-state": status_snapshot["coarse-state"],
         }
+
+    async def _rehydrate_session(
+        self,
+        project_root: Path,
+        session_id: str,
+        *,
+        execution_profile_id: str,
+        provider_id: str,
+        model_id: str | None,
+        surface_hint: Any,
+        idle_timeout_seconds: float,
+        max_lifetime_seconds: float,
+        turn_timeout_seconds: float,
+        turn_silence_timeout_seconds: float,
+        correlation_id: str | None,
+        request_runtime_root: Path | None,
+        mcp_entries,
+    ) -> dict[str, Any]:
+        # The loop serializes this check with every other session operation;
+        # concurrent continuations cannot open two browser/provider handles.
+        if session_id in self._handles:
+            handle = self._handles[session_id]
+            handle.update_bounds(
+                idle_timeout_seconds=idle_timeout_seconds,
+                max_lifetime_seconds=max_lifetime_seconds,
+            )
+            return session_store.read_session_record(project_root, session_id)
+
+        record = session_store.read_session_record(project_root, session_id)
+        if record.get("state") != "active":
+            raise AudiaGenticError(
+                code="RES-AGW-003",
+                kind="agents",
+                message="session is not active and cannot be rehydrated",
+                details={"session-id": session_id, "state": record.get("state")},
+            )
+        if record.get("execution-profile-id") != execution_profile_id:
+            raise AudiaGenticError(
+                code="VAL-AGW-060",
+                kind="agents",
+                message="request execution profile does not match the session's profile",
+                details={"session-id": session_id},
+            )
+        binding = session_store.read_session_binding(project_root, session_id)
+        provider_ref = (binding or {}).get("provider-session-ref")
+        bound_provider = (binding or {}).get("provider-id") or session_store.session_provider_id(record)
+        surface_id = (binding or {}).get("surface-id")
+        if not isinstance(provider_ref, str) or not provider_ref.strip():
+            raise AudiaGenticError(
+                code="RES-AGW-003",
+                kind="agents",
+                message="active session has no durable provider binding to rehydrate",
+                details={"session-id": session_id, "suggestion": "resume the session explicitly"},
+            )
+        if bound_provider and bound_provider != provider_id:
+            raise AudiaGenticError(
+                code="CON-AGW-120",
+                kind="agents",
+                message="durable provider binding does not match the requested provider",
+                details={"session-id": session_id, "provider-id": provider_id},
+            )
+        if not isinstance(surface_id, str) or not surface_id.strip():
+            raise AudiaGenticError(
+                code="RES-AGW-003",
+                kind="agents",
+                message="active session has no durable surface binding to rehydrate",
+                details={"session-id": session_id, "suggestion": "resume the session explicitly"},
+            )
+
+        async def binding_sink(update: Any) -> None:
+            update_ref = getattr(getattr(update, "provider_session_ref", None), "value", None)
+            if update_ref != provider_ref:
+                raise AudiaGenticError(
+                    code="CON-AGW-120",
+                    kind="agents",
+                    message="rehydrated provider attempted to replace its session binding",
+                    details={"session-id": session_id},
+                )
+            session_store.install_initial_provider_binding(
+                project_root,
+                session_id,
+                provider_id=provider_id,
+                surface_id=surface_id,
+                provider_session_ref=provider_ref,
+                metadata=dict(getattr(update, "metadata", {}) or {}),
+            )
+
+        prepare_kwargs: dict[str, Any] = {
+            "provider_id": provider_id,
+            "ag_session_id": session_id,
+            "binding_sink": binding_sink,
+            "surface_hint": surface_hint,
+            "model_id": model_id or session_store.session_model_id(record),
+            "resume_provider_ref": provider_ref,
+            "resume_provider_metadata": session_store.session_provider_metadata(record),
+        }
+        if request_runtime_root is not None:
+            prepare_kwargs["request_runtime_root"] = request_runtime_root
+            prepare_kwargs["mcp_entries"] = tuple(mcp_entries)
+        transport = None
+        try:
+            prepared = self._provider_prepare_fn(project_root, **prepare_kwargs)
+            if prepared.transport is None:
+                raise AudiaGenticError(
+                    code="CON-AGW-095",
+                    kind="agents",
+                    message="resolved session surface is unsupported; cannot rehydrate session",
+                    details={"session-id": session_id, "provider-id": provider_id},
+                )
+            transport = prepared.transport
+            open_result = await transport.open()
+        except asyncio.CancelledError:
+            if transport is not None:
+                await _close_failed_transport(transport)
+            raise
+        except AudiaGenticError:
+            if transport is not None:
+                await _close_failed_transport(transport)
+            raise
+        except Exception as exc:  # noqa: BLE001 - preserve provider cause
+            if transport is not None:
+                await _close_failed_transport(transport)
+            raise AudiaGenticError(
+                code="EXT-AGW-118",
+                kind="agents",
+                message="provider rejected durable session rehydration",
+                details={
+                    "session-id": session_id,
+                    "provider-id": provider_id,
+                    "error-type": type(exc).__name__,
+                    "error-message": str(exc).strip(),
+                },
+            ) from exc
+
+        try:
+            returned_ref = getattr(getattr(open_result, "provider_session_ref", None), "value", None)
+            if open_result.ag_session_id != session_id or returned_ref != provider_ref:
+                raise AudiaGenticError(
+                    code="CON-AGW-121",
+                    kind="agents",
+                    message="rehydrated transport did not prove the original session identity",
+                    details={"session-id": session_id},
+                )
+        except BaseException:
+            await _close_failed_transport(transport)
+            raise
+
+        handle = _SessionHandle(
+            session_id=session_id,
+            transport=transport,
+            project_root=project_root,
+            execution_profile_id=execution_profile_id,
+            idle_timeout_seconds=idle_timeout_seconds,
+            max_lifetime_seconds=max_lifetime_seconds,
+            turn_timeout_seconds=turn_timeout_seconds,
+            turn_silence_timeout_seconds=turn_silence_timeout_seconds,
+            created_clock=self._clock(),
+            correlation_id=correlation_id,
+            surface_snapshot=getattr(prepared, "surface", None),
+            request_runtime_root=request_runtime_root,
+            runtime_preserve_relpaths=getattr(prepared, "runtime_preserve_relpaths", ()),
+        )
+        handle.child_pid = getattr(transport, "child_pid", None)
+        handle.adopted_child = getattr(transport, "_adopted_child", None)
+        # Rehydration happens in a fresh gateway process, so recreate the
+        # process-local observer binding before exposing the handle. Observer
+        # failure remains best-effort, matching the normal open path.
+        try:
+            binding_id, _token, _endpoint = self._observer_ingress.create_observer_binding(
+                session_id=session_id,
+                project_root=str(project_root),
+            )
+            handle.observer_binding_id = binding_id
+        except AudiaGenticError:
+            logger.warning(
+                "failed to create observer binding on session rehydration",
+                extra={"session-id": session_id},
+                exc_info=True,
+            )
+        self._handles[session_id] = handle
+        session_store.record_session_timeline(
+            project_root,
+            session_id,
+            "session.rehydrated",
+            state="active",
+            attributes={"provider-id": provider_id, "correlation-id": correlation_id},
+        )
+        return session_store.read_session_record(project_root, session_id)
 
     async def _open_session(
         self,

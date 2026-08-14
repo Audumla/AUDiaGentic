@@ -263,34 +263,67 @@ def _dispatch_session_request(
                             "request-fingerprint": context_fingerprint,
                         },
                     )
-            # Update lifetime bounds when continuing with keep-alive and new
-            # policy values. Bounds apply to the in-memory handle so the
-            # updated policy is effective for this and future turns.
+            # Handles are process-local. After a gateway restart the durable
+            # record can remain active while its handle is absent. Reattach
+            # the exact provider binding before applying continuation policy.
+            if not runtime.session_runtime_status(session_id).get("available"):
+                if session_record.get("state") != "active":
+                    raise AudiaGenticError(
+                        code="RES-AGW-003",
+                        kind="agents",
+                        message="session is not active and cannot be continued",
+                        details={"session-id": session_id, "state": session_record.get("state")},
+                    )
+                from audiagentic.components.providers import providers_api
+
+                opening_request_ids = session_store.session_request_ids(session_record)
+                rehydrate_root = (
+                    gateway_request_dir(project_root, opening_request_ids[0]) / "runtime"
+                    if opening_request_ids
+                    else None
+                )
+                runtime.rehydrate_session(
+                    project_root,
+                    session_id,
+                    execution_profile_id=execution_profile_id,
+                    provider_id=provider_id,
+                    model_id=session_store.session_model_id(session_record)
+                    or record.get("resolved-model-id"),
+                    surface_hint=_build_surface_hint(profile),
+                    idle_timeout_seconds=(
+                        record.get("session-idle-timeout-seconds")
+                        if record.get("session-idle-timeout-seconds") is not None
+                        else session_store.session_idle_timeout_seconds(session_record)
+                    ),
+                    max_lifetime_seconds=(
+                        record.get("session-max-lifetime-seconds")
+                        if record.get("session-max-lifetime-seconds") is not None
+                        else session_store.session_max_lifetime_seconds(session_record)
+                    ),
+                    turn_timeout_seconds=first_present(
+                        params, "session-turn-timeout-seconds", "session_turn_timeout_seconds"
+                    ),
+                    turn_silence_timeout_seconds=first_present(
+                        params,
+                        "session-turn-silence-timeout-seconds",
+                        "session_turn_silence_timeout_seconds",
+                    ),
+                    correlation_id=record.get("correlation-id"),
+                    request_runtime_root=rehydrate_root,
+                    mcp_entries=providers_api.collect_management_mcp_launch_entries(project_root),
+                )
+
+            # Global/profile policy is applied only to the in-memory handle;
+            # _SessionHandle.update_bounds keeps the more-open value.
             if record.get("session-keep-alive") and (
                 record.get("session-idle-timeout-seconds") is not None
                 or record.get("session-max-lifetime-seconds") is not None
             ):
-                try:
-                    runtime.update_session_bounds(
-                        session_id,
-                        idle_timeout_seconds=record.get("session-idle-timeout-seconds"),
-                        max_lifetime_seconds=record.get("session-max-lifetime-seconds"),
-                    )
-                except AudiaGenticError as exc:
-                    raise AudiaGenticError(
-                        code="VAL-AGW-098",
-                        kind="agents",
-                        message=(
-                            "session lifetime bounds provided with session_id and "
-                            "session_keep_alive, but the runtime cannot update policy "
-                            "on an existing session"
-                        ),
-                        details={
-                            "session-id": session_id,
-                            "underlying-code": exc.code,
-                            "underlying-message": exc.message,
-                        },
-                    ) from exc
+                runtime.update_session_bounds(
+                    session_id,
+                    idle_timeout_seconds=record.get("session-idle-timeout-seconds"),
+                    max_lifetime_seconds=record.get("session-max-lifetime-seconds"),
+                )
 
         if session_id is None:
             raise AudiaGenticError(
