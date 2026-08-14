@@ -1080,6 +1080,26 @@ class SessionRuntime:
         bound_provider = (binding or {}).get("provider-id") or session_store.session_provider_id(record)
         surface_id = (binding or {}).get("surface-id")
         if not isinstance(provider_ref, str) or not provider_ref.strip():
+            metadata = session_store.session_provider_metadata(record)
+            if metadata.get("unresolved-turn-pending") and provider_id == "gpt-auto":
+                raise AudiaGenticError(
+                    code="RES-AGW-003",
+                    kind="agents",
+                    message=(
+                        "active gpt-auto session has an unresolved turn but no durable "
+                        "provider conversation binding; the first Send may have reached "
+                        "ChatGPT before the gateway lost identity"
+                    ),
+                    details={
+                        "session-id": session_id,
+                        "recovery-state": metadata.get("recovery-state"),
+                        "turn-id": metadata.get("unresolved-turn-id"),
+                        "suggestion": (
+                            "inspect the retained ChatGPT tab for the submitted prompt; "
+                            "resume only after its outcome is proven, otherwise resubmit"
+                        ),
+                    },
+                )
             raise AudiaGenticError(
                 code="RES-AGW-003",
                 kind="agents",
