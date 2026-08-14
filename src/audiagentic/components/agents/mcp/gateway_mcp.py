@@ -189,6 +189,7 @@ def agent_task_submit(
     session_keep_alive: bool = False,
     session_idle_timeout_seconds: float | None = None,
     session_max_lifetime_seconds: float | None = None,
+    execution_context_fingerprint: str | None = None,
 ) -> dict[str, Any]:
     """Submit async work as `agent_id` (AS62's Agent Definition — an Execution
     Profile plus a Role bundled under one stable ID). Resolves the agent's
@@ -212,18 +213,20 @@ def agent_task_submit(
     from audiagentic.components.agents.models.agent_definition_api import get_agent_definition
 
     definition = get_agent_definition(project_root, agent_id)
-    status = get_gateway_client(project_root).submit_execution_request(
-        project_root,
-        execution_profile_id=definition["execution_profile_id"],
-        prompt_body=prompt_body,
-        timeout_seconds=timeout_seconds,
-        source=source,
-        metadata=metadata,
-        session_id=session_id,
-        session_keep_alive=session_keep_alive,
-        session_idle_timeout_seconds=session_idle_timeout_seconds,
-        session_max_lifetime_seconds=session_max_lifetime_seconds,
-    )
+    submit_kwargs: dict[str, Any] = {
+        "execution_profile_id": definition["execution_profile_id"],
+        "prompt_body": prompt_body,
+        "timeout_seconds": timeout_seconds,
+        "source": source,
+        "metadata": metadata,
+        "session_id": session_id,
+        "session_keep_alive": session_keep_alive,
+        "session_idle_timeout_seconds": session_idle_timeout_seconds,
+        "session_max_lifetime_seconds": session_max_lifetime_seconds,
+    }
+    if execution_context_fingerprint is not None:
+        submit_kwargs["execution_context_fingerprint"] = execution_context_fingerprint
+    status = get_gateway_client(project_root).submit_execution_request(project_root, **submit_kwargs)
     return _sparse({
         "request-id": status.get("request-id"),
         "state": status.get("state"),
