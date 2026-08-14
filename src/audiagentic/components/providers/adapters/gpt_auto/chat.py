@@ -178,6 +178,7 @@ class PersistentChat:
                 if not self._claim_page(str(page["pageHandle"])):
                     raise RuntimeError("gpt-auto retained conversation page is already owned")
                 self._bind_page(page)
+                await self._prefer_active_conversation_page()
         if self.page_handle is None:
             create_page = getattr(self.runtime, "create_chat_page", None)
             if create_page is not None:
@@ -375,6 +376,57 @@ class PersistentChat:
                 self.runtime.release_page(self, handle)
         return None
 
+    async def _prefer_active_conversation_page(self) -> None:
+        """Bind the matching tab with the richest mounted conversation DOM."""
+        if not self.provider_session_id:
+            return
+        browser = self._gpt_browser()
+        pages = await self.runtime.bridge.call("list_pages")
+        if not isinstance(pages, list):
+            return
+        belongs = getattr(self.runtime, "page_belongs_to_dedicated_window", lambda _: True)
+        candidates: list[tuple[tuple[int, int], dict, ChatSnapshot]] = []
+        for record in pages:
+            handle = str(record.get("pageHandle") or "")
+            if (
+                not handle
+                or not belongs(record)
+                or not url_matches_provider_session(
+                    str(record.get("url") or ""), self.provider_session_id
+                )
+            ):
+                continue
+            try:
+                page = await browser.page_by_handle(handle)
+                snapshot = ChatSnapshot.from_bridge(
+                    await browser.snapshot(
+                        page, signals=self.config.workflow.bridge_signals()
+                    )
+                )
+            except Exception:  # noqa: BLE001 - retain existing binding if a tab is stale
+                continue
+            candidates.append(((snapshot.user_count, snapshot.assistant_count), record, snapshot))
+        if not candidates:
+            return
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        best_score, best_record, best_snapshot = candidates[0]
+        if len(candidates) > 1 and candidates[1][0] == best_score:
+            raise RuntimeError(
+                "gpt-auto retained conversation remains ambiguous after DOM reconciliation"
+            )
+        best_handle = str(best_record["pageHandle"])
+        if best_handle == self.page_handle:
+            self._last_snapshot = best_snapshot
+            return
+        if not self._claim_page(best_handle):
+            raise RuntimeError("gpt-auto richest retained conversation page is already owned")
+        old_handle = self.page_handle
+        self._bind_page(best_record)
+        if old_handle:
+            self.runtime.release_page(self, old_handle)
+        self._last_snapshot = best_snapshot
+        self._last_url = best_snapshot.url
+
     def observed_status(self) -> dict[str, object]:
         """Return sparse page evidence for status projections."""
         if self._last_snapshot is None:
@@ -504,6 +556,7 @@ class PersistentChat:
             )
             if page is not None and self._claim_page(str(page["pageHandle"])):
                 self._bind_page(page)
+                await self._prefer_active_conversation_page()
                 if self.active_turn_id:
                     self._move(ChatState.BUSY)
                 else:
