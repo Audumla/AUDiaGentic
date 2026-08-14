@@ -12,6 +12,7 @@ from audiagentic.components.providers.adapters.gpt_auto.chat import (
     ChatState,
     PersistentChat,
     _unresolved_prompt_match,
+    _unresolved_prompt_match_diagnostics,
 )
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.runtime import (
@@ -58,6 +59,45 @@ def test_unresolved_recovery_can_match_prompt_text_without_provider_message_id()
         user_message_texts=(snapshot.latest_user_text, snapshot.latest_user_text),
     )
     assert _unresolved_prompt_match(chat, ambiguous) is None
+
+
+def test_unresolved_prompt_diagnostics_distinguish_id_mismatch_and_digest_fallback() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    chat = PersistentChat(
+        ag_session_id="session-diagnostics",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+        resume_provider_metadata={
+            "prompt-message-id": "missing-id",
+            "prompt-text-digest": "f" * 64,
+            "unresolved-turn-pending": True,
+        },
+    )
+    snapshot = ChatSnapshot(
+        url="https://chatgpt.com/g/g-p-project/c/provider-session",
+        composer_present=True,
+        composer_editable=True,
+        user_count=1,
+        assistant_count=0,
+        latest_assistant_id=None,
+        latest_user_text="different prompt",
+        latest_assistant_text=None,
+        dom_signals=frozenset(),
+        error_present=False,
+        user_message_texts=("different prompt",),
+        latest_user_id="other-id",
+    )
+
+    match, reason, details = _unresolved_prompt_match_diagnostics(chat, snapshot)
+
+    assert match is None
+    assert reason == "prompt-text-digest-not-found"
+    assert details["expected-prompt-id"] == "missing-id"
+    assert details["observed-latest-user-id"] == "other-id"
+    assert details["observed-user-count"] == 1
 
 
 class _EventBridge:
@@ -294,6 +334,56 @@ async def test_unknown_submitted_turn_cannot_promote_idle_composer_to_ready() ->
         await chat.ensure_ready()
     assert error.value.code == "EXT-GPTAUTO-004"
     assert error.value.details["failure-reason"] == "unresolved-turn-not-reconciled"
+    assert error.value.details["recovery-reason"] == "prompt-correlation-evidence-missing"
+
+
+@pytest.mark.asyncio
+async def test_unresolved_recovery_reports_missing_completion_evidence() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle)
+
+        async def snapshot(self, _page, *, signals=None):
+            return {
+                "url": "https://chatgpt.com/g/g-p-project/c/conversation-1",
+                "composerPresent": True,
+                "composerEditable": True,
+                "userCount": 1,
+                "assistantCount": 1,
+                "latestAssistantId": "assistant-new",
+                "latestAssistantText": "new response",
+                "latestUserText": "the submitted prompt",
+                "userMessageTexts": ["the submitted prompt"],
+                "domSignals": {},
+                "errorPresent": False,
+            }
+
+    runtime = SimpleNamespace(
+        gpt_browser=_Browser(),
+        bridge=SimpleNamespace(),
+        claim_page=lambda _chat, _handle: True,
+        release_page=lambda _chat, _handle: None,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-missing-completion",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+    )
+    chat.page_handle = "page-1"
+    chat.state = ChatState.RECOVERING
+    chat.mark_submission_unresolved("the submitted prompt")
+
+    with pytest.raises(AudiaGenticError) as error:
+        await chat.ensure_ready()
+
+    assert error.value.code == "EXT-GPTAUTO-004"
+    assert error.value.details["recovery-reason"] == "completion-evidence-missing"
+    assert error.value.details["recovery-details"]["required-signal"] == "completion-control"
 
 
 @pytest.mark.asyncio

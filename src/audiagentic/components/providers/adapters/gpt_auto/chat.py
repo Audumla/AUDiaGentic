@@ -93,6 +93,12 @@ class PersistentChat:
             self.unresolved_prompt_message_id
         )
         self._unresolved_match_fingerprint: tuple[object, ...] | None = None
+        # Keep the last reconciliation decision separate from the durable
+        # marker.  The marker says *a turn may still be outstanding*; this
+        # evidence says why the latest attempt could not clear it.  It is
+        # intentionally ephemeral and is surfaced in the next boundary error.
+        self._unresolved_recovery_reason: str | None = None
+        self._unresolved_recovery_details: dict[str, object] = {}
         self._recovery_ready = asyncio.Event()
         self._recovery_ready.set()
 
@@ -291,6 +297,7 @@ class PersistentChat:
                         "prompt-id-available": bool(self.unresolved_prompt_message_id),
                         "prompt-text-digest-available": bool(self.unresolved_prompt_text_digest),
                         "suggestion": "resume the same session after the provider is idle, or resubmit only after confirming the prompt is absent",
+                        **self._unresolved_recovery_diagnostics(),
                         **_unresolved_observation_details(self._last_snapshot),
                     },
                 )
@@ -375,33 +382,90 @@ class PersistentChat:
         """Prove the retained prompt reached a terminal provider outcome."""
         if not self.unresolved_turn_pending:
             return True
-        snapshot = await self.snapshot(allow_recovering=True)
-        if snapshot.generating or not provider_quiescent(snapshot):
+        try:
+            snapshot = await self.snapshot(allow_recovering=True)
+        except Exception as exc:  # noqa: BLE001 - preserve diagnostic context
+            self._set_unresolved_recovery(
+                "snapshot-observation-failed",
+                exception_type=type(exc).__name__,
+                exception=str(exc),
+            )
             return False
-        prompt_match = _unresolved_prompt_match(self, snapshot)
+        if snapshot.generating:
+            self._set_unresolved_recovery("provider-still-generating")
+            return False
+        if not provider_quiescent(snapshot):
+            self._set_unresolved_recovery(
+                "provider-not-quiescent",
+                composer_present=snapshot.composer_present,
+                composer_editable=snapshot.composer_editable,
+                error_present=snapshot.error_present,
+                dom_signals=sorted(snapshot.dom_signals),
+            )
+            return False
+        prompt_match, prompt_reason, prompt_details = _unresolved_prompt_match_diagnostics(
+            self, snapshot
+        )
         if prompt_match is None:
+            self._set_unresolved_recovery(prompt_reason, **prompt_details)
             return False
         assistant_id = snapshot.latest_assistant_id
-        if not assistant_id or not snapshot.latest_assistant_text:
+        if not assistant_id:
+            self._set_unresolved_recovery("assistant-response-id-not-observed")
+            return False
+        if not snapshot.latest_assistant_text:
+            self._set_unresolved_recovery("assistant-response-text-not-observed")
             return False
         # A stable partial assistant message can look idle while ChatGPT is
         # still stalled in a tool-backed turn.  Require explicit terminal
         # evidence before clearing the unresolved marker; the caller receives
         # a structured recovery error when that evidence never appears.
         if "completion-control" not in snapshot.dom_signals:
+            self._set_unresolved_recovery(
+                "completion-evidence-missing",
+                required_signal="completion-control",
+                observed_dom_signals=sorted(snapshot.dom_signals),
+            )
             return False
         if self.unresolved_assistant_message_id:
             terminal = assistant_id == self.unresolved_assistant_message_id
         else:
             terminal = assistant_id != self.unresolved_assistant_before_id
         if not terminal:
+            self._set_unresolved_recovery(
+                "assistant-response-not-terminal-match",
+                observed_assistant_id=assistant_id,
+                expected_assistant_id=self.unresolved_assistant_message_id,
+                assistant_before_id=self.unresolved_assistant_before_id,
+            )
             return False
         match_fingerprint = (prompt_match, assistant_id, snapshot.latest_assistant_text)
         if self._unresolved_match_fingerprint != match_fingerprint:
             self._unresolved_match_fingerprint = match_fingerprint
+            self._set_unresolved_recovery(
+                "awaiting-second-stable-observation",
+                correlation=prompt_match,
+                assistant_id=assistant_id,
+            )
             return False
         self.clear_unresolved_turn()
         return True
+
+    def _set_unresolved_recovery(self, reason: str, **details: object) -> None:
+        self._unresolved_recovery_reason = reason
+        self._unresolved_recovery_details = {
+            key.replace("_", "-"): value
+            for key, value in details.items()
+            if value is not None and value != "" and value != []
+        }
+
+    def _unresolved_recovery_diagnostics(self) -> dict[str, object]:
+        values: dict[str, object] = {}
+        if self._unresolved_recovery_reason:
+            values["recovery-reason"] = self._unresolved_recovery_reason
+        if self._unresolved_recovery_details:
+            values["recovery-details"] = dict(self._unresolved_recovery_details)
+        return values
 
     def unresolved_metadata(self) -> dict[str, object]:
         """Return sparse correlation evidence for successor session records."""
@@ -421,6 +485,8 @@ class PersistentChat:
     def mark_submission_unresolved(self, prompt_text: str | None = None) -> None:
         """Record that a send command completed but its provider identity is unknown."""
         self.unresolved_turn_pending = True
+        self._unresolved_recovery_reason = None
+        self._unresolved_recovery_details = {}
         if prompt_text:
             self.unresolved_prompt_text_digest = _prompt_text_digest(prompt_text)
 
@@ -431,6 +497,8 @@ class PersistentChat:
         prompt_text: str | None = None,
     ) -> None:
         self.unresolved_turn_pending = True
+        self._unresolved_recovery_reason = None
+        self._unresolved_recovery_details = {}
         self.unresolved_prompt_message_id = prompt_id
         self.unresolved_assistant_before_id = assistant_before_id
         if prompt_text:
@@ -446,6 +514,8 @@ class PersistentChat:
         self.unresolved_assistant_before_id = None
         self.unresolved_prompt_text_digest = None
         self._unresolved_match_fingerprint = None
+        self._unresolved_recovery_reason = None
+        self._unresolved_recovery_details = {}
 
     async def find_prompt_snapshot(
         self, baseline: ChatSnapshot, expected_text: str
@@ -817,24 +887,57 @@ def _unresolved_prompt_match(chat: PersistentChat, snapshot: ChatSnapshot) -> st
     digest match is accepted only when exactly one visible section matches;
     repeated identical prompts remain unresolved instead of guessing.
     """
+    return _unresolved_prompt_match_diagnostics(chat, snapshot)[0]
+
+
+def _unresolved_prompt_match_diagnostics(
+    chat: PersistentChat, snapshot: ChatSnapshot
+) -> tuple[str | None, str, dict[str, object]]:
+    """Correlate an unresolved prompt and explain every failed fallback.
+
+    IDs are preferred, but a missing or stale provider ID is not itself a
+    terminal error.  We then use the persisted text digest, accepting it only
+    when exactly one visible user section matches.  Returning a reason and
+    sparse evidence keeps the recovery decision inspectable without making
+    callers infer it from a generic boolean.
+    """
     prompt_id = chat.unresolved_prompt_message_id
     if prompt_id:
         if snapshot.latest_user_id == prompt_id and prompt_id in snapshot.user_message_ids:
-            return f"id:{prompt_id}"
+            return f"id:{prompt_id}", "prompt-id-match", {"prompt-id": prompt_id}
+        id_details: dict[str, object] = {
+            "expected-prompt-id": prompt_id,
+        }
+        if snapshot.latest_user_id:
+            id_details["observed-latest-user-id"] = snapshot.latest_user_id
+    else:
+        id_details = {}
+
     digest = chat.unresolved_prompt_text_digest
     if not digest:
-        return None
+        return None, "prompt-correlation-evidence-missing", id_details
     observed_texts = snapshot.user_message_texts or (
         (snapshot.latest_user_text,) if snapshot.latest_user_text else ()
     )
-    matches = [
-        text
-        for text in observed_texts
-        if _prompt_text_digest(text) == digest
-    ]
-    if len(matches) != 1:
-        return None
-    return f"text:{digest}"
+    matches = [text for text in observed_texts if _prompt_text_digest(text) == digest]
+    if len(matches) == 1:
+        details = {"prompt-text-digest": digest, "matched-user-count": len(matches)}
+        if id_details:
+            details.update(id_details)
+            return f"text:{digest}", "prompt-id-mismatch-text-digest-match", details
+        return f"text:{digest}", "prompt-text-digest-match", details
+    if not matches:
+        details = {
+            **id_details,
+            "expected-prompt-text-digest": digest,
+            "observed-user-count": len(observed_texts),
+        }
+        return None, "prompt-text-digest-not-found", details
+    return None, "prompt-text-digest-ambiguous", {
+        **id_details,
+        "expected-prompt-text-digest": digest,
+        "matching-user-count": len(matches),
+    }
 
 
 def _same_quiescent_state(left: ChatSnapshot, right: ChatSnapshot) -> bool:

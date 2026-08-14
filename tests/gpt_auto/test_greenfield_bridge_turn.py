@@ -20,6 +20,7 @@ from audiagentic.foundation.transports.agent_session import (
     ControlDisposition,
     SessionControlAction,
     SessionControlRequest,
+    SessionFailureDisposition,
     SessionPrompt,
 )
 
@@ -510,3 +511,29 @@ async def test_delayed_cancel_for_old_turn_does_not_cancel_active_turn():
 
     assert result.disposition is ControlDisposition.ALREADY_TERMINAL
     assert not active.cancel_event.is_set()
+
+
+@pytest.mark.asyncio
+async def test_admission_failure_marks_recoverable_session_for_gateway_retention():
+    chat = _Chat()
+    admission_error = AudiaGenticError(
+        code="EXT-GPTAUTO-004",
+        kind="providers",
+        message="previous turn outcome is unresolved",
+    )
+
+    async def ensure_ready():
+        raise admission_error
+
+    async def retain_after_turn_failure(error):
+        assert error is admission_error
+        return True
+
+    chat.ensure_ready = ensure_ready
+    chat.retain_after_turn_failure = retain_after_turn_failure
+    transport = GptAutoSessionTransport(chat)
+
+    with pytest.raises(AudiaGenticError, match="previous turn outcome"):
+        await transport.prompt(SessionPrompt(turn_id="turn-1", body="continue"), lambda _: None)
+
+    assert transport.turn_failure_disposition() is SessionFailureDisposition.RETAIN
