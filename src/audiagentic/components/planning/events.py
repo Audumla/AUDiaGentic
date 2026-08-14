@@ -89,8 +89,8 @@ def _on_ledger_event_recorded(
         if not isinstance(item_id, str):
             continue
         try:
-            item_path = item_store.require_item(project_root, item_id)
-            with item_store.item_write_lock(item_path):
+            with item_store.item_identity_write_lock(project_root, item_id):
+                item_path = item_store.require_item(project_root, item_id)
                 fm, body = item_store.parse_frontmatter(
                     item_path.read_text(encoding="utf-8")
                 )
