@@ -73,6 +73,35 @@ def session_provider_metadata(record: dict[str, Any]) -> dict[str, Any]:
     return dict((record.get("provider") or {}).get("metadata") or {})
 
 
+def update_provider_metadata(
+    project_root: Path,
+    session_id: str,
+    metadata: dict[str, Any],
+    *,
+    remove_keys: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    """Atomically update provider metadata without changing session identity.
+
+    Turn recovery checkpoints use this narrow write path so a provider-side
+    effect is durable before a browser Send.  ``remove_keys`` lets terminal
+    proof clear only checkpoint fields while retaining provider URL/ref data.
+    """
+    with _session_lock(project_root, session_id):
+        record = read_session_record(project_root, session_id)
+        provider = record.setdefault("provider", {})
+        current = dict(provider.get("metadata") or {})
+        current.update(metadata)
+        for key in remove_keys:
+            current.pop(key, None)
+        if current:
+            provider["metadata"] = current
+        else:
+            provider.pop("metadata", None)
+        record.setdefault("timing", {})["updated-at"] = now_iso_z()
+        write_session_record(project_root, record)
+        return record
+
+
 def session_turn_count(record: dict[str, Any]) -> int:
     return (record.get("activity") or {}).get("turn-count") or 0
 
