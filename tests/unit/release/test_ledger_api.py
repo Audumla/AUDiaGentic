@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+import pytest
+
 from audiagentic.components.ledger import ledger_api
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_text
 
 
@@ -118,6 +122,59 @@ def test_incremental_sync_appends_only(tmp_path: Path) -> None:
     ledger_api.sync(tmp_path)
     lines_noop = ledger_path.read_text(encoding="utf-8").splitlines()
     assert len([l for l in lines_noop if l.strip()]) == 3
+
+
+def test_empty_sync_preserves_manifest_for_later_incremental_append(tmp_path: Path) -> None:
+    """A no-op sync must not make the next event replace the current ledger."""
+    ledger_api.record_changes(
+        tmp_path,
+        [_event("chg_empty_sync_001"), _event("chg_empty_sync_002")],
+        sync=True,
+    )
+    ledger_api.sync(tmp_path)
+
+    ledger_api.record_change(tmp_path, _event("chg_empty_sync_003"), sync=True)
+
+    ledger_path = tmp_path / "docs" / "releases" / "CURRENT_RELEASE_LEDGER.ndjson"
+    lines = [line for line in ledger_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert len(lines) == 3
+    assert {json.loads(line)["event-id"] for line in lines} == {
+        "chg_empty_sync_001",
+        "chg_empty_sync_002",
+        "chg_empty_sync_003",
+    }
+
+
+def test_stale_empty_manifest_cannot_replace_existing_ledger(tmp_path: Path) -> None:
+    """Existing ledger IDs protect history even when the manifest was reset."""
+    ledger_api.record_changes(
+        tmp_path,
+        [_event("chg_stale_manifest_001"), _event("chg_stale_manifest_002")],
+        sync=True,
+    )
+    manifest_path = tmp_path / ".audiagentic" / "runtime" / "ledger" / "sync" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["fragment-ids"] = []
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    ledger_api.record_change(tmp_path, _event("chg_stale_manifest_003"), sync=True)
+
+    ledger_path = tmp_path / "docs" / "releases" / "CURRENT_RELEASE_LEDGER.ndjson"
+    lines = [line for line in ledger_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert len(lines) == 3
+
+
+def test_malformed_current_ledger_fails_closed(tmp_path: Path) -> None:
+    ledger_path = tmp_path / "docs" / "releases" / "CURRENT_RELEASE_LEDGER.ndjson"
+    ledger_path.parent.mkdir(parents=True, exist_ok=True)
+    ledger_path.write_text("{not-json}\n", encoding="utf-8")
+    ledger_api.record_change(tmp_path, _event("chg_malformed_ledger"), sync=False)
+
+    with pytest.raises(AudiaGenticError) as error:
+        ledger_api.sync(tmp_path)
+
+    assert error.value.code == "CON-SYNCL-002"
+    assert ledger_path.read_text(encoding="utf-8") == "{not-json}\n"
 
 
 def test_sync_purges_synced_fragments(tmp_path: Path) -> None:

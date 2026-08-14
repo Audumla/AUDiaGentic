@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from audiagentic.foundation.event import DeliveryMode, get_bus
 
@@ -17,6 +18,9 @@ def publish_ledger_event_recorded(
     event_id: str,
     plan_item_ids: list[str],
     project_root: Path,
+    *,
+    source: Any = None,
+    timestamp_utc: str | None = None,
 ) -> None:
     """Publish ledger.event.recorded after a change event is successfully recorded.
 
@@ -26,10 +30,17 @@ def publish_ledger_event_recorded(
     try:
         get_bus().publish(
             LEDGER_EVENT_RECORDED,
-            {"event-id": event_id, "plan-item-ids": plan_item_ids, "project_root": project_root},
+            {
+                "event-id": event_id,
+                "plan-item-ids": plan_item_ids,
+                "project_root": project_root,
+                "source": source,
+                "timestamp-utc": timestamp_utc,
+            },
             metadata={
                 "source_component": COMPONENT_ID,
                 "subject": {"kind": "ledger-event", "id": event_id},
+                "provenance": {"source": source, "timestamp-utc": timestamp_utc},
             },
             mode=DeliveryMode.ASYNC,
         )

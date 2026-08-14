@@ -297,6 +297,7 @@ def get_item(
     return result
 
 
+@item_store.serialize_item_update
 def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any]:
     """Transition item to new_state, moving to the appropriate folder."""
     target_dir = item_store.state_dir(project_root, new_state)  # raises on invalid state

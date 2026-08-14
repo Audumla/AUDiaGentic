@@ -15,7 +15,7 @@ from audiagentic.components.ledger.paths import (
     safe_json_load,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import atomic_write_ndjson, atomic_write_text
+from audiagentic.foundation.io import atomic_write_ndjson, atomic_write_text, load_ndjson
 from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.time import now_iso_z
 
@@ -125,17 +125,42 @@ def sync_current_release_ledger(project_root: Path) -> SyncResult:
         current_ids = {f["event-id"] for f in fragments}
         manifest = _load_manifest(project_root)
         synced_ids = set(manifest.get("fragment-ids", []))
+        # The manifest may be missing or stale (for example after an older
+        # no-op sync reset it to an empty set).  The current ledger itself is
+        # durable evidence and must be included before deciding whether an
+        # append is safe; otherwise one new fragment could replace history.
+        current_ledger = current_ledger_path(project_root)
+        try:
+            existing_ledger_ids = {
+                entry["event-id"]
+                for entry in load_ndjson(current_ledger)
+                if isinstance(entry.get("event-id"), str)
+            }
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            raise AudiaGenticError(
+                code="CON-SYNCL-002",
+                kind="release",
+                message="current release ledger could not be parsed safely",
+                details={"path": str(current_ledger), "reason": str(exc)[:500]},
+            ) from exc
+        known_ids = synced_ids | existing_ledger_ids
+        # Fragments are purged after a successful sync.  An empty fragment
+        # directory therefore means "no new events", not "the ledger is
+        # empty".  Keep the manifest's durable identity set so a later
+        # incremental event is appended instead of replacing the current
+        # ledger with only that event.
+        all_synced_ids = known_ids | current_ids
+        new_ids = current_ids - known_ids
 
-        if not fragments or (synced_ids and synced_ids == current_ids):
+        if not fragments or not new_ids:
             atomic_write_text(ledger_manifest_path(project_root), json.dumps({
                 "synced-at": now_iso_z(),
-                "fragment-count": len(fragments),
-                "fragment-ids": sorted(current_ids),
+                "fragment-count": len(all_synced_ids),
+                "fragment-ids": sorted(all_synced_ids),
                 "ledger-path": str(current_ledger_path(project_root)),
             }, indent=2))
         else:
-            new_ids = current_ids - synced_ids
-            if new_ids and synced_ids:
+            if new_ids and known_ids:
                 new_fragments = [f for f in fragments if f["event-id"] in new_ids]
                 atomic_write_ndjson(current_ledger_path(project_root), new_fragments, append=True)
             else:
@@ -143,8 +168,8 @@ def sync_current_release_ledger(project_root: Path) -> SyncResult:
 
             atomic_write_text(ledger_manifest_path(project_root), json.dumps({
                 "synced-at": now_iso_z(),
-                "fragment-count": len(fragments),
-                "fragment-ids": sorted(current_ids),
+                "fragment-count": len(all_synced_ids),
+                "fragment-ids": sorted(all_synced_ids),
                 "ledger-path": str(current_ledger_path(project_root)),
             }, indent=2))
 
