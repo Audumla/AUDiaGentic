@@ -39,8 +39,8 @@ from audiagentic.components.agents.gateway.queue.capacity import (
     SourceCapacityAuthority,
 )
 from audiagentic.components.agents.gateway.queue.capacity_policy import (
+    resolve_capacity_limits,
     resolve_pending_capacity,
-    resolve_virtual_capacity,
 )
 from audiagentic.components.agents.gateway.queue.pending import PendingAuthority
 from audiagentic.components.agents.gateway.queue.watchdog_registry import watchdog_registry
@@ -229,6 +229,26 @@ prompt_digest; dispatch needs the raw prompt for provider execution."""
 
 
 @dataclass(frozen=True)
+class _QueueReservation:
+    """Physical reservation plus optional gateway scope overlays."""
+
+    source: CapacityReservation
+    scope_keys: tuple[str, ...]
+
+    @property
+    def source_id(self) -> str:
+        return self.source.source_id
+
+    @property
+    def model_id(self) -> str | None:
+        return self.source.model_id
+
+    @property
+    def capacity_source_id(self) -> str:
+        return self.source.capacity_source_id
+
+
+@dataclass(frozen=True)
 class QueuedDispatch:
     """Immutable per-request dispatch entry. Carries everything _drain/_run_one
     needs so that concurrent enqueues for the same profile never substitute
@@ -249,6 +269,7 @@ class QueuedDispatch:
     snapshot: profiles_mod.ResolvedExecutionProfile
     instance_facts: tuple[InstanceFacts, ...]
     project_key: str
+    session_key: str | None
     runner: RequestRunner
     owner_epoch: str
     service_root: Path | None
@@ -270,7 +291,7 @@ class _RuntimeState:
     idle sessions don't block other profiles from making progress.
     """
 
-    def __init__(self, virtual_capacity: int, pending_capacity: int) -> None:
+    def __init__(self, virtual_capacity: int | None, pending_capacity: int) -> None:
         # Provider-neutral fallback capacity for sources without declarations.
         self.virtual_capacity = virtual_capacity
         self.pending_capacity = pending_capacity
@@ -278,6 +299,9 @@ class _RuntimeState:
         self.running: set[str] = set()
         self.idle: set[str] = set()
         self.cancel_requested: set[str] = set()
+        # Optional project/session overlays are counted under stable keys.
+        # Access is protected by this profile lane's lock.
+        self.scope_usage: dict[str, int] = {}
 
     def active_running(self) -> int:
         """Count of requests actually consuming compute (not waiting on session locks)."""
@@ -327,7 +351,7 @@ class GatewayQueueManager:
                 # modes. Gated profiles ignore virtual_capacity for compute
                 # gating -- capacity comes from the resource trackers instead.
                 params = dict(snapshot.execution_params)
-                virtual_capacity = resolve_virtual_capacity(params)
+                virtual_capacity = resolve_capacity_limits(params)["global"]
                 pending_capacity = resolve_pending_capacity(params, virtual_capacity)
                 pq = _RuntimeState(virtual_capacity, pending_capacity)
                 self._runtime[profile_identity] = pq
@@ -457,7 +481,10 @@ class GatewayQueueManager:
             execution_profile_id=execution_profile_id,
             snapshot=snapshot,
             instance_facts=instance_facts,
-            project_key=str(project_root),
+            # Resolve once so relative/symlinked callers cannot accidentally
+            # bypass a per-project limit for the same physical project.
+            project_key=str(project_root.resolve()),
+            session_key=str(record.get("session-id")) if record.get("session-id") else None,
             runner=runner,
             owner_epoch=owner_epoch,
             service_root=dispatch_service_root,
@@ -556,15 +583,21 @@ class GatewayQueueManager:
             for candidate in self._pending_authority.candidates():
                 entry = candidate.value
                 pq = self._runtime_state(entry.snapshot)
-                reservation: CapacityReservation | None = None
+                reservation: _QueueReservation | None = None
                 with pq.lock:
-                    reservation = self._try_reserve_source(entry, pq.virtual_capacity)
+                    reservation = self._try_reserve_source(entry, pq)
                     if reservation is None:
                         continue
                     claimed = self._pending_authority.claim(entry.request_id)
                     if claimed is None:
                         if reservation is not None:
-                            self._capacity.release(reservation)
+                            self._capacity.release(reservation.source)
+                            for key in reservation.scope_keys:
+                                current = pq.scope_usage.get(key, 0)
+                                if current <= 1:
+                                    pq.scope_usage.pop(key, None)
+                                else:
+                                    pq.scope_usage[key] = current - 1
                         continue
                     pq.running.add(entry.request_id)
                     self._active_requests[entry.request_id] = (
@@ -583,37 +616,77 @@ class GatewayQueueManager:
                 return
 
     def _try_reserve_source(
-        self, entry: QueuedDispatch, fallback_concurrency: int,
-    ) -> CapacityReservation | None:
+        self, entry: QueuedDispatch, pq: _RuntimeState,
+    ) -> "_QueueReservation | None":
         """Reserve one compatible instance through the common capacity model.
 
         Declared model sources use their shared physical resource.  Plain
         instances use a profile-scoped virtual resource only to preserve the
         existing profile limit while removing the separate semaphore path.
         """
+        limits = resolve_capacity_limits(dict(entry.snapshot.execution_params))
+        scope_keys: list[tuple[str, int]] = []
+        if limits["project"] is not None:
+            scope_keys.append((f"project:{entry.project_key}", int(limits["project"])))
+        if limits["session"] is not None and entry.session_key is not None:
+            scope_keys.append((f"session:{entry.session_key}", int(limits["session"])))
+        if any(pq.scope_usage.get(key, 0) >= limit for key, limit in scope_keys):
+            return None
+
+        # A source without a declaration uses the configured global overlay
+        # as its fallback; None deliberately means unbounded.
         virtual_resource = (
             f"profile:{entry.snapshot.profile_id}/"
             f"{entry.snapshot.generation}/{entry.snapshot.config_digest}"
         )
         for facts in entry.instance_facts:
             declared = facts.resource_id is not None
+            global_limit = limits["global"]
+            virtual_bound = global_limit is not None
+            local_scope_keys = list(scope_keys)
+            if bool(limits["global-explicit"]):
+                if global_limit is not None:
+                    local_scope_keys.append(("global", int(global_limit)))
             reservation = self._capacity.try_reserve(
                 source_id=facts.source_id,
-                resource_id=facts.resource_id if declared else virtual_resource,
-                concurrency=facts.concurrency if declared else fallback_concurrency,
+                resource_id=facts.resource_id if declared else (virtual_resource if virtual_bound else None),
+                concurrency=facts.concurrency if declared else (int(global_limit) if global_limit is not None else None),
                 model_id=facts.model_id,
-                capacity_source_id=facts.source_id if declared else virtual_resource,
+                capacity_source_id=facts.source_id if declared else (virtual_resource if virtual_bound else facts.source_id),
                 declared=declared,
             )
             if reservation is not None:
-                return reservation
+                for key, _limit in local_scope_keys:
+                    pq.scope_usage[key] = pq.scope_usage.get(key, 0) + 1
+                return _QueueReservation(reservation, tuple(key for key, _ in local_scope_keys))
         return None
+
+    def _release_reservation(self, pq: _RuntimeState, reservation: "_QueueReservation") -> None:
+        self._capacity.release(reservation.source)
+        with pq.lock:
+            for key in reservation.scope_keys:
+                current = pq.scope_usage.get(key, 0)
+                if current <= 1:
+                    pq.scope_usage.pop(key, None)
+                else:
+                    pq.scope_usage[key] = current - 1
+
+    def _reserve_session_when_available(
+        self, entry: QueuedDispatch, pq: _RuntimeState,
+    ) -> "_QueueReservation":
+        """Acquire both physical and optional project/session overlays."""
+        while True:
+            with pq.lock:
+                reservation = self._try_reserve_source(entry, pq)
+            if reservation is not None:
+                return reservation
+            time.sleep(0.1)
 
     def _run_one(
         self,
         pq: _RuntimeState,
         entry: QueuedDispatch,
-        bound: CapacityReservation | None,
+        bound: _QueueReservation | None,
     ) -> None:
         project_root = entry.project_root
         execution_profile_id = entry.execution_profile_id
@@ -756,19 +829,19 @@ class GatewayQueueManager:
                 # never across an idle keep-alive lifetime.
                 turn_template = bound
                 if bound is not None:
-                    self._capacity.release(bound)
+                    self._release_reservation(pq, bound)
                     bound = None
                 with pq.lock:
                     pq.idle.add(request_id)
 
-                turn_reservation: CapacityReservation | None = None
+                turn_reservation: _QueueReservation | None = None
 
                 async def _on_turn_starting(rid: str) -> None:
                     nonlocal turn_reservation
                     if turn_template is None:
                         raise RuntimeError("session turn has no capacity reservation template")
                     turn_reservation = await asyncio.to_thread(
-                        self._capacity.reserve_when_available, turn_template,
+                        self._reserve_session_when_available, entry, pq,
                     )
                     with pq.lock:
                         pq.idle.discard(rid)
@@ -780,7 +853,7 @@ class GatewayQueueManager:
                         turn_reservation = None
                         pq.idle.add(rid)
                     if released is not None:
-                        self._capacity.release(released)
+                        self._release_reservation(pq, released)
                     self._drain_all()
 
                 _TURNCB.set_callbacks(request_id, _on_turn_starting, _on_turn_done)
@@ -859,7 +932,7 @@ class GatewayQueueManager:
         finally:
             watchdog_registry().unregister(project_root, request_id)
             if bound is not None:
-                self._capacity.release(bound)
+                self._release_reservation(pq, bound)
             with pq.lock:
                 pq.running.discard(request_id)
                 pq.idle.discard(request_id)
@@ -1001,7 +1074,7 @@ class GatewayQueueManager:
             else:
                 backoff_seconds = min(backoff_seconds * 2, _WAIT_MAX_BACKOFF_SECONDS)
 
-    def queue_depth(self, execution_profile_id: str) -> dict[str, int]:
+    def queue_depth(self, execution_profile_id: str) -> dict[str, Any]:
         """Return aggregate queue depth across profile generations.
 
         Multiple immutable profile generations can coexist during reload; the
@@ -1014,6 +1087,7 @@ class GatewayQueueManager:
         active_running = 0
         idle = 0
         virtual_capacity = 0
+        unbounded = False
 
         with self._manager_lock:
             for profile_identity, pq in self._runtime.items():
@@ -1022,14 +1096,17 @@ class GatewayQueueManager:
                         running += len(pq.running)
                         active_running += pq.active_running()
                         idle += len(pq.idle)
-                    virtual_capacity += pq.virtual_capacity
+                    if pq.virtual_capacity is None:
+                        unbounded = True
+                    else:
+                        virtual_capacity += pq.virtual_capacity
 
         return {
             "pending": pending,
             "running": running,
             "active_running": active_running,
             "idle": idle,
-            "virtual_capacity": virtual_capacity,
+            "virtual_capacity": "unlimited" if unbounded else virtual_capacity,
         }
 
     def request_slot_status(self, execution_profile_id: str, request_id: str) -> str | None:
@@ -1054,7 +1131,7 @@ class GatewayQueueManager:
         This is the operator-facing reporting authority. It deliberately does
         not expose internal lane keys or other projects' work.
         """
-        project_key = str(project_root)
+        project_key = str(project_root.resolve())
         result: dict[str, dict[str, int]] = {}
         pending_by_profile = self._pending_authority.count_by(
             lambda request: (
