@@ -91,6 +91,60 @@ def test_project_queue_depths_excludes_other_projects(tmp_path: Path):
     assert manager.wait(project_b, second["request-id"], timeout_seconds=5)["state"] == "completed"
 
 
+def test_project_capacity_allows_different_projects_to_run_concurrently(tmp_path: Path):
+    """An explicit project limit must not serialize unrelated projects."""
+    manager = queue_mod.GatewayQueueManager()
+    project_a = tmp_path / "project-a"
+    project_b = tmp_path / "project-b"
+    project_a.mkdir()
+    project_b.mkdir()
+    hold = threading.Event()
+    started = threading.Semaphore(0)
+
+    def runner(project_root: Path, record: dict) -> dict:
+        started.release()
+        hold.wait(timeout=5)
+        return store.transition_record(
+            project_root, record["request-id"], "completed",
+            updates={"output": "done", "finished-at": now_iso_z()},
+        )
+
+    params = {
+        "global-capacity": "unlimited",
+        "project-capacity": 1,
+        "session-capacity": "unlimited",
+    }
+    first = _submit(manager, project_a, "gpt-auto", params, runner)
+    second = _submit(manager, project_b, "gpt-auto", params, runner)
+    assert started.acquire(timeout=2)
+    assert started.acquire(timeout=2)
+    assert manager.queue_depth("gpt-auto")["running"] == 2
+
+    hold.set()
+    assert manager.wait(project_a, first["request-id"], timeout_seconds=5)["state"] == "completed"
+    assert manager.wait(project_b, second["request-id"], timeout_seconds=5)["state"] == "completed"
+
+
+def test_project_capacity_still_serializes_same_project(tmp_path: Path):
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    hold = threading.Event()
+    started = threading.Event()
+    runner = _blocking_runner(hold, started)
+    params = {"global-capacity": "unlimited", "project-capacity": 1}
+
+    first = _submit(manager, project, "gpt-auto", params, runner)
+    assert started.wait(timeout=2)
+    second = _submit(manager, project, "gpt-auto", params, runner)
+    assert manager.queue_depth("gpt-auto")["running"] == 1
+    assert manager.queue_depth("gpt-auto")["pending"] == 1
+
+    hold.set()
+    assert manager.wait(project, first["request-id"], timeout_seconds=5)["state"] == "completed"
+    assert manager.wait(project, second["request-id"], timeout_seconds=5)["state"] == "completed"
+
+
 # ---------------------------------------------------------------------------
 # concurrency
 # ---------------------------------------------------------------------------
@@ -223,6 +277,69 @@ def test_session_workers_share_one_profile_compute_slot(tmp_path: Path):
     for record in records:
         assert manager.wait(tmp_path, record["request-id"], timeout_seconds=5)["state"] == "completed"
     assert max_active == 1
+
+
+def test_session_capacity_serializes_same_session_but_not_other_sessions(tmp_path: Path):
+    manager = queue_mod.GatewayQueueManager()
+    entered = threading.Semaphore(0)
+    allow_turn_start = threading.Event()
+    release_compute = threading.Event()
+    active = 0
+    max_active = 0
+    active_lock = threading.Lock()
+
+    def runner(project_root: Path, record: dict) -> dict:
+        nonlocal active, max_active
+        entered.release()
+        allow_turn_start.wait(timeout=5)
+        asyncio.run(queue_mod.notify_turn_starting(record["request-id"]))
+        try:
+            with active_lock:
+                active += 1
+                max_active = max(max_active, active)
+            release_compute.wait(timeout=5)
+        finally:
+            with active_lock:
+                active -= 1
+            asyncio.run(queue_mod.notify_turn_done(record["request-id"]))
+        return store.transition_record(
+            project_root, record["request-id"], "completed",
+            updates={"output": "done", "finished-at": now_iso_z()},
+        )
+
+    project = tmp_path / "project"
+    project.mkdir()
+    params = {
+        "global-capacity": "unlimited",
+        "project-capacity": "unlimited",
+        "session-capacity": 1,
+    }
+    records = [
+        store.build_record(
+            execution_profile_id="session-scoped",
+            prompt_body=str(index),
+            session_id="same-session",
+        )
+        for index in range(2)
+    ]
+    for record in records:
+        store.write_record(project, record)
+        manager.enqueue(project, record, params, runner)
+    assert entered.acquire(timeout=2)
+    assert entered.acquire(timeout=2)
+    allow_turn_start.set()
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        with active_lock:
+            if active == 1:
+                break
+        time.sleep(0.01)
+    with active_lock:
+        assert active == 1
+        assert max_active == 1
+    release_compute.set()
+    for record in records:
+        assert manager.wait(project, record["request-id"], timeout_seconds=5)["state"] == "completed"
 
 
 def test_fifo_ordering(tmp_path: Path):
