@@ -91,6 +91,7 @@ class GptAutoTurn:
         # markers are sufficient to diagnose the boundary safely.
         self._last_snapshot: ChatSnapshot | None = None
         self._last_observation_error: BaseException | None = None
+        self._baseline_snapshot: ChatSnapshot | None = None
 
     def _move(self, target: TurnState) -> None:
         failure = _ENGINE.check(self.state.value, target.value)
@@ -174,6 +175,7 @@ class GptAutoTurn:
             return self._result("cancelled")
         self._phase = "baseline-observation"
         baseline = await self.chat.snapshot()
+        self._baseline_snapshot = baseline
         self._remember_snapshot(baseline)
         self._move(TurnState.SUBMITTING)
         self._phase = "submission"
@@ -245,18 +247,27 @@ class GptAutoTurn:
 
     async def _capture_provider_identity_after_ambiguous_submission(self) -> None:
         """Persist a conversation URL observed after an ambiguous submit."""
-        if self.chat.provider_session_id is not None:
-            return
         try:
             current = await self.chat.snapshot()
             self._remember_snapshot(current)
-            if _matches(_normal(self.request.body), _normal(current.latest_user_text or "")) and current.latest_user_id:
+            is_new = _new_user_message(self._baseline_snapshot, current) if self._baseline_snapshot else True
+            if (
+                is_new
+                and _matches(_normal(self.request.body), _normal(current.latest_user_text or ""))
+                and current.latest_user_id
+            ):
                 self._prompt_message_id = current.latest_user_id
                 mark_prompt = getattr(self.chat, "mark_prompt_submitted", None)
                 if mark_prompt is not None:
-                    mark_prompt(current.latest_user_id, None)
-            if parse_provider_session_id(current.url):
+                    mark_prompt(
+                        current.latest_user_id,
+                        self._baseline_snapshot.latest_assistant_id
+                        if self._baseline_snapshot
+                        else None,
+                    )
+            if self.chat.provider_session_id is None and parse_provider_session_id(current.url):
                 await self.chat.acquire_provider_identity(current)
+            if self.chat.provider_session_id:
                 await self._publish_message_ids(strict=False)
         except Exception as exc:  # noqa: BLE001 - preservation is best effort
             self._last_observation_error = exc

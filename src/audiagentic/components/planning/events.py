@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -81,30 +82,36 @@ def _on_ledger_event_recorded(
         )
         return
 
-    from audiagentic.components.planning import planning_api
-    from audiagentic.components.planning.item_store import require_item
+    from audiagentic.components.planning import item_store
+    from audiagentic.foundation.io import atomic_write_text
 
     for item_id in plan_item_ids:
         if not isinstance(item_id, str):
             continue
         try:
-            new_entry = f"- {event_id}"
-            item_path = require_item(project_root, item_id)
-            raw_item = item_path.read_text(encoding="utf-8")
-            if any(line.strip() == new_entry for line in raw_item.splitlines()):
-                logger.debug(
-                    "ledger event already linked to plan item",
-                    extra={"item_id": item_id, "event_id": event_id},
+            item_path = item_store.require_item(project_root, item_id)
+            with item_store.item_write_lock(item_path):
+                fm, body = item_store.parse_frontmatter(
+                    item_path.read_text(encoding="utf-8")
                 )
-                continue
-            existing = planning_api.get_item(project_root, item_id)
-            current_ledger = existing.get("ledger-events", "")
-            updated_ledger = (
-                current_ledger.rstrip() + "\n" + new_entry
-                if current_ledger.strip()
-                else new_entry
-            )
-            planning_api.update_item(project_root, item_id, {"ledger-events": updated_ledger})
+                item_store.ensure_not_review(fm, item_id, "VAL-PLN-020")
+                updated_body, linked = item_store.append_ledger_event(
+                    body,
+                    event_id,
+                )
+                if not linked:
+                    logger.debug(
+                        "ledger event already linked to plan item",
+                        extra={"item_id": item_id, "event_id": event_id},
+                    )
+                    continue
+                updated_body = item_store.append_change_log(
+                    updated_body,
+                    datetime.now(timezone.utc).isoformat(),
+                    "updated-by",
+                    "Updated: section:ledger-events",
+                )
+                atomic_write_text(item_path, item_store.render_item(fm, updated_body))
             logger.info(
                 "linked ledger event to plan item",
                 extra={"item_id": item_id, "event_id": event_id},

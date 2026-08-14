@@ -363,6 +363,7 @@ def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any
     return result
 
 
+@item_store.serialize_item_update
 def update_item(project_root: Path, item_id: str, updates: dict[str, Any]) -> dict[str, Any]:
     """Update frontmatter fields and/or body sections of a plan item.
 

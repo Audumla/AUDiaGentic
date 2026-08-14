@@ -10,6 +10,9 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
+from contextlib import contextmanager
+from functools import wraps
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +43,9 @@ __all__ = [
     "active_states",
     "terminal_states",
     "append_change_log",
+    "append_ledger_event",
+    "item_write_lock",
+    "serialize_item_update",
     "build_item_body",
     "check_transition",
     "cleanup_empty_plan_dirs",
@@ -114,6 +120,37 @@ _load_config()  # populate the above at import time
 _ITEM_ID_RE = re.compile(r"^([A-Z]+)(\d+)$", re.IGNORECASE)
 _CHANGE_LOG_HEADING = "## Change Log"
 _CHANGE_ENTRY_RE = re.compile(r"^- (\S+) \(([^)]+)\): (.*)$")
+_HEADING_RE = re.compile(r"^##\s+(.+?)\s*$")
+
+_ITEM_LOCKS: dict[Path, threading.RLock] = {}
+_ITEM_LOCKS_GUARD = threading.Lock()
+
+
+def _item_lock(path: Path) -> threading.RLock:
+    resolved = path.resolve()
+    with _ITEM_LOCKS_GUARD:
+        lock = _ITEM_LOCKS.get(resolved)
+        if lock is None:
+            lock = threading.RLock()
+            _ITEM_LOCKS[resolved] = lock
+        return lock
+
+
+@contextmanager
+def item_write_lock(path: Path):
+    """Serialize read/modify/write operations for one item in this process."""
+    with _item_lock(path):
+        yield
+
+
+def serialize_item_update(func):
+    """Decorate an item mutator with the same per-item write lock."""
+    @wraps(func)
+    def wrapped(project_root: Path, item_id: str, *args, **kwargs):
+        path = require_item(project_root, item_id)
+        with item_write_lock(path):
+            return func(project_root, item_id, *args, **kwargs)
+    return wrapped
 
 
 def _get_state_set(kind: str, set_name: str) -> set[str]:
@@ -453,6 +490,63 @@ def append_change_log(
     else:
         # Create the section after all existing content
         return body.rstrip() + f"\n\n{_CHANGE_LOG_HEADING}\n\n{entry}\n"
+
+
+def _heading_key(heading: str) -> str:
+    """Return a stable key for headings written with legacy punctuation."""
+    return re.sub(r"[^a-z0-9]+", "-", heading.lower()).strip("-")
+
+
+def append_ledger_event(body: str, event_id: str) -> tuple[str, bool]:
+    """Append one ledger event while canonicalizing legacy duplicate sections.
+
+    ``Ledger-events`` was historically an unconfigured custom heading.  A
+    generic read/modify/write therefore parsed only the last occurrence and
+    could either discard older links or recreate the section.  This helper
+    treats all punctuation/case variants as one logical section, preserves
+    every existing bullet, removes duplicate headings, and reports whether the
+    event was newly linked.
+    """
+    lines = body.splitlines()
+    starts: list[tuple[int, str]] = []
+    for index, line in enumerate(lines):
+        match = _HEADING_RE.match(line)
+        if match:
+            starts.append((index, match.group(1)))
+
+    ledger_ranges: list[tuple[int, int]] = []
+    ledger_values: list[str] = []
+    for position, (start, heading) in enumerate(starts):
+        if _heading_key(heading) != "ledger-events":
+            continue
+        end = starts[position + 1][0] if position + 1 < len(starts) else len(lines)
+        ledger_ranges.append((start, end))
+        ledger_values.extend(lines[start + 1 : end])
+
+    entry = f"- {event_id}"
+    already_present = any(line.strip() == entry for line in ledger_values)
+    if not already_present:
+        ledger_values = [*ledger_values, entry]
+
+    if not ledger_ranges:
+        updated = body.rstrip() + f"\n\n## Ledger-events\n\n{entry}\n"
+        return updated, True
+
+    first_start = ledger_ranges[0][0]
+    rebuilt: list[str] = []
+    index = 0
+    while index < len(lines):
+        matching = next((end for start, end in ledger_ranges if start == index), None)
+        if matching is not None:
+            if index == first_start:
+                rebuilt.extend(["## Ledger-events", "", *ledger_values])
+            index = matching
+            continue
+        rebuilt.append(lines[index])
+        index += 1
+
+    updated = "\n".join(rebuilt).rstrip() + "\n"
+    return updated, not already_present
 
 
 def parse_change_log(body: str) -> list[dict[str, str]]:
