@@ -26,6 +26,41 @@ logger = logging.getLogger(__name__)
 _TURN_CALL_GRACE_SECONDS = 15.0
 
 
+def _terminal_session_diagnostics(session_id: str, record: dict[str, Any]) -> dict[str, Any]:
+    """Return sparse facts needed to repair a continuation rejection.
+
+    RES-AGW-003 is deliberately stable for callers, but ``state`` alone is
+    not enough to explain why a session stopped accepting turns.  Keep the
+    durable lifecycle reason, timestamps, and whether a provider conversation
+    remains bound in the error so operators can choose explicit resume versus
+    a new session without guessing or resubmitting blindly.
+    """
+    details: dict[str, Any] = {
+        "session-id": session_id,
+        "state": record.get("state"),
+        "close-reason": record.get("close-reason"),
+        "suggestion": (
+            "call session_resume to continue the same provider conversation"
+            if record.get("state") in {"failed", "closed", "expired"}
+            else "inspect the gateway runtime before retrying"
+        ),
+    }
+    timing = record.get("timing")
+    if isinstance(timing, dict):
+        for key in ("created-at", "last-activity-at", "updated-at", "closed-at"):
+            value = timing.get(key)
+            if value:
+                details[key] = value
+    provider = record.get("provider")
+    metadata = provider.get("metadata") if isinstance(provider, dict) else None
+    if isinstance(metadata, dict):
+        for key in ("provider-session-id", "chat-url", "unresolved-turn-pending"):
+            value = metadata.get(key)
+            if value not in (None, "", False):
+                details[f"provider-{key}"] = value
+    return details
+
+
 # ── AS28 slice 4a helpers ────────────────────────────────────────
 def _build_surface_hint(profile: dict[str, Any]) -> Any:
     """Build the surface hint from the resolved execution profile.
@@ -272,7 +307,7 @@ def _dispatch_session_request(
                         code="RES-AGW-003",
                         kind="agents",
                         message="session is not active and cannot be continued",
-                        details={"session-id": session_id, "state": session_record.get("state")},
+                        details=_terminal_session_diagnostics(session_id, session_record),
                     )
                 from audiagentic.components.providers import providers_api
 

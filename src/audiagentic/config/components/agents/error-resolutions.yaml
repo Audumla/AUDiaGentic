@@ -34,7 +34,7 @@ IO-AGW-002: "Failed to read or parse the gateway session record file. Check that
 CON-AGW-002: "The requested session state transition is illegal for the current workflow. Review valid transitions in workflows.yaml."
 CON-AGW-003: "The session's turn queue is full. Wait for queued turns to drain before sending more prompts."
 CON-AGW-004: "The session exceeded its max lifetime and is draining — no new turns are accepted. Open a new session (or open sessions with session_max_lifetime_seconds=0 to disable the cap)."
-RES-AGW-003: "The session is not active in this gateway process. It may have been closed, expired, or belong to a previous process — open a new session."
+RES-AGW-003: "The session cannot accept this turn because its durable state is not active (inspect state, close-reason, timestamps, and provider binding in error details). If a provider-session-id and chat-url remain bound, call session_resume to continue that conversation; otherwise open a new session."
 VAL-AGW-060: "The request's execution profile does not match the session's profile. A session is bound to one profile for its lifetime."
 VAL-AGW-061: "session_max_lifetime_seconds requires session_keep_alive=true and must be positive, or 0 to disable the lifetime cap. The cap applies to the session's lifetime policy; it is only meaningful when keep-alive sets that policy."
 VAL-AGW-062: "project_root must be an absolute, canonicalizable local path."
