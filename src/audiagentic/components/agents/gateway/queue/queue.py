@@ -36,6 +36,8 @@ from audiagentic.components.agents.gateway.event_topics import (
 from audiagentic.components.agents.gateway.instances import InstanceFacts
 from audiagentic.components.agents.gateway.queue.capacity import (
     CapacityReservation,
+    OverlayReservation,
+    ScopedCapacityAuthority,
     SourceCapacityAuthority,
 )
 from audiagentic.components.agents.gateway.queue.capacity_policy import (
@@ -233,7 +235,7 @@ class _QueueReservation:
     """Physical reservation plus optional gateway scope overlays."""
 
     source: CapacityReservation
-    scope_keys: tuple[str, ...]
+    overlay: OverlayReservation | None
 
     @property
     def source_id(self) -> str:
@@ -299,9 +301,6 @@ class _RuntimeState:
         self.running: set[str] = set()
         self.idle: set[str] = set()
         self.cancel_requested: set[str] = set()
-        # Optional project/session overlays are counted under stable keys.
-        # Access is protected by this profile lane's lock.
-        self.scope_usage: dict[str, int] = {}
 
     def active_running(self) -> int:
         """Count of requests actually consuming compute (not waiting on session locks)."""
@@ -334,6 +333,7 @@ class GatewayQueueManager:
         self._capacity = SourceCapacityAuthority(
             starvation_seconds=_STARVATION_THRESHOLD_SECONDS,
         )
+        self._scoped_capacity = ScopedCapacityAuthority()
         # AS101: one canonical pending authority. Lanes retain only running
         # session/compatibility state; they no longer own pending work.
         self._pending_authority: PendingAuthority[QueuedDispatch] = PendingAuthority()
@@ -462,7 +462,27 @@ class GatewayQueueManager:
             snapshot = shared_registry.resolve_snapshot(snapshot.profile_id)
 
         owner_epoch = dispatch_owner_epoch or f"local-{uuid.uuid4().hex}"
-        pq = self._runtime_state(snapshot)
+        try:
+            pq = self._runtime_state(snapshot)
+        except AudiaGenticError as exc:
+            # Capacity policy is part of admission. If a persisted request
+            # reached this boundary before validation, never leave it stranded
+            # as queued with no pending-authority entry.
+            rejected = store.transition_record(
+                project_root,
+                request_id,
+                "rejected",
+                updates={"error": exc},
+            )
+            store.record_gateway_timeline(
+                project_root,
+                request_id,
+                "queue.rejected-invalid-capacity",
+                state=rejected["state"],
+                attributes={"execution-profile-id": execution_profile_id},
+            )
+            _publish_lifecycle_event("rejected", rejected)
+            return rejected
 
         # AS105/AS101: resolve instance capacity facts once, at admission --
         # never re-derived at dispatch time, so a mid-flight model-sources.yaml
@@ -592,12 +612,7 @@ class GatewayQueueManager:
                     if claimed is None:
                         if reservation is not None:
                             self._capacity.release(reservation.source)
-                            for key in reservation.scope_keys:
-                                current = pq.scope_usage.get(key, 0)
-                                if current <= 1:
-                                    pq.scope_usage.pop(key, None)
-                                else:
-                                    pq.scope_usage[key] = current - 1
+                            self._scoped_capacity.release(reservation.overlay)
                         continue
                     pq.running.add(entry.request_id)
                     self._active_requests[entry.request_id] = (
@@ -624,15 +639,7 @@ class GatewayQueueManager:
         instances use a profile-scoped virtual resource only to preserve the
         existing profile limit while removing the separate semaphore path.
         """
-        limits = resolve_capacity_limits(dict(entry.snapshot.execution_params))
-        scope_keys: list[tuple[str, int]] = []
-        if limits["project"] is not None:
-            scope_keys.append((f"project:{entry.project_key}", int(limits["project"])))
-        if limits["session"] is not None and entry.session_key is not None:
-            scope_keys.append((f"session:{entry.session_key}", int(limits["session"])))
-        if any(pq.scope_usage.get(key, 0) >= limit for key, limit in scope_keys):
-            return None
-
+        limits, scope_keys = self._scope_keys(entry)
         # A source without a declaration uses the configured global overlay
         # as its fallback; None deliberately means unbounded.
         virtual_resource = (
@@ -643,10 +650,9 @@ class GatewayQueueManager:
             declared = facts.resource_id is not None
             global_limit = limits["global"]
             virtual_bound = global_limit is not None
-            local_scope_keys = list(scope_keys)
-            if bool(limits["global-explicit"]):
-                if global_limit is not None:
-                    local_scope_keys.append(("global", int(global_limit)))
+            overlay = self._scoped_capacity.try_reserve(tuple(scope_keys))
+            if overlay is None:
+                return None
             reservation = self._capacity.try_reserve(
                 source_id=facts.source_id,
                 resource_id=facts.resource_id if declared else (virtual_resource if virtual_bound else None),
@@ -656,29 +662,71 @@ class GatewayQueueManager:
                 declared=declared,
             )
             if reservation is not None:
-                for key, _limit in local_scope_keys:
-                    pq.scope_usage[key] = pq.scope_usage.get(key, 0) + 1
-                return _QueueReservation(reservation, tuple(key for key, _ in local_scope_keys))
+                return _QueueReservation(reservation, overlay)
+            self._scoped_capacity.release(overlay)
         return None
 
-    def _release_reservation(self, pq: _RuntimeState, reservation: "_QueueReservation") -> None:
+    @staticmethod
+    def _scope_keys(entry: QueuedDispatch) -> tuple[dict[str, int | None | bool], list[tuple[str, int]]]:
+        limits = resolve_capacity_limits(dict(entry.snapshot.execution_params))
+        keys: list[tuple[str, int]] = []
+        # An explicitly configured global overlay applies to declared
+        # physical sources as well as virtual sources. The legacy implicit
+        # virtual-capacity default is intentionally left to the virtual
+        # resource so declared model-source capacity remains unchanged.
+        if bool(limits["global-explicit"]) and limits["global"] is not None:
+            keys.append(("global", int(limits["global"])))
+        if limits["project"] is not None:
+            keys.append((f"project:{entry.project_key}", int(limits["project"])))
+        if limits["session"] is not None and entry.session_key is not None:
+            keys.append((f"session:{entry.session_key}", int(limits["session"])))
+        return limits, keys
+
+    def _try_reserve_specific_source(
+        self, entry: QueuedDispatch, pq: _RuntimeState, template: _QueueReservation,
+    ) -> "_QueueReservation | None":
+        """Reacquire the same source selected at session admission.
+
+        A session's durable binding identifies the source chosen at admission;
+        a later turn must not silently select a different instance merely
+        because another compatible source is currently free.
+        """
+        _limits, scope_keys = self._scope_keys(entry)
+        overlay = self._scoped_capacity.try_reserve(tuple(scope_keys))
+        if overlay is None:
+            return None
+        source = template.source
+        reservation = self._capacity.try_reserve(
+            source_id=source.source_id,
+            resource_id=source.resource_id,
+            concurrency=source.concurrency,
+            model_id=source.model_id,
+            capacity_source_id=source.capacity_source_id,
+            declared=source.declared,
+        )
+        if reservation is None:
+            self._scoped_capacity.release(overlay)
+            return None
+        return _QueueReservation(reservation, overlay)
+
+    def _release_reservation(self, reservation: "_QueueReservation") -> None:
         self._capacity.release(reservation.source)
-        with pq.lock:
-            for key in reservation.scope_keys:
-                current = pq.scope_usage.get(key, 0)
-                if current <= 1:
-                    pq.scope_usage.pop(key, None)
-                else:
-                    pq.scope_usage[key] = current - 1
+        self._scoped_capacity.release(reservation.overlay)
 
     def _reserve_session_when_available(
-        self, entry: QueuedDispatch, pq: _RuntimeState,
+        self, entry: QueuedDispatch, pq: _RuntimeState, template: _QueueReservation,
+        cancelled: threading.Event | None = None,
     ) -> "_QueueReservation":
         """Acquire both physical and optional project/session overlays."""
         while True:
+            if cancelled is not None and cancelled.is_set():
+                raise asyncio.CancelledError
             with pq.lock:
-                reservation = self._try_reserve_source(entry, pq)
+                reservation = self._try_reserve_specific_source(entry, pq, template)
             if reservation is not None:
+                if cancelled is not None and cancelled.is_set():
+                    self._release_reservation(reservation)
+                    raise asyncio.CancelledError
                 return reservation
             time.sleep(0.1)
 
@@ -829,20 +877,27 @@ class GatewayQueueManager:
                 # never across an idle keep-alive lifetime.
                 turn_template = bound
                 if bound is not None:
-                    self._release_reservation(pq, bound)
+                    self._release_reservation(bound)
                     bound = None
                 with pq.lock:
                     pq.idle.add(request_id)
 
                 turn_reservation: _QueueReservation | None = None
+                turn_acquire_cancel = threading.Event()
 
                 async def _on_turn_starting(rid: str) -> None:
                     nonlocal turn_reservation
                     if turn_template is None:
                         raise RuntimeError("session turn has no capacity reservation template")
-                    turn_reservation = await asyncio.to_thread(
-                        self._reserve_session_when_available, entry, pq,
-                    )
+                    turn_acquire_cancel.clear()
+                    try:
+                        turn_reservation = await asyncio.to_thread(
+                            self._reserve_session_when_available,
+                            entry, pq, turn_template, turn_acquire_cancel,
+                        )
+                    except asyncio.CancelledError:
+                        turn_acquire_cancel.set()
+                        raise
                     with pq.lock:
                         pq.idle.discard(rid)
 
@@ -853,7 +908,7 @@ class GatewayQueueManager:
                         turn_reservation = None
                         pq.idle.add(rid)
                     if released is not None:
-                        self._release_reservation(pq, released)
+                        self._release_reservation(released)
                     self._drain_all()
 
                 _TURNCB.set_callbacks(request_id, _on_turn_starting, _on_turn_done)
@@ -932,7 +987,7 @@ class GatewayQueueManager:
         finally:
             watchdog_registry().unregister(project_root, request_id)
             if bound is not None:
-                self._release_reservation(pq, bound)
+                self._release_reservation(bound)
             with pq.lock:
                 pq.running.discard(request_id)
                 pq.idle.discard(request_id)
