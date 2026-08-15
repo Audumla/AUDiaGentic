@@ -81,6 +81,14 @@ _UNSUPPORTED_REASONS = frozenset(
     }
 )
 
+
+class _SurfaceResolutionFailure(RuntimeError):
+    """Unexpected runtime failure while proving a declared surface."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
 # ---------------------------------------------------------------------------
 # Platform triple detection (Fix 3: exact normalized target triples)
 # ---------------------------------------------------------------------------
@@ -149,7 +157,10 @@ def _probe_installed_version(
     CLI and parse the version from stdout. Returns None when there is no
     cli_probe or the probe fails (tool not installed, unparseable output).
 
-    Never raises — failures are silently treated as "unknown version".
+    Known absence (no probe, unavailable executable, or unparseable output)
+    remains an unknown version. Unexpected probe failures are raised through a
+    typed internal boundary so resolution can report UNAVAILABLE instead of
+    silently treating a broken probe as a valid unknown-version path.
     """
     cli_probe = getattr(descriptor, "cli_probe", None)
     if not cli_probe or not isinstance(cli_probe, list):
@@ -166,8 +177,8 @@ def _probe_installed_version(
         parsed = _parse_version(output)
         if parsed is not None:
             return ".".join(str(v) for v in parsed)
-    except Exception:  # noqa: BLE001 — version discovery is best-effort
-        pass
+    except Exception as exc:  # noqa: BLE001 — classify at resolver boundary
+        raise _SurfaceResolutionFailure("version-probe-failed") from exc
     return None
 
 
@@ -223,8 +234,10 @@ def _adapter_factory_exists(adapter_ref: str) -> bool:
 
         obj = resolve_ref(adapter_ref)
         return callable(obj)
-    except Exception:  # noqa: BLE001 — existence check only
-        return False
+    except Exception as exc:  # noqa: BLE001 — classify at resolver boundary
+        if getattr(exc, "code", None) == "VAL-DESC-001":
+            return False
+        raise _SurfaceResolutionFailure("adapter-resolution-failed") from exc
 
 
 # ---------------------------------------------------------------------------
@@ -478,7 +491,16 @@ def resolve_session_surface(
         )
 
     # ── 3. Discover installed version (Fix 2) ──────────────────────
-    installed_version = _probe_installed_version(descriptor)
+    try:
+        installed_version = _probe_installed_version(descriptor)
+    except _SurfaceResolutionFailure as exc:
+        return _unsupported_snapshot(
+            provider_id,
+            surface_hint.surface_id,
+            exc.reason,
+            requested_version=surface_hint.version_hint,
+            outcome=SurfaceResolutionOutcome.UNAVAILABLE,
+        )
 
     # ── 4. Select declaration (Fix 2: both surface_id + version match)
     declaration, requested_version = _select_declaration(
@@ -537,7 +559,17 @@ def resolve_session_surface(
 
     # ── 8. Missing adapter factory (existence check only) ──────────
     if declaration.adapter_ref:
-        if not _adapter_factory_exists(declaration.adapter_ref):
+        try:
+            adapter_exists = _adapter_factory_exists(declaration.adapter_ref)
+        except _SurfaceResolutionFailure as exc:
+            return _unsupported_snapshot(
+                provider_id,
+                surface_hint.surface_id,
+                exc.reason,
+                requested_version=declaration.version_constraint,
+                outcome=SurfaceResolutionOutcome.UNAVAILABLE,
+            )
+        if not adapter_exists:
             return _unsupported_snapshot(
                 provider_id,
                 surface_hint.surface_id,
