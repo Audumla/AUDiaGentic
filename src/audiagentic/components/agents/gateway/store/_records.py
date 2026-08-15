@@ -463,10 +463,32 @@ def project_public_status(
 def read_public_status(project_root: Path, request_id: str) -> dict[str, Any]:
     """Read a safe request status with its bounded last transition."""
     record = read_record(project_root, request_id)
-    return project_public_status(
+    status = project_public_status(
         record,
         latest_transition=latest_transition_projection(project_root, request_id),
     )
+    # A GPT-auto checkpoint is written to the durable session record before the
+    # request record can observe the provider turn. Reconcile that live source
+    # here so an operator never mistakes a quiet, unresolved provider turn for
+    # an idle request. Missing/terminal session records remain best-effort: the
+    # request projection already contains the last fenced checkpoint.
+    if status.get("provider-turn-pending") is not True:
+        session_id = record.get("session-id")
+        if isinstance(session_id, str) and session_id:
+            try:
+                from audiagentic.components.agents.gateway.session import sessions_store
+
+                session = sessions_store.read_session_record(project_root, session_id)
+                pending = sessions_store.session_provider_metadata(session).get(
+                    "unresolved-turn-pending"
+                )
+                if pending is True:
+                    status["provider-turn-pending"] = True
+            except (AudiaGenticError, OSError, TypeError, ValueError):
+                # Status inspection must not fail because a retained session is
+                # unavailable; preserve the request-side evidence instead.
+                pass
+    return status
 
 
 def list_records(project_root: Path) -> list[dict[str, Any]]:
