@@ -91,6 +91,23 @@ class ContentChannelId(StrEnum):
     TOOL_SUMMARY = "tool-summary"
 
 
+class SurfaceResolutionOutcome(StrEnum):
+    """Safe semantic result of resolving a provider session surface.
+
+    ``UNSUPPORTED`` means the declared surface cannot satisfy the requested
+    identity/platform constraints. ``UNPROVEN`` means the surface may exist,
+    but the evidence required for the requested observation is absent.
+    ``UNAVAILABLE`` means the provider or its configured runtime is not
+    available. Unexpected resolver defects remain exceptions and are never
+    represented as one of these outcomes.
+    """
+
+    SUPPORTED = "supported"
+    UNSUPPORTED = "unsupported"
+    UNPROVEN = "unproven"
+    UNAVAILABLE = "unavailable"
+
+
 # ---------------------------------------------------------------------------
 # Validation / evidence  (AS67 — simplified from O0-O4 ladder)
 # ---------------------------------------------------------------------------
@@ -263,6 +280,14 @@ class PlatformEvidence:
 class SurfaceValidation:
     evidence: ValidationEvidence = field(default_factory=ValidationEvidence)
     platforms: tuple[PlatformEvidence, ...] = ()
+    outcome: SurfaceResolutionOutcome = SurfaceResolutionOutcome.UNPROVEN
+    reason: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.outcome, SurfaceResolutionOutcome):
+            raise ValueError("SurfaceValidation.outcome must be a SurfaceResolutionOutcome")
+        if not isinstance(self.reason, str):
+            raise ValueError("SurfaceValidation.reason must be a string")
 
 
 # ---------------------------------------------------------------------------
