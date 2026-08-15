@@ -39,7 +39,16 @@ def _redact_error(error: BaseException | dict[str, Any] | None) -> dict[str, Any
     if error is None:
         return None
     if isinstance(error, AudiaGenticError):
-        return {"code": error.code, "message": error.message, "kind": error.kind}
+        projected = {"code": error.code, "message": error.message, "kind": error.kind}
+        # Provider-boundary errors already carry a bounded, redacted evidence
+        # envelope. Preserve its operational diagnostics in public status so
+        # an operator can choose the next action (wait, resume, or resubmit)
+        # without exposing prompt bodies, tracebacks, or transport secrets.
+        if error.code.startswith("EXT-GPTAUTO-") and isinstance(error.details, dict):
+            details = _project_gpt_auto_error_details(error.details)
+            if details:
+                projected["details"] = details
+        return projected
     if isinstance(error, BaseException):
         # Preserve ordinary validation/configuration detail so operators can
         # correct the failing input.  ValueError messages are bounded by the
@@ -48,6 +57,94 @@ def _redact_error(error: BaseException | dict[str, Any] | None) -> dict[str, Any
             return {"code": "VAL-AGW-UNKNOWN", "message": str(error), "kind": type(error).__name__}
         return {"code": "UNKNOWN", "message": "unexpected error (see server logs)", "kind": type(error).__name__}
     return {k: v for k, v in error.items() if k in _shared._REDACTED_ERROR_KEYS}
+
+
+_GPT_AUTO_DETAIL_KEYS = frozenset(
+    {
+        "turn-id",
+        "phase",
+        "turn-state",
+        "chat-state",
+        "failure-reason",
+        "recovery-reason",
+        "recovery-details",
+        "suggestion",
+        "prompt-id-available",
+        "prompt-text-digest-available",
+        "prompt-text-digest",
+        "expected-prompt-id",
+        "observed-latest-user-id",
+        "observed-user-id",
+        "observed-assistant-id",
+        "expected-assistant-id",
+        "assistant-before-id",
+        "assistant-before-message-id",
+        "provider-session-id",
+        "target-id",
+        "page-handle",
+        "observed-url",
+        "observation-state",
+        "observed-user-count",
+        "observed-assistant-count",
+        "observed-user-text-length",
+        "assistant-text-length",
+        "composer-present",
+        "composer-editable",
+        "user-text-present",
+        "generating",
+        "error-present",
+        "dom-signals",
+        "observation-markers",
+        "expected-prompt-length",
+        "prompt-text-match",
+        "matched-user-count",
+        "matching-user-count",
+        "observed-user-count",
+        "required-signal",
+        "observed-dom-signals",
+        "timeout-policy",
+        "submission-confirmed",
+        "submission-ambiguous",
+        "action-complete",
+        "send-button-clicked",
+        "enter-dispatched",
+        "typed-text-length",
+        "typed-text-match",
+        "cause-type",
+    }
+)
+
+
+def _project_gpt_auto_error_details(details: dict[str, Any]) -> dict[str, Any]:
+    """Keep safe, actionable GPT-auto evidence in the public error envelope.
+
+    Adapter details are already secret-redacted at error construction, but
+    they can still contain prompt text or exception messages. An explicit
+    allow-list keeps public status sparse and prevents accidental expansion
+    when provider diagnostics gain new fields.
+    """
+
+    projected: dict[str, Any] = {}
+    for key, value in details.items():
+        if key not in _GPT_AUTO_DETAIL_KEYS:
+            continue
+        if key == "recovery-details":
+            if isinstance(value, dict):
+                nested = _project_gpt_auto_error_details(value)
+                if nested:
+                    projected[key] = nested
+            continue
+        if isinstance(value, str) and len(value) > 256:
+            projected[key] = value[:256] + "..."
+        elif isinstance(value, (list, tuple)):
+            projected[key] = list(value)[:32]
+        elif isinstance(value, dict):
+            nested = _project_gpt_auto_error_details(value)
+            if nested:
+                projected[key] = nested
+        elif isinstance(value, (str, int, float, bool)) or value is None:
+            projected[key] = value
+    return projected
 
 
 def build_record(
