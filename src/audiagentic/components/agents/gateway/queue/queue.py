@@ -640,7 +640,7 @@ class GatewayQueueManager:
 
     def _try_reserve_source(
         self, entry: QueuedDispatch, pq: _RuntimeState,
-    ) -> "_QueueReservation | None":
+    ) -> _QueueReservation | None:
         """Reserve one compatible instance through the common capacity model.
 
         Declared model sources use their shared physical resource.  Plain
@@ -718,7 +718,7 @@ class GatewayQueueManager:
 
     def _try_reserve_specific_source(
         self, entry: QueuedDispatch, pq: _RuntimeState, template: _QueueReservation,
-    ) -> "_QueueReservation | None":
+    ) -> _QueueReservation | None:
         """Reacquire the same source selected at session admission.
 
         A session's durable binding identifies the source chosen at admission;
@@ -743,14 +743,14 @@ class GatewayQueueManager:
             return None
         return _QueueReservation(reservation, overlay)
 
-    def _release_reservation(self, reservation: "_QueueReservation") -> None:
+    def _release_reservation(self, reservation: _QueueReservation) -> None:
         self._capacity.release(reservation.source)
         self._scoped_capacity.release(reservation.overlay)
 
     def _reserve_session_when_available(
         self, entry: QueuedDispatch, pq: _RuntimeState, template: _QueueReservation,
         cancelled: threading.Event | None = None,
-    ) -> "_QueueReservation":
+    ) -> _QueueReservation:
         """Acquire both physical and optional project/session overlays."""
         while True:
             if cancelled is not None and cancelled.is_set():

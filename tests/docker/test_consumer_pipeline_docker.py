@@ -14,7 +14,6 @@ from __future__ import annotations
 # Imports below the Docker-harness marker are intentionally grouped by
 # consumer surface for readability.
 # ruff: noqa: E402
-
 import asyncio
 import json
 import os

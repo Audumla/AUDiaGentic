@@ -13,9 +13,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from audiagentic.components.providers.adapters.gpt_auto import session_transport
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.runtime import GptAutoProviderRuntime
-from audiagentic.components.providers.adapters.gpt_auto import session_transport
 
 from .deterministic_fixtures import (
     FakeTargetTable,
@@ -109,6 +109,43 @@ def test_resume_build_forwards_durable_chat_url_without_submitting(monkeypatch: 
     assert transport.chat.provider_session_id == "conversation-42"
     assert transport.chat.chat_url.endswith("/c/conversation-42")
     assert transport._active_turn is None
+
+
+def test_resume_build_tolerates_missing_chat_url(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A missing chat-url must defer to browser-based reconciliation, not fail resume outright."""
+    runtime = SimpleNamespace()
+    monkeypatch.setattr(session_transport, "get_runtime", lambda _root, _config: runtime)
+    transport = session_transport.build_gpt_auto_session_transport(
+        tmp_path,
+        config=valid_config(),
+        ag_session_id="ses-resumed",
+        binding_sink=lambda _update: None,
+        resume_provider_ref="conversation-42",
+        resume_metadata_hint={
+            "project-url": "https://chatgpt.com/g/g-p-project/project",
+        },
+    )
+    assert transport.chat.provider_session_id == "conversation-42"
+    assert transport.chat.chat_url is None
+    assert transport._active_turn is None
+
+
+def test_resume_build_rejects_conflicting_chat_url(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A chat-url that actively conflicts with the provider ref is still a hard failure."""
+    runtime = SimpleNamespace()
+    monkeypatch.setattr(session_transport, "get_runtime", lambda _root, _config: runtime)
+    with pytest.raises(RuntimeError, match="matching durable chat-url"):
+        session_transport.build_gpt_auto_session_transport(
+            tmp_path,
+            config=valid_config(),
+            ag_session_id="ses-resumed",
+            binding_sink=lambda _update: None,
+            resume_provider_ref="conversation-42",
+            resume_metadata_hint={
+                "project-url": "https://chatgpt.com/g/g-p-project/project",
+                "chat-url": "https://chatgpt.com/g/g-p-project/c/some-other-conversation",
+            },
+        )
 
 
 def test_deterministic_selection_excludes_live_modules() -> None:

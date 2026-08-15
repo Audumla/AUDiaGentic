@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 from audiagentic.components.providers.services.config.provider_config import (
-    load_provider_settings,
     load_provider_config,
+    load_provider_settings,
 )
+
+
 def test_provider_settings_are_loaded_into_runtime_provider_config(tmp_path):
     path = tmp_path / ".audiagentic" / "config" / "providers" / "opencode.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)

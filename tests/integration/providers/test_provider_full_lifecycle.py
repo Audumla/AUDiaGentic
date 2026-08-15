@@ -44,11 +44,11 @@ from audiagentic.components.providers.surfaces.manager import (
     prune_provider_surfaces,
 )
 from audiagentic.foundation.components.loader import register_all_components
+from audiagentic.foundation.features.lifecycle import enable_implementation
 from audiagentic.foundation.lifecycle.components import (
     enable_component,
     install_component,
 )
-from audiagentic.foundation.features.lifecycle import enable_implementation
 from audiagentic.foundation.toolchains.config.managed_config import (
     ManagedConfigSpec,
     resolve_managed_config_path,

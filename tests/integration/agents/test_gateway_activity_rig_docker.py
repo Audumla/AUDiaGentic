@@ -5,7 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.components.agents.contracts.worker_protocol import WorkerActivityEnvelope, WorkerExecutionIdentity
+from audiagentic.components.agents.contracts.worker_protocol import (
+    WorkerActivityEnvelope,
+    WorkerExecutionIdentity,
+)
 from audiagentic.components.agents.gateway.queue.worker import execute_isolated_provider_turn
 from audiagentic.components.providers.providers_api import ProviderExecutionRequest
 
@@ -13,7 +16,9 @@ pytestmark = pytest.mark.integration
 
 
 def test_activity_rig_emits_authenticated_progress_sequence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from audiagentic.components.providers.services.config.provider_config import set_provider_enabled
+    from audiagentic.components.providers.services.config.provider_config import (
+        set_provider_enabled,
+    )
     set_provider_enabled(tmp_path, "activity-rig", enabled=True)
     monkeypatch.setenv("AUDIAGENTIC_WORKER_ACTIVITY_SOURCES", "provider-progress,tool-progress,provider-progress")
     monkeypatch.setenv("AUDIAGENTIC_WORKER_ACTIVITY_INTERVAL_SECONDS", "0.1")
@@ -39,7 +44,9 @@ def test_activity_rig_emits_authenticated_progress_sequence(tmp_path: Path, monk
 
 
 def test_activity_rig_stall_after_first_activity_is_observable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from audiagentic.components.providers.services.config.provider_config import set_provider_enabled
+    from audiagentic.components.providers.services.config.provider_config import (
+        set_provider_enabled,
+    )
     set_provider_enabled(tmp_path, "activity-rig", enabled=True)
     monkeypatch.setenv("AUDIAGENTIC_WORKER_ACTIVITY_SOURCES", "provider-progress,tool-progress")
     monkeypatch.setenv("AUDIAGENTIC_WORKER_ACTIVITY_INTERVAL_SECONDS", "0.1")

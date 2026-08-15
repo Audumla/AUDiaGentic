@@ -6,7 +6,6 @@ from typing import Any
 from audiagentic.components.agents.gateway.mapping import first_present
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
-
 _UNLIMITED = {"unlimited", "none", "null", "infinite", "infinity"}
 
 

@@ -87,8 +87,8 @@ class ChatSnapshot:
     def observe(
         self,
         *,
-        baseline: "ChatSnapshot | None" = None,
-        previous: "ChatSnapshot | None" = None,
+        baseline: ChatSnapshot | None = None,
+        previous: ChatSnapshot | None = None,
     ) -> PageObservation:
         """Classify one atomic snapshot from explicit, bounded evidence."""
         baseline = baseline or self

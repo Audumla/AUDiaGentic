@@ -11,11 +11,11 @@ from urllib.request import Request, urlopen
 
 import pytest
 
+from audiagentic.components.agents.gateway.application import InProcessGatewayApplication
 from audiagentic.components.agents.gateway.client import (
     get_gateway_client,
     reset_gateway_client,
 )
-from audiagentic.components.agents.gateway.application import InProcessGatewayApplication
 from audiagentic.components.agents.gateway.remote_client import (
     StandaloneGatewayClient,
     load_auth_token,

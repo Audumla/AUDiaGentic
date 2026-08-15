@@ -22,8 +22,8 @@ from audiagentic.components.providers.adapters.gpt_auto.cdp.cdp_browser import (
 )
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
-    GptAutoCdpBrowserController,
     _SNAPSHOT_FN,
+    GptAutoCdpBrowserController,
 )
 
 from .test_greenfield_config_urls import valid_config

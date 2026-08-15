@@ -12,7 +12,6 @@ import shutil
 from pathlib import Path
 
 
-
 def materialize_model_config_path(project_root: Path, agent_runtime: Path | None) -> Path:
     """Pi launches read models from the isolated agent runtime."""
     from audiagentic.foundation.paths.home import global_harness_runtime

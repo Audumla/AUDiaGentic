@@ -17,7 +17,10 @@ from audiagentic.foundation.transports.agent_session import (
     TransportObservation,
     TransportObservationKind,
 )
-from audiagentic.foundation.transports.session_binding import ProviderSessionBindingUpdate, ProviderSessionRef
+from audiagentic.foundation.transports.session_binding import (
+    ProviderSessionBindingUpdate,
+    ProviderSessionRef,
+)
 from audiagentic.foundation.workflow import TransitionConfig, TransitionEngine
 
 from .chat import ChatState, PersistentChat
