@@ -57,6 +57,7 @@ from audiagentic.foundation.transports.session_surface import (
     SessionMappingFacts,
     SessionOwnershipMode,
     SessionSurfaceRef,
+    SurfaceResolutionOutcome,
     SurfaceValidation,
     ValidationEvidence,
 )
@@ -181,6 +182,7 @@ def _unsupported_snapshot(
     reason: str,
     *,
     requested_version: str | None = None,
+    outcome: SurfaceResolutionOutcome = SurfaceResolutionOutcome.UNSUPPORTED,
 ) -> ResolvedSessionSurface:
     """Build an unsupported ResolvedSessionSurface.
 
@@ -199,6 +201,8 @@ def _unsupported_snapshot(
         identity=SessionIdentityCapabilities(),
         validation=SurfaceValidation(
             evidence=ValidationEvidence(validated=False),
+            outcome=outcome,
+            reason=reason,
         ),
     )
 
@@ -312,7 +316,7 @@ def _select_declaration(
         # Final compatibility check for the selected declaration.
         if installed_version is not None:
             result = _version_satisfies(installed_version, decl.version_constraint)
-            if result == False:  # noqa: F632
+            if result is False:
                 return None, "version-mismatch"
         return decl, requested_version
 
@@ -371,6 +375,12 @@ def _build_resolved_surface(
         validation=SurfaceValidation(
             evidence=evidence,
             platforms=platforms,
+            outcome=(
+                SurfaceResolutionOutcome.SUPPORTED
+                if evidence.validated
+                else SurfaceResolutionOutcome.UNPROVEN
+            ),
+            reason="" if evidence.validated else "missing-validation-evidence",
         ),
     )
 
@@ -450,6 +460,7 @@ def resolve_session_surface(
             surface_hint.surface_id,
             "unknown-provider",
             requested_version=surface_hint.version_hint,
+            outcome=SurfaceResolutionOutcome.UNAVAILABLE,
         )
 
     # ── 2. Disabled provider ───────────────────────────────────────
@@ -463,6 +474,7 @@ def resolve_session_surface(
             surface_hint.surface_id,
             "disabled-provider",
             requested_version=surface_hint.version_hint,
+            outcome=SurfaceResolutionOutcome.UNAVAILABLE,
         )
 
     # ── 3. Discover installed version (Fix 2) ──────────────────────
@@ -520,6 +532,7 @@ def resolve_session_surface(
                 surface_hint.surface_id,
                 "no-inventory-proof",
                 requested_version=declaration.version_constraint,
+                outcome=SurfaceResolutionOutcome.UNPROVEN,
             )
 
     # ── 8. Missing adapter factory (existence check only) ──────────

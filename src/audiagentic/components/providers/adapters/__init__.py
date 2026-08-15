@@ -15,7 +15,7 @@ from types import ModuleType
 from ..descriptors.loader import (
     get_load_errors,
     get_providers_config_dir,
-    load_providers_from_directory,
+    load_providers_strict,
 )
 from ..descriptors.registry import register
 
@@ -92,7 +92,7 @@ def load_providers() -> None:
 
     # Load descriptors from YAML
     config_dir = get_providers_config_dir()
-    providers = load_providers_from_directory(config_dir)
+    providers = load_providers_strict(config_dir)
 
     # Register each provider descriptor + any descriptor-driven surfaces
     for descriptor in providers.values():

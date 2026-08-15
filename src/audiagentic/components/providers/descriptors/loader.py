@@ -832,18 +832,12 @@ def load_provider_descriptor(path: Path) -> ProviderDescriptor:
     return load_descriptor(path, PROVIDER_SPEC)
 
 
-def load_providers_from_directory(directory: Path) -> dict[str, ProviderDescriptor]:
-    """Load all provider descriptors from a YAML directory.
+def _load_providers_from_directory_diagnostic(directory: Path) -> dict[str, ProviderDescriptor]:
+    """Load descriptors while retaining every malformed entry as diagnostics.
 
     Invalid descriptors are skipped with WARNING-level logging; they are
     recorded in :data:`_load_errors` and remain visible via
     :func:`get_load_errors` for operator inspection (e.g. ``gateway_overview``).
-
-    Args:
-        directory: Path to directory containing provider YAML files.
-
-    Returns:
-        Dict mapping provider_id to ProviderDescriptor (partial on error).
     """
     providers: dict[str, ProviderDescriptor] = {}
     for path in iter_descriptor_files(directory):
@@ -867,6 +861,52 @@ def load_providers_from_directory(directory: Path) -> dict[str, ProviderDescript
             )
         providers[descriptor.provider_id] = descriptor
     return providers
+
+
+def load_providers_diagnostic(directory: Path) -> dict[str, ProviderDescriptor]:
+    """Return the valid subset of descriptors and retain malformed entries.
+
+    This is intentionally the tolerant path for doctor/status/catalogue
+    callers.  Execution and admission must use :func:`load_providers_strict`.
+    """
+    clear_load_errors()
+    return _load_providers_from_directory_diagnostic(directory)
+
+
+def load_providers_strict(directory: Path) -> dict[str, ProviderDescriptor]:
+    """Load the complete configured descriptor set or fail closed.
+
+    A partial descriptor collection is unsafe for authoritative execution:
+    it can make a configured provider appear absent.  The original parser
+    exception is chained for operator diagnostics while the public error keeps
+    only bounded descriptor names and counts.
+    """
+    providers = load_providers_diagnostic(directory)
+    if _load_errors:
+        failed = [path.name for path, _ in _load_errors]
+        first_error = _load_errors[0][1]
+        raise AudiaGenticError(
+            code="VAL-PCAP-013",
+            kind="providers",
+            message="authoritative provider descriptor load failed",
+            details={
+                "directory": str(directory),
+                "failed-descriptors": failed,
+                "loaded-count": len(providers),
+            },
+        ) from first_error
+    return providers
+
+
+def load_providers_from_directory(directory: Path) -> dict[str, ProviderDescriptor]:
+    """Load provider descriptors using the diagnostic/tolerant semantics.
+
+    New authoritative callers should name their intent with
+    :func:`load_providers_strict`; this function remains the explicit
+    diagnostic entry point used by existing inspection surfaces during the
+    migration.
+    """
+    return load_providers_diagnostic(directory)
 
 
 def get_load_errors() -> list[tuple[Path, Exception]]:

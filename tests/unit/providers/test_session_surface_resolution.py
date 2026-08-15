@@ -40,6 +40,7 @@ from audiagentic.foundation.transports.session_surface import (
     SessionIdentityOperation,
     SessionMappingFacts,
     SessionOwnershipMode,
+    SurfaceResolutionOutcome,
     ValidationEvidence,
 )
 
@@ -643,6 +644,8 @@ class TestDisabledProvider:
         hint = SurfaceHint(surface_id="acp")
         result = resolve_session_surface(tmp_path, "disabled-prov", hint)
         assert not result.validation.evidence.validated
+        assert result.validation.outcome is SurfaceResolutionOutcome.UNAVAILABLE
+        assert result.validation.reason == "disabled-provider"
 
 
 # ── Unknown provider ────────────────────────────────────────────────────────
@@ -655,6 +658,8 @@ class TestUnknownProvider:
         hint = SurfaceHint(surface_id="acp")
         result = resolve_session_surface(tmp_path, "nonexistent-provider", hint)
         assert not result.validation.evidence.validated
+        assert result.validation.outcome is SurfaceResolutionOutcome.UNAVAILABLE
+        assert result.validation.reason == "unknown-provider"
 
 
 # ── No surface id match ─────────────────────────────────────────────────────
@@ -667,6 +672,8 @@ class TestNoSurfaceIdMatch:
         hint = SurfaceHint(surface_id="nonexistent")
         result = resolve_session_surface(tmp_path, "test-provider", hint)
         assert not result.validation.evidence.validated
+        assert result.validation.outcome is SurfaceResolutionOutcome.UNSUPPORTED
+        assert result.validation.reason == "no-surface-id-match"
 
 
 # ── Blocked declaration ─────────────────────────────────────────────────────

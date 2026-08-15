@@ -151,6 +151,7 @@ VAL-PCAP-009: "Provider capability descriptor validation error. Check the descri
 VAL-PCAP-010: "Provider capability automation validation error. Check the automation capability."
 VAL-PCAP-011: "Session-surface declaration validation error. Check surface_id, version_constraint, and all enum fields."
 VAL-PCAP-012: "Unknown managed-config transport. Use a subset of [stdio, http]; the value declares which entry shapes the adapter reader/writer implement."
+VAL-PCAP-013: "Authoritative provider descriptor loading failed. Repair every listed provider descriptor before execution or admission; diagnostic/status inspection may still report the valid subset."
 IO-DESC-001: "Failed to read provider descriptor file. Check the path and file format."
 VAL-DESC-003: "Required field missing from provider descriptor YAML. Check the descriptor schema."
 VAL-DESC-004: "Unknown top-level key not registered on the spec. Remove or register the key."
