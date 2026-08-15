@@ -986,6 +986,45 @@ def test_read_public_status_reconciles_pending_session_checkpoint(
     assert status["provider-turn-pending"] is True
 
 
+def test_gpt_auto_error_projection_preserves_safe_recovery_evidence(
+    tmp_path: Path,
+) -> None:
+    """GPT-auto failures expose the reason needed for a safe next action."""
+    err = AudiaGenticError(
+        code="EXT-GPTAUTO-004",
+        kind="providers",
+        message="gpt-auto could not reconcile the previous turn",
+        details={
+            "failure-reason": "unresolved-turn-not-reconciled",
+            "recovery-reason": "prompt-text-digest-ambiguous",
+            "recovery-details": {
+                "matching-user-count": 2,
+                "expected-prompt-text": "must not be exposed",
+            },
+            "suggestion": "resume the same session after the provider is idle",
+            "cause-message": "must not be exposed",
+        },
+    )
+
+    record = store.build_record(execution_profile_id="gpt-auto", prompt_body="review")
+    store.write_record(tmp_path, record)
+    store.transition_record(tmp_path, record["request-id"], "running")
+    updated = store.transition_record(
+        tmp_path,
+        record["request-id"],
+        "failed",
+        updates={"error": err},
+    )
+
+    assert updated["error"]["details"] == {
+        "failure-reason": "unresolved-turn-not-reconciled",
+        "recovery-reason": "prompt-text-digest-ambiguous",
+        "recovery-details": {"matching-user-count": 2},
+        "suggestion": "resume the same session after the provider is idle",
+    }
+    assert "must not be exposed" not in str(updated["error"])
+
+
 # ── SH21 RV769: private worker diagnostic evidence ───────────────────────
 
 def test_sh21_rv769_int_agw_076_persists_private_worker_evidence(
