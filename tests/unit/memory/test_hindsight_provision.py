@@ -5,8 +5,6 @@ orchestration over providers_api with no matrix, factory, or recipe registry.
 """
 from __future__ import annotations
 
-import json
-
 import audiagentic.components.providers  # noqa: F401 — register provider descriptors
 from audiagentic.components.memory.hindsight import provision as prov
 from audiagentic.components.memory.hindsight.export import HindsightBackendConfig

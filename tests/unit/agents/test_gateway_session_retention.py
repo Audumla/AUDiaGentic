@@ -8,8 +8,8 @@ from audiagentic.components.agents.gateway.session.root_registry import (
 )
 from audiagentic.components.agents.gateway.session.sessions_store import (
     build_session_record,
-    record_session_turn,
     read_session_record,
+    record_session_turn,
     update_provider_metadata,
     write_session_record,
 )

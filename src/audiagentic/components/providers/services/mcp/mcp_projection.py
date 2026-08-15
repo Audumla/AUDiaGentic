@@ -11,8 +11,8 @@ from audiagentic.foundation.mcp.component_builder import (
 
 from ...descriptors.registry import all_descriptors
 from ..config.provider_config import is_provider_enabled
-from .mcp import sync_managed_provider_mcp_subset
 from .managed_mcp_registry import load_managed_mcp_registry
+from .mcp import sync_managed_provider_mcp_subset
 
 
 def sync_component_mcp_to_providers(

@@ -170,13 +170,20 @@ def build_gpt_auto_session_transport(
     project_url = str(project_url_value) if project_url_value else None
     chat_url = metadata.get("chat-url")
     if resume_provider_ref:
-        if not isinstance(chat_url, str) or not url_matches_provider_session(
-            chat_url, resume_provider_ref
-        ):
-            raise RuntimeError(
-                "gpt-auto resume requires a matching durable chat-url and provider ref"
-            )
-        chat_url = canonical_chat_url(chat_url)
+        if isinstance(chat_url, str) and chat_url:
+            if not url_matches_provider_session(chat_url, resume_provider_ref):
+                raise RuntimeError(
+                    "gpt-auto resume requires a matching durable chat-url and provider ref"
+                )
+            chat_url = canonical_chat_url(chat_url)
+        else:
+            # A missing chat-url does not mean the conversation is lost --
+            # PersistentChat.open()/reconcile() can still locate the live tab
+            # by provider_session_id via find_conversation_page, or recreate
+            # it once a URL is recovered from the provider.  Failing here
+            # before that browser-based reconciliation runs turns transient
+            # metadata staleness into a hard, unrecoverable resume failure.
+            chat_url = None
     chat = PersistentChat(
         ag_session_id=ag_session_id,
         project_name=_active_project_name(project_root),

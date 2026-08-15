@@ -17,6 +17,8 @@ import pytest
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.acp import (
     AcpAgentSessionTransport as _AcpAgentSessionTransport,
+)
+from audiagentic.foundation.transports.acp import (
     AcpEvent,
     AcpLaunch,
     _map_acp_event_to_observation,
