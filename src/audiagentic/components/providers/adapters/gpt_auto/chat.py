@@ -132,8 +132,8 @@ class PersistentChat:
             for key, value in (
                 ("unresolved-baseline-user-id", baseline.latest_user_id),
                 ("unresolved-baseline-assistant-id", baseline.latest_assistant_id),
-                ("unresolved-baseline-user-count", baseline.user_message_count),
-                ("unresolved-baseline-assistant-count", baseline.assistant_message_count),
+                ("unresolved-baseline-user-count", baseline.user_count),
+                ("unresolved-baseline-assistant-count", baseline.assistant_count),
             ):
                 if value is not None and value != "":
                     self._checkpoint_metadata[key] = value
