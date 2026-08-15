@@ -4,8 +4,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import yaml
 import pytest
+import yaml
 
 from audiagentic.components.agents.configuration.contracts import AgentsConfigDocument
 from audiagentic.components.agents.configuration.repository import AgentsConfigRepository
@@ -87,7 +87,7 @@ def test_replaying_event_reuses_one_work_and_gateway_admission(tmp_path: Path) -
 
 def test_observer_without_context_fails_closed_without_legacy_job(tmp_path: Path) -> None:
     from audiagentic.components.agent_jobs.event_observer import EventObserver
-    from audiagentic.foundation.event.event_bus import get_bus, reset_bus
+    from audiagentic.foundation.event.event_bus import reset_bus
 
     _seed(tmp_path)
     _write_trigger(tmp_path)
