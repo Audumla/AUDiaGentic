@@ -659,6 +659,48 @@ async def test_find_conversation_page_restores_window_before_selecting_retained_
 
 
 @pytest.mark.asyncio
+async def test_find_conversation_page_does_not_trust_recycled_target_id(
+    monkeypatch,
+) -> None:
+    """A recycled target must not bind a different ChatGPT conversation."""
+    runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
+    runtime.state = ProviderState.AVAILABLE
+
+    async def ensure_anchor() -> str:
+        runtime._dedicated_window_id = 7
+        return "anchor"
+
+    class _Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages"
+            return [
+                {
+                    "pageHandle": "recycled",
+                    "targetId": "target-retained",
+                    "windowId": 7,
+                    "url": "https://chatgpt.com/c/a-different-conversation",
+                },
+                {
+                    "pageHandle": "matching",
+                    "targetId": "target-matching",
+                    "windowId": 7,
+                    "url": "https://chatgpt.com/c/provider-session",
+                },
+            ]
+
+    runtime._bridge = _Bridge()  # type: ignore[assignment]
+    monkeypatch.setattr(runtime, "ensure_dedicated_window_anchor", ensure_anchor)
+
+    page = await runtime.find_conversation_page(
+        "provider-session",
+        preferred_target_id="target-retained",
+    )
+
+    assert page is not None
+    assert page["pageHandle"] == "matching"
+
+
+@pytest.mark.asyncio
 async def test_reconcile_proves_quiescence_before_ready(monkeypatch) -> None:
     config = GptAutoConfig.from_dict(valid_config())
     page = {

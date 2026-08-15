@@ -331,6 +331,10 @@ class GptAutoProviderRuntime:
                     for page in pages
                     if str(page.get("targetId") or "") == preferred_target_id
                     and self.page_belongs_to_dedicated_window(page)
+                    and url_matches_provider_session(
+                        str(page.get("url") or ""),
+                        provider_session_id,
+                    )
                 ),
                 None,
             )
