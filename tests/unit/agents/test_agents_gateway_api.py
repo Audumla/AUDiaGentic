@@ -115,7 +115,7 @@ def test_public_status_contains_canonical_agent_status(tmp_path: Path, monkeypat
     result = gateway.run_execution_request(tmp_path, prompt_body="hi")
     status = gateway.get_execution_request(tmp_path, result["request-id"])
 
-    assert status["response-version"] == 2
+    assert status["response-version"] == 3
     assert status["agent-status"]["scope"] == "execution-request"
     assert status["agent-status"]["lifecycle"] == "terminal"
     assert status["agent-status"]["outcome"] == "success"

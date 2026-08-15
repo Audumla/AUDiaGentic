@@ -948,6 +948,20 @@ def test_public_status_projection_excludes_submission_secrets() -> None:
     assert "metadata" in status
 
 
+def test_public_status_projects_only_safe_provider_turn_state() -> None:
+    record = store.build_record(execution_profile_id="gpt-auto", prompt_body="review")
+    record["provider-metadata"] = {
+        "unresolved-turn-pending": True,
+        "chat-url": "https://chatgpt.com/private-chat",
+    }
+
+    status = store.project_public_status(record)
+
+    assert status["provider-turn-pending"] is True
+    assert "provider-metadata" not in status
+    assert "private-chat" not in str(status)
+
+
 # ── SH21 RV769: private worker diagnostic evidence ───────────────────────
 
 def test_sh21_rv769_int_agw_076_persists_private_worker_evidence(

@@ -555,8 +555,9 @@ def submit_execution_request(
     return record
 
 
-# AS56 — public response schema version.
-_PUBLIC_RESPONSE_VERSION: int = 2
+# AS56 — public response schema version.  Version 3 makes the explicit
+# progress-disposition/interruptibility vocabulary part of the contract.
+_PUBLIC_RESPONSE_VERSION: int = 3
 
 
 def get_execution_request(project_root: Path, request_id: str) -> dict[str, Any]:

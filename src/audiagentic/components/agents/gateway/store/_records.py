@@ -447,6 +447,15 @@ def project_public_status(
         "resolved-instance-ids", "resolved-queue-limits", "admission-policy-digest",
     )
     status = {field: record.get(field) for field in visible}
+    # Provider metadata is deliberately not exposed wholesale.  This one
+    # boolean is safe and essential for interpreting a running request:
+    # ``True`` means the provider may still be completing the submitted turn,
+    # not that the request is stalled.
+    provider_metadata = record.get("provider-metadata")
+    if isinstance(provider_metadata, dict):
+        pending = provider_metadata.get("unresolved-turn-pending")
+        if isinstance(pending, bool):
+            status["provider-turn-pending"] = pending
     status["latest-transition"] = latest_transition
     return status
 
