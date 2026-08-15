@@ -219,7 +219,8 @@
       "properties": {
         "code": {"type": "string"},
         "message": {"type": "string"},
-        "kind": {"type": "string"}
+        "kind": {"type": "string"},
+        "details": {"type": "object"}
       },
       "additionalProperties": false
     },
