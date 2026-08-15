@@ -19,8 +19,8 @@ from audiagentic.components.providers.adapters.gpt_auto.runtime import (
     GptAutoProviderRuntime,
     ProviderState,
 )
-from audiagentic.components.providers.adapters.gpt_auto.status.status_page import STATUS_PAGE_URL
 from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatSnapshot
+from audiagentic.components.providers.adapters.gpt_auto.status.status_page import STATUS_PAGE_URL
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 from .test_greenfield_config_urls import valid_config
@@ -117,6 +117,38 @@ def test_completed_resume_message_ids_do_not_imply_unresolved_turn() -> None:
 
     assert chat.unresolved_turn_pending is False
     assert chat.unresolved_metadata()["unresolved-turn-pending"] is False
+
+
+@pytest.mark.asyncio
+async def test_unresolved_checkpoint_persists_snapshot_counts() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    updates = []
+    chat = PersistentChat(
+        ag_session_id="session-checkpoint-counts",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+        checkpoint_sink=updates.append,
+    )
+    baseline = ChatSnapshot(
+        url="https://chatgpt.com/g/g-p-project/c/provider-session",
+        composer_present=True,
+        composer_editable=True,
+        user_count=3,
+        assistant_count=2,
+        latest_assistant_id="assistant-2",
+        latest_user_text="prompt",
+        latest_assistant_text="answer",
+        dom_signals=frozenset(),
+        error_present=False,
+    )
+
+    await chat.persist_unresolved_checkpoint(turn_id="turn-1", baseline=baseline)
+
+    assert updates[-1]["unresolved-baseline-user-count"] == 3
+    assert updates[-1]["unresolved-baseline-assistant-count"] == 2
 
 
 def test_explicit_unresolved_marker_remains_authoritative() -> None:
