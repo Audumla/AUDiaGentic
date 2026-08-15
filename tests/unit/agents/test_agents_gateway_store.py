@@ -962,6 +962,30 @@ def test_public_status_projects_only_safe_provider_turn_state() -> None:
     assert "private-chat" not in str(status)
 
 
+def test_read_public_status_reconciles_pending_session_checkpoint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A live session checkpoint wins when the request snapshot is stale."""
+    record = store.build_record(execution_profile_id="gpt-auto", prompt_body="review")
+    record["session-id"] = "ses_live"
+    record["provider-metadata"] = {"unresolved-turn-pending": False}
+    store.write_record(tmp_path, record)
+
+    from audiagentic.components.agents.gateway.session import sessions_store
+
+    monkeypatch.setattr(
+        sessions_store,
+        "read_session_record",
+        lambda _root, _session_id: {
+            "provider": {"metadata": {"unresolved-turn-pending": True}},
+        },
+    )
+
+    status = store.read_public_status(tmp_path, record["request-id"])
+
+    assert status["provider-turn-pending"] is True
+
+
 # ── SH21 RV769: private worker diagnostic evidence ───────────────────────
 
 def test_sh21_rv769_int_agw_076_persists_private_worker_evidence(
