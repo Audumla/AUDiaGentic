@@ -74,6 +74,49 @@ def test_running_no_session_event_gives_launching(tmp_path: Path) -> None:
     assert projection["stale-progress"] is False
 
 
+def test_unresolved_provider_turn_is_explicitly_wait_only() -> None:
+    record = store.build_record(execution_profile_id="gpt-auto", prompt_body="review")
+    record.update({
+        "state": "running",
+        "worker-id": "worker-1",
+        "watchdog-state": "active",
+        "watchdog-reason": "awaiting-verified-activity",
+        "provider-turn-pending": True,
+    })
+
+    projection = progress_mod.project_request_progress(record)
+
+    assert projection["progress-disposition"] == "processing-unverified"
+    assert projection["interruptibility"] == "not-safe"
+    assert projection["progress-disposition-reason"] == "provider-turn-unresolved-live-attempt"
+    assert projection["provider-turn-pending"] is True
+
+
+def test_activity_lease_diagnostic_is_not_permission_to_interrupt() -> None:
+    record = store.build_record(execution_profile_id="gpt-auto", prompt_body="review")
+    record.update({
+        "state": "running",
+        "worker-id": "worker-1",
+        "watchdog-state": "intervention",
+        "watchdog-reason": "activity-lease-expired-diagnostic",
+    })
+
+    projection = progress_mod.project_request_progress(record)
+
+    assert projection["progress-disposition"] == "stalled-diagnostic"
+    assert projection["interruptibility"] == "diagnostic-only"
+
+
+def test_cancel_requested_running_request_is_not_terminal() -> None:
+    record = store.build_record(execution_profile_id="gpt-auto", prompt_body="review")
+    record.update({"state": "running", "worker-id": "worker-1", "cancel-requested": True})
+
+    projection = progress_mod.project_request_progress(record)
+
+    assert projection["progress-disposition"] == "cancellation-requested"
+    assert projection["interruptibility"] == "not-safe"
+
+
 def test_stale_progress_when_no_evidence_past_threshold(tmp_path: Path) -> None:
     record = store.build_record(execution_profile_id="default", prompt_body="hello")
     record["state"] = "running"
@@ -412,6 +455,9 @@ def test_all_keys_present() -> None:
         "latest-session-event",
         "stale-progress",
         "stale-reason",
+        "progress-disposition",
+        "interruptibility",
+        "progress-disposition-reason",
     }
     assert set(projection.keys()) == expected_keys
 
@@ -872,6 +918,9 @@ def test_project_request_progress_without_summary_is_backward_compat() -> None:
         "latest-session-event",
         "stale-progress",
         "stale-reason",
+        "progress-disposition",
+        "interruptibility",
+        "progress-disposition-reason",
     }
     assert set(projection.keys()) == expected_keys
 

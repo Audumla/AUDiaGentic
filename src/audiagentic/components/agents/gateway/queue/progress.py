@@ -6,9 +6,85 @@ from a persisted request record and an optional latest session event.
 from __future__ import annotations
 
 import datetime
+from enum import Enum
 from typing import Any
 
 STALE_PROGRESS_THRESHOLD_SECONDS = 300
+
+
+class ProgressDisposition(str, Enum):
+    """Operator-facing meaning of a non-terminal request observation.
+
+    These are *diagnostic dispositions*, not request lifecycle states.  In
+    particular, ``PROCESSING_UNVERIFIED`` means that the worker is still
+    owned and the provider may be quiet; it must never be interpreted as a
+    stall or permission to interrupt.
+    """
+
+    QUEUED = "queued"
+    DISPATCHING = "dispatching"
+    PROCESSING_UNVERIFIED = "processing-unverified"
+    PROCESSING_VERIFIED = "processing-verified"
+    CANCELLATION_REQUESTED = "cancellation-requested"
+    STALLED_DIAGNOSTIC = "stalled-diagnostic"
+    TERMINAL = "terminal"
+    UNKNOWN = "unknown"
+
+
+class Interruptibility(str, Enum):
+    """What an observer may safely do with the current request."""
+
+    ALLOWED = "allowed"
+    NOT_SAFE = "not-safe"
+    DIAGNOSTIC_ONLY = "diagnostic-only"
+    NOT_APPLICABLE = "not-applicable"
+
+
+def _disposition(record: dict[str, Any]) -> tuple[ProgressDisposition, Interruptibility, str]:
+    """Derive an explicit operator disposition from durable evidence.
+
+    Absence of provider activity is intentionally not a stall signal.  A
+    running owned attempt without a configured watchdog lease remains
+    ``PROCESSING_UNVERIFIED`` and is not safe to interrupt.
+    """
+    state = record.get("state")
+    if isinstance(state, str) and state in _TERMINAL_STATE_TO_PHASE:
+        return ProgressDisposition.TERMINAL, Interruptibility.NOT_APPLICABLE, "terminal-request-state"
+    if state == "queued":
+        return ProgressDisposition.QUEUED, Interruptibility.ALLOWED, "request-awaiting-dispatch"
+    if state != "running":
+        return ProgressDisposition.UNKNOWN, Interruptibility.NOT_SAFE, "request-state-unrecognized"
+    if record.get("cancel-requested"):
+        return (
+            ProgressDisposition.CANCELLATION_REQUESTED,
+            Interruptibility.NOT_SAFE,
+            "cancellation-requested-but-not-terminal",
+        )
+    if record.get("watchdog-state") == "intervention":
+        return (
+            ProgressDisposition.STALLED_DIAGNOSTIC,
+            Interruptibility.DIAGNOSTIC_ONLY,
+            "activity-lease-expired-diagnostic-only",
+        )
+    if record.get("provider-turn-pending") is True:
+        return (
+            ProgressDisposition.PROCESSING_UNVERIFIED,
+            Interruptibility.NOT_SAFE,
+            "provider-turn-unresolved-live-attempt",
+        )
+    if record.get("activity-sequence", 0) or record.get("watchdog-reason") == "verified-activity-renewed":
+        return (
+            ProgressDisposition.PROCESSING_VERIFIED,
+            Interruptibility.NOT_SAFE,
+            "verified-provider-activity",
+        )
+    if record.get("worker-id"):
+        return (
+            ProgressDisposition.PROCESSING_UNVERIFIED,
+            Interruptibility.NOT_SAFE,
+            "owned-attempt-awaiting-provider-evidence",
+        )
+    return ProgressDisposition.DISPATCHING, Interruptibility.NOT_SAFE, "running-without-worker-evidence"
 
 _PHASE_VOCABULARY = frozenset({
     "queued", "claimed", "launching", "prompt-delivered",
@@ -216,6 +292,8 @@ def project_request_progress(
                 stale_progress = True
                 stale_reason = "no-turn-evidence-past-threshold"
 
+    disposition, interruptibility, disposition_reason = _disposition(record)
+
     result: dict[str, Any] = {
         "phase": phase,
         "running-seconds": running_seconds,
@@ -225,7 +303,14 @@ def project_request_progress(
         "latest-session-event": safe_session_event,
         "stale-progress": stale_progress,
         "stale-reason": stale_reason,
+        "progress-disposition": disposition.value,
+        "interruptibility": interruptibility.value,
+        "progress-disposition-reason": disposition_reason,
     }
+
+    provider_turn_pending = record.get("provider-turn-pending")
+    if isinstance(provider_turn_pending, bool):
+        result["provider-turn-pending"] = provider_turn_pending
 
     # SH15: include richer progress-summary fields when available
     if progress_summary is not None and isinstance(progress_summary, dict):
