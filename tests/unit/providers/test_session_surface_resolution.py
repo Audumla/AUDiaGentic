@@ -405,6 +405,35 @@ class TestInstalledVersionDiscovery:
         result = resolve_session_surface(tmp_path, "no-probe", hint)
         assert result.ref.resolved_version == ">=1.0"
 
+    def test_probe_failure_is_unavailable_not_unknown_version(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        descriptor = _fake_descriptor(
+            "probe-failure",
+            session_surfaces=(_fake_surface_decl(surface_id="acp"),),
+        )
+        register(descriptor)
+        set_provider_enabled(tmp_path, "probe-failure", enabled=True)
+
+        def fail_probe(_descriptor: Any) -> str | None:
+            from audiagentic.components.providers.services.session import (
+                session_surface_resolution,
+            )
+
+            raise session_surface_resolution._SurfaceResolutionFailure(
+                "version-probe-failed"
+            )
+
+        monkeypatch.setattr(
+            "audiagentic.components.providers.services.session.session_surface_resolution._probe_installed_version",
+            fail_probe,
+        )
+
+        result = resolve_session_surface(tmp_path, "probe-failure", SurfaceHint(surface_id="acp"))
+
+        assert result.validation.outcome is SurfaceResolutionOutcome.UNAVAILABLE
+        assert result.validation.reason == "version-probe-failed"
+
 
 # ── Fix 3: Exact normalized target-triple platform matching ─────────────────
 
@@ -800,6 +829,34 @@ class TestMissingAdapterFactory:
         hint = SurfaceHint(surface_id="acp")
         result = resolve_session_surface(tmp_path, "no-adapter-prov", hint)
         assert "missing-adapter-factory" not in (result.ref.resolved_version or "")
+
+    def test_adapter_resolution_failure_is_unavailable(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        descriptor = _fake_descriptor(
+            "adapter-failure-prov",
+            session_surfaces=(_fake_surface_decl(adapter_ref="test.module:factory"),),
+        )
+        register(descriptor)
+        set_provider_enabled(tmp_path, "adapter-failure-prov", enabled=True)
+
+        from audiagentic.components.providers.services.session import session_surface_resolution
+
+        def fail_resolve(_ref: str) -> bool:
+            raise session_surface_resolution._SurfaceResolutionFailure(
+                "adapter-resolution-failed"
+            )
+
+        monkeypatch.setattr(
+            session_surface_resolution, "_adapter_factory_exists", fail_resolve
+        )
+
+        result = resolve_session_surface(
+            tmp_path, "adapter-failure-prov", SurfaceHint(surface_id="acp")
+        )
+
+        assert result.validation.outcome is SurfaceResolutionOutcome.UNAVAILABLE
+        assert result.validation.reason == "adapter-resolution-failed"
 
 
 # ── Immutable / no native value result ──────────────────────────────────────
