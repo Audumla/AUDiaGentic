@@ -6,6 +6,8 @@ objects field-by-field.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from audiagentic.components.providers.descriptors.base import (
@@ -16,7 +18,9 @@ from audiagentic.components.providers.descriptors.loader import (
     get_providers_config_dir,
     load_provider_descriptor,
     load_providers_from_directory,
+    load_providers_strict,
 )
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.mcp.json_format import (
     read_mcp_json,
     remove_mcp_json,
@@ -442,3 +446,34 @@ class TestLoaderResilience:
             assert "display_name" in errors[0][1]
         finally:
             clear_load_errors()
+
+    def test_strict_loader_fails_closed_with_bounded_details(self, tmp_path) -> None:
+        (tmp_path / "valid.yaml").write_text(self.VALID_YAML, encoding="utf-8")
+        (tmp_path / "invalid.yaml").write_text(self.INVALID_YAML, encoding="utf-8")
+
+        with pytest.raises(AudiaGenticError) as exc_info:
+            load_providers_strict(tmp_path)
+
+        error = exc_info.value
+        assert error.code == "VAL-PCAP-013"
+        assert error.details == {
+            "directory": str(tmp_path),
+            "failed-descriptors": ["invalid.yaml"],
+            "loaded-count": 1,
+        }
+        assert error.__cause__ is not None
+
+    def test_diagnostic_loader_clears_stale_failures(self, tmp_path) -> None:
+        from audiagentic.components.providers.descriptors.loader import (
+            get_load_errors,
+            load_providers_diagnostic,
+        )
+
+        (tmp_path / "invalid.yaml").write_text(self.INVALID_YAML, encoding="utf-8")
+        load_providers_diagnostic(tmp_path)
+        assert len(get_load_errors()) == 1
+
+        (tmp_path / "invalid.yaml").unlink()
+        (tmp_path / "valid.yaml").write_text(self.VALID_YAML, encoding="utf-8")
+        assert load_providers_diagnostic(tmp_path)
+        assert get_load_errors() == []
