@@ -15,6 +15,42 @@ from audiagentic.foundation.workflow import EvidencePolicy
 
 _DEFAULTS_PATH = Path(__file__).with_name("defaults.yaml")
 
+# GP21: contract-version is the real schema contract, distinct from the
+# resolved GptAutoConfig.contract_version this module always produces.
+# v1 predates GP07's two submission-proof fields; v2 requires them
+# explicitly. migrate_v1_to_v2() lets an older project config keep working
+# (filling sane defaults) instead of hard-failing the whole shared gateway
+# the moment gpt_auto's own schema grows -- the exact bigcherry incident
+# GP09 was raised about.
+CURRENT_CONTRACT_VERSION = "v2"
+SUPPORTED_CONTRACT_VERSIONS = ("v1", "v2")
+_V1_SUBMISSION_PROOF_DEFAULTS = {
+    "submission-proof-progress-lease-seconds": 300,
+    "submission-proof-absolute-ceiling-seconds": 900,
+}
+
+
+def migrate_v1_to_v2(settings: dict[str, Any]) -> dict[str, Any]:
+    """Fill v2's two new required turn fields with v1-era defaults if absent.
+
+    Only fills keys that are genuinely missing -- an explicit v1 config that
+    already happens to set these (unusual, but not invalid) keeps its own
+    values rather than being silently overridden.
+    """
+    turn_data = settings.get("turn")
+    if not isinstance(turn_data, dict):
+        return settings
+    missing = {
+        key: value
+        for key, value in _V1_SUBMISSION_PROOF_DEFAULTS.items()
+        if key not in turn_data
+    }
+    if not missing:
+        return settings
+    result = dict(settings)
+    result["turn"] = {**turn_data, **missing}
+    return result
+
 
 class ExistingBrowserPolicy(StrEnum):
     FAIL = "fail"
@@ -125,8 +161,14 @@ class GptAutoConfig:
             "settings",
             required={"contract-version", "browser", "cdp", "chat", "turn", "workflow"},
         )
-        if settings.get("contract-version") != "v1":
-            _invalid("contract-version must be v1")
+        declared_version = settings.get("contract-version")
+        if declared_version not in SUPPORTED_CONTRACT_VERSIONS:
+            _invalid(
+                f"contract-version must be one of {SUPPORTED_CONTRACT_VERSIONS}, "
+                f"got {declared_version!r}"
+            )
+        if declared_version == "v1":
+            settings = migrate_v1_to_v2(settings)
         project_url = (
             _chatgpt_url(settings.get("project-url"))
             if settings.get("project-url") is not None
@@ -243,7 +285,7 @@ class GptAutoConfig:
             ),
         )
         workflow = _workflow_config(_mapping(settings, "workflow"))
-        return cls("v1", project_url, browser, cdp, chat, turn, workflow)
+        return cls(CURRENT_CONTRACT_VERSION, project_url, browser, cdp, chat, turn, workflow)
 
     @classmethod
     def from_project_dict(cls, data: dict[str, Any]) -> GptAutoConfig:
