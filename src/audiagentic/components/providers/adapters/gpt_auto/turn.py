@@ -153,7 +153,7 @@ class _ResponseCompletionPolicy:
     @property
     def soft_grace_cap_seconds(self) -> float:
         stall = self.turn_config.response_stall_timeout_seconds
-        return (stall / 5) if stall else 60.0
+        return (stall / 5) if stall else float("inf")
 
     @property
     def candidate_stability_window_seconds(self) -> float:
@@ -162,12 +162,14 @@ class _ResponseCompletionPolicy:
     @property
     def candidate_max_verification_window_seconds(self) -> float:
         stall = self.turn_config.response_stall_timeout_seconds
-        return max(self.turn_config.response_stability_seconds * 5, stall if stall else 60.0)
+        if not stall:
+            return float("inf")
+        return max(self.turn_config.response_stability_seconds * 5, stall)
 
     @property
     def suspect_grace_seconds(self) -> float:
         stall = self.turn_config.response_stall_timeout_seconds
-        return (stall / 5) if stall else 60.0
+        return (stall / 5) if stall else float("inf")
 
     @property
     def absolute_ceiling_seconds(self) -> float:
