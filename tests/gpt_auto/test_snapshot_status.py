@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from audiagentic.components.providers.adapters.gpt_auto.snapshot import (
+    ChatMessageRef,
     ChatSnapshot,
     PageObservationState,
 )
@@ -121,6 +122,52 @@ def test_bridge_snapshot_preserves_ordered_assistant_message_sequence() -> None:
 
     assert snapshot.assistant_message_ids == ("answer-1", "answer-2")
     assert snapshot.assistant_message_texts == ("first answer", "second answer")
+
+
+def test_bridge_snapshot_preserves_true_dom_order_across_roles() -> None:
+    """GP08 slice 1: message_refs must preserve cross-role interleaving --
+    the two legacy per-role arrays alone cannot distinguish 'assistant then
+    a foreign user message' from 'foreign user message then assistant',
+    which is exactly the ordering a request-scoped correlation boundary
+    needs to resolve."""
+    snapshot = ChatSnapshot.from_bridge(
+        {
+            "url": "https://chatgpt.com/g/g-p-test/c/c1",
+            "composerPresent": True,
+            "composerEditable": True,
+            "userCount": 2,
+            "assistantCount": 1,
+            "latestUserId": "user-2",
+            "latestAssistantId": "answer-1",
+            "latestUserText": "second user message",
+            "latestAssistantText": "the answer",
+            "messageRefs": [
+                {"role": "user", "messageId": "user-1", "text": "first user message", "sequence": 0},
+                {"role": "assistant", "messageId": "answer-1", "text": "the answer", "sequence": 1},
+                {"role": "user", "messageId": "user-2", "text": "second user message", "sequence": 2},
+            ],
+        }
+    )
+
+    assert snapshot.message_refs == (
+        ChatMessageRef(role="user", message_id="user-1", text="first user message", sequence=0),
+        ChatMessageRef(role="assistant", message_id="answer-1", text="the answer", sequence=1),
+        ChatMessageRef(role="user", message_id="user-2", text="second user message", sequence=2),
+    )
+    # The assistant span ends at sequence 1: anything from sequence 2 onward
+    # belongs to a later, foreign turn, regardless of role classification.
+    assistant_index = next(
+        i for i, ref in enumerate(snapshot.message_refs) if ref.role == "assistant"
+    )
+    boundary_index = next(
+        (
+            i
+            for i, ref in enumerate(snapshot.message_refs)
+            if i > assistant_index and ref.role == "user"
+        ),
+        None,
+    )
+    assert boundary_index == 2
 
 
 def test_bridge_snapshot_defaults_assistant_sequence_to_empty_when_absent() -> None:
