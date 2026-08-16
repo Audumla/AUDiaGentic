@@ -753,6 +753,16 @@ class PersistentChat:
         self.runtime.release_page(self, handle)
         self._lost_during_turn = self.active_turn_id is not None
         self._move(ChatState.RECOVERING)
+        if not self._lost_during_turn:
+            # GP12: an idle chat losing its page (e.g. the user closes the
+            # tab) is not a crash to recover from immediately -- forcing an
+            # unconditional recreate-and-navigate here means the tab can
+            # never actually stay closed.  Mirror GptAutoProviderRuntime
+            # .recover()'s own idle/active distinction: only a turn actively
+            # in flight needs eager reconciliation to avoid losing it. An
+            # idle chat's existing lazy ensure_ready() -> reconcile() path
+            # (see there) already handles recovery on next real use.
+            return
         try:
             pages = await self.runtime.bridge.call("list_pages")
             await self.reconcile(pages)
