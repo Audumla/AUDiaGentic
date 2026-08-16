@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, NoReturn
 from urllib.parse import urlparse
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.io import load_yaml_file
 from audiagentic.foundation.workflow import EvidencePolicy
+
+_DEFAULTS_PATH = Path(__file__).with_name("defaults.yaml")
 
 
 class ExistingBrowserPolicy(StrEnum):
@@ -240,6 +244,44 @@ class GptAutoConfig:
         )
         workflow = _workflow_config(_mapping(settings, "workflow"))
         return cls("v1", project_url, browser, cdp, chat, turn, workflow)
+
+    @classmethod
+    def from_project_dict(cls, data: dict[str, Any]) -> GptAutoConfig:
+        """Resolve a project's sparse settings overlay against packaged defaults.
+
+        GP09/GP20: project config files previously had to restate the full
+        settings schema, including the workflow dom-signals/evidence-policies
+        block that is genuinely shared across every project on this machine
+        (confirmed near-identical across gpt-auto.yaml/gpt-auto-t1.yaml/
+        gpt-auto-t2.yaml by diff, 2026-08-17) -- duplicating it risked exactly
+        the schema-drift incident GP09 was raised about. A project overlay now
+        only needs project-url plus any genuine overrides; everything else is
+        inherited from defaults.yaml.
+        """
+        merged = deep_merge(_load_packaged_defaults(), data)
+        return cls.from_dict(merged)
+
+
+def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge override onto base, returning a new dict.
+
+    A dict value merges key-by-key; any other value (including a list --
+    e.g. dom-signal selectors) is replaced wholesale by override's value,
+    never concatenated. Neither input is mutated.
+    """
+    result = dict(base)
+    for key, value in override.items():
+        existing = result.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            result[key] = deep_merge(existing, value)
+        else:
+            result[key] = value
+    return result
+
+
+@lru_cache(maxsize=1)
+def _load_packaged_defaults() -> dict[str, Any]:
+    return load_yaml_file(_DEFAULTS_PATH)
 
 
 def provider_settings(data: dict[str, Any]) -> dict[str, Any]:
