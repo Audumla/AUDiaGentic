@@ -120,6 +120,60 @@ class _SubmissionProofPolicy:
         return self.turn_config.submission_proof_absolute_ceiling_seconds
 
 
+@dataclass(frozen=True)
+class _ResponseCompletionPolicy:
+    """ObservationPolicy for the response-completion phase (GP07).
+
+    Re-expresses the pre-existing three-timer structure (start/stall/total,
+    already fundamentally sound) through the shared engine instead of a
+    bespoke inline loop -- and closes a real latent hole the old loop had:
+    last_activity_at could be reset by stop-control/streaming/thinking
+    widget transitions alone (response-active's any-of), so a flapping
+    widget could indefinitely renew the stall clock even after stop-control
+    was demoted to advisory for completion detection. Widget transitions
+    are SOFT_LIVENESS here -- bounded grace only, never a real reset. A
+    config value of 0 means "disabled" (matches the prior semantics);
+    mapped to effectively-infinite rather than an instant trigger.
+    """
+
+    turn_config: Any
+
+    @staticmethod
+    def _or_infinite(value: float) -> float:
+        return value if value else float("inf")
+
+    @property
+    def start_bound_seconds(self) -> float:
+        return self._or_infinite(self.turn_config.response_start_timeout_seconds)
+
+    @property
+    def progress_lease_seconds(self) -> float:
+        return self._or_infinite(self.turn_config.response_stall_timeout_seconds)
+
+    @property
+    def soft_grace_cap_seconds(self) -> float:
+        stall = self.turn_config.response_stall_timeout_seconds
+        return (stall / 5) if stall else 60.0
+
+    @property
+    def candidate_stability_window_seconds(self) -> float:
+        return self.turn_config.response_stability_seconds
+
+    @property
+    def candidate_max_verification_window_seconds(self) -> float:
+        stall = self.turn_config.response_stall_timeout_seconds
+        return max(self.turn_config.response_stability_seconds * 5, stall if stall else 60.0)
+
+    @property
+    def suspect_grace_seconds(self) -> float:
+        stall = self.turn_config.response_stall_timeout_seconds
+        return (stall / 5) if stall else 60.0
+
+    @property
+    def absolute_ceiling_seconds(self) -> float:
+        return self._or_infinite(self.turn_config.response_timeout_seconds)
+
+
 class GptAutoTurn:
     def __init__(self, chat: PersistentChat, request: SessionPrompt, sink: ObservationSink) -> None:
         self.chat = chat
@@ -543,17 +597,29 @@ class GptAutoTurn:
             ) from last_observation_error
         return None
 
+    _SOFT_LIVENESS_SIGNALS = frozenset(
+        {"stop-control", "streaming-indicator", "thinking-indicator", "busy-indicator"}
+    )
+    _TERMINAL_WITNESS_SIGNALS = frozenset({"completion-control", "message-finalized"})
+
     async def _await_response(self, baseline: ChatSnapshot, current: ChatSnapshot) -> str | None:
+        """GP07: re-expresses the previously-bespoke start/stall/total timer
+        loop through the shared observation engine. Closes a real latent
+        hole the old loop had: last_activity_at could be reset by
+        stop-control/streaming/thinking widget transitions ALONE
+        (response-active's any-of), so a flapping widget could indefinitely
+        renew the stall clock even after stop-control was demoted to
+        advisory for completion detection itself. Widget transitions are
+        SOFT_LIVENESS now -- bounded grace, never a real reset.
+        """
         loop = asyncio.get_running_loop()
-        started_at = loop.time()
-        last_activity_at = started_at
+        policy = _ResponseCompletionPolicy(self.chat.config.turn)
+        tracker = ObservationTracker(policy=policy, now=loop.time())
         previous = current
-        previous_fingerprint = _fingerprint(current)
         response_started = False
-        stable_text = None
-        stable_since = None
         emitted = False
         last_observation_error: BaseException | None = None
+        final_outcome: ObservationOutcome | None = None
         while True:
             if self.cancel_event.is_set():
                 if self._stop_task is None:
@@ -570,34 +636,13 @@ class GptAutoTurn:
                     "gpt-auto response observation interrupted; awaiting conversation recovery",
                     extra={"turn-id": self.request.turn_id},
                 )
-                now = loop.time()
-                timers = self.chat.config.turn
-                timeout_policy = None
-                if not response_started and timers.response_start_timeout_seconds and now - started_at >= timers.response_start_timeout_seconds:
-                    timeout_policy = "response-start-observation-timeout"
-                elif response_started and timers.response_stall_timeout_seconds and now - last_activity_at >= timers.response_stall_timeout_seconds:
-                    timeout_policy = "response-stall-observation-timeout"
-                elif timers.response_timeout_seconds and now - started_at >= timers.response_timeout_seconds:
-                    timeout_policy = "response-total-observation-timeout"
-                if timeout_policy:
-                    self._move(TurnState.TIMED_OUT)
-                    raise AudiaGenticError(
-                        code="EXT-GPTAUTO-004",
-                        kind="providers",
-                        message=(
-                            "gpt-auto response observation failed until "
-                            f"{timeout_policy}: {type(exc).__name__}: {exc}"
-                        ),
-                        details={
-                            "turn-id": self.request.turn_id,
-                            "phase": "response-observation",
-                            "failure-reason": "response-observation-timeout",
-                            "timeout-policy": timeout_policy,
-                            "cause-type": type(exc).__name__,
-                            "cause-message": str(exc),
-                            **self._diagnostics(),
-                        },
-                    ) from exc
+                outcome = tracker.advance(
+                    Observation(capabilities=EvidenceCapability.NONE, terminal_candidate=False),
+                    loop.time(),
+                )
+                if outcome is not None:
+                    final_outcome = outcome
+                    break
                 await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
                 continue
             self._remember_snapshot(current)
@@ -632,7 +677,6 @@ class GptAutoTurn:
             started = self.chat.config.workflow.policy("response-started").evaluate(facts)
             if started.satisfied and not response_started:
                 response_started = True
-                last_activity_at = now
                 logger.info(
                     "gpt-auto response-started policy matched evidence=%s",
                     sorted(started.matched),
@@ -643,22 +687,8 @@ class GptAutoTurn:
                     {"model_activity": "response-started"},
                 )
                 emitted = True
-            fingerprint = _fingerprint(current)
-            active = self.chat.config.workflow.policy("response-active").evaluate(facts)
-            if response_started and active.satisfied and fingerprint != previous_fingerprint:
-                last_activity_at = now
-                logger.debug(
-                    "gpt-auto response activity evidence=%s",
-                    sorted(active.matched),
-                )
-                await self._emit(
-                    TransportObservationKind.ACTIVITY,
-                    {"model_activity": "response-progress"},
-                )
-                emitted = True
             complete = self.chat.config.workflow.policy("response-complete").evaluate(facts)
-            complete_satisfied = complete.satisfied
-            if complete_satisfied and current.generating:
+            if complete.satisfied and current.generating:
                 # stop-control (the usual source of a raw .generating=True)
                 # is proven live-unreliable -- it can stick indefinitely
                 # after real completion. It is advisory-only now: logged
@@ -670,109 +700,116 @@ class GptAutoTurn:
                     "response-complete policy evidence=%s",
                     sorted(complete.matched),
                 )
-            if complete_satisfied and current.latest_assistant_text:
-                if not emitted:
-                    await self._emit(
-                        TransportObservationKind.ACTIVITY,
-                        {"model_activity": "response-observed"},
-                    )
-                    emitted = True
-                if current.latest_assistant_text != stable_text:
-                    stable_text = current.latest_assistant_text
-                    stable_since = now
-                    logger.info(
-                        "gpt-auto response-complete policy candidate evidence=%s chars=%d",
-                        sorted(complete.matched),
-                        len(stable_text),
-                    )
-                elif (
-                    stable_since is not None
-                    and now - stable_since >= self.chat.config.turn.response_stability_seconds
-                ):
-                    try:
-                        verify = await self.chat.snapshot()
-                    except Exception as exc:  # noqa: BLE001 - verification resumes on next poll
-                        self._last_observation_error = exc
-                        now = loop.time()
-                        timers = self.chat.config.turn
-                        timeout_policy = None
-                        if (
-                            response_started
-                            and timers.response_stall_timeout_seconds
-                            and now - last_activity_at >= timers.response_stall_timeout_seconds
-                        ):
-                            timeout_policy = "terminal-verification-stall-timeout"
-                        elif (
-                            timers.response_timeout_seconds
-                            and now - started_at >= timers.response_timeout_seconds
-                        ):
-                            timeout_policy = "terminal-verification-total-timeout"
-                        if timeout_policy:
-                            self._move(TurnState.TIMED_OUT)
-                            raise AudiaGenticError(
-                                code="EXT-GPTAUTO-004",
-                                kind="providers",
-                                message=(
-                                    "gpt-auto terminal verification failed until "
-                                    f"{timeout_policy}: {type(exc).__name__}: {exc}"
-                                ),
-                                details={
-                                    "turn-id": self.request.turn_id,
-                                    "phase": "terminal-verification",
-                                    "failure-reason": "terminal-verification-timeout",
-                                    "timeout-policy": timeout_policy,
-                                    "cause-type": type(exc).__name__,
-                                    "cause-message": str(exc),
-                                    **self._diagnostics(),
-                                },
-                            ) from exc
-                        await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
-                        continue
-                    self._remember_snapshot(verify)
-                    verify_facts = _facts(baseline, current, verify)
-                    verified = self.chat.config.workflow.policy("response-complete").evaluate(
-                        verify_facts
-                    )
-                    if verify.generating:
-                        logger.warning(
-                            "gpt-auto Tier-3 generating signal disagreed with "
-                            "response-complete policy at final verification evidence=%s",
-                            sorted(verified.matched),
-                        )
-                    if verified.satisfied and verify.latest_assistant_text == stable_text:
-                        assert stable_text is not None
-                        self._response_message_id = verify.latest_assistant_id
-                        logger.info(
-                            "gpt-auto response completion verified evidence=%s chars=%d",
-                            sorted(verified.matched),
-                            len(stable_text),
-                        )
-                        return stable_text
-            else:
-                stable_text = None
-                stable_since = None
 
-            timers = self.chat.config.turn
+            progress_edge = (
+                current.latest_assistant_id != previous.latest_assistant_id
+                or current.latest_assistant_text != previous.latest_assistant_text
+            )
+            current_soft = current.dom_signals & self._SOFT_LIVENESS_SIGNALS
+            previous_soft = previous.dom_signals & self._SOFT_LIVENESS_SIGNALS
+            soft_edge = current_soft != previous_soft or current.generating != previous.generating
+            soft_present = bool(current_soft) or current.generating
+            caps = EvidenceCapability.NONE
+            if response_started and progress_edge:
+                caps |= EvidenceCapability.PROGRESS
+            if response_started and soft_edge and soft_present:
+                caps |= EvidenceCapability.SOFT_LIVENESS
+            if current.dom_signals & self._TERMINAL_WITNESS_SIGNALS:
+                caps |= EvidenceCapability.TERMINAL_WITNESS
+            if caps & (EvidenceCapability.PROGRESS | EvidenceCapability.SOFT_LIVENESS):
+                # Edge-triggered by construction (progress_edge/soft_edge
+                # already compare against the previous observation), so this
+                # fires every time real activity is newly observed -- not
+                # just once -- matching the pre-existing behavior. The
+                # gateway's own watchdog activity lease depends on these
+                # ACTIVITY emissions arriving throughout the turn, not just
+                # at the start.
+                await self._emit(
+                    TransportObservationKind.ACTIVITY,
+                    {"model_activity": "response-progress"},
+                )
+                emitted = True
+
+            terminal_candidate = complete.satisfied and bool(current.latest_assistant_text)
+            terminal_verified_ok = False
+            response_message_id = current.latest_assistant_id
+            response_text = current.latest_assistant_text
+            if terminal_candidate and not emitted:
+                await self._emit(
+                    TransportObservationKind.ACTIVITY, {"model_activity": "response-observed"}
+                )
+                emitted = True
             if (
-                not response_started
-                and timers.response_start_timeout_seconds
-                and now - started_at >= timers.response_start_timeout_seconds
+                terminal_candidate
+                and tracker.state.value == "candidate-terminal"
+                and tracker.clock.candidate_entered_at is not None
+                and now - tracker.clock.candidate_entered_at
+                >= policy.candidate_stability_window_seconds
             ):
-                self._raise_response_timeout("response-start-timeout")
-            if (
-                response_started
-                and timers.response_stall_timeout_seconds
-                and now - last_activity_at >= timers.response_stall_timeout_seconds
-            ):
-                self._raise_response_timeout("response-stall-timeout")
-            if (
-                timers.response_timeout_seconds
-                and now - started_at >= timers.response_timeout_seconds
-            ):
-                self._raise_response_timeout("response-total-timeout")
+                # An independent, freshly-fetched snapshot -- not just the
+                # same regular poll cadence -- confirms the candidate before
+                # it is trusted, matching the pre-existing design.
+                try:
+                    verify = await self.chat.snapshot()
+                except Exception as exc:  # noqa: BLE001 - verification resumes on next poll
+                    self._last_observation_error = exc
+                    logger.info(
+                        "gpt-auto terminal verification observation interrupted; retrying",
+                        extra={"turn-id": self.request.turn_id},
+                    )
+                    outcome = tracker.advance(
+                        Observation(capabilities=caps, terminal_candidate=terminal_candidate),
+                        loop.time(),
+                    )
+                    if outcome is not None:
+                        final_outcome = outcome
+                        break
+                    await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
+                    continue
+                self._remember_snapshot(verify)
+                verify_facts = _facts(baseline, current, verify)
+                verified = self.chat.config.workflow.policy("response-complete").evaluate(
+                    verify_facts
+                )
+                if verify.generating:
+                    logger.warning(
+                        "gpt-auto Tier-3 generating signal disagreed with "
+                        "response-complete policy at final verification evidence=%s",
+                        sorted(verified.matched),
+                    )
+                terminal_verified_ok = (
+                    verified.satisfied and verify.latest_assistant_text == current.latest_assistant_text
+                )
+                response_message_id = verify.latest_assistant_id
+                response_text = verify.latest_assistant_text
+                if terminal_verified_ok:
+                    logger.info(
+                        "gpt-auto response completion verified evidence=%s chars=%d",
+                        sorted(verified.matched),
+                        len(response_text or ""),
+                    )
+
+            observation = Observation(
+                capabilities=caps,
+                terminal_candidate=terminal_candidate,
+                terminal_verified_ok=terminal_verified_ok,
+            )
+            outcome = tracker.advance(observation, loop.time())
+            if outcome is ObservationOutcome.VERIFIED_TERMINAL:
+                assert response_text is not None
+                self._response_message_id = response_message_id
+                return response_text
+            if outcome is not None:
+                final_outcome = outcome
+                break
             previous = current
-            previous_fingerprint = fingerprint
             await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
+        if not response_started:
+            self._raise_response_timeout("response-start-timeout")
+        elif final_outcome is ObservationOutcome.BUDGET_EXHAUSTED:
+            self._raise_response_timeout("response-total-timeout")
+        else:
+            self._raise_response_timeout("response-stall-timeout")
 
     def _raise_response_timeout(self, policy: str) -> None:
         self._move(TurnState.TIMED_OUT)
@@ -996,23 +1033,6 @@ def _facts(
         }
     )
     return facts
-
-
-def _fingerprint(snapshot: ChatSnapshot) -> tuple[Any, ...]:
-    return (
-        snapshot.url,
-        snapshot.user_count,
-        snapshot.assistant_count,
-        snapshot.latest_assistant_id,
-        snapshot.latest_user_id,
-        snapshot.latest_user_text,
-        snapshot.latest_assistant_text,
-        snapshot.composer_present,
-        snapshot.composer_editable,
-        snapshot.dom_signals,
-        snapshot.error_present,
-        snapshot.generating,
-    )
 
 
 def _message_ids(turn: GptAutoTurn) -> dict[str, str]:
