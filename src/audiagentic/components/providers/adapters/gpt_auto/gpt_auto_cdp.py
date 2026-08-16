@@ -121,13 +121,20 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         )
         return {"stopped": bool(stopped)}
 
+    _SUBMIT_MAX_ATTEMPTS = 3
+    _SUBMIT_RETRY_DELAY_SECONDS = 0.2
+
     async def submit(
         self, page: CdpPageRef, text: str, *, timeout: float | None = None
     ) -> dict[str, Any]:
         if not isinstance(text, str) or not text.strip():
             raise ValueError("text must be a non-empty string")
 
-        async def _submit() -> dict[str, Any]:
+        async def _submit_once() -> dict[str, Any]:
+            # select-all + insertText replaces any existing composer content,
+            # so this is safe to call again on a retry -- it always leaves
+            # the composer holding exactly `text`, never a concatenation of
+            # a prior attempt's leftover content (GP11, verified live).
             typed = await self.evaluate(
                 page,
                 """(text) => {
@@ -168,10 +175,27 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 "enterDispatched": not bool(sent),
             }
 
+        async def _submit_with_retry() -> dict[str, Any]:
+            # GP11: neither the send-button click nor the Enter fallback has
+            # any built-in retry -- one attempt, and if the button was
+            # transiently absent/disabled (e.g. right after a prior turn
+            # resolves, before the composer settles) the whole submission
+            # fails immediately with composer-action-not-confirmed, even
+            # though the composer clear-and-retype above makes a retry safe.
+            # Bound this at the DOM-interaction layer instead of pushing the
+            # cost onto every caller.
+            result = await _submit_once()
+            attempt = 1
+            while not result["actionComplete"] and attempt < self._SUBMIT_MAX_ATTEMPTS:
+                await asyncio.sleep(self._SUBMIT_RETRY_DELAY_SECONDS)
+                result = await _submit_once()
+                attempt += 1
+            return result
+
         if timeout is None:
-            return await _submit()
+            return await _submit_with_retry()
         async with asyncio.timeout(timeout):
-            return await _submit()
+            return await _submit_with_retry()
 
     async def find_project_url(self, page: CdpPageRef, project_name: str) -> dict[str, str]:
         result = await self.evaluate(
