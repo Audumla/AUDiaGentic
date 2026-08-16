@@ -55,6 +55,7 @@ so failures point straight at the adapter rather than the dispatch stack.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import uuid
 from pathlib import Path
@@ -101,14 +102,40 @@ def _load_live_settings(provider_id: str) -> dict[str, Any]:
     return settings
 
 
+_CHECKPOINT_DIR = _PROJECT_ROOT / ".audiagentic" / "runtime" / "live-stress-checkpoints"
+
+
+def _make_checkpoint_sink(ag_session_id: str):
+    """GP11: a real checkpoint_sink so an ambiguous live failure can
+    actually be reconciled afterward (read-only CDP inspection against a
+    known baseline/turn-id) instead of being unrecoverable once a tab
+    closes, as happened during tonight's investigation. This is a minimal
+    local-file sink, not the gateway's durable session-store one -- this
+    test harness deliberately bypasses the gateway/session store (see
+    module docstring), so there's no session record to write into. Good
+    enough to leave a trail on disk for manual/agent-assisted reconciliation."""
+    path = _CHECKPOINT_DIR / f"{ag_session_id}.json"
+
+    def _sink(metadata: dict[str, Any]) -> None:
+        _CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+        if metadata.get("unresolved-turn-pending"):
+            path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
+        elif path.exists():
+            path.unlink()
+
+    return _sink
+
+
 async def _open_transport(provider_id: str):
     settings = _load_live_settings(provider_id)
     config = GptAutoConfig.from_dict(settings)
+    ag_session_id = f"live-stress-{uuid.uuid4().hex[:12]}"
     transport = build_session_transport(
         _PROJECT_ROOT,
         config=settings,
-        ag_session_id=f"live-stress-{uuid.uuid4().hex[:12]}",
+        ag_session_id=ag_session_id,
         binding_sink=lambda _update: None,
+        checkpoint_sink=_make_checkpoint_sink(ag_session_id),
     )
     await transport.open()
     return transport, config
