@@ -76,8 +76,12 @@ def valid_config() -> dict:
                 "response-started": {"any-of": ["assistant-fresh", "stop-control"]},
                 "response-active": {"any-of": ["text-changed", "stop-control"]},
                 "response-complete": {
-                    "all-of": ["assistant-fresh", "text-present"],
-                    "any-of": ["completion-control", "message-finalized"],
+                    "all-of": [
+                        "assistant-fresh",
+                        "text-present",
+                        "completion-control",
+                        "message-finalized",
+                    ],
                     "none-of": ["error-page"],
                 },
                 "response-failed": {"any-of": ["error-page"]},
@@ -107,9 +111,26 @@ def test_response_complete_policy_never_regresses_to_the_stuck_stop_control_veto
         "stop-control is proven live-unreliable (sticks after real completion) "
         "and must stay advisory-only, never a completion veto"
     )
-    assert "message-finalized" in policy.any_of
-    assert "completion-control" in policy.any_of
-    assert policy.any_of, "at least one corroborating any-of signal must be required"
+    assert "message-finalized" in policy.all_of
+    assert "completion-control" in policy.all_of
+
+
+def test_response_complete_policy_never_regresses_to_either_witness_alone(): # GP17
+    """GP17 regression guard: completion-control and message-finalized were
+    proven live-unreliable INDEPENDENTLY (each can fire on a genuinely
+    incomplete turn and then stay persistently true through the whole
+    stability window, so text stability alone does not catch a shared
+    false-positive). Both must be required TOGETHER (all-of), never
+    accepted as sufficient alone (any-of) -- a future edit that silently
+    reverts to any-of would reintroduce the false-positive-early-completion
+    bug that produced real truncated live results on 2026-08-16."""
+    policy = GptAutoConfig.from_dict(valid_config()).workflow.policy("response-complete")
+    assert not policy.any_of, (
+        "response-complete must not accept any single corroborating witness "
+        "alone -- completion-control and message-finalized are each "
+        "independently unreliable and must be required together"
+    )
+    assert {"completion-control", "message-finalized"} <= set(policy.all_of)
 
 
 def test_project_url_is_optional_for_project_name_discovery():
