@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import re
 from enum import StrEnum
 
@@ -25,6 +26,8 @@ from .urls import (
     parse_provider_session_id,
     url_matches_provider_session,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ChatState(StrEnum):
@@ -465,9 +468,12 @@ class PersistentChat:
             )
             return False
         if snapshot.generating:
-            self._set_unresolved_recovery("provider-still-generating")
-            return False
-        if not provider_quiescent(snapshot):
+            logger.warning(
+                "gpt-auto Tier-3 generating signal disagreed with reconciliation "
+                "evidence during unresolved-turn recovery, dom_signals=%s",
+                sorted(snapshot.dom_signals),
+            )
+        if not _reconciliation_evidence_clear(snapshot):
             self._set_unresolved_recovery(
                 "provider-not-quiescent",
                 composer_present=snapshot.composer_present,
@@ -493,10 +499,10 @@ class PersistentChat:
         # still stalled in a tool-backed turn.  Require explicit terminal
         # evidence before clearing the unresolved marker; the caller receives
         # a structured recovery error when that evidence never appears.
-        if "completion-control" not in snapshot.dom_signals:
+        if not snapshot.dom_signals.intersection({"completion-control", "message-finalized"}):
             self._set_unresolved_recovery(
                 "completion-evidence-missing",
-                required_signal="completion-control",
+                required_signal="completion-control-or-message-finalized",
                 observed_dom_signals=sorted(snapshot.dom_signals),
             )
             return False
@@ -928,6 +934,27 @@ def provider_quiescent(snapshot: ChatSnapshot) -> bool:
         snapshot.composer_present
         and snapshot.composer_editable
         and not snapshot.generating
+        and not snapshot.error_present
+        and not snapshot.dom_signals.intersection(busy_signals | failed_signals)
+    )
+
+
+def _reconciliation_evidence_clear(snapshot: ChatSnapshot) -> bool:
+    """Whether a snapshot's own evidence proves a PRIOR turn is done.
+
+    Deliberately narrower-scoped than provider_quiescent(): this answers
+    "did the retained prompt reach a terminal outcome," not "is it safe to
+    type a new prompt right now" -- reconciliation never submits anything.
+    stop-control is excluded from the busy check here -- proven live
+    (2026-08-15/16) to stick indefinitely after real completion, so it
+    must not block reconciliation of an already-finished turn the way it
+    correctly still blocks new-prompt admission in provider_quiescent().
+    """
+    busy_signals = {"streaming-indicator", "thinking-indicator", "busy-indicator"}
+    failed_signals = {"auth-required", "error-page", "error-alert"}
+    return bool(
+        snapshot.composer_present
+        and snapshot.composer_editable
         and not snapshot.error_present
         and not snapshot.dom_signals.intersection(busy_signals | failed_signals)
     )

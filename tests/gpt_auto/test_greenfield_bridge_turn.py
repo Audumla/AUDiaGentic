@@ -56,6 +56,12 @@ def snap(
         dom_signals=frozenset(signals),
         error_present=False,
         latest_user_id=user_id or (f"prompt-{users}" if users else None),
+        # A real bridge observation derives both from the same underlying
+        # DOM check (gpt_auto_cdp.py's raw `generating` query mirrors the
+        # stop-control selectors) -- keep them coupled here so tests
+        # exercise the real .generating field turn.py actually reads, not
+        # just the decoupled dom_signals fact.
+        generating=generating,
     )
 
 
@@ -203,6 +209,94 @@ async def test_turn_proves_submission_once_and_completes_from_atomic_snapshots()
     assert result.metadata["assistant-message-id"] == "assistant-1"
     assert chat.checkpoint_updates[0]["recovery-state"] == "side-effect-may-have-started"
     assert chat.checkpoint_updates[-1] == {"unresolved-turn-pending": False}
+
+
+@pytest.mark.asyncio
+async def test_turn_completes_despite_stuck_stop_control_signal():
+    """Live-reproduced 2026-08-16: ChatGPT's own stop/submit button can stay
+    in its 'stop' state indefinitely after a response has actually finished
+    rendering. generating=True (and the stop-control dom signal) must be
+    advisory-only, never an unconditional veto -- a stable, corroborated
+    response-complete result must still terminate the turn."""
+    chat = _Chat()
+    chat._snapshots = iter(
+        [
+            snap(),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01", generating=True),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks",
+                generating=True,
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks sound",
+                generating=True,
+                complete=True,
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks sound",
+                generating=True,
+                complete=True,
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks sound",
+                generating=True,
+                complete=True,
+            ),
+        ]
+    )
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-stuck-stop-control", body="Review AU01"), lambda _: None
+    )
+    result = await turn.run()
+    assert result.stop_reason == "end-turn"
+    assert result.final_summary == "Looks sound"
+    assert turn.state is TurnState.COMPLETE
+
+
+@pytest.mark.asyncio
+async def test_turn_does_not_complete_while_text_is_still_changing_even_without_generating_veto():
+    """Regression guard for the fix above: removing the generating veto must
+    not turn this into a false-positive-completion risk. Text still actively
+    changing (no stability window satisfied) must keep blocking completion
+    regardless of what any DOM widget claims, and must still time out
+    correctly rather than falsely declare success."""
+    chat = _Chat()
+    chat.runtime.config.turn.response_timeout_seconds = 0.05
+    chat.runtime.config.turn.response_start_timeout_seconds = 0.05
+
+    def _growing_text_snapshots():
+        prefix = "Looks sound"
+        counter = 0
+        while True:
+            counter += 1
+            yield snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant=f"{prefix} {counter}",
+                complete=True,
+            )
+
+    chat._snapshots = _growing_text_snapshots()
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-still-changing", body="Review AU01"), lambda _: None
+    )
+    with pytest.raises(AudiaGenticError):
+        await turn.run()
+    assert turn.state is not TurnState.COMPLETE
 
 
 @pytest.mark.asyncio
