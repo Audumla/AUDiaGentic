@@ -38,7 +38,15 @@ def test_inbound_adapters_depend_on_public_client_not_core_api() -> None:
     for rel in ("mcp/gateway_mcp.py", "gateway/events.py"):
         source = (agents_dir / rel).read_text(encoding="utf-8")
         assert "gateway.api import" not in source
-        assert "gateway.client import get_gateway_client" in source
+        # GP06: gateway_mcp.py calls through call_gateway_method (which
+        # self-heals a dead cached client on NET-AGSV-002) rather than
+        # get_gateway_client(...).method(...) directly; either public
+        # client.py entry point satisfies the "public client, not core api"
+        # boundary this test enforces.
+        assert (
+            "gateway.client import get_gateway_client" in source
+            or "gateway.client import call_gateway_method" in source
+        ), rel
 
 
 def test_inbound_adapters_resolve_gateway_with_project_context() -> None:
@@ -169,6 +177,89 @@ def test_live_owner_with_unknown_policy_raises(tmp_path: Path, monkeypatch) -> N
     with pytest.raises(AudiaGenticError) as exc_info:
         get_gateway_client(tmp_path)
     assert exc_info.value.code == "CFG-AGSV-006"
+
+
+# ── GP06: call_gateway_method self-healing on NET-AGSV-002 ────────────────
+
+
+class _FakeClient:
+    def __init__(self, *, fail_first: bool, error_code: str = "NET-AGSV-002") -> None:
+        self.calls: list[str] = []
+        self._fail_first = fail_first
+        self._error_code = error_code
+
+    def gateway_overview(self, _project_root: Path) -> dict[str, object]:
+        self.calls.append("gateway_overview")
+        if self._fail_first and len(self.calls) == 1:
+            raise AudiaGenticError(self._error_code, "agents", "gateway service is unavailable", {})
+        return {"total_requests": 1}
+
+    def submit_execution_request(self, _project_root: Path, **_kwargs: object) -> dict[str, object]:
+        self.calls.append("submit_execution_request")
+        if self._fail_first and len(self.calls) == 1:
+            raise AudiaGenticError(self._error_code, "agents", "gateway service is unavailable", {})
+        return {"state": "queued"}
+
+
+def test_call_gateway_method_reconnects_and_retries_read_only_after_net_agsv_002(
+    tmp_path: Path, monkeypatch
+) -> None:
+    dead = _FakeClient(fail_first=True)
+    live = _FakeClient(fail_first=False)
+    sequence = iter([dead, live])
+    reset_calls: list[None] = []
+
+    monkeypatch.setattr(client_module, "get_gateway_client", lambda _root: next(sequence))
+    monkeypatch.setattr(client_module, "reset_gateway_client", lambda: reset_calls.append(None))
+
+    result = client_module.call_gateway_method("gateway_overview", tmp_path)
+
+    assert result == {"total_requests": 1}
+    assert reset_calls == [None]
+    assert dead.calls == ["gateway_overview"]
+    assert live.calls == ["gateway_overview"]
+
+
+def test_call_gateway_method_does_not_replay_mutating_call_after_net_agsv_002(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Reconnecting is always safe; blindly replaying a mutation is not --
+    a network failure doesn't prove the original RPC never reached the
+    server. The caller must decide whether to retry a mutation, now against
+    a live client."""
+    dead = _FakeClient(fail_first=True)
+    live = _FakeClient(fail_first=False)
+    sequence = iter([dead, live])
+    reset_calls: list[None] = []
+
+    monkeypatch.setattr(client_module, "get_gateway_client", lambda _root: next(sequence))
+    monkeypatch.setattr(client_module, "reset_gateway_client", lambda: reset_calls.append(None))
+
+    with pytest.raises(AudiaGenticError) as exc_info:
+        client_module.call_gateway_method("submit_execution_request", tmp_path, prompt_body="hi")
+
+    assert exc_info.value.code == "NET-AGSV-002"
+    # The client WAS reconnected (so the caller's next attempt uses a live
+    # one) even though this specific call was not replayed.
+    assert reset_calls == [None]
+    assert dead.calls == ["submit_execution_request"]
+    assert live.calls == []
+
+
+def test_call_gateway_method_propagates_non_network_errors_without_reconnecting(
+    tmp_path: Path, monkeypatch
+) -> None:
+    broken = _FakeClient(fail_first=True, error_code="VAL-AGSV-001")
+    reset_calls: list[None] = []
+
+    monkeypatch.setattr(client_module, "get_gateway_client", lambda _root: broken)
+    monkeypatch.setattr(client_module, "reset_gateway_client", lambda: reset_calls.append(None))
+
+    with pytest.raises(AudiaGenticError) as exc_info:
+        client_module.call_gateway_method("gateway_overview", tmp_path)
+
+    assert exc_info.value.code == "VAL-AGSV-001"
+    assert reset_calls == []
 
 
 def test_default_policy_with_no_project_root_is_refuse() -> None:
