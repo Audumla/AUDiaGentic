@@ -311,6 +311,54 @@ async def test_gpt_provider_submit_falls_back_to_enter_when_send_is_disabled():
     assert any(method == "dispatch_enter" for method, _ in bridge.calls)
 
 
+class _TransientSendFailureBridge(_GptOperationBridge):
+    """The send button is disabled for the first `fail_attempts` evaluate
+    calls that check it, then becomes available -- simulates the real
+    composer-not-yet-settled window found live (GP11)."""
+
+    def __init__(self, *, fail_attempts: int) -> None:
+        super().__init__(send_enabled=False)
+        self._fail_attempts = fail_attempts
+        self._send_checks = 0
+
+    async def evaluate(self, page_handle, function, argument=None, **kwargs):
+        if "send-button" in function:
+            self._send_checks += 1
+            self.send_enabled = self._send_checks > self._fail_attempts
+        return await super().evaluate(page_handle, function, argument, **kwargs)
+
+
+@pytest.mark.asyncio
+async def test_gpt_provider_submit_retries_and_recovers_from_transient_send_failure():
+    """GP11: a transiently-disabled/absent send button (e.g. right after a
+    prior turn resolves, before the composer settles) must not fail the
+    whole submission on the first attempt -- submit() retries a bounded
+    number of times and succeeds once the button becomes available again."""
+    bridge = _TransientSendFailureBridge(fail_attempts=1)
+    browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]
+    page = CdpPageRef("page-1", "target-1")
+    result = await browser.submit(page, "retry recovers")
+    assert result["actionComplete"] is True
+    assert result["sendButtonClicked"] is True
+    # One dispatch_enter fallback from the failed first attempt, no more.
+    assert sum(1 for method, _ in bridge.calls if method == "dispatch_enter") == 1
+
+
+@pytest.mark.asyncio
+async def test_gpt_provider_submit_gives_up_after_bounded_retries():
+    """A send button that never becomes available exhausts the retry bound
+    and still reports actionComplete=False -- never silently succeeds."""
+    bridge = _TransientSendFailureBridge(fail_attempts=999)
+    browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]
+    page = CdpPageRef("page-1", "target-1")
+    result = await browser.submit(page, "never recovers")
+    assert result["actionComplete"] is False
+    assert (
+        sum(1 for method, _ in bridge.calls if method == "dispatch_enter")
+        == GptAutoCdpBrowserController._SUBMIT_MAX_ATTEMPTS
+    )
+
+
 @pytest.mark.asyncio
 async def test_gpt_provider_rejects_blank_prompt_and_reports_no_stop_control():
     bridge = _GptOperationBridge(stop_visible=False)
