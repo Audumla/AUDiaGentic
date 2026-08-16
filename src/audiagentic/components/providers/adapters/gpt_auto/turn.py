@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
@@ -24,6 +25,12 @@ from audiagentic.foundation.transports.session_binding import (
 from audiagentic.foundation.workflow import TransitionConfig, TransitionEngine
 
 from .chat import ChatState, PersistentChat
+from .observation_engine import (
+    EvidenceCapability,
+    Observation,
+    ObservationOutcome,
+    ObservationTracker,
+)
 from .snapshot import ChatSnapshot
 from .urls import parse_provider_session_id
 
@@ -69,6 +76,48 @@ _ENGINE = TransitionEngine(
         values=frozenset(s.value for s in TurnState),
     )
 )
+
+
+@dataclass(frozen=True)
+class _SubmissionProofPolicy:
+    """ObservationPolicy for the submission-proof phase (GP07).
+
+    start_bound reuses submission_timeout_seconds (did we see ANY sign of
+    it at all -- the raw type+send CDP call already has its own separate
+    timeout for that operation itself). Everything after start is
+    activity-aware: a real new user message resets the clock; a stuck
+    generating=True widget alone never does.
+    """
+
+    turn_config: Any
+
+    @property
+    def start_bound_seconds(self) -> float:
+        return self.turn_config.submission_timeout_seconds
+
+    @property
+    def progress_lease_seconds(self) -> float:
+        return self.turn_config.submission_proof_progress_lease_seconds
+
+    @property
+    def soft_grace_cap_seconds(self) -> float:
+        return self.turn_config.submission_proof_progress_lease_seconds / 5
+
+    @property
+    def candidate_stability_window_seconds(self) -> float:
+        return self.turn_config.poll_interval_seconds
+
+    @property
+    def candidate_max_verification_window_seconds(self) -> float:
+        return max(10.0, self.turn_config.poll_interval_seconds * 10)
+
+    @property
+    def suspect_grace_seconds(self) -> float:
+        return self.turn_config.submission_proof_progress_lease_seconds / 5
+
+    @property
+    def absolute_ceiling_seconds(self) -> float:
+        return self.turn_config.submission_proof_absolute_ceiling_seconds
 
 
 class GptAutoTurn:
@@ -387,12 +436,33 @@ class GptAutoTurn:
             )
 
     async def _await_submission_proof(self, baseline: ChatSnapshot) -> ChatSnapshot | None:
-        deadline = (
-            asyncio.get_running_loop().time() + self.chat.config.turn.submission_timeout_seconds
-        )
+        """GP07: activity-aware, not a single fixed deadline from typing/dispatch.
+
+        A new user message matching the submitted prompt is PROGRESS +
+        TERMINAL_WITNESS together (strong, near-instant proof -- no
+        multi-second stability dance needed, unlike response text). A new
+        message that DOESN'T exactly match (e.g. code-block rendering
+        artifacts, GP07 tracked separately) still counts as PROGRESS alone,
+        so a real-but-imperfect-match observation correctly resets the
+        inactivity clock instead of silently ticking toward a false timeout.
+        generating/dom_signals changes are SOFT_LIVENESS only -- bounded
+        grace, never authoritative, consistent with the same widget already
+        proven unreliable for completion detection.
+        """
+        turn_cfg = self.chat.config.turn
+        policy = _SubmissionProofPolicy(turn_cfg)
+        loop = asyncio.get_running_loop()
+        tracker = ObservationTracker(policy=policy, now=loop.time())
         expected = _normal(self.request.body)
         last_observation_error: BaseException | None = None
-        while asyncio.get_running_loop().time() < deadline:
+        # Edge-triggered, not level-triggered: an unchanged fact observed on
+        # every poll (e.g. the new user message still being "new" relative
+        # to baseline) must not count as PROGRESS again each time -- only a
+        # genuine change since the LAST observation does.
+        previous_user_id = baseline.latest_user_id
+        previous_generating = baseline.generating
+        previous_dom_signals = baseline.dom_signals
+        while True:
             if self.cancel_event.is_set():
                 self._move(TurnState.CANCELLED)
                 return None
@@ -405,15 +475,47 @@ class GptAutoTurn:
                     "gpt-auto submission proof observation interrupted; awaiting same conversation",
                     extra={"turn-id": self.request.turn_id},
                 )
+                # A failing observation is not evidence of anything, but the
+                # clock must still advance -- otherwise persistent exceptions
+                # spin the loop forever with no eventual SUSPECT_STALLED/
+                # UNRESOLVED_STALL exit (there is no fixed deadline anymore
+                # to fall back on).
+                outcome = tracker.advance(
+                    Observation(capabilities=EvidenceCapability.NONE, terminal_candidate=False),
+                    loop.time(),
+                )
+                if outcome is not None:
+                    break
                 await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
                 continue
             last_observation_error = None
             self._remember_snapshot(snap)
-            if _new_user_message(baseline, snap) and _matches(
-                expected, _normal(snap.latest_user_text or "")
-            ):
+            new_msg = _new_user_message(baseline, snap)
+            text_matches = new_msg and _matches(expected, _normal(snap.latest_user_text or ""))
+            user_id_changed = snap.latest_user_id != previous_user_id
+            soft_changed = (
+                snap.generating != previous_generating or snap.dom_signals != previous_dom_signals
+            )
+            caps = EvidenceCapability.NONE
+            if new_msg and user_id_changed:
+                caps |= EvidenceCapability.PROGRESS
+            if soft_changed and (snap.generating or snap.dom_signals):
+                caps |= EvidenceCapability.SOFT_LIVENESS
+            if text_matches:
+                caps |= EvidenceCapability.TERMINAL_WITNESS
+            observation = Observation(
+                capabilities=caps, terminal_candidate=text_matches, terminal_verified_ok=text_matches
+            )
+            previous_user_id = snap.latest_user_id
+            previous_generating = snap.generating
+            previous_dom_signals = snap.dom_signals
+            if text_matches:
                 self._prompt_message_id = snap.latest_user_id
+            outcome = tracker.advance(observation, loop.time())
+            if outcome is ObservationOutcome.VERIFIED_TERMINAL:
                 return snap
+            if outcome is not None:
+                break
             finder = getattr(self.chat, "find_prompt_snapshot", None)
             if finder is not None:
                 alternate = await finder(baseline, expected)

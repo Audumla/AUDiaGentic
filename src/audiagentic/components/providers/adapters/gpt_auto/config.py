@@ -50,6 +50,12 @@ class TurnConfig:
     response_timeout_seconds: float
     poll_interval_seconds: float
     response_stability_seconds: float
+    # GP07: submission-proof's observation clock must be activity-aware, not
+    # a single fixed deadline from action-start -- submission_timeout_seconds
+    # remains the raw type+send CDP-call timeout and this phase's start-bound
+    # (did we see ANY sign of it at all); these two govern everything after.
+    submission_proof_progress_lease_seconds: float
+    submission_proof_absolute_ceiling_seconds: float
 
 
 class DomSignalScope(StrEnum):
@@ -209,6 +215,8 @@ class GptAutoConfig:
                 "response-timeout-seconds",
                 "poll-interval-seconds",
                 "response-stability-seconds",
+                "submission-proof-progress-lease-seconds",
+                "submission-proof-absolute-ceiling-seconds",
             },
             "turn",
         )
@@ -223,6 +231,12 @@ class GptAutoConfig:
             response_timeout_seconds=_non_negative(turn_data, "response-timeout-seconds"),
             poll_interval_seconds=_positive(turn_data, "poll-interval-seconds"),
             response_stability_seconds=_positive(turn_data, "response-stability-seconds"),
+            submission_proof_progress_lease_seconds=_positive(
+                turn_data, "submission-proof-progress-lease-seconds"
+            ),
+            submission_proof_absolute_ceiling_seconds=_positive(
+                turn_data, "submission-proof-absolute-ceiling-seconds"
+            ),
         )
         workflow = _workflow_config(_mapping(settings, "workflow"))
         return cls("v1", project_url, browser, cdp, chat, turn, workflow)

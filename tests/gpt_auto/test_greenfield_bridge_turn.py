@@ -118,6 +118,8 @@ class _Chat:
                     response_timeout_seconds=0.2,
                     response_stability_seconds=0,
                     poll_interval_seconds=0,
+                    submission_proof_progress_lease_seconds=0.2,
+                    submission_proof_absolute_ceiling_seconds=1.0,
                 ),
                 workflow=GptAutoConfig.from_dict(valid_config()).workflow,
             ),
@@ -126,6 +128,11 @@ class _Chat:
         self._snapshots = iter(
             [
                 snap(),
+                snap(users=1, user="Review AU01"),
+                # GP07: submission-proof now takes one confirming poll before
+                # VERIFIED_TERMINAL (the whole point -- a single observation
+                # is no longer trusted alone), so this duplicate gives that
+                # tick room without shifting every other snapshot's meaning.
                 snap(users=1, user="Review AU01"),
                 snap(users=1, user="Review AU01", generating=True),
                 snap(users=1, assistants=1, user="Review AU01", assistant="Looks"),
@@ -209,6 +216,37 @@ async def test_turn_proves_submission_once_and_completes_from_atomic_snapshots()
     assert result.metadata["assistant-message-id"] == "assistant-1"
     assert chat.checkpoint_updates[0]["recovery-state"] == "side-effect-may-have-started"
     assert chat.checkpoint_updates[-1] == {"unresolved-turn-pending": False}
+
+
+@pytest.mark.asyncio
+async def test_submission_proof_resolves_ambiguous_not_hung_when_text_never_exactly_matches():
+    """GP07: a real bug found live -- a new user message can appear with a
+    length matching the sent prompt but content that never satisfies strict
+    equality (code-block rendering artifacts). The activity-aware engine
+    must not hang forever chasing an exact match that may never arrive; it
+    must resolve to ambiguous (None -> EXT-GPTAUTO-003, submission-ambiguous
+    -- never a silent success, never an infinite wait) once genuinely
+    stalled, while still recognizing each new (edge-triggered) mismatched
+    message as real PROGRESS along the way."""
+    chat = _Chat()
+    chat.runtime.config.turn.submission_proof_progress_lease_seconds = 0.05
+    chat.runtime.config.turn.submission_proof_absolute_ceiling_seconds = 0.3
+
+    def _never_matching_snapshots():
+        yield snap()
+        counter = 0
+        while True:
+            counter += 1
+            yield snap(users=1, user=f"Review AU01 (rendered variant {counter})")
+
+    chat._snapshots = _never_matching_snapshots()
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-never-matches", body="Review AU01"), lambda _: None
+    )
+    with pytest.raises(AudiaGenticError) as error:
+        await turn.run()
+    assert error.value.details.get("submission-ambiguous") is True
+    assert turn.state is not TurnState.COMPLETE
 
 
 @pytest.mark.asyncio
@@ -482,7 +520,9 @@ async def test_real_chat_transition_is_terminalized_exactly_once_on_policy_failu
 
     chat._move = move
     failed = snap(users=1, user="Review SH10", extra_signals=("error-page",))
-    chat._snapshots = iter([snap(), snap(users=1, user="Review SH10"), failed])
+    chat._snapshots = iter(
+        [snap(), snap(users=1, user="Review SH10"), snap(users=1, user="Review SH10"), failed]
+    )
     turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-1", body="Review SH10"), lambda _: None)
 
     with pytest.raises(Exception, match="provider failure policy matched"):
