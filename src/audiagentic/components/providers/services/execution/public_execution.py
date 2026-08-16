@@ -621,20 +621,25 @@ def prepare_provider_session_transport(
             effective_provider_ref=effective_ref,
         )
 
-    # ── Supported CDP surface (gpt-auto): build the CDP transport ─────
-    # gpt-auto has no ACP launch builder. Its thin transport resolves a shared
-    # provider runtime plus one PersistentChat through the same neutral
-    # AgentSessionTransport seam — no browser type crosses this boundary.
-    if provider_id == "gpt-auto" and surface_hint.surface_id == "gpt-auto-cdp":
-        from audiagentic.components.providers.adapters.gpt_auto.session_transport import (
-            build_gpt_auto_session_transport,
-        )
+    # ── Supported non-ACP surface (e.g. gpt-auto's CDP transport) ──────
+    # Some providers reach AgentSessionTransport by a seam other than an ACP
+    # launch (gpt-auto's shared provider runtime + PersistentChat over CDP).
+    # Resolved the same way ACP launch builders are below -- an adapter-hook
+    # capability probe on provider_id's own adapter package, never a
+    # surface_id or provider_id literal here. Any provider_id whose adapter
+    # package exposes session_transport.build_session_transport gets routed
+    # through it, including same-implementation alias packages such as
+    # gpt-auto-t1/t2 (dedicated GP05 test projects) -- no dispatcher edit
+    # needed to add one, only the adapter package plus provider settings.
+    from .execution import load_session_transport_builder
 
+    session_transport_builder = load_session_transport_builder(provider_id)
+    if session_transport_builder is not None:
         runtime = get_provider_runtime_config_state(project_root, provider_id)
         provider_config = runtime["config"]
         if not isinstance(provider_config, dict):
             provider_config = {}
-        transport = build_gpt_auto_session_transport(
+        transport = session_transport_builder(
             project_root,
             config=provider_config,
             ag_session_id=ag_session_id,

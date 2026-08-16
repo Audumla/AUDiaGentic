@@ -95,7 +95,7 @@ def test_snapshot_and_target_scripts_are_explicit() -> None:
 def test_resume_build_forwards_durable_chat_url_without_submitting(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     runtime = SimpleNamespace()
     monkeypatch.setattr(session_transport, "get_runtime", lambda _root, _config: runtime)
-    transport = session_transport.build_gpt_auto_session_transport(
+    transport = session_transport.build_session_transport(
         tmp_path,
         config=valid_config(),
         ag_session_id="ses-resumed",
@@ -115,7 +115,7 @@ def test_resume_build_tolerates_missing_chat_url(monkeypatch: pytest.MonkeyPatch
     """A missing chat-url must defer to browser-based reconciliation, not fail resume outright."""
     runtime = SimpleNamespace()
     monkeypatch.setattr(session_transport, "get_runtime", lambda _root, _config: runtime)
-    transport = session_transport.build_gpt_auto_session_transport(
+    transport = session_transport.build_session_transport(
         tmp_path,
         config=valid_config(),
         ag_session_id="ses-resumed",
@@ -135,7 +135,7 @@ def test_resume_build_rejects_conflicting_chat_url(monkeypatch: pytest.MonkeyPat
     runtime = SimpleNamespace()
     monkeypatch.setattr(session_transport, "get_runtime", lambda _root, _config: runtime)
     with pytest.raises(RuntimeError, match="matching durable chat-url"):
-        session_transport.build_gpt_auto_session_transport(
+        session_transport.build_session_transport(
             tmp_path,
             config=valid_config(),
             ag_session_id="ses-resumed",

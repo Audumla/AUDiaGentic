@@ -17,7 +17,7 @@ Durable regression tooling for two plan items:
   restart, a durable session with a missing/live chat-url must still be
   resumable via ``resume_execution_session`` using its stored identity/
   execution context fingerprints (see ``session_transport.py``'s
-  ``build_gpt_auto_session_transport``).
+  ``build_session_transport``).
 - GP05 (suspected cross-project blast radius): ``GptAutoProviderRuntime`` is
   machine-scoped (see ``runtime_registry.get_runtime``'s explicit
   ``del project_root``), and ``recover()`` reacts to a SINGLE browser/CDP

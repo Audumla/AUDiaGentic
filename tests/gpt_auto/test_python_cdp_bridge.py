@@ -11,6 +11,7 @@ from audiagentic.components.providers.adapters.gpt_auto.cdp.cdp_browser import (
     CdpPageRef,
     CdpWindowBounds,
 )
+from audiagentic.components.providers.adapters.gpt_auto.cdp.client import CdpError
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
     GptAutoCdpBrowserController,
@@ -80,6 +81,42 @@ async def test_python_bridge_serializes_page_creation_and_returns_window_identit
     creates = [call for call in fake.calls if call[0] == "Target.createTarget"]
     assert creates[0][1]["newWindow"] is True
     assert creates[1][1]["newWindow"] is False
+
+
+@pytest.mark.asyncio
+async def test_refresh_pages_tolerates_one_target_with_no_resolvable_window():
+    """A devtools:// inspector page (or any windowless target) alongside real
+    tabbed pages must not abort enumeration of every other live page --
+    reproduced live 2026-08-16 when an operator-opened devtools inspector
+    broke session dispatch machine-wide across every gpt-auto project
+    sharing the browser."""
+    bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
+    fake = _FakeClient()
+
+    async def command(method, params=None, *, session_id=None, timeout=None):
+        params = params or {}
+        if method == "Target.getTargets":
+            return {
+                "targetInfos": [
+                    {"targetId": "target-devtools", "type": "page", "url": "devtools://devtools/x"},
+                    {"targetId": "target-real", "type": "page", "url": "https://chatgpt.com/"},
+                ]
+            }
+        if method == "Browser.getWindowForTarget":
+            if params.get("targetId") == "target-devtools":
+                raise CdpError("Browser window not found")
+            return {"windowId": 42}
+        return await _FakeClient.command(fake, method, params, session_id=session_id, timeout=timeout)
+
+    fake.command = command
+    bridge._client = fake
+
+    pages = await bridge._refresh_pages()
+
+    assert len(pages) == 2
+    by_target = {p["targetId"]: p for p in pages}
+    assert by_target["target-devtools"]["windowId"] is None
+    assert by_target["target-real"]["windowId"] == 42
 
 
 @pytest.mark.asyncio

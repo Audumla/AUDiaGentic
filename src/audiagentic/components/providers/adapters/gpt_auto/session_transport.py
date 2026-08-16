@@ -153,7 +153,7 @@ class GptAutoSessionTransport:
         return self._turn_failure_disposition
 
 
-def build_gpt_auto_session_transport(
+def build_session_transport(
     project_root: Path,
     *,
     config: dict[str, Any],
@@ -199,4 +199,4 @@ def build_gpt_auto_session_transport(
     return GptAutoSessionTransport(chat)
 
 
-__all__ = ["GptAutoSessionTransport", "build_gpt_auto_session_transport"]
+__all__ = ["GptAutoSessionTransport", "build_session_transport"]

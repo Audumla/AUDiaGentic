@@ -1080,7 +1080,17 @@ class SessionRuntime:
         surface_id = (binding or {}).get("surface-id")
         if not isinstance(provider_ref, str) or not provider_ref.strip():
             metadata = session_store.session_provider_metadata(record)
-            if metadata.get("unresolved-turn-pending") and provider_id == "gpt-auto":
+            # Gated on a provider capability probe (does bound_provider's
+            # adapter declare a non-ACP session transport, e.g. gpt-auto's
+            # CDP seam) rather than a surface_id or provider_id literal --
+            # applies to any provider with this shape, including the
+            # dedicated gpt-auto-t1/t2 test projects, with no code change
+            # needed when a new one is added.
+            from audiagentic.components.providers import providers_api
+
+            if metadata.get(
+                "unresolved-turn-pending"
+            ) and providers_api.provider_declares_session_transport(bound_provider or ""):
                 raise AudiaGenticError(
                     code="RES-AGW-003",
                     kind="agents",

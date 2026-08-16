@@ -34,7 +34,7 @@ def test_gpt_auto_page_release_allows_next_session_to_claim() -> None:
 
 def test_unregister_chat_releases_owned_page() -> None:
     runtime = _runtime()
-    chat = SimpleNamespace(ag_session_id="session-a", page_handle="page-1")
+    chat = SimpleNamespace(ag_session_id="session-a", page_handle="page-1", provider_session_id=None)
     runtime._chats[chat.ag_session_id] = chat
     assert runtime.claim_page(chat, chat.page_handle) is True
 
