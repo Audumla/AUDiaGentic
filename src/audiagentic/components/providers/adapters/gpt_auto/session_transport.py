@@ -163,7 +163,7 @@ def build_session_transport(
     resume_metadata_hint: dict[str, Any] | None = None,
     checkpoint_sink: Any | None = None,
 ) -> GptAutoSessionTransport:
-    parsed = GptAutoConfig.from_dict(config)
+    parsed = GptAutoConfig.from_project_dict(config)
     runtime = get_runtime(project_root, parsed)
     metadata = resume_metadata_hint or {}
     project_url_value = metadata.get("project-url") or parsed.project_url
