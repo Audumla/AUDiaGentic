@@ -290,6 +290,8 @@ class GptAutoTurn:
             return self._result("cancelled")
         self._phase = "baseline-observation"
         baseline = await self.chat.snapshot()
+        if baseline.generating or not baseline.composer_editable:
+            baseline = await self._await_composer_settled(baseline)
         self._baseline_snapshot = baseline
         self._remember_snapshot(baseline)
         self._move(TurnState.SUBMITTING)
@@ -403,6 +405,27 @@ class GptAutoTurn:
                 extra={"session-id": self.chat.ag_session_id},
                 exc_info=True,
             )
+
+    async def _await_composer_settled(self, current: ChatSnapshot) -> ChatSnapshot:
+        """GP11: a turn submitted immediately after the previous one resolves
+        can race a composer that has not finished settling (still showing
+        generating=True, or composer_editable not yet true again) --
+        proven live to cause composer-action-not-confirmed. ensure_ready()
+        only re-reconciles a RECOVERING chat; an already-READY chat's
+        composer state is never re-verified at admission. Give it a short,
+        bounded window to settle here instead. If it never settles within
+        the budget, proceed anyway (submit()'s own bounded retry, GP11,
+        is the remaining safety net) rather than raise a new failure mode
+        for a case that might still succeed."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self.chat.config.turn.submission_timeout_seconds
+        poll_interval = self.chat.config.turn.poll_interval_seconds or 0.5
+        while current.generating or not current.composer_editable:
+            if loop.time() >= deadline:
+                break
+            await asyncio.sleep(poll_interval)
+            current = await self.chat.snapshot()
+        return current
 
     async def _submit_once(self) -> None:
         if self.submission_confirmed or self.state is not TurnState.SUBMITTING:

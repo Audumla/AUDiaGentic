@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -38,6 +39,7 @@ def snap(
     generating=False,
     complete=False,
     extra_signals=(),
+    composer_editable=True,
 ):
     signals = set(extra_signals)
     if generating:
@@ -52,7 +54,7 @@ def snap(
     return ChatSnapshot(
         url="https://chatgpt.com/g/g-p-project/c/conversation-1",
         composer_present=True,
-        composer_editable=True,
+        composer_editable=composer_editable,
         user_count=users,
         assistant_count=assistants,
         latest_assistant_id=assistant_id or (f"assistant-{assistants}" if assistants else None),
@@ -862,4 +864,61 @@ async def test_turn_does_not_complete_on_message_finalized_alone_without_complet
     )
     with pytest.raises(AudiaGenticError):
         await turn.run()
+
+
+@pytest.mark.asyncio
+async def test_await_composer_settled_returns_immediately_when_already_settled():
+    """GP11: an already-settled baseline (not generating, composer editable)
+    must not consume any extra snapshots or wait -- the fast path for the
+    overwhelmingly common case."""
+    chat = _Chat()
+    chat.runtime.config.turn.submission_timeout_seconds = 1.0
+    chat.runtime.config.turn.poll_interval_seconds = 0.01
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-1", body="hi"), lambda _: None)
+    already_settled = snap(generating=False, composer_editable=True)
+    result = await turn._await_composer_settled(already_settled)
+    assert result is already_settled
+
+
+@pytest.mark.asyncio
+async def test_await_composer_settled_polls_until_generating_clears():
+    """GP11: a baseline caught while the previous turn is still generating
+    (or the composer isn't yet editable again) must be re-observed until it
+    settles, within the bounded budget, rather than submitting into a
+    composer that isn't ready yet."""
+    chat = _Chat()
+    chat.runtime.config.turn.submission_timeout_seconds = 1.0
+    chat.runtime.config.turn.poll_interval_seconds = 0.01
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-1", body="hi"), lambda _: None)
+
+    def _settles_after_two_polls():
+        yield snap(generating=True)
+        yield snap(generating=True)
+        yield snap(generating=False)
+
+    chat._snapshots = _settles_after_two_polls()
+    start = snap(generating=True)
+    result = await turn._await_composer_settled(start)
+    assert result.generating is False
+
+
+@pytest.mark.asyncio
+async def test_await_composer_settled_gives_up_after_bounded_budget_without_hanging():
+    """A composer that never settles must not hang the turn forever -- the
+    bounded budget expires and the (still unsettled) snapshot is returned
+    so the caller can proceed anyway; submit()'s own bounded retry (GP11)
+    is the remaining safety net, not an indefinite wait here."""
+    chat = _Chat()
+    chat.runtime.config.turn.submission_timeout_seconds = 0.05
+    chat.runtime.config.turn.poll_interval_seconds = 0.01
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-1", body="hi"), lambda _: None)
+
+    def _never_settles():
+        while True:
+            yield snap(generating=True)
+
+    chat._snapshots = _never_settles()
+    start = snap(generating=True)
+    result = await asyncio.wait_for(turn._await_composer_settled(start), timeout=2.0)
+    assert result.generating is True
     assert turn.state is not TurnState.COMPLETE
