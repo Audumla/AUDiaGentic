@@ -4,10 +4,18 @@ GptAutoConfig.from_project_dict()'s resolution against defaults.yaml."""
 
 from __future__ import annotations
 
+import copy
+
+import pytest
+
 from audiagentic.components.providers.adapters.gpt_auto.config import (
+    CURRENT_CONTRACT_VERSION,
     GptAutoConfig,
     deep_merge,
 )
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+from .test_greenfield_config_urls import valid_config
 
 
 def test_deep_merge_recurses_into_nested_dicts_without_dropping_siblings() -> None:
@@ -72,3 +80,54 @@ def test_from_project_dict_overlay_override_wins_over_defaults() -> None:
     assert config.turn.response_timeout_seconds == 60
     # Sibling turn fields not overridden still come from defaults.
     assert config.turn.poll_interval_seconds == 1
+
+
+def test_v1_config_missing_gp07_fields_migrates_with_sane_defaults() -> None:
+    """GP21: a v1 project config predating GP07's two new required
+    submission-proof fields must not hard-fail the whole shared gateway --
+    the exact bigcherry incident GP09 was raised about. Migration fills
+    v1-era defaults instead."""
+    data = copy.deepcopy(valid_config())
+    del data["turn"]["submission-proof-progress-lease-seconds"]
+    del data["turn"]["submission-proof-absolute-ceiling-seconds"]
+
+    config = GptAutoConfig.from_dict(data)
+
+    assert config.turn.submission_proof_progress_lease_seconds == 300
+    assert config.turn.submission_proof_absolute_ceiling_seconds == 900
+    # The resolved config always reports the current schema version, not
+    # whatever version the input declared.
+    assert config.contract_version == CURRENT_CONTRACT_VERSION
+
+
+def test_v1_config_that_already_sets_gp07_fields_keeps_its_own_values() -> None:
+    """Migration only fills genuinely missing keys -- an explicit v1 config
+    that already sets these (unusual but not invalid) is not silently
+    overridden."""
+    data = copy.deepcopy(valid_config())
+    data["turn"]["submission-proof-progress-lease-seconds"] = 42
+    data["turn"]["submission-proof-absolute-ceiling-seconds"] = 99
+
+    config = GptAutoConfig.from_dict(data)
+
+    assert config.turn.submission_proof_progress_lease_seconds == 42
+    assert config.turn.submission_proof_absolute_ceiling_seconds == 99
+
+
+def test_v2_contract_version_accepted_directly_without_migration() -> None:
+    data = copy.deepcopy(valid_config())
+    data["contract-version"] = "v2"
+
+    config = GptAutoConfig.from_dict(data)
+
+    assert config.contract_version == CURRENT_CONTRACT_VERSION
+
+
+def test_unsupported_contract_version_is_rejected_clearly() -> None:
+    data = copy.deepcopy(valid_config())
+    data["contract-version"] = "v3"
+
+    with pytest.raises(AudiaGenticError) as exc_info:
+        GptAutoConfig.from_dict(data)
+
+    assert exc_info.value.code == "VAL-GPTAUTO-001"
