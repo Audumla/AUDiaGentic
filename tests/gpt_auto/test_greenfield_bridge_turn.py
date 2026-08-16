@@ -311,6 +311,46 @@ async def test_submission_proof_resolves_ambiguous_not_hung_when_text_never_exac
 
 
 @pytest.mark.asyncio
+async def test_submission_proof_finder_fallback_receives_raw_prompt_text():
+    """GP25 regression: _await_submission_proof()'s duplicate-tab fallback
+    (chat.find_prompt_snapshot) must be called with the raw prompt string,
+    not a PromptFingerprint object -- a real live bug where a leftover
+    `expected` reference (removed when GP25 migrated off the old _normal()
+    variable) caused a bare NameError in production the first time this
+    fallback branch actually ran, uncaught by every other test because
+    none of them give the fake chat a find_prompt_snapshot attribute at
+    all (so the fallback branch was never exercised)."""
+    chat = _Chat()
+    chat.runtime.config.turn.submission_proof_progress_lease_seconds = 0.05
+    chat.runtime.config.turn.submission_proof_absolute_ceiling_seconds = 0.3
+
+    def _never_matching_snapshots():
+        yield snap()
+        counter = 0
+        while True:
+            counter += 1
+            yield snap(users=1, user=f"Review AU01 (rendered variant {counter})")
+
+    chat._snapshots = _never_matching_snapshots()
+
+    calls: list[tuple[object, object]] = []
+
+    async def find_prompt_snapshot(baseline, expected_text):
+        calls.append((baseline, expected_text))
+        return None
+
+    chat.find_prompt_snapshot = find_prompt_snapshot
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-finder-fallback", body="Review AU01"), lambda _: None
+    )
+    with pytest.raises(AudiaGenticError):
+        await turn.run()
+    assert calls, "find_prompt_snapshot fallback was never invoked"
+    assert all(isinstance(expected_text, str) for _, expected_text in calls)
+    assert all(expected_text == "Review AU01" for _, expected_text in calls)
+
+
+@pytest.mark.asyncio
 async def test_turn_completes_despite_stuck_stop_control_signal():
     """Live-reproduced 2026-08-16: ChatGPT's own stop/submit button can stay
     in its 'stop' state indefinitely after a response has actually finished
@@ -622,12 +662,14 @@ async def test_real_chat_transition_is_terminalized_exactly_once_on_policy_failu
 
 
 def test_prompt_identity_preserves_case_spacing_and_indentation():
-    from audiagentic.components.providers.adapters.gpt_auto.turn import _normal
+    from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import (
+        normalize_prompt_text,
+    )
 
-    assert _normal("Return Foo") != _normal("return foo")
-    assert _normal("x  y") != _normal("x y")
-    assert _normal("if ok:\n    run()") != _normal("if ok:\nrun()")
-    assert _normal("line\r\n") == "line"
+    assert normalize_prompt_text("Return Foo") != normalize_prompt_text("return foo")
+    assert normalize_prompt_text("x  y") != normalize_prompt_text("x y")
+    assert normalize_prompt_text("if ok:\n    run()") != normalize_prompt_text("if ok:\nrun()")
+    assert normalize_prompt_text("line\r\n") == "line"
 
 
 @pytest.mark.asyncio
