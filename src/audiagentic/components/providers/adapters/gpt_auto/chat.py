@@ -353,7 +353,9 @@ class PersistentChat:
                     kind="providers",
                     message=(
                         "gpt-auto could not reconcile the previous turn; "
-                        "the conversation remains recoverable and no prompt was sent"
+                        "this admission attempt did not submit a new prompt, but the "
+                        "prior unresolved turn's outcome is not yet proven -- it may "
+                        "already have been sent and may even have completed"
                     ),
                     details={
                         "failure-reason": "unresolved-turn-not-reconciled",
