@@ -363,9 +363,23 @@ class GptAutoProviderRuntime:
             )
         ]
         if len(matches) > 1:
-            raise RuntimeError(
-                "gpt-auto retained conversation is ambiguous across multiple managed tabs"
-            )
+            # Multiple tabs can genuinely display the same canonical
+            # conversation (provider_session_id already proved that -- e.g.
+            # a human manually opened a second tab of it). That is tab-
+            # instance duplication, not conversation-identity ambiguity, so
+            # hard-refusing here is overly conservative. Deterministically
+            # pick one instead: never hop onto a tab a different LIVE chat
+            # already owns (that would bypass the exact invariant
+            # _page_owners exists to enforce), then break any remaining tie
+            # by page handle so repeated calls are stable rather than
+            # depending on list_pages' incidental ordering.
+            unclaimed = [
+                page
+                for page in matches
+                if self._page_owners.get(str(page.get("pageHandle") or "")) is None
+            ]
+            candidates = unclaimed or matches
+            return min(candidates, key=lambda page: str(page.get("pageHandle") or ""))
         return matches[0] if matches else None
 
     async def page_record(self, page_handle: str) -> dict | None:

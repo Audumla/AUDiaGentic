@@ -848,6 +848,79 @@ async def test_open_recovers_without_hanging_despite_bridge_replacement_mid_resu
     assert chat.page_handle == "handle-from-dead-bridge-generation"
 
 
+@pytest.mark.asyncio
+async def test_find_conversation_page_picks_deterministically_among_duplicate_tabs(
+    monkeypatch,
+) -> None:
+    """GP04: two tabs genuinely displaying the same canonical conversation
+    (e.g. a human manually opened a second tab) is tab-instance duplication,
+    not conversation-identity ambiguity -- must not hard-refuse. Must never
+    hop onto a tab a different live chat already owns, and must be stable
+    across repeated calls rather than depending on list_pages ordering."""
+    runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
+    runtime.state = ProviderState.AVAILABLE
+    runtime._dedicated_window_id = 7
+    same_conversation_pages = [
+        {"pageHandle": "page-32", "targetId": "target-b", "windowId": 7, "url": "https://chatgpt.com/c/provider-session"},
+        {"pageHandle": "page-17", "targetId": "target-a", "windowId": 7, "url": "https://chatgpt.com/c/provider-session"},
+    ]
+
+    class _Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages"
+            return same_conversation_pages
+
+    async def ensure_anchor() -> str:
+        return "anchor"
+
+    runtime._bridge = _Bridge()  # type: ignore[assignment]
+    monkeypatch.setattr(runtime, "ensure_dedicated_window_anchor", ensure_anchor)
+
+    # Neither tab is owned by another chat: pick deterministically (lowest
+    # page handle), not whatever list_pages happened to return first.
+    page = await runtime.find_conversation_page("provider-session")
+    assert page is not None
+    assert page["pageHandle"] == "page-17"
+
+    # Repeated calls are stable.
+    page_again = await runtime.find_conversation_page("provider-session")
+    assert page_again["pageHandle"] == "page-17"
+
+
+@pytest.mark.asyncio
+async def test_find_conversation_page_never_hops_onto_a_page_owned_by_another_live_chat(
+    monkeypatch,
+) -> None:
+    """A duplicate tab already claimed by a different live chat must never
+    be silently selected -- that would bypass the ownership invariant
+    _page_owners exists to enforce."""
+    runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
+    runtime.state = ProviderState.AVAILABLE
+    runtime._dedicated_window_id = 7
+    same_conversation_pages = [
+        {"pageHandle": "page-17", "targetId": "target-a", "windowId": 7, "url": "https://chatgpt.com/c/provider-session"},
+        {"pageHandle": "page-32", "targetId": "target-b", "windowId": 7, "url": "https://chatgpt.com/c/provider-session"},
+    ]
+    # page-17 has the lower handle (would win the deterministic tiebreak),
+    # but it's already owned by a different chat -- must be skipped.
+    runtime._page_owners["page-17"] = "other-session"
+
+    class _Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages"
+            return same_conversation_pages
+
+    async def ensure_anchor() -> str:
+        return "anchor"
+
+    runtime._bridge = _Bridge()  # type: ignore[assignment]
+    monkeypatch.setattr(runtime, "ensure_dedicated_window_anchor", ensure_anchor)
+
+    page = await runtime.find_conversation_page("provider-session")
+    assert page is not None
+    assert page["pageHandle"] == "page-32"
+
+
 def test_dedicated_window_ownership_rejects_duplicate_url_in_manual_window() -> None:
     runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
     runtime._dedicated_window_id = 41
