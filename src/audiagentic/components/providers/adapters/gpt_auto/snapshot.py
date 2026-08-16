@@ -52,6 +52,13 @@ class ChatSnapshot:
     latest_user_id: str | None = None
     user_message_ids: tuple[str, ...] = ()
     user_message_texts: tuple[str, ...] = ()
+    # GP08: ordered assistant-message sequence, mirroring the user-message
+    # arrays above -- the raw data a request-addressable correlation layer
+    # needs. "Latest assistant" alone cannot answer "what was the response
+    # to request A" once a later, unrelated turn has entered the
+    # conversation.
+    assistant_message_ids: tuple[str, ...] = ()
+    assistant_message_texts: tuple[str, ...] = ()
 
     @classmethod
     def from_bridge(cls, value: dict[str, Any]) -> ChatSnapshot:
@@ -80,6 +87,16 @@ class ChatSnapshot:
             user_message_texts=tuple(
                 item.strip()
                 for item in (value.get("userMessageTexts") or ())
+                if isinstance(item, str) and item.strip()
+            ),
+            assistant_message_ids=tuple(
+                item.strip()
+                for item in (value.get("assistantMessageIds") or ())
+                if isinstance(item, str) and item.strip()
+            ),
+            assistant_message_texts=tuple(
+                item.strip()
+                for item in (value.get("assistantMessageTexts") or ())
                 if isinstance(item, str) and item.strip()
             ),
         )
