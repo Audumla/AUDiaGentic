@@ -555,7 +555,19 @@ class GptAutoTurn:
                 )
                 emitted = True
             complete = self.chat.config.workflow.policy("response-complete").evaluate(facts)
-            complete_satisfied = complete.satisfied and not current.generating
+            complete_satisfied = complete.satisfied
+            if complete_satisfied and current.generating:
+                # stop-control (the usual source of a raw .generating=True)
+                # is proven live-unreliable -- it can stick indefinitely
+                # after real completion. It is advisory-only now: logged
+                # when it disagrees with the response-complete policy
+                # (which already requires corroborating any-of evidence
+                # plus the text-stability window below), never a veto.
+                logger.warning(
+                    "gpt-auto Tier-3 generating signal disagreed with "
+                    "response-complete policy evidence=%s",
+                    sorted(complete.matched),
+                )
             if complete_satisfied and current.latest_assistant_text:
                 if not emitted:
                     await self._emit(
@@ -619,11 +631,13 @@ class GptAutoTurn:
                     verified = self.chat.config.workflow.policy("response-complete").evaluate(
                         verify_facts
                     )
-                    if (
-                        verified.satisfied
-                        and not verify.generating
-                        and verify.latest_assistant_text == stable_text
-                    ):
+                    if verify.generating:
+                        logger.warning(
+                            "gpt-auto Tier-3 generating signal disagreed with "
+                            "response-complete policy at final verification evidence=%s",
+                            sorted(verified.matched),
+                        )
+                    if verified.satisfied and verify.latest_assistant_text == stable_text:
                         assert stable_text is not None
                         self._response_message_id = verify.latest_assistant_id
                         logger.info(
