@@ -133,6 +133,19 @@ def get_provider_mcp_launch_isolation_tier(provider_id: str) -> McpLaunchIsolati
     return _get_tier(provider_id)
 
 
+def provider_declares_session_transport(provider_id: str) -> bool:
+    """Return whether *provider_id*'s adapter package declares a non-ACP
+    session transport builder (e.g. gpt-auto's CDP seam), through the public
+    boundary. A pure capability probe -- callers use this instead of a
+    surface_id or provider_id literal to recognize this class of provider.
+    """
+    from audiagentic.components.providers.services.execution.execution import (
+        load_session_transport_builder,
+    )
+
+    return load_session_transport_builder(provider_id) is not None
+
+
 def get_provider_runtime_config_state(
     project_root: Path,
     provider_id: str,
@@ -1938,6 +1951,7 @@ __all__ = [
     "get_provider_execution_isolation_tier",
     "get_provider_mcp_launch_isolation_tier",
     "get_provider_runtime_config_state",
+    "provider_declares_session_transport",
     "execute_provider_turn",
     "prepare_provider_acp_launch",
     "prepare_interactive_provider_launch",

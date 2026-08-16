@@ -194,11 +194,12 @@ def test_all_providers_validate_against_catalogue():
     """Every capability_id in all shipped provider YAMLs resolves to a catalogue kind.
 
     The repository-owned activity-rig is also a registered synthetic provider
-    used by deterministic gateway tests, so the shipped registry currently
-    contains 21 descriptors.
+    used by deterministic gateway tests, and gpt-auto-t1/gpt-auto-t2 are
+    dedicated GP05 test-project aliases of gpt-auto, so the shipped registry
+    currently contains 23 descriptors.
     """
     descriptors = all_descriptors()
-    assert len(descriptors) == 21, f"Expected 21 providers, got {len(descriptors)}"
+    assert len(descriptors) == 23, f"Expected 23 providers, got {len(descriptors)}"
 
     for pid, desc in descriptors.items():
         validate_provider_capability_facts(desc)  # raises if any fact fails

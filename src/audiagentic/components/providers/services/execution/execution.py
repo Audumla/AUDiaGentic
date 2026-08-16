@@ -184,6 +184,19 @@ def load_materialize_model_config_path_resolver(provider_id: str) -> Callable[..
     return _adapter_hook(provider_id, "install", "materialize_model_config_path")
 
 
+def load_session_transport_builder(provider_id: str) -> Callable[..., Any] | None:
+    """Load a provider-owned non-ACP session transport builder, if declared.
+
+    Covers providers that reach ``AgentSessionTransport`` some other way than
+    an ACP launch (e.g. gpt-auto's CDP browser-automation seam). An adapter
+    package exposes ``build_session_transport(...)`` in its ``session_transport``
+    submodule; any provider_id whose adapter package declares this hook is
+    routed through it, with no dispatcher edit needed to add another one
+    (including a same-implementation alias package such as gpt-auto-t1/t2).
+    """
+    return _adapter_hook(provider_id, "session_transport", "build_session_transport")
+
+
 _EXECUTION_MODE_BY_DECLARATION: dict[str, str] = {
     "cli": "descriptor",
     "stub": "stub",

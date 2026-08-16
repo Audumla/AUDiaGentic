@@ -264,28 +264,39 @@ class TestTransportObservationEligibility:
         )
 
         eligible = list_eligible_transport_observation_surfaces(platform="linux-amd64")
-        assert len(eligible) == 3
+        assert len(eligible) == 5
         assert ("gpt-auto", "gpt-auto-browser") in eligible
+        assert ("gpt-auto-t1", "gpt-auto-browser") in eligible
+        assert ("gpt-auto-t2", "gpt-auto-browser") in eligible
         assert ("opencode", "opencode-acp") in eligible
         assert ("pi", "pi-community-acp") in eligible
 
     def test_eligible_list_windows_includes_current_validated_surfaces(self):
-        """Windows includes the validated Pi and gpt-auto surfaces."""
+        """Windows includes the validated Pi and gpt-auto (+ t1/t2 alias) surfaces."""
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             list_eligible_transport_observation_surfaces,
         )
 
         eligible = list_eligible_transport_observation_surfaces(platform="windows-amd64")
-        assert eligible == [("gpt-auto", "gpt-auto-browser"), ("pi", "pi-community-acp")]
+        assert eligible == [
+            ("gpt-auto", "gpt-auto-browser"),
+            ("gpt-auto-t1", "gpt-auto-browser"),
+            ("gpt-auto-t2", "gpt-auto-browser"),
+            ("pi", "pi-community-acp"),
+        ]
 
     def test_eligible_list_darwin_arm64_includes_gpt_auto(self):
-        """On darwin-arm64, gpt-auto is the currently validated surface."""
+        """On darwin-arm64, gpt-auto (+ t1/t2 alias) are the validated surfaces."""
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             list_eligible_transport_observation_surfaces,
         )
 
         eligible = list_eligible_transport_observation_surfaces(platform="darwin-arm64")
-        assert eligible == [("gpt-auto", "gpt-auto-browser")]
+        assert eligible == [
+            ("gpt-auto", "gpt-auto-browser"),
+            ("gpt-auto-t1", "gpt-auto-browser"),
+            ("gpt-auto-t2", "gpt-auto-browser"),
+        ]
 
 
 # ---------------------------------------------------------------------------

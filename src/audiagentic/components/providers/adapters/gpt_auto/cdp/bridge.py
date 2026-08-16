@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..config import GptAutoConfig
-from .client import CdpClient
+from .client import CdpClient, CdpError
 
 
 @dataclass(frozen=True)
@@ -94,13 +94,22 @@ class PythonCdpBridge:
                 continue
             target_id = str(info["targetId"])
             handle = self._handle_for_target(target_id)
+            try:
+                window_id = await self._window_id(target_id)
+            except CdpError:
+                # A target that isn't a real tabbed browser window (e.g. a
+                # devtools:// inspector page opened by the operator) has no
+                # window to resolve. One such target must not abort page
+                # enumeration for every other live page on the shared
+                # browser -- treat it as windowless and keep going.
+                window_id = None
             result.append(
                 {
                     "pageHandle": handle,
                     "url": str(info.get("url") or ""),
                     "title": str(info.get("title") or ""),
                     "targetId": target_id,
-                    "windowId": await self._window_id(target_id),
+                    "windowId": window_id,
                 }
             )
         return result
