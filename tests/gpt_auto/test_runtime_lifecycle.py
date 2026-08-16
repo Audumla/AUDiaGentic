@@ -759,6 +759,95 @@ async def test_resume_open_fails_cleanly_without_orphaning_page_when_no_tab_or_u
     assert chat.state is ChatState.CLOSED
 
 
+@pytest.mark.asyncio
+async def test_open_recovers_without_hanging_despite_bridge_replacement_mid_resume() -> None:
+    """GP05 boundary case: a shared-bridge death during _open_impl()'s
+    find_conversation_page() await must not make resume hang for the full
+    recovery-timeout before it can even re-verify the page it was handed.
+
+    This reproduces the exact vulnerable window the review flagged.
+    _wait_ready() already tolerates RECOVERING (allow_recovering=True), but
+    the very next call -- self.snapshot() re-verifying provider-session
+    identity -- did not, so a bridge replacement racing the resume path used
+    to force a needless ~30s wait on a signal nothing in this flow ever
+    sets, before eventually failing anyway. Fixed by passing
+    allow_recovering=True there too, consistent with _wait_ready()'s own
+    call just above it. With the fix, resume completes promptly and
+    re-verifies identity against a live snapshot rather than trusting the
+    page dict blindly.
+    """
+    config = GptAutoConfig.from_dict(valid_config())
+    stale_page = {
+        "pageHandle": "handle-from-dead-bridge-generation",
+        "targetId": "stale-target",
+        "url": "https://chatgpt.com/g/g-p-project/c/provider-session",
+    }
+
+    class _Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages"
+            return []
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle, target_id="stable-target")
+
+        async def snapshot(self, _page, *, signals=None):
+            return {
+                "url": stale_page["url"],
+                "composerPresent": True,
+                "composerEditable": True,
+                "userCount": 0,
+                "assistantCount": 0,
+                "domSignals": {},
+                "errorPresent": False,
+            }
+
+    runtime = SimpleNamespace(
+        gpt_browser=_Browser(),
+        bridge=_Bridge(),
+        claim_page=lambda _chat, _handle: True,
+        release_page=lambda _chat, _handle: None,
+        register_chat=lambda _chat: _done(),
+        claim_conversation=lambda _chat, _provider_session_id: True,
+        ensure_available=_done,
+    )
+
+    chat = PersistentChat(
+        ag_session_id="session-race-bridge-death-mid-resume",
+        project_name="project",
+        project_url=None,
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url="https://chatgpt.com/g/g-p-project/c/provider-session",
+    )
+
+    async def find_conversation_page_races_bridge_death(_provider_session_id, *, preferred_target_id=None):
+        # Simulate the shared CDP bridge dying WHILE this lookup is in
+        # flight -- runtime.recover() would call bridge_replaced() on every
+        # registered chat at exactly this moment in a real race.
+        chat.bridge_replaced()
+        return stale_page
+
+    runtime.find_conversation_page = find_conversation_page_races_bridge_death
+
+    async def quiescent(*, allow_recovering=False):
+        assert allow_recovering is True
+        return SimpleNamespace()
+
+    chat.wait_quiescent = quiescent  # type: ignore[method-assign]
+
+    # Before the fix this raised RuntimeError("gpt-auto chat recovery timed
+    # out") after a full config.cdp.recovery_timeout_seconds wait; the
+    # bounded wait_for below proves it no longer hangs at all.
+    await asyncio.wait_for(chat.open(), timeout=2.0)
+
+    assert chat.state is ChatState.READY
+    assert chat.page_handle == "handle-from-dead-bridge-generation"
+
+
 def test_dedicated_window_ownership_rejects_duplicate_url_in_manual_window() -> None:
     runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
     runtime._dedicated_window_id = 41
