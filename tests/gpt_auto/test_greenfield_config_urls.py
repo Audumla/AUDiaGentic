@@ -46,6 +46,8 @@ def valid_config() -> dict:
             "response-timeout-seconds": 600,
             "poll-interval-seconds": 1,
             "response-stability-seconds": 6,
+            "submission-proof-progress-lease-seconds": 300,
+            "submission-proof-absolute-ceiling-seconds": 900,
         },
         "workflow": {
             "dom-signals": {
