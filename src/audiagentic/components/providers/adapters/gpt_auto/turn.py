@@ -31,6 +31,7 @@ from .observation_engine import (
     ObservationOutcome,
     ObservationTracker,
 )
+from .prompt_fingerprint import PromptFingerprint, match_prompt
 from .snapshot import ChatSnapshot
 from .urls import parse_provider_session_id
 
@@ -381,7 +382,7 @@ class GptAutoTurn:
             is_new = _new_user_message(self._baseline_snapshot, current) if self._baseline_snapshot else True
             if (
                 is_new
-                and _matches(_normal(self.request.body), _normal(current.latest_user_text or ""))
+                and match_prompt(self.request.body, current.latest_user_text or "")
                 and current.latest_user_id
             ):
                 self._prompt_message_id = current.latest_user_id
@@ -495,7 +496,7 @@ class GptAutoTurn:
                     **self._diagnostics(expected_prompt=self.request.body),
                 },
             )
-        if _normal(str(typed_text or "")) != _normal(self.request.body):
+        if not match_prompt(self.request.body, str(typed_text or "")):
             # The browser has already reported a completed send action.  The
             # editor's read-back text is only a local pre-flight signal and
             # can differ from the eventual conversation text because React/
@@ -532,7 +533,7 @@ class GptAutoTurn:
         policy = _SubmissionProofPolicy(turn_cfg)
         loop = asyncio.get_running_loop()
         tracker = ObservationTracker(policy=policy, now=loop.time())
-        expected = _normal(self.request.body)
+        expected_fingerprint = PromptFingerprint.from_text(self.request.body)
         last_observation_error: BaseException | None = None
         # Edge-triggered, not level-triggered: an unchanged fact observed on
         # every poll (e.g. the new user message still being "new" relative
@@ -572,7 +573,7 @@ class GptAutoTurn:
             last_observation_error = None
             self._remember_snapshot(snap)
             new_msg = _new_user_message(baseline, snap)
-            text_matches = new_msg and _matches(expected, _normal(snap.latest_user_text or ""))
+            text_matches = new_msg and expected_fingerprint.matches_text(snap.latest_user_text or "")
             user_id_changed = snap.latest_user_id != previous_user_id
             soft_changed = (
                 snap.generating != previous_generating or snap.dom_signals != previous_dom_signals
@@ -617,7 +618,7 @@ class GptAutoTurn:
                 break
             finder = getattr(self.chat, "find_prompt_snapshot", None)
             if finder is not None:
-                alternate = await finder(baseline, expected)
+                alternate = await finder(baseline, self.request.body)
                 if alternate is not None:
                     self._prompt_message_id = alternate.latest_user_id
                     return alternate
@@ -1038,17 +1039,6 @@ class GptAutoTurn:
             )
 
 
-def _normal(text: str) -> str:
-    # Browser text surfaces may normalize line endings and append one terminal
-    # newline.  Case, indentation, repeated spaces, and interior blank lines
-    # remain semantically significant for coding prompts.
-    return text.replace("\r\n", "\n").replace("\r", "\n").removesuffix("\n")
-
-
-def _matches(expected: str, actual: str) -> bool:
-    return expected == actual
-
-
 def _new_user_message(baseline: ChatSnapshot, current: ChatSnapshot) -> bool:
     """Prefer the provider message UUID; counts remain a compatibility fallback."""
     if current.latest_user_id and current.latest_user_id not in set(baseline.user_message_ids):
@@ -1122,7 +1112,7 @@ def _snapshot_diagnostics(
     if expected_prompt is not None:
         result["expected-prompt-length"] = len(expected_prompt)
         result["observed-user-text-length"] = len(snapshot.latest_user_text or "")
-        result["prompt-text-match"] = _matches(
-            _normal(expected_prompt), _normal(snapshot.latest_user_text or "")
+        result["prompt-text-match"] = match_prompt(
+            expected_prompt, snapshot.latest_user_text or ""
         )
     return result

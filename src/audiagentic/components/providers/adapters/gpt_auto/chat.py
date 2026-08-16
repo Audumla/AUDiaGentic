@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
-import re
 from enum import StrEnum
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -17,6 +15,7 @@ from audiagentic.foundation.transports.session_binding import (
 from audiagentic.foundation.workflow import TransitionConfig, TransitionEngine
 
 from .config import GptAutoConfig
+from .prompt_fingerprint import PromptFingerprint, match_prompt
 from .runtime import GptAutoProviderRuntime
 from .snapshot import ChatSnapshot
 from .urls import (
@@ -568,7 +567,7 @@ class PersistentChat:
         self._unresolved_recovery_reason = None
         self._unresolved_recovery_details = {}
         if prompt_text:
-            self.unresolved_prompt_text_digest = _prompt_text_digest(prompt_text)
+            self.unresolved_prompt_text_digest = PromptFingerprint.from_text(prompt_text).digest
 
     def mark_prompt_submitted(
         self,
@@ -582,7 +581,7 @@ class PersistentChat:
         self.unresolved_prompt_message_id = prompt_id
         self.unresolved_assistant_before_id = assistant_before_id
         if prompt_text:
-            self.unresolved_prompt_text_digest = _prompt_text_digest(prompt_text)
+            self.unresolved_prompt_text_digest = PromptFingerprint.from_text(prompt_text).digest
 
     def mark_assistant_observed(self, assistant_id: str) -> None:
         self.unresolved_assistant_message_id = assistant_id
@@ -638,7 +637,7 @@ class PersistentChat:
                 snapshot.latest_user_id
                 and snapshot.latest_user_id not in set(baseline.user_message_ids)
             ) or snapshot.user_count > baseline.user_count
-            if fresh and _same_prompt(snapshot.latest_user_text, expected_text):
+            if fresh and match_prompt(expected_text, snapshot.latest_user_text or ""):
                 if old_handle and old_handle != handle:
                     self.runtime.release_page(self, old_handle)
                 self._bind_page(record)
@@ -970,12 +969,6 @@ def _reconciliation_evidence_clear(snapshot: ChatSnapshot) -> bool:
     )
 
 
-def _same_prompt(actual: str | None, expected: str) -> bool:
-    if not isinstance(actual, str):
-        return False
-    return actual.strip() == expected.strip()
-
-
 def _metadata_text(metadata: dict[str, object], key: str) -> str | None:
     value = metadata.get(key)
     return value.strip() if isinstance(value, str) and value.strip() else None
@@ -983,11 +976,6 @@ def _metadata_text(metadata: dict[str, object], key: str) -> str | None:
 
 def _metadata_bool(metadata: dict[str, object], key: str) -> bool:
     return metadata.get(key) is True
-
-
-def _prompt_text_digest(value: str) -> str:
-    normalized = re.sub(r"\s+", " ", value).strip()
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def _unresolved_prompt_match(chat: PersistentChat, snapshot: ChatSnapshot) -> str | None:
@@ -1030,7 +1018,7 @@ def _unresolved_prompt_match_diagnostics(
     observed_texts = snapshot.user_message_texts or (
         (snapshot.latest_user_text,) if snapshot.latest_user_text else ()
     )
-    matches = [text for text in observed_texts if _prompt_text_digest(text) == digest]
+    matches = [text for text in observed_texts if PromptFingerprint.from_text(text).digest == digest]
     if len(matches) == 1:
         details = {"prompt-text-digest": digest, "matched-user-count": len(matches)}
         if id_details:
