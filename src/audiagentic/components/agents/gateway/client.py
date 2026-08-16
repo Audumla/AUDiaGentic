@@ -319,3 +319,53 @@ def reset_gateway_client() -> None:
                 close()
         _CLIENT = None
         _CLIENT_CONFIG = None
+
+
+# GP06: methods safe to silently retry once against a freshly-reconnected
+# client after NET-AGSV-002. A network failure does not prove the original
+# RPC never reached the server, so mutating operations (submit, resume,
+# control, close, cancel) are deliberately excluded -- reconnecting the
+# client is always safe, but replaying a mutation blindly is not.
+_READ_ONLY_GATEWAY_METHODS = frozenset({
+    "get_execution_request",
+    "list_execution_requests",
+    "gateway_overview",
+    "list_execution_sessions",
+    "request_runtime_status",
+    "list_agent_contexts",
+    "get_agent_context",
+    "get_agent_work",
+    "list_agent_work",
+})
+
+
+def call_gateway_method(
+    method_name: str, project_root: Path | None, *args: Any, **kwargs: Any
+) -> Any:
+    """Call a GatewayClient method, self-healing a dead cached 'automatic'
+    client on NET-AGSV-002.
+
+    get_gateway_client()'s cache previously never revisited its choice after
+    the first call in a process's lifetime: if the underlying gateway
+    process later died and was restarted, every subsequent call kept
+    failing against the dead reference forever, with no self-recovery
+    (confirmed live 2026-08-16, tracked as GP06). Reconnection is
+    unconditionally safe -- a dead client is useless no matter what is being
+    called -- but REPLAYING the specific failed call is not always safe, so
+    only read-only methods are retried after reconnecting; mutating calls
+    are re-raised so the caller decides, now against a live client for
+    their next attempt.
+    """
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    client = get_gateway_client(project_root)
+    try:
+        return getattr(client, method_name)(project_root, *args, **kwargs)
+    except AudiaGenticError as exc:
+        if exc.code != "NET-AGSV-002":
+            raise
+        reset_gateway_client()
+        client = get_gateway_client(project_root)
+        if method_name not in _READ_ONLY_GATEWAY_METHODS:
+            raise
+        return getattr(client, method_name)(project_root, *args, **kwargs)

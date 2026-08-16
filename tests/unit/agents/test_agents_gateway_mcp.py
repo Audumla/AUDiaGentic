@@ -34,41 +34,37 @@ def test_agent_list_definitions_delegates():
 def test_agent_task_status_delegates():
     with (
         _patch_root(),
-        patch("audiagentic.components.agents.mcp.gateway_mcp.get_gateway_client") as mock_get,
+        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
     ):
-        mock = mock_get.return_value
-        mock.get_execution_request.return_value = {"request-id": "req_x", "state": "completed"}
+        mock_call.return_value = {"request-id": "req_x", "state": "completed"}
         result = agents_gateway_mcp.agent_task_status("req_x")
     assert result["state"] == "completed"
-    mock_get.assert_called_once_with(_ROOT)
-    mock.get_execution_request.assert_called_once_with(_ROOT, "req_x")
+    mock_call.assert_called_once_with("get_execution_request", _ROOT, "req_x")
 
 
 def test_agent_task_cancel_delegates():
     with (
         _patch_root(),
-        patch("audiagentic.components.agents.mcp.gateway_mcp.get_gateway_client") as mock_get,
+        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
     ):
-        mock = mock_get.return_value
-        mock.cancel_execution_request.return_value = {"request-id": "req_x", "state": "cancelled"}
+        mock_call.return_value = {"request-id": "req_x", "state": "cancelled"}
         result = agents_gateway_mcp.agent_task_cancel("req_x")
     assert result["state"] == "cancelled"
-    mock_get.assert_called_once_with(_ROOT)
-    mock.cancel_execution_request.assert_called_once_with(_ROOT, "req_x")
+    mock_call.assert_called_once_with("cancel_execution_request", _ROOT, "req_x")
 
 
 def test_agent_task_session_resume_delegates_to_gateway_client():
     with (
         _patch_root(),
-        patch("audiagentic.components.agents.mcp.gateway_mcp.get_gateway_client") as mock_get,
+        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
     ):
-        mock = mock_get.return_value
-        mock.resume_execution_session.return_value = {"session-id": "ses_new", "state": "active"}
+        mock_call.return_value = {"session-id": "ses_new", "state": "active"}
         result = agents_gateway_mcp.agent_task_session_resume(
             "ses_old", "ctl_001", "identity", "execution", "chatgpt"
         )
     assert result["session-id"] == "ses_new"
-    mock.resume_execution_session.assert_called_once_with(
+    mock_call.assert_called_once_with(
+        "resume_execution_session",
         _ROOT,
         "ses_old",
         control_id="ctl_001",
@@ -81,15 +77,15 @@ def test_agent_task_session_resume_delegates_to_gateway_client():
 def test_agent_task_session_control_delegates_to_gateway_client():
     with (
         _patch_root(),
-        patch("audiagentic.components.agents.mcp.gateway_mcp.get_gateway_client") as mock_get,
+        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
     ):
-        mock = mock_get.return_value
-        mock.control_execution_session.return_value = {"disposition": "accepted"}
+        mock_call.return_value = {"disposition": "accepted"}
         result = agents_gateway_mcp.agent_task_session_control(
             "ses_1", "cancel-turn", "ctl_1", turn_id="req_1"
         )
     assert result == {"disposition": "accepted"}
-    mock.control_execution_session.assert_called_once_with(
+    mock_call.assert_called_once_with(
+        "control_execution_session",
         _ROOT,
         "ses_1",
         action="cancel-turn",
@@ -102,23 +98,20 @@ def test_agent_task_session_control_delegates_to_gateway_client():
 def test_agent_task_list_requests_delegates():
     with (
         _patch_root(),
-        patch("audiagentic.components.agents.mcp.gateway_mcp.get_gateway_client") as mock_get,
+        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
     ):
-        mock = mock_get.return_value
-        mock.list_execution_requests.return_value = [{"request-id": "req_x", "state": "completed"}]
+        mock_call.return_value = [{"request-id": "req_x", "state": "completed"}]
         result = agents_gateway_mcp.agent_task_list_requests(state="completed", limit=5)
     assert result == [{"request-id": "req_x", "state": "completed"}]
-    mock_get.assert_called_once_with(_ROOT)
-    mock.list_execution_requests.assert_called_once_with(_ROOT, state="completed", limit=5)
+    mock_call.assert_called_once_with("list_execution_requests", _ROOT, state="completed", limit=5)
 
 
 def test_agent_task_gateway_overview_delegates():
     with (
         _patch_root(),
-        patch("audiagentic.components.agents.mcp.gateway_mcp.get_gateway_client") as mock_get,
+        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
     ):
-        mock = mock_get.return_value
-        mock.gateway_overview.return_value = {
+        mock_call.return_value = {
             "total_requests": 3,
             "by_state": {"completed": 3},
             "recent_failures": [],
@@ -126,8 +119,7 @@ def test_agent_task_gateway_overview_delegates():
         }
         result = agents_gateway_mcp.agent_task_gateway_overview()
     assert result["total_requests"] == 3
-    mock_get.assert_called_once_with(_ROOT)
-    mock.gateway_overview.assert_called_once_with(_ROOT)
+    mock_call.assert_called_once_with("gateway_overview", _ROOT)
 
 
 def test_agent_task_submit_resolves_agent_and_delegates():
@@ -139,10 +131,9 @@ def test_agent_task_submit_resolves_agent_and_delegates():
             "audiagentic.components.agents.models.agent_definition_api.get_agent_definition",
             return_value={"agent_id": "reviewer-agent", "execution_profile_id": "fast"},
         ) as mock_get_definition,
-        patch("audiagentic.components.agents.mcp.gateway_mcp.get_gateway_client") as mock_get_client,
+        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
     ):
-        mock_client = mock_get_client.return_value
-        mock_client.submit_execution_request.return_value = {
+        mock_call.return_value = {
             "request-id": "req_x",
             "state": "queued",
         }
@@ -150,8 +141,8 @@ def test_agent_task_submit_resolves_agent_and_delegates():
 
     assert result["state"] == "queued"
     mock_get_definition.assert_called_once_with(_ROOT, "reviewer-agent")
-    mock_client.get_execution_request.assert_not_called()
-    mock_client.submit_execution_request.assert_called_once_with(
+    mock_call.assert_called_once_with(
+        "submit_execution_request",
         _ROOT,
         execution_profile_id="fast",
         prompt_body="hi",
