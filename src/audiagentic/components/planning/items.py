@@ -365,7 +365,12 @@ def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any
 
 
 @item_store.serialize_item_update
-def update_item(project_root: Path, item_id: str, updates: dict[str, Any]) -> dict[str, Any]:
+def update_item(
+    project_root: Path,
+    item_id: str,
+    updates: dict[str, Any],
+    append: list[str] | None = None,
+) -> dict[str, Any]:
     """Update frontmatter fields and/or body sections of a plan item.
 
     Frontmatter keys: id, order, plan, state, validate-first, priority,
@@ -375,12 +380,23 @@ def update_item(project_root: Path, item_id: str, updates: dict[str, Any]) -> di
     their canonical heading in the configured order; any other key becomes a
     custom section appended after them, created if it does not yet exist.
     Custom headings already in the file keep their original text.
+
+    By default a key in `updates` replaces its section's entire content —
+    this loses prior content if the caller doesn't fetch-then-concatenate
+    first. Pass the key's name in `append` (e.g. append=["notes"]) to instead
+    add the new value after the existing content (blank-line separated),
+    which is almost always what repeated narrative sections like `notes`
+    actually want. `append` has no effect on frontmatter fields (order,
+    state, etc. are scalar, not narrative — replace is the only sensible
+    semantic there) and is silently ignored for any key not also present in
+    `updates`.
     """
     path = item_store.require_item(project_root, item_id)
     fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
     item_store.ensure_not_review(fm, item_id, "VAL-PLN-020")
     sections = item_store.parse_item_sections(body)
     custom_headings = item_store.parse_item_custom_headings(body)
+    append_keys = set(append or ())
 
     # Snapshot old values before mutating — needed for change-log diffing.
     old_fm = dict(fm)
@@ -397,11 +413,16 @@ def update_item(project_root: Path, item_id: str, updates: dict[str, Any]) -> di
             # of this chain and was discarded while the call still reported
             # success — writing it is what callers always meant.
             # Serialize non-string values (dicts, lists) into markdown.
-            sections[key] = (
+            new_value = (
                 value
                 if isinstance(value, str)
                 else item_store._serialize_section_value(value)
             )
+            if key in append_keys:
+                existing = old_sections.get(key, "").rstrip()
+                sections[key] = f"{existing}\n\n{new_value}" if existing else new_value
+            else:
+                sections[key] = new_value
 
     # Determine which fields actually changed for the change log.
     changed_keys: list[str] = []

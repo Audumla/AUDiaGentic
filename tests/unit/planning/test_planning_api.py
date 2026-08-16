@@ -429,6 +429,38 @@ def test_update_item_updates_body_section(tmp_path):
     assert item["description"] == "Updated description."
 
 
+def test_update_item_append_adds_after_existing_content(tmp_path):
+    planning_api.create_item(tmp_path, _make_item())
+    planning_api.update_item(tmp_path, "TST01", {"notes": "First entry."})
+    planning_api.update_item(tmp_path, "TST01", {"notes": "Second entry."}, append=["notes"])
+
+    item = planning_api.get_item(tmp_path, "TST01")
+    assert item["notes"] == "First entry.\n\nSecond entry."
+
+
+def test_update_item_append_on_empty_section_has_no_leading_blank(tmp_path):
+    planning_api.create_item(tmp_path, _make_item())
+    planning_api.update_item(tmp_path, "TST01", {"notes": "Only entry."}, append=["notes"])
+
+    item = planning_api.get_item(tmp_path, "TST01")
+    assert item["notes"] == "Only entry."
+
+
+def test_update_item_append_only_applies_to_listed_keys(tmp_path):
+    planning_api.create_item(tmp_path, _make_item())
+    planning_api.update_item(tmp_path, "TST01", {"description": "Original description."})
+    planning_api.update_item(
+        tmp_path,
+        "TST01",
+        {"description": "Replaced.", "notes": "First note."},
+        append=["notes"],
+    )
+
+    item = planning_api.get_item(tmp_path, "TST01")
+    assert item["description"] == "Replaced."
+    assert item["notes"] == "First note."
+
+
 def test_update_item_updates_title(tmp_path):
     planning_api.create_item(tmp_path, _make_item())
     planning_api.update_item(tmp_path, "TST01", {"title": "New Title"})
