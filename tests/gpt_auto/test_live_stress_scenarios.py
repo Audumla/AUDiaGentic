@@ -22,8 +22,19 @@ Why manual-only, not automated:
   multi-minute) and genuinely nondeterministic -- these are stress/
   exploration scenarios for a human to run and read the output of, not
   a reliable pass/fail gate to block merges on.
-- L4/L5 deliberately interfere with a live browser tab (closing it,
-  cancelling mid-generation) -- not something that should run unattended.
+- Some scenarios deliberately interfere with a live browser tab (closing
+  it mid-generation, cancelling mid-generation) -- not something that
+  should run unattended.
+
+Session usage: 3 test functions, 4 real ChatGPT sessions total (not one
+per scenario) -- test_live_t1_scenarios runs the long-generation and
+tab-close scenarios sequentially against ONE gpt-t1 session; the cancel
+scenario reuses its own session for its follow-up prompt; only the
+concurrent-isolation test genuinely needs two simultaneous sessions.
+ChatGPT rate-limits new-session creation more than continuing an existing
+one (proven live 2026-08-16), so minimizing session count here is
+deliberate, not incidental -- do not "simplify" this back to one fresh
+session per scenario.
 
 Requires:
 - A real Chrome/Brave already running with --remote-debugging-port=9222
@@ -132,38 +143,33 @@ async def _close_cdp_target(cdp_url: str, target_id: str) -> None:
     urllib.request.urlopen(f"{base}/json/close/{target_id}", timeout=5)
 
 
-@pytest.mark.asyncio
-async def test_live_long_generation_completes_with_full_correct_content():
+async def _run_long_generation(transport) -> None:
     """L1: a genuinely long, multi-minute generation must complete with the
     full expected content, not time out or truncate."""
-    transport, _config = await _open_transport("gpt-auto-t1")
     observations: list[Any] = []
-    try:
-        result = await transport.prompt(
-            SessionPrompt(
-                turn_id=f"turn-{uuid.uuid4().hex[:8]}",
-                body=(
-                    "Write a detailed, well-structured 2000+ word technical essay on "
-                    "how B-tree and LSM-tree storage engines differ, covering write "
-                    "amplification, read amplification, compaction strategies, and "
-                    "when each is the right choice. Use headings. Go deep."
-                ),
+    result = await transport.prompt(
+        SessionPrompt(
+            turn_id=f"turn-{uuid.uuid4().hex[:8]}",
+            body=(
+                "Write a detailed, well-structured 2000+ word technical essay on "
+                "how B-tree and LSM-tree storage engines differ, covering write "
+                "amplification, read amplification, compaction strategies, and "
+                "when each is the right choice. Use headings. Go deep."
             ),
-            observations.append,
-        )
-        assert result.stop_reason == "end-turn"
-        assert result.final_summary is not None
-        assert len(result.final_summary) > 2000
-        # NOTE: do not assert on the number of response-progress ACTIVITY
-        # observations. If the response is already fully rendered by the
-        # time submission-proof hands off to response-wait (a genuinely
-        # fast completion, observed live -- ChatGPT response time varies
-        # a lot), there is no text delta left for response-wait to detect
-        # as an edge, so zero progress ticks is legitimate, not a bug.
-        # The real acceptance criteria are the terminal state and content
-        # above; progress-event *count* is not a safe invariant to assert.
-    finally:
-        await transport.close()
+        ),
+        observations.append,
+    )
+    assert result.stop_reason == "end-turn"
+    assert result.final_summary is not None
+    assert len(result.final_summary) > 2000
+    # NOTE: do not assert on the number of response-progress ACTIVITY
+    # observations. If the response is already fully rendered by the
+    # time submission-proof hands off to response-wait (a genuinely
+    # fast completion, observed live -- ChatGPT response time varies
+    # a lot), there is no text delta left for response-wait to detect
+    # as an edge, so zero progress ticks is legitimate, not a bug.
+    # The real acceptance criteria are the terminal state and content
+    # above; progress-event *count* is not a safe invariant to assert.
 
 
 @pytest.mark.asyncio
@@ -201,45 +207,55 @@ async def test_live_concurrent_turns_on_both_test_projects_stay_isolated():
         await transport_2.close()
 
 
-@pytest.mark.asyncio
-async def test_live_mid_turn_tab_close_recovers_and_completes():
+async def _run_mid_turn_tab_close(transport, config) -> None:
     """L4: closing the real ChatGPT tab mid-generation must not corrupt the
     turn -- the adapter should recover (reopen the conversation) and still
     reach a correct terminal outcome, never a silent false success and
     never an indefinite hang (bounded by the turn's own absolute ceiling)."""
+    prompt_task = asyncio.create_task(
+        transport.prompt(
+            SessionPrompt(
+                turn_id=f"turn-{uuid.uuid4().hex[:8]}",
+                body=(
+                    "Write a detailed, well-structured 2000+ word technical essay on "
+                    "the CAP theorem and its practical implications for distributed "
+                    "database design. Use headings. Go deep."
+                ),
+            ),
+            lambda _obs: None,
+        )
+    )
+    # Give it a real head start into generation before interfering.
+    await asyncio.sleep(15)
+    target_fragment = str(config.project_url).rsplit("/", 1)[-1]
+    target_id = None
+    for _ in range(10):
+        target_id = await _find_live_cdp_target(config.cdp_url, target_fragment)
+        if target_id:
+            break
+        await asyncio.sleep(2)
+    if target_id is None:
+        prompt_task.cancel()
+        pytest.skip("could not locate the live gpt-t1 tab to interfere with")
+    await _close_cdp_target(config.cdp_url, target_id)
+
+    result = await prompt_task
+    assert result.stop_reason == "end-turn"
+    assert result.final_summary is not None
+    assert len(result.final_summary) > 500
+
+
+@pytest.mark.asyncio
+async def test_live_t1_scenarios():
+    """L1 + L4 share one gpt-auto-t1 session (sequentially) instead of each
+    opening a fresh conversation -- ChatGPT rate-limits new-session creation
+    more aggressively than continuing an existing one (proven live
+    2026-08-16, see GP04's notes), so this file conserves sessions rather
+    than opening one per scenario."""
     transport, config = await _open_transport("gpt-auto-t1")
     try:
-        prompt_task = asyncio.create_task(
-            transport.prompt(
-                SessionPrompt(
-                    turn_id=f"turn-{uuid.uuid4().hex[:8]}",
-                    body=(
-                        "Write a detailed, well-structured 2000+ word technical essay on "
-                        "the CAP theorem and its practical implications for distributed "
-                        "database design. Use headings. Go deep."
-                    ),
-                ),
-                lambda _obs: None,
-            )
-        )
-        # Give it a real head start into generation before interfering.
-        await asyncio.sleep(15)
-        target_fragment = str(config.project_url).rsplit("/", 1)[-1]
-        target_id = None
-        for _ in range(10):
-            target_id = await _find_live_cdp_target(config.cdp_url, target_fragment)
-            if target_id:
-                break
-            await asyncio.sleep(2)
-        if target_id is None:
-            prompt_task.cancel()
-            pytest.skip("could not locate the live gpt-t1 tab to interfere with")
-        await _close_cdp_target(config.cdp_url, target_id)
-
-        result = await prompt_task
-        assert result.stop_reason == "end-turn"
-        assert result.final_summary is not None
-        assert len(result.final_summary) > 500
+        await _run_long_generation(transport)
+        await _run_mid_turn_tab_close(transport, config)
     finally:
         await transport.close()
 
