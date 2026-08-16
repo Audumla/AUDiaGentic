@@ -37,6 +37,23 @@ class PageObservation:
 
 
 @dataclass(frozen=True)
+class ChatMessageRef:
+    """One message in true DOM order, spanning both roles.
+
+    GP08 slice 1: the per-role id/text arrays on ChatSnapshot cannot express
+    cross-role interleaving order (whether a user message landed before or
+    after a given assistant message within one poll) -- exactly what a
+    request-scoped correlation boundary needs to know. This is the raw,
+    ordered sequence those arrays are derived from.
+    """
+
+    role: str
+    message_id: str | None
+    text: str | None
+    sequence: int
+
+
+@dataclass(frozen=True)
 class ChatSnapshot:
     url: str
     composer_present: bool
@@ -59,6 +76,7 @@ class ChatSnapshot:
     # conversation.
     assistant_message_ids: tuple[str, ...] = ()
     assistant_message_texts: tuple[str, ...] = ()
+    message_refs: tuple[ChatMessageRef, ...] = ()
 
     @classmethod
     def from_bridge(cls, value: dict[str, Any]) -> ChatSnapshot:
@@ -98,6 +116,16 @@ class ChatSnapshot:
                 item.strip()
                 for item in (value.get("assistantMessageTexts") or ())
                 if isinstance(item, str) and item.strip()
+            ),
+            message_refs=tuple(
+                ChatMessageRef(
+                    role=str(item.get("role") or ""),
+                    message_id=_text(item.get("messageId")),
+                    text=_text(item.get("text")),
+                    sequence=int(item.get("sequence") or 0),
+                )
+                for item in (value.get("messageRefs") or ())
+                if isinstance(item, dict)
             ),
         )
 
