@@ -856,6 +856,94 @@ def test_dedicated_window_ownership_rejects_duplicate_url_in_manual_window() -> 
     assert not runtime.page_belongs_to_dedicated_window({"windowId": 99})
 
 
+@pytest.mark.asyncio
+async def test_ensure_ready_recovers_when_bridge_replacement_races_binding_validation() -> None:
+    """GP05 boundary case #2: a shared-bridge death during ensure_ready()'s
+    admission-time _validate_page_binding() call.
+
+    _validate_page_binding() reads its own local `page`/`handle` snapshot
+    before a concurrent bridge_replaced() could fire, so it can take its
+    "not recycled, not wrong conversation -> return early" path even though
+    self.page_handle/self.state were already reset out from under it. This
+    test proves ensure_ready()'s own fresh state re-check right after that
+    call is what actually saves this window -- it must still reach READY via
+    reconciliation, not silently proceed as if nothing happened, and not
+    raise an opaque "chat is not ready" error.
+    """
+    config = GptAutoConfig.from_dict(valid_config())
+    original_handle = "handle-from-dying-bridge"
+    matching_url = "https://chatgpt.com/g/g-p-project/c/provider-session"
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            # Simulate the shared bridge dying WHILE this lookup is in
+            # flight -- runtime.recover() would call bridge_replaced() on
+            # every registered chat at exactly this moment in a real race.
+            chat.bridge_replaced()
+            # The returned page object still looks like a normal match
+            # (same target/url) from _validate_page_binding()'s point of
+            # view -- it has no way to see that the bridge generation
+            # underneath it has already changed.
+            return SimpleNamespace(handle=handle, target_id="stable-target", url=matching_url)
+
+        async def snapshot(self, _page, *, signals=None):
+            return {
+                "url": matching_url,
+                "composerPresent": True,
+                "composerEditable": True,
+                "userCount": 0,
+                "assistantCount": 0,
+                "domSignals": {},
+                "errorPresent": False,
+            }
+
+    class _Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages"
+            return [{"pageHandle": "reconciled-handle", "targetId": "stable-target", "url": matching_url}]
+
+    async def find_conversation_page(_provider_session_id, *, preferred_target_id=None):
+        return {"pageHandle": "reconciled-handle", "targetId": "stable-target", "url": matching_url}
+
+    runtime = SimpleNamespace(
+        gpt_browser=_Browser(),
+        bridge=_Bridge(),
+        claim_page=lambda _chat, _handle: True,
+        release_page=lambda _chat, _handle: None,
+        find_conversation_page=find_conversation_page,
+        page_belongs_to_dedicated_window=lambda _record: True,
+    )
+
+    chat = PersistentChat(
+        ag_session_id="session-race-bridge-death-mid-admission",
+        project_name="project",
+        project_url=None,
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url=matching_url,
+    )
+    chat.page_handle = original_handle
+    chat.target_id = "stable-target"
+    chat.state = ChatState.READY
+
+    async def quiescent(*, allow_recovering=False):
+        return SimpleNamespace()
+
+    chat.wait_quiescent = quiescent  # type: ignore[method-assign]
+
+    # Before a fix would be needed here, the risk is an unbounded hang or an
+    # opaque "chat is not ready" RuntimeError; bound it to prove neither.
+    await asyncio.wait_for(chat.ensure_ready(), timeout=2.0)
+
+    assert chat.state is ChatState.READY
+    assert chat.page_handle == "reconciled-handle", (
+        "ensure_ready() must reconcile onto a page handle from the NEW "
+        "bridge generation, never keep using the stale pre-race handle"
+    )
+
+
 def test_terminal_conversation_owner_can_be_reclaimed_by_resume() -> None:
     runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
     runtime._conversation_owners["provider-session"] = "old-session"
