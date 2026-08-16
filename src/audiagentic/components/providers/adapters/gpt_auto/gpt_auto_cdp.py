@@ -61,6 +61,13 @@ _SNAPSHOT_FN = r"""
     userCount: users.length, assistantCount: assistants.length,
     userMessageIds: users.map(e => e.getAttribute("data-message-id")).filter(Boolean),
     userMessageTexts: users.map(userText).filter(Boolean).slice(-64),
+    // GP08: the ordered assistant-message sequence, mirroring the
+    // user-message arrays above. "Latest assistant" alone cannot answer
+    // "what was the response to request A" once a later, unrelated turn
+    // (from any actor) has entered the same conversation -- this ordered
+    // list is the raw data a request-addressable correlation layer needs.
+    assistantMessageIds: assistants.map(e => e.getAttribute("data-message-id")).filter(Boolean),
+    assistantMessageTexts: assistants.map(e => boundedText(e)).filter(Boolean).slice(-64),
     latestUserId: users.length ? users[users.length - 1].getAttribute("data-message-id") || null : null,
     latestAssistantId: latestAssistant?.getAttribute("data-message-id") || null,
     latestUserText: text(users, userText), latestAssistantText: text(assistants), generating, domSignals,

@@ -96,3 +96,46 @@ def test_bridge_snapshot_preserves_latest_user_message_id() -> None:
     )
 
     assert snapshot.latest_user_id == "prompt-2"
+
+
+def test_bridge_snapshot_preserves_ordered_assistant_message_sequence() -> None:
+    """GP08: the full ordered assistant sequence must survive the bridge
+    round-trip, not just the single 'latest' projection -- this is the raw
+    data a request-addressable correlation layer needs once more than one
+    actor can post serially into the same conversation."""
+    snapshot = ChatSnapshot.from_bridge(
+        {
+            "url": "https://chatgpt.com/g/g-p-test/c/c1",
+            "composerPresent": True,
+            "composerEditable": True,
+            "userCount": 2,
+            "assistantCount": 2,
+            "latestUserId": "prompt-2",
+            "latestAssistantId": "answer-2",
+            "latestUserText": "second prompt",
+            "latestAssistantText": "second answer",
+            "assistantMessageIds": ["answer-1", "answer-2"],
+            "assistantMessageTexts": ["first answer", "second answer"],
+        }
+    )
+
+    assert snapshot.assistant_message_ids == ("answer-1", "answer-2")
+    assert snapshot.assistant_message_texts == ("first answer", "second answer")
+
+
+def test_bridge_snapshot_defaults_assistant_sequence_to_empty_when_absent() -> None:
+    """Older/minimal bridge payloads (e.g. hand-built test fixtures) that
+    don't supply the new arrays must not error -- backward compatible."""
+    snapshot = ChatSnapshot.from_bridge(
+        {
+            "url": "https://chatgpt.com/g/g-p-test/c/c1",
+            "composerPresent": True,
+            "composerEditable": True,
+            "userCount": 1,
+            "assistantCount": 1,
+            "latestAssistantId": "answer-1",
+        }
+    )
+
+    assert snapshot.assistant_message_ids == ()
+    assert snapshot.assistant_message_texts == ()
