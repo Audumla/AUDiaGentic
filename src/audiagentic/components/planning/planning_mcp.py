@@ -96,12 +96,19 @@ def plan_update_item(item_id: str, updates: dict, append: list[str] | None = Non
     validation, effort_risk, standards, notes, ...) of an existing item.
 
     By default each key in `updates` REPLACES its section's full content —
-    for a narrative section like `notes` that accumulates entries over time,
-    this silently discards everything written there before unless you fetch
-    the item first and concatenate. Pass the key's name in `append` (e.g.
+    for a narrative section that accumulates entries over time, this
+    silently discards everything written there before unless you fetch the
+    item first and concatenate. Pass the key's name in `append` (e.g.
     append=["notes"]) to instead add the new text after the existing
     content, separated by a blank line. `append` only affects body sections
     named in `updates`; frontmatter fields always replace.
+
+    `notes` specifically defaults to append even when `append` is omitted
+    entirely — accidentally replacing accumulated incident history is a
+    real failure mode, so narrative history is hard to destroy by default.
+    Pass `append=[]` explicitly (an empty list) to opt out and force a full
+    replace of `notes` too, e.g. when deliberately rewriting notes to fix
+    corruption.
     """
     return planning_api.update_item(project_root_from_env(), item_id, updates, append)
 
