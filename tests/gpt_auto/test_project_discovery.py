@@ -70,7 +70,7 @@ async def test_initial_chat_discovers_project_by_active_project_name(monkeypatch
     async def ready() -> None:
         return None
 
-    async def snapshot():
+    async def snapshot(*, allow_recovering=False):
         return SimpleNamespace(url=chat.project_url)
 
     monkeypatch.setattr(chat, "_wait_ready", ready)
