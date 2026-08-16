@@ -59,6 +59,11 @@ def valid_config() -> dict:
                     "selectors": ['[data-testid="copy-turn-action-button"]'],
                     "visible": False,
                 },
+                "message-finalized": {
+                    "scope": "latest-assistant-turn",
+                    "selectors": ["[data-is-last-node]"],
+                    "visible": False,
+                },
                 "error-page": {
                     "scope": "document",
                     "selectors": [".error-page"],
@@ -69,8 +74,9 @@ def valid_config() -> dict:
                 "response-started": {"any-of": ["assistant-fresh", "stop-control"]},
                 "response-active": {"any-of": ["text-changed", "stop-control"]},
                 "response-complete": {
-                    "all-of": ["assistant-fresh", "text-present", "completion-control"],
-                    "none-of": ["stop-control", "error-page"],
+                    "all-of": ["assistant-fresh", "text-present"],
+                    "any-of": ["completion-control", "message-finalized"],
+                    "none-of": ["error-page"],
                 },
                 "response-failed": {"any-of": ["error-page"]},
             },

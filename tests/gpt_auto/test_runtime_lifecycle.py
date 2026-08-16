@@ -454,7 +454,71 @@ async def test_unresolved_recovery_reports_missing_completion_evidence() -> None
 
     assert error.value.code == "EXT-GPTAUTO-004"
     assert error.value.details["recovery-reason"] == "completion-evidence-missing"
-    assert error.value.details["recovery-details"]["required-signal"] == "completion-control"
+    assert (
+        error.value.details["recovery-details"]["required-signal"]
+        == "completion-control-or-message-finalized"
+    )
+
+
+@pytest.mark.asyncio
+async def test_unresolved_recovery_reconciles_despite_stuck_generating_signal() -> None:
+    """Live-reproduced 2026-08-16 (GP05 L4 scenario): reconciliation of an
+    unresolved turn must not be permanently blocked by a stuck
+    generating=True/stop-control signal once real completion evidence
+    (completion-control here) corroborates that the response is done --
+    matches the composer-editable=True + stop-control-stuck combination
+    observed live, which is itself evidence the button state is stale."""
+    config = GptAutoConfig.from_dict(valid_config())
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle)
+
+        async def snapshot(self, _page, *, signals=None):
+            return {
+                "url": "https://chatgpt.com/g/g-p-project/c/conversation-1",
+                "composerPresent": True,
+                "composerEditable": True,
+                "userCount": 1,
+                "assistantCount": 1,
+                "latestAssistantId": "assistant-new",
+                "latestAssistantText": "new response",
+                "latestUserText": "the submitted prompt",
+                "userMessageTexts": ["the submitted prompt"],
+                "domSignals": {"completion-control": True, "stop-control": True},
+                "generating": True,
+                "errorPresent": False,
+            }
+
+    runtime = SimpleNamespace(
+        gpt_browser=_Browser(),
+        bridge=SimpleNamespace(),
+        claim_page=lambda _chat, _handle: True,
+        release_page=lambda _chat, _handle: None,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-stuck-generating",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+    )
+    chat.page_handle = "page-1"
+    chat.state = ChatState.RECOVERING
+    chat.mark_submission_unresolved("the submitted prompt")
+
+    # First reconciliation attempt: correlation evidence matches but a
+    # second stable observation is required before clearing.
+    with pytest.raises(AudiaGenticError) as first_error:
+        await chat.ensure_ready()
+    assert first_error.value.details["recovery-reason"] == "awaiting-second-stable-observation"
+
+    # Second identical observation: reconciles successfully despite the
+    # stuck generating=True/stop-control the whole time.
+    await chat.ensure_ready()
+    assert chat.state is ChatState.READY
+    assert chat.unresolved_turn_pending is False
 
 
 @pytest.mark.asyncio
