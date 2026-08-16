@@ -593,25 +593,41 @@ async def test_chat_close_can_opt_in_to_closing_tab() -> None:
 
 
 @pytest.mark.asyncio
-async def test_recovery_invalidates_bridge_local_handles_before_reconciliation(monkeypatch) -> None:
+async def test_recovery_invalidates_handles_globally_but_reconciles_active_chat_only(monkeypatch) -> None:
+    """GP05: a shared bridge fault invalidates every chat's page handle
+    (bridge_replaced() for all), but eager reconcile() is reserved for a
+    chat with an in-flight turn. An idle chat must NOT be driven through
+    reconcile() here -- it reconciles lazily on its own next ensure_ready()
+    instead, so one project's bridge fault does not stall an unrelated
+    idle project sharing the runtime."""
     runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
     old = SimpleNamespace(stop=lambda: _done())
     replacement = SimpleNamespace(call=lambda method: _pages() if method == "list_pages" else None)
     runtime._bridge = old
     runtime.state = ProviderState.AVAILABLE
     runtime._dedicated_window_anchor = "page-1"
-    runtime._page_owners = {"page-1": "session-a"}
-    chat = SimpleNamespace(replaced=0, reconciled=None)
+    runtime._page_owners = {"page-1": "session-a", "page-2": "session-b"}
 
-    def bridge_replaced() -> None:
-        chat.replaced += 1
+    active_chat = SimpleNamespace(replaced=0, reconciled=None, active_turn_id="turn-1")
+    idle_chat = SimpleNamespace(replaced=0, reconciled=None, active_turn_id=None)
 
-    async def reconcile(pages) -> None:
-        chat.reconciled = pages
+    def make_bridge_replaced(chat):
+        def bridge_replaced() -> None:
+            chat.replaced += 1
 
-    chat.bridge_replaced = bridge_replaced
-    chat.reconcile = reconcile
-    runtime._chats = {"session-a": chat}
+        return bridge_replaced
+
+    def make_reconcile(chat):
+        async def reconcile(pages) -> None:
+            chat.reconciled = pages
+
+        return reconcile
+
+    active_chat.bridge_replaced = make_bridge_replaced(active_chat)
+    active_chat.reconcile = make_reconcile(active_chat)
+    idle_chat.bridge_replaced = make_bridge_replaced(idle_chat)
+    idle_chat.reconcile = make_reconcile(idle_chat)
+    runtime._chats = {"session-a": active_chat, "session-b": idle_chat}
 
     async def ensure_available() -> None:
         runtime._bridge = replacement
@@ -621,10 +637,126 @@ async def test_recovery_invalidates_bridge_local_handles_before_reconciliation(m
     monkeypatch.setattr(runtime, "ensure_available", ensure_available)
     await runtime.recover()
 
-    assert chat.replaced == 1
-    assert chat.reconciled == [{"pageHandle": "page-1", "targetId": "new-target"}]
+    # Both chats' bridge-local handles are invalidated -- the shared socket
+    # really did die for everyone.
+    assert active_chat.replaced == 1
+    assert idle_chat.replaced == 1
+    # Only the actively in-flight chat pays the eager reconciliation cost.
+    assert active_chat.reconciled == [{"pageHandle": "page-1", "targetId": "new-target"}]
+    assert idle_chat.reconciled is None
     assert runtime._page_owners == {}
     assert runtime._dedicated_window_anchor is None
+
+
+@pytest.mark.asyncio
+async def test_resume_open_recovers_via_retained_tab_when_chat_url_missing() -> None:
+    """Missing chat-url must not block resume when a retained tab is found."""
+    config = GptAutoConfig.from_dict(valid_config())
+    retained_page = {
+        "pageHandle": "retained-handle",
+        "targetId": "retained-target",
+        "url": "https://chatgpt.com/g/g-p-project/c/provider-session",
+    }
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle)
+
+        async def snapshot(self, _page, *, signals=None):
+            return {
+                "url": retained_page["url"],
+                "composerPresent": True,
+                "composerEditable": True,
+                "userCount": 1,
+                "assistantCount": 1,
+                "domSignals": {},
+                "errorPresent": False,
+            }
+
+    async def find_conversation_page(_provider_session_id, *, preferred_target_id=None):
+        return retained_page
+
+    class _Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages"
+            return [retained_page]
+
+    runtime = SimpleNamespace(
+        gpt_browser=_Browser(),
+        bridge=_Bridge(),
+        claim_page=lambda _chat, _handle: True,
+        release_page=lambda _chat, _handle: None,
+        find_conversation_page=find_conversation_page,
+        register_chat=lambda _chat: _done(),
+        claim_conversation=lambda _chat, _provider_session_id: True,
+        ensure_available=_done,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-missing-url-retained-tab",
+        project_name="project",
+        project_url=None,
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url=None,
+    )
+
+    async def quiescent(*, allow_recovering=False):
+        return SimpleNamespace()
+
+    chat.wait_quiescent = quiescent  # type: ignore[method-assign]
+
+    await chat.open()
+
+    assert chat.page_handle == "retained-handle"
+    assert chat.state is ChatState.READY
+
+
+@pytest.mark.asyncio
+async def test_resume_open_fails_cleanly_without_orphaning_page_when_no_tab_or_url() -> None:
+    """Missing chat-url AND no retained tab must fail before claiming a fresh page."""
+    config = GptAutoConfig.from_dict(valid_config())
+
+    create_page_calls: list[str] = []
+
+    async def create_chat_page() -> str:
+        create_page_calls.append("called")
+        return "orphan-handle"
+
+    async def find_conversation_page(_provider_session_id, *, preferred_target_id=None):
+        return None
+
+    runtime = SimpleNamespace(
+        gpt_browser=SimpleNamespace(),
+        bridge=SimpleNamespace(),
+        claim_page=lambda _chat, _handle: True,
+        release_page=lambda _chat, _handle: None,
+        find_conversation_page=find_conversation_page,
+        create_chat_page=create_chat_page,
+        register_chat=lambda _chat: _done(),
+        claim_conversation=lambda _chat, _provider_session_id: True,
+        ensure_available=_done,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-missing-url-no-tab",
+        project_name="project",
+        project_url=None,
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="provider-session",
+        chat_url=None,
+    )
+
+    with pytest.raises(RuntimeError, match="retained browser tab or a durable chat-url"):
+        await chat.open()
+
+    assert create_page_calls == []
+    assert chat.page_handle is None
+    # open() closes the chat on any _open_impl failure (FAILED -> CLOSED);
+    # the important assertion is that no page was ever created/claimed.
+    assert chat.state is ChatState.CLOSED
 
 
 def test_dedicated_window_ownership_rejects_duplicate_url_in_manual_window() -> None:

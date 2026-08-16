@@ -250,6 +250,18 @@ class PersistentChat:
                     raise RuntimeError("gpt-auto retained conversation page is already owned")
                 self._bind_page(page)
                 await self._prefer_active_conversation_page()
+            elif not target:
+                # provider_session_id is set but neither a retained browser
+                # tab nor a durable chat-url is available. Creating a fresh
+                # page here would have nothing to navigate to and nothing to
+                # bind it to -- since tabs are retained rather than closed by
+                # default, that page would be silently orphaned. Fail before
+                # claiming a page instead of after.
+                self._move(ChatState.FAILED)
+                raise RuntimeError(
+                    "gpt-auto resume requires a retained browser tab or a durable "
+                    "chat-url; neither is available"
+                )
         if self.page_handle is None:
             create_page = getattr(self.runtime, "create_chat_page", None)
             if create_page is not None:

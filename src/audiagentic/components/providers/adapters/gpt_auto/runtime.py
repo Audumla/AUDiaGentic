@@ -290,6 +290,19 @@ class GptAutoProviderRuntime:
         await self.ensure_available()
         pages = await self.bridge.call("list_pages")
         for chat in tuple(self._chats.values()):
+            if chat.active_turn_id is None:
+                # A shared CDP-bridge fault genuinely invalidates every
+                # chat's bridge-local page handle (bridge_replaced(), above,
+                # already covers that for all chats) -- but that does not
+                # mean every otherwise-idle chat needs to pay the cost of
+                # reconciling right now. Idle chats already have a lazy
+                # RECOVERING -> reconcile path in ensure_ready(); let them
+                # take it on their own next admission instead of driving
+                # every registered chat across every project through
+                # reconcile() here, which would let one project's bridge
+                # fault stall every other unrelated project sharing the
+                # runtime.
+                continue
             try:
                 await chat.reconcile(pages)
             except Exception:  # noqa: BLE001 - isolate one session's recovery
