@@ -922,3 +922,59 @@ async def test_await_composer_settled_gives_up_after_bounded_budget_without_hang
     result = await asyncio.wait_for(turn._await_composer_settled(start), timeout=2.0)
     assert result.generating is True
     assert turn.state is not TurnState.COMPLETE
+
+
+@pytest.mark.asyncio
+async def test_submission_proof_does_not_starve_while_assistant_text_keeps_growing():
+    """GP19: a real live incident where the submitted prompt's text never
+    matched (Markdown-stripped rendering, most likely) but the assistant
+    was genuinely, continuously writing a real answer (generating=True,
+    growing text) the whole time -- the OLD code granted PROGRESS/
+    SOFT_LIVENESS only on the one poll where the new user message first
+    appeared, then starved to EvidenceCapability.NONE forever, timing out
+    despite unambiguous ongoing activity. Growing assistant text must now
+    keep resetting the progress lease, so the wait runs close to the full
+    absolute ceiling (consuming many polls) instead of stalling out almost
+    immediately after the one-time initial match failure."""
+    chat = _Chat()
+    # _await_submission_proof() polls on a hardcoded 0.2s cadence (not
+    # poll_interval_seconds) -- the lease must comfortably exceed that or
+    # every poll starts the observation stalled before it can even repeat.
+    chat.runtime.config.turn.submission_proof_progress_lease_seconds = 1.0
+    chat.runtime.config.turn.submission_proof_absolute_ceiling_seconds = 2.0
+
+    poll_count = 0
+
+    def _new_message_never_matches_but_assistant_keeps_growing():
+        nonlocal poll_count
+        # First poll: a new user message appears, but its text does not
+        # match the expected prompt (simulates Markdown-stripped rendering).
+        poll_count += 1
+        yield snap(users=1, user="totally different rendered text", generating=True)
+        # Every subsequent poll: prompt text still never matches, but the
+        # assistant's own text keeps growing -- real, continuing activity.
+        counter = 0
+        while True:
+            counter += 1
+            poll_count += 1
+            yield snap(
+                users=1,
+                user="totally different rendered text",
+                assistants=1,
+                assistant=f"partial answer {counter}",
+                generating=True,
+            )
+
+    chat._snapshots = _new_message_never_matches_but_assistant_keeps_growing()
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-gp19", body="Review AU01"), lambda _: None
+    )
+    baseline = snap()
+    result = await asyncio.wait_for(turn._await_submission_proof(baseline), timeout=5.0)
+    assert result is None  # text truly never matched -- correctly stays ambiguous, not a false success
+    # With the fix, growing assistant text keeps the lease alive for close
+    # to the full absolute ceiling rather than starving after ~1-2 polls.
+    assert poll_count >= 10, (
+        f"only consumed {poll_count} polls before giving up -- growing assistant "
+        "text should have kept the observation alive far longer than this"
+    )

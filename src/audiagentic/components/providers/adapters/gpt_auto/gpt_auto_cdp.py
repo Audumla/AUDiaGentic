@@ -42,7 +42,16 @@ _SNAPSHOT_FN = r"""
       })
     );
   }
-  const boundedText = (element) => ((element?.innerText || element?.textContent || "").trim()).slice(0, 20000) || null;
+  // GP19: this bound was 20000, which is small enough that a genuinely
+  // long real prompt/response can never satisfy exact-text correlation
+  // matching even with otherwise-perfect DOM extraction (a distinct latent
+  // bug from GP19's main Markdown-rendering finding). Raised well beyond
+  // any realistic single ChatGPT message so it functions as a sanity
+  // ceiling, not a correlation-breaking truncation. The deeper fix (a
+  // correlation-specific fingerprint computed before any truncation,
+  // separate from a bounded display/preview string) is part of GP19's
+  // still-open shared prompt-correlation primitive work.
+  const boundedText = (element) => ((element?.innerText || element?.textContent || "").trim()).slice(0, 200000) || null;
   // User messages are collapsible in the ChatGPT UI.  Reading the outer
   // message node includes the presentation controls ("Show more" /
   // "Show less"), which makes a durable prompt digest fail to match after a
