@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any
 
@@ -32,7 +32,7 @@ from .observation_engine import (
     ObservationTracker,
 )
 from .prompt_fingerprint import PromptFingerprint, match_prompt
-from .snapshot import ChatSnapshot
+from .snapshot import ChatMessageRef, ChatSnapshot
 from .urls import parse_provider_session_id
 
 logger = logging.getLogger(__name__)
@@ -661,6 +661,11 @@ class GptAutoTurn:
         loop = asyncio.get_running_loop()
         policy = _ResponseCompletionPolicy(self.chat.config.turn)
         tracker = ObservationTracker(policy=policy, now=loop.time())
+        # GP30: correlate against THIS request's own prompt anchor, not
+        # whatever is conversation-global-latest -- prevents a later,
+        # unrelated turn's response (from any actor) from ever being
+        # mistaken for this request's own answer.
+        prompt_message_id = self._prompt_message_id
         previous = current
         response_started = False
         emitted = False
@@ -674,7 +679,7 @@ class GptAutoTurn:
                 self._move(TurnState.CANCELLED)
                 return None
             try:
-                current = await self.chat.snapshot()
+                raw_current = await self.chat.snapshot()
             except Exception as exc:  # noqa: BLE001 - never re-submit after an attempted send
                 last_observation_error = exc
                 self._last_observation_error = exc
@@ -691,14 +696,40 @@ class GptAutoTurn:
                     break
                 await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
                 continue
-            self._remember_snapshot(current)
+            self._remember_snapshot(raw_current)
+            if prompt_message_id:
+                current, response_ref = _scope_response_snapshot(
+                    baseline, raw_current, prompt_message_id=prompt_message_id
+                )
+            else:
+                # Defensive fallback only -- _await_submission_proof() and
+                # its duplicate-tab finder fallback always set this before
+                # _await_response() can be reached.
+                current, response_ref = raw_current, None
             now = loop.time()
-            if current.latest_assistant_id and current.latest_assistant_id != baseline.latest_assistant_id:
-                self._response_message_id = current.latest_assistant_id
-                mark_assistant = getattr(self.chat, "mark_assistant_observed", None)
-                if mark_assistant is not None:
-                    mark_assistant(current.latest_assistant_id)
-                await self._publish_message_ids(strict=True)
+            if response_ref is not None and response_ref.message_id:
+                if self._response_message_id is None:
+                    self._response_message_id = response_ref.message_id
+                    mark_assistant = getattr(self.chat, "mark_assistant_observed", None)
+                    if mark_assistant is not None:
+                        mark_assistant(response_ref.message_id)
+                    await self._publish_message_ids(strict=True)
+                elif self._response_message_id != response_ref.message_id:
+                    # Never silently "follow latest" once an identity is
+                    # established -- a later, unrelated turn's assistant
+                    # message must never overwrite this request's own.
+                    raise AudiaGenticError(
+                        code="EXT-GPTAUTO-004",
+                        kind="providers",
+                        message="gpt-auto observed a conflicting response correlation",
+                        details={
+                            "turn-id": self.request.turn_id,
+                            "failure-reason": "frozen-response-correlation-conflict",
+                            "expected-assistant-id": self._response_message_id,
+                            "observed-assistant-id": response_ref.message_id,
+                            **self._diagnostics(),
+                        },
+                    )
             facts = _facts(baseline, previous, current)
             failed = self.chat.config.workflow.policy("response-failed").evaluate(facts)
             if failed.satisfied:
@@ -796,7 +827,7 @@ class GptAutoTurn:
                 # same regular poll cadence -- confirms the candidate before
                 # it is trusted, matching the pre-existing design.
                 try:
-                    verify = await self.chat.snapshot()
+                    raw_verify = await self.chat.snapshot()
                 except Exception as exc:  # noqa: BLE001 - verification resumes on next poll
                     self._last_observation_error = exc
                     logger.info(
@@ -812,7 +843,13 @@ class GptAutoTurn:
                         break
                     await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
                     continue
-                self._remember_snapshot(verify)
+                self._remember_snapshot(raw_verify)
+                if prompt_message_id:
+                    verify, _verify_ref = _scope_response_snapshot(
+                        baseline, raw_verify, prompt_message_id=prompt_message_id
+                    )
+                else:
+                    verify = raw_verify
                 verify_facts = _facts(baseline, current, verify)
                 verified = self.chat.config.workflow.policy("response-complete").evaluate(
                     verify_facts
@@ -1044,6 +1081,69 @@ def _new_user_message(baseline: ChatSnapshot, current: ChatSnapshot) -> bool:
     if current.latest_user_id and current.latest_user_id not in set(baseline.user_message_ids):
         return True
     return current.user_count > baseline.user_count
+
+
+def _response_ref_for_prompt(
+    snapshot: ChatSnapshot, prompt_message_id: str
+) -> ChatMessageRef | None:
+    """GP30: the first assistant message after this request's own prompt,
+    before the next user message of any provenance.
+
+    "Latest assistant" alone cannot answer "what was the response to THIS
+    request" once a later, unrelated turn (from any actor -- a human typing
+    in the same tab, or a later gateway request) has entered the same
+    conversation. A hard boundary at the next user message means a later
+    turn's assistant reply can never be mistaken for this one's, even once
+    it becomes conversation-global-latest.
+    """
+    refs = snapshot.message_refs
+    prompt_index = next(
+        (
+            index
+            for index, ref in enumerate(refs)
+            if ref.role == "user" and ref.message_id == prompt_message_id
+        ),
+        None,
+    )
+    if prompt_index is None:
+        return None
+    for ref in refs[prompt_index + 1 :]:
+        if ref.role == "user":
+            return None
+        if ref.role == "assistant":
+            return ref
+    return None
+
+
+def _scope_response_snapshot(
+    baseline: ChatSnapshot, snapshot: ChatSnapshot, *, prompt_message_id: str
+) -> tuple[ChatSnapshot, ChatMessageRef | None]:
+    """Project a raw snapshot onto this request's own response, not
+    whatever is conversation-global-latest.
+
+    dom_signals/generating are left untouched -- those describe genuine
+    page-wide activity/liveness and must keep reflecting reality; only the
+    assistant identity/text facts the response-completion policies key off
+    of are re-pointed at this request's own span.
+    """
+    response_ref = _response_ref_for_prompt(snapshot, prompt_message_id)
+    if response_ref is None:
+        return (
+            replace(
+                snapshot,
+                latest_assistant_id=baseline.latest_assistant_id,
+                latest_assistant_text=baseline.latest_assistant_text,
+            ),
+            None,
+        )
+    return (
+        replace(
+            snapshot,
+            latest_assistant_id=response_ref.message_id,
+            latest_assistant_text=response_ref.text,
+        ),
+        response_ref,
+    )
 
 
 def _facts(

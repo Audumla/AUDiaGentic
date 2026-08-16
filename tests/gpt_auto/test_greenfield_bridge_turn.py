@@ -10,7 +10,7 @@ from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoCon
 from audiagentic.components.providers.adapters.gpt_auto.session_transport import (
     GptAutoSessionTransport,
 )
-from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatSnapshot
+from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatMessageRef, ChatSnapshot
 from audiagentic.components.providers.adapters.gpt_auto.turn import (
     GptAutoTurn,
     TurnState,
@@ -51,24 +51,40 @@ def snap(
         # means "genuinely done" for tests exercising the happy path.
         signals.add("completion-control")
         signals.add("message-finalized")
+    resolved_user_id = user_id or (f"prompt-{users}" if users else None)
+    resolved_assistant_id = assistant_id or (f"assistant-{assistants}" if assistants else None)
+    # GP30: message_refs is the true-DOM-order sequence _await_response()'s
+    # resolver keys off of -- populate it from this snapshot's own latest
+    # user/assistant pair so single-turn test fixtures exercise the same
+    # request-scoped correlation real bridge snapshots do (GP29).  Only the
+    # single latest pair is representable here; tests that need to model a
+    # foreign/later turn build message_refs explicitly themselves.
+    message_refs: list[ChatMessageRef] = []
+    if users and resolved_user_id:
+        message_refs.append(ChatMessageRef(role="user", message_id=resolved_user_id, text=user, sequence=0))
+    if assistants and resolved_assistant_id:
+        message_refs.append(
+            ChatMessageRef(role="assistant", message_id=resolved_assistant_id, text=assistant, sequence=1)
+        )
     return ChatSnapshot(
         url="https://chatgpt.com/g/g-p-project/c/conversation-1",
         composer_present=True,
         composer_editable=composer_editable,
         user_count=users,
         assistant_count=assistants,
-        latest_assistant_id=assistant_id or (f"assistant-{assistants}" if assistants else None),
+        latest_assistant_id=resolved_assistant_id,
         latest_user_text=user,
         latest_assistant_text=assistant,
         dom_signals=frozenset(signals),
         error_present=False,
-        latest_user_id=user_id or (f"prompt-{users}" if users else None),
+        latest_user_id=resolved_user_id,
         # A real bridge observation derives both from the same underlying
         # DOM check (gpt_auto_cdp.py's raw `generating` query mirrors the
         # stop-control selectors) -- keep them coupled here so tests
         # exercise the real .generating field turn.py actually reads, not
         # just the decoupled dom_signals fact.
         generating=generating,
+        message_refs=tuple(message_refs),
     )
 
 
@@ -203,6 +219,81 @@ class _Chat:
 
     async def persist_unresolved_clear(self):
         self.checkpoint_updates.append({"unresolved-turn-pending": False})
+
+
+@pytest.mark.asyncio
+async def test_await_response_never_returns_a_later_foreign_turns_answer():
+    """GP08/GP30 core regression: once a later, unrelated turn (from any
+    actor -- a human typing in the same tab, or a later gateway request)
+    posts into the same conversation, its assistant reply must never be
+    mistaken for THIS request's own answer, even after it becomes
+    conversation-global-latest. Before GP30, _await_response() biased
+    toward whatever ChatSnapshot.latest_assistant_id/_text reported, which
+    would have returned the foreign answer here."""
+    chat = _Chat()
+
+    own_prompt_ref = ChatMessageRef(role="user", message_id="prompt-1", text="Review AU01", sequence=0)
+    own_answer_ref = ChatMessageRef(role="assistant", message_id="assistant-own", text="Looks sound", sequence=1)
+    foreign_prompt_ref = ChatMessageRef(
+        role="user", message_id="prompt-foreign", text="unrelated question", sequence=2
+    )
+    foreign_answer_ref = ChatMessageRef(
+        role="assistant", message_id="assistant-foreign", text="unrelated answer", sequence=3
+    )
+
+    def _snapshot_with_refs(refs, *, assistant_text, assistant_id, generating=False, complete=False):
+        signals = set()
+        if generating:
+            signals.add("stop-control")
+        if complete:
+            signals.add("completion-control")
+            signals.add("message-finalized")
+        user_refs = [r for r in refs if r.role == "user"]
+        return ChatSnapshot(
+            url="https://chatgpt.com/g/g-p-project/c/conversation-1",
+            composer_present=True,
+            composer_editable=True,
+            user_count=len(user_refs),
+            assistant_count=sum(1 for r in refs if r.role == "assistant"),
+            latest_assistant_id=assistant_id,
+            latest_user_text=user_refs[-1].text if user_refs else None,
+            latest_assistant_text=assistant_text,
+            dom_signals=frozenset(signals),
+            error_present=False,
+            latest_user_id=user_refs[-1].message_id if user_refs else None,
+            generating=generating,
+            message_refs=tuple(refs),
+        )
+
+    def _snapshots_gen():
+        yield snap()  # baseline
+        yield _snapshot_with_refs([own_prompt_ref], assistant_text=None, assistant_id=None)
+        yield _snapshot_with_refs([own_prompt_ref], assistant_text=None, assistant_id=None)
+        yield _snapshot_with_refs(
+            [own_prompt_ref, own_answer_ref],
+            assistant_text="Looks sound",
+            assistant_id="assistant-own",
+            generating=True,
+        )
+        # A foreign turn has now landed in the same conversation and become
+        # conversation-global-latest -- the raw snapshot's own
+        # latest_assistant_id/_text report the FOREIGN answer, exactly what
+        # a human posting into the same tab (or a later gateway request)
+        # would produce. The resolver must still return this request's own
+        # answer, not this raw global-latest value.
+        while True:
+            yield _snapshot_with_refs(
+                [own_prompt_ref, own_answer_ref, foreign_prompt_ref, foreign_answer_ref],
+                assistant_text="unrelated answer",
+                assistant_id="assistant-foreign",
+                complete=True,
+            )
+
+    chat._snapshots = _snapshots_gen()
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-1", body="Review AU01"), lambda _: None)
+    result = await turn.run()
+    assert result.final_summary == "Looks sound"
+    assert turn._response_message_id == "assistant-own"
 
 
 @pytest.mark.asyncio
