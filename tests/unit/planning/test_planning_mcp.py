@@ -106,7 +106,21 @@ def test_plan_update_item_delegates_to_api():
     ):
         result = planning_mcp.plan_update_item("X01", updates)
     assert result == {"ok": True}
-    mock.assert_called_once_with(_ROOT, "X01", updates)
+    mock.assert_called_once_with(_ROOT, "X01", updates, None)
+
+
+def test_plan_update_item_passes_append_through_to_api():
+    updates = {"notes": "New entry."}
+    with (
+        _patch_root(),
+        patch(
+            "audiagentic.components.planning.planning_api.update_item",
+            return_value={"ok": True},
+        ) as mock,
+    ):
+        result = planning_mcp.plan_update_item("X01", updates, append=["notes"])
+    assert result == {"ok": True}
+    mock.assert_called_once_with(_ROOT, "X01", updates, ["notes"])
 
 
 def test_plan_delete_item_delegates_to_api():
