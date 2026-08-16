@@ -90,8 +90,20 @@ def plan_set_state(item_id: str, new_state: str) -> dict:
 
 @mcp.tool()
 @tool_boundary
-def plan_update_item(item_id: str, updates: dict) -> dict:
-    return planning_api.update_item(project_root_from_env(), item_id, updates)
+def plan_update_item(item_id: str, updates: dict, append: list[str] | None = None) -> dict:
+    """Update frontmatter fields (order, state, work, skill, ...) or body
+    sections (description, steps, detailed_solution, code_samples, files,
+    validation, effort_risk, standards, notes, ...) of an existing item.
+
+    By default each key in `updates` REPLACES its section's full content —
+    for a narrative section like `notes` that accumulates entries over time,
+    this silently discards everything written there before unless you fetch
+    the item first and concatenate. Pass the key's name in `append` (e.g.
+    append=["notes"]) to instead add the new text after the existing
+    content, separated by a blank line. `append` only affects body sections
+    named in `updates`; frontmatter fields always replace.
+    """
+    return planning_api.update_item(project_root_from_env(), item_id, updates, append)
 
 
 @mcp.tool()
