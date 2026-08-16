@@ -541,6 +541,8 @@ class GptAutoTurn:
         previous_user_id = baseline.latest_user_id
         previous_generating = baseline.generating
         previous_dom_signals = baseline.dom_signals
+        previous_assistant_id = baseline.latest_assistant_id
+        previous_assistant_text = baseline.latest_assistant_text
         while True:
             if self.cancel_event.is_set():
                 self._move(TurnState.CANCELLED)
@@ -575,10 +577,26 @@ class GptAutoTurn:
             soft_changed = (
                 snap.generating != previous_generating or snap.dom_signals != previous_dom_signals
             )
+            # GP19: growing assistant output is real evidence the provider is
+            # actively working -- unlike a stuck stop-button widget, changing
+            # text/id is not something a static DOM state can fake. This is
+            # NOT identity proof (a human could also produce this in the same
+            # tab, GP08's actor boundary), only activity/progress evidence,
+            # so it never sets caps |= TERMINAL_WITNESS on its own.
+            assistant_progress = (
+                snap.latest_assistant_id != previous_assistant_id
+                or snap.latest_assistant_text != previous_assistant_text
+            )
             caps = EvidenceCapability.NONE
-            if new_msg and user_id_changed:
+            if (new_msg and user_id_changed) or assistant_progress:
                 caps |= EvidenceCapability.PROGRESS
-            if soft_changed and (snap.generating or snap.dom_signals):
+            # GP19: sustained generating=True is real, ongoing evidence of
+            # activity, not just the moment it first became true -- a level
+            # check here (not just soft_changed's edge) closes the exact
+            # starvation this item was raised for: a prompt match that never
+            # succeeds combined with generating=True that never toggles used
+            # to leave every subsequent poll with EvidenceCapability.NONE.
+            if snap.generating or (soft_changed and snap.dom_signals):
                 caps |= EvidenceCapability.SOFT_LIVENESS
             if text_matches:
                 caps |= EvidenceCapability.TERMINAL_WITNESS
@@ -588,6 +606,8 @@ class GptAutoTurn:
             previous_user_id = snap.latest_user_id
             previous_generating = snap.generating
             previous_dom_signals = snap.dom_signals
+            previous_assistant_id = snap.latest_assistant_id
+            previous_assistant_text = snap.latest_assistant_text
             if text_matches:
                 self._prompt_message_id = snap.latest_user_id
             outcome = tracker.advance(observation, loop.time())
