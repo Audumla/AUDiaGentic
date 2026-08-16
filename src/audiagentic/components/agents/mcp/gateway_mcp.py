@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from audiagentic.components.agents.gateway.client import get_gateway_client
+from audiagentic.components.agents.gateway.client import call_gateway_method
 from audiagentic.foundation.mcp.component_server import (
     mcp_server,
     project_root_from_env,
@@ -61,7 +61,7 @@ def agent_list_definitions() -> list[dict[str, Any]]:
 def agent_task_status(request_id: str) -> dict[str, Any]:
     """Return the current persisted state of a gateway request."""
     project_root = project_root_from_env()
-    return _sparse(get_gateway_client(project_root).get_execution_request(project_root, request_id))
+    return _sparse(call_gateway_method("get_execution_request", project_root, request_id))
 
 
 @mcp.tool()
@@ -69,7 +69,7 @@ def agent_task_status(request_id: str) -> dict[str, Any]:
 def agent_task_cancel(request_id: str) -> dict[str, Any]:
     """Cancel a queued request, or best-effort mark a running one cancel-requested."""
     project_root = project_root_from_env()
-    return _sparse(get_gateway_client(project_root).cancel_execution_request(project_root, request_id))
+    return _sparse(call_gateway_method("cancel_execution_request", project_root, request_id))
 
 
 @mcp.tool()
@@ -85,9 +85,7 @@ def agent_task_list_requests(
     """
     project_root = project_root_from_env()
     return _sparse(
-        get_gateway_client(project_root).list_execution_requests(
-            project_root, state=state, limit=limit
-        )
+        call_gateway_method("list_execution_requests", project_root, state=state, limit=limit)
     )
 
 
@@ -97,7 +95,7 @@ def agent_task_gateway_overview() -> dict[str, Any]:
     """Operator-facing summary: persisted request counts by state, the 5 most
     recent failures (with redacted error), and in-process per-profile queue depths."""
     project_root = project_root_from_env()
-    return _sparse(get_gateway_client(project_root).gateway_overview(project_root))
+    return _sparse(call_gateway_method("gateway_overview", project_root))
 
 
 @mcp.tool()
@@ -107,9 +105,7 @@ def agent_task_session_list(state: str | None = None) -> list[dict[str, Any]]:
     'live' flag: true when the session's agent process is held by this gateway
     process (only live sessions can accept new turns)."""
     project_root = project_root_from_env()
-    return _sparse(
-        get_gateway_client(project_root).list_execution_sessions(project_root, state=state)
-    )
+    return _sparse(call_gateway_method("list_execution_sessions", project_root, state=state))
 
 
 @mcp.tool()
@@ -118,9 +114,7 @@ def agent_task_session_close(session_id: str) -> dict[str, Any]:
     """Close a live agent session (terminates its agent process). Idempotent —
     an already-closed or orphaned session returns its final record."""
     project_root = project_root_from_env()
-    return _sparse(
-        get_gateway_client(project_root).close_execution_session(project_root, session_id)
-    )
+    return _sparse(call_gateway_method("close_execution_session", project_root, session_id))
 
 
 @mcp.tool()
@@ -139,7 +133,8 @@ def agent_task_session_control(
     """
     project_root = project_root_from_env()
     return _sparse(
-        get_gateway_client(project_root).control_execution_session(
+        call_gateway_method(
+            "control_execution_session",
             project_root,
             session_id,
             action=action,
@@ -171,9 +166,7 @@ def agent_task_session_resume(
     if component_profile is not None:
         kwargs["component_profile"] = component_profile
     return _sparse(
-        get_gateway_client(project_root).resume_execution_session(
-            project_root, source_session_id, **kwargs
-        )
+        call_gateway_method("resume_execution_session", project_root, source_session_id, **kwargs)
     )
 
 
@@ -226,7 +219,7 @@ def agent_task_submit(
     }
     if execution_context_fingerprint is not None:
         submit_kwargs["execution_context_fingerprint"] = execution_context_fingerprint
-    status = get_gateway_client(project_root).submit_execution_request(project_root, **submit_kwargs)
+    status = call_gateway_method("submit_execution_request", project_root, **submit_kwargs)
     return _sparse({
         "request-id": status.get("request-id"),
         "state": status.get("state"),
