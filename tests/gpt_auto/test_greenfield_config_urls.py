@@ -92,6 +92,24 @@ def test_strict_config_is_typed_and_frozen():
         config.project_url = "changed"  # type: ignore[misc]
 
 
+def test_response_complete_policy_never_regresses_to_the_stuck_stop_control_veto():
+    """GP07 regression guard: this is the one committed, source-of-truth
+    workflow policy every deterministic AND live-gated (AUDIAGENTIC_GPT_AUTO_LIVE=1)
+    test builds its config from -- the gitignored local
+    .audiagentic/config/providers/gpt-auto*.yaml files are a SEPARATE,
+    uncommitted copy this fixture cannot protect. Lock in the specific shape
+    that fixes the stuck stop-control bug so a future edit can't silently
+    reintroduce it here."""
+    policy = GptAutoConfig.from_dict(valid_config()).workflow.policy("response-complete")
+    assert "stop-control" not in policy.none_of, (
+        "stop-control is proven live-unreliable (sticks after real completion) "
+        "and must stay advisory-only, never a completion veto"
+    )
+    assert "message-finalized" in policy.any_of
+    assert "completion-control" in policy.any_of
+    assert policy.any_of, "at least one corroborating any-of signal must be required"
+
+
 def test_project_url_is_optional_for_project_name_discovery():
     value = valid_config()
     del value["project-url"]
