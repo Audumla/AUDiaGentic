@@ -18,9 +18,23 @@ _SNAPSHOT_FN = r"""
     return r.width > 0 && r.height > 0 && s.display !== "none" &&
       s.visibility !== "hidden" && s.opacity !== "0";
   };
-  const users = Array.from(document.querySelectorAll('[data-message-author-role="user"]'));
-  const assistants = Array.from(document.querySelectorAll('[data-message-author-role="assistant"]'))
-    .filter(e => !(e.getAttribute("data-message-id") || "").startsWith("request-placeholder-request-"));
+  // GP08 slice 1: walk user+assistant DOM nodes together in ONE pass, in
+  // true document order, instead of two separately-filtered
+  // querySelectorAll calls. Two role-specific passes cannot tell you
+  // whether a user message landed before or after a given assistant
+  // message when both appear between polls -- exactly the ordering the
+  // GP08 correlation boundary rule needs. This also fixes a latent id/text
+  // desync: collecting ids and texts via separately-filtered passes let an
+  // empty/transient text node fall out of one array but not the other.
+  const allRoleNodes = Array.from(document.querySelectorAll('[data-message-author-role="user"], [data-message-author-role="assistant"]'));
+  const messageEntries = [];
+  for (const el of allRoleNodes) {
+    const role = el.getAttribute("data-message-author-role");
+    if (role === "assistant" && (el.getAttribute("data-message-id") || "").startsWith("request-placeholder-request-")) continue;
+    messageEntries.push({role, el, messageId: el.getAttribute("data-message-id") || null});
+  }
+  const users = messageEntries.filter(m => m.role === "user").map(m => m.el);
+  const assistants = messageEntries.filter(m => m.role === "assistant").map(m => m.el);
   const latestAssistant = assistants.length ? assistants[assistants.length - 1] : null;
   const assistantTurn = latestAssistant && (latestAssistant.closest("article") || latestAssistant.parentElement?.parentElement);
   const domSignals = {};
@@ -60,26 +74,43 @@ _SNAPSHOT_FN = r"""
   const userText = (element) => boundedText(
     element?.querySelector('[data-testid="collapsible-user-message-content"]') || element
   );
-  const text = (list, reader = boundedText) => list.length ? reader(list[list.length - 1]) : null;
   const selectors = '[data-testid="stop-button"], [data-testid="stop-generating"], .result-streaming, .result-thinking, [aria-busy="true"]';
   const generating = Array.from(document.querySelectorAll(selectors)).some(shown);
   const composer = document.querySelector(".ProseMirror");
+  // GP08 slice 1: text extraction happens exactly once per node here, so
+  // an id and its text can never desync between two independently-filtered
+  // arrays the way the old users.map(...)/assistants.map(...) pairs could.
+  const messageRefs = messageEntries.map((m, sequence) => ({
+    role: m.role,
+    messageId: m.messageId,
+    text: m.role === "user" ? userText(m.el) : boundedText(m.el),
+    sequence
+  }));
+  const userRefs = messageRefs.filter(m => m.role === "user");
+  const assistantRefs = messageRefs.filter(m => m.role === "assistant");
+  const lastText = (refs) => refs.length ? refs[refs.length - 1].text : null;
   return {
     url: location.href, composerPresent: !!composer,
     composerEditable: !!composer && composer.isContentEditable && !composer.hasAttribute("disabled"),
-    userCount: users.length, assistantCount: assistants.length,
-    userMessageIds: users.map(e => e.getAttribute("data-message-id")).filter(Boolean),
-    userMessageTexts: users.map(userText).filter(Boolean).slice(-64),
+    userCount: userRefs.length, assistantCount: assistantRefs.length,
+    // GP08 slice 1: messageRefs is the single true DOM-order sequence this
+    // adapter derives everything else from -- it is what lets a caller
+    // later tell "A-A then U-human" apart from "U-human then A-A" within
+    // one poll, which the four legacy arrays below cannot express on their
+    // own (they only carry per-role order, not cross-role interleaving).
+    messageRefs,
+    userMessageIds: userRefs.map(m => m.messageId).filter(Boolean),
+    userMessageTexts: userRefs.map(m => m.text).filter(Boolean).slice(-64),
     // GP08: the ordered assistant-message sequence, mirroring the
     // user-message arrays above. "Latest assistant" alone cannot answer
     // "what was the response to request A" once a later, unrelated turn
     // (from any actor) has entered the same conversation -- this ordered
     // list is the raw data a request-addressable correlation layer needs.
-    assistantMessageIds: assistants.map(e => e.getAttribute("data-message-id")).filter(Boolean),
-    assistantMessageTexts: assistants.map(e => boundedText(e)).filter(Boolean).slice(-64),
-    latestUserId: users.length ? users[users.length - 1].getAttribute("data-message-id") || null : null,
+    assistantMessageIds: assistantRefs.map(m => m.messageId).filter(Boolean),
+    assistantMessageTexts: assistantRefs.map(m => m.text).filter(Boolean).slice(-64),
+    latestUserId: userRefs.length ? userRefs[userRefs.length - 1].messageId : null,
     latestAssistantId: latestAssistant?.getAttribute("data-message-id") || null,
-    latestUserText: text(users, userText), latestAssistantText: text(assistants), generating, domSignals,
+    latestUserText: lastText(userRefs), latestAssistantText: lastText(assistantRefs), generating, domSignals,
     errorPresent: !!document.querySelector('.error-page, [data-testid*="error"]')
   };
 }
