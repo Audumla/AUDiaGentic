@@ -461,6 +461,30 @@ def test_update_item_append_only_applies_to_listed_keys(tmp_path):
     assert item["notes"] == "First note."
 
 
+def test_update_item_notes_appends_by_default_without_explicit_append(tmp_path):
+    """Accidentally replacing accumulated notes history is a real,
+    previously-hit failure mode -- notes must be hard to destroy by
+    default, even when the caller forgets to pass append=["notes"]."""
+    planning_api.create_item(tmp_path, _make_item())
+    planning_api.update_item(tmp_path, "TST01", {"notes": "First entry."})
+    planning_api.update_item(tmp_path, "TST01", {"notes": "Second entry."})
+
+    item = planning_api.get_item(tmp_path, "TST01")
+    assert item["notes"] == "First entry.\n\nSecond entry."
+
+
+def test_update_item_notes_replace_requires_explicit_empty_append(tmp_path):
+    """append=[] (an explicit empty list, not the None default) is the
+    escape hatch to force a full replace of notes, e.g. when deliberately
+    rewriting notes to fix corruption."""
+    planning_api.create_item(tmp_path, _make_item())
+    planning_api.update_item(tmp_path, "TST01", {"notes": "First entry."})
+    planning_api.update_item(tmp_path, "TST01", {"notes": "Replacement."}, append=[])
+
+    item = planning_api.get_item(tmp_path, "TST01")
+    assert item["notes"] == "Replacement."
+
+
 def test_update_item_updates_title(tmp_path):
     planning_api.create_item(tmp_path, _make_item())
     planning_api.update_item(tmp_path, "TST01", {"title": "New Title"})

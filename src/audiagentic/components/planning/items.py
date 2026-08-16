@@ -390,13 +390,20 @@ def update_item(
     state, etc. are scalar, not narrative — replace is the only sensible
     semantic there) and is silently ignored for any key not also present in
     `updates`.
+
+    `notes` defaults to append even when `append` is omitted (append=None),
+    since accidentally replacing accumulated incident history is a real,
+    previously-hit failure mode and narrative history should be hard to
+    destroy by default. Pass `append=[]` explicitly (an empty list, not
+    None) to opt out and force a full replace of `notes` too — e.g. when
+    deliberately rewriting notes to fix corruption.
     """
     path = item_store.require_item(project_root, item_id)
     fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
     item_store.ensure_not_review(fm, item_id, "VAL-PLN-020")
     sections = item_store.parse_item_sections(body)
     custom_headings = item_store.parse_item_custom_headings(body)
-    append_keys = set(append or ())
+    append_keys = set(append) if append is not None else {"notes"}
 
     # Snapshot old values before mutating — needed for change-log diffing.
     old_fm = dict(fm)
