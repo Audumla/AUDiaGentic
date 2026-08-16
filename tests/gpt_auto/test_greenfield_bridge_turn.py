@@ -43,7 +43,12 @@ def snap(
     if generating:
         signals.add("stop-control")
     if complete:
+        # GP17: response-complete now requires completion-control AND
+        # message-finalized together (all-of, not any-of) -- either alone
+        # was proven live-unreliable. Set both so `complete=True` still
+        # means "genuinely done" for tests exercising the happy path.
         signals.add("completion-control")
+        signals.add("message-finalized")
     return ChatSnapshot(
         url="https://chatgpt.com/g/g-p-project/c/conversation-1",
         composer_present=True,
@@ -826,3 +831,35 @@ def test_response_stall_timeout_disabled_means_unbounded_across_every_phase():
     # detection must not implicitly disable them too.
     assert policy.start_bound_seconds == 120.0
     assert policy.absolute_ceiling_seconds == 3600.0
+
+
+@pytest.mark.asyncio
+async def test_turn_does_not_complete_on_message_finalized_alone_without_completion_control():
+    """GP17: message-finalized was proven live to fire on a genuinely
+    incomplete response (7-35 chars) while completion-control was absent --
+    the exact scenario that produced real truncated "completed" results on
+    2026-08-16. With only message-finalized present (no completion-control,
+    text never growing), the turn must NOT complete -- it must time out
+    instead, never falsely report success on a short, unfinished answer."""
+    chat = _Chat()
+    chat.runtime.config.turn.response_start_timeout_seconds = 0.05
+    chat.runtime.config.turn.response_stall_timeout_seconds = 0.05
+    chat.runtime.config.turn.response_timeout_seconds = 0.3
+
+    def _short_stuck_response_message_finalized_only():
+        while True:
+            yield snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="I would",
+                extra_signals=["message-finalized"],
+            )
+
+    chat._snapshots = _short_stuck_response_message_finalized_only()
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-message-finalized-alone", body="Review AU01"), lambda _: None
+    )
+    with pytest.raises(AudiaGenticError):
+        await turn.run()
+    assert turn.state is not TurnState.COMPLETE
