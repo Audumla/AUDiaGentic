@@ -219,6 +219,60 @@ async def test_turn_proves_submission_once_and_completes_from_atomic_snapshots()
 
 
 @pytest.mark.asyncio
+async def test_response_progress_activity_emits_repeatedly_not_just_once():
+    """GP07 regression guard: a rewiring mistake made during the
+    _await_response engine migration suppressed the response-progress
+    ACTIVITY emission after the first occurrence. The gateway's own
+    watchdog activity lease depends on these arriving throughout the turn,
+    not just once at the start -- streaming text growing over several
+    polls must produce more than one response-progress observation."""
+    chat = _Chat()
+    observations = []
+    chat._snapshots = iter(
+        [
+            snap(),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, assistants=1, user="Review AU01", assistant="Looks"),
+            snap(users=1, assistants=1, user="Review AU01", assistant="Looks so"),
+            snap(users=1, assistants=1, user="Review AU01", assistant="Looks sound"),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks sound",
+                complete=True,
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks sound",
+                complete=True,
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks sound",
+                complete=True,
+            ),
+        ]
+    )
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-progress", body="Review AU01"), observations.append
+    )
+    result = await turn.run()
+    assert result.stop_reason == "end-turn"
+    progress_observations = [
+        obs
+        for obs in observations
+        if obs.attributes.get("model_activity") == "response-progress"
+    ]
+    assert len(progress_observations) >= 2
+
+
+@pytest.mark.asyncio
 async def test_submission_proof_resolves_ambiguous_not_hung_when_text_never_exactly_matches():
     """GP07: a real bug found live -- a new user message can appear with a
     length matching the sent prompt but content that never satisfies strict
@@ -331,6 +385,35 @@ async def test_turn_does_not_complete_while_text_is_still_changing_even_without_
     chat._snapshots = _growing_text_snapshots()
     turn = GptAutoTurn(
         chat, SessionPrompt(turn_id="turn-still-changing", body="Review AU01"), lambda _: None
+    )
+    with pytest.raises(AudiaGenticError):
+        await turn.run()
+    assert turn.state is not TurnState.COMPLETE
+
+
+@pytest.mark.asyncio
+async def test_response_wait_stalls_correctly_despite_flapping_soft_liveness_widget():
+    """GP07: a real latent hole found while rewiring _await_response --
+    response-active's any-of previously let stop-control/streaming/thinking
+    widget transitions ALONE reset last_activity_at, so a widget flapping
+    forever (no real text ever appearing) could indefinitely postpone the
+    stall timeout. Widget transitions are SOFT_LIVENESS now (bounded grace
+    only); with no real content ever arriving, this must still resolve to
+    a stall/failure, not hang."""
+    chat = _Chat()
+    chat.runtime.config.turn.response_start_timeout_seconds = 0.05
+    chat.runtime.config.turn.response_stall_timeout_seconds = 0.05
+    chat.runtime.config.turn.response_timeout_seconds = 0.3
+
+    def _flapping_stop_control_no_text_ever():
+        toggle = False
+        while True:
+            toggle = not toggle
+            yield snap(users=1, assistants=1, user="Review AU01", assistant="", generating=toggle)
+
+    chat._snapshots = _flapping_stop_control_no_text_ever()
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-flapping-widget", body="Review AU01"), lambda _: None
     )
     with pytest.raises(AudiaGenticError):
         await turn.run()
