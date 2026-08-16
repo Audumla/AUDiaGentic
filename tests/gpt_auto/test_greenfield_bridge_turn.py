@@ -792,3 +792,37 @@ async def test_admission_failure_marks_recoverable_session_for_gateway_retention
         await transport.prompt(SessionPrompt(turn_id="turn-1", body="continue"), lambda _: None)
 
     assert transport.turn_failure_disposition() is SessionFailureDisposition.RETAIN
+
+
+def test_response_stall_timeout_disabled_means_unbounded_across_every_phase():
+    """GP15: response-stall-timeout-seconds=0 is documented as "disabled",
+    but only progress_lease_seconds/absolute_ceiling_seconds actually
+    honored that -- soft_grace_cap_seconds, candidate_max_verification_
+    window_seconds, and suspect_grace_seconds silently fell back to a
+    fixed 60s. Proven live 2026-08-16: a genuinely-in-progress consultation
+    (no assistant text yet, stop-control persistently visible but never
+    toggling, so SOFT_LIVENESS was never granted -- edge-triggered) was
+    falsely marked failed via response-stall-timeout at ~195s even though
+    the config said stall detection was disabled. Every disable-sensitive
+    timing property must agree, or the "disabled" contract is a lie for
+    whichever path a caller's actual DOM behavior happens to route through."""
+    from audiagentic.components.providers.adapters.gpt_auto.turn import (
+        _ResponseCompletionPolicy,
+    )
+
+    turn_config = SimpleNamespace(
+        response_start_timeout_seconds=120.0,
+        response_stall_timeout_seconds=0,
+        response_timeout_seconds=3600.0,
+        response_stability_seconds=6.0,
+    )
+    policy = _ResponseCompletionPolicy(turn_config)
+    assert policy.progress_lease_seconds == float("inf")
+    assert policy.soft_grace_cap_seconds == float("inf")
+    assert policy.candidate_max_verification_window_seconds == float("inf")
+    assert policy.suspect_grace_seconds == float("inf")
+    # response_start_timeout_seconds and response_timeout_seconds are their
+    # own independent, legitimately-finite bounds -- disabling stall
+    # detection must not implicitly disable them too.
+    assert policy.start_bound_seconds == 120.0
+    assert policy.absolute_ceiling_seconds == 3600.0
