@@ -304,7 +304,14 @@ class PersistentChat:
                 timeout=self.config.chat.navigation_timeout_seconds + 2,
             )
         await self._wait_ready()
-        snap = await self.snapshot()
+        # _wait_ready() already tolerates RECOVERING (it calls
+        # wait_quiescent(allow_recovering=True)) -- a shared-bridge
+        # replacement can race this exact resume window and move state to
+        # RECOVERING between that call and this one. Without allow_recovering
+        # here too, this would block for the full recovery-timeout waiting on
+        # a signal nothing in this flow ever sets, before eventually failing
+        # anyway -- a needless hang on the way to the same outcome.
+        snap = await self.snapshot(allow_recovering=True)
         if self.provider_session_id and not url_matches_provider_session(
             snap.url, self.provider_session_id
         ):
