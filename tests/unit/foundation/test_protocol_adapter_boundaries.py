@@ -56,6 +56,10 @@ def test_component_mcp_adapters_do_not_import_owning_internals() -> None:
                 or relative.endswith("_client")
                 or "_api." in relative
                 or "_client." in relative
+                or ".api." in relative
+                or ".client." in relative
+                or relative.endswith(".api")
+                or relative.endswith(".client")
             )
             if not allowed:
                 violations.append(f"{path.relative_to(ROOT)} imports {target}")

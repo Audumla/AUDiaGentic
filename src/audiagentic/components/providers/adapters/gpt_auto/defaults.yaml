@@ -59,15 +59,39 @@ settings:
         selectors: ['[aria-busy="true"]', '[data-busy="true"]']
         visible: true
       completion-control:
+        # GP41 (2026-08-17): [data-testid="copy-turn-action-button"] is NOT
+        # unique to assistant turns -- confirmed live it is the SAME
+        # testid ChatGPT uses on the user's own prompt-message action bar
+        # (copy/edit/share what was typed). Scoping to latest-assistant-turn
+        # is what prevents matching the wrong one, but that scoping walk
+        # was independently found to be fragile for at least one real DOM
+        # shape tonight (a false alarm in that specific investigation, but
+        # a real fragility in the underlying approach). The assistant's
+        # own copy button separately carries aria-label="Copy response"
+        # (confirmed live: <button ... aria-label="Copy response"
+        # data-testid="copy-turn-action-button">), which IS role-specific
+        # -- added as a second selector so this signal no longer depends
+        # entirely on the scoping walk being correct.
         scope: latest-assistant-turn
-        selectors: ['[data-testid="copy-turn-action-button"]']
+        selectors: ['[data-testid="copy-turn-action-button"]', 'button[aria-label="Copy response"]']
         visible: false
       message-finalized:
-        # ChatGPT's markdown renderer's own "this is the final paragraph"
-        # marker. Corroborating evidence only (any-of, alongside
-        # completion-control) -- its exact lifecycle (transient vs
-        # persistent, per turn type) is not yet fully characterized, so it
-        # must never be relied on alone.
+        # ChatGPT's markdown renderer's own "this is the currently-last
+        # rendered node" marker on the final paragraph. Reinstated
+        # 2026-08-17 (GP39) after being removed under GP32 on the mistaken
+        # belief ChatGPT had dropped it entirely -- it was only absent from
+        # THAT investigation's specific long technical-essay response
+        # (which likely ended in a list/code-block/heading, not a plain
+        # paragraph); confirmed live to still be present and correctly
+        # scoped to the assistant message on a short, single-paragraph
+        # response. Still individually unreliable (GP17, 2026-08-16:
+        # proven live to fire on a genuinely-incomplete 7-35 char response
+        # -- a paragraph can be marked "last so far" before more content
+        # streams in and moves the marker). Never trusted alone; paired
+        # with not-generating below, not completion-control, since this
+        # signal exists specifically to cover responses where
+        # completion-control/more-actions-menu are slow to mount or never
+        # appear within a reasonable window.
         scope: latest-assistant-turn
         selectors: ['[data-is-last-node]']
         visible: false
@@ -100,15 +124,62 @@ settings:
       more-actions-menu:
         # The end-of-turn action bar's "More actions" overflow button,
         # confirmed present live 2026-08-17 alongside completion-control on
-        # a genuinely complete turn. A real, distinct end-of-turn signal,
-        # but its lifecycle relative to completion-control/message-finalized
-        # (does it ever lag, does it persist identically across turn types)
-        # is not yet characterized the way those two were before landing in
-        # response-complete's all-of set (GP17). Advisory/diagnostic only
-        # for now -- never wired into a completion or failure policy without
-        # its own live validation across multiple real completions first.
+        # a genuinely complete turn, using the SAME production scoping
+        # logic (assistantTurn = closest("article") ||
+        # parentElement.parentElement) as the real snapshot code -- not an
+        # ad-hoc check.
         scope: latest-assistant-turn
         selectors: ['button[aria-label="More actions"]']
+        visible: true
+      canvas-edit-control:
+        # ChatGPT's canvas/writing-block response type (a distinct rendering
+        # mode from the standard chat-turn bubble, seen live 2026-08-17)
+        # shows a completely different end-of-turn action bar -- Edit/Copy/
+        # Open editor -- instead of the standard copy-turn-action-button +
+        # More actions pair. completion-control/more-actions-menu were
+        # confirmed document-scoped-absent for a genuinely complete canvas
+        # turn (GP33 follow-up), which would make response-complete
+        # permanently unsatisfiable for this whole response type -- the
+        # exact GP32 failure mode again, for a different rendering mode
+        # this time. ChatGPT is known to have MORE than these two response
+        # variants; this is only the second one confirmed live so far.
+        #
+        # KNOWN WEAKNESS (GP34/code review, 2026-08-17): live monitoring
+        # confirmed this signal (and canvas-open-editor-control) both
+        # appear within ~150 characters of a response that ultimately
+        # reached ~1900 characters -- i.e. essentially at canvas-panel
+        # creation, not at genuine completion. Both members of this pair
+        # fire together at the same moment, so pairing them provides NO
+        # real independent corroboration the way completion-control/
+        # more-actions-menu are intended to (code review, 2026-08-17: "two
+        # structural witnesses for essentially the same event... pairing
+        # them doesn't convert that into 'generation has finished'").
+        # streaming-indicator/thinking-indicator (response-complete's
+        # none-of veto) are chat-bubble-specific CSS classes that do not
+        # fire for canvas content, so none-of provides no protection
+        # either. Mitigated (not fully closed) by requiring not-generating
+        # as a THIRD group member below -- current.generating (the raw
+        # stop/streaming/thinking/aria-busy check) was observed live to
+        # correctly track this specific canvas turn's busy/done state
+        # (stop button present throughout growth, false only once text
+        # stabilized), but this is one data point, not a proven guarantee
+        # the same way completion-control/more-actions-menu's stability
+        # requirement is. Do not treat this group as equally trustworthy
+        # until a canvas turn has been watched live through an actual
+        # multi-second generation pause to rule out a false-positive
+        # during a real mid-generation stall.
+        scope: latest-assistant-turn
+        selectors: ['[data-testid="writing-block-header-magic-edit-button"]']
+        visible: true
+      canvas-open-editor-control:
+        # Paired corroborating signal for canvas-edit-control -- confirmed
+        # live 2026-08-17 co-occurring with it on a genuinely complete
+        # canvas turn, same discipline as completion-control/
+        # more-actions-menu (never trust one witness alone, GP17). Carries
+        # the SAME known weakness noted on canvas-edit-control above --
+        # see GP34.
+        scope: latest-assistant-turn
+        selectors: ['button[aria-label="Open editor"]']
         visible: true
     evidence-policies:
       response-started:
@@ -119,17 +190,59 @@ settings:
         # stop-control is deliberately NOT in none-of: proven live
         # (2026-08-15/16) to stick indefinitely after real completion, so
         # it is advisory-only now (logged on disagreement, never a veto).
-        # completion-control and message-finalized are BOTH individually
-        # unreliable (each independently proven live to fire on a
-        # genuinely-incomplete turn -- completion-control mid-stream,
-        # message-finalized on a 7-35 char response, GP17 2026-08-16) and
-        # each can stay persistently true (not flap) through the whole
-        # response_stability_seconds window, so the stability check alone
-        # does not catch a shared false-positive. Require BOTH together
-        # (all-of, not any-of) as the corroborating pair -- this was the
-        # root cause of real live truncated/wrong "completed" results
-        # (GP17), not text stability being insufficient on its own.
-        all-of: [assistant-fresh, text-present, completion-control, message-finalized]
+        # completion-control alone is unreliable (proven live to fire on a
+        # genuinely-incomplete turn mid-stream, GP17 2026-08-16) and can
+        # stay persistently true (not flap) through the whole
+        # response_stability_seconds window, so a second, independent
+        # corroborating signal is required. any-of-groups (not a single
+        # flat all-of) so a future DOM change breaking one corroborating
+        # signal degrades to the other surviving groups instead of making
+        # response-complete permanently unsatisfiable -- exactly what
+        # happened on 2026-08-17 when message-finalized's DOM marker
+        # ([data-is-last-node]) was absent from the one long technical
+        # response GP32 was diagnosed against, live-reproduced as a 600s
+        # hang with zero adapter-side signal despite ChatGPT itself having
+        # finished. (CORRECTION, GP39 same day: the marker was NOT removed
+        # by ChatGPT as GP32 concluded -- it is conditional on the
+        # response's last rendered block being a plain paragraph, absent
+        # for other endings like lists/code-blocks/headings. Reinstated
+        # below as a third group once this was confirmed live.) Same day, a
+        # second variant of the same failure mode was live-reproduced:
+        # ChatGPT's canvas/writing-block response type renders a
+        # different action bar entirely, so the standard pair was
+        # document-scoped-absent for a genuinely complete canvas turn
+        # (GP33 follow-up) -- covered by a second any-of-groups entry
+        # rather than trying to find one selector that covers every
+        # response variant. ChatGPT has more response variants than
+        # these two; add further groups only after their own live
+        # validation, never speculatively.
+        #
+        # GP34/code review 2026-08-17: unlike the standard pair, the
+        # canvas pair's own two members were proven to co-fire at
+        # canvas-panel-creation time (not completion) -- see
+        # canvas-edit-control's comment. not-generating is included as a
+        # THIRD required fact in the canvas group specifically (never
+        # added to the standard group -- that would reintroduce the
+        # stop-control-stickiness false-negative GP17 fixed) so a genuine
+        # mid-generation pause, where ChatGPT's own busy indicator is
+        # still active, cannot satisfy this group.
+        #
+        # GP39 (2026-08-17): a third group covers responses where
+        # completion-control/more-actions-menu are slow to mount or never
+        # appear within a reasonable window (observed live on a trivial
+        # short single-paragraph answer -- text fully rendered and stable
+        # for several minutes with neither signal present anywhere in the
+        # document). message-finalized ([data-is-last-node]) is present
+        # and correctly scoped for exactly this response shape, but is
+        # proven individually unreliable (GP17); paired with
+        # not-generating rather than completion-control, since
+        # completion-control not appearing at all is the exact gap this
+        # group exists to route around.
+        all-of: [assistant-fresh, text-present]
+        any-of-groups:
+          - [completion-control, more-actions-menu]
+          - [canvas-edit-control, canvas-open-editor-control, not-generating]
+          - [message-finalized, not-generating]
         none-of: [streaming-indicator, thinking-indicator, error-page, error-alert, auth-required]
       response-failed:
         any-of: [error-page, error-alert, auth-required]

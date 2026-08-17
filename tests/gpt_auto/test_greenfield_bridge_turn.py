@@ -45,12 +45,15 @@ def snap(
     if generating:
         signals.add("stop-control")
     if complete:
-        # GP17: response-complete now requires completion-control AND
-        # message-finalized together (all-of, not any-of) -- either alone
-        # was proven live-unreliable. Set both so `complete=True` still
-        # means "genuinely done" for tests exercising the happy path.
+        # GP17/GP32: response-complete requires completion-control AND a
+        # corroborating partner together (all-of, not any-of) -- either
+        # alone was proven live-unreliable. That partner was
+        # message-finalized until GP32 (2026-08-17), when ChatGPT removed
+        # its underlying DOM marker entirely; more-actions-menu replaced
+        # it. Set both so `complete=True` still means "genuinely done" for
+        # tests exercising the happy path.
         signals.add("completion-control")
-        signals.add("message-finalized")
+        signals.add("more-actions-menu")
     resolved_user_id = user_id or (f"prompt-{users}" if users else None)
     resolved_assistant_id = assistant_id or (f"assistant-{assistants}" if assistants else None)
     # GP30: message_refs is the true-DOM-order sequence _await_response()'s
@@ -247,7 +250,7 @@ async def test_await_response_never_returns_a_later_foreign_turns_answer():
             signals.add("stop-control")
         if complete:
             signals.add("completion-control")
-            signals.add("message-finalized")
+            signals.add("more-actions-menu")
         user_refs = [r for r in refs if r.role == "user"]
         return ChatSnapshot(
             url="https://chatgpt.com/g/g-p-project/c/conversation-1",
@@ -969,31 +972,34 @@ def test_response_stall_timeout_disabled_means_unbounded_across_every_phase():
 
 
 @pytest.mark.asyncio
-async def test_turn_does_not_complete_on_message_finalized_alone_without_completion_control():
-    """GP17: message-finalized was proven live to fire on a genuinely
-    incomplete response (7-35 chars) while completion-control was absent --
-    the exact scenario that produced real truncated "completed" results on
-    2026-08-16. With only message-finalized present (no completion-control,
-    text never growing), the turn must NOT complete -- it must time out
-    instead, never falsely report success on a short, unfinished answer."""
+async def test_turn_does_not_complete_on_more_actions_menu_alone_without_completion_control():
+    """GP17/GP32: completion-control's corroborating partner (message-
+    finalized until GP32, 2026-08-17, when its underlying DOM marker was
+    removed by ChatGPT and more-actions-menu replaced it) was proven live
+    to fire on a genuinely incomplete response while completion-control
+    was absent -- the exact scenario that produced real truncated
+    "completed" results on 2026-08-16. With only the corroborating signal
+    present (no completion-control, text never growing), the turn must
+    NOT complete -- it must time out instead, never falsely report success
+    on a short, unfinished answer."""
     chat = _Chat()
     chat.runtime.config.turn.response_start_timeout_seconds = 0.05
     chat.runtime.config.turn.response_stall_timeout_seconds = 0.05
     chat.runtime.config.turn.response_timeout_seconds = 0.3
 
-    def _short_stuck_response_message_finalized_only():
+    def _short_stuck_response_more_actions_menu_only():
         while True:
             yield snap(
                 users=1,
                 assistants=1,
                 user="Review AU01",
                 assistant="I would",
-                extra_signals=["message-finalized"],
+                extra_signals=["more-actions-menu"],
             )
 
-    chat._snapshots = _short_stuck_response_message_finalized_only()
+    chat._snapshots = _short_stuck_response_more_actions_menu_only()
     turn = GptAutoTurn(
-        chat, SessionPrompt(turn_id="turn-message-finalized-alone", body="Review AU01"), lambda _: None
+        chat, SessionPrompt(turn_id="turn-more-actions-menu-alone", body="Review AU01"), lambda _: None
     )
     with pytest.raises(AudiaGenticError):
         await turn.run()

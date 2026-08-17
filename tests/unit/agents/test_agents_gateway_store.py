@@ -44,7 +44,7 @@ def test_value_error_detail_is_preserved_for_operator_diagnosis(tmp_path: Path) 
         updates={"error": ValueError("browser executable is not configured")},
     )
     assert updated["error"] == {
-        "code": "VAL-AGW-UNKNOWN",
+        "code": "VAL-AGW-999",
         "message": "browser executable is not configured",
         "kind": "ValueError",
     }

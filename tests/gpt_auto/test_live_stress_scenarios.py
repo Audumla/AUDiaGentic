@@ -128,7 +128,7 @@ def _make_checkpoint_sink(ag_session_id: str):
 
 async def _open_transport(provider_id: str):
     settings = _load_live_settings(provider_id)
-    config = GptAutoConfig.from_dict(settings)
+    config = GptAutoConfig.from_project_dict(settings)
     ag_session_id = f"live-stress-{uuid.uuid4().hex[:12]}"
     transport = build_session_transport(
         _PROJECT_ROOT,

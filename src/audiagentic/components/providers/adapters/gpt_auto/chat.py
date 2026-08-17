@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from enum import StrEnum
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -98,6 +99,15 @@ class PersistentChat:
         # that a previous send still needs reconciliation.
         self.unresolved_turn_pending = _metadata_bool(metadata, "unresolved-turn-pending")
         self._unresolved_match_fingerprint: tuple[object, ...] | None = None
+        # GP18 code-review follow-up: the fingerprint match alone proved
+        # only that two OBSERVATIONS agreed, not that real TIME passed
+        # between them -- a caller retrying admission shortly afterwards
+        # could produce a second matching fingerprint almost immediately,
+        # unlike _await_response()'s explicit candidate_stability_window
+        # wait. Track when the fingerprint was first recorded so clearing
+        # requires the same response_stability_seconds gap the main
+        # completion path already requires.
+        self._unresolved_match_fingerprint_at: float | None = None
         # Keep the last reconciliation decision separate from the durable
         # marker.  The marker says *a turn may still be outstanding*; this
         # evidence says why the latest attempt could not clear it.  It is
@@ -498,10 +508,27 @@ class PersistentChat:
         # still stalled in a tool-backed turn.  Require explicit terminal
         # evidence before clearing the unresolved marker; the caller receives
         # a structured recovery error when that evidence never appears.
-        if not snapshot.dom_signals.intersection({"completion-control", "message-finalized"}):
+        #
+        # GP18 code review: this used to accept ANY single witness
+        # (completion-control alone, or one canvas control alone) via a
+        # flat .intersection() -- weaker than response-complete's own gate,
+        # which requires a WHOLE corroborating pair together (GP17: a
+        # single witness is proven to fire on genuinely-incomplete turns).
+        # Reuses the SAME any-of-groups the real completion gate uses
+        # (config.workflow.policy("response-complete").any_of_groups)
+        # instead of a separately-maintained witness set, so recovery and
+        # normal completion can never drift into different terminal
+        # semantics again.
+        completion_groups = self.config.workflow.policy("response-complete").any_of_groups
+        # not-generating is a derived fact (from snapshot.generating), not
+        # a DOM signal -- it never appears in dom_signals itself, so it
+        # must be added explicitly to match what the group actually
+        # requires (mirrors turn.py's _facts()).
+        true_facts = snapshot.dom_signals | ({"not-generating"} if not snapshot.generating else set())
+        if not any(group <= true_facts for group in completion_groups):
             self._set_unresolved_recovery(
                 "completion-evidence-missing",
-                required_signal="completion-control-or-message-finalized",
+                required_signal="-or-".join("+".join(sorted(group)) for group in completion_groups),
                 observed_dom_signals=sorted(snapshot.dom_signals),
             )
             return False
@@ -518,12 +545,29 @@ class PersistentChat:
             )
             return False
         match_fingerprint = (prompt_match, assistant_id, snapshot.latest_assistant_text)
+        now = time.monotonic()
         if self._unresolved_match_fingerprint != match_fingerprint:
             self._unresolved_match_fingerprint = match_fingerprint
+            self._unresolved_match_fingerprint_at = now
             self._set_unresolved_recovery(
                 "awaiting-second-stable-observation",
                 correlation=prompt_match,
                 assistant_id=assistant_id,
+            )
+            return False
+        # GP18 code review: a matching fingerprint alone only proves two
+        # OBSERVATIONS agreed -- not that any real time passed between
+        # them. A caller retrying admission shortly afterwards could
+        # reconcile against a canvas turn's premature witnesses (GP34)
+        # almost immediately. Require the same response_stability_seconds
+        # gap _await_response()'s own candidate window enforces.
+        elapsed = now - (self._unresolved_match_fingerprint_at or now)
+        if elapsed < self.config.turn.response_stability_seconds:
+            self._set_unresolved_recovery(
+                "awaiting-second-stable-observation",
+                correlation=prompt_match,
+                assistant_id=assistant_id,
+                elapsed_seconds=round(elapsed, 3),
             )
             return False
         self.clear_unresolved_turn()
@@ -593,6 +637,7 @@ class PersistentChat:
         self.unresolved_assistant_before_id = None
         self.unresolved_prompt_text_digest = None
         self._unresolved_match_fingerprint = None
+        self._unresolved_match_fingerprint_at = None
         self._unresolved_recovery_reason = None
         self._unresolved_recovery_details = {}
 

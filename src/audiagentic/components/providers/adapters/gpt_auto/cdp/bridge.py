@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..config import GptAutoConfig
-from .client import CdpClient, CdpError
+from .client import CdpClient, CdpError, CdpStaleGenerationError
 
 
 @dataclass(frozen=True)
@@ -27,6 +27,16 @@ class PythonCdpBridge:
         self._reader_task: asyncio.Task[None] | None = None
         self._pages: dict[str, str] = {}
         self._sessions: dict[str, str] = {}
+        # GP18: the underlying CdpClient can silently reconnect (a fresh
+        # WebSocket connection) when it detects its previous connection is
+        # stale. Target-attachment sessionIds are scoped to the specific
+        # connection they were established on, so a session cached from
+        # before a reconnect is invalid on the new one (CDP error -32001
+        # "Session with given id not found."). Track the client's
+        # connection generation and invalidate the session cache -- not
+        # the page/target-handle map, target identity itself survives a
+        # client reconnect -- whenever it changes.
+        self._known_connection_generation: int | None = None
         self._next_page = 1
         self._tab_open_lock = asyncio.Lock()
         self.events: asyncio.Queue[BridgeEvent] = asyncio.Queue()
@@ -48,9 +58,33 @@ class PythonCdpBridge:
         )
         await client.start()
         self._client = client
+        self._known_connection_generation = client.connection_generation
         self._reader_task = asyncio.create_task(self._route_events(client))
         await client.command("Target.setDiscoverTargets", {"discover": True})
         await self._refresh_pages()
+
+    def _generation(self) -> int:
+        # getattr fallback keeps small adapter test doubles compatible while
+        # the production CdpClient always supplies connection_generation.
+        return getattr(self.client, "connection_generation", 0)
+
+    async def _invalidate_stale_sessions_if_reconnected(self) -> None:
+        current_generation = self._generation()
+        if self._known_connection_generation == current_generation:
+            return
+        self._sessions.clear()
+        self._known_connection_generation = current_generation
+        # GP18 review follow-up: a fresh WebSocket connection loses
+        # browser-level, connection-scoped setup. Target.* attachment is
+        # re-established per _session() call (session-scoped), but target
+        # discovery is a one-time subscription per CONNECTION -- without
+        # re-issuing it here, target-created/destroyed/crashed events
+        # silently stop arriving after a transparent reconnect even though
+        # ordinary commands keep working.
+        try:
+            await self.client.command("Target.setDiscoverTargets", {"discover": True})
+        except CdpError:
+            pass
 
     async def _route_events(self, client: CdpClient) -> None:
         while self._client is client:
@@ -134,31 +168,78 @@ class PythonCdpBridge:
         except KeyError as exc:
             raise RuntimeError(f"unknown or closed page handle: {handle}") from exc
 
-    async def _session(self, handle: str) -> str:
+    async def _session(self, handle: str) -> tuple[str, int]:
+        """Return a (session_id, connection_generation) pair.
+
+        GP18 review follow-up: the generation is the connection generation
+        the session is valid for, captured atomically with the attach
+        sequence (retried whole if a reconnect invalidates a
+        just-attached session mid-setup). Callers must pass this
+        generation as required_generation on any later command() using
+        this session_id, since a reconnect can happen in the gap between
+        this call returning and that later command actually sending.
+        """
+        await self._invalidate_stale_sessions_if_reconnected()
         target_id = await self._target(handle)
         if target_id in self._sessions:
-            return self._sessions[target_id]
-        result = await self.client.command(
-            "Target.attachToTarget", {"targetId": target_id, "flatten": True}
-        )
-        session = str(result["sessionId"])
-        try:
-            await self.client.command("Page.enable", session_id=session)
-            await self.client.command(
-                "Page.setLifecycleEventsEnabled", {"enabled": True}, session_id=session
+            return self._sessions[target_id], self._generation()
+        while True:
+            result = await self.client.command(
+                "Target.attachToTarget", {"targetId": target_id, "flatten": True}
             )
-        except BaseException:
-            self._sessions.pop(target_id, None)
-            raise
-        self._sessions[target_id] = session
-        return session
+            session = str(result["sessionId"])
+            generation = self._generation()
+            try:
+                await self.client.command(
+                    "Page.enable", session_id=session, required_generation=generation
+                )
+                await self.client.command(
+                    "Page.setLifecycleEventsEnabled",
+                    {"enabled": True},
+                    session_id=session,
+                    required_generation=generation,
+                )
+            except CdpStaleGenerationError:
+                # Reconnected between attach and setup -- the session we
+                # just attached is already invalid on the new connection.
+                # Retry the whole attach sequence fresh rather than send
+                # setup commands for a session that can never work.
+                continue
+            except BaseException:
+                self._sessions.pop(target_id, None)
+                raise
+            self._sessions[target_id] = session
+            return session, generation
+
+    async def _session_command(
+        self,
+        handle: str,
+        method: str,
+        params: dict[str, Any] | None = None,
+        *,
+        timeout: float | None = None,
+    ) -> Any:
+        """Run a session-scoped command, retrying once if a reconnect
+        invalidated the session between fetch and send (GP18 review:
+        closes the TOCTOU race a plain `session = await self._session(...)`
+        followed later by `client.command(..., session_id=session)` has)."""
+        session, generation = await self._session(handle)
+        try:
+            return await self.client.command(
+                method, params, session_id=session, timeout=timeout, required_generation=generation
+            )
+        except CdpStaleGenerationError:
+            session, generation = await self._session(handle)
+            return await self.client.command(
+                method, params, session_id=session, timeout=timeout, required_generation=generation
+            )
 
     async def evaluate(
         self, page_handle: str, function: str, argument: Any = None, *, user_gesture: bool = False
     ) -> Any:
-        session = await self._session(page_handle)
         expression = f"({function})({json.dumps(argument, separators=(',', ':'))})"
-        result = await self.client.command(
+        result = await self._session_command(
+            page_handle,
             "Runtime.evaluate",
             {
                 "expression": expression,
@@ -166,7 +247,6 @@ class PythonCdpBridge:
                 "awaitPromise": True,
                 "userGesture": user_gesture,
             },
-            session_id=session,
         )
         if result.get("exceptionDetails"):
             raise RuntimeError(str(result["exceptionDetails"]))
@@ -267,21 +347,21 @@ class PythonCdpBridge:
             return await self.client.command(
                 "Target.activateTarget", {"targetId": await self._target(handle)}, timeout=timeout
             )
-        session = await self._session(handle)
         if method == "navigate":
-            result = await self.client.command(
-                "Page.navigate", {"url": params["url"]}, session_id=session, timeout=timeout
+            result = await self._session_command(
+                handle, "Page.navigate", {"url": params["url"]}, timeout=timeout
             )
             if result.get("errorText"):
                 raise RuntimeError(str(result["errorText"]))
             return {"url": str(params["url"])}
         if method == "keep_page_active":
-            await self.client.command("Page.bringToFront", session_id=session)
+            await self._session_command(handle, "Page.bringToFront")
             await self.evaluate(handle, "() => { window.focus(); return true; }")
             return {"ok": True}
         if method == "dispatch_enter":
             for event_type in ("keyDown", "keyUp"):
-                await self.client.command(
+                await self._session_command(
+                    handle,
                     "Input.dispatchKeyEvent",
                     {
                         "type": event_type,
@@ -290,7 +370,6 @@ class PythonCdpBridge:
                         "windowsVirtualKeyCode": 13,
                         "nativeVirtualKeyCode": 13,
                     },
-                    session_id=session,
                 )
             return {"ok": True}
         raise RuntimeError(f"unknown bridge method: {method}")
