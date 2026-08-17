@@ -204,3 +204,13 @@ def gateway_output_lock_path(project_root: Path, request_id: str) -> Path:
 def gateway_retention_lock_path(project_root: Path) -> Path:
     """Return the cross-surface lock for retention pins and purge deletion."""
     return gateway_root(project_root) / "retention.mutation.lock"
+
+
+def gateway_provenance_log_path(project_root: Path) -> Path:
+    """Return the GP27 request-record provenance log path.
+
+    Co-located with the request directories it traces
+    (.../agent-execution-gateway/provenance.ndjson). Best-effort, bounded:
+    instrumentation must never change request lifecycle behavior.
+    """
+    return gateway_root(project_root) / "provenance.ndjson"
