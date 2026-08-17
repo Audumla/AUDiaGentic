@@ -195,6 +195,7 @@ def build_session_transport(
         chat_url=chat_url,
         resume_provider_metadata=metadata,
         checkpoint_sink=checkpoint_sink,
+        project_key=str(project_root.resolve()),
     )
     return GptAutoSessionTransport(chat)
 

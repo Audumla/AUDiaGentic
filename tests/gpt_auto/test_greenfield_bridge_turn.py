@@ -500,6 +500,79 @@ async def test_turn_completes_despite_stuck_stop_control_signal():
 
 
 @pytest.mark.asyncio
+async def test_response_completion_logs_the_deciding_observation_evidence(caplog):
+    """GP46: two live incidents persisted truncated/mid-stream output with no
+    trace of which indicators the tracker accepted as terminal. The tracker's
+    state transitions and the accepting evidence must now be logged (evidence
+    predicate names, dom-signal names, and text LENGTH -- never response
+    content) so a recurrence is diagnosable from the process log."""
+    chat = _Chat()
+    chat._snapshots = iter(
+        [
+            snap(),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01", generating=True),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks sound",
+                generating=True,
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks sound",
+                generating=True,
+                complete=True,
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks sound",
+                generating=True,
+                complete=True,
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Looks sound",
+                generating=True,
+                complete=True,
+            ),
+        ]
+    )
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-trace-evidence", body="Review AU01"), lambda _: None
+    )
+    with caplog.at_level("INFO", logger="audiagentic.components.providers.adapters.gpt_auto.turn"):
+        result = await turn.run()
+    assert result.final_summary == "Looks sound"
+
+    transition_records = [
+        r for r in caplog.records if "gpt-auto observation transition" in r.getMessage()
+    ]
+    assert transition_records, "expected at least one observation-transition log line"
+    assert all(getattr(r, "turn-id", None) == "turn-trace-evidence" for r in transition_records)
+
+    verified_records = [
+        r
+        for r in caplog.records
+        if "gpt-auto response completion verification result" in r.getMessage()
+    ]
+    assert verified_records, "expected a verification-result log line"
+    assert "True" in verified_records[-1].getMessage()
+    assert "candidate_text_len=11" in verified_records[-1].getMessage()
+
+    # No log line in this path may ever contain the actual response text.
+    for record in caplog.records:
+        assert "Looks sound" not in record.getMessage()
+
+
+@pytest.mark.asyncio
 async def test_turn_does_not_complete_while_text_is_still_changing_even_without_generating_veto():
     """Regression guard for the fix above: removing the generating veto must
     not turn this into a false-positive-completion risk. Text still actively
