@@ -38,6 +38,50 @@ from .urls import parse_provider_session_id
 logger = logging.getLogger(__name__)
 
 
+def _advance_with_trace(
+    tracker: ObservationTracker,
+    observation: Observation,
+    now: float,
+    *,
+    turn_id: str,
+    phase: str,
+    dom_signals: frozenset[str] | None = None,
+    text_length: int | None = None,
+) -> ObservationOutcome | None:
+    """Advance an ObservationTracker and log any resulting state transition.
+
+    GP46: neither the tracker's internal transitions nor the evidence that
+    drove terminal-candidate acceptance were previously observable after the
+    fact -- two live incidents persisted truncated/mid-stream output with no
+    trace of which indicators the tracker accepted as terminal. Logs only
+    metadata (capability flags, dom-signal names, tracker states, text
+    LENGTH) -- never prompt/response content -- on every state transition,
+    not just the final accept, so a premature-completion recurrence can be
+    diagnosed from the gateway process log instead of requiring a live DOM
+    catch. Kept outside ObservationTracker itself so the state machine stays
+    a pure, independently-testable unit.
+    """
+    prev_state = tracker.state
+    outcome = tracker.advance(observation, now)
+    if tracker.state is not prev_state:
+        logger.info(
+            "gpt-auto observation transition phase=%s state=%s->%s outcome=%s "
+            "caps=%s terminal_candidate=%s terminal_verified_ok=%s "
+            "text_len=%s dom_signals=%s",
+            phase,
+            prev_state.value,
+            tracker.state.value,
+            outcome.value if outcome is not None else None,
+            observation.capabilities,
+            observation.terminal_candidate,
+            observation.terminal_verified_ok,
+            text_length,
+            sorted(dom_signals) if dom_signals is not None else None,
+            extra={"turn-id": turn_id},
+        )
+    return outcome
+
+
 class TurnState(StrEnum):
     PREPARING = "preparing"
     SUBMITTING = "submitting"
@@ -562,9 +606,12 @@ class GptAutoTurn:
                 # spin the loop forever with no eventual SUSPECT_STALLED/
                 # UNRESOLVED_STALL exit (there is no fixed deadline anymore
                 # to fall back on).
-                outcome = tracker.advance(
+                outcome = _advance_with_trace(
+                    tracker,
                     Observation(capabilities=EvidenceCapability.NONE, terminal_candidate=False),
                     loop.time(),
+                    turn_id=self.request.turn_id,
+                    phase="submission-proof",
                 )
                 if outcome is not None:
                     break
@@ -611,7 +658,15 @@ class GptAutoTurn:
             previous_assistant_text = snap.latest_assistant_text
             if text_matches:
                 self._prompt_message_id = snap.latest_user_id
-            outcome = tracker.advance(observation, loop.time())
+            outcome = _advance_with_trace(
+                tracker,
+                observation,
+                loop.time(),
+                turn_id=self.request.turn_id,
+                phase="submission-proof",
+                dom_signals=snap.dom_signals,
+                text_length=len(snap.latest_user_text or ""),
+            )
             if outcome is ObservationOutcome.VERIFIED_TERMINAL:
                 return snap
             if outcome is not None:
@@ -703,9 +758,12 @@ class GptAutoTurn:
                     "gpt-auto response observation interrupted; awaiting conversation recovery",
                     extra={"turn-id": self.request.turn_id},
                 )
-                outcome = tracker.advance(
+                outcome = _advance_with_trace(
+                    tracker,
                     Observation(capabilities=EvidenceCapability.NONE, terminal_candidate=False),
                     loop.time(),
+                    turn_id=self.request.turn_id,
+                    phase="response-complete",
                 )
                 if outcome is not None:
                     final_outcome = outcome
@@ -792,6 +850,7 @@ class GptAutoTurn:
                     "gpt-auto Tier-3 generating signal disagreed with "
                     "response-complete policy evidence=%s",
                     sorted(complete.matched),
+                    extra={"turn-id": self.request.turn_id},
                 )
 
             progress_edge = (
@@ -827,6 +886,14 @@ class GptAutoTurn:
             terminal_verified_ok = False
             response_message_id = current.latest_assistant_id
             response_text = current.latest_assistant_text
+            if terminal_candidate and tracker.state.value != "candidate-terminal":
+                logger.info(
+                    "gpt-auto response terminal-candidate evidence=%s text_len=%d dom_signals=%s",
+                    sorted(complete.matched),
+                    len(response_text or ""),
+                    sorted(current.dom_signals),
+                    extra={"turn-id": self.request.turn_id},
+                )
             if terminal_candidate and not emitted:
                 await self._emit(
                     TransportObservationKind.ACTIVITY, {"model_activity": "response-observed"}
@@ -850,9 +917,14 @@ class GptAutoTurn:
                         "gpt-auto terminal verification observation interrupted; retrying",
                         extra={"turn-id": self.request.turn_id},
                     )
-                    outcome = tracker.advance(
+                    outcome = _advance_with_trace(
+                        tracker,
                         Observation(capabilities=caps, terminal_candidate=terminal_candidate),
                         loop.time(),
+                        turn_id=self.request.turn_id,
+                        phase="response-complete",
+                        dom_signals=current.dom_signals,
+                        text_length=len(current.latest_assistant_text or ""),
                     )
                     if outcome is not None:
                         final_outcome = outcome
@@ -875,25 +947,38 @@ class GptAutoTurn:
                         "gpt-auto Tier-3 generating signal disagreed with "
                         "response-complete policy at final verification evidence=%s",
                         sorted(verified.matched),
+                        extra={"turn-id": self.request.turn_id},
                     )
                 terminal_verified_ok = (
                     verified.satisfied and verify.latest_assistant_text == current.latest_assistant_text
                 )
                 response_message_id = verify.latest_assistant_id
                 response_text = verify.latest_assistant_text
-                if terminal_verified_ok:
-                    logger.info(
-                        "gpt-auto response completion verified evidence=%s chars=%d",
-                        sorted(verified.matched),
-                        len(response_text or ""),
-                    )
+                logger.info(
+                    "gpt-auto response completion verification result=%s evidence=%s "
+                    "candidate_text_len=%d verify_text_len=%d dom_signals=%s",
+                    terminal_verified_ok,
+                    sorted(verified.matched),
+                    len(current.latest_assistant_text or ""),
+                    len(response_text or ""),
+                    sorted(verify.dom_signals),
+                    extra={"turn-id": self.request.turn_id},
+                )
 
             observation = Observation(
                 capabilities=caps,
                 terminal_candidate=terminal_candidate,
                 terminal_verified_ok=terminal_verified_ok,
             )
-            outcome = tracker.advance(observation, loop.time())
+            outcome = _advance_with_trace(
+                tracker,
+                observation,
+                loop.time(),
+                turn_id=self.request.turn_id,
+                phase="response-complete",
+                dom_signals=current.dom_signals,
+                text_length=len(response_text or ""),
+            )
             if outcome is ObservationOutcome.VERIFIED_TERMINAL:
                 assert response_text is not None
                 self._response_message_id = response_message_id

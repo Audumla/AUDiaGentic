@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from audiagentic.foundation.workflow import TransitionConfig, TransitionEngine
 
@@ -248,6 +248,7 @@ class GptAutoProviderRuntime:
                     "provider": "gpt-auto",
                     "session": chat.ag_session_id,
                     "project": chat.project_name,
+                    "project_key": chat.project_key or chat.project_name,
                     "state": chat.state.value,
                     "page": chat.page_handle,
                     "turn": chat.active_turn_id,
@@ -256,15 +257,36 @@ class GptAutoProviderRuntime:
             )
             for chat in self._chats.values()
         ]
+        # This runtime instance is shared across every project using
+        # gpt-auto on this machine (runtime_registry keys by browser/CDP
+        # endpoint, not project_root), so grouping self._chats by
+        # project_key gives a genuine cross-project view -- not a hint,
+        # actual current sessions. What it CANNOT see is gateway-side
+        # admission queuing (a request waiting on project/session capacity
+        # before a PersistentChat even exists) -- that lives in the
+        # gateway's queue manager, a layer above this provider adapter, and
+        # is deliberately not reached into here (see GP-dashboard notes).
+        projects: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            key = str(row.get("project_key") or row.get("project") or "unknown")
+            bucket = projects.setdefault(
+                key, {"key": key, "name": row.get("project", key), "sessions": []}
+            )
+            bucket["sessions"].append(row)
+        state_counts: dict[str, int] = {}
+        for row in rows:
+            state_counts[row["state"]] = state_counts.get(row["state"], 0) + 1
         payload = {
             "runtime": self.state.value,
             "providers": [{"provider_id": "gpt-auto", "state": self.state.value}],
             "sessions": rows,
+            "projects": sorted(projects.values(), key=lambda p: p["name"]),
+            "counts": state_counts,
             "queue": {
-                "running": sum(
-                    1 for row in rows if row["state"] in {"busy", "generating", "running"}
-                ),
-                "queued": 0,
+                "running": state_counts.get("busy", 0) + state_counts.get("acquiring-session-id", 0),
+                "recovering": state_counts.get("recovering", 0),
+                "ready": state_counts.get("ready", 0),
+                "failed": state_counts.get("failed", 0),
             },
             "updated": asyncio.get_running_loop().time(),
         }
