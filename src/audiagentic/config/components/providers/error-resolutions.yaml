@@ -60,6 +60,7 @@ IO-PCFG-001: "Failed to read provider config file. Check the path and file forma
 VAL-PCFG-001: "Provider config failed validation. Check the config fields against the schema."
 VAL-PCFG-002: "Invalid reconciliation-policy mode. Use 'auto', 'allowlist', or 'prompt'."
 VAL-PCFG-003: "Provider settings must be a YAML mapping. Check the provider file structure under settings."
+VAL-PCFG-004: "Provider config failed effective-config validation. Check the provider settings against the provider's resolved-config contract (packaged defaults + machine override + project overlay) before persisting."
 VAL-PLSP-001: "Invalid self-provided LSP state. Use one of the states supported by the provider LSP contract."
 VAL-PROV-SKILL-001: "Skill file is missing YAML frontmatter. Add '---' at the top with metadata."
 VAL-PROV-SKILL-002: "Prompt syntax is missing skill-surfaces config. Check the prompt syntax file."

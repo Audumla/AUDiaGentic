@@ -310,10 +310,7 @@ class GptAutoConfig:
         live, 2026-08-17: project-url disappeared, falling back to a
         generic project-name search instead of the configured URL).
         """
-        default_settings = provider_settings(_load_packaged_defaults())
-        project_settings = provider_settings(data)
-        merged = deep_merge(default_settings, project_settings)
-        return cls.from_dict(merged)
+        return resolve_gpt_auto_config(data, provider_id="gpt-auto")
 
 
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -331,6 +328,87 @@ def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]
         else:
             result[key] = value
     return result
+
+
+# ── GP26: machine-level drift detection entry points ────────────────────────
+
+
+def machine_gpt_auto_override_path(provider_id: str = "gpt-auto") -> Path:
+    """Return the optional machine-scoped provider override file path.
+
+    Mirrors the gateway's own machine scope: a settings file here applies to
+    every project on this machine that resolves this provider, matching GP20's
+    ``load defaults -> load optional machine override -> project overlay`` flow.
+    """
+    from audiagentic.foundation.paths.home import global_config_dir
+
+    return global_config_dir() / "providers" / f"{provider_id}.yaml"
+
+
+def _load_machine_override(provider_id: str = "gpt-auto") -> dict[str, Any]:
+    """Load the optional machine override file as a bare settings dict.
+
+    Returns ``{}`` when absent or unreadable-as-mapping -- a missing machine
+    override is not drift; the packaged defaults alone are the machine baseline.
+    """
+    path = machine_gpt_auto_override_path(provider_id)
+    if not path.exists():
+        return {}
+    try:
+        payload = load_yaml_file(path)
+    except Exception:  # noqa: BLE001
+        # A corrupt machine override must not be silently treated as absent by
+        # this resolver alone -- the startup validation below re-reads it and
+        # will surface the parse failure as the drift it is.
+        return {}
+    return provider_settings(payload)
+
+
+def resolve_gpt_auto_config(
+    project_settings: dict[str, Any],
+    *,
+    provider_id: str = "gpt-auto",
+) -> GptAutoConfig:
+    """Resolve packaged defaults + machine override + project overlay.
+
+    The single three-tier resolution used by production session creation
+    (via :meth:`GptAutoConfig.from_project_dict`) and by GP26's startup drift
+    validation, so the scan always evaluates the SAME effective config the
+    gateway would actually use.
+    """
+    default_settings = provider_settings(_load_packaged_defaults())
+    machine_settings = _load_machine_override(provider_id)
+    project_settings = provider_settings(project_settings)
+    merged = deep_merge(deep_merge(default_settings, machine_settings), project_settings)
+    return GptAutoConfig.from_dict(merged)
+
+
+def validate_machine_gpt_auto_config() -> None:
+    """Resolve packaged defaults + machine override and validate compatibility.
+
+    GP26: invalid MACHINE-level config fails gateway startup entirely -- it is
+    the shared foundation every project on this machine builds on. Raises
+    :class:`~audiagentic.foundation.contracts.errors.AudiaGenticError`
+    (VAL-GPTAUTO-001) when the machine-level gpt-auto config is invalid.
+    """
+    GptAutoConfig.from_dict(
+        deep_merge(provider_settings(_load_packaged_defaults()), _load_machine_override())
+    )
+
+
+def validate_project_gpt_auto_config(project_root: Path) -> GptAutoConfig:
+    """Resolve a project's full gpt-auto config and validate compatibility.
+
+    GP26: an invalid PROJECT config blocks only that project, never the shared
+    gateway. Returns the effective :class:`GptAutoConfig` (the scan records
+    compatibility from the loader's verdict, never a hand-rolled version check).
+    """
+    from audiagentic.components.providers.services.config.provider_config import (
+        load_provider_settings,
+    )
+
+    settings = load_provider_settings(project_root, "gpt-auto")
+    return resolve_gpt_auto_config(settings, provider_id="gpt-auto")
 
 
 @lru_cache(maxsize=1)
