@@ -35,6 +35,71 @@ PROFILE = {
     "params": {},
 }
 
+# GP13: the real "opencode" descriptor used by PROFILE above does not
+# declare RESUME_BY_REF support, so auto-resume tests need their own
+# resumable descriptor -- same pattern as
+# test_agents_gateway_sessions_resume_dispatch.py's _register_resumable_descriptor.
+# Surface id is pinned to "opencode-acp" because _build_fake_prepared (this
+# rig's fake provider_prepare_fn helper, shared with test_agents_gateway_
+# sessions.py) always echoes that exact surface id back regardless of the
+# SurfaceHint it was given -- only the provider id actually reflects what
+# was requested, so the registered descriptor's surface id must match the
+# fake's hardcoded echo for resolve_session_surface to find it.
+_RESUMABLE_PROVIDER_ID = "test-gp13-resumable-provider"
+_RESUMABLE_SURFACE_ID = "opencode-acp"
+_RESUMABLE_PROFILE = dict(PROFILE, provider_id=_RESUMABLE_PROVIDER_ID, surface_id=_RESUMABLE_SURFACE_ID)
+
+
+def _register_resumable_descriptor() -> None:
+    from audiagentic.components.providers.descriptors.base import ProviderDescriptor
+    from audiagentic.components.providers.descriptors.registry import register
+    from audiagentic.components.providers.descriptors.session_surface_declarations import (
+        SessionSurfaceDeclaration,
+    )
+    from audiagentic.foundation.transports.session_surface import (
+        ControlSupport,
+        SessionIdentityOperation,
+        SessionMappingFacts,
+        ValidationEvidence,
+    )
+
+    decl = SessionSurfaceDeclaration(
+        surface_id=_RESUMABLE_SURFACE_ID,
+        version_constraint=">=1.0",
+        identity_operations={
+            SessionIdentityOperation.OPEN: ControlSupport.SUPPORTED,
+            SessionIdentityOperation.RESUME_BY_REF: ControlSupport.SUPPORTED,
+        },
+        mapping_facts=SessionMappingFacts(ref_namespace="provider-session-ref"),
+        evidence=ValidationEvidence(validated=True, reference="test"),
+    )
+    register(
+        ProviderDescriptor(
+            provider_id=_RESUMABLE_PROVIDER_ID,
+            display_name=_RESUMABLE_PROVIDER_ID,
+            execution_isolation_tier="no-isolation",
+            session_surfaces=(decl,),
+        )
+    )
+
+
+@pytest.fixture
+def resumable_rig(rig, monkeypatch):
+    """GP13 auto-resume tests: same rig, but resolved against a provider
+    whose registered descriptor actually declares resume-by-ref support."""
+    import audiagentic.components.agents.models.execution_profile_api as agents_api
+    from audiagentic.components.providers.descriptors.registry import _registry
+    from audiagentic.components.providers.services.config.provider_config import (
+        set_provider_enabled,
+    )
+
+    runtime, transports, tmp_path = rig
+    _registry._items.clear()
+    _register_resumable_descriptor()
+    set_provider_enabled(tmp_path, _RESUMABLE_PROVIDER_ID, enabled=True)
+    monkeypatch.setattr(agents_api, "resolve_execution_profile", lambda root, pid: dict(_RESUMABLE_PROFILE))
+    yield runtime, transports, tmp_path
+
 
 @pytest.fixture
 def rig(tmp_path, monkeypatch):
@@ -249,6 +314,153 @@ def test_plain_record_does_not_touch_session_path(rig, monkeypatch):
     result = _dispatch(tmp_path, _running_record(tmp_path), dispatch_prompt="do the thing")
     assert result["state"] == "completed", result
     assert transports == []
+
+
+def test_closed_by_shutdown_session_transparently_resumes(resumable_rig):
+    """GP13 (scoped): a session closed specifically by a gateway shutdown
+    (the exact shape a force gateway_restart() produces machine-wide) is
+    transparently reattached on the next continuation instead of forcing
+    RES-AGW-003 -- reproduced live 2026-08-17 when a force restart
+    (loading unrelated fixes) collaterally closed a concurrent agent's
+    session in a different project."""
+    runtime, transports, tmp_path = resumable_rig
+    first = _dispatch(
+        tmp_path, _running_record(tmp_path, session_keep_alive=True), dispatch_prompt="hello"
+    )
+    session_id = first["session-id"]
+    runtime.close_session(tmp_path, session_id, reason="shutdown")
+
+    second = _dispatch(
+        tmp_path, _running_record(tmp_path, session_id=session_id), dispatch_prompt="are you there"
+    )
+    assert second["state"] == "completed", second
+    # AS49/AS30: resume always creates a new generation -- never aliases the
+    # closed source id onto the successor.
+    assert second["session-id"] != session_id
+    assert len(transports) == 2
+    assert transports[1].turns == ["are you there"]
+
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
+
+    successor = session_store.read_session_record(tmp_path, second["session-id"])
+    assert successor["binding"]["relation"] == "resumed-from"
+    assert successor["binding"]["predecessor-binding-id"] is not None
+
+
+def test_closed_by_non_shutdown_reason_still_raises_res_agw_003(rig):
+    """A session closed for any reason OTHER than a gateway shutdown (client
+    request, post-turn auto-close, etc.) must NOT be transparently resumed
+    -- GP13's own notes are explicit that undoing an intentional close is
+    much closer to a correctness bug than the restart problem being fixed."""
+    runtime, transports, tmp_path = rig
+    first = _dispatch(
+        tmp_path, _running_record(tmp_path, session_keep_alive=True), dispatch_prompt="hello"
+    )
+    session_id = first["session-id"]
+    runtime.close_session(tmp_path, session_id, reason="client-request")
+
+    second = _dispatch(
+        tmp_path, _running_record(tmp_path, session_id=session_id), dispatch_prompt="are you there"
+    )
+    assert second["state"] == "failed"
+    assert second["error"]["code"] == "RES-AGW-003"
+    assert len(transports) == 1  # no successor transport was ever opened
+
+
+def test_failed_session_never_auto_resumes(rig):
+    """A genuinely failed session must still require the caller's own
+    explicit session_resume -- GP13's core invariant: a real terminal
+    failure is never silently papered over by a transparent resume."""
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
+
+    runtime, transports, tmp_path = rig
+    first = _dispatch(
+        tmp_path, _running_record(tmp_path, session_keep_alive=True), dispatch_prompt="hello"
+    )
+    session_id = first["session-id"]
+    session_store.transition_session_record(
+        tmp_path, session_id, "failed", updates={"close-reason": "failed"}
+    )
+    # transition_session_record only touches the durable record -- the
+    # runtime's own live in-process handle registry is a separate thing
+    # entirely (a real "failed" session usually loses its handle via the
+    # same event that fails it). Drop it directly so
+    # session_runtime_status(...).get("available") is False, exactly like
+    # after a real crash/restart.
+    runtime._handles.pop(session_id, None)
+
+    second = _dispatch(
+        tmp_path, _running_record(tmp_path, session_id=session_id), dispatch_prompt="are you there"
+    )
+    assert second["state"] == "failed"
+    assert second["error"]["code"] == "RES-AGW-003"
+    assert len(transports) == 1
+
+
+def test_auto_resume_expected_refusal_falls_back_to_res_agw_003(resumable_rig, monkeypatch):
+    """An expected AS49 eligibility refusal (e.g. the resolved surface
+    doesn't actually support resume-by-ref) must fall back to the ordinary
+    RES-AGW-003 the caller already knows how to handle -- resume is a
+    best-effort transparent upgrade, never a new, different failure mode."""
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    runtime, transports, tmp_path = resumable_rig
+    first = _dispatch(
+        tmp_path, _running_record(tmp_path, session_keep_alive=True), dispatch_prompt="hello"
+    )
+    session_id = first["session-id"]
+    runtime.close_session(tmp_path, session_id, reason="shutdown")
+
+    def refuse(*args, **kwargs):
+        raise AudiaGenticError(
+            code="UNS-AGW-112",
+            kind="agents",
+            message="resolved session surface does not support resume-by-ref",
+            details={},
+        )
+
+    monkeypatch.setattr(runtime, "resume_session", refuse)
+
+    second = _dispatch(
+        tmp_path, _running_record(tmp_path, session_id=session_id), dispatch_prompt="are you there"
+    )
+    assert second["state"] == "failed"
+    assert second["error"]["code"] == "RES-AGW-003"
+
+
+def test_auto_resume_unexpected_error_propagates_as_itself(resumable_rig, monkeypatch):
+    """An error OUTSIDE AS49's known eligibility-refusal taxonomy (a store
+    failure, a lost ownership fence, an internal resume defect) must never
+    be masked as mere ineligibility -- it has to surface as itself so a
+    real bug is never hidden behind an innocuous 'session isn't active'.
+    CON-AGW-002 ("session runtime has been shut down") is a real,
+    registered error code that is deliberately NOT in
+    _AUTO_RESUME_EXPECTED_REFUSAL_CODES -- it stands in for any internal
+    resume failure outside AS49's own eligibility taxonomy."""
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    runtime, transports, tmp_path = resumable_rig
+    first = _dispatch(
+        tmp_path, _running_record(tmp_path, session_keep_alive=True), dispatch_prompt="hello"
+    )
+    session_id = first["session-id"]
+    runtime.close_session(tmp_path, session_id, reason="shutdown")
+
+    def explode(*args, **kwargs):
+        raise AudiaGenticError(
+            code="CON-AGW-002",
+            kind="agents",
+            message="session runtime has been shut down",
+            details={},
+        )
+
+    monkeypatch.setattr(runtime, "resume_session", explode)
+
+    second = _dispatch(
+        tmp_path, _running_record(tmp_path, session_id=session_id), dispatch_prompt="are you there"
+    )
+    assert second["state"] == "failed"
+    assert second["error"]["code"] == "CON-AGW-002"
 
 
 def test_no_isolation_plain_record_routes_through_ephemeral_session(rig, monkeypatch):

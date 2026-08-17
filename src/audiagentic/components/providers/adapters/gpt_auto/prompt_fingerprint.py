@@ -10,22 +10,44 @@ fails on long/code-heavy prompts -- confirmed live three times (a
 bigcherry incident, GP10's re-consultation req_1250368b8f2f4477, and
 GP24/GP30's own code-dense design-consultation prompt, 2026-08-16/17).
 
-Case, indentation, and interior whitespace remain semantically significant
-for coding prompts and are deliberately preserved here -- only the Markdown
-presentation syntax itself is stripped, never blanket whitespace collapsing.
+Case and non-whitespace content remain semantically significant for coding
+prompts and are deliberately preserved here. Runs of horizontal whitespace
+are deliberately NOT preserved exactly -- see GP43 below -- but this exists
+purely to correlate "did the right content reach ChatGPT," not to verify
+byte-perfect formatting was retained; the assistant reads and responds to
+semantic content, not exact indentation width.
 
-KNOWN RESIDUAL GAP (found live 2026-08-17, req_27c9251fa0c54d73): ChatGPT's
-renderer does two things this module does not yet fully compensate for on
-very long, multi-code-block prompts: (1) it displays a fenced block's
-language tag (e.g. the "python" in ```python) as its own visible text
-line rather than discarding it -- handled below by keeping the language
-word instead of stripping it entirely; (2) it re-encodes a code block's
-leading indentation as alternating non-breaking-space/space pairs that do
-NOT preserve the original character count 1:1 (e.g. three plain spaces
-can become "\xa0 \xa0", a different length) -- NOT yet handled, since a
-generic fix would mean collapsing interior whitespace runs, contradicting
-this module's deliberate indentation-preservation design. Left as a
-documented, real, still-open limitation rather than papered over.
+RESOLVED (GP43, 2026-08-17, root-caused live against a real 35850-char
+diff-heavy prompt, req_c4c7f7b3ac03444b): ChatGPT's renderer re-encodes
+runs of horizontal whitespace inside rendered message text using a mix of
+non-breaking-space (\xa0) substitution and outright collapsing that does
+NOT preserve the original run length 1:1 -- confirmed live: a lone leading
+space becomes a lone \xa0 (length-preserving), but a run of 9 plain spaces
+was observed collapsed to a single \xa0 (length-losing), and this pattern
+recurs throughout a code/diff-heavy prompt, not just in leading
+indentation. A byte-level diff against the real observed DOM text proved
+this affects roughly 1 in 34 characters of a diff-heavy prompt and made
+exact-length comparison fundamentally unreliable for such prompts. The
+original design intent of preserving exact interior whitespace was based
+on an incorrect assumption about ChatGPT's rendering fidelity; collapsing
+any run of 2+ horizontal-whitespace characters (after normalizing \xa0 to
+a plain space) to one canonical space closes the gap exactly -- verified
+against that same 35850-char capture to produce a byte-for-byte match.
+
+RESOLVED (GP44, 2026-08-17, root-caused live against req_42f9580ebfcd45d6 -- a
+design-consultation prompt containing one fenced code block): a request
+was observed stuck indefinitely in submission-proof (never reaching
+completion detection) despite ChatGPT having received and fully answered
+the real prompt minutes earlier. Reconstructing the exact submitted prompt
+and the exact observed DOM text and diffing them found only two residual
+mismatches: ChatGPT's renderer inserts an extra blank line immediately
+before and after a fenced code block's rendered content (blank-line
+padding around the code block), which _WS_RUN_RE (horizontal-only) does
+not touch. Collapsing any run of 2+ newlines to one closes this exactly --
+verified byte-for-byte against that capture. Vertical whitespace (blank
+lines) carries no more submission-correlation meaning than horizontal
+whitespace runs do; the same "compare content, not formatting fidelity"
+rationale applies.
 """
 
 from __future__ import annotations
@@ -36,6 +58,8 @@ from dataclasses import dataclass
 
 _FENCE_OPEN_RE = re.compile(r"```([^\n]*)\n")
 _LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+_WS_RUN_RE = re.compile(r"[ \t]{2,}")
+_BLANK_LINE_RUN_RE = re.compile(r"\n{2,}")
 
 
 def _replace_fence_open(match: re.Match[str]) -> str:
@@ -59,6 +83,21 @@ def normalize_prompt_text(text: str) -> str:
     normalized = normalized.replace("`", "")
     # Markdown links: [text](url) -> text.
     normalized = _LINK_RE.sub(r"\1", normalized)
+    # GP43: ChatGPT's renderer re-encodes horizontal whitespace runs (most
+    # visibly leading indentation, but not only there) using a lossy mix of
+    # non-breaking-space substitution and outright collapsing that does not
+    # preserve run length. Normalize \xa0 to a plain space first, then
+    # collapse any run of 2+ horizontal-whitespace characters to one --
+    # this only affects whitespace RUNS; a single space/tab and all
+    # non-whitespace content (including single-space-indented diff context
+    # lines) are untouched.
+    normalized = normalized.replace("\xa0", " ")
+    normalized = _WS_RUN_RE.sub(" ", normalized)
+    # GP44: ChatGPT's renderer pads a fenced code block with an extra blank
+    # line immediately before and after its rendered content -- collapse
+    # any run of 2+ newlines (blank lines) to one, the vertical analogue of
+    # the horizontal-whitespace-run collapse above.
+    normalized = _BLANK_LINE_RUN_RE.sub("\n", normalized)
     return normalized
 
 
