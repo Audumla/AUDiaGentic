@@ -1399,3 +1399,83 @@ async def _done() -> None:
 
 async def _pages():
     return [{"pageHandle": "page-1", "targetId": "new-target"}]
+
+
+@pytest.mark.asyncio
+async def test_unregister_chat_tracks_its_background_refresh_task() -> None:
+    """GP18: unregister_chat()'s status-refresh task was truly fire-and-
+    forget (no reference kept anywhere), so it could still be mid-flight on
+    the shared CDP bridge when the very next caller issued an unrelated
+    command -- the suspected cause of a reproducible list_pages hang.
+    It must now be tracked so a later command can wait for it first."""
+    config = GptAutoConfig.from_dict(valid_config())
+    runtime = GptAutoProviderRuntime(config)
+    runtime._dedicated_window_anchor = "anchor"
+    release_refresh = asyncio.Event()
+
+    async def slow_refresh() -> None:
+        await release_refresh.wait()
+
+    runtime._bridge = SimpleNamespace()  # type: ignore[assignment]
+    runtime.refresh_status_page = slow_refresh  # type: ignore[method-assign]
+    chat = SimpleNamespace(ag_session_id="s1", page_handle=None, provider_session_id=None)
+    runtime._chats["s1"] = chat  # type: ignore[assignment]
+
+    runtime.unregister_chat(chat)  # type: ignore[arg-type]
+
+    assert len(runtime._pending_background_tasks) == 1
+    release_refresh.set()
+    await runtime._await_pending_background_tasks()
+    assert runtime._pending_background_tasks == set()
+
+
+@pytest.mark.asyncio
+async def test_ensure_dedicated_window_anchor_waits_for_pending_background_task(
+    monkeypatch,
+) -> None:
+    """GP18 regression: a still-running background refresh task from a
+    just-unregistered chat must be awaited before ensure_dedicated_window_anchor
+    issues list_pages on the shared bridge -- proving the two can no longer
+    race for the same CDP request/response correlation."""
+    config = GptAutoConfig.from_dict(valid_config())
+    runtime = GptAutoProviderRuntime(config)
+    runtime._dedicated_window_anchor = "anchor"
+    runtime._dedicated_window_id = 7
+
+    order: list[str] = []
+    release_refresh = asyncio.Event()
+
+    async def slow_refresh() -> None:
+        order.append("refresh-start")
+        await release_refresh.wait()
+        order.append("refresh-end")
+
+    class _Bridge:
+        async def call(self, method, params=None, **kwargs):
+            order.append(f"bridge-{method}")
+            if method == "list_pages":
+                return [{"pageHandle": "anchor", "url": STATUS_PAGE_URL, "windowId": 7}]
+            return {"ok": True}
+
+    runtime._bridge = _Bridge()  # type: ignore[assignment]
+    runtime.refresh_status_page = slow_refresh  # type: ignore[method-assign]
+
+    async def available():
+        return None
+
+    monkeypatch.setattr(runtime, "ensure_available", available)
+
+    chat = SimpleNamespace(ag_session_id="s1", page_handle=None, provider_session_id=None)
+    runtime._chats["s1"] = chat  # type: ignore[assignment]
+    runtime.unregister_chat(chat)  # type: ignore[arg-type]
+    await asyncio.sleep(0)  # let the newly created background task actually start
+    assert order == ["refresh-start"]
+
+    anchor_task = asyncio.create_task(runtime.ensure_dedicated_window_anchor())
+    await asyncio.sleep(0)  # let it reach _await_pending_background_tasks() and block
+    assert "bridge-list_pages" not in order
+
+    release_refresh.set()
+    result = await anchor_task
+    assert result == "anchor"
+    assert order == ["refresh-start", "refresh-end", "bridge-list_pages"]
