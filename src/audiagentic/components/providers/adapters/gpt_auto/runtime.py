@@ -22,6 +22,22 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# TEMPORARY GP31 debug instrumentation -- gateway subprocess stdout/stderr
+# are redirected to DEVNULL and no file log handler is configured, so
+# logger calls are unrecoverable. Writes directly to disk instead. Remove
+# once GP31's browser-kill mechanism is found.
+_GP31_TRACE_PATH = r"C:\Users\mgs\AppData\Local\Temp\claude\h--development-projects-AUDia-AUDiaGentic\7cc783d7-5e01-4bf2-9c53-db8095b37fa2\scratchpad\gp31_trace.log"
+
+
+def _gp31_trace(message: str) -> None:
+    import datetime
+
+    try:
+        with open(_GP31_TRACE_PATH, "a", encoding="utf-8") as f:
+            f.write(f"{datetime.datetime.now(datetime.UTC).isoformat()} pid={__import__('os').getpid()} {message}\n")
+    except OSError:
+        pass
+
 
 def _compact_row(row: dict[str, object]) -> dict[str, object]:
     """Drop absent dashboard fields without dropping meaningful false/zero."""
@@ -78,6 +94,18 @@ class GptAutoProviderRuntime:
         self._dedicated_window_id: int | None = None
         self._dedicated_window_lock = asyncio.Lock()
         self._browser = BrowserProcessController(config.browser, cdp_probe=self._cdp_available)
+        # GP18: unregister_chat() fires refresh_status_page() as a truly
+        # fire-and-forget task -- untracked, it can still be mid-flight on
+        # the shared CDP bridge when the very next caller issues an
+        # unrelated command (e.g. list_pages), racing for the same
+        # request/response correlation. Track pending background tasks so a
+        # command that needs a quiescent bridge can wait for them first.
+        self._pending_background_tasks: set[asyncio.Task[None]] = set()
+
+    async def _await_pending_background_tasks(self) -> None:
+        pending = tuple(self._pending_background_tasks)
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
 
     @property
     def bridge(self) -> PythonCdpBridge:
@@ -110,17 +138,23 @@ class GptAutoProviderRuntime:
 
     async def ensure_available(self) -> None:
         self._owner_loop = asyncio.get_running_loop()
+        _gp31_trace(f"ensure_available() entered, state={self.state.value}, bridge={self._bridge is not None}")
         async with self._lifecycle_lock:
             if self.state is ProviderState.AVAILABLE and self._bridge:
+                _gp31_trace("ensure_available() early-return: already AVAILABLE with bridge")
                 return
             if self.state in {ProviderState.STOPPED, ProviderState.FAILED}:
                 self._move(ProviderState.CONNECTING)
             elif self.state is ProviderState.RECOVERING:
                 self._move(ProviderState.CONNECTING)
             try:
-                if not await self._cdp_available():
+                cdp_ok = await self._cdp_available()
+                _gp31_trace(f"_cdp_available() returned {cdp_ok}")
+                if not cdp_ok:
                     self._move(ProviderState.STARTING)
-                    await self._browser.ensure_browser_for_cdp()
+                    _gp31_trace("calling ensure_browser_for_cdp() -- CDP was NOT available")
+                    evidence = await self._browser.ensure_browser_for_cdp()
+                    _gp31_trace(f"ensure_browser_for_cdp() returned pid={evidence.pid} launched_by_provider={evidence.launched_by_provider}")
                     self._move(ProviderState.CONNECTING)
                 bridge = await self._connect_bridge()
                 self._bridge = bridge
@@ -162,6 +196,12 @@ class GptAutoProviderRuntime:
         """Create one persistent anchor tab for the shared GPT-auto window."""
         async with self._dedicated_window_lock:
             await self.ensure_available()
+            # GP18: wait for any in-flight fire-and-forget status-refresh
+            # task (from a just-unregistered chat) before issuing a command
+            # that needs the shared CDP bridge quiescent -- an untracked
+            # concurrent command on the same bridge is the suspected cause
+            # of a reproducible list_pages/Target.getTargets hang.
+            await self._await_pending_background_tasks()
             pages = await self.bridge.call("list_pages")
             if self._dedicated_window_anchor and any(
                 str(p.get("pageHandle")) == self._dedicated_window_anchor for p in pages
@@ -442,7 +482,9 @@ class GptAutoProviderRuntime:
         if chat.provider_session_id and self._conversation_owners.get(chat.provider_session_id) == chat.ag_session_id:
             self._conversation_owners.pop(chat.provider_session_id, None)
         if getattr(self, "_dedicated_window_anchor", None) and self._bridge:
-            asyncio.create_task(self.refresh_status_page())
+            task = asyncio.create_task(self.refresh_status_page())
+            self._pending_background_tasks.add(task)
+            task.add_done_callback(self._pending_background_tasks.discard)
 
     async def shutdown(self) -> None:
         async with self._lifecycle_lock:
