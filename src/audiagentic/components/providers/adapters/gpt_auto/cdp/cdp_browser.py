@@ -71,10 +71,20 @@ class CdpBrowserController:
         )
 
     async def page_by_handle(self, handle: str) -> CdpPageRef:
-        for page in await self.pages():
-            if page.handle == handle:
-                return page
-        raise RuntimeError(f"unknown or closed page handle: {handle}")
+        # GP42: this is called on every poll tick of every open
+        # conversation. Routing it through pages() (a full
+        # Target.getTargets scan of the ENTIRE shared browser) turned
+        # every poll of every gpt-auto tab into a browser-wide scan
+        # several times a second. get_page resolves only this one
+        # already-known target.
+        value = await self.bridge.call("get_page", {"pageHandle": handle})
+        return CdpPageRef(
+            str(value["pageHandle"]),
+            str(value["targetId"]),
+            value.get("windowId"),
+            str(value.get("url") or ""),
+            str(value.get("title") or ""),
+        )
 
     async def page(self, handle: str) -> CdpPageRef:
         return await self.page_by_handle(handle)

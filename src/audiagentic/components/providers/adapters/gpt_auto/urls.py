@@ -38,3 +38,24 @@ def canonical_chat_url(url: str) -> str | None:
 
 def url_matches_provider_session(url: str, provider_session_id: str) -> bool:
     return parse_provider_session_id(url) == provider_session_id
+
+
+def is_gpt_auto_relevant_url(url: str) -> bool:
+    """True for URLs a gpt-auto-owned tab can plausibly have.
+
+    GP42: PythonCdpBridge._refresh_pages() used to resolve windowId for
+    EVERY page target on the whole shared browser, including completely
+    unrelated tabs (other websites, other tools) -- one extra
+    Browser.getWindowForTarget CDP round-trip per tab, on every call. A
+    machine with dozens of ordinary browsing tabs open turns one
+    list_pages() call into dozens of round-trips. Used to scope that
+    lookup to tabs that could actually be ours: a real ChatGPT
+    conversation/project, our own data: URL status dashboard, or a
+    freshly created but not-yet-navigated about:blank tab.
+    """
+    if url in ("", "about:blank"):
+        return True
+    if url.startswith("data:"):
+        return True
+    hostname = urlsplit(url).hostname
+    return hostname in {"chatgpt.com", "chat.openai.com"}

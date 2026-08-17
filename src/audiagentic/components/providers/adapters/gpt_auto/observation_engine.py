@@ -148,6 +148,22 @@ class ObservationTracker:
                 self.state = ObservationState.ACTIVE
                 clock.candidate_entered_at = None
                 clock.candidate_generation = None
+            elif not observation.terminal_candidate:
+                # GP40 (code review, 2026-08-17): losing terminal_candidate
+                # alone used to be silently ignored -- the candidate timer
+                # kept running underneath, so a later brief re-appearance of
+                # terminal evidence could inherit a stale clock instead of
+                # starting a fresh stability window. Concretely: terminal
+                # evidence appears, generation quietly resumes without
+                # changing text (no PROGRESS signal), terminal evidence
+                # flickers absent then true again -- the old code would
+                # treat that as one continuous candidate_stability_window
+                # even though the candidate was never continuously eligible.
+                # Require a genuinely fresh terminal observation to
+                # re-arm the window.
+                self.state = ObservationState.ACTIVE
+                clock.candidate_entered_at = None
+                clock.candidate_generation = None
             elif now - clock.candidate_entered_at >= self.policy.candidate_stability_window_seconds:
                 if (
                     observation.terminal_verified_ok

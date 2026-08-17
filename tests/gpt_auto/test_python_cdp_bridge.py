@@ -191,6 +191,134 @@ async def test_refresh_pages_tolerates_one_target_with_no_resolvable_window():
 
 
 @pytest.mark.asyncio
+async def test_refresh_pages_skips_window_lookup_for_unrelated_browser_tabs():
+    """GP42: the shared browser can have dozens of ordinary tabs open that
+    have nothing to do with gpt-auto. _refresh_pages() must not spend a
+    Browser.getWindowForTarget round-trip resolving a window for every one
+    of them -- only tabs that could plausibly be ours (chatgpt.com, the
+    data: dashboard, about:blank) are worth resolving."""
+    bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
+    fake = _FakeClient()
+    window_lookup_targets: list[str] = []
+
+    async def command(method, params=None, *, session_id=None, timeout=None):
+        params = params or {}
+        if method == "Target.getTargets":
+            return {
+                "targetInfos": [
+                    {"targetId": "target-chatgpt", "type": "page", "url": "https://chatgpt.com/c/abc"},
+                    {"targetId": "target-reddit", "type": "page", "url": "https://reddit.com/r/x"},
+                    {"targetId": "target-amazon", "type": "page", "url": "https://amazon.com/dp/1"},
+                    {"targetId": "target-blank", "type": "page", "url": "about:blank"},
+                ]
+            }
+        if method == "Browser.getWindowForTarget":
+            window_lookup_targets.append(str(params.get("targetId")))
+            return {"windowId": 42}
+        return await _FakeClient.command(fake, method, params, session_id=session_id, timeout=timeout)
+
+    fake.command = command
+    bridge._client = fake
+
+    pages = await bridge._refresh_pages()
+
+    assert len(pages) == 4
+    assert set(window_lookup_targets) == {"target-chatgpt", "target-blank"}
+    by_target = {p["targetId"]: p for p in pages}
+    assert by_target["target-reddit"]["windowId"] is None
+    assert by_target["target-amazon"]["windowId"] is None
+    assert by_target["target-chatgpt"]["windowId"] == 42
+    assert by_target["target-blank"]["windowId"] == 42
+
+
+@pytest.mark.asyncio
+async def test_get_page_resolves_single_target_without_enumerating_all_tabs():
+    """GP42: chat.py calls page_by_handle() on every poll tick of every
+    open conversation. That must not enumerate every target on the shared
+    browser (Target.getTargets) each time -- only look up the one handle
+    already known locally, via Target.getTargetInfo."""
+    bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
+    fake = _FakeClient()
+    get_targets_calls = 0
+
+    async def command(method, params=None, *, session_id=None, timeout=None):
+        nonlocal get_targets_calls
+        params = params or {}
+        if method == "Target.getTargets":
+            get_targets_calls += 1
+            return {"targetInfos": []}
+        if method == "Target.getTargetInfo":
+            return {"targetInfo": {"targetId": params["targetId"], "url": "https://chatgpt.com/c/abc"}}
+        return await _FakeClient.command(fake, method, params, session_id=session_id, timeout=timeout)
+
+    fake.command = command
+    bridge._client = fake
+    bridge._pages["page-1"] = "target-1"
+
+    page = await bridge.call("get_page", {"pageHandle": "page-1"})
+
+    assert page == {
+        "pageHandle": "page-1",
+        "url": "https://chatgpt.com/c/abc",
+        "title": "",
+        "targetId": "target-1",
+        "windowId": 42,
+    }
+    assert get_targets_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_get_page_raises_and_forgets_handle_for_closed_target():
+    bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
+    fake = _FakeClient()
+
+    async def command(method, params=None, *, session_id=None, timeout=None):
+        if method == "Target.getTargetInfo":
+            raise CdpError("No target with given id found")
+        return await _FakeClient.command(fake, method, params or {}, session_id=session_id, timeout=timeout)
+
+    fake.command = command
+    bridge._client = fake
+    bridge._pages["page-1"] = "target-1"
+    bridge._sessions["target-1"] = "session-1"
+
+    with pytest.raises(RuntimeError, match="unknown or closed page handle"):
+        await bridge.call("get_page", {"pageHandle": "page-1"})
+
+    assert "page-1" not in bridge._pages
+    assert "target-1" not in bridge._sessions
+
+
+@pytest.mark.asyncio
+async def test_page_by_handle_uses_get_page_not_full_page_enumeration():
+    bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
+    fake = _FakeClient()
+    get_targets_calls = 0
+
+    async def command(method, params=None, *, session_id=None, timeout=None):
+        nonlocal get_targets_calls
+        params = params or {}
+        if method == "Target.getTargets":
+            get_targets_calls += 1
+            return {"targetInfos": []}
+        if method == "Target.getTargetInfo":
+            return {"targetInfo": {"targetId": params["targetId"], "url": "https://chatgpt.com/c/abc"}}
+        return await _FakeClient.command(fake, method, params, session_id=session_id, timeout=timeout)
+
+    fake.command = command
+    bridge._client = fake
+    bridge._pages["page-1"] = "target-1"
+    api = CdpBrowserController(bridge)
+
+    page = await api.page_by_handle("page-1")
+
+    assert isinstance(page, CdpPageRef)
+    assert page.handle == "page-1"
+    assert page.url == "https://chatgpt.com/c/abc"
+    assert get_targets_calls == 0
+
+
+@pytest.mark.asyncio
 async def test_python_bridge_uses_page_session_for_navigation_and_evaluation():
     bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
     fake = _FakeClient()

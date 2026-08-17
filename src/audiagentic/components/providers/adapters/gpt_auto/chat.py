@@ -470,6 +470,7 @@ class PersistentChat:
         try:
             snapshot = await self.snapshot(allow_recovering=True)
         except Exception as exc:  # noqa: BLE001 - preserve diagnostic context
+            self._reset_unresolved_match_candidate()
             self._set_unresolved_recovery(
                 "snapshot-observation-failed",
                 exception_type=type(exc).__name__,
@@ -483,6 +484,7 @@ class PersistentChat:
                 sorted(snapshot.dom_signals),
             )
         if not _reconciliation_evidence_clear(snapshot):
+            self._reset_unresolved_match_candidate()
             self._set_unresolved_recovery(
                 "provider-not-quiescent",
                 composer_present=snapshot.composer_present,
@@ -495,13 +497,16 @@ class PersistentChat:
             self, snapshot
         )
         if prompt_match is None:
+            self._reset_unresolved_match_candidate()
             self._set_unresolved_recovery(prompt_reason, **prompt_details)
             return False
         assistant_id = snapshot.latest_assistant_id
         if not assistant_id:
+            self._reset_unresolved_match_candidate()
             self._set_unresolved_recovery("assistant-response-id-not-observed")
             return False
         if not snapshot.latest_assistant_text:
+            self._reset_unresolved_match_candidate()
             self._set_unresolved_recovery("assistant-response-text-not-observed")
             return False
         # A stable partial assistant message can look idle while ChatGPT is
@@ -525,7 +530,17 @@ class PersistentChat:
         # must be added explicitly to match what the group actually
         # requires (mirrors turn.py's _facts()).
         true_facts = snapshot.dom_signals | ({"not-generating"} if not snapshot.generating else set())
-        if not any(group <= true_facts for group in completion_groups):
+        # Code review (2026-08-17): EvidencePolicy.evaluate() treats an
+        # absent/empty any-of-groups section as no any-of requirement at
+        # all, but any(...) over an empty sequence is False -- a valid
+        # overlay that legally removes any-of-groups from response-complete
+        # would silently make unresolved-turn recovery impossible here.
+        # Match EvidencePolicy's own semantics explicitly.
+        groups_satisfied = not completion_groups or any(
+            group <= true_facts for group in completion_groups
+        )
+        if not groups_satisfied:
+            self._reset_unresolved_match_candidate()
             self._set_unresolved_recovery(
                 "completion-evidence-missing",
                 required_signal="-or-".join("+".join(sorted(group)) for group in completion_groups),
@@ -537,6 +552,7 @@ class PersistentChat:
         else:
             terminal = assistant_id != self.unresolved_assistant_before_id
         if not terminal:
+            self._reset_unresolved_match_candidate()
             self._set_unresolved_recovery(
                 "assistant-response-not-terminal-match",
                 observed_assistant_id=assistant_id,
@@ -629,6 +645,20 @@ class PersistentChat:
 
     def mark_assistant_observed(self, assistant_id: str) -> None:
         self.unresolved_assistant_message_id = assistant_id
+
+    def _reset_unresolved_match_candidate(self) -> None:
+        """Discard any in-progress stability timer for unresolved-turn
+        recovery (GP38/GP40 code review, 2026-08-17): the elapsed-time
+        check only proves two matching observations were seen at least
+        response_stability_seconds apart, not that the terminal candidate
+        was continuously eligible in between. Without this reset, a
+        candidate armed by one terminal observation could survive an
+        intervening non-terminal one (generation resuming, evidence
+        temporarily unclear) and later be revived by an unrelated brief
+        flicker, satisfying "two matches N seconds apart" without ever
+        observing N continuous seconds of real stability."""
+        self._unresolved_match_fingerprint = None
+        self._unresolved_match_fingerprint_at = None
 
     def clear_unresolved_turn(self) -> None:
         self.unresolved_turn_pending = False
