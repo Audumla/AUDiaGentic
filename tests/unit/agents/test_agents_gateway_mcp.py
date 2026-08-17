@@ -2,12 +2,26 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from unittest.mock import patch
 
 from audiagentic.components.agents.mcp import gateway_mcp as agents_gateway_mcp
 
 _ROOT = Path("C:/fake/root")
+
+
+def test_agent_task_list_definitions_is_a_registered_mcp_tool():
+    """This tool previously existed on the module only as a plain, non-
+    decorated function (agent_list_definitions) with a docstring saying
+    'configuration MCP owns the public export.' A caller attached to ONLY
+    the gateway server (this one) had no way to discover which agent_id
+    values agent_task_submit would accept without also having the separate
+    configuration server attached. Now registered here too (under its own
+    name, since a tool name must have exactly one owning MCP surface), so
+    gateway-only callers can self-discover valid agent_ids."""
+    tools = asyncio.run(agents_gateway_mcp.mcp.list_tools())
+    assert "agent_task_list_definitions" in {tool.name for tool in tools}
 
 
 def _patch_root():
@@ -17,7 +31,48 @@ def _patch_root():
     )
 
 
-def test_agent_list_definitions_delegates():
+def test_agent_task_list_definitions_returns_slim_client_facing_cards():
+    """Modeled on the A2A AgentCard shape (protocols/a2a/agent_card.py):
+    what an agent IS to a caller, never how it's implemented. Harness/
+    wiring fields (execution_profile_id, role_ids, prompt_id, internal/
+    acp/a2a flags) must not leak into this projection -- a calling agent
+    has no use for them and must not couple to them."""
+    raw = [
+        {
+            "agent_id": "gpt-auto-reviewer-agent",
+            "name": "GPT-Auto Reviewer Agent",
+            "prompt_id": "migrated-role-placeholder",
+            "role_ids": ["reviewer"],
+            "execution_profile_id": "gpt-auto",
+            "description": "Real reviewer-role behavioral agent.",
+            "advertised_skills": ["code-review"],
+            "internal": True,
+            "acp": False,
+            "a2a": False,
+        }
+    ]
+    with (
+        _patch_root(),
+        patch(
+            "audiagentic.components.agents.models.agent_definition_api.list_agent_definitions",
+            return_value=raw,
+        ),
+    ):
+        result = agents_gateway_mcp.agent_task_list_definitions()
+
+    assert result == [
+        {
+            "agent_id": "gpt-auto-reviewer-agent",
+            "name": "GPT-Auto Reviewer Agent",
+            "description": "Real reviewer-role behavioral agent.",
+            "skills": [{"id": "code-review", "name": "code-review"}],
+        }
+    ]
+    for leaked in ("prompt_id", "role_ids", "execution_profile_id", "internal", "acp", "a2a"):
+        assert leaked not in result[0]
+
+
+def test_agent_task_list_definitions_delegates():
     with (
         _patch_root(),
         patch(
@@ -25,8 +80,10 @@ def test_agent_list_definitions_delegates():
             return_value=[{"agent_id": "reviewer-agent"}],
         ) as mock_list,
     ):
-        result = agents_gateway_mcp.agent_list_definitions()
+        result = agents_gateway_mcp.agent_task_list_definitions()
 
+    # name/description/skills are all absent on this bare fixture record and
+    # _sparse strips absent values, so only agent_id survives.
     assert result == [{"agent_id": "reviewer-agent"}]
     mock_list.assert_called_once_with(_ROOT)
 

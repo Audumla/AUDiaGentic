@@ -62,6 +62,132 @@ def _terminal_session_diagnostics(session_id: str, record: dict[str, Any]) -> di
 
 
 # ── AS28 slice 4a helpers ────────────────────────────────────────
+# GP13 (scoped, 2026-08-17): a resume-eligibility refusal from AS49's
+# validate_resume_eligibility() (see resume.py's module docstring for the
+# full taxonomy) is EXPECTED input to the auto-resume decision -- it just
+# means this particular closed session can't be transparently upgraded, so
+# the caller falls back to today's RES-AGW-003 behavior. CON-AGW-116
+# (idempotent replay of a previously-failed control id) is included: a
+# prior auto-resume attempt for this exact source already failed, so
+# retrying it again would only reproduce the same refusal. Anything NOT in
+# this set (a store failure, a lost ownership fence, a genuine internal
+# defect) must never be silently swallowed into an innocuous "session
+# isn't active" -- it has to surface as itself.
+_AUTO_RESUME_EXPECTED_REFUSAL_CODES = frozenset(
+    {
+        "CON-AGW-110",  # source session is not terminal
+        "RES-AGW-111",  # source session has no usable provider binding
+        "UNS-AGW-112",  # resolved surface does not support resume-by-ref
+        "VER-AGW-113",  # surface id or ref namespace incompatible
+        "CON-AGW-114",  # identity context fingerprint unknown or mismatched
+        "CON-AGW-115",  # execution context fingerprint unknown or mismatched
+        "CON-AGW-116",  # idempotent replay of a control id that already failed
+        "UNS-AGW-117",  # surface declares resume-by-ref but evidence unvalidated
+    }
+)
+
+
+def _auto_resume_shutdown_closed_session(
+    project_root: Path,
+    runtime: Any,
+    *,
+    source_session_id: str,
+    record: dict[str, Any],
+    context_fingerprint: str | None,
+    request_runtime_root: Path,
+) -> tuple[str, dict[str, Any], dict[str, Any]]:
+    """Transparently reattach a session closed by a gateway shutdown.
+
+    Reproduced live 2026-08-17: a force gateway restart (loading unrelated
+    fixes) explicitly closed every live session machine-wide
+    (close-reason=shutdown) as part of its own stop sequence. A concurrent
+    caller's next continuation against one of those sessions got a hard
+    RES-AGW-003 even though the closed record still carried everything
+    needed to resume the same live provider conversation. Deliberately
+    narrow in scope (see the caller's own state==closed and
+    close-reason==shutdown guard): this function is never reached for a
+    genuinely failed session (that must still require the caller's own
+    explicit session_resume, never be silently papered over) or any other
+    close reason (a policy/lifecycle boundary this tactical patch does not
+    attempt to reinterpret -- see plan item GP13's own notes for the full
+    unified-activation design this is deliberately NOT building).
+
+    Reuses AS49's existing resume_session() machinery as-is -- no new
+    concurrency primitive. A control id deterministic in the source
+    session id means concurrent racing continuations against the same
+    closed session converge on resume.py's existing idempotency-by-
+    control-id lookup and resolve to the SAME successor, rather than each
+    minting its own. This is a real, accepted, narrower guarantee than
+    GP13's full per-source reservation model: an EXPLICIT caller resume
+    (a different control id) racing this SAME source session could still
+    mint a second, different successor. Not closed by this patch.
+
+    Returns (new_session_id, new_session_record, updated_request_record).
+    Raises the original RES-AGW-003 for any expected resume-ineligibility
+    refusal (see _AUTO_RESUME_EXPECTED_REFUSAL_CODES); any other error
+    (a lost ownership fence, a store failure, an internal resume defect)
+    propagates as itself -- it must never be masked as mere ineligibility.
+    """
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
+
+    manifest_context_fingerprint = context_fingerprint or record.get("context-fingerprint")
+    try:
+        new_session_record = runtime.resume_session(
+            project_root,
+            source_session_id,
+            # Deterministic, not request-scoped: two concurrent
+            # continuations against the SAME closed source must resolve to
+            # the same idempotency lookup, which a request-id-derived key
+            # would not give them.
+            control_id=f"auto-resume:{source_session_id}",
+            identity_context_fingerprint=manifest_context_fingerprint,
+            execution_context_fingerprint=manifest_context_fingerprint,
+            request_runtime_root=request_runtime_root,
+        )
+    except AudiaGenticError as exc:
+        if exc.code in _AUTO_RESUME_EXPECTED_REFUSAL_CODES:
+            raise AudiaGenticError(
+                code="RES-AGW-003",
+                kind="agents",
+                message="session is not active and cannot be continued",
+                details={
+                    **_terminal_session_diagnostics(
+                        source_session_id,
+                        session_store.read_session_record(project_root, source_session_id),
+                    ),
+                    "auto-resume-attempted": True,
+                    "auto-resume-refusal-code": exc.code,
+                },
+            ) from exc
+        raise
+
+    new_session_id = str(new_session_record["session-id"])
+    logger.info(
+        "gpt-auto session transparently resumed after shutdown closure",
+        extra={
+            "source-session-id": source_session_id,
+            "resumed-session-id": new_session_id,
+        },
+    )
+    # GP13 code-review consultation: retarget the durable request to the
+    # successor BEFORE any provider submission proceeds. update_owned_
+    # running_session() is already fenced on owner_epoch/worker_id/
+    # attempt_epoch (see store/_transitions.py) -- a lost fence here means
+    # this worker no longer has authority over the request and must raise,
+    # never silently fall back to the old RES-AGW-003 as if resume merely
+    # wasn't eligible.
+    updated_record = store.update_owned_running_session(
+        project_root,
+        record["request-id"],
+        owner_epoch=record["dispatch-owner-epoch"],
+        worker_id=record["worker-id"],
+        attempt_epoch=record["attempt-epoch"],
+        session_id=new_session_id,
+        provider_metadata=session_store.session_provider_metadata(new_session_record),
+    )
+    return new_session_id, new_session_record, updated_record
+
+
 def _build_surface_hint(profile: dict[str, Any]) -> Any:
     """Build the surface hint from the resolved execution profile.
 
@@ -303,51 +429,72 @@ def _dispatch_session_request(
             # record can remain active while its handle is absent. Reattach
             # the exact provider binding before applying continuation policy.
             if not runtime.session_runtime_status(session_id).get("available"):
-                if session_record.get("state") != "active":
+                if (
+                    session_record.get("state") == "closed"
+                    and session_record.get("close-reason") == "shutdown"
+                ):
+                    # GP13 (scoped): transparently reattach rather than
+                    # forcing the caller to detect RES-AGW-003 and
+                    # separately call session_resume -- see
+                    # _auto_resume_shutdown_closed_session's own docstring
+                    # for why this is deliberately narrow. The resumed
+                    # successor already has a live runtime handle (resume
+                    # opens a real transport), so unlike the active-state
+                    # branch below, no rehydrate_session() call follows.
+                    session_id, session_record, record = _auto_resume_shutdown_closed_session(
+                        project_root,
+                        runtime,
+                        source_session_id=session_id,
+                        record=record,
+                        context_fingerprint=context_fingerprint,
+                        request_runtime_root=request_runtime_root,
+                    )
+                elif session_record.get("state") != "active":
                     raise AudiaGenticError(
                         code="RES-AGW-003",
                         kind="agents",
                         message="session is not active and cannot be continued",
                         details=_terminal_session_diagnostics(session_id, session_record),
                     )
-                from audiagentic.components.providers import providers_api
+                else:
+                    from audiagentic.components.providers import providers_api
 
-                opening_request_ids = session_store.session_request_ids(session_record)
-                rehydrate_root = (
-                    gateway_request_dir(project_root, opening_request_ids[0]) / "runtime"
-                    if opening_request_ids
-                    else None
-                )
-                runtime.rehydrate_session(
-                    project_root,
-                    session_id,
-                    execution_profile_id=execution_profile_id,
-                    provider_id=provider_id,
-                    model_id=session_store.session_model_id(session_record)
-                    or record.get("resolved-model-id"),
-                    surface_hint=_build_surface_hint(profile),
-                    idle_timeout_seconds=(
-                        record.get("session-idle-timeout-seconds")
-                        if record.get("session-idle-timeout-seconds") is not None
-                        else session_store.session_idle_timeout_seconds(session_record)
-                    ),
-                    max_lifetime_seconds=(
-                        record.get("session-max-lifetime-seconds")
-                        if record.get("session-max-lifetime-seconds") is not None
-                        else session_store.session_max_lifetime_seconds(session_record)
-                    ),
-                    turn_timeout_seconds=first_present(
-                        params, "session-turn-timeout-seconds", "session_turn_timeout_seconds"
-                    ),
-                    turn_silence_timeout_seconds=first_present(
-                        params,
-                        "session-turn-silence-timeout-seconds",
-                        "session_turn_silence_timeout_seconds",
-                    ),
-                    correlation_id=record.get("correlation-id"),
-                    request_runtime_root=rehydrate_root,
-                    mcp_entries=providers_api.collect_management_mcp_launch_entries(project_root),
-                )
+                    opening_request_ids = session_store.session_request_ids(session_record)
+                    rehydrate_root = (
+                        gateway_request_dir(project_root, opening_request_ids[0]) / "runtime"
+                        if opening_request_ids
+                        else None
+                    )
+                    runtime.rehydrate_session(
+                        project_root,
+                        session_id,
+                        execution_profile_id=execution_profile_id,
+                        provider_id=provider_id,
+                        model_id=session_store.session_model_id(session_record)
+                        or record.get("resolved-model-id"),
+                        surface_hint=_build_surface_hint(profile),
+                        idle_timeout_seconds=(
+                            record.get("session-idle-timeout-seconds")
+                            if record.get("session-idle-timeout-seconds") is not None
+                            else session_store.session_idle_timeout_seconds(session_record)
+                        ),
+                        max_lifetime_seconds=(
+                            record.get("session-max-lifetime-seconds")
+                            if record.get("session-max-lifetime-seconds") is not None
+                            else session_store.session_max_lifetime_seconds(session_record)
+                        ),
+                        turn_timeout_seconds=first_present(
+                            params, "session-turn-timeout-seconds", "session_turn_timeout_seconds"
+                        ),
+                        turn_silence_timeout_seconds=first_present(
+                            params,
+                            "session-turn-silence-timeout-seconds",
+                            "session_turn_silence_timeout_seconds",
+                        ),
+                        correlation_id=record.get("correlation-id"),
+                        request_runtime_root=rehydrate_root,
+                        mcp_entries=providers_api.collect_management_mcp_launch_entries(project_root),
+                    )
 
             # Global/profile policy is applied only to the in-memory handle;
             # _SessionHandle.update_bounds keeps the more-open value.

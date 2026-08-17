@@ -13,6 +13,7 @@ from audiagentic.components.providers.adapters.gpt_auto.cdp.cdp_browser import (
 )
 from audiagentic.components.providers.adapters.gpt_auto.cdp.client import (
     CdpError,
+    CdpProtocolError,
     CdpStaleGenerationError,
 )
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
@@ -268,13 +269,16 @@ async def test_get_page_resolves_single_target_without_enumerating_all_tabs():
 
 
 @pytest.mark.asyncio
-async def test_get_page_raises_and_forgets_handle_for_closed_target():
+async def test_get_page_raises_and_forgets_handle_for_genuinely_closed_target():
+    """A CdpProtocolError from Target.getTargetInfo is the CDP server
+    itself saying the target no longer exists -- the one case where
+    forgetting the handle is correct."""
     bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
     fake = _FakeClient()
 
     async def command(method, params=None, *, session_id=None, timeout=None):
         if method == "Target.getTargetInfo":
-            raise CdpError("No target with given id found")
+            raise CdpProtocolError("No target with given id found")
         return await _FakeClient.command(fake, method, params or {}, session_id=session_id, timeout=timeout)
 
     fake.command = command
@@ -287,6 +291,36 @@ async def test_get_page_raises_and_forgets_handle_for_closed_target():
 
     assert "page-1" not in bridge._pages
     assert "target-1" not in bridge._sessions
+
+
+@pytest.mark.asyncio
+async def test_get_page_preserves_handle_on_transport_failure():
+    """GP42 code review blocker (B1): GP18 established _pages deliberately
+    survives a CDP WebSocket reconnect -- attached sessionIds do not, but
+    target/page identity does. A transport-level CdpError (connection
+    closed, client stopped, stale connection) from Target.getTargetInfo is
+    NOT proof the target itself is gone; erasing the handle on any such
+    CdpError would turn a recoverable connection event into apparent page
+    destruction. Only a CdpProtocolError (the CDP server's own "no such
+    target" response) may do that."""
+    bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
+    fake = _FakeClient()
+
+    async def command(method, params=None, *, session_id=None, timeout=None):
+        if method == "Target.getTargetInfo":
+            raise CdpError("CDP connection closed: socket closed")
+        return await _FakeClient.command(fake, method, params or {}, session_id=session_id, timeout=timeout)
+
+    fake.command = command
+    bridge._client = fake
+    bridge._pages["page-1"] = "target-1"
+    bridge._sessions["target-1"] = "session-1"
+
+    with pytest.raises(CdpError):
+        await bridge.call("get_page", {"pageHandle": "page-1"})
+
+    assert bridge._pages["page-1"] == "target-1"
+    assert bridge._sessions["target-1"] == "session-1"
 
 
 @pytest.mark.asyncio
