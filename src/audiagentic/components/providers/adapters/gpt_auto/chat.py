@@ -70,10 +70,16 @@ class PersistentChat:
         provider_session_id: str | None = None,
         chat_url: str | None = None,
         resume_provider_metadata: dict[str, object] | None = None,
+        project_key: str | None = None,
     ) -> None:
         self.ag_session_id = ag_session_id
         self.project_name = project_name
         self.project_url = project_url
+        # The AUDiaGentic caller's canonical project root -- distinct from
+        # project_name (ChatGPT's own project label, often shared across
+        # many AUDiaGentic projects that all use the same ChatGPT project).
+        # Used only for grouping in the operator dashboard.
+        self.project_key = project_key
         self.provider_session_id = provider_session_id
         self.chat_url = chat_url
         self.page_handle: str | None = None
