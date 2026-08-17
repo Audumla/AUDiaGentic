@@ -40,30 +40,41 @@ class BrowserProcessController:
         self._launched: asyncio.subprocess.Process | None = None
 
     async def ensure_browser_for_cdp(self) -> BrowserProcessEvidence:
-        if await self._cdp_probe():
-            return BrowserProcessEvidence(
-                self._port_owner(self.config.remote_debugging_port), None, False
-            )
+        from .runtime import _gp31_trace
+
+        probe_ok = await self._cdp_probe()
+        _gp31_trace(f"ensure_browser_for_cdp(): _cdp_probe()={probe_ok}")
+        if probe_ok:
+            owner_pid = self._port_owner(self.config.remote_debugging_port)
+            _gp31_trace(f"ensure_browser_for_cdp(): probe ok, port_owner={owner_pid} -- reconnect, no launch")
+            return BrowserProcessEvidence(owner_pid, None, False)
         owner = self._port_owner(self.config.remote_debugging_port)
+        _gp31_trace(f"ensure_browser_for_cdp(): probe failed, port_owner={owner}")
         if owner is not None:
+            _gp31_trace("ensure_browser_for_cdp(): raising -- port occupied but not usable CDP")
             raise RuntimeError(
                 "configured CDP port is occupied but is not a usable browser endpoint"
             )
         matching = self._process_lookup(self.config.executable)
+        _gp31_trace(f"ensure_browser_for_cdp(): matching processes={matching}")
         if matching:
             if self.config.existing_browser_policy is ExistingBrowserPolicy.FAIL:
+                _gp31_trace("ensure_browser_for_cdp(): raising -- FAIL policy, matching process exists")
                 raise RuntimeError("configured browser is running without usable CDP")
             # Executable identity is not ownership evidence. A restart policy
             # must never terminate unrelated user windows; only a process
             # launched and recorded by this controller may be stopped.
+            _gp31_trace("ensure_browser_for_cdp(): raising -- restart refused, ownership unproven")
             raise RuntimeError(
                 "configured browser is running without usable CDP; restart refused "
                 "because process ownership cannot be proven"
             )
+        _gp31_trace("ensure_browser_for_cdp(): NO matching process found -- launching a FRESH browser")
         self._launched = await asyncio.create_subprocess_exec(
             str(self.config.executable),
             f"--remote-debugging-port={self.config.remote_debugging_port}",
         )
+        _gp31_trace(f"ensure_browser_for_cdp(): launched fresh browser pid={self._launched.pid}")
         return BrowserProcessEvidence(self._launched.pid, None, True)
 
     async def _stop_matching(self, pids: list[int]) -> None:

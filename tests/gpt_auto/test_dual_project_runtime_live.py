@@ -82,7 +82,7 @@ def _load_config() -> GptAutoConfig:
     raw = yaml.safe_load((REPO_ROOT / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8"))
     settings = dict(raw["settings"])
     settings.pop("project-url", None)
-    return GptAutoConfig.from_dict(settings)
+    return GptAutoConfig.from_project_dict(settings)
 
 
 async def _open_chat(

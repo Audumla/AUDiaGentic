@@ -36,7 +36,16 @@ _SNAPSHOT_FN = r"""
   const users = messageEntries.filter(m => m.role === "user").map(m => m.el);
   const assistants = messageEntries.filter(m => m.role === "assistant").map(m => m.el);
   const latestAssistant = assistants.length ? assistants[assistants.length - 1] : null;
-  const assistantTurn = latestAssistant && (latestAssistant.closest("article") || latestAssistant.parentElement?.parentElement);
+  // GP41 (2026-08-17): .agent-turn is a semantically meaningful, real
+  // wrapper class confirmed present (via closest()) on two independent
+  // live conversations tonight -- prefer it over the old fixed-depth
+  // parentElement.parentElement walk, which only worked by coincidence
+  // for the specific DOM depths tested and has no structural guarantee
+  // for a differently-nested turn. <article> has never been observed to
+  // exist in current ChatGPT markup; kept as a legacy fallback only.
+  const assistantTurn = latestAssistant && (
+    latestAssistant.closest(".agent-turn") || latestAssistant.closest("article") || latestAssistant.parentElement?.parentElement
+  );
   const domSignals = {};
   for (const spec of signalSpecs) {
     const root = spec.scope === "latest-assistant-turn" ? assistantTurn : document;
@@ -76,7 +85,16 @@ _SNAPSHOT_FN = r"""
   );
   const selectors = '[data-testid="stop-button"], [data-testid="stop-generating"], .result-streaming, .result-thinking, [aria-busy="true"]';
   const generating = Array.from(document.querySelectorAll(selectors)).some(shown);
-  const composer = document.querySelector(".ProseMirror");
+  // GP35: a canvas/writing-block turn (seen live 2026-08-17) renders its
+  // OWN .ProseMirror-based contenteditable inline in the conversation
+  // history (data-testid="writing-block-container"), positioned BEFORE
+  // the real chat composer in DOM order. A plain '.ProseMirror' query
+  // matches that canvas editor instead of the real composer whenever any
+  // canvas turn exists anywhere in the conversation -- live-reproduced as
+  // a misdirected prompt submission. #prompt-textarea is the real
+  // composer's own stable, unique id; confirmed present across every
+  // observed page state, canvas or not.
+  const composer = document.querySelector("#prompt-textarea");
   // GP08 slice 1: text extraction happens exactly once per node here, so
   // an id and its text can never desync between two independently-filtered
   // arrays the way the old users.map(...)/assistants.map(...) pairs could.
@@ -178,7 +196,9 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             typed = await self.evaluate(
                 page,
                 """(text) => {
-              const editor = document.querySelector('.ProseMirror');
+              // GP35: see the composer-detection query above -- must match
+              // the real chat composer, never a canvas turn's inline editor.
+              const editor = document.querySelector('#prompt-textarea');
               if (!editor) throw new Error('composer not found');
               editor.focus();
               const selection = window.getSelection(); selection.removeAllRanges();

@@ -1,6 +1,6 @@
 # Agent Gateway (AGW) and Execution Profile (EXP) error resolutions
 VAL-AGW-001: "The request mode must be 'async' or 'blocking'. Check the mode parameter."
-VAL-AGW-UNKNOWN: "The gateway received an invalid provider or configuration value. Read the error message, correct the named value, and retry; if the message is insufficient, inspect the private gateway diagnostic evidence."
+VAL-AGW-999: "The gateway received an invalid provider or configuration value. Read the error message, correct the named value, and retry; if the message is insufficient, inspect the private gateway diagnostic evidence."
 VAL-AGW-002: "The gateway request record failed schema validation after construction. Review the built record fields."
 VAL-AGW-003: "The gateway request record is missing a request-id. Ensure build_record() generated one before writing."
 VAL-AGW-004: "The gateway request record failed schema validation on write. Check all required fields."

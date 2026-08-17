@@ -336,8 +336,12 @@ def _recover_after_restart(run: ProjectRun, pre: dict[str, Any]) -> dict[str, An
 def _cdp_port() -> int:
     import yaml
 
-    cfg = yaml.safe_load((REPO_ROOT / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8"))
-    return int(cfg["settings"]["browser"]["remote-debugging-port"])
+    from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
+
+    document = yaml.safe_load(
+        (REPO_ROOT / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
+    )
+    return GptAutoConfig.from_project_dict(document).browser.remote_debugging_port
 
 
 def _chat_id(url: str) -> str | None:

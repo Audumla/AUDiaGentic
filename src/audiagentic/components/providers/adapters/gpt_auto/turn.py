@@ -646,7 +646,23 @@ class GptAutoTurn:
     _SOFT_LIVENESS_SIGNALS = frozenset(
         {"stop-control", "streaming-indicator", "thinking-indicator", "busy-indicator"}
     )
-    _TERMINAL_WITNESS_SIGNALS = frozenset({"completion-control", "message-finalized"})
+    # GP32 (2026-08-17): message-finalized's underlying DOM marker
+    # ([data-is-last-node]) was removed by ChatGPT entirely; more-actions-menu
+    # replaced it as the corroborating signal. This is an any-of
+    # intersection so completion-control alone already suffices here.
+    #
+    # GP34/code review: canvas-edit-control/canvas-open-editor-control are
+    # deliberately NOT included, even though they cover ChatGPT's canvas
+    # response variant elsewhere (response-complete's second any-of-groups
+    # entry) -- code review confirmed live that either one ALONE (or even
+    # both together, without the not-generating fact response-complete
+    # also requires for that group) is not a valid terminal witness, since
+    # both were observed to appear at canvas-panel-CREATION time, not at
+    # completion. A single-signal OR-set like this one cannot express
+    # "both plus not currently generating", so canvas completion is left
+    # entirely to response-complete's own properly-guarded group instead
+    # of being approximated here.
+    _TERMINAL_WITNESS_SIGNALS = frozenset({"completion-control", "more-actions-menu"})
 
     async def _await_response(self, baseline: ChatSnapshot, current: ChatSnapshot) -> str | None:
         """GP07: re-expresses the previously-bespoke start/stall/total timer
@@ -1159,6 +1175,10 @@ def _facts(
             "composer-present": current.composer_present,
             "composer-editable": current.composer_editable,
             "composer-unavailable": not current.composer_present or not current.composer_editable,
+            # GP34 code-review follow-up: see config.py's known_facts
+            # comment for why this exists (a stop-control-free way to gate
+            # on "nothing looks actively busy right now").
+            "not-generating": not current.generating,
             "page-ready": observation.state.value == "ready",
             "page-submitting": observation.state.value == "submitting",
             "page-generating": observation.state.value == "generating",

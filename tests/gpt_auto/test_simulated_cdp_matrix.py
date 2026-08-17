@@ -43,7 +43,7 @@ class _ScenarioClient:
         self.fail_method: str | None = None
         self.window_open_target: str | None = None
 
-    async def command(self, method, params=None, *, session_id=None, timeout=None):
+    async def command(self, method, params=None, *, session_id=None, timeout=None, required_generation=None):
         params = params or {}
         self.calls.append((method, params, session_id))
         if method == self.fail_method:

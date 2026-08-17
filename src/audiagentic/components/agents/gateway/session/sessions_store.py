@@ -184,7 +184,7 @@ def _redact_error(error: BaseException | dict[str, Any] | None) -> dict[str, Any
         # material is not expected in ValueError messages and the outer error
         # boundary still redacts provider/authentication exceptions.
         if isinstance(error, ValueError) and str(error):
-            return {"code": "VAL-AGW-UNKNOWN", "message": str(error), "kind": type(error).__name__}
+            return {"code": "VAL-AGW-999", "message": str(error), "kind": type(error).__name__}
         return {
             "code": "UNKNOWN",
             "message": "unexpected error (see server logs)",
