@@ -47,13 +47,46 @@ def _sparse(value: Any) -> Any:
     return value
 
 
-def agent_list_definitions() -> list[dict[str, Any]]:
-    """Internal discovery helper; configuration MCP owns the public export."""
+def _agent_card(definition: dict[str, Any]) -> dict[str, Any]:
+    """Client-facing summary of one Agent Definition (A2A AgentCard-style
+    projection — see protocols/a2a/agent_card.py's build_agent_card for the
+    sibling used on the A2A-publication path). Deliberately excludes
+    implementation/harness details a calling agent has no use for and must
+    not couple to: execution_profile_id, role_ids, prompt_id. What backs an
+    agent is free to change without being part of its public contract."""
+    return {
+        "agent_id": definition["agent_id"],
+        "name": definition.get("name"),
+        "description": definition.get("description"),
+        "skills": [
+            {"id": skill, "name": skill} for skill in definition.get("advertised_skills") or []
+        ],
+    }
+
+
+@mcp.tool()
+@tool_boundary
+def agent_task_list_definitions() -> list[dict[str, Any]]:
+    """List available agents — the valid `agent_id` values for
+    `agent_task_submit` — as a slim, client-facing summary per agent
+    (agent_id, name, description, skills). Modeled on the A2A AgentCard
+    shape: what an agent IS to a caller, not how it's implemented —
+    execution profile, role, and other harness wiring are deliberately
+    left out.
+
+    The configuration MCP server (ag-agents-config) separately exposes the
+    full administrative record (via `agent_list_definitions`) for managing
+    definitions/execution-profiles/roles; a tool name must have exactly one
+    owning MCP surface, so this copy is named agent_task_list_definitions.
+    It exists so a caller using ONLY the gateway server can discover valid
+    agent_id values without also needing the configuration server
+    attached."""
     from audiagentic.components.agents.models.agent_definition_api import (
         list_agent_definitions,
     )
 
-    return _sparse(list_agent_definitions(project_root_from_env()))
+    definitions = list_agent_definitions(project_root_from_env())
+    return _sparse([_agent_card(definition) for definition in definitions])
 
 
 @mcp.tool()

@@ -48,6 +48,15 @@ class CdpError(RuntimeError):
     """A CDP command returned an error."""
 
 
+class CdpProtocolError(CdpError):
+    """The CDP server itself rejected a command with a JSON-RPC "error"
+    field -- a genuine protocol-level failure (e.g. "No target with given
+    id found"), as opposed to a transport/connection failure (socket
+    closed, client stopped, stale connection detected). Only this subtype
+    is safe evidence that the command's target itself is gone; every other
+    CdpError means the command's outcome is simply unknown."""
+
+
 class CdpStaleGenerationError(CdpError):
     """A session-scoped command's required_generation no longer matches.
 
@@ -289,7 +298,7 @@ class CdpClient:
                         continue
                     if "error" in value:
                         error = value["error"]
-                        future.set_exception(CdpError(str(error)))
+                        future.set_exception(CdpProtocolError(str(error)))
                     else:
                         future.set_result(value.get("result"))
                 elif "method" in value:

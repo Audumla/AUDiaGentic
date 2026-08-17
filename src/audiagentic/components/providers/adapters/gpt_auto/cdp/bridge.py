@@ -9,7 +9,7 @@ from typing import Any
 
 from ..config import GptAutoConfig
 from ..urls import is_gpt_auto_relevant_url
-from .client import CdpClient, CdpError, CdpStaleGenerationError
+from .client import CdpClient, CdpError, CdpProtocolError, CdpStaleGenerationError
 
 
 @dataclass(frozen=True)
@@ -178,7 +178,15 @@ class PythonCdpBridge:
         target_id = await self._target(handle)
         try:
             result = await self.client.command("Target.getTargetInfo", {"targetId": target_id})
-        except CdpError as exc:
+        except CdpProtocolError as exc:
+            # GP42 code review: only a genuine protocol-level rejection
+            # (the CDP server itself replying "no target with this id")
+            # proves the target is actually gone. GP18 established _pages
+            # deliberately survives a WebSocket reconnect -- a transport
+            # failure here (socket closed, client stopped, stale
+            # connection) is NOT evidence of target loss and must not
+            # erase a live handle/target binding just because the specific
+            # command that happened to observe it failed.
             self._pages.pop(handle, None)
             self._sessions.pop(target_id, None)
             raise RuntimeError(f"unknown or closed page handle: {handle}") from exc

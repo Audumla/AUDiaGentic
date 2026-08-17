@@ -755,13 +755,17 @@ async def test_real_chat_transition_is_terminalized_exactly_once_on_policy_failu
     assert transitions.count((ChatState.BUSY, ChatState.FAILED)) == 1
 
 
-def test_prompt_identity_preserves_case_spacing_and_indentation():
+def test_prompt_identity_preserves_case_and_indentation_presence():
+    """GP43 (2026-08-17): exact interior-whitespace RUN LENGTH is no longer
+    compared -- ChatGPT's renderer proved unable to preserve it reliably
+    (a run of 9 plain spaces was observed collapsed to a single \xa0).
+    Case and indentation DEPTH (present vs absent) remain significant."""
     from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import (
         normalize_prompt_text,
     )
 
     assert normalize_prompt_text("Return Foo") != normalize_prompt_text("return foo")
-    assert normalize_prompt_text("x  y") != normalize_prompt_text("x y")
+    assert normalize_prompt_text("x  y") == normalize_prompt_text("x y")
     assert normalize_prompt_text("if ok:\n    run()") != normalize_prompt_text("if ok:\nrun()")
     assert normalize_prompt_text("line\r\n") == "line"
 

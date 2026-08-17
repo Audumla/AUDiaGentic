@@ -215,6 +215,7 @@ mcp-servers:
   - name: ag-agents-gateway
     module: audiagentic.components.agents.mcp.gateway_mcp
     direct-tools:
+      - agent_task_list_definitions
       - agent_task_submit
       - agent_task_status
       - agent_task_cancel
@@ -263,6 +264,12 @@ mcp-servers:
       or agent_task_list_requests to see what's happening without already
       knowing a request-id.
     tool-descriptions:
+      agent_task_list_definitions: >
+        List available agents as a slim, client-facing summary per agent
+        (agent_id, name, description, skills) -- the valid agent_id values
+        for agent_task_submit. Modeled on the A2A AgentCard shape:
+        implementation/harness details (execution profile, role, prompt
+        wiring) are deliberately left out.
       agent_task_submit: >
         Submit an async request as agent_id (resolves the agent's execution
         profile automatically). Returns structured response with:
