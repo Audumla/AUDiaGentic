@@ -15,6 +15,7 @@ from audiagentic.components.providers.adapters.gpt_auto.turn import _facts
 from audiagentic.components.providers.adapters.gpt_auto.urls import (
     canonical_chat_url,
     canonical_project_url,
+    is_gpt_auto_relevant_url,
     parse_project_id,
     parse_provider_session_id,
     url_matches_provider_session,
@@ -220,6 +221,17 @@ def test_chatgpt_url_identity_helpers_are_pure_and_exact():
     )
     assert url_matches_provider_session(url, "conversation-1")
     assert not url_matches_provider_session(url, "conversation-2")
+
+
+def test_is_gpt_auto_relevant_url_scopes_to_plausible_owned_tabs():
+    assert is_gpt_auto_relevant_url("https://chatgpt.com/c/abc")
+    assert is_gpt_auto_relevant_url("https://chat.openai.com/g/g-p-x")
+    assert is_gpt_auto_relevant_url("data:text/html;charset=utf-8,<html></html>")
+    assert is_gpt_auto_relevant_url("about:blank")
+    assert is_gpt_auto_relevant_url("")
+    assert not is_gpt_auto_relevant_url("https://reddit.com/r/x")
+    assert not is_gpt_auto_relevant_url("https://amazon.com/dp/1")
+    assert not is_gpt_auto_relevant_url("devtools://devtools/x")
 
 
 def test_live_workflow_does_not_treat_static_streaming_animation_as_busy() -> None:

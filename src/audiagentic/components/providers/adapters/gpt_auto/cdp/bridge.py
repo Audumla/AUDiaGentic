@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..config import GptAutoConfig
+from ..urls import is_gpt_auto_relevant_url
 from .client import CdpClient, CdpError, CdpStaleGenerationError
 
 
@@ -128,25 +129,74 @@ class PythonCdpBridge:
                 continue
             target_id = str(info["targetId"])
             handle = self._handle_for_target(target_id)
-            try:
-                window_id = await self._window_id(target_id)
-            except CdpError:
-                # A target that isn't a real tabbed browser window (e.g. a
-                # devtools:// inspector page opened by the operator) has no
-                # window to resolve. One such target must not abort page
-                # enumeration for every other live page on the shared
-                # browser -- treat it as windowless and keep going.
-                window_id = None
+            url = str(info.get("url") or "")
+            window_id = None
+            if is_gpt_auto_relevant_url(url):
+                # GP42: Browser.getWindowForTarget is a real CDP round-trip.
+                # The shared browser can have dozens of tabs open that have
+                # nothing to do with gpt-auto (other sites, other tools) --
+                # resolving a window for every one of them on every refresh
+                # turns a single list_pages() call into dozens of avoidable
+                # round-trips. Only tabs that could plausibly be ours need
+                # windowId populated at all.
+                try:
+                    window_id = await self._window_id(target_id)
+                except CdpError:
+                    # A target that isn't a real tabbed browser window (e.g. a
+                    # devtools:// inspector page opened by the operator) has no
+                    # window to resolve. One such target must not abort page
+                    # enumeration for every other live page on the shared
+                    # browser -- treat it as windowless and keep going.
+                    window_id = None
             result.append(
                 {
                     "pageHandle": handle,
-                    "url": str(info.get("url") or ""),
+                    "url": url,
                     "title": str(info.get("title") or ""),
                     "targetId": target_id,
                     "windowId": window_id,
                 }
             )
         return result
+
+    async def _refresh_page(self, handle: str) -> dict[str, Any]:
+        """Resolve one already-known page by handle without enumerating
+        every target on the shared browser.
+
+        GP42: chat.py calls page_by_handle() on every single poll tick of
+        every open conversation (poll_interval_seconds, so multiple times
+        a second across every gpt-auto tab) purely to re-confirm a handle
+        it already holds and hand a fresh CdpPageRef down to evaluate().
+        evaluate() itself never needed that -- it resolves the target
+        straight from the local handle->targetId map. Routing that
+        extremely hot lookup through _refresh_pages()'s full
+        Target.getTargets fan-out (plus a Browser.getWindowForTarget per
+        relevant tab) turned every poll of every conversation into a
+        browser-wide scan. Target.getTargetInfo is scoped to the one
+        target this call actually cares about.
+        """
+        target_id = await self._target(handle)
+        try:
+            result = await self.client.command("Target.getTargetInfo", {"targetId": target_id})
+        except CdpError as exc:
+            self._pages.pop(handle, None)
+            self._sessions.pop(target_id, None)
+            raise RuntimeError(f"unknown or closed page handle: {handle}") from exc
+        info = result.get("targetInfo") or {}
+        url = str(info.get("url") or "")
+        window_id = None
+        if is_gpt_auto_relevant_url(url):
+            try:
+                window_id = await self._window_id(target_id)
+            except CdpError:
+                window_id = None
+        return {
+            "pageHandle": handle,
+            "url": url,
+            "title": str(info.get("title") or ""),
+            "targetId": target_id,
+            "windowId": window_id,
+        }
 
     def _handle_for_target(self, target_id: str) -> str:
         """Return one stable handle per physical CDP target."""
@@ -260,6 +310,8 @@ class PythonCdpBridge:
             return await self.client.command("Browser.getVersion", timeout=timeout)
         if method == "list_pages":
             return await self._refresh_pages()
+        if method == "get_page":
+            return await self._refresh_page(str(params["pageHandle"]))
         if method in {"create_page", "create_window_page"}:
             async with self._tab_open_lock:
                 result = await self.client.command(

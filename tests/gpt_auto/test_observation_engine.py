@@ -91,20 +91,38 @@ def test_terminal_witness_alone_cannot_reopen_a_candidate_but_progress_can():
     assert tracker.state is ObservationState.ACTIVE
 
 
-def test_candidate_terminal_expires_to_suspect_stalled_if_witness_vanishes():
+def test_candidate_terminal_resets_immediately_when_witness_vanishes():
+    """GP40 (code review, 2026-08-17): merely losing terminal_candidate used
+    to be silently ignored -- the candidate_entered_at timer kept running
+    underneath, so a real sequence like "terminal evidence, generation
+    quietly resumes without changing text (no PROGRESS), terminal evidence
+    flickers absent then true again" would satisfy candidate_stability_
+    window_seconds as if the candidate had been continuously eligible the
+    whole time, when it was not. Losing terminal_candidate must discard the
+    candidate immediately and require a fresh one to re-arm the window --
+    not let a stale clock survive to expire into SUSPECT_STALLED later."""
     policy = _Policy(candidate_stability_window_seconds=5.0, candidate_max_verification_window_seconds=10.0)
     tracker = ObservationTracker(policy=policy, now=0.0)
     tracker.advance(_obs(PROGRESS), now=1.0)
     tracker.advance(_obs(WITNESS, candidate=True), now=2.0)
     assert tracker.state is ObservationState.CANDIDATE_TERMINAL
 
-    # witness disappears, text unchanged, nothing conclusive -- candidate
-    # cannot verify (terminal_candidate False) and must not hang forever
-    outcome = tracker.advance(_obs(NONE, candidate=False), now=8.0)
+    outcome = tracker.advance(_obs(NONE, candidate=False), now=3.0)
     assert outcome is None
-    outcome = tracker.advance(_obs(NONE, candidate=False), now=13.0)
+    assert tracker.state is ObservationState.ACTIVE
+    assert tracker.clock.candidate_entered_at is None
+    assert tracker.clock.candidate_generation is None
+
+    # a fresh terminal observation re-arms a NEW window from now, not from
+    # the original (discarded) candidate_entered_at
+    outcome = tracker.advance(_obs(WITNESS, candidate=True), now=4.0)
     assert outcome is None
-    assert tracker.state is ObservationState.SUSPECT_STALLED
+    assert tracker.state is ObservationState.CANDIDATE_TERMINAL
+    assert tracker.clock.candidate_entered_at == 4.0
+    outcome = tracker.advance(_obs(WITNESS, candidate=True, verified=True), now=8.9)
+    assert outcome is None, "must not verify before a fresh 5s window elapses from the reset"
+    outcome = tracker.advance(_obs(WITNESS, candidate=True, verified=True), now=9.1)
+    assert outcome is ObservationOutcome.VERIFIED_TERMINAL
 
 
 def test_suspect_stalled_recovers_to_candidate_terminal_on_weak_witness_reappearing():

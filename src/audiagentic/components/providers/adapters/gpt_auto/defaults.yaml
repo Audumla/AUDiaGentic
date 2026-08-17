@@ -69,11 +69,17 @@ settings:
         # a real fragility in the underlying approach). The assistant's
         # own copy button separately carries aria-label="Copy response"
         # (confirmed live: <button ... aria-label="Copy response"
-        # data-testid="copy-turn-action-button">), which IS role-specific
-        # -- added as a second selector so this signal no longer depends
-        # entirely on the scoping walk being correct.
+        # data-testid="copy-turn-action-button">), which IS role-specific.
+        #
+        # Code review (2026-08-17) caught that a naive second, OR'd
+        # selector does not actually help: selectors within one signal are
+        # OR'd, so the known-ambiguous bare testid still matches (and wins)
+        # first if scoping ever picks the wrong container. A single
+        # selector requiring BOTH attributes on the same element is used
+        # instead -- role-specific by itself, testid kept only as an extra
+        # qualifier, not an independently-sufficient alternative.
         scope: latest-assistant-turn
-        selectors: ['[data-testid="copy-turn-action-button"]', 'button[aria-label="Copy response"]']
+        selectors: ['button[data-testid="copy-turn-action-button"][aria-label="Copy response"]']
         visible: false
       message-finalized:
         # ChatGPT's markdown renderer's own "this is the currently-last
