@@ -97,6 +97,19 @@ settings:
         selectors: ['[role="dialog"]']
         visible: true
         text-contains-any: ['too many requests', 'making requests too quickly', 'temporarily limited']
+      more-actions-menu:
+        # The end-of-turn action bar's "More actions" overflow button,
+        # confirmed present live 2026-08-17 alongside completion-control on
+        # a genuinely complete turn. A real, distinct end-of-turn signal,
+        # but its lifecycle relative to completion-control/message-finalized
+        # (does it ever lag, does it persist identically across turn types)
+        # is not yet characterized the way those two were before landing in
+        # response-complete's all-of set (GP17). Advisory/diagnostic only
+        # for now -- never wired into a completion or failure policy without
+        # its own live validation across multiple real completions first.
+        scope: latest-assistant-turn
+        selectors: ['button[aria-label="More actions"]']
+        visible: true
     evidence-policies:
       response-started:
         any-of: [assistant-fresh, stop-control, streaming-indicator, thinking-indicator]
