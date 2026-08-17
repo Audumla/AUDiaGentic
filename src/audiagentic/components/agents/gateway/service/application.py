@@ -167,6 +167,8 @@ class GatewayServiceApplication:
                 "gateway is draining and will not admit new agent execution work",
                 operation=operation,
             )
+        if operation in _WORK_PRODUCING_OPERATIONS:
+            self._record_project_encounter(root)
         if operation == "submit_execution_request":
             submitted = _validated_submission_arguments(root, arguments)
             return self._application.submit_execution_request(
@@ -349,6 +351,24 @@ class GatewayServiceApplication:
                 25, "service lifecycle operations require the standalone service host"
             )
         return self._lifecycle
+
+    def _record_project_encounter(self, project_root: Path) -> None:
+        """Record a gpt-auto project's last-seen time in the known-projects
+        registry (GP26). Best-effort and advisory: the registry is a startup
+        scan cache, never an availability dependency, so a write failure here
+        is intentionally swallowed."""
+        try:
+            from audiagentic.components.agents.gateway.service.known_projects import (
+                record_known_project,
+            )
+
+            record_known_project(
+                self._service_store.root / "known-projects.json",
+                project_root=project_root,
+            )
+        except Exception:  # noqa: BLE001
+            # Registry writes must never affect request admission.
+            pass
 
     def _service_is_draining(self) -> bool:
         return self._service_store.read().state == "draining"

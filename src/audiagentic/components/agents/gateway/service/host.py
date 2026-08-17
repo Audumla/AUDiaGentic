@@ -187,6 +187,23 @@ class GatewayServiceHost:
         )
 
         recover_gateway_requests(self.service_store.root, live_owner_epoch=self.owner_epoch)
+        # GP26: machine-level gpt-auto config drift detection runs after durable
+        # request recovery (correctness-critical) and before readiness. An
+        # invalid MACHINE-level config is fatal (it is the shared foundation);
+        # an invalid PROJECT config blocks only that project, never the gateway.
+        from audiagentic.components.agents.gateway.service.known_projects import (
+            scan_known_gpt_auto_projects,
+        )
+        from audiagentic.components.providers.adapters.gpt_auto.config import (
+            validate_machine_gpt_auto_config,
+            validate_project_gpt_auto_config,
+        )
+
+        validate_machine_gpt_auto_config()
+        scan_known_gpt_auto_projects(
+            self.service_store.root / "known-projects.json",
+            check_project=validate_project_gpt_auto_config,
+        )
         if not self._externally_managed:
             self.service_store.heartbeat({"ready": True}, expected_epoch=self.owner_epoch)
         self._start_ingress_poller()

@@ -132,7 +132,29 @@ def patch_provider_config(
         payload = load_yaml_file(path)
     else:
         payload = {}
-    payload.update(patch)
+    candidate = dict(payload)
+    candidate.update(patch)
+    # GP26 write-time guard: validate the candidate BEFORE persisting, not
+    # after. For gpt-auto, the effective-config resolver (three-tier: packaged
+    # defaults -> machine override -> this project overlay) is the authoritative
+    # compatibility verdict -- an invalid candidate must never reach disk.
+    if provider_id.startswith("gpt-auto"):
+        from audiagentic.components.providers.adapters.gpt_auto.config import (
+            resolve_gpt_auto_config,
+        )
+
+        try:
+            resolve_gpt_auto_config(candidate, provider_id=provider_id)
+        except AudiaGenticError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise AudiaGenticError(
+                code="VAL-PCFG-004",
+                kind="providers",
+                message="provider config failed effective-config validation",
+                details={"provider-id": provider_id, "path": str(path), "error": str(exc)},
+            ) from exc
+    payload = candidate
     _save_provider_config(path, payload)
     if not was_present:
         from audiagentic.foundation.toolchains.config.artifact_registry import ArtifactRegistry

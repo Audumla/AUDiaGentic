@@ -5,6 +5,7 @@ GptAutoConfig.from_project_dict()'s resolution against defaults.yaml."""
 from __future__ import annotations
 
 import copy
+from pathlib import Path
 
 import pytest
 
@@ -12,6 +13,9 @@ from audiagentic.components.providers.adapters.gpt_auto.config import (
     CURRENT_CONTRACT_VERSION,
     GptAutoConfig,
     deep_merge,
+    machine_gpt_auto_override_path,
+    validate_machine_gpt_auto_config,
+    validate_project_gpt_auto_config,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
@@ -148,5 +152,107 @@ def test_unsupported_contract_version_is_rejected_clearly() -> None:
 
     with pytest.raises(AudiaGenticError) as exc_info:
         GptAutoConfig.from_dict(data)
+
+    assert exc_info.value.code == "VAL-GPTAUTO-001"
+
+
+# ── GP26: machine-level config validation entry points ──────────────────────
+
+
+def test_machine_override_path_respects_audiagentic_home(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AUDIAGENTIC_HOME", "C:/tmp/audihome")
+
+    path = machine_gpt_auto_override_path("gpt-auto")
+
+    assert path == Path("C:/tmp/audihome/config/providers/gpt-auto.yaml")
+
+
+def test_validate_machine_config_succeeds_with_defaults_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AUDIAGENTIC_HOME", "C:/tmp/empty-audihome")
+
+    validate_machine_gpt_auto_config()
+
+
+def test_validate_machine_config_applies_machine_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path))
+    provider_dir = tmp_path / "config" / "providers"
+    provider_dir.mkdir(parents=True)
+    (provider_dir / "gpt-auto.yaml").write_text(
+        "settings:\n  contract-version: v1\n  turn:\n    response-timeout-seconds: 42\n",
+        encoding="utf-8",
+    )
+
+    validate_machine_gpt_auto_config()
+
+    resolved = validate_project_gpt_auto_config(tmp_path / "some-project")
+    assert resolved.turn.response_timeout_seconds == 42
+
+
+def test_validate_machine_config_rejects_invalid_machine_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GP26: an invalid MACHINE-level config is startup-fatal."""
+    monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path))
+    provider_dir = tmp_path / "config" / "providers"
+    provider_dir.mkdir(parents=True)
+    (provider_dir / "gpt-auto.yaml").write_text(
+        "settings:\n  contract-version: v99\n  turn:\n    response-timeout-seconds: 42\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(AudiaGenticError) as exc_info:
+        validate_machine_gpt_auto_config()
+
+    assert exc_info.value.code == "VAL-GPTAUTO-001"
+
+
+def test_validate_project_config_returns_effective_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path / "audihome"))
+    project = tmp_path / "project"
+    provider_dir = project / ".audiagentic" / "config" / "providers"
+    provider_dir.mkdir(parents=True)
+    (provider_dir / "gpt-auto.yaml").write_text(
+        "settings:\n"
+        "  contract-version: v1\n"
+        "  project-url: https://chatgpt.com/g/g-p-test-project\n",
+        encoding="utf-8",
+    )
+
+    config = validate_project_gpt_auto_config(project)
+
+    assert config.project_url == "https://chatgpt.com/g/g-p-test-project"
+    assert config.turn.response_timeout_seconds == 3600
+
+
+def test_validate_project_config_without_settings_resolves_to_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path / "audihome"))
+    config = validate_project_gpt_auto_config(tmp_path)
+
+    assert config.turn.response_timeout_seconds == 3600
+
+
+def test_validate_project_config_rejects_incompatible_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GP26: an invalid PROJECT config must be isolated to that project."""
+    monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path / "audihome"))
+    project = tmp_path / "project"
+    provider_dir = project / ".audiagentic" / "config" / "providers"
+    provider_dir.mkdir(parents=True)
+    (provider_dir / "gpt-auto.yaml").write_text(
+        "settings:\n  contract-version: v1\n  browser:\n    executable: 42\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(AudiaGenticError) as exc_info:
+        validate_project_gpt_auto_config(project)
 
     assert exc_info.value.code == "VAL-GPTAUTO-001"
