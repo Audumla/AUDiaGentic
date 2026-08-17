@@ -66,6 +66,25 @@ def test_from_project_dict_resolves_a_sparse_overlay_specifying_only_project_url
     assert config.workflow.policy("response-complete").all_of
 
 
+def test_from_project_dict_tolerates_an_already_unwrapped_settings_dict() -> None:
+    """Real live bug, 2026-08-17: some callers (the live stress test
+    harness's _load_live_settings(), which does data.get('settings', data)
+    itself before passing the result on) pass an already-unwrapped bare
+    settings dict, not the {"settings": {...}} shape every on-disk config
+    file has. Merging a wrapped defaults.yaml against an unwrapped project
+    dict without unwrapping both first silently discards every project
+    override (project-url included) and falls through to defaults."""
+    unwrapped_overlay = {
+        "contract-version": "v1",
+        "project-url": "https://chatgpt.com/g/g-p-unwrapped-test",
+    }
+
+    config = GptAutoConfig.from_project_dict(unwrapped_overlay)
+
+    assert config.project_url == "https://chatgpt.com/g/g-p-unwrapped-test"
+    assert config.browser.remote_debugging_port == 9222
+
+
 def test_from_project_dict_overlay_override_wins_over_defaults() -> None:
     overlay = {
         "settings": {

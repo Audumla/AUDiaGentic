@@ -299,8 +299,20 @@ class GptAutoConfig:
         the schema-drift incident GP09 was raised about. A project overlay now
         only needs project-url plus any genuine overrides; everything else is
         inherited from defaults.yaml.
+
+        Tolerant of both a full ``{"settings": {...}}``-wrapped payload
+        (the on-disk shape of every provider config file) and an
+        already-unwrapped bare settings dict (what some callers, e.g. the
+        live stress test harness, pass directly) -- mirrors from_dict()'s
+        own ``data.get("settings", data)`` tolerance. Merging a wrapped
+        defaults.yaml against an unwrapped project dict without unwrapping
+        both first would silently discard every project override (found
+        live, 2026-08-17: project-url disappeared, falling back to a
+        generic project-name search instead of the configured URL).
         """
-        merged = deep_merge(_load_packaged_defaults(), data)
+        default_settings = provider_settings(_load_packaged_defaults())
+        project_settings = provider_settings(data)
+        merged = deep_merge(default_settings, project_settings)
         return cls.from_dict(merged)
 
 
