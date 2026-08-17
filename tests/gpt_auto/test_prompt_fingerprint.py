@@ -28,7 +28,9 @@ def test_normalize_strips_inline_code_backticks() -> None:
 
 def test_normalize_strips_fenced_code_block_markers_keeping_content() -> None:
     submitted = "Review this:\n```python\ndef f():\n    return 1\n```\nThanks"
-    rendered = "Review this:\ndef f():\n    return 1\nThanks"
+    # The language tag survives as visible text (see the dedicated test for
+    # that behavior) -- only the backtick delimiters themselves are gone.
+    rendered = "Review this:\npython\ndef f():\n    return 1\nThanks"
     assert normalize_prompt_text(submitted) == normalize_prompt_text(rendered)
     # The code content itself, including its indentation, survives intact.
     assert "    return 1" in normalize_prompt_text(submitted)
@@ -77,6 +79,21 @@ def test_real_incident_delta_gp10_resubmission_2324_vs_2306_chars() -> None:
     )
     assert len(submitted) != len(rendered)
     assert match_prompt(submitted, rendered)
+
+
+def test_normalize_keeps_fenced_code_language_tag_as_visible_text() -> None:
+    """Real live gap found 2026-08-17 (req_27c9251fa0c54d73): ChatGPT's
+    renderer displays a fenced block's language tag (the "python" in
+    ```python) as its own visible text line, a syntax-highlighter UI
+    label -- it is not simply discarded like the rest of the fence syntax.
+    Stripping it entirely (the original GP25 behavior) caused normalized
+    submitted/observed text to permanently disagree on any prompt with a
+    language-tagged fence."""
+    submitted = "before\n```python\ndef f():\n    return 1\n```\nafter"
+    # This approximates what ChatGPT's own rendering shows: the language
+    # tag survives as a visible line, the backtick delimiters do not.
+    rendered = "before\npython\ndef f():\n    return 1\nafter"
+    assert normalize_prompt_text(submitted) == normalize_prompt_text(rendered)
 
 
 def test_backward_incompatible_with_old_exact_digest_is_a_known_accepted_tradeoff() -> None:
