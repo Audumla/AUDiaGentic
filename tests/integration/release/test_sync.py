@@ -53,7 +53,7 @@ def test_sync_merges_fragments_idempotent(tmp_path: Path) -> None:
         sandbox.cleanup()
 
 
-def test_sync_rebuilds_from_fragments_only(tmp_path: Path) -> None:
+def test_sync_preserves_existing_ledger_and_appends_fragments(tmp_path: Path) -> None:
     sandbox = sandbox_helper.create(tmp_path, "sync-rebuild")
     try:
         record_change_event(sandbox.repo, _load_event("chg_010"))
@@ -71,7 +71,7 @@ def test_sync_rebuilds_from_fragments_only(tmp_path: Path) -> None:
             for line in ledger.read_text(encoding="utf-8").splitlines()
             if line.strip()
         ]
-        assert [entry["event-id"] for entry in lines] == ["chg_010"]
+        assert [entry["event-id"] for entry in lines] == ["evt_manual_001", "chg_010"]
     finally:
         sandbox.cleanup()
 

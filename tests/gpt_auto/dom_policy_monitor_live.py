@@ -53,7 +53,7 @@ async def _monitor(
     provider_document = yaml.safe_load(
         (ROOT / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
     )
-    config = GptAutoConfig.from_dict(provider_document)
+    config = GptAutoConfig.from_project_dict(provider_document)
     bridge = PythonCdpBridge(config)
     transitions: list[dict[str, Any]] = []
     stage_summaries: dict[int, dict[str, Any]] = {}

@@ -454,9 +454,10 @@ async def test_unresolved_recovery_reports_missing_completion_evidence() -> None
 
     assert error.value.code == "EXT-GPTAUTO-004"
     assert error.value.details["recovery-reason"] == "completion-evidence-missing"
-    assert (
-        error.value.details["recovery-details"]["required-signal"]
-        == "completion-control-or-message-finalized"
+    assert error.value.details["recovery-details"]["required-signal"] == (
+        "completion-control+more-actions-menu"
+        "-or-canvas-edit-control+canvas-open-editor-control+not-generating"
+        "-or-message-finalized+not-generating"
     )
 
 
@@ -485,7 +486,11 @@ async def test_unresolved_recovery_reconciles_despite_stuck_generating_signal() 
                 "latestAssistantText": "new response",
                 "latestUserText": "the submitted prompt",
                 "userMessageTexts": ["the submitted prompt"],
-                "domSignals": {"completion-control": True, "stop-control": True},
+                "domSignals": {
+                    "completion-control": True,
+                    "more-actions-menu": True,
+                    "stop-control": True,
+                },
                 "generating": True,
                 "errorPresent": False,
             }
@@ -514,8 +519,15 @@ async def test_unresolved_recovery_reconciles_despite_stuck_generating_signal() 
         await chat.ensure_ready()
     assert first_error.value.details["recovery-reason"] == "awaiting-second-stable-observation"
 
-    # Second identical observation: reconciles successfully despite the
-    # stuck generating=True/stop-control the whole time.
+    # GP18 code review: a matching fingerprint alone is not enough -- real
+    # time must also pass (response_stability_seconds), so a caller
+    # retrying immediately can't rush past the stability window. Simulate
+    # that real time elapsed between the two observations.
+    chat._unresolved_match_fingerprint_at -= config.turn.response_stability_seconds + 1
+
+    # Second identical observation, after the stability window: reconciles
+    # successfully despite the stuck generating=True/stop-control the
+    # whole time.
     await chat.ensure_ready()
     assert chat.state is ChatState.READY
     assert chat.unresolved_turn_pending is False

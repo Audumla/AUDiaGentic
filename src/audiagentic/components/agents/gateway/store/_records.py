@@ -54,7 +54,7 @@ def _redact_error(error: BaseException | dict[str, Any] | None) -> dict[str, Any
         # correct the failing input.  ValueError messages are bounded by the
         # gateway error projection and must never include raw traceback/data.
         if isinstance(error, ValueError) and str(error):
-            return {"code": "VAL-AGW-UNKNOWN", "message": str(error), "kind": type(error).__name__}
+            return {"code": "VAL-AGW-999", "message": str(error), "kind": type(error).__name__}
         return {"code": "UNKNOWN", "message": "unexpected error (see server logs)", "kind": type(error).__name__}
     return {k: v for k, v in error.items() if k in _shared._REDACTED_ERROR_KEYS}
 

@@ -457,6 +457,13 @@ def _workflow_config(data: dict[str, Any]) -> TurnWorkflowConfig:
         "composer-present",
         "composer-editable",
         "composer-unavailable",
+        # GP34 code-review follow-up: derived from ChatSnapshot.generating
+        # directly (the raw stop/streaming/thinking/aria-busy check), not a
+        # dom-signal selector. Lets a policy require the ABSENCE of active
+        # generation without using stop-control in none-of (stop-control is
+        # deliberately excluded there -- proven live to stick indefinitely
+        # after real completion for the standard chat bubble, GP17).
+        "not-generating",
     }
     policies: list[tuple[str, EvidencePolicy]] = []
     for name, raw in policy_data.items():
@@ -467,6 +474,8 @@ def _workflow_config(data: dict[str, Any]) -> TurnWorkflowConfig:
         except ValueError as exc:
             _invalid(f"workflow.evidence-policies.{name}: {exc}")
         referenced = policy.all_of | policy.any_of | policy.none_of
+        for group in policy.any_of_groups:
+            referenced = referenced | group
         unknown = referenced - known_facts
         if unknown:
             _invalid(f"workflow.evidence-policies.{name} references unknown facts")

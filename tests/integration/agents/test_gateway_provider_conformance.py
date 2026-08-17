@@ -22,6 +22,8 @@ def test_gateway_provider_conformance_covers_every_descriptor() -> None:
         "gemini",
         "goose",
         "gpt-auto",
+        "gpt-auto-t1",
+        "gpt-auto-t2",
         "kilo",
         "local-openai",
         "opencode",

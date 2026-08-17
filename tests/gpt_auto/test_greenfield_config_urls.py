@@ -10,6 +10,8 @@ from audiagentic.components.providers.adapters.gpt_auto.config import (
     ExistingBrowserPolicy,
     GptAutoConfig,
 )
+from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatSnapshot
+from audiagentic.components.providers.adapters.gpt_auto.turn import _facts
 from audiagentic.components.providers.adapters.gpt_auto.urls import (
     canonical_chat_url,
     canonical_project_url,
@@ -61,9 +63,24 @@ def valid_config() -> dict:
                     "selectors": ['[data-testid="copy-turn-action-button"]'],
                     "visible": False,
                 },
+                "more-actions-menu": {
+                    "scope": "latest-assistant-turn",
+                    "selectors": ['button[aria-label="More actions"]'],
+                    "visible": True,
+                },
+                "canvas-edit-control": {
+                    "scope": "latest-assistant-turn",
+                    "selectors": ['[data-testid="writing-block-header-magic-edit-button"]'],
+                    "visible": True,
+                },
+                "canvas-open-editor-control": {
+                    "scope": "latest-assistant-turn",
+                    "selectors": ['button[aria-label="Open editor"]'],
+                    "visible": True,
+                },
                 "message-finalized": {
                     "scope": "latest-assistant-turn",
-                    "selectors": ["[data-is-last-node]"],
+                    "selectors": ['[data-is-last-node]'],
                     "visible": False,
                 },
                 "error-page": {
@@ -76,11 +93,11 @@ def valid_config() -> dict:
                 "response-started": {"any-of": ["assistant-fresh", "stop-control"]},
                 "response-active": {"any-of": ["text-changed", "stop-control"]},
                 "response-complete": {
-                    "all-of": [
-                        "assistant-fresh",
-                        "text-present",
-                        "completion-control",
-                        "message-finalized",
+                    "all-of": ["assistant-fresh", "text-present"],
+                    "any-of-groups": [
+                        ["completion-control", "more-actions-menu"],
+                        ["canvas-edit-control", "canvas-open-editor-control", "not-generating"],
+                        ["message-finalized", "not-generating"],
                     ],
                     "none-of": ["error-page"],
                 },
@@ -111,26 +128,64 @@ def test_response_complete_policy_never_regresses_to_the_stuck_stop_control_veto
         "stop-control is proven live-unreliable (sticks after real completion) "
         "and must stay advisory-only, never a completion veto"
     )
-    assert "message-finalized" in policy.all_of
-    assert "completion-control" in policy.all_of
+    assert {"completion-control", "more-actions-menu"} in {frozenset(g) for g in policy.any_of_groups}
 
 
-def test_response_complete_policy_never_regresses_to_either_witness_alone(): # GP17
-    """GP17 regression guard: completion-control and message-finalized were
-    proven live-unreliable INDEPENDENTLY (each can fire on a genuinely
-    incomplete turn and then stay persistently true through the whole
-    stability window, so text stability alone does not catch a shared
-    false-positive). Both must be required TOGETHER (all-of), never
-    accepted as sufficient alone (any-of) -- a future edit that silently
-    reverts to any-of would reintroduce the false-positive-early-completion
-    bug that produced real truncated live results on 2026-08-16."""
+def test_response_complete_policy_never_regresses_to_either_witness_alone(): # GP17, GP32
+    """GP17 regression guard: completion-control and its corroborating
+    partner were proven live-unreliable INDEPENDENTLY (each can fire on a
+    genuinely incomplete turn and then stay persistently true through the
+    whole stability window, so text stability alone does not catch a
+    shared false-positive). Both must be required TOGETHER within one
+    corroborating group, never accepted as sufficient alone (a flat
+    any-of) -- a future edit that silently reverts to a flat any-of would
+    reintroduce the false-positive-early-completion bug that produced
+    real truncated live results on 2026-08-16.
+
+    GP32 (2026-08-17): response-complete used to require its corroborating
+    pair via a single flat all-of, which made it permanently unsatisfiable
+    the moment ChatGPT removed the DOM marker one signal in that pair
+    (message-finalized) depended on -- a total block on completion
+    detection, not a degraded state. Moved to any-of-groups (a disjunction
+    of AND-groups) specifically so a future signal loss degrades to
+    surviving groups instead of total failure; every individual group
+    must still require its full pair together, which is what this test
+    guards, independent of which signals fill a given group."""
     policy = GptAutoConfig.from_dict(valid_config()).workflow.policy("response-complete")
     assert not policy.any_of, (
         "response-complete must not accept any single corroborating witness "
-        "alone -- completion-control and message-finalized are each "
-        "independently unreliable and must be required together"
+        "alone via a flat any-of -- each any-of-groups entry must require "
+        "its full pair together"
     )
-    assert {"completion-control", "message-finalized"} <= set(policy.all_of)
+    assert any(
+        {"completion-control", "more-actions-menu"} <= set(group)
+        for group in policy.any_of_groups
+    )
+    for group in policy.any_of_groups:
+        assert len(group) >= 2, (
+            "each any-of-groups entry must itself require more than one "
+            "corroborating signal -- a single-fact group would let that "
+            "one witness satisfy response-complete alone, reintroducing "
+            "the GP17 false-positive-early-completion bug"
+        )
+
+
+def test_response_complete_recognizes_the_canvas_response_variant():
+    """GP33 follow-up: ChatGPT's canvas/writing-block response type
+    (confirmed live 2026-08-17) renders a completely different end-of-turn
+    action bar than the standard chat-turn bubble -- completion-control and
+    more-actions-menu were confirmed document-scoped-absent for a
+    genuinely complete canvas turn, which would make response-complete
+    permanently unsatisfiable for that whole response variant (the exact
+    GP32 failure shape again). A second any-of-groups entry
+    (canvas-edit-control + canvas-open-editor-control) must be present so
+    the standard chat-bubble variant losing its signals doesn't take the
+    canvas variant down with it, and vice versa."""
+    policy = GptAutoConfig.from_dict(valid_config()).workflow.policy("response-complete")
+    assert any(
+        {"canvas-edit-control", "canvas-open-editor-control"} <= set(group)
+        for group in policy.any_of_groups
+    )
 
 
 def test_project_url_is_optional_for_project_name_discovery():
@@ -172,7 +227,146 @@ def test_live_workflow_does_not_treat_static_streaming_animation_as_busy() -> No
     document = yaml.safe_load(
         (root / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
     )
-    config = GptAutoConfig.from_dict(document)
+    config = GptAutoConfig.from_project_dict(document)
     signals = {item["name"]: item for item in config.workflow.bridge_signals()}
 
     assert ".streaming-animation" not in signals["streaming-indicator"]["selectors"]
+
+
+def _synthetic_snapshot(
+    dom_signals: list[str], *, assistant_id: str | None = "a1", generating: bool = False
+) -> ChatSnapshot:
+    return ChatSnapshot(
+        url="https://chatgpt.com/x",
+        composer_present=True,
+        composer_editable=True,
+        user_count=1,
+        assistant_count=1 if assistant_id else 0,
+        latest_assistant_id=assistant_id,
+        latest_user_text="hi",
+        latest_assistant_text="hello world" if assistant_id else None,
+        dom_signals=frozenset(dom_signals),
+        error_present=False,
+        generating=generating,
+    )
+
+
+def test_real_merged_config_response_complete_requires_both_witnesses_together() -> None:
+    """GP32 integration guard: exercises turn.py's real _facts() pipeline
+    against the ACTUAL trimmed, merged .audiagentic/config/providers/
+    gpt-auto.yaml (not the synthetic valid_config() fixture every other
+    test in this file uses) -- the one file every other test's fixture
+    comment explicitly says it cannot protect. Neither witness alone may
+    satisfy response-complete; only the pair together may."""
+    root = Path(__file__).resolve().parents[2]
+    document = yaml.safe_load(
+        (root / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
+    )
+    config = GptAutoConfig.from_project_dict(document)
+    policy = config.workflow.policy("response-complete")
+    baseline = _synthetic_snapshot([], assistant_id=None)
+
+    both = _facts(baseline, baseline, _synthetic_snapshot(["completion-control", "more-actions-menu"]))
+    assert policy.evaluate(both).satisfied
+
+    only_completion = _facts(baseline, baseline, _synthetic_snapshot(["completion-control"]))
+    assert not policy.evaluate(only_completion).satisfied
+
+    only_more_actions = _facts(baseline, baseline, _synthetic_snapshot(["more-actions-menu"]))
+    assert not policy.evaluate(only_more_actions).satisfied
+
+
+def test_real_merged_config_response_complete_recognizes_canvas_variant_alone() -> None:
+    """GP33 integration guard: a canvas/writing-block turn carries NEITHER
+    completion-control nor more-actions-menu (confirmed live 2026-08-17,
+    document-scoped-absent) -- only canvas-edit-control and
+    canvas-open-editor-control. response-complete must still resolve via
+    its second any-of-groups entry, against the real merged config, not
+    just the synthetic fixture."""
+    root = Path(__file__).resolve().parents[2]
+    document = yaml.safe_load(
+        (root / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
+    )
+    config = GptAutoConfig.from_project_dict(document)
+    policy = config.workflow.policy("response-complete")
+    baseline = _synthetic_snapshot([], assistant_id=None)
+
+    canvas_only = _facts(
+        baseline, baseline, _synthetic_snapshot(["canvas-edit-control", "canvas-open-editor-control"])
+    )
+    assert policy.evaluate(canvas_only).satisfied
+
+    canvas_single_witness = _facts(baseline, baseline, _synthetic_snapshot(["canvas-edit-control"]))
+    assert not policy.evaluate(canvas_single_witness).satisfied
+
+
+def test_real_merged_config_canvas_group_rejects_mid_generation_false_positive() -> None:
+    """GP34/code-review guard: live monitoring confirmed canvas-edit-control
+    and canvas-open-editor-control both appear within ~150 characters of a
+    response that ultimately reached ~1900 characters -- i.e. at
+    canvas-panel-creation time, not completion. Code review's own
+    hypothetical failure sequence: both canvas controls present while
+    ChatGPT is still genuinely mid-generation (a real pause, not yet the
+    final answer) must NOT satisfy response-complete. This is the concrete
+    scenario not-generating's addition to the canvas group exists to
+    catch -- without it, this test would have failed before tonight's fix
+    and did fail during code review's analysis of the pre-fix diff."""
+    root = Path(__file__).resolve().parents[2]
+    document = yaml.safe_load(
+        (root / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
+    )
+    config = GptAutoConfig.from_project_dict(document)
+    policy = config.workflow.policy("response-complete")
+    baseline = _synthetic_snapshot([], assistant_id=None)
+
+    mid_generation_canvas = _facts(
+        baseline,
+        baseline,
+        _synthetic_snapshot(
+            ["canvas-edit-control", "canvas-open-editor-control"], generating=True
+        ),
+    )
+    assert not policy.evaluate(mid_generation_canvas).satisfied
+
+    # Once generation genuinely stops, the same two signals DO satisfy it.
+    genuinely_done_canvas = _facts(
+        baseline,
+        baseline,
+        _synthetic_snapshot(
+            ["canvas-edit-control", "canvas-open-editor-control"], generating=False
+        ),
+    )
+    assert policy.evaluate(genuinely_done_canvas).satisfied
+
+
+def test_real_merged_config_message_finalized_group_covers_stalled_action_bar() -> None:
+    """GP39: live-observed on a trivial single-paragraph answer -- text
+    fully rendered and stable for several minutes with NEITHER
+    completion-control NOR more-actions-menu present anywhere in the
+    document (not just out of scope). message-finalized
+    ([data-is-last-node]) was present and correctly scoped the whole
+    time. Reinstated (removed under GP32 on the mistaken belief ChatGPT
+    had dropped it entirely -- it is conditional on the response's last
+    block being a plain paragraph, not gone) as a third any-of-groups
+    entry, paired with not-generating rather than completion-control
+    since completion-control never appearing at all is exactly the gap
+    this group routes around. Like the canvas group, message-finalized
+    alone (generating=True) must NOT satisfy response-complete -- GP17
+    proved it fires on genuinely-incomplete short responses too."""
+    root = Path(__file__).resolve().parents[2]
+    document = yaml.safe_load(
+        (root / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
+    )
+    config = GptAutoConfig.from_project_dict(document)
+    policy = config.workflow.policy("response-complete")
+    baseline = _synthetic_snapshot([], assistant_id=None)
+
+    stalled_action_bar = _facts(
+        baseline, baseline, _synthetic_snapshot(["message-finalized"], generating=False)
+    )
+    assert policy.evaluate(stalled_action_bar).satisfied
+
+    still_generating = _facts(
+        baseline, baseline, _synthetic_snapshot(["message-finalized"], generating=True)
+    )
+    assert not policy.evaluate(still_generating).satisfied

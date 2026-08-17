@@ -11,7 +11,10 @@ from audiagentic.components.providers.adapters.gpt_auto.cdp.cdp_browser import (
     CdpPageRef,
     CdpWindowBounds,
 )
-from audiagentic.components.providers.adapters.gpt_auto.cdp.client import CdpError
+from audiagentic.components.providers.adapters.gpt_auto.cdp.client import (
+    CdpError,
+    CdpStaleGenerationError,
+)
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
     GptAutoCdpBrowserController,
@@ -26,7 +29,7 @@ class _FakeClient:
         self.calls: list[tuple[str, dict, str | None]] = []
         self.next_target = 1
 
-    async def command(self, method, params=None, *, session_id=None, timeout=None):
+    async def command(self, method, params=None, *, session_id=None, timeout=None, required_generation=None):
         params = params or {}
         self.calls.append((method, params, session_id))
         if method == "Target.getTargets":
@@ -62,6 +65,74 @@ class _FakeClient:
         if method == "Runtime.evaluate":
             return {"result": {"value": {"ok": True}}}
         return {}
+
+
+class _GenerationRaceClient:
+    """Enforces required_generation the same way the real CdpClient does,
+    and simulates a reconnect completing in the gap between a session
+    finishing its attach sequence and the caller's actual work command
+    being sent -- the exact TOCTOU window GP18 code review flagged."""
+
+    def __init__(self) -> None:
+        self.connection_generation = 1
+        self._attach_count = 0
+        self.commands: list[tuple[str, str | None, int | None]] = []
+
+    async def command(self, method, params=None, *, session_id=None, timeout=None, required_generation=None):
+        self.commands.append((method, session_id, required_generation))
+        if required_generation is not None and required_generation != self.connection_generation:
+            raise CdpStaleGenerationError(
+                f"stale: required={required_generation} current={self.connection_generation}"
+            )
+        if method == "Target.attachToTarget":
+            self._attach_count += 1
+            return {"sessionId": f"session-gen{self.connection_generation}-{self._attach_count}"}
+        if method == "Page.setLifecycleEventsEnabled":
+            # A concurrent reconnect completes exactly after the FIRST
+            # session finishes attaching -- only once, so the retried
+            # attach converges instead of looping forever.
+            if self.connection_generation == 1:
+                self.connection_generation = 2
+            return {}
+        if method in {"Page.enable", "Target.setDiscoverTargets"}:
+            return {}
+        if method == "Target.getTargets":
+            return {"targetInfos": []}
+        if method == "Runtime.evaluate":
+            return {"result": {"value": "ok"}}
+        return {}
+
+
+@pytest.mark.asyncio
+async def test_session_command_retries_once_when_reconnect_happens_between_session_fetch_and_send():
+    """GP18 code-review follow-up (the specific test the reviewer asked
+    for): deliberately force a reconnect precisely between _session()
+    finishing and its session-scoped command being sent, and prove no
+    stale sessionId is ever actually transmitted -- the bridge must
+    detect the generation mismatch and retry with a freshly-attached
+    session instead of sending a doomed request."""
+    bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
+    client = _GenerationRaceClient()
+    bridge._client = client
+    bridge._known_connection_generation = client.connection_generation
+    bridge._pages["page-1"] = "target-1"
+
+    result = await bridge._session_command("page-1", "Runtime.evaluate", {"expression": "1"})
+
+    assert result == {"result": {"value": "ok"}}
+    attach_calls = [c for c in client.commands if c[0] == "Target.attachToTarget"]
+    assert len(attach_calls) == 2, "expected exactly one retry after the mid-attach generation bump"
+    # The fake logs a call before enforcing required_generation (mirroring
+    # the real client's own trace-then-check order), so the doomed
+    # generation-1 attempt is recorded too -- it must have been REJECTED
+    # (never actually reached a successful result), and the retry must
+    # have used the fresh, post-bump session.
+    runtime_calls = [c for c in client.commands if c[0] == "Runtime.evaluate"]
+    assert len(runtime_calls) == 2
+    rejected, retried = runtime_calls
+    assert rejected == ("Runtime.evaluate", "session-gen1-1", 1)
+    assert retried == ("Runtime.evaluate", "session-gen2-2", 2)
+    assert bridge._sessions["target-1"] == "session-gen2-2"
 
 
 @pytest.mark.asyncio
@@ -224,7 +295,7 @@ async def test_python_bridge_live_page_and_window_lifecycle():
         assert any(item["pageHandle"] == page["pageHandle"] for item in listed)
         html = (
             "data:text/html,<html><body>"
-            "<div class='ProseMirror' contenteditable='true'></div>"
+            "<div id='prompt-textarea' class='ProseMirror' contenteditable='true'></div>"
             "</body></html>"
         )
         await bridge.call("navigate", {"pageHandle": page["pageHandle"], "url": html})
