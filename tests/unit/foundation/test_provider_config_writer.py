@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 from audiagentic.components.providers.services.config.provider_config import (
@@ -15,6 +16,7 @@ from audiagentic.components.providers.services.config.provider_config import (
     patch_provider_config,
     set_provider_enabled,
 )
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import (
     get_implementation_state,
@@ -109,3 +111,51 @@ def test_feature_state_is_authoritative_for_enabled(tmp_path: Path) -> None:
     )
     set_implementation_state(tmp_path, "providers", "codex", ImplementationState(enabled=False))
     assert load_provider_config(tmp_path)["providers"]["codex"]["enabled"] is False
+
+
+# ── GP26: patch_provider_config write-time validation guard ─────────────────
+
+
+def test_patch_provider_config_validates_gpt_auto_before_persisting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GP26: an invalid gpt-auto project patch must be rejected WITHOUT writing."""
+    monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path / "audihome"))
+    path = _provider_yaml(tmp_path, "gpt-auto")
+
+    with pytest.raises(AudiaGenticError) as exc_info:
+        patch_provider_config(
+            tmp_path,
+            "gpt-auto",
+            {
+                "install-mode": "external-configured",
+                "access-mode": "none",
+                "settings": {
+                    "contract-version": "v1",
+                    "turn": {"response-timeout-seconds": "not-a-number"},
+                },
+            },
+        )
+
+    assert exc_info.value.code == "VAL-GPTAUTO-001"
+    assert not path.exists()
+
+
+def test_patch_provider_config_persists_valid_gpt_auto(tmp_path: Path) -> None:
+    path = _provider_yaml(tmp_path, "gpt-auto")
+
+    result = patch_provider_config(
+        tmp_path,
+        "gpt-auto",
+        {
+            "install-mode": "external-configured",
+            "access-mode": "none",
+            "settings": {
+                "contract-version": "v1",
+                "turn": {"response-timeout-seconds": 42},
+            },
+        },
+    )
+
+    assert result["providers"]["gpt-auto"]["settings"]["turn"]["response-timeout-seconds"] == 42
+    assert path.exists()
