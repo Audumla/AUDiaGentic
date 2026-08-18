@@ -1,0 +1,15 @@
+[package]
+name = "audiagentic-mcp-smoke"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+rmcp.workspace = true
+tokio.workspace = true
+
+[[bin]]
+name = "audiagentic-mcp-smoke"
+path = "src/main.rs"
