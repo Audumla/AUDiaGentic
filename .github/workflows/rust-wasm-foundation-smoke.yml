@@ -34,6 +34,11 @@ jobs:
           targets: wasm32-wasip2
           components: clippy,rustfmt
 
+      - name: Install native build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
