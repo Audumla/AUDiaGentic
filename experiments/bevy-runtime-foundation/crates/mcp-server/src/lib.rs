@@ -32,16 +32,17 @@ impl AudiagenticMcpServer {
 
 #[tool_router(server_handler)]
 impl AudiagenticMcpServer {
-    #[tool(description = "Add two integers. This is intentionally a simple tool that does not use Bevy.")]
+    #[tool(
+        description = "Add two integers. This is intentionally a simple tool that does not use Bevy."
+    )]
     fn add(&self, Parameters(AddParams { a, b }): Parameters<AddParams>) -> String {
         (a + b).to_string()
     }
 
-    #[tool(description = "Run a batch of workflow instances through the Bevy ECS runtime and return execution metrics.")]
-    async fn workflow_batch(
-        &self,
-        Parameters(params): Parameters<WorkflowBatchParams>,
-    ) -> String {
+    #[tool(
+        description = "Run a batch of workflow instances through the Bevy ECS runtime and return execution metrics."
+    )]
+    async fn workflow_batch(&self, Parameters(params): Parameters<WorkflowBatchParams>) -> String {
         let result = self
             .runtime
             .run_batch(BatchSpec {
