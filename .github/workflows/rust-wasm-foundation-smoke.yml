@@ -47,12 +47,6 @@ jobs:
             experiments/rust-wasm-foundation/components/workflow-alt
             experiments/rust-wasm-foundation/components/process
 
-      - name: Install pinned wash
-        run: |
-          cargo install --git https://github.com/wasmCloud/wasmCloud.git \
-            --rev 998d4a75598a5269af07be2c21682f334f642eaa \
-            wash --locked --no-default-features
-
       - name: Rust formatting
         working-directory: experiments/rust-wasm-foundation
         run: |
