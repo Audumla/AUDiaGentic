@@ -1,0 +1,7 @@
+package audiagentic:process@0.1.0;
+
+world process {
+    import audiagentic:workflow/engine@0.1.0;
+    import audiagentic:host/audit@0.1.0;
+    export wasi:http/incoming-handler@0.2.2;
+}

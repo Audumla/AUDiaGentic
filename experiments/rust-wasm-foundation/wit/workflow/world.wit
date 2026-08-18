@@ -1,0 +1,9 @@
+package audiagentic:workflow@0.1.0;
+
+interface engine {
+    execute: func(input: string) -> result<string, string>;
+}
+
+world provider {
+    export engine;
+}

@@ -1,0 +1,9 @@
+package audiagentic:host@0.1.0;
+
+interface audit {
+    emit: func(action: string, detail: string);
+}
+
+world provider {
+    import audit;
+}

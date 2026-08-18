@@ -4,12 +4,12 @@ on:
   push:
     branches: ["spike/rust-wasm-foundation"]
     paths:
-      - "experiments/rust-wasm-foundation-spike.tar.gz"
+      - "experiments/rust-wasm-foundation/**"
       - ".github/workflows/rust-wasm-foundation-smoke.yml"
   pull_request:
     branches: ["ASA-ACP-DI-refactor"]
     paths:
-      - "experiments/rust-wasm-foundation-spike.tar.gz"
+      - "experiments/rust-wasm-foundation/**"
       - ".github/workflows/rust-wasm-foundation-smoke.yml"
   workflow_dispatch:
 
@@ -19,13 +19,6 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-
-      - name: Expand spike source
-        run: |
-          mkdir -p experiments
-          tar -xzf experiments/rust-wasm-foundation-spike.tar.gz -C experiments
-          rm -rf experiments/rust-wasm-foundation
-          mv experiments/audiagentic-rust-wasm-spike experiments/rust-wasm-foundation
 
       - name: Install Rust 1.94 + WASIp2 target
         uses: dtolnay/rust-toolchain@master

@@ -1,0 +1,4 @@
+target/
+components/*/target/
+components/*/wit/deps/
+.DS_Store
