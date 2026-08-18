@@ -145,7 +145,7 @@ async fn start_case(
     ensure!(
         matches!(
             stopped.workload_status.workload_state,
-            WorkloadState::Completed | WorkloadState::NotFound
+            WorkloadState::Stopping | WorkloadState::Completed | WorkloadState::NotFound
         ),
         "{name} stop failed: {:?}: {}",
         stopped.workload_status.workload_state,
