@@ -8,7 +8,9 @@ mod bindings {
 use bindings::{
     audiagentic::{host::audit, workflow::engine},
     exports::wasi::http::incoming_handler::Guest,
-    wasi::http::types::{Fields, IncomingRequest, OutgoingBody, OutgoingResponse, ResponseOutparam},
+    wasi::http::types::{
+        Fields, IncomingRequest, OutgoingBody, OutgoingResponse, ResponseOutparam,
+    },
 };
 
 struct Process;
