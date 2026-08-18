@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, ensure};
 use rmcp::{
-    ClientInfo, ServiceExt,
-    model::CallToolRequestParams,
+    ServiceExt,
+    model::{CallToolRequestParams, ClientInfo},
     object,
     transport::{StreamableHttpClientTransport, TokioChildProcess},
 };
