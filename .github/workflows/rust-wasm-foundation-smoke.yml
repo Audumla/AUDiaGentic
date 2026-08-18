@@ -1,0 +1,58 @@
+name: Rust Wasm Foundation Smoke
+
+on:
+  push:
+    branches: ["spike/rust-wasm-foundation"]
+    paths:
+      - "experiments/rust-wasm-foundation-spike.tar.gz"
+      - ".github/workflows/rust-wasm-foundation-smoke.yml"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Expand spike source
+        run: |
+          mkdir -p experiments
+          tar -xzf experiments/rust-wasm-foundation-spike.tar.gz -C experiments
+          rm -rf experiments/rust-wasm-foundation
+          mv experiments/audiagentic-rust-wasm-spike experiments/rust-wasm-foundation
+
+      - name: Install Rust 1.94 + WASIp2 target
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.94.0
+          targets: wasm32-wasip2
+          components: clippy,rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            experiments/rust-wasm-foundation/host
+            experiments/rust-wasm-foundation/components/workflow-default
+            experiments/rust-wasm-foundation/components/workflow-alt
+            experiments/rust-wasm-foundation/components/process
+
+      - name: Install pinned wash
+        run: |
+          cargo install --git https://github.com/wasmCloud/wasmCloud.git \
+            --rev 998d4a75598a5269af07be2c21682f334f642eaa \
+            wash --locked --no-default-features
+
+      - name: Rust formatting
+        working-directory: experiments/rust-wasm-foundation
+        run: |
+          cargo fmt --manifest-path host/Cargo.toml -- --check
+          cargo fmt --manifest-path components/workflow-default/Cargo.toml -- --check
+          cargo fmt --manifest-path components/workflow-alt/Cargo.toml -- --check
+          cargo fmt --manifest-path components/process/Cargo.toml -- --check
+
+      - name: Build and execute real smoke
+        working-directory: experiments/rust-wasm-foundation
+        env:
+          RUST_LOG: info
+        run: ./scripts/smoke.sh
