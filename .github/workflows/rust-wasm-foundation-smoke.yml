@@ -13,6 +13,10 @@ on:
       - ".github/workflows/rust-wasm-foundation-smoke.yml"
   workflow_dispatch:
 
+concurrency:
+  group: rust-wasm-foundation-smoke
+  cancel-in-progress: true
+
 jobs:
   smoke:
     runs-on: ubuntu-latest
