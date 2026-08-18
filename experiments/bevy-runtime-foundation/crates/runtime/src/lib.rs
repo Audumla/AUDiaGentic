@@ -1,6 +1,6 @@
 use std::{thread, time::Instant};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use bevy_app::{App, Plugin, Update};
 use bevy_ecs::{prelude::*, schedule::IntoScheduleConfigs};
 use serde::Serialize;
@@ -75,10 +75,7 @@ impl Plugin for MetricsPlugin {
     }
 }
 
-fn advance_runs(
-    mut runs: Query<&mut WorkflowRun>,
-    mut finished: MessageWriter<RunFinished>,
-) {
+fn advance_runs(mut runs: Query<&mut WorkflowRun>, mut finished: MessageWriter<RunFinished>) {
     for mut run in &mut runs {
         match run.state {
             RunState::Ready => run.state = RunState::Running,
@@ -116,10 +113,7 @@ fn advance_runs(
     }
 }
 
-fn collect_finished(
-    mut messages: MessageReader<RunFinished>,
-    mut stats: ResMut<RuntimeStats>,
-) {
+fn collect_finished(mut messages: MessageReader<RunFinished>, mut stats: ResMut<RuntimeStats>) {
     for message in messages.read() {
         if message.cancelled {
             stats.cancelled += 1;
@@ -149,8 +143,8 @@ fn execute_batch(app: &mut App, spec: BatchSpec) -> Result<BatchResult> {
 
     for i in 1..=spec.runs {
         let retry_budget = u8::from(spec.retry_every > 0 && i % spec.retry_every == 0);
-        let cancel_on_tick = (spec.cancel_every > 0 && i % spec.cancel_every == 0)
-            .then_some(3.min(spec.steps));
+        let cancel_on_tick =
+            (spec.cancel_every > 0 && i % spec.cancel_every == 0).then_some(3.min(spec.steps));
 
         app.world_mut().spawn(WorkflowRun {
             remaining: spec.steps,
