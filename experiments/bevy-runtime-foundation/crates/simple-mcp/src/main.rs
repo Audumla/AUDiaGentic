@@ -1,9 +1,4 @@
-use rmcp::{
-    ServiceExt,
-    handler::server::wrapper::Parameters,
-    tool, tool_router,
-    transport::stdio,
-};
+use rmcp::{ServiceExt, handler::server::wrapper::Parameters, tool, tool_router, transport::stdio};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
