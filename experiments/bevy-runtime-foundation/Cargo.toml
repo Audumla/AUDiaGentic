@@ -1,0 +1,37 @@
+[workspace]
+members = [
+  "crates/runtime",
+  "crates/mcp-server",
+  "crates/mcp-smoke",
+  "crates/simple-mcp",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.94"
+version = "0.1.0"
+license = "MIT"
+
+[workspace.dependencies]
+anyhow = "1"
+axum = "0.8"
+bevy_app = "0.19.0"
+bevy_ecs = "0.19.0"
+rmcp = { version = "3.0.1", features = [
+  "server",
+  "client",
+  "macros",
+  "schemars",
+  "transport-io",
+  "transport-child-process",
+  "transport-streamable-http-server",
+  "transport-streamable-http-client-reqwest",
+] }
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
