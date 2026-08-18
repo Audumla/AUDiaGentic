@@ -8,20 +8,17 @@ use rmcp::{
 use tokio::process::Command;
 
 async fn exercise_stdio(server_path: &str) -> Result<()> {
-    let client = ()
-        .serve(TokioChildProcess::new(Command::new(server_path))?)
-        .await
-        .context("connect to stdio MCP server")?;
+    let client =
+        ().serve(TokioChildProcess::new(Command::new(server_path))?)
+            .await
+            .context("connect to stdio MCP server")?;
 
     let tools = client.list_all_tools().await?;
     ensure!(tools.iter().any(|tool| tool.name == "add"));
     ensure!(tools.iter().any(|tool| tool.name == "workflow_batch"));
 
     let add = client
-        .call_tool(
-            CallToolRequestParams::new("add")
-                .with_arguments(object!({ "a": 20, "b": 22 })),
-        )
+        .call_tool(CallToolRequestParams::new("add").with_arguments(object!({ "a": 20, "b": 22 })))
         .await?;
     ensure!(add.is_error != Some(true), "stdio add failed: {add:?}");
 
@@ -58,10 +55,7 @@ async fn exercise_http(uri: &str) -> Result<()> {
     ensure!(tools.iter().any(|tool| tool.name == "workflow_batch"));
 
     let add = client
-        .call_tool(
-            CallToolRequestParams::new("add")
-                .with_arguments(object!({ "a": 40, "b": 2 })),
-        )
+        .call_tool(CallToolRequestParams::new("add").with_arguments(object!({ "a": 40, "b": 2 })))
         .await?;
     ensure!(add.is_error != Some(true), "http add failed: {add:?}");
 
@@ -89,7 +83,9 @@ async fn exercise_http(uri: &str) -> Result<()> {
 #[tokio::main]
 async fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
-    let mode = args.next().context("usage: audiagentic-mcp-smoke <stdio|http> <target>")?;
+    let mode = args
+        .next()
+        .context("usage: audiagentic-mcp-smoke <stdio|http> <target>")?;
     let target = args.next().context("missing target")?;
 
     match mode.as_str() {
