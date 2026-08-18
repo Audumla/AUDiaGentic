@@ -1,0 +1,18 @@
+[package]
+name = "audiagentic-rust-wasm-smoke"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+
+[dependencies]
+anyhow = "1.0.98"
+async-trait = "0.1.89"
+bytes = "1"
+reqwest = { version = "0.12.20", default-features = false, features = ["rustls-tls"] }
+semver = "1.0.26"
+tokio = { version = "1.45.1", features = ["full"] }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+uuid = { version = "1.17.0", features = ["v4"] }
+wasmtime = { version = "47.0.3", features = ["component-model", "component-model-async"] }
+wash-runtime = { git = "https://github.com/wasmCloud/wasmCloud.git", rev = "998d4a75598a5269af07be2c21682f334f642eaa", package = "wash-runtime", default-features = false }
