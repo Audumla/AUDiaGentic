@@ -4,9 +4,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use audiagentic_file_store::{FileStoreError, atomic_write_json, read_json};
-use audiagentic_reconcile::{
-    Change, Conflict, DesiredSet, OwnershipRegistry, Plan, Receipt, plan,
-};
+use audiagentic_reconcile::{Change, Conflict, DesiredSet, OwnershipRegistry, Plan, Receipt, plan};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use thiserror::Error;
@@ -136,7 +134,10 @@ fn read_ownership(path: &Path) -> Result<OwnershipFile, ManagedConfigError> {
     Ok(state)
 }
 
-fn apply_plan(observed: &mut BTreeMap<String, Value>, planned: &Plan<Value>) -> (Vec<String>, Vec<String>) {
+fn apply_plan(
+    observed: &mut BTreeMap<String, Value>,
+    planned: &Plan<Value>,
+) -> (Vec<String>, Vec<String>) {
     let mut updated = Vec::new();
     let mut removed = Vec::new();
     for change in &planned.changes {
@@ -194,13 +195,21 @@ mod tests {
         let ownership = dir.join("runtime/owners.json");
         atomic_write_json(&target, &json!({"user": {"keep": true}})).unwrap();
 
-        let first = sync_json(&target, &ownership, &desired("old", json!({"command": "one"})))
-            .unwrap();
+        let first = sync_json(
+            &target,
+            &ownership,
+            &desired("old", json!({"command": "one"})),
+        )
+        .unwrap();
         assert!(first.ok());
         assert!(first.changed);
 
-        let second = sync_json(&target, &ownership, &desired("new", json!({"command": "two"})))
-            .unwrap();
+        let second = sync_json(
+            &target,
+            &ownership,
+            &desired("new", json!({"command": "two"})),
+        )
+        .unwrap();
         assert!(second.ok());
         assert!(second.updated.contains(&"new".to_owned()));
         assert!(second.removed.contains(&"old".to_owned()));
