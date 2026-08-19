@@ -48,7 +48,10 @@ impl fmt::Display for IdentifierError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Empty => f.write_str("identifier must not be empty"),
-            Self::Invalid(value) => write!(f, "identifier contains invalid whitespace/control characters: {value:?}"),
+            Self::Invalid(value) => write!(
+                f,
+                "identifier contains invalid whitespace/control characters: {value:?}"
+            ),
         }
     }
 }
@@ -61,6 +64,7 @@ id_type!(ComponentId);
 id_type!(CapabilityId);
 id_type!(CorrelationId);
 id_type!(DiagnosticCode);
+id_type!(ArtifactRef);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -134,6 +138,45 @@ impl ComponentManifest {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ComponentSelection {
+    pub id: ComponentId,
+    pub artifact: ArtifactRef,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ApplicationManifest {
+    pub schema_version: u32,
+    pub id: ApplicationId,
+    #[serde(default)]
+    pub components: Vec<ComponentSelection>,
+}
+
+impl ApplicationManifest {
+    pub fn validate(&self) -> Result<(), Diagnostic> {
+        if self.schema_version == 0 {
+            return Err(Diagnostic::new(
+                DiagnosticCode::new("CORE-APP-MANIFEST-001").expect("static diagnostic code"),
+                Severity::Error,
+                "application manifest schema_version must be greater than zero",
+            ));
+        }
+
+        let mut seen = BTreeSet::new();
+        for component in &self.components {
+            if !seen.insert(component.id.clone()) {
+                return Err(Diagnostic::new(
+                    DiagnosticCode::new("CORE-APP-MANIFEST-002")
+                        .expect("static diagnostic code"),
+                    Severity::Error,
+                    format!("component {} is selected more than once", component.id),
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,7 +186,9 @@ mod tests {
         assert_eq!(ApplicationId::new(""), Err(IdentifierError::Empty));
         assert!(CapabilityId::new("workflow\nexecute").is_err());
         assert_eq!(
-            CapabilityId::new("audiagentic:workflow/engine@1").unwrap().as_str(),
+            CapabilityId::new("audiagentic:workflow/engine@1")
+                .unwrap()
+                .as_str(),
             "audiagentic:workflow/engine@1"
         );
     }
@@ -157,5 +202,22 @@ mod tests {
             requires: vec![],
         };
         assert!(manifest.validate().is_ok());
+    }
+
+    #[test]
+    fn application_manifest_rejects_duplicate_component_selection() {
+        let component = ComponentSelection {
+            id: ComponentId::new("workflow").unwrap(),
+            artifact: ArtifactRef::new("oci://example/workflow:1").unwrap(),
+        };
+        let manifest = ApplicationManifest {
+            schema_version: 1,
+            id: ApplicationId::new("research").unwrap(),
+            components: vec![component.clone(), component],
+        };
+        assert_eq!(
+            manifest.validate().unwrap_err().code.as_str(),
+            "CORE-APP-MANIFEST-002"
+        );
     }
 }
