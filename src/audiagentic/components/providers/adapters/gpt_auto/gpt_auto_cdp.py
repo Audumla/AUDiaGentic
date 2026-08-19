@@ -83,8 +83,17 @@ _SNAPSHOT_FN = r"""
   const userText = (element) => boundedText(
     element?.querySelector('[data-testid="collapsible-user-message-content"]') || element
   );
-  const selectors = '[data-testid="stop-button"], [data-testid="stop-generating"], .result-streaming, .result-thinking, [aria-busy="true"]';
-  const generating = Array.from(document.querySelectorAll(selectors)).some(shown);
+  // generating mirrors the same per-signal-scoped evidence the domSignals
+  // walk above already computes -- stop-control stays document-scoped (the
+  // stop button lives outside the assistant-turn subtree, per
+  // defaults.yaml), while streaming/thinking/busy-indicator stay scoped to
+  // latest-assistant-turn (so a stale class on an OLDER, already-finished
+  // message elsewhere in a long conversation can't pin generating=true for
+  // the CURRENT turn). Previously this was a second, always-document-wide
+  // selector string that duplicated and drifted from the config-driven
+  // signals (it was even missing button[aria-label*="stop" i] and
+  // [data-busy="true"], both already covered by domSignals).
+  const generating = !!(domSignals["stop-control"] || domSignals["streaming-indicator"] || domSignals["thinking-indicator"] || domSignals["busy-indicator"]);
   // GP35: a canvas/writing-block turn (seen live 2026-08-17) renders its
   // OWN .ProseMirror-based contenteditable inline in the conversation
   // history (data-testid="writing-block-container"), positioned BEFORE

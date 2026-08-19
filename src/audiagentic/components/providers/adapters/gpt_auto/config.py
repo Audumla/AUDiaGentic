@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import lru_cache
@@ -14,6 +16,55 @@ from audiagentic.foundation.io import load_yaml_file
 from audiagentic.foundation.workflow import EvidencePolicy
 
 _DEFAULTS_PATH = Path(__file__).with_name("defaults.yaml")
+
+# gpt-auto only connects to an already-running browser via CDP -- it never
+# launches one -- so there is nothing to "install" here. These are just the
+# well-known install locations for CDP-capable Chromium browsers per
+# platform, used to turn a bare "file not found" into an actionable
+# suggestion (or confirm the machine has no candidate at all).
+_WINDOWS_BROWSER_CANDIDATES = (
+    r"%ProgramFiles%\BraveSoftware\Brave-Browser\Application\brave.exe",
+    r"%ProgramFiles(x86)%\BraveSoftware\Brave-Browser\Application\brave.exe",
+    r"%LocalAppData%\BraveSoftware\Brave-Browser\Application\brave.exe",
+    r"%ProgramFiles%\Google\Chrome\Application\chrome.exe",
+    r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe",
+    r"%LocalAppData%\Google\Chrome\Application\chrome.exe",
+)
+_MACOS_BROWSER_CANDIDATES = (
+    "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+)
+_LINUX_BROWSER_CANDIDATES = (
+    "/usr/bin/brave-browser",
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/snap/bin/brave",
+    "/snap/bin/chromium",
+)
+
+
+def discover_browser_candidates() -> tuple[Path, ...]:
+    """Probe well-known install locations for a CDP-capable browser.
+
+    Detection only -- gpt-auto never launches or installs a browser, it
+    connects to one already running with --remote-debugging-port. Returns
+    every candidate that actually exists on this machine, most-preferred
+    first (Brave before Chrome, matching the packaged default).
+    """
+    if sys.platform == "win32":
+        raw_candidates = _WINDOWS_BROWSER_CANDIDATES
+    elif sys.platform == "darwin":
+        raw_candidates = _MACOS_BROWSER_CANDIDATES
+    else:
+        raw_candidates = _LINUX_BROWSER_CANDIDATES
+    found: list[Path] = []
+    for raw in raw_candidates:
+        candidate = Path(os.path.expandvars(raw))
+        if candidate.is_file() and candidate not in found:
+            found.append(candidate)
+    return tuple(found)
 
 # GP21: contract-version is the real schema contract, distinct from the
 # resolved GptAutoConfig.contract_version this module always produces.
@@ -199,7 +250,12 @@ class GptAutoConfig:
         )
         executable = Path(_string(browser_data, "executable"))
         if not executable.is_file():
-            _invalid("browser.executable must name an existing file")
+            candidates = discover_browser_candidates()
+            if candidates:
+                hint = "; detected on this machine: " + ", ".join(str(c) for c in candidates)
+            else:
+                hint = "; no supported browser (Brave/Chrome) was detected on this machine"
+            _invalid(f"browser.executable must name an existing file (got {executable}){hint}")
         port = _integer(browser_data, "remote-debugging-port")
         if not 1 <= port <= 65535:
             _invalid("browser.remote-debugging-port must be between 1 and 65535")
@@ -383,6 +439,29 @@ def resolve_gpt_auto_config(
     return GptAutoConfig.from_dict(merged)
 
 
+def _check_gpt_auto_dependencies() -> None:
+    """Fail with an actionable message if the gpt-auto extra isn't installed.
+
+    gpt-auto's CDP transport requires ``websockets``, which lives in the
+    optional ``gpt-auto`` extra (not a base dependency, so plain installs
+    stay lean). A project that has actually configured gpt-auto needs it
+    though -- catch the gap here, at config validation, rather than letting
+    it surface as an ImportError deep inside a session turn.
+    """
+    try:
+        import websockets  # noqa: F401
+    except ImportError as exc:
+        raise AudiaGenticError(
+            code="VAL-GPTAUTO-002",
+            kind="providers",
+            message=(
+                "gpt-auto is configured but the 'gpt-auto' extra is not installed. "
+                "Run: pip install \"audiagentic[gpt-auto]\""
+            ),
+            details={"missing-dependency": "websockets"},
+        ) from exc
+
+
 def validate_machine_gpt_auto_config() -> None:
     """Resolve packaged defaults + machine override and validate compatibility.
 
@@ -390,6 +469,12 @@ def validate_machine_gpt_auto_config() -> None:
     the shared foundation every project on this machine builds on. Raises
     :class:`~audiagentic.foundation.contracts.errors.AudiaGenticError`
     (VAL-GPTAUTO-001) when the machine-level gpt-auto config is invalid.
+
+    Runs unconditionally on every gateway startup regardless of whether any
+    project uses gpt-auto, so it must NOT gate on the optional 'gpt-auto'
+    extra being installed -- that would make gpt-auto's dependency mandatory
+    for the whole shared gateway. See validate_project_gpt_auto_config for
+    the per-project, non-fatal dependency check.
     """
     GptAutoConfig.from_dict(
         deep_merge(provider_settings(_load_packaged_defaults()), _load_machine_override())
@@ -407,6 +492,7 @@ def validate_project_gpt_auto_config(project_root: Path) -> GptAutoConfig:
         load_provider_settings,
     )
 
+    _check_gpt_auto_dependencies()
     settings = load_provider_settings(project_root, "gpt-auto")
     return resolve_gpt_auto_config(settings, provider_id="gpt-auto")
 

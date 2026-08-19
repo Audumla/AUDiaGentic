@@ -349,6 +349,17 @@ class GptAutoProviderRuntime:
                 chat.bridge_replaced()
             if old:
                 await old.stop()
+            # Only relaunch the browser immediately if a turn is actively
+            # in flight right now -- that is genuine active demand this
+            # instant needs. A disconnect with no active turn (idle chats,
+            # or no chats at all) must NOT eagerly relaunch a browser
+            # nobody is using; instead land in FAILED and let the next
+            # real actor (a chat starting a turn, ensure_dedicated_window_
+            # anchor, etc.) drive the ordinary STOPPED/FAILED -> CONNECTING
+            # lazy path in ensure_available().
+            if not any(chat.active_turn_id is not None for chat in self._chats.values()):
+                self._move(ProviderState.FAILED)
+                return
         await self.ensure_available()
         pages = await self.bridge.call("list_pages")
         for chat in tuple(self._chats.values()):
