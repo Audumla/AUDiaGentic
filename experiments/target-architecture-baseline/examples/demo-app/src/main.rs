@@ -3,7 +3,9 @@
 use std::sync::Arc;
 
 use audiagentic_application::Application;
-use audiagentic_core::{ApplicationContext, ApplicationId, ApplicationInstanceId, ApplicationManifest};
+use audiagentic_core::{
+    ApplicationContext, ApplicationId, ApplicationInstanceId, ApplicationManifest,
+};
 use target_baseline_demo_capability::Greeting;
 
 struct DemoState {
