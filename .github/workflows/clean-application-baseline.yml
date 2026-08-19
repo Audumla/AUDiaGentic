@@ -1,0 +1,35 @@
+name: clean-application-baseline
+
+on:
+  push:
+    branches:
+      - spike/clean-application-baseline
+  pull_request:
+    paths:
+      - 'experiments/clean-application-baseline/**'
+      - 'experiments/bevy-runtime-foundation/**'
+      - 'experiments/rust-wasm-foundation/**'
+      - '.github/workflows/clean-application-baseline.yml'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.95.0'
+          targets: wasm32-wasip2
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            experiments/clean-application-baseline -> target
+            experiments/bevy-runtime-foundation -> target
+            experiments/rust-wasm-foundation/host -> target
+            experiments/rust-wasm-foundation/components/process -> target
+            experiments/rust-wasm-foundation/components/workflow-default -> target
+            experiments/rust-wasm-foundation/components/workflow-alt -> target
+      - name: Run clean baseline smoke
+        run: bash experiments/clean-application-baseline/scripts/smoke.sh
