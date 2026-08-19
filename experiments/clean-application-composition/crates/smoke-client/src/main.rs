@@ -30,8 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )?;
             let reply = client
                 .call_tool(
-                    CallToolRequestParams::new("greet")
-                        .with_arguments(object!({ "name": "Ada" })),
+                    CallToolRequestParams::new("greet").with_arguments(object!({ "name": "Ada" })),
                 )
                 .await?;
             require(
@@ -60,8 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let greet_reply = client
                 .call_tool(
-                    CallToolRequestParams::new("greet")
-                        .with_arguments(object!({ "name": "Ada" })),
+                    CallToolRequestParams::new("greet").with_arguments(object!({ "name": "Ada" })),
                 )
                 .await?;
             require(
@@ -107,8 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let greet_reply = client
                 .call_tool(
-                    CallToolRequestParams::new("greet")
-                        .with_arguments(object!({ "name": "Ada" })),
+                    CallToolRequestParams::new("greet").with_arguments(object!({ "name": "Ada" })),
                 )
                 .await?;
             require(
