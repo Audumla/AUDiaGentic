@@ -6,7 +6,7 @@ use audiagentic_application::Application;
 use audiagentic_core::{
     ApplicationContext, ApplicationId, ApplicationInstanceId, ApplicationManifest,
 };
-use target_baseline_demo_capability::Greeting;
+use target_baseline_demo_capability::{Greeting, GreetingError};
 
 struct DemoState {
     greeting: Arc<dyn Greeting>,
@@ -15,8 +15,8 @@ struct DemoState {
 struct PlainGreeting;
 
 impl Greeting for PlainGreeting {
-    fn greet(&self, name: &str) -> String {
-        format!("hello {name}")
+    fn greet(&self, name: &str) -> Result<String, GreetingError> {
+        Ok(format!("hello {name}"))
     }
 }
 
@@ -35,6 +35,9 @@ fn main() {
         },
     );
 
-    assert_eq!(application.state().greeting.greet("world"), "hello world");
+    assert_eq!(
+        application.state().greeting.greet("world").unwrap(),
+        "hello world"
+    );
     println!("TARGET_BASELINE_OK");
 }
