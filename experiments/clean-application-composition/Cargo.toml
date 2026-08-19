@@ -42,3 +42,4 @@ tokio-util = "0.7"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 wasmtime = { version = "=47.0.3", features = ["component-model"] }
+wasmtime-wasi = "=47.0.3"
