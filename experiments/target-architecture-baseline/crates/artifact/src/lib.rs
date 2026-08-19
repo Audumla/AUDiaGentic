@@ -50,7 +50,9 @@ pub enum ArtifactError {
         #[source]
         source: std::io::Error,
     },
-    #[error("artifact digest mismatch for component {component}: expected {expected}, got {actual}")]
+    #[error(
+        "artifact digest mismatch for component {component}: expected {expected}, got {actual}"
+    )]
     DigestMismatch {
         component: ComponentId,
         expected: ArtifactDigest,
@@ -123,7 +125,8 @@ pub fn sha256_digest(bytes: &[u8]) -> Result<ArtifactDigest, ArtifactError> {
         use std::fmt::Write as _;
         write!(&mut encoded, "{byte:02x}").expect("writing to String cannot fail");
     }
-    ArtifactDigest::try_from(encoded).map_err(|error| ArtifactError::InvalidGeneratedDigest(error.to_string()))
+    ArtifactDigest::try_from(encoded)
+        .map_err(|error| ArtifactError::InvalidGeneratedDigest(error.to_string()))
 }
 
 #[cfg(test)]
@@ -149,10 +152,8 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("component.wasm"), b"component bytes").unwrap();
 
-        let mut manifest = ApplicationManifest::new(
-            ApplicationId::try_from("demo").unwrap(),
-            "1.0.0",
-        );
+        let mut manifest =
+            ApplicationManifest::new(ApplicationId::try_from("demo").unwrap(), "1.0.0");
         let mut spec = ComponentSpec::new(
             ComponentId::try_from("example").unwrap(),
             ArtifactRef::try_from("file:component.wasm").unwrap(),
