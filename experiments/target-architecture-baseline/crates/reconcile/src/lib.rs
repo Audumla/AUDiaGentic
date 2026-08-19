@@ -106,9 +106,9 @@ impl OwnershipRegistry {
 
     fn owner_of_name(&self, name: &str) -> Option<(&OwnerId, &ManagedId)> {
         self.owners.iter().find_map(|(owner, entries)| {
-            entries
-                .iter()
-                .find_map(|(managed_id, owned_name)| (owned_name == name).then_some((owner, managed_id)))
+            entries.iter().find_map(|(managed_id, owned_name)| {
+                (owned_name == name).then_some((owner, managed_id))
+            })
         })
     }
 }
@@ -181,10 +181,6 @@ where
         .get(&desired.owner)
         .cloned()
         .unwrap_or_default();
-    let next_scope = next_registry
-        .owners
-        .entry(desired.owner.clone())
-        .or_default();
     let mut changes = Vec::new();
     let mut conflicts = Vec::new();
     let mut scheduled_removals = BTreeSet::new();
@@ -202,7 +198,11 @@ where
             });
             scheduled_removals.insert(old_name.clone());
         }
-        next_scope.remove(managed_id);
+        next_registry
+            .owners
+            .entry(desired.owner.clone())
+            .or_default()
+            .remove(managed_id);
     }
 
     for (managed_id, item) in &desired.items {
@@ -349,14 +349,27 @@ mod tests {
         assert!(result.is_safe());
         assert!(result.changes.iter().any(|change| matches!(
             change,
-            Change::Upsert { name, before: None, after: 2, .. } if name == "new-name"
+            Change::Upsert {
+                name,
+                before: None,
+                after: 2,
+                ..
+            } if name == "new-name"
         )));
         assert!(result.changes.iter().any(|change| matches!(
             change,
-            Change::Remove { name, before: 1, .. } if name == "old-name"
+            Change::Remove {
+                name,
+                before: 1,
+                ..
+            } if name == "old-name"
         )));
         assert_eq!(
-            result.next_registry.names_for(&owner).unwrap().get(&managed_id),
+            result
+                .next_registry
+                .names_for(&owner)
+                .unwrap()
+                .get(&managed_id),
             Some(&"new-name".to_owned())
         );
     }
