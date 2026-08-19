@@ -11,6 +11,7 @@ async fn main() -> Result<(), String> {
     let minimal = Application::minimal();
     assert!(!minimal.has_workflow());
     assert!(!minimal.has_component_probe());
+    assert_eq!(minimal.context().application.as_str(), "baseline");
     assert!(
         minimal
             .run_workflow(WorkflowRequest { runs: 1, steps: 1 })
@@ -21,8 +22,9 @@ async fn main() -> Result<(), String> {
     let wasm_smoke = env::var("AUDIAGENTIC_WASM_SMOKE_BIN")
         .map_err(|_| "AUDIAGENTIC_WASM_SMOKE_BIN is required".to_owned())?;
 
+    let workflow_runtime = BevyWorkflow::spawn().map_err(|error| error.to_string())?;
     let app = Application::minimal()
-        .with_workflow(Arc::new(BevyWorkflow::spawn()?))
+        .with_workflow(Arc::new(workflow_runtime))
         .with_component_probe(Arc::new(WasmComponentProbe::new(wasm_smoke)));
 
     let workflow = app
@@ -30,12 +32,16 @@ async fn main() -> Result<(), String> {
             runs: 5_000,
             steps: 12,
         })
-        .await?;
+        .await
+        .map_err(|error| error.to_string())?;
     if workflow.runs != 5_000 || workflow.completed + workflow.cancelled != 5_000 {
         return Err(format!("workflow result did not converge: {workflow:?}"));
     }
 
-    let component = app.probe_component().await?;
+    let component = app
+        .probe_component()
+        .await
+        .map_err(|error| error.to_string())?;
     if component != "workflow-default:smoke" {
         return Err(format!("unexpected component provider: {component}"));
     }
@@ -43,11 +49,12 @@ async fn main() -> Result<(), String> {
     let _mcp_projection = McpApplication::new(app);
 
     println!("APPLICATION_MINIMAL_OK");
+    println!("APPLICATION_CONTEXT_OK");
     println!("WORKFLOW_RUNS={}", workflow.runs);
     println!("WORKFLOW_COMPLETED={}", workflow.completed);
     println!("WORKFLOW_CANCELLED={}", workflow.cancelled);
     println!("WASM_COMPONENT={component}");
     println!("MCP_PROJECTION_CONSTRUCTED=1");
-    println!("CLEAN_BASELINE_OK");
+    println!("RUST_BASELINE_V2_OK");
     Ok(())
 }
