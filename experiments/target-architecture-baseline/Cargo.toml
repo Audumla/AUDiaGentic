@@ -9,6 +9,7 @@ members = [
   "crates/template",
   "crates/reconcile",
   "crates/file-store",
+  "capabilities/managed-config",
   "examples/demo-capability",
   "examples/demo-app",
   "examples/wasm-app",

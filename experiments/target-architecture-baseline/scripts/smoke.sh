@@ -11,9 +11,12 @@ cargo test --workspace
 for package in \
   audiagentic-core \
   audiagentic-application \
+  audiagentic-artifact \
   audiagentic-config \
   audiagentic-template \
-  audiagentic-reconcile; do
+  audiagentic-reconcile \
+  audiagentic-file-store \
+  audiagentic-managed-config; do
   tree="$(cargo tree -p "$package")"
   printf '%s\n' "$tree"
   if printf '%s\n' "$tree" | grep -Eiq 'bevy|rmcp|wasmtime|wash-runtime|tokio'; then

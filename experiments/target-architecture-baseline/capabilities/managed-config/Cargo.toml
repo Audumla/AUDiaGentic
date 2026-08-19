@@ -1,0 +1,13 @@
+[package]
+name = "audiagentic-managed-config"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+audiagentic-file-store = { path = "../../crates/file-store" }
+audiagentic-reconcile = { path = "../../crates/reconcile" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
