@@ -7,6 +7,8 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+pub type ConfigResult<T> = Result<T, Box<figment::Error>>;
+
 /// Human-readable identity for a configuration layer.
 ///
 /// The identity is propagated by Figment as per-value metadata, allowing callers
@@ -87,12 +89,12 @@ pub struct ResolvedConfig {
 }
 
 impl ResolvedConfig {
-    pub fn deserialize<T: DeserializeOwned>(&self) -> figment::Result<T> {
-        self.figment.extract()
+    pub fn deserialize<T: DeserializeOwned>(&self) -> ConfigResult<T> {
+        self.figment.extract().map_err(Box::new)
     }
 
-    pub fn deserialize_inner<T: DeserializeOwned>(&self, key: &str) -> figment::Result<T> {
-        self.figment.extract_inner(key)
+    pub fn deserialize_inner<T: DeserializeOwned>(&self, key: &str) -> ConfigResult<T> {
+        self.figment.extract_inner(key).map_err(Box::new)
     }
 
     /// Return the winning named source for a Figment key path such as
@@ -178,7 +180,7 @@ mod tests {
 
     #[test]
     fn extraction_errors_keep_figments_source_metadata() {
-        #[derive(Deserialize)]
+        #[derive(Debug, Deserialize)]
         struct Invalid {
             workers: u32,
         }
