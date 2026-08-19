@@ -3,7 +3,7 @@ package audiagentic:baseline@0.1.0;
 /// A deliberately tiny host authority used only to prove that host access is
 /// granted by WIT linking rather than through a global host/service object.
 interface observer {
-    record: func(message: string);
+    observe: func(message: string);
 }
 
 world host-aware {

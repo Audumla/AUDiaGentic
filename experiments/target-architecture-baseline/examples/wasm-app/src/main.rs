@@ -22,7 +22,7 @@ struct HostState {
 }
 
 impl audiagentic::baseline::observer::Host for HostState {
-    fn record(&mut self, message: String) {
+    fn observe(&mut self, message: String) {
         self.observations.push(message);
     }
 }
