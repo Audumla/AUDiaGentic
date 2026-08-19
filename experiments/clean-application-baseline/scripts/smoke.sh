@@ -3,7 +3,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="$(cd "$ROOT/../.." && pwd)"
 
-"$ROOT/scripts/architecture.sh"
+bash "$ROOT/scripts/architecture.sh"
 
 "$REPO_ROOT/experiments/rust-wasm-foundation/scripts/smoke.sh"
 WASM_BIN="$REPO_ROOT/experiments/rust-wasm-foundation/host/target/release/audiagentic-rust-wasm-smoke"
