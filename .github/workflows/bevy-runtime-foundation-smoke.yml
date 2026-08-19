@@ -6,6 +6,7 @@ on:
       - "experiments/bevy-runtime-foundation/**"
       - "experiments/rust-wasm-foundation/**"
       - "experiments/clean-application-baseline/**"
+      - "experiments/target-architecture-baseline/**"
       - ".github/workflows/bevy-runtime-foundation-smoke.yml"
   workflow_dispatch:
 
@@ -70,3 +71,23 @@ jobs:
 
       - name: Build and execute clean baseline
         run: bash experiments/clean-application-baseline/scripts/smoke.sh
+
+  target-architecture-baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust 1.95
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          components: rustfmt,clippy
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: experiments/target-architecture-baseline
+
+      - name: Build and execute target baseline
+        run: bash experiments/target-architecture-baseline/scripts/smoke.sh
