@@ -1,0 +1,11 @@
+[package]
+name = "audiagentic-runtime-bevy-spike"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+audiagentic-capability-api-spike = { path = "../capability-api" }
+audiagentic-bevy-runtime-spike = { path = "../../../bevy-runtime-foundation/crates/runtime" }
+async-trait.workspace = true
