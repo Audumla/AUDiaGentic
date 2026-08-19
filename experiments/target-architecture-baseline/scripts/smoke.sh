@@ -5,8 +5,11 @@ cd "$ROOT"
 
 cargo fmt --all -- --check
 cargo fmt --manifest-path components/greeting/Cargo.toml -- --check
+cargo fmt --manifest-path examples/external-app/Cargo.toml -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+cargo clippy --manifest-path examples/external-app/Cargo.toml --all-targets -- -D warnings
+cargo test --manifest-path examples/external-app/Cargo.toml
 
 for package in \
   audiagentic-core \
@@ -26,8 +29,16 @@ for package in \
   fi
 done
 
+EXTERNAL_TREE="$(cargo tree --manifest-path examples/external-app/Cargo.toml)"
+if printf '%s\n' "$EXTERNAL_TREE" | grep -Eiq 'bevy|rmcp|wasmtime|wash-runtime|tokio'; then
+  echo "standalone consumer unexpectedly pulled a heavyweight runtime dependency" >&2
+  exit 1
+fi
+echo "EXTERNAL_APP_DEPENDENCIES_OK"
+
 echo "FOUNDATION_DEPENDENCIES_OK"
 cargo run -p target-baseline-demo --quiet
+cargo run --manifest-path examples/external-app/Cargo.toml --quiet
 
 cargo build --manifest-path components/greeting/Cargo.toml --target wasm32-wasip2 --release
 COMPONENT="$ROOT/components/greeting/target/wasm32-wasip2/release/target_baseline_greeting_component.wasm"

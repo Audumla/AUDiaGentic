@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "external-demo",
+  "version": "1.0.0",
+  "components": [
+    {
+      "id": "payload",
+      "artifact": "file:artifacts/payload.bin",
+      "config": {}
+    }
+  ],
+  "metadata": {
+    "purpose": "standalone-consumer-proof"
+  }
+}
