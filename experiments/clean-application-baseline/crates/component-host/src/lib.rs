@@ -8,7 +8,9 @@ pub struct WasmComponentProbe {
 
 impl WasmComponentProbe {
     pub fn new(executable: impl Into<String>) -> Self {
-        Self { executable: executable.into() }
+        Self {
+            executable: executable.into(),
+        }
     }
 }
 
