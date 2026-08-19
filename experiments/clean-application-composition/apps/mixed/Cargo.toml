@@ -1,0 +1,16 @@
+[package]
+name = "audiagentic-clean-mixed-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+audiagentic-clean-capabilities = { path = "../../crates/capabilities", version = "0.1.0" }
+audiagentic-clean-mcp-surface = { path = "../../crates/mcp-surface", version = "0.1.0" }
+audiagentic-clean-wasm-greeter = { path = "../../crates/wasm-greeter", version = "0.1.0" }
+audiagentic-clean-workflow-bevy = { path = "../../crates/workflow-bevy", version = "0.1.0" }
+axum.workspace = true
+rmcp.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true

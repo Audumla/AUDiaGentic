@@ -1,0 +1,10 @@
+[package]
+name = "audiagentic-clean-native-greeter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+audiagentic-clean-capabilities = { path = "../capabilities", version = "0.1.0" }

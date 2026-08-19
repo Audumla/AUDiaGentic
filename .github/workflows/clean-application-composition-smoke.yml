@@ -1,0 +1,41 @@
+name: Clean Application Composition Smoke
+
+on:
+  pull_request:
+    paths:
+      - "experiments/clean-application-composition/**"
+      - ".github/workflows/clean-application-composition-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: experiments/clean-application-composition
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust 1.95
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          targets: wasm32-wasip2
+          components: rustfmt,clippy
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: experiments/clean-application-composition
+
+      - name: Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Build and execute composition spike
+        run: bash scripts/smoke.sh
