@@ -34,13 +34,7 @@ pub fn merge_layers(layers: impl IntoIterator<Item = ConfigLayer>) -> LayeredCon
     let mut provenance = BTreeMap::new();
 
     for layer in layers {
-        merge_value(
-            &mut value,
-            layer.value,
-            "",
-            &layer.source,
-            &mut provenance,
-        );
+        merge_value(&mut value, layer.value, "", &layer.source, &mut provenance);
     }
 
     LayeredConfig { value, provenance }
@@ -62,13 +56,9 @@ fn merge_value(
                     format!("{path}.{key}")
                 };
                 match target_map.get_mut(&key) {
-                    Some(existing) => merge_value(
-                        existing,
-                        incoming_value,
-                        &child_path,
-                        source,
-                        provenance,
-                    ),
+                    Some(existing) => {
+                        merge_value(existing, incoming_value, &child_path, source, provenance)
+                    }
                     None => {
                         record_leaf_provenance(&incoming_value, &child_path, source, provenance);
                         target_map.insert(key, incoming_value);
@@ -77,10 +67,20 @@ fn merge_value(
             }
         }
         (target_slot, incoming_value) => {
+            clear_provenance(path, provenance);
             record_leaf_provenance(&incoming_value, path, source, provenance);
             *target_slot = incoming_value;
         }
     }
+}
+
+fn clear_provenance(path: &str, provenance: &mut BTreeMap<String, ConfigSource>) {
+    if path.is_empty() {
+        provenance.clear();
+        return;
+    }
+    let prefix = format!("{path}.");
+    provenance.retain(|existing, _| existing != path && !existing.starts_with(&prefix));
 }
 
 fn record_leaf_provenance(
@@ -130,5 +130,24 @@ mod tests {
         assert_eq!(merged.value["runtime"]["log"], "info");
         assert_eq!(merged.provenance["runtime.threads"].as_str(), "project");
         assert_eq!(merged.provenance["runtime.log"].as_str(), "package");
+    }
+
+    #[test]
+    fn replacing_a_subtree_clears_stale_provenance() {
+        let merged = merge_layers([
+            ConfigLayer {
+                source: ConfigSource::new("package"),
+                value: json!({"runtime": {"threads": 4, "log": "info"}}),
+            },
+            ConfigLayer {
+                source: ConfigSource::new("project"),
+                value: json!({"runtime": "disabled"}),
+            },
+        ]);
+
+        assert_eq!(merged.value["runtime"], "disabled");
+        assert_eq!(merged.provenance["runtime"].as_str(), "project");
+        assert!(!merged.provenance.contains_key("runtime.threads"));
+        assert!(!merged.provenance.contains_key("runtime.log"));
     }
 }
