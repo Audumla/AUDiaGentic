@@ -1,0 +1,25 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/core",
+  "crates/application",
+  "crates/config",
+  "crates/sensitive",
+  "crates/template",
+  "crates/reconcile",
+  "examples/demo-capability",
+  "examples/demo-app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+regex = "1"
+secrecy = "=0.10.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
