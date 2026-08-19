@@ -98,9 +98,11 @@ impl ResolvedConfig {
     /// Return the winning named source for a Figment key path such as
     /// `logging.level`.
     pub fn source(&self, key: &str) -> Option<ConfigSource> {
-        self.figment.find_metadata(key).map(|metadata| ConfigSource {
-            label: metadata.name.to_string(),
-        })
+        self.figment
+            .find_metadata(key)
+            .map(|metadata| ConfigSource {
+                label: metadata.name.to_string(),
+            })
     }
 
     /// Expose the underlying Figment when an application needs an ecosystem
