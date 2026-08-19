@@ -1,0 +1,11 @@
+[package]
+name = "audiagentic-component-host-spike"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+audiagentic-capability-api-spike = { path = "../capability-api" }
+async-trait.workspace = true
+tokio = { workspace = true, features = ["process"] }
