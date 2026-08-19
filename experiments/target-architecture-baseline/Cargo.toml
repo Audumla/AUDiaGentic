@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "crates/core",
   "crates/application",
+  "crates/artifact",
   "crates/config",
   "crates/sensitive",
   "crates/template",
@@ -27,5 +28,6 @@ regex = "1"
 secrecy = "=0.10.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "=0.10.9"
 thiserror = "2"
 wasmtime = { version = "=47.0.3", default-features = false, features = ["anyhow", "component-model", "cranelift", "runtime", "std"] }
