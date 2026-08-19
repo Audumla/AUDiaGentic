@@ -62,20 +62,50 @@ pub enum ArtifactError {
     InvalidGeneratedDigest(String),
 }
 
-/// Resolve local `file:` artifacts and produce immutable digest evidence.
+/// Resolve one component artifact into immutable lock evidence.
 ///
-/// This is intentionally only the local implementation. OCI/network resolution
-/// belongs in separate runtime infrastructure while producing the same lock data.
-pub fn resolve_local_application(
+/// Resolution technology is deliberately outside the application model. A
+/// local file resolver, OCI resolver, test resolver, or application-specific
+/// resolver can all produce the same `LockedComponent` evidence.
+pub trait ArtifactResolver {
+    fn resolve(
+        &self,
+        component: &ComponentSpec,
+        base_dir: &Path,
+    ) -> Result<LockedComponent, ArtifactError>;
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct LocalArtifactResolver;
+
+impl ArtifactResolver for LocalArtifactResolver {
+    fn resolve(
+        &self,
+        component: &ComponentSpec,
+        base_dir: &Path,
+    ) -> Result<LockedComponent, ArtifactError> {
+        resolve_local_component(component, base_dir)
+    }
+}
+
+pub fn resolve_application(
     manifest: &ApplicationManifest,
     base_dir: impl AsRef<Path>,
+    resolver: &impl ArtifactResolver,
 ) -> Result<ApplicationLock, ArtifactError> {
     let base_dir = base_dir.as_ref();
     let mut locked = Vec::with_capacity(manifest.components.len());
     for component in &manifest.components {
-        locked.push(resolve_local_component(component, base_dir)?);
+        locked.push(resolver.resolve(component, base_dir)?);
     }
     Ok(ApplicationLock::new(manifest, locked))
+}
+
+pub fn resolve_local_application(
+    manifest: &ApplicationManifest,
+    base_dir: impl AsRef<Path>,
+) -> Result<ApplicationLock, ArtifactError> {
+    resolve_application(manifest, base_dir, &LocalArtifactResolver)
 }
 
 pub fn resolve_local_component(

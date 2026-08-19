@@ -12,6 +12,7 @@ for package in \
   audiagentic-core \
   audiagentic-application \
   audiagentic-artifact \
+  audiagentic-runtime \
   audiagentic-config \
   audiagentic-template \
   audiagentic-reconcile \
