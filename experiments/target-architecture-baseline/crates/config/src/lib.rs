@@ -180,11 +180,6 @@ mod tests {
 
     #[test]
     fn extraction_errors_keep_figments_source_metadata() {
-        #[derive(Debug, Deserialize)]
-        struct Invalid {
-            workers: u32,
-        }
-
         let resolved = ConfigStack::new()
             .push(ConfigLayer::new(
                 ConfigSource::new("project"),
@@ -192,7 +187,7 @@ mod tests {
             ))
             .resolve();
 
-        let error = resolved.deserialize::<Invalid>().unwrap_err();
+        let error = resolved.deserialize_inner::<u32>("workers").unwrap_err();
         assert_eq!(error.metadata.as_ref().unwrap().name, "project");
     }
 }
