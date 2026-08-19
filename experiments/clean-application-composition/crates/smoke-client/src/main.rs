@@ -14,39 +14,6 @@ fn require(value: bool, message: impl Into<String>) -> Result<(), Box<dyn std::e
     }
 }
 
-async fn call_greet(
-    client: &rmcp::service::RunningService<rmcp::RoleClient, ClientInfo>,
-) -> Result<String, Box<dyn std::error::Error>> {
-    let reply = client
-        .call_tool(CallToolRequestParams::new("greet").with_arguments(object!({ "name": "Ada" })))
-        .await?;
-    require(
-        reply.is_error != Some(true),
-        format!("greet failed: {reply:?}"),
-    )?;
-    Ok(format!("{reply:?}"))
-}
-
-async fn call_workflow(
-    client: &rmcp::service::RunningService<rmcp::RoleClient, ClientInfo>,
-) -> Result<String, Box<dyn std::error::Error>> {
-    let reply = client
-        .call_tool(
-            CallToolRequestParams::new("workflow_batch").with_arguments(object!({
-                "runs": 5000,
-                "steps": 12,
-                "retry_every": 17,
-                "cancel_every": 211
-            })),
-        )
-        .await?;
-    require(
-        reply.is_error != Some(true),
-        format!("workflow failed: {reply:?}"),
-    )?;
-    Ok(format!("{reply:?}"))
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
@@ -61,7 +28,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 tools.len() == 1 && tools[0].name == "greet",
                 format!("unexpected minimal tools: {tools:?}"),
             )?;
-            let greeting = call_greet(&client).await?;
+            let reply = client
+                .call_tool(
+                    CallToolRequestParams::new("greet")
+                        .with_arguments(object!({ "name": "Ada" })),
+                )
+                .await?;
+            require(
+                reply.is_error != Some(true),
+                format!("minimal greet failed: {reply:?}"),
+            )?;
+            let greeting = format!("{reply:?}");
             require(greeting.contains("native:hello Ada"), greeting.clone())?;
             println!("MINIMAL_GREETING={greeting}");
             client.cancel().await?;
@@ -80,10 +57,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 tools.iter().any(|tool| tool.name == "workflow_batch"),
                 "mixed workflow tool missing",
             )?;
-            let greeting = call_greet(&client).await?;
+
+            let greet_reply = client
+                .call_tool(
+                    CallToolRequestParams::new("greet")
+                        .with_arguments(object!({ "name": "Ada" })),
+                )
+                .await?;
+            require(
+                greet_reply.is_error != Some(true),
+                format!("mixed stdio greet failed: {greet_reply:?}"),
+            )?;
+            let greeting = format!("{greet_reply:?}");
             require(greeting.contains("wasm:hello Ada"), greeting.clone())?;
-            let workflow = call_workflow(&client).await?;
+
+            let workflow_reply = client
+                .call_tool(
+                    CallToolRequestParams::new("workflow_batch").with_arguments(object!({
+                        "runs": 5000,
+                        "steps": 12,
+                        "retry_every": 17,
+                        "cancel_every": 211
+                    })),
+                )
+                .await?;
+            require(
+                workflow_reply.is_error != Some(true),
+                format!("mixed stdio workflow failed: {workflow_reply:?}"),
+            )?;
+            let workflow = format!("{workflow_reply:?}");
             require(workflow.contains("\"runs\":5000"), workflow.clone())?;
+
             println!("MIXED_STDIO_GREETING={greeting}");
             println!("MIXED_STDIO_WORKFLOW={workflow}");
             client.cancel().await?;
@@ -100,10 +104,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 tools.iter().any(|tool| tool.name == "workflow_batch"),
                 "HTTP workflow tool missing",
             )?;
-            let greeting = call_greet(&client).await?;
+
+            let greet_reply = client
+                .call_tool(
+                    CallToolRequestParams::new("greet")
+                        .with_arguments(object!({ "name": "Ada" })),
+                )
+                .await?;
+            require(
+                greet_reply.is_error != Some(true),
+                format!("mixed HTTP greet failed: {greet_reply:?}"),
+            )?;
+            let greeting = format!("{greet_reply:?}");
             require(greeting.contains("wasm:hello Ada"), greeting.clone())?;
-            let workflow = call_workflow(&client).await?;
+
+            let workflow_reply = client
+                .call_tool(
+                    CallToolRequestParams::new("workflow_batch").with_arguments(object!({
+                        "runs": 5000,
+                        "steps": 12,
+                        "retry_every": 17,
+                        "cancel_every": 211
+                    })),
+                )
+                .await?;
+            require(
+                workflow_reply.is_error != Some(true),
+                format!("mixed HTTP workflow failed: {workflow_reply:?}"),
+            )?;
+            let workflow = format!("{workflow_reply:?}");
             require(workflow.contains("\"runs\":5000"), workflow.clone())?;
+
             println!("MIXED_HTTP_GREETING={greeting}");
             println!("MIXED_HTTP_WORKFLOW={workflow}");
             client.cancel().await?;
