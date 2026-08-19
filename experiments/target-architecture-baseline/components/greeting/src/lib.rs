@@ -1,5 +1,3 @@
-#![forbid(unsafe_code)]
-
 mod bindings {
     wit_bindgen::generate!({
         world: "host-aware",
