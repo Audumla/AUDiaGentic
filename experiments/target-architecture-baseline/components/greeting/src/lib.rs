@@ -11,7 +11,7 @@ struct GreetingComponent;
 
 impl bindings::Guest for GreetingComponent {
     fn greet(name: String) -> String {
-        bindings::audiagentic::baseline::observer::record(&format!("greet:{name}"));
+        bindings::audiagentic::baseline::observer::observe(&format!("greet:{name}"));
         format!("wasm:{name}")
     }
 }
