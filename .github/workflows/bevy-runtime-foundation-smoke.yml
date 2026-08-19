@@ -74,7 +74,7 @@ jobs:
 
   target-architecture-baseline:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -82,12 +82,15 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.95.0
+          targets: wasm32-wasip2
           components: rustfmt,clippy
 
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: experiments/target-architecture-baseline
+          workspaces: |
+            experiments/target-architecture-baseline
+            experiments/target-architecture-baseline/components/greeting
 
       - name: Build and execute target baseline
         run: bash experiments/target-architecture-baseline/scripts/smoke.sh
