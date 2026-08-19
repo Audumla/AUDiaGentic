@@ -326,7 +326,10 @@ mod tests {
         assert!(!result.is_safe());
         assert!(result.changes.is_empty());
         assert_eq!(result.conflicts.len(), 1);
-        assert_eq!(result.conflicts[0].reason, ConflictReason::UnmanagedCollision);
+        assert_eq!(
+            result.conflicts[0].reason,
+            ConflictReason::UnmanagedCollision
+        );
     }
 
     #[test]
