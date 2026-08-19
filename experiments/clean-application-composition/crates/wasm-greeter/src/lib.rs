@@ -2,7 +2,10 @@ use std::{path::Path, sync::Arc};
 
 use async_trait::async_trait;
 use audiagentic_clean_capabilities::{CapabilityError, CapabilityResult, Greeting};
-use wasmtime::{Engine, Store, component::{Component, Linker}};
+use wasmtime::{
+    Engine, Store,
+    component::{Component, Linker},
+};
 
 mod bindings {
     wasmtime::component::bindgen!({
@@ -21,8 +24,8 @@ impl WasmGreeter {
     pub fn load(path: impl AsRef<Path>) -> CapabilityResult<Self> {
         let mut config = wasmtime::Config::new();
         config.wasm_component_model(true);
-        let engine = Engine::new(&config)
-            .map_err(|error| CapabilityError::failed("greeting", error))?;
+        let engine =
+            Engine::new(&config).map_err(|error| CapabilityError::failed("greeting", error))?;
         let component = Component::from_file(&engine, path)
             .map_err(|error| CapabilityError::failed("greeting", error))?;
         Ok(Self {
