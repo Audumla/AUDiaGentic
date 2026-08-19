@@ -94,10 +94,11 @@ pub fn atomic_write_json<T: Serialize>(
     value: &T,
 ) -> Result<(), FileStoreError> {
     let path = path.as_ref();
-    let bytes = serde_json::to_vec_pretty(value).map_err(|source| FileStoreError::SerializeJson {
-        path: path.to_owned(),
-        source,
-    })?;
+    let bytes =
+        serde_json::to_vec_pretty(value).map_err(|source| FileStoreError::SerializeJson {
+            path: path.to_owned(),
+            source,
+        })?;
     atomic_write_text(path, bytes)
 }
 
