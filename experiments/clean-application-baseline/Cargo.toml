@@ -1,8 +1,13 @@
 [workspace]
 resolver = "2"
 members = [
+  "crates/core",
   "crates/capability-api",
   "crates/application",
+  "crates/foundation-sensitive",
+  "crates/foundation-template",
+  "crates/foundation-reconcile",
+  "crates/foundation-config",
   "crates/runtime-bevy",
   "crates/component-host",
   "crates/mcp-adapter",
