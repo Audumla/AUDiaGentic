@@ -64,7 +64,9 @@ impl MixedMcpServer {
             .unwrap_or_else(|error| format!("capability error: {error}"))
     }
 
-    #[tool(description = "Execute a synthetic workflow batch through the selected workflow capability.")]
+    #[tool(
+        description = "Execute a synthetic workflow batch through the selected workflow capability."
+    )]
     async fn workflow_batch(&self, Parameters(params): Parameters<WorkflowBatchParams>) -> String {
         let result = self
             .workflow
