@@ -8,3 +8,6 @@ license.workspace = true
 [dependencies]
 audiagentic-core-spike = { path = "../core" }
 audiagentic-capability-api-spike = { path = "../capability-api" }
+
+[dev-dependencies]
+tokio.workspace = true
