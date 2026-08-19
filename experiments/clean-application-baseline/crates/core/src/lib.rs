@@ -166,8 +166,7 @@ impl ApplicationManifest {
         for component in &self.components {
             if !seen.insert(component.id.clone()) {
                 return Err(Diagnostic::new(
-                    DiagnosticCode::new("CORE-APP-MANIFEST-002")
-                        .expect("static diagnostic code"),
+                    DiagnosticCode::new("CORE-APP-MANIFEST-002").expect("static diagnostic code"),
                     Severity::Error,
                     format!("component {} is selected more than once", component.id),
                 ));
