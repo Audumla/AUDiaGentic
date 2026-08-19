@@ -1,0 +1,12 @@
+[package]
+name = "audiagentic-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+audiagentic-application = { path = "../application" }
+audiagentic-artifact = { path = "../artifact" }
+audiagentic-core = { path = "../core" }
+thiserror.workspace = true

@@ -15,5 +15,6 @@ The following invariants are treated as locked by this spike unless a later proo
 11. Stable managed identity is separate from a mutable target name; ownership evidence is separate from user-owned target data.
 12. Capability-specific errors and schemas live with the capability. Core contains only universal diagnostic primitives.
 13. Artifact resolution produces immutable digest/lock evidence; resolution transport is not part of the application model.
-14. Heavy runtime dependencies must remain absent from `audiagentic-core` and `audiagentic-application`.
-15. Generated Wasm ABI glue may contain generated unsafe code; handwritten baseline/core/capability code remains `forbid(unsafe_code)` where practical.
+14. Runtime preparation validates generic manifest invariants and immutable artifact evidence, then delegates typed state construction to the concrete application.
+15. Heavy runtime dependencies must remain absent from `audiagentic-core`, `audiagentic-application`, and generic `audiagentic-runtime`.
+16. Generated Wasm ABI glue may contain generated unsafe code; handwritten baseline/core/capability code remains `forbid(unsafe_code)` where practical.

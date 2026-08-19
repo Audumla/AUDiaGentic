@@ -4,6 +4,7 @@ members = [
   "crates/core",
   "crates/application",
   "crates/artifact",
+  "crates/runtime",
   "crates/config",
   "crates/sensitive",
   "crates/template",
