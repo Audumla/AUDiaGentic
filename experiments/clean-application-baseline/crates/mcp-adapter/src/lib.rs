@@ -25,7 +25,14 @@ impl McpApplication {
 impl McpApplication {
     #[tool(description = "Run the configured workflow capability.")]
     async fn workflow(&self, Parameters(params): Parameters<WorkflowParams>) -> String {
-        match self.app.run_workflow(WorkflowRequest { runs: params.runs, steps: params.steps }).await {
+        match self
+            .app
+            .run_workflow(WorkflowRequest {
+                runs: params.runs,
+                steps: params.steps,
+            })
+            .await
+        {
             Ok(result) => serde_json::to_string(&result)
                 .unwrap_or_else(|error| format!("serialization error: {error}")),
             Err(error) => format!("workflow error: {error}"),
@@ -34,6 +41,9 @@ impl McpApplication {
 
     #[tool(description = "Probe the configured runtime-loaded component capability.")]
     async fn component_probe(&self) -> String {
-        self.app.probe_component().await.unwrap_or_else(|error| format!("component error: {error}"))
+        self.app
+            .probe_component()
+            .await
+            .unwrap_or_else(|error| format!("component error: {error}"))
     }
 }
