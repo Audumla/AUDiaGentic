@@ -53,13 +53,7 @@ impl ConfigStack {
         let mut provenance = BTreeMap::new();
 
         for layer in &self.layers {
-            merge_value(
-                &mut value,
-                &layer.value,
-                &layer.source,
-                "",
-                &mut provenance,
-            );
+            merge_value(&mut value, &layer.value, &layer.source, "", &mut provenance);
         }
 
         ResolvedConfig { value, provenance }
@@ -219,8 +213,14 @@ mod tests {
     #[test]
     fn arrays_are_replaced_and_provenance_follows_the_winner() {
         let resolved = ConfigStack::new()
-            .push(ConfigLayer::new(ConfigSource::new("base"), json!({"items": [1, 2]})))
-            .push(ConfigLayer::new(ConfigSource::new("user"), json!({"items": [3]})))
+            .push(ConfigLayer::new(
+                ConfigSource::new("base"),
+                json!({"items": [1, 2]}),
+            ))
+            .push(ConfigLayer::new(
+                ConfigSource::new("user"),
+                json!({"items": [3]}),
+            ))
             .resolve();
 
         assert_eq!(resolved.value()["items"], json!([3]));

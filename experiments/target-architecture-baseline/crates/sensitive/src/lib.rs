@@ -14,14 +14,11 @@ static URL_CREDENTIALS: LazyLock<Regex> = LazyLock::new(|| {
         .expect("URL credential redaction regex must compile")
 });
 static KEY_VALUE_SECRET: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r"(?i)(\b(?:api[_-]?key|token|secret|password|authorization|auth)\b\s*[:=]\s*)\S+",
-    )
-    .expect("key/value redaction regex must compile")
+    Regex::new(r"(?i)(\b(?:api[_-]?key|token|secret|password|authorization|auth)\b\s*[:=]\s*)\S+")
+        .expect("key/value redaction regex must compile")
 });
 static BEARER_SECRET: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)(bearer\s+)[A-Za-z0-9._-]{20,}")
-        .expect("bearer redaction regex must compile")
+    Regex::new(r"(?i)(bearer\s+)[A-Za-z0-9._-]{20,}").expect("bearer redaction regex must compile")
 });
 static PREFIXED_SECRET: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\b(?:sk|pk|ghp|gho|ghu|ghs|ghr)-[A-Za-z0-9_-]{20,}\b")
@@ -43,7 +40,8 @@ impl Redactor {
         let literal = literal.into();
         if !literal.is_empty() {
             self.literals.push(literal);
-            self.literals.sort_by_key(|value| std::cmp::Reverse(value.len()));
+            self.literals
+                .sort_by_key(|value| std::cmp::Reverse(value.len()));
             self.literals.dedup();
         }
         self

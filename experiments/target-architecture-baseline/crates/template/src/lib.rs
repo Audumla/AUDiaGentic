@@ -36,7 +36,10 @@ pub fn resolve_path<'a>(context: &'a Map<String, Value>, path: &str) -> Option<&
     Some(current)
 }
 
-pub fn render_template(template: &str, context: &Map<String, Value>) -> Result<String, TemplateError> {
+pub fn render_template(
+    template: &str,
+    context: &Map<String, Value>,
+) -> Result<String, TemplateError> {
     let mut output = String::with_capacity(template.len());
     let mut rest = template;
 
@@ -118,6 +121,9 @@ mod tests {
     #[test]
     fn unmatched_open_brace_is_left_literal() {
         let context = Map::new();
-        assert_eq!(render_template("literal { text", &context).unwrap(), "literal { text");
+        assert_eq!(
+            render_template("literal { text", &context).unwrap(),
+            "literal { text"
+        );
     }
 }

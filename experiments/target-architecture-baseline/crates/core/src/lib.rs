@@ -219,10 +219,8 @@ mod tests {
 
     #[test]
     fn manifest_round_trips_without_runtime_types() {
-        let mut manifest = ApplicationManifest::new(
-            ApplicationId::try_from("demo.app").unwrap(),
-            "1.0.0",
-        );
+        let mut manifest =
+            ApplicationManifest::new(ApplicationId::try_from("demo.app").unwrap(), "1.0.0");
         manifest.components.push(ComponentSpec::new(
             ComponentId::try_from("search").unwrap(),
             ArtifactRef::try_from("oci://example/search:1").unwrap(),

@@ -218,9 +218,24 @@ mod tests {
         let result = plan(&desired, &observed);
         assert!(result.is_safe());
         assert_eq!(result.changes.len(), 3);
-        assert!(result.changes.iter().any(|change| matches!(change, Change::Create { key, .. } if key == "create")));
-        assert!(result.changes.iter().any(|change| matches!(change, Change::Update { key, .. } if key == "update")));
-        assert!(result.changes.iter().any(|change| matches!(change, Change::Remove { key, .. } if key == "remove")));
+        assert!(
+            result
+                .changes
+                .iter()
+                .any(|change| matches!(change, Change::Create { key, .. } if key == "create"))
+        );
+        assert!(
+            result
+                .changes
+                .iter()
+                .any(|change| matches!(change, Change::Update { key, .. } if key == "update"))
+        );
+        assert!(
+            result
+                .changes
+                .iter()
+                .any(|change| matches!(change, Change::Remove { key, .. } if key == "remove"))
+        );
     }
 
     #[test]
