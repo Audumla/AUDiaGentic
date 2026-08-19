@@ -53,7 +53,10 @@ impl fmt::Display for ComponentProbeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Unavailable(detail) => write!(f, "component runtime unavailable: {detail}"),
-            Self::InvalidResponse(detail) => write!(f, "component runtime returned an invalid response: {detail}"),
+            Self::InvalidResponse(detail) => write!(
+                f,
+                "component runtime returned an invalid response: {detail}"
+            ),
             Self::Internal(detail) => write!(f, "component runtime failed: {detail}"),
         }
     }
