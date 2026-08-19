@@ -81,7 +81,10 @@ impl Application {
                 CapabilityId::new("workflow.execute").expect("static capability id"),
             )
         })?;
-        workflow.run(request).await.map_err(ApplicationError::Workflow)
+        workflow
+            .run(request)
+            .await
+            .map_err(ApplicationError::Workflow)
     }
 
     pub async fn probe_component(&self) -> Result<String, ApplicationError> {
