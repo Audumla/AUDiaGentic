@@ -32,7 +32,9 @@ pub fn redact_text(input: &str, secrets: &[&str]) -> String {
     secrets
         .iter()
         .filter(|secret| !secret.is_empty())
-        .fold(input.to_owned(), |text, secret| text.replace(secret, "[REDACTED]"))
+        .fold(input.to_owned(), |text, secret| {
+            text.replace(secret, "[REDACTED]")
+        })
 }
 
 #[cfg(test)]
