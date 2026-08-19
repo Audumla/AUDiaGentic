@@ -56,6 +56,11 @@ jobs:
           targets: wasm32-wasip2
           components: rustfmt,clippy
 
+      - name: Install native build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
