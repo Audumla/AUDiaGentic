@@ -61,7 +61,10 @@ impl fmt::Display for ReconcileError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidOwnershipId => f.write_str("ownership id must not be empty"),
-            Self::OwnershipConflict { key, existing_owner } => match existing_owner {
+            Self::OwnershipConflict {
+                key,
+                existing_owner,
+            } => match existing_owner {
                 Some(owner) => write!(f, "cannot reconcile {key}: owned by {}", owner.as_str()),
                 None => write!(f, "cannot reconcile {key}: existing value is user-owned"),
             },
@@ -129,18 +132,33 @@ mod tests {
         let observed = BTreeMap::from([
             (
                 "owned-old".into(),
-                Observed { value: "old", owner: Some(owner.clone()) },
+                Observed {
+                    value: "old",
+                    owner: Some(owner.clone()),
+                },
             ),
             (
                 "user-value".into(),
-                Observed { value: "keep", owner: None },
+                Observed {
+                    value: "keep",
+                    owner: None,
+                },
             ),
         ]);
         let desired = BTreeMap::from([("owned-new".into(), "new")]);
         let plan = plan_owned_map(owner, &observed, &desired).unwrap();
         assert_eq!(plan.changes.len(), 2);
-        assert!(plan.changes.iter().any(|change| matches!(change, Change::Remove { key, .. } if key == "owned-old")));
-        assert!(!plan.changes.iter().any(|change| matches!(change, Change::Remove { key, .. } if key == "user-value")));
+        assert!(
+            plan.changes
+                .iter()
+                .any(|change| matches!(change, Change::Remove { key, .. } if key == "owned-old"))
+        );
+        assert!(
+            !plan
+                .changes
+                .iter()
+                .any(|change| matches!(change, Change::Remove { key, .. } if key == "user-value"))
+        );
     }
 
     #[test]
@@ -148,7 +166,10 @@ mod tests {
         let owner = OwnershipId::new("app/config").unwrap();
         let observed = BTreeMap::from([(
             "shared".into(),
-            Observed { value: "user", owner: None },
+            Observed {
+                value: "user",
+                owner: None,
+            },
         )]);
         let desired = BTreeMap::from([("shared".into(), "ours")]);
         assert!(matches!(
