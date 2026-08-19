@@ -1,0 +1,44 @@
+[workspace]
+members = [
+  "crates/capabilities",
+  "crates/native-greeter",
+  "crates/wasm-greeter",
+  "crates/workflow-bevy",
+  "crates/mcp-surface",
+  "crates/smoke-client",
+  "apps/minimal",
+  "apps/mixed",
+]
+exclude = ["components/greeter"]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.95"
+version = "0.1.0"
+license = "MIT"
+
+[workspace.dependencies]
+async-trait = "0.1"
+axum = "0.8"
+bevy_app = "=0.19.1"
+bevy_ecs = "=0.19.1"
+rmcp = { version = "=3.1.3", features = [
+  "server",
+  "client",
+  "macros",
+  "schemars",
+  "transport-io",
+  "transport-child-process",
+  "transport-streamable-http-server",
+  "transport-streamable-http-client-reqwest",
+] }
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+wasmtime = { version = "=47.0.3", features = ["component-model"] }

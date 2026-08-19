@@ -1,0 +1,17 @@
+[package]
+name = "audiagentic-clean-greeter-component"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "=0.60.0"
+
+[profile.release]
+lto = true
+opt-level = "s"
+strip = true
