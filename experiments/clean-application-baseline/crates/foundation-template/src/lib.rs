@@ -71,13 +71,22 @@ mod tests {
     #[test]
     fn renders_strict_dotted_scalar_paths() {
         let data = json!({"user": {"name": "Marius"}, "count": 3});
-        assert_eq!(render("hello {user.name} x{count}", &data).unwrap(), "hello Marius x3");
+        assert_eq!(
+            render("hello {user.name} x{count}", &data).unwrap(),
+            "hello Marius x3"
+        );
     }
 
     #[test]
     fn missing_and_structured_values_fail() {
         let data = json!({"user": {"name": "Marius"}});
-        assert_eq!(render("{missing}", &data), Err(TemplateError::MissingValue("missing".into())));
-        assert_eq!(render("{user}", &data), Err(TemplateError::NonScalarValue("user".into())));
+        assert_eq!(
+            render("{missing}", &data),
+            Err(TemplateError::MissingValue("missing".into()))
+        );
+        assert_eq!(
+            render("{user}", &data),
+            Err(TemplateError::NonScalarValue("user".into()))
+        );
     }
 }
