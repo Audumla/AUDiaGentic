@@ -12,5 +12,8 @@ The following invariants are treated as locked by this spike unless a later proo
 8. Configuration semantics are separate from managed external configuration semantics.
 9. Redaction happens at diagnostic/output boundaries; legitimate persistence does not silently redact stored values.
 10. Reconciliation owns desired/observed/ownership semantics; filesystem/process effects stay outside it.
-11. Capability-specific errors and schemas live with the capability. Core contains only universal diagnostic primitives.
-12. Heavy runtime dependencies must remain absent from `audiagentic-core` and `audiagentic-application`.
+11. Stable managed identity is separate from a mutable target name; ownership evidence is separate from user-owned target data.
+12. Capability-specific errors and schemas live with the capability. Core contains only universal diagnostic primitives.
+13. Artifact resolution produces immutable digest/lock evidence; resolution transport is not part of the application model.
+14. Heavy runtime dependencies must remain absent from `audiagentic-core` and `audiagentic-application`.
+15. Generated Wasm ABI glue may contain generated unsafe code; handwritten baseline/core/capability code remains `forbid(unsafe_code)` where practical.
