@@ -23,13 +23,23 @@ logger = logging.getLogger(__name__)
 
 
 def _discover_adapter_packages() -> dict[str, ModuleType]:
-    """Discover adapter packages via pkgutil (surface imports only)."""
+    """Discover adapter packages via pkgutil (surface imports only).
+
+    An adapter whose optional dependency extra (e.g. gpt-auto's
+    ``websockets``) isn't installed is skipped rather than crashing
+    discovery for every other provider.
+    """
     modules: dict[str, ModuleType] = {}
     for module_info in pkgutil.iter_modules(__path__):
         name = module_info.name
         if name.startswith("_") or not module_info.ispkg:
             continue
-        modules[name] = importlib.import_module(f"{__name__}.{name}")
+        try:
+            modules[name] = importlib.import_module(f"{__name__}.{name}")
+        except ImportError as exc:
+            logger.warning(
+                "Skipping adapter %r: missing optional dependency (%s)", name, exc
+            )
     return modules
 
 

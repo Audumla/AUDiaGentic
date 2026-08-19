@@ -20,7 +20,14 @@ _DASHBOARD_HTML = """<!doctype html><html><head><meta charset='utf-8'><title>Age
 .projects{display:grid;gap:16px}.proj{background:linear-gradient(180deg,#131b31,#0f1729);border:1px solid var(--line);border-radius:16px;padding:16px 18px;box-shadow:var(--shadow)}
 .proj-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.proj-name{font-weight:750;font-size:15px;display:flex;align-items:center;gap:8px}.proj-name .icn{color:var(--purple)}.proj-pills{display:flex;gap:6px;flex-wrap:wrap}.pill{border-radius:99px;padding:3px 9px;font-size:11px;font-weight:650;border:1px solid var(--line);color:var(--muted)}.pill.busy{color:var(--amber);border-color:#5a4a24}.pill.recovering{color:var(--purple);border-color:#463a63}.pill.ready{color:var(--green);border-color:#254a37}.pill.failed{color:var(--red);border-color:#5a2a30}
 .jobs{display:grid;gap:8px}.job{display:grid;grid-template-columns:8px 1fr auto;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:11px 14px}.bar{align-self:stretch;width:6px;border-radius:5px;background:var(--cyan)}.bar.complete{background:var(--green)}.bar.busy{background:var(--amber);box-shadow:0 0 13px #f7c87388}.bar.failed{background:var(--red)}.bar.recovering{background:var(--purple);box-shadow:0 0 13px #b39bff88}
-.jobtitle{font-weight:700;font-size:13px}.meta{color:var(--muted);font-size:11.5px;margin-top:3px}.flags{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}.flag{background:#1c2740;border:1px solid var(--line);color:var(--muted);border-radius:6px;padding:1px 6px;font-size:10.5px}
+.jobtitle{font-weight:700;font-size:13px}.meta{color:var(--muted);font-size:11.5px;margin-top:3px}.flags{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
+.flag{background:#1c2740;border:1px solid var(--line);color:var(--muted);border-radius:6px;padding:1px 6px;font-size:10.5px;transition:background .3s,border-color .3s}
+.flag.progress{color:var(--amber);border-color:#5a4a24;background:#241c10}
+.flag.evidence{color:var(--cyan);border-color:#1f4a4a;background:#0f2323}
+.flag.alert{color:var(--red);border-color:#5a2a30;background:#2a1418;font-weight:650}
+.flag.baseline{opacity:.55}
+.flag.flash{animation:flash-in 1.6s ease-out}
+@keyframes flash-in{0%{box-shadow:0 0 0 4px currentColor;filter:brightness(1.6)}100%{box-shadow:0 0 0 0 transparent;filter:brightness(1)}}
 .badge{border:1px solid var(--line);border-radius:99px;padding:5px 10px;color:var(--cyan);font-size:12px;white-space:nowrap;height:fit-content}.badge.busy{color:var(--amber)}.badge.failed{color:var(--red)}.badge.recovering{color:var(--purple)}.badge.ready{color:var(--green)}
 .empty{color:var(--muted);padding:24px;text-align:center;border:1px dashed var(--line);border-radius:12px}.footer{color:var(--muted);font-size:11px;margin-top:20px}
 @media(max-width:1100px){.grid{grid-template-columns:repeat(3,1fr)}}
@@ -42,12 +49,55 @@ function flagsOf(s){const o=s.observed||{};const f=s.flags??o['dom-signals']??o.
 function classFor(s){s=s.toLowerCase();return /fail|error|crash|reject|cancel/.test(s)?'failed':/recover/.test(s)?'recovering':/ready|complete|closed|idle|success/.test(s)?'complete':'busy'}
 function badgeClassFor(s){s=s.toLowerCase();return /fail/.test(s)?'failed':/recover/.test(s)?'recovering':/busy|acquiring/.test(s)?'busy':/ready/.test(s)?'ready':''}
 function esc(x){return String(x).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]))}
+// Flags are real DOM evidence with very different meanings -- color-code by
+// what kind of claim each one makes so a glance distinguishes "the page has
+// loaded" (baseline, dimmed) from "something needs attention" (alert, red)
+// from "generation in progress" (amber) from "completion evidence" (cyan).
+const _FLAG_ALERT = new Set(['rate-limit-dialog', 'error-page', 'error-alert', 'auth-required']);
+const _FLAG_PROGRESS = new Set(['stop-control', 'streaming-indicator', 'thinking-indicator', 'busy-indicator']);
+const _FLAG_EVIDENCE = new Set(['completion-control', 'message-finalized', 'more-actions-menu', 'canvas-edit-control', 'canvas-open-editor-control']);
+const _FLAG_BASELINE = new Set(['url-present', 'composer-present', 'composer-editable', 'composer-ready', 'text-present']);
+function flagClass(f){if(_FLAG_ALERT.has(f))return 'alert';if(_FLAG_PROGRESS.has(f))return 'progress';if(_FLAG_EVIDENCE.has(f))return 'evidence';if(_FLAG_BASELINE.has(f))return 'baseline';return ''}
+// Every flag is a specific claim about DOM state -- name it plainly so an
+// unhighlighted (uncategorized) bubble is no longer a mystery, and every
+// bubble's tooltip states its category up front (a bubble with no color
+// still gets a real explanation, it's just not one of the four known
+// categories above).
+const _FLAG_CATEGORY_LABEL = {alert:'Alert', progress:'In progress', evidence:'Completion evidence', baseline:'Baseline', '':'Uncategorized'};
+const _FLAG_DESC = {
+  'url-present':"Page has a resolvable ChatGPT conversation URL.",
+  'composer-present':"The message composer element exists in the DOM.",
+  'composer-editable':"The composer currently accepts text input.",
+  'composer-ready':"Composer is present, editable, and ready for the next prompt.",
+  'text-present':"Assistant response text is present in the DOM.",
+  'stop-control':"ChatGPT's 'Stop generating' button is visible -- response is likely still streaming.",
+  'streaming-indicator':"The response's streaming animation is active.",
+  'thinking-indicator':"The model 'thinking' indicator is visible.",
+  'busy-indicator':"aria-busy is set -- ChatGPT itself reports it is still working.",
+  'completion-control':"The response's copy button is present -- usually means the turn finished.",
+  'message-finalized':"ChatGPT's own DOM marker for 'this is the last rendered message'.",
+  'more-actions-menu':"The end-of-turn 'More actions' menu is present, corroborating completion.",
+  'canvas-edit-control':"Canvas/writing-block edit control is present (canvas response variant).",
+  'canvas-open-editor-control':"Canvas 'Open editor' control is present, pairs with canvas-edit-control.",
+  'error-page':"ChatGPT rendered a full error page.",
+  'error-alert':"An alert-role error message is showing.",
+  'auth-required':"ChatGPT is asking to log in -- this browser session isn't authenticated.",
+  'rate-limit-dialog':"ChatGPT's rate-limit dialog is showing (advisory only -- generation can still finish behind it).",
+};
+function flagTitle(f){const cls=flagClass(f);const label=_FLAG_CATEGORY_LABEL[cls];const desc=_FLAG_DESC[f]||'No description recorded for this signal.';return `${label}: ${desc}`}
+// Newly-appeared flags flash once so a state change is actually noticeable
+// on a page that repaints every second -- otherwise a bubble silently
+// popping into an unchanging-looking list is easy to miss.
+const _prevFlags = {};
 function sessionRow(s){const st=statusOf(s),cls=classFor(st),flags=flagsOf(s),o=s.observed||{};
+  const key=s.session||s.page||'?';
+  const prior=_prevFlags[key]||new Set();
+  _prevFlags[key]=new Set(flags);
   const genLabel=o.generating===true?'generating':o.generating===false?'idle':null;
-  return `<article class='job'><i class='bar ${cls}'></i><div><div class='jobtitle'>${esc(s.session||'session')}</div>`+
-    `<div class='meta'>${s.page?'page '+esc(s.page):''}${s.turn?' · turn '+esc(s.turn):''}${genLabel?' · '+genLabel:''}</div>`+
-    (flags.length?`<div class='flags'>${flags.map(f=>`<span class='flag'>${esc(f)}</span>`).join('')}</div>`:'')+
-    `</div><span class='badge ${badgeClassFor(st)}'>${esc(st)}</span></article>`}
+  return `<article class='job'><i class='bar ${cls}' title='Session state: ${esc(st)}'></i><div><div class='jobtitle'>${esc(s.session||'session')}</div>`+
+    `<div class='meta'>${s.page?`<span title='Browser tab (CDP page handle) backing this session'>Tab: ${esc(s.page)}</span>`:''}${s.turn?` · <span title='Gateway request id for the in-flight turn'>Turn: ${esc(s.turn)}</span>`:''}${genLabel?' · '+genLabel:''}</div>`+
+    (flags.length?`<div class='flags'>${flags.map(f=>`<span class='flag ${flagClass(f)}${prior.has(f)?'':' flash'}' title='${esc(flagTitle(f))}'>${esc(f)}</span>`).join('')}</div>`:'')+
+    `</div><span class='badge ${badgeClassFor(st)}' title='Session state: ${esc(st)}'>${esc(st)}</span></article>`}
 window.renderDashboard=function(v){v=v||{};const ss=[...(v.sessions||[]),...(v.jobs||[])],q=v.queue||{},counts=v.counts||{},providers=v.providers||[];
   let projectGroups=v.projects;
   if(!projectGroups){const byKey={};for(const s of ss){const k=s.project_key||s.project||'unknown';(byKey[k]=byKey[k]||{key:k,name:s.project||k,sessions:[]}).sessions.push(s)}projectGroups=Object.values(byKey)}

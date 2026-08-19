@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -338,6 +339,33 @@ _READ_ONLY_GATEWAY_METHODS = frozenset({
     "list_agent_work",
 })
 
+# Mutating methods whose own handler independently documents a server-side
+# idempotency guarantee, verified against each handler before inclusion:
+# - resume_execution_session: api.py docstring -- "control_id makes
+#   repeated calls idempotent (returns the original result, never creates
+#   a second successor generation)".
+# - control_execution_session: session/controls.py -- "Durable idempotency
+#   for closed generic session controls", keyed on control_id.
+# - close_execution_session: api.py docstring -- "Idempotent -- closing a
+#   session that is already terminal ... returns its final record".
+# submit_execution_request and cancel_execution_request are deliberately
+# excluded: submit creates new work on every call, and cancel's replay
+# safety was not independently verified here.
+_IDEMPOTENT_MUTATING_GATEWAY_METHODS = frozenset({
+    "resume_execution_session",
+    "control_execution_session",
+    "close_execution_session",
+})
+
+_RETRY_ELIGIBLE_GATEWAY_METHODS = _READ_ONLY_GATEWAY_METHODS | _IDEMPOTENT_MUTATING_GATEWAY_METHODS
+
+# A gateway restart is not instantaneous. A single immediate retry can
+# still land inside the outage window (observed live 2026-08-18: a caller
+# retrying session-resume by hand, each attempt getting exactly one
+# immediate reconnect-and-try, kept missing a several-second restart
+# window). Retry eligible methods across this backoff instead of once.
+_RETRY_BACKOFF_SECONDS = (0.5, 1.5, 3.0)
+
 
 def call_gateway_method(
     method_name: str, project_root: Path | None, *args: Any, **kwargs: Any
@@ -352,9 +380,11 @@ def call_gateway_method(
     (confirmed live 2026-08-16, tracked as GP06). Reconnection is
     unconditionally safe -- a dead client is useless no matter what is being
     called -- but REPLAYING the specific failed call is not always safe, so
-    only read-only methods are retried after reconnecting; mutating calls
-    are re-raised so the caller decides, now against a live client for
-    their next attempt.
+    only methods proven safe to replay (read-only, or mutating with a
+    verified server-side idempotency key) are retried after reconnecting,
+    across a short backoff to ride out a genuine restart; every other
+    mutating call is re-raised so the caller decides, now against a live
+    client for their next attempt.
     """
     from audiagentic.foundation.contracts.errors import AudiaGenticError
 
@@ -366,6 +396,17 @@ def call_gateway_method(
             raise
         reset_gateway_client()
         client = get_gateway_client(project_root)
-        if method_name not in _READ_ONLY_GATEWAY_METHODS:
+        if method_name not in _RETRY_ELIGIBLE_GATEWAY_METHODS:
             raise
-        return getattr(client, method_name)(project_root, *args, **kwargs)
+        last_exc: AudiaGenticError = exc
+        for delay in _RETRY_BACKOFF_SECONDS:
+            try:
+                return getattr(client, method_name)(project_root, *args, **kwargs)
+            except AudiaGenticError as retry_exc:
+                if retry_exc.code != "NET-AGSV-002":
+                    raise
+                last_exc = retry_exc
+                time.sleep(delay)
+                reset_gateway_client()
+                client = get_gateway_client(project_root)
+        raise last_exc

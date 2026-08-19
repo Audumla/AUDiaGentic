@@ -718,6 +718,9 @@ class GptAutoTurn:
     # entirely to response-complete's own properly-guarded group instead
     # of being approximated here.
     _TERMINAL_WITNESS_SIGNALS = frozenset({"completion-control", "more-actions-menu"})
+    # GP47: cadence for the poll-loop heartbeat log, independent of tracker
+    # state transitions -- see _await_response's heartbeat comment.
+    _HEARTBEAT_INTERVAL_SECONDS = 30.0
 
     async def _await_response(self, baseline: ChatSnapshot, current: ChatSnapshot) -> str | None:
         """GP07: re-expresses the previously-bespoke start/stall/total timer
@@ -742,6 +745,17 @@ class GptAutoTurn:
         emitted = False
         last_observation_error: BaseException | None = None
         final_outcome: ObservationOutcome | None = None
+        # GP47 (2026-08-19): _advance_with_trace only logs on a tracker STATE
+        # TRANSITION. A turn that stalls for the full response-total-timeout
+        # (observed live: message-finalized present but never promoted past
+        # candidacy) can spend up to an hour with zero transitions and
+        # therefore zero log lines -- the only evidence surviving to the
+        # failure report was a single final snapshot, not enough to tell
+        # whether `generating` was wrongly stuck true throughout, or whether
+        # completion evidence itself simply never appeared until too late.
+        # A coarse heartbeat, independent of transitions, makes a future
+        # stall's timeline reconstructable from the gateway process log.
+        last_heartbeat_at = loop.time()
         while True:
             if self.cancel_event.is_set():
                 if self._stop_task is None:
@@ -850,6 +864,19 @@ class GptAutoTurn:
                     "gpt-auto Tier-3 generating signal disagreed with "
                     "response-complete policy evidence=%s",
                     sorted(complete.matched),
+                    extra={"turn-id": self.request.turn_id},
+                )
+            if now - last_heartbeat_at >= self._HEARTBEAT_INTERVAL_SECONDS:
+                last_heartbeat_at = now
+                logger.info(
+                    "gpt-auto response poll heartbeat tracker_state=%s generating=%s "
+                    "complete_satisfied=%s complete_evidence=%s text_len=%d dom_signals=%s",
+                    tracker.state.value,
+                    current.generating,
+                    complete.satisfied,
+                    sorted(complete.matched),
+                    len(current.latest_assistant_text or ""),
+                    sorted(current.dom_signals),
                     extra={"turn-id": self.request.turn_id},
                 )
 
@@ -1306,8 +1333,11 @@ def _snapshot_diagnostics(
         result["observed-user-id"] = snapshot.latest_user_id
     if snapshot.latest_assistant_id:
         result["observed-assistant-id"] = snapshot.latest_assistant_id
-    if snapshot.generating:
-        result["generating"] = True
+    # GP47: previously only included when True, which left a failure
+    # report unable to distinguish "not generating" from "not recorded" --
+    # exactly the ambiguity that blocked analyzing this class of failure
+    # after the fact. Always record the actual value.
+    result["generating"] = snapshot.generating
     if snapshot.error_present:
         result["error-present"] = True
     if snapshot.dom_signals:
