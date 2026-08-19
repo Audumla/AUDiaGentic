@@ -13,6 +13,26 @@ permissions:
   contents: read
 
 jobs:
+  rust-baseline-v2:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust 1.95
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          components: rustfmt,clippy
+
+      - name: Cache Rust baseline build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: experiments/clean-application-baseline
+
+      - name: Validate locked baseline architecture
+        run: bash experiments/clean-application-baseline/scripts/architecture.sh
+
   smoke:
     runs-on: ubuntu-24.04
     defaults:
