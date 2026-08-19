@@ -1,0 +1,25 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/capability-api",
+  "crates/application",
+  "crates/runtime-bevy",
+  "crates/component-host",
+  "crates/mcp-adapter",
+  "crates/spike-smoke",
+]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.95"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+anyhow = "1"
+async-trait = "0.1"
+bevy_app = "=0.19.1"
+bevy_ecs = "=0.19.1"
+rmcp = "=3.1.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
