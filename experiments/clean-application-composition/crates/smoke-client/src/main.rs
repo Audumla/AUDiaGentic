@@ -7,18 +7,29 @@ use rmcp::{
 use tokio::process::Command;
 
 fn require(value: bool, message: impl Into<String>) -> Result<(), Box<dyn std::error::Error>> {
-    if value { Ok(()) } else { Err(message.into().into()) }
+    if value {
+        Ok(())
+    } else {
+        Err(message.into().into())
+    }
 }
 
-async fn call_greet(client: &rmcp::service::RunningService<rmcp::RoleClient, ClientInfo>) -> Result<String, Box<dyn std::error::Error>> {
+async fn call_greet(
+    client: &rmcp::service::RunningService<rmcp::RoleClient, ClientInfo>,
+) -> Result<String, Box<dyn std::error::Error>> {
     let reply = client
         .call_tool(CallToolRequestParams::new("greet").with_arguments(object!({ "name": "Ada" })))
         .await?;
-    require(reply.is_error != Some(true), format!("greet failed: {reply:?}"))?;
+    require(
+        reply.is_error != Some(true),
+        format!("greet failed: {reply:?}"),
+    )?;
     Ok(format!("{reply:?}"))
 }
 
-async fn call_workflow(client: &rmcp::service::RunningService<rmcp::RoleClient, ClientInfo>) -> Result<String, Box<dyn std::error::Error>> {
+async fn call_workflow(
+    client: &rmcp::service::RunningService<rmcp::RoleClient, ClientInfo>,
+) -> Result<String, Box<dyn std::error::Error>> {
     let reply = client
         .call_tool(
             CallToolRequestParams::new("workflow_batch").with_arguments(object!({
@@ -29,7 +40,10 @@ async fn call_workflow(client: &rmcp::service::RunningService<rmcp::RoleClient, 
             })),
         )
         .await?;
-    require(reply.is_error != Some(true), format!("workflow failed: {reply:?}"))?;
+    require(
+        reply.is_error != Some(true),
+        format!("workflow failed: {reply:?}"),
+    )?;
     Ok(format!("{reply:?}"))
 }
 
@@ -43,7 +57,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "minimal-stdio" => {
             let client = ().serve(TokioChildProcess::new(Command::new(&target))?).await?;
             let tools = client.list_all_tools().await?;
-            require(tools.len() == 1 && tools[0].name == "greet", format!("unexpected minimal tools: {tools:?}"))?;
+            require(
+                tools.len() == 1 && tools[0].name == "greet",
+                format!("unexpected minimal tools: {tools:?}"),
+            )?;
             let greeting = call_greet(&client).await?;
             require(greeting.contains("native:hello Ada"), greeting.clone())?;
             println!("MINIMAL_GREETING={greeting}");
@@ -55,8 +72,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             command.arg("stdio").arg(wasm);
             let client = ().serve(TokioChildProcess::new(command)?).await?;
             let tools = client.list_all_tools().await?;
-            require(tools.iter().any(|tool| tool.name == "greet"), "mixed greet tool missing")?;
-            require(tools.iter().any(|tool| tool.name == "workflow_batch"), "mixed workflow tool missing")?;
+            require(
+                tools.iter().any(|tool| tool.name == "greet"),
+                "mixed greet tool missing",
+            )?;
+            require(
+                tools.iter().any(|tool| tool.name == "workflow_batch"),
+                "mixed workflow tool missing",
+            )?;
             let greeting = call_greet(&client).await?;
             require(greeting.contains("wasm:hello Ada"), greeting.clone())?;
             let workflow = call_workflow(&client).await?;
@@ -69,8 +92,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let transport = StreamableHttpClientTransport::from_uri(target);
             let client = ClientInfo::default().serve(transport).await?;
             let tools = client.list_all_tools().await?;
-            require(tools.iter().any(|tool| tool.name == "greet"), "HTTP greet tool missing")?;
-            require(tools.iter().any(|tool| tool.name == "workflow_batch"), "HTTP workflow tool missing")?;
+            require(
+                tools.iter().any(|tool| tool.name == "greet"),
+                "HTTP greet tool missing",
+            )?;
+            require(
+                tools.iter().any(|tool| tool.name == "workflow_batch"),
+                "HTTP workflow tool missing",
+            )?;
             let greeting = call_greet(&client).await?;
             require(greeting.contains("wasm:hello Ada"), greeting.clone())?;
             let workflow = call_workflow(&client).await?;
