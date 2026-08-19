@@ -32,10 +32,11 @@ Each real application defines its own strongly typed state/capability handles.
 
 - `audiagentic-core` — canonical IDs, application/component manifest data, diagnostics, immutable application context.
 - `audiagentic-application` — `Application<S>` only.
+- `audiagentic-artifact` — immutable artifact lock data plus a strict local `file:` resolver/digest verifier; OCI resolution can be added independently.
 - `audiagentic-config` — thin ordered-precedence policy over Figment; Figment owns recursive merge, typed extraction and per-value provenance.
 - `audiagentic-sensitive` — `secrecy` integration plus output/key/structural redaction helpers.
 - `audiagentic-template` — pure strict dotted-path template rendering.
-- `audiagentic-reconcile` — generic desired/observed ownership planning + receipts.
+- `audiagentic-reconcile` — stable managed IDs, desired/observed planning, separate ownership evidence, collision protection and receipts.
 - `audiagentic-file-store` — small native persistence helper using `atomic-write-file`; missing and malformed data remain distinct.
 
 The `examples/` crates prove a capability contract can live outside the base and be assembled into a
@@ -56,9 +57,9 @@ The following remain optional layers and must not leak into `core` or `applicati
 
 ## Next layer after this baseline
 
-1. host authority crates/interfaces for filesystem/process/secrets/config/observability;
+1. host authority interfaces for filesystem/process/secrets/config/observability, preferring WASI interfaces where they already fit;
 2. managed-config built from `reconcile` + file-store + host filesystem rather than placed in core;
-3. application artifact resolution and immutable resolved-manifest/lock data;
+3. OCI artifact resolution producing the same immutable lock data as the local resolver;
 4. adapters such as MCP consuming explicit capability handles;
 5. optional Bevy-backed capability runtimes.
 
