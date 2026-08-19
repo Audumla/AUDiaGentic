@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "experiments/bevy-runtime-foundation/**"
+      - "experiments/rust-wasm-foundation/**"
+      - "experiments/clean-application-baseline/**"
       - ".github/workflows/bevy-runtime-foundation-smoke.yml"
   workflow_dispatch:
 
@@ -40,3 +42,26 @@ jobs:
         env:
           RUST_LOG: info
         run: bash scripts/smoke.sh
+
+  clean-application-baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust 1.95
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          targets: wasm32-wasip2
+          components: rustfmt,clippy
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            experiments/clean-application-baseline
+            experiments/rust-wasm-foundation/host
+
+      - name: Build and execute clean baseline
+        run: bash experiments/clean-application-baseline/scripts/smoke.sh
