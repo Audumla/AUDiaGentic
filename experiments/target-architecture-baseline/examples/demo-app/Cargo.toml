@@ -1,0 +1,11 @@
+[package]
+name = "target-baseline-demo"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+audiagentic-application = { path = "../../crates/application" }
+audiagentic-core = { path = "../../crates/core" }
+target-baseline-demo-capability = { path = "../demo-capability" }
