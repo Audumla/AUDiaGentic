@@ -1,0 +1,43 @@
+name: spike-one-shot-format
+
+on:
+  pull_request:
+    paths:
+      - 'crates/**'
+      - 'examples/**'
+      - 'scripts/spike-one-shot-format.py'
+      - '.github/workflows/spike-one-shot-format.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.event.pull_request.number == 23 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.95.0'
+          components: rustfmt
+      - name: Apply reviewed source fixes
+        run: python scripts/spike-one-shot-format.py
+      - name: Apply Rust 1.95 formatting
+        run: cargo fmt --all
+      - name: Commit exact formatted source
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "SPIKE_FORMAT_ALREADY_CLEAN"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates examples
+          git commit -m "style: apply Rust 1.95 formatting and review fixes"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
