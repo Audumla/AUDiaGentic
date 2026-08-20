@@ -1,0 +1,11 @@
+[package]
+name = "audiagentic-process-native-spike"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+audiagentic-process-api-spike = { path = "../process-api" }
+async-trait.workspace = true
+tokio.workspace = true
