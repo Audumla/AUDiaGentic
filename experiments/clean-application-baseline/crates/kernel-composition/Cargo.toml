@@ -9,3 +9,6 @@ license.workspace = true
 audiagentic-kernel-core-spike = { path = "../kernel-core" }
 audiagentic-kernel-manifest-spike = { path = "../kernel-manifest" }
 thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
