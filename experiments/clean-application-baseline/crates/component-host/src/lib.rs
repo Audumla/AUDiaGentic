@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use audiagentic_capability_api_spike::ComponentProbe;
+use audiagentic_component_probe_api_spike::ComponentProbe;
 use tokio::process::Command;
 
 pub struct WasmComponentProbe {
