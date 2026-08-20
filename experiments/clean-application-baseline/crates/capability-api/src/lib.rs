@@ -122,6 +122,16 @@ where
     }
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NoWorkflow;
+
+#[async_trait]
+impl Workflow for NoWorkflow {
+    async fn run(&self, _request: WorkflowRequest) -> CapabilityResult<WorkflowResult> {
+        Err(CapabilityError::unavailable("workflow"))
+    }
+}
+
 #[async_trait]
 pub trait ComponentProbe: Send + Sync {
     async fn probe(&self) -> CapabilityResult<String>;
@@ -134,6 +144,16 @@ where
 {
     async fn probe(&self) -> CapabilityResult<String> {
         (**self).probe().await
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NoComponentProbe;
+
+#[async_trait]
+impl ComponentProbe for NoComponentProbe {
+    async fn probe(&self) -> CapabilityResult<String> {
+        Err(CapabilityError::unavailable("component_probe"))
     }
 }
 

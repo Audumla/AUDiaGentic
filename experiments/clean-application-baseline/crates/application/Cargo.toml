@@ -7,7 +7,7 @@ license.workspace = true
 
 [dependencies]
 audiagentic-capability-api-spike = { path = "../capability-api" }
-async-trait.workspace = true
 
 [dev-dependencies]
+async-trait.workspace = true
 tokio.workspace = true
