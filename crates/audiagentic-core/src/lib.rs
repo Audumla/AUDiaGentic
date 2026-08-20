@@ -3,7 +3,7 @@
 //! This crate deliberately does not know any concrete capability, runtime,
 //! transport, component technology, or I/O framework.
 
-use std::{error::Error, fmt};
+use std::{collections::BTreeSet, error::Error, fmt};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IdentifierError {
@@ -60,6 +60,41 @@ define_id!(CapabilityId);
 define_id!(ExecutionId);
 define_id!(CorrelationId);
 define_id!(DiagnosticCode);
+
+/// Static component metadata. It describes semantic requirements/exports only;
+/// it does not resolve, discover, instantiate, or register implementations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ComponentDescriptor {
+    component_id: ComponentId,
+    exports: BTreeSet<CapabilityId>,
+    requires: BTreeSet<CapabilityId>,
+}
+
+impl ComponentDescriptor {
+    pub fn new(
+        component_id: ComponentId,
+        exports: impl IntoIterator<Item = CapabilityId>,
+        requires: impl IntoIterator<Item = CapabilityId>,
+    ) -> Self {
+        Self {
+            component_id,
+            exports: exports.into_iter().collect(),
+            requires: requires.into_iter().collect(),
+        }
+    }
+
+    pub fn component_id(&self) -> &ComponentId {
+        &self.component_id
+    }
+
+    pub fn exports(&self) -> &BTreeSet<CapabilityId> {
+        &self.exports
+    }
+
+    pub fn requires(&self) -> &BTreeSet<CapabilityId> {
+        &self.requires
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApplicationIdentity {
@@ -222,7 +257,11 @@ impl LifecycleError {
 
 impl fmt::Display for LifecycleError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "invalid lifecycle transition {:?} -> {:?}", self.from, self.to)
+        write!(
+            f,
+            "invalid lifecycle transition {:?} -> {:?}",
+            self.from, self.to
+        )
     }
 }
 
@@ -246,7 +285,11 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    pub fn new(code: DiagnosticCode, severity: DiagnosticSeverity, summary: impl Into<String>) -> Self {
+    pub fn new(
+        code: DiagnosticCode,
+        severity: DiagnosticSeverity,
+        summary: impl Into<String>,
+    ) -> Self {
         Self {
             code,
             severity,
@@ -295,6 +338,25 @@ mod tests {
     }
 
     #[test]
+    fn component_metadata_is_descriptive_not_resolving() {
+        let descriptor = ComponentDescriptor::new(
+            ComponentId::new("calculator-component").unwrap(),
+            [CapabilityId::new("calculator.add").unwrap()],
+            [CapabilityId::new("audit.record").unwrap()],
+        );
+        assert!(
+            descriptor
+                .exports()
+                .contains(&CapabilityId::new("calculator.add").unwrap())
+        );
+        assert!(
+            descriptor
+                .requires()
+                .contains(&CapabilityId::new("audit.record").unwrap())
+        );
+    }
+
+    #[test]
     fn lifecycle_enforces_only_generic_lifecycle_semantics() {
         let mut lifecycle = Lifecycle::default();
         lifecycle.transition(LifecycleState::Starting).unwrap();
@@ -307,6 +369,9 @@ mod tests {
     #[test]
     fn identifiers_reject_empty_values() {
         assert!(CapabilityId::new("  ").is_err());
-        assert_eq!(CapabilityId::new("calc.add").unwrap().as_str(), "calc.add");
+        assert_eq!(
+            CapabilityId::new("calc.add").unwrap().as_str(),
+            "calc.add"
+        );
     }
 }
