@@ -17,6 +17,8 @@ members = [
   "crates/filesystem-native",
   "crates/process-api",
   "crates/process-native",
+  "crates/secrets-api",
+  "crates/secrets-memory",
   "crates/managed-config-api",
   "crates/managed-config-json",
   "crates/runtime-bevy",
