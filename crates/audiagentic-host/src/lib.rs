@@ -167,11 +167,7 @@ impl ProcessRequest {
         self
     }
 
-    pub fn env_secret(
-        mut self,
-        key: impl Into<OsString>,
-        value: Secret<OsString>,
-    ) -> Self {
+    pub fn env_secret(mut self, key: impl Into<OsString>, value: Secret<OsString>) -> Self {
         self.environment.push((key.into(), value));
         self
     }
@@ -188,7 +184,14 @@ impl fmt::Debug for ProcessRequest {
             .field("program", &self.program)
             .field("args", &self.args)
             .field("current_dir", &self.current_dir)
-            .field("environment_keys", &self.environment.iter().map(|(key, _)| key).collect::<Vec<_>>())
+            .field(
+                "environment_keys",
+                &self
+                    .environment
+                    .iter()
+                    .map(|(key, _)| key)
+                    .collect::<Vec<_>>(),
+            )
             .field("inherit_environment", &self.inherit_environment)
             .finish()
     }
@@ -315,10 +318,8 @@ mod tests {
 
     #[test]
     fn process_request_redacts_environment_values() {
-        let request = ProcessRequest::new("/bin/tool").env_secret(
-            "TOKEN",
-            Secret::new(OsString::from("never-log-me")),
-        );
+        let request = ProcessRequest::new("/bin/tool")
+            .env_secret("TOKEN", Secret::new(OsString::from("never-log-me")));
         let debug = format!("{request:?}");
         assert!(debug.contains("TOKEN"));
         assert!(!debug.contains("never-log-me"));
