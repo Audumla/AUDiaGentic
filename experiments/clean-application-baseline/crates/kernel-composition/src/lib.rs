@@ -38,7 +38,9 @@ pub fn validate(
             .insert(binding.capability.clone(), binding.component.clone())
             .is_some()
         {
-            return Err(CompositionError::DuplicateBinding(binding.capability.clone()));
+            return Err(CompositionError::DuplicateBinding(
+                binding.capability.clone(),
+            ));
         }
 
         let component = discovered
