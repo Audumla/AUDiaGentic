@@ -19,6 +19,7 @@ from typing import Any
 from audiagentic.components.planning import planning_paths
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import load_yaml_file
+from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.workflow import (
     is_known_state,
     load_workflow,
@@ -60,7 +61,6 @@ __all__ = [
     "parse_item_custom_headings",
     "parse_item_sections",
     "parse_title",
-
     "render_item",
     "require_item",
     "state_dir",
@@ -125,10 +125,23 @@ _LEDGER_ENTRY_RE = re.compile(r"^\s*[-+*]\s+(chg_[^\s]+)\s*$")
 
 _ITEM_LOCKS: dict[tuple[Path, str], threading.RLock] = {}
 _ITEM_LOCKS_GUARD = threading.Lock()
+_LOCK_TIMEOUT_SECONDS = 30.0
+
+
+def _lock_path(project_root: Path, lock_key: str) -> Path:
+    """Return a deterministic cross-process lock path for a planning resource.
+
+    Item documents can move between the active and completed trees, so locking
+    the document path would let a state transition race an update.  Lock by the
+    stable logical ID instead.  ``StartupLock`` uses an atomic create-exclusive
+    lock file, which works across independent stdio MCP server processes.
+    """
+    safe_key = re.sub(r"[^A-Za-z0-9_.-]+", "_", lock_key)
+    return project_root / ".audiagentic" / "runtime" / "planning" / "locks" / f"{safe_key}.lock"
 
 
 def _item_lock(project_root: Path, item_id: str) -> threading.RLock:
-    key = (project_root.resolve(), item_id)
+    key = (project_root.resolve(), item_id.upper())
     with _ITEM_LOCKS_GUARD:
         lock = _ITEM_LOCKS.get(key)
         if lock is None:
@@ -139,17 +152,46 @@ def _item_lock(project_root: Path, item_id: str) -> threading.RLock:
 
 @contextmanager
 def item_identity_write_lock(project_root: Path, item_id: str):
-    """Serialize mutations by logical item identity, including state moves."""
+    """Serialize mutations by logical item identity, including state moves.
+
+    The in-process RLock avoids unnecessary lock-file churn for threads in one
+    server; StartupLock extends the critical section to other MCP processes.
+    """
     with _item_lock(project_root, item_id):
+        with StartupLock(
+            _lock_path(project_root, f"item-{item_id.upper()}"), timeout=_LOCK_TIMEOUT_SECONDS
+        ):
+            yield
+
+
+@contextmanager
+def planning_collection_write_lock(project_root: Path):
+    """Serialize creation and ID allocation across planning server processes."""
+    with StartupLock(
+        _lock_path(project_root, "planning-collection"), timeout=_LOCK_TIMEOUT_SECONDS
+    ):
         yield
 
 
 def serialize_item_update(func):
     """Decorate an item mutator with the same per-item write lock."""
+
     @wraps(func)
     def wrapped(project_root: Path, item_id: str, *args, **kwargs):
         with item_identity_write_lock(project_root, item_id):
             return func(project_root, item_id, *args, **kwargs)
+
+    return wrapped
+
+
+def serialize_planning_collection_write(func):
+    """Decorate a mutation that allocates IDs or changes the item collection."""
+
+    @wraps(func)
+    def wrapped(project_root: Path, *args, **kwargs):
+        with planning_collection_write_lock(project_root):
+            return func(project_root, *args, **kwargs)
+
     return wrapped
 
 
@@ -273,9 +315,6 @@ def build_item_body(
 
 def render_item(fm: dict[str, Any], body: str) -> str:
     return render_frontmatter(fm, body)
-
-
-
 
 
 def dir_item_prefix(directory: Path) -> str | None:

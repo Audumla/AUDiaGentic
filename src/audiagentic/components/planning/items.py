@@ -13,11 +13,13 @@ from typing import Any
 
 from audiagentic.components.planning import events, item_store, planning_paths
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.io import atomic_write_text
 from audiagentic.foundation.workflow.frontmatter import parse_frontmatter, parse_title
 
 logger = logging.getLogger(__name__)
 
 
+@item_store.serialize_planning_collection_write
 def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
     """Create a new plan item. Required keys: plan, title.
 
@@ -92,10 +94,7 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
         if k not in _consumed and k not in item_store.ITEM_SECTION_HEADING:
             raw_sections[k] = v
     # Serialize non-string values (dicts, lists) into markdown.
-    sections = {
-        k: item_store._serialize_section_value(v)
-        for k, v in raw_sections.items()
-    }
+    sections = {k: item_store._serialize_section_value(v) for k, v in raw_sections.items()}
     body = item_store.build_item_body(title, sections)
 
     # Append creation change log entry
@@ -104,7 +103,7 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
     slug = plan
     target = planning_paths.plans_active_dir(project_root) / slug / f"{item_id}.md"
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(item_store.render_item(fm, body), encoding="utf-8")
+    atomic_write_text(target, item_store.render_item(fm, body))
 
     payload = {
         "id": item_id,
@@ -257,9 +256,7 @@ def list_items_grouped(
 
     result = []
     for plan_key, plan_items in sorted(groups.items()):
-        active_count = sum(
-            1 for i in plan_items if i["state"] in item_store.active_states("item")
-        )
+        active_count = sum(1 for i in plan_items if i["state"] in item_store.active_states("item"))
         completed_count = sum(
             1 for i in plan_items if i["state"] in item_store.terminal_states("item")
         )
@@ -330,10 +327,10 @@ def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any
     target = target_dir / path.parent.name / path.name
     if target != path:
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(item_store.render_item(fm, body), encoding="utf-8")
+        atomic_write_text(target, item_store.render_item(fm, body))
         path.unlink()
     else:
-        target.write_text(item_store.render_item(fm, body), encoding="utf-8")
+        atomic_write_text(target, item_store.render_item(fm, body))
 
     # Clean up empty plan dirs in the source state (item was moved away)
     source_dir = item_store.state_dir(
@@ -421,9 +418,7 @@ def update_item(
             # success — writing it is what callers always meant.
             # Serialize non-string values (dicts, lists) into markdown.
             new_value = (
-                value
-                if isinstance(value, str)
-                else item_store._serialize_section_value(value)
+                value if isinstance(value, str) else item_store._serialize_section_value(value)
             )
             if key in append_keys:
                 existing = old_sections.get(key, "").rstrip()
@@ -463,7 +458,7 @@ def update_item(
         change_desc,
     )
 
-    path.write_text(item_store.render_item(fm, new_body), encoding="utf-8")
+    atomic_write_text(path, item_store.render_item(fm, new_body))
 
     result = {"ok": True, "id": item_id, "path": str(path.relative_to(project_root))}
     events.publish_planning_event(
