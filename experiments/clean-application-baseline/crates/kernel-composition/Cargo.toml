@@ -1,0 +1,11 @@
+[package]
+name = "audiagentic-kernel-composition-spike"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+audiagentic-kernel-core-spike = { path = "../kernel-core" }
+audiagentic-kernel-manifest-spike = { path = "../kernel-manifest" }
+thiserror.workspace = true
