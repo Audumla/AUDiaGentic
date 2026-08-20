@@ -31,6 +31,8 @@ assert_clean_tree audiagentic-foundation-template-spike FOUNDATION_TEMPLATE
 assert_clean_tree audiagentic-foundation-reconcile-spike FOUNDATION_RECONCILE
 assert_clean_tree audiagentic-foundation-config-spike FOUNDATION_CONFIG
 assert_clean_tree audiagentic-foundation-file-store-spike FOUNDATION_FILE_STORE
+assert_clean_tree audiagentic-workflow-api-spike WORKFLOW_API
+assert_clean_tree audiagentic-component-probe-api-spike COMPONENT_PROBE_API
 assert_clean_tree audiagentic-filesystem-api-spike FILESYSTEM_API
 assert_clean_tree audiagentic-filesystem-native-spike FILESYSTEM_NATIVE
 
