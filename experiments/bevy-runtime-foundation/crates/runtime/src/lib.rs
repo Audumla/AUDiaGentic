@@ -1,6 +1,10 @@
-use std::{thread, time::Instant};
+use std::{
+    sync::{Arc, Mutex},
+    thread,
+    time::Instant,
+};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use bevy_app::{App, Plugin, Update};
 use bevy_ecs::{prelude::*, schedule::IntoScheduleConfigs};
 use serde::Serialize;
@@ -75,8 +79,12 @@ impl Plugin for MetricsPlugin {
     }
 }
 
-fn advance_runs(mut runs: Query<&mut WorkflowRun>, mut finished: MessageWriter<RunFinished>) {
-    for mut run in &mut runs {
+fn advance_runs(
+    mut commands: Commands,
+    mut runs: Query<(Entity, &mut WorkflowRun)>,
+    mut finished: MessageWriter<RunFinished>,
+) {
+    for (entity, mut run) in &mut runs {
         match run.state {
             RunState::Ready => run.state = RunState::Running,
             RunState::Running => {
@@ -88,6 +96,7 @@ fn advance_runs(mut runs: Query<&mut WorkflowRun>, mut finished: MessageWriter<R
                         cancelled: true,
                         retries: run.retries,
                     });
+                    commands.entity(entity).despawn();
                     continue;
                 }
 
@@ -105,6 +114,7 @@ fn advance_runs(mut runs: Query<&mut WorkflowRun>, mut finished: MessageWriter<R
                         cancelled: false,
                         retries: run.retries,
                     });
+                    commands.entity(entity).despawn();
                 }
             }
             RunState::Retrying => run.state = RunState::Running,
@@ -128,6 +138,11 @@ fn build_app() -> App {
     let mut app = App::new();
     app.add_plugins((WorkflowPlugin, MetricsPlugin));
     app
+}
+
+fn active_run_count(app: &mut App) -> usize {
+    let mut query = app.world_mut().query::<&WorkflowRun>();
+    query.iter(app.world()).count()
 }
 
 fn execute_batch(app: &mut App, spec: BatchSpec) -> Result<BatchResult> {
@@ -193,18 +208,25 @@ enum RuntimeCommand {
         spec: BatchSpec,
         response: oneshot::Sender<Result<BatchResult>>,
     },
+    ActiveRuns {
+        response: oneshot::Sender<usize>,
+    },
+    Shutdown {
+        response: oneshot::Sender<()>,
+    },
 }
 
 #[derive(Clone)]
 pub struct WorkflowRuntimeHandle {
     tx: mpsc::Sender<RuntimeCommand>,
+    join: Arc<Mutex<Option<thread::JoinHandle<()>>>>,
 }
 
 impl WorkflowRuntimeHandle {
     pub fn spawn() -> Result<Self> {
         let (tx, mut rx) = mpsc::channel::<RuntimeCommand>(64);
 
-        thread::Builder::new()
+        let join = thread::Builder::new()
             .name("audiagentic-bevy-runtime".to_owned())
             .spawn(move || {
                 let mut app = build_app();
@@ -213,12 +235,22 @@ impl WorkflowRuntimeHandle {
                         RuntimeCommand::RunBatch { spec, response } => {
                             let _ = response.send(execute_batch(&mut app, spec));
                         }
+                        RuntimeCommand::ActiveRuns { response } => {
+                            let _ = response.send(active_run_count(&mut app));
+                        }
+                        RuntimeCommand::Shutdown { response } => {
+                            let _ = response.send(());
+                            break;
+                        }
                     }
                 }
             })
             .context("spawn Bevy runtime thread")?;
 
-        Ok(Self { tx })
+        Ok(Self {
+            tx,
+            join: Arc::new(Mutex::new(Some(join))),
+        })
     }
 
     pub async fn run_batch(&self, spec: BatchSpec) -> Result<BatchResult> {
@@ -228,6 +260,38 @@ impl WorkflowRuntimeHandle {
             .await
             .context("Bevy runtime is not available")?;
         rx.await.context("Bevy runtime dropped response")?
+    }
+
+    pub async fn active_runs(&self) -> Result<usize> {
+        let (response, rx) = oneshot::channel();
+        self.tx
+            .send(RuntimeCommand::ActiveRuns { response })
+            .await
+            .context("Bevy runtime is not available")?;
+        rx.await.context("Bevy runtime dropped active-run response")
+    }
+
+    pub async fn shutdown(&self) -> Result<()> {
+        let (response, rx) = oneshot::channel();
+        if self
+            .tx
+            .send(RuntimeCommand::Shutdown { response })
+            .await
+            .is_ok()
+        {
+            rx.await.context("Bevy runtime dropped shutdown response")?;
+        }
+
+        let join = self
+            .join
+            .lock()
+            .map_err(|_| anyhow!("Bevy runtime join handle lock poisoned"))?
+            .take();
+        if let Some(join) = join {
+            join.join()
+                .map_err(|_| anyhow!("Bevy runtime thread panicked during shutdown"))?;
+        }
+        Ok(())
     }
 }
 
@@ -252,5 +316,28 @@ mod tests {
         assert!(result.cancelled > 0);
         assert!(result.retried > 0);
         assert!(result.ticks < 80);
+        assert_eq!(runtime.active_runs().await.unwrap(), 0);
+        runtime.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn repeated_batches_release_terminal_entities() {
+        let runtime = WorkflowRuntimeHandle::spawn().unwrap();
+        for _ in 0..20 {
+            let result = runtime
+                .run_batch(BatchSpec {
+                    runs: 500,
+                    steps: 8,
+                    retry_every: 17,
+                    cancel_every: 101,
+                })
+                .await
+                .unwrap();
+            assert_eq!(result.completed + result.cancelled, 500);
+            assert_eq!(runtime.active_runs().await.unwrap(), 0);
+        }
+
+        runtime.shutdown().await.unwrap();
+        assert!(runtime.active_runs().await.is_err());
     }
 }

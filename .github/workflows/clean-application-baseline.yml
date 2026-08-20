@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - spike/clean-application-baseline
+      - work/production-application-baseline
   pull_request:
     paths:
       - 'experiments/clean-application-baseline/**'
@@ -37,3 +38,13 @@ jobs:
             experiments/rust-wasm-foundation/components/workflow-alt -> target
       - name: Run clean baseline smoke
         run: bash experiments/clean-application-baseline/scripts/smoke.sh
+      - name: Capture resolved lockfiles
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clean-baseline-lockfiles
+          if-no-files-found: ignore
+          path: |
+            experiments/clean-application-baseline/Cargo.lock
+            experiments/bevy-runtime-foundation/Cargo.lock
+            experiments/rust-wasm-foundation/**/Cargo.lock
