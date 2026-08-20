@@ -9,6 +9,9 @@ license.workspace = true
 audiagentic-application-spike = { path = "../application" }
 audiagentic-capability-api-spike = { path = "../capability-api" }
 audiagentic-component-host-spike = { path = "../component-host" }
+audiagentic-filesystem-api-spike = { path = "../filesystem-api" }
+audiagentic-filesystem-native-spike = { path = "../filesystem-native" }
+audiagentic-kernel-core-spike = { path = "../kernel-core" }
 audiagentic-mcp-adapter-spike = { path = "../mcp-adapter" }
 audiagentic-runtime-bevy-spike = { path = "../runtime-bevy" }
 tokio.workspace = true
