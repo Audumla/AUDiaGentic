@@ -14,7 +14,7 @@ use std::{
 use audiagentic_file_store::{FileStoreError, read as read_file, write_atomic};
 use audiagentic_host::{
     FileHost, FileReadAuthority, FileWriteAuthority, ProcessAuthority, ProcessChild, ProcessExit,
-    ProcessHost, ProcessRequest,
+    ProcessHost, ProcessRequest, ProcessStdio,
 };
 use thiserror::Error;
 
@@ -34,8 +34,22 @@ pub enum NativeHostError {
     },
     #[error("authority root is not a directory: {0:?}")]
     AuthorityRootNotDirectory(PathBuf),
+    #[error("inspect read target {path:?}: {source}")]
+    InspectReadTarget {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
     #[error("canonicalize read path {path:?}: {source}")]
     CanonicalizeReadPath {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error("read path has no parent: {0:?}")]
+    MissingReadParent(PathBuf),
+    #[error("canonicalize read parent {path:?}: {source}")]
+    CanonicalizeReadParent {
         path: PathBuf,
         #[source]
         source: io::Error,
@@ -58,6 +72,12 @@ pub enum NativeHostError {
     },
     #[error("write target is a symbolic link: {0:?}")]
     SymbolicLinkWriteTarget(PathBuf),
+    #[error("remove file {path:?}: {source}")]
+    RemoveFile {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
     #[error("{operation} path {path:?} is outside authority root {root:?}")]
     OutsideAuthority {
         operation: &'static str,
@@ -151,6 +171,44 @@ fn authorize_read(authority: &FileReadAuthority, path: &Path) -> Result<PathBuf,
     Ok(canonical)
 }
 
+fn authorize_optional_read(
+    authority: &FileReadAuthority,
+    path: &Path,
+) -> Result<Option<PathBuf>, NativeHostError> {
+    let root = canonical_root(authority.root())?;
+    let requested = requested_path(&root, path);
+
+    match fs::symlink_metadata(&requested) {
+        Ok(_) => {
+            let canonical = fs::canonicalize(&requested).map_err(|source| {
+                NativeHostError::CanonicalizeReadPath {
+                    path: requested,
+                    source,
+                }
+            })?;
+            ensure_contained("read", &root, &canonical)?;
+            Ok(Some(canonical))
+        }
+        Err(source) if source.kind() == io::ErrorKind::NotFound => {
+            let parent = requested
+                .parent()
+                .ok_or_else(|| NativeHostError::MissingReadParent(requested.clone()))?;
+            let canonical_parent = fs::canonicalize(parent).map_err(|source| {
+                NativeHostError::CanonicalizeReadParent {
+                    path: parent.to_path_buf(),
+                    source,
+                }
+            })?;
+            ensure_contained("read", &root, &canonical_parent)?;
+            Ok(None)
+        }
+        Err(source) => Err(NativeHostError::InspectReadTarget {
+            path: requested,
+            source,
+        }),
+    }
+}
+
 fn authorize_write(
     authority: &FileWriteAuthority,
     path: &Path,
@@ -212,12 +270,31 @@ fn process_exit(status: ExitStatus) -> ProcessExit {
     ProcessExit::new(status.code(), status.success())
 }
 
+fn process_stdio(mode: ProcessStdio) -> Stdio {
+    match mode {
+        ProcessStdio::Pipe => Stdio::piped(),
+        ProcessStdio::Null => Stdio::null(),
+        ProcessStdio::Inherit => Stdio::inherit(),
+    }
+}
+
 impl FileHost for NativeFileHost {
     type Error = NativeHostError;
 
     fn read(&self, authority: &FileReadAuthority, path: &Path) -> Result<Vec<u8>, Self::Error> {
         let path = authorize_read(authority, path)?;
         read_file(path).map_err(NativeHostError::from)
+    }
+
+    fn read_optional(
+        &self,
+        authority: &FileReadAuthority,
+        path: &Path,
+    ) -> Result<Option<Vec<u8>>, Self::Error> {
+        let Some(path) = authorize_optional_read(authority, path)? else {
+            return Ok(None);
+        };
+        read_file(path).map(Some).map_err(NativeHostError::from)
     }
 
     fn write(
@@ -228,6 +305,11 @@ impl FileHost for NativeFileHost {
     ) -> Result<(), Self::Error> {
         let path = authorize_write(authority, path)?;
         write_atomic(path, bytes).map_err(NativeHostError::from)
+    }
+
+    fn remove(&self, authority: &FileWriteAuthority, path: &Path) -> Result<(), Self::Error> {
+        let path = authorize_write(authority, path)?;
+        fs::remove_file(&path).map_err(|source| NativeHostError::RemoveFile { path, source })
     }
 }
 
@@ -275,6 +357,24 @@ impl ProcessChild for NativeProcess {
         self.stderr
             .as_mut()
             .map(|stderr| stderr as &mut (dyn Read + Send))
+    }
+
+    fn take_stdin(&mut self) -> Option<Box<dyn Write + Send>> {
+        self.stdin
+            .take()
+            .map(|stdin| Box::new(stdin) as Box<dyn Write + Send>)
+    }
+
+    fn take_stdout(&mut self) -> Option<Box<dyn Read + Send>> {
+        self.stdout
+            .take()
+            .map(|stdout| Box::new(stdout) as Box<dyn Read + Send>)
+    }
+
+    fn take_stderr(&mut self) -> Option<Box<dyn Read + Send>> {
+        self.stderr
+            .take()
+            .map(|stderr| Box::new(stderr) as Box<dyn Read + Send>)
     }
 
     fn try_wait(&mut self) -> Result<Option<ProcessExit>, Self::Error> {
@@ -325,9 +425,9 @@ impl ProcessHost for NativeProcessHost {
         let program = authorize_program(authority, request.program())?;
         let mut command = Command::new(&program);
         command.args(request.args());
-        command.stdin(Stdio::piped());
-        command.stdout(Stdio::piped());
-        command.stderr(Stdio::piped());
+        command.stdin(process_stdio(request.stdin_mode()));
+        command.stdout(process_stdio(request.stdout_mode()));
+        command.stderr(process_stdio(request.stderr_mode()));
 
         if let Some(current_dir) = request.current_dir() {
             command.current_dir(current_dir);
@@ -364,7 +464,7 @@ mod tests {
     }
 
     #[test]
-    fn round_trip_and_overwrite_are_authority_mediated() {
+    fn round_trip_overwrite_optional_read_and_remove_are_authority_mediated() {
         let _test_guard = TEST_LOCK.lock().unwrap();
         let root = test_root("round-trip");
         let _ = fs::remove_dir_all(&root);
@@ -375,9 +475,16 @@ mod tests {
         let write = FileWriteAuthority::new(&root);
         let path = root.join("state.bin");
 
+        assert_eq!(host.read_optional(&read, &path).unwrap(), None);
         host.write(&write, &path, b"one").unwrap();
         host.write(&write, &path, b"two").unwrap();
         assert_eq!(host.read(&read, &path).unwrap(), b"two");
+        assert_eq!(
+            host.read_optional(&read, &path).unwrap(),
+            Some(b"two".to_vec())
+        );
+        host.remove(&write, &path).unwrap();
+        assert_eq!(host.read_optional(&read, &path).unwrap(), None);
 
         fs::remove_dir_all(root).unwrap();
     }

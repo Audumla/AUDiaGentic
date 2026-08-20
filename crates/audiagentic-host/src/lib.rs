@@ -109,6 +109,14 @@ impl SecretAuthority {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ProcessStdio {
+    #[default]
+    Pipe,
+    Null,
+    Inherit,
+}
+
 /// Description of a managed child process. Environment values are represented
 /// as `Secret` so debug output cannot expose them accidentally.
 pub struct ProcessRequest {
@@ -117,6 +125,9 @@ pub struct ProcessRequest {
     current_dir: Option<PathBuf>,
     environment: Vec<(OsString, Secret<OsString>)>,
     inherit_environment: bool,
+    stdin: ProcessStdio,
+    stdout: ProcessStdio,
+    stderr: ProcessStdio,
 }
 
 impl ProcessRequest {
@@ -127,6 +138,9 @@ impl ProcessRequest {
             current_dir: None,
             environment: Vec::new(),
             inherit_environment: false,
+            stdin: ProcessStdio::Pipe,
+            stdout: ProcessStdio::Pipe,
+            stderr: ProcessStdio::Pipe,
         }
     }
 
@@ -150,6 +164,18 @@ impl ProcessRequest {
 
     pub fn inherits_environment(&self) -> bool {
         self.inherit_environment
+    }
+
+    pub fn stdin_mode(&self) -> ProcessStdio {
+        self.stdin
+    }
+
+    pub fn stdout_mode(&self) -> ProcessStdio {
+        self.stdout
+    }
+
+    pub fn stderr_mode(&self) -> ProcessStdio {
+        self.stderr
     }
 
     pub fn arg(mut self, arg: impl Into<OsString>) -> Self {
@@ -176,6 +202,21 @@ impl ProcessRequest {
         self.inherit_environment = inherit;
         self
     }
+
+    pub fn stdin(mut self, mode: ProcessStdio) -> Self {
+        self.stdin = mode;
+        self
+    }
+
+    pub fn stdout(mut self, mode: ProcessStdio) -> Self {
+        self.stdout = mode;
+        self
+    }
+
+    pub fn stderr(mut self, mode: ProcessStdio) -> Self {
+        self.stderr = mode;
+        self
+    }
 }
 
 impl fmt::Debug for ProcessRequest {
@@ -193,6 +234,9 @@ impl fmt::Debug for ProcessRequest {
                     .collect::<Vec<_>>(),
             )
             .field("inherit_environment", &self.inherit_environment)
+            .field("stdin", &self.stdin)
+            .field("stdout", &self.stdout)
+            .field("stderr", &self.stderr)
             .finish()
     }
 }
@@ -239,12 +283,20 @@ pub trait FileHost: Send + Sync {
 
     fn read(&self, authority: &FileReadAuthority, path: &Path) -> Result<Vec<u8>, Self::Error>;
 
+    fn read_optional(
+        &self,
+        authority: &FileReadAuthority,
+        path: &Path,
+    ) -> Result<Option<Vec<u8>>, Self::Error>;
+
     fn write(
         &self,
         authority: &FileWriteAuthority,
         path: &Path,
         bytes: &[u8],
     ) -> Result<(), Self::Error>;
+
+    fn remove(&self, authority: &FileWriteAuthority, path: &Path) -> Result<(), Self::Error>;
 }
 
 /// Owned child-process lifecycle. Blocking stdio is exposed deliberately at
@@ -257,9 +309,20 @@ pub trait ProcessChild: Send {
     fn stdin(&mut self) -> Option<&mut (dyn Write + Send)>;
     fn stdout(&mut self) -> Option<&mut (dyn Read + Send)>;
     fn stderr(&mut self) -> Option<&mut (dyn Read + Send)>;
+    fn take_stdin(&mut self) -> Option<Box<dyn Write + Send>>;
+    fn take_stdout(&mut self) -> Option<Box<dyn Read + Send>>;
+    fn take_stderr(&mut self) -> Option<Box<dyn Read + Send>>;
     fn try_wait(&mut self) -> Result<Option<ProcessExit>, Self::Error>;
     fn wait(&mut self) -> Result<ProcessExit, Self::Error>;
     fn kill(&mut self) -> Result<(), Self::Error>;
+
+    fn close_stdin(&mut self) {
+        drop(self.take_stdin());
+    }
+
+    fn is_running(&mut self) -> Result<bool, Self::Error> {
+        Ok(self.try_wait()?.is_none())
+    }
 }
 
 /// Process creation returns an owned child rather than collapsing a harness
@@ -317,11 +380,13 @@ mod tests {
     }
 
     #[test]
-    fn process_request_redacts_environment_values() {
+    fn process_request_redacts_environment_values_and_exposes_stdio_policy() {
         let request = ProcessRequest::new("/bin/tool")
-            .env_secret("TOKEN", Secret::new(OsString::from("never-log-me")));
+            .env_secret("TOKEN", Secret::new(OsString::from("never-log-me")))
+            .stderr(ProcessStdio::Null);
         let debug = format!("{request:?}");
         assert!(debug.contains("TOKEN"));
         assert!(!debug.contains("never-log-me"));
+        assert_eq!(request.stderr_mode(), ProcessStdio::Null);
     }
 }

@@ -66,6 +66,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "audiagentic-example-platform"
+version = "0.1.0"
+dependencies = [
+ "audiagentic-core",
+ "audiagentic-events",
+ "audiagentic-host",
+ "audiagentic-host-native",
+ "audiagentic-managed-config",
+ "audiagentic-reconcile",
+ "audiagentic-time",
+ "audiagentic-workflow",
+]
+
+[[package]]
 name = "audiagentic-example-tiny"
 version = "0.1.0"
 dependencies = [
@@ -96,6 +110,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "audiagentic-managed-config"
+version = "0.1.0"
+dependencies = [
+ "audiagentic-host",
+ "audiagentic-reconcile",
+]
+
+[[package]]
 name = "audiagentic-reconcile"
 version = "0.1.0"
 
@@ -105,6 +127,10 @@ version = "0.1.0"
 
 [[package]]
 name = "audiagentic-template"
+version = "0.1.0"
+
+[[package]]
+name = "audiagentic-time"
 version = "0.1.0"
 
 [[package]]
