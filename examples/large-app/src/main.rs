@@ -14,10 +14,8 @@ struct StateFeature {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let directory = std::env::temp_dir().join(format!(
-        "audiagentic-large-app-{}",
-        std::process::id()
-    ));
+    let directory =
+        std::env::temp_dir().join(format!("audiagentic-large-app-{}", std::process::id()));
     let path = directory.join("state.txt");
     let _ = fs::remove_dir_all(&directory);
 
