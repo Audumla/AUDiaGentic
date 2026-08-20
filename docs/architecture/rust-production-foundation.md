@@ -24,7 +24,7 @@ application-specific code
         |       file-store
         |
         +---- narrow host-facility contracts
-        |       filesystem / process / network / secrets / observability
+        |       filesystem / process / network / secrets
         |
         +---- audiagentic-core
                 identity
@@ -58,7 +58,9 @@ Foundation libraries are small semantic libraries, not managers:
 
 `audiagentic-host` contains narrow host-facility contracts and explicit authority scopes. It is not a DI container and does not aggregate facilities into a global service locator. Callers pass the specific facility and authority required by a capability.
 
-The current authority checks are structural policy objects. Platform-specific canonicalization, sandboxing, OS process containment, credential providers, and networking implementations belong to later host implementation work.
+The current authority objects carry structural policy only. Platform-specific canonicalization, sandboxing, OS process containment, credential providers, networking implementations, and policy enforcement belong to later host implementation work.
+
+Observability is deliberately not modeled as a generic AUDiaGentic `EventSink` or event bus. Later integrations should use the Rust `tracing` ecosystem and OpenTelemetry projection at the appropriate runtime/application edge.
 
 ## Errors
 
@@ -76,7 +78,8 @@ Human presentation remains separate from machine identity.
 4. zero normal dependencies in `audiagentic-core`;
 5. no Bevy/RMCP/Wasmtime/wash-runtime/Tokio/async-trait dependency in the production foundation;
 6. no spike-specific `Workflow`, `ComponentProbe`, or `DynApplication` vocabulary in core;
-7. host contracts do not depend upward on config, file-store, template, or reconcile.
+7. host contracts do not depend upward on config, file-store, template, or reconcile;
+8. all Cargo build/test/run/tree checks use the committed lockfile with `--locked`.
 
 ## Deliberately not in this baseline
 
