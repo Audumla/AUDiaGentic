@@ -6,7 +6,8 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-audiagentic-capability-api-spike = { path = "../capability-api" }
+audiagentic-component-probe-api-spike = { path = "../component-probe-api" }
+audiagentic-workflow-api-spike = { path = "../workflow-api" }
 rmcp.workspace = true
 schemars.workspace = true
 serde.workspace = true
