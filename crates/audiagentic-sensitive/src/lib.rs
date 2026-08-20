@@ -108,7 +108,9 @@ impl SafeMetadata {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
-        self.values.iter().map(|(key, value)| (key.as_str(), value.as_str()))
+        self.values
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str()))
     }
 }
 
@@ -116,7 +118,9 @@ pub fn redact_text<'a>(input: &str, secrets: impl IntoIterator<Item = &'a str>) 
     secrets
         .into_iter()
         .filter(|secret| !secret.is_empty())
-        .fold(input.to_owned(), |text, secret| text.replace(secret, REDACTED))
+        .fold(input.to_owned(), |text, secret| {
+            text.replace(secret, REDACTED)
+        })
 }
 
 #[cfg(test)]
