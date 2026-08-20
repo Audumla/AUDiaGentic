@@ -18,6 +18,8 @@ audiagentic-mcp-adapter-spike = { path = "../mcp-adapter" }
 audiagentic-process-api-spike = { path = "../process-api" }
 audiagentic-process-native-spike = { path = "../process-native" }
 audiagentic-runtime-bevy-spike = { path = "../runtime-bevy" }
+audiagentic-secrets-api-spike = { path = "../secrets-api" }
+audiagentic-secrets-memory-spike = { path = "../secrets-memory" }
 audiagentic-workflow-api-spike = { path = "../workflow-api" }
 serde_json.workspace = true
 tokio.workspace = true
