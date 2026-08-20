@@ -37,6 +37,8 @@ assert_clean_tree audiagentic-filesystem-api-spike FILESYSTEM_API
 assert_clean_tree audiagentic-filesystem-native-spike FILESYSTEM_NATIVE
 assert_clean_tree audiagentic-process-api-spike PROCESS_API
 assert_clean_tree audiagentic-process-native-spike PROCESS_NATIVE
+assert_clean_tree audiagentic-secrets-api-spike SECRETS_API
+assert_clean_tree audiagentic-secrets-memory-spike SECRETS_MEMORY
 assert_clean_tree audiagentic-managed-config-api-spike MANAGED_CONFIG_API
 assert_clean_tree audiagentic-managed-config-json-spike MANAGED_CONFIG_JSON
 
