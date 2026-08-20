@@ -6,8 +6,10 @@
 use std::{
     collections::BTreeSet,
     error::Error,
-    ffi::OsString,
+    ffi::{OsStr, OsString},
+    fmt,
     future::Future,
+    io::{Read, Write},
     path::{Path, PathBuf},
     pin::Pin,
 };
@@ -51,6 +53,11 @@ impl FileWriteAuthority {
     }
 }
 
+/// Permission to launch a bounded set of executable paths.
+///
+/// This is launch authority, not a child-process sandbox: once started, a
+/// native process has the operating-system authority of its account unless a
+/// stronger platform sandbox is applied by a later concrete host.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ProcessAuthority {
     programs: BTreeSet<PathBuf>,
@@ -102,17 +109,109 @@ impl SecretAuthority {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Description of a managed child process. Environment values are represented
+/// as `Secret` so debug output cannot expose them accidentally.
 pub struct ProcessRequest {
-    pub program: PathBuf,
-    pub args: Vec<OsString>,
+    program: PathBuf,
+    args: Vec<OsString>,
+    current_dir: Option<PathBuf>,
+    environment: Vec<(OsString, Secret<OsString>)>,
+    inherit_environment: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProcessOutput {
-    pub exit_code: Option<i32>,
-    pub stdout: Vec<u8>,
-    pub stderr: Vec<u8>,
+impl ProcessRequest {
+    pub fn new(program: impl Into<PathBuf>) -> Self {
+        Self {
+            program: program.into(),
+            args: Vec::new(),
+            current_dir: None,
+            environment: Vec::new(),
+            inherit_environment: false,
+        }
+    }
+
+    pub fn program(&self) -> &Path {
+        &self.program
+    }
+
+    pub fn args(&self) -> &[OsString] {
+        &self.args
+    }
+
+    pub fn current_dir(&self) -> Option<&Path> {
+        self.current_dir.as_deref()
+    }
+
+    pub fn environment(&self) -> impl Iterator<Item = (&OsStr, &Secret<OsString>)> {
+        self.environment
+            .iter()
+            .map(|(key, value)| (key.as_os_str(), value))
+    }
+
+    pub fn inherits_environment(&self) -> bool {
+        self.inherit_environment
+    }
+
+    pub fn arg(mut self, arg: impl Into<OsString>) -> Self {
+        self.args.push(arg.into());
+        self
+    }
+
+    pub fn args_from(mut self, args: impl IntoIterator<Item = OsString>) -> Self {
+        self.args.extend(args);
+        self
+    }
+
+    pub fn current_dir_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.current_dir = Some(path.into());
+        self
+    }
+
+    pub fn env_secret(
+        mut self,
+        key: impl Into<OsString>,
+        value: Secret<OsString>,
+    ) -> Self {
+        self.environment.push((key.into(), value));
+        self
+    }
+
+    pub fn inherit_environment(mut self, inherit: bool) -> Self {
+        self.inherit_environment = inherit;
+        self
+    }
+}
+
+impl fmt::Debug for ProcessRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ProcessRequest")
+            .field("program", &self.program)
+            .field("args", &self.args)
+            .field("current_dir", &self.current_dir)
+            .field("environment_keys", &self.environment.iter().map(|(key, _)| key).collect::<Vec<_>>())
+            .field("inherit_environment", &self.inherit_environment)
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProcessExit {
+    code: Option<i32>,
+    success: bool,
+}
+
+impl ProcessExit {
+    pub fn new(code: Option<i32>, success: bool) -> Self {
+        Self { code, success }
+    }
+
+    pub fn code(self) -> Option<i32> {
+        self.code
+    }
+
+    pub fn success(self) -> bool {
+        self.success
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -145,14 +244,32 @@ pub trait FileHost: Send + Sync {
     ) -> Result<(), Self::Error>;
 }
 
-pub trait ProcessHost: Send + Sync {
+/// Owned child-process lifecycle. Blocking stdio is exposed deliberately at
+/// this low-level boundary; an application/runtime may adapt it onto threads or
+/// an async reactor without making Tokio part of the host contract.
+pub trait ProcessChild: Send {
     type Error: Error + Send + Sync + 'static;
 
-    fn run<'a>(
-        &'a self,
-        authority: &'a ProcessAuthority,
+    fn id(&self) -> u32;
+    fn stdin(&mut self) -> Option<&mut (dyn Write + Send)>;
+    fn stdout(&mut self) -> Option<&mut (dyn Read + Send)>;
+    fn stderr(&mut self) -> Option<&mut (dyn Read + Send)>;
+    fn try_wait(&mut self) -> Result<Option<ProcessExit>, Self::Error>;
+    fn wait(&mut self) -> Result<ProcessExit, Self::Error>;
+    fn kill(&mut self) -> Result<(), Self::Error>;
+}
+
+/// Process creation returns an owned child rather than collapsing a harness
+/// session into a one-shot `run()` call.
+pub trait ProcessHost: Send + Sync {
+    type Error: Error + Send + Sync + 'static;
+    type Child: ProcessChild<Error = Self::Error>;
+
+    fn spawn(
+        &self,
+        authority: &ProcessAuthority,
         request: ProcessRequest,
-    ) -> HostFuture<'a, Result<ProcessOutput, Self::Error>>;
+    ) -> Result<Self::Child, Self::Error>;
 }
 
 pub trait NetworkHost: Send + Sync {
@@ -194,5 +311,16 @@ mod tests {
 
         let secrets = SecretAuthority::new(["api-token".to_owned()]);
         assert!(secrets.names().contains("api-token"));
+    }
+
+    #[test]
+    fn process_request_redacts_environment_values() {
+        let request = ProcessRequest::new("/bin/tool").env_secret(
+            "TOKEN",
+            Secret::new(OsString::from("never-log-me")),
+        );
+        let debug = format!("{request:?}");
+        assert!(debug.contains("TOKEN"));
+        assert!(!debug.contains("never-log-me"));
     }
 }

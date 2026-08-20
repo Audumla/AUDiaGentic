@@ -12,7 +12,7 @@ on:
       - 'crates/**'
       - 'examples/**'
       - 'scripts/rust-foundation-smoke.sh'
-      - 'docs/architecture/rust-production-foundation.md'
+      - 'docs/architecture/**'
       - '.github/workflows/rust-production-foundation.yml'
 
 concurrency:
