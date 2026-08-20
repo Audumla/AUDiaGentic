@@ -88,7 +88,33 @@ Provides ordered config layering, provenance and typed deserialization. It delib
 
 ### `foundation-file-store`
 
-Provides native atomic file persistence and distinguishes absence from other I/O failure. It is implementation machinery, not the public filesystem capability.
+Provides trusted native atomic file persistence and distinguishes absence from other I/O failure. It is implementation machinery, not the public filesystem capability.
+
+## First capability/component layering proof
+
+### `filesystem-api`
+
+Defines the filesystem capability contract and a validated relative-path value. Consumers receive a scoped filesystem abstraction rather than ambient host paths.
+
+### `filesystem-native`
+
+Implements that contract using a capability-rooted `cap_std::fs::Dir`. Ambient authority is used once when the host opens the granted root; operations after that are relative to the granted directory. Tests cover ordinary read/write/remove behavior and denial of a symlink escape.
+
+This distinction is deliberate:
+
+```text
+foundation-file-store
+    trusted internal persistence helper
+
+filesystem-api
+    public semantic capability
+        ^
+        |
+filesystem-native
+    privileged native implementation
+```
+
+A future Wasm implementation can satisfy the same semantic capability through WASI/WIT without changing consumers.
 
 ## Optional implementations and adapters
 
@@ -98,7 +124,7 @@ Provides native atomic file persistence and distinguishes absence from other I/O
 
 ## Non-negotiable boundary tests
 
-CI must fail if kernel, application, or foundation crates pull in Bevy, RMCP, Wasmtime, or wash-runtime.
+CI must fail if kernel, application, foundation, or capability API crates pull in Bevy, RMCP, Wasmtime, or wash-runtime. Native capability implementations may depend on ordinary implementation libraries such as Tokio or `cap-std`, but not on unrelated optional application runtimes/adapters.
 
 The baseline must not introduce:
 
@@ -113,4 +139,4 @@ The baseline must not introduce:
 
 ## Next layer
 
-The next production-oriented layer may add concrete host/capability implementations (filesystem, process, secrets, observability, managed configuration, workflow, recipes, agents) by consuming these contracts and foundation libraries. Those additions do not widen the kernel unless a requirement is proven universal to arbitrary applications.
+The next production-oriented layer may add concrete host/capability implementations (process, secrets, observability, managed configuration, workflow, recipes, agents) by consuming these contracts and foundation libraries. Those additions do not widen the kernel unless a requirement is proven universal to arbitrary applications.
