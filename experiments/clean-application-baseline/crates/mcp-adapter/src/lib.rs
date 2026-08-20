@@ -1,5 +1,6 @@
-use audiagentic_application_spike::Application;
-use audiagentic_capability_api_spike::WorkflowRequest;
+use std::sync::Arc;
+
+use audiagentic_capability_api_spike::{ComponentProbe, Workflow, WorkflowRequest};
 use rmcp::{handler::server::wrapper::Parameters, tool, tool_router};
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -12,12 +13,16 @@ pub struct WorkflowParams {
 
 #[derive(Clone)]
 pub struct McpApplication {
-    app: Application,
+    workflow: Arc<dyn Workflow>,
+    component_probe: Arc<dyn ComponentProbe>,
 }
 
 impl McpApplication {
-    pub fn new(app: Application) -> Self {
-        Self { app }
+    pub fn new(workflow: Arc<dyn Workflow>, component_probe: Arc<dyn ComponentProbe>) -> Self {
+        Self {
+            workflow,
+            component_probe,
+        }
     }
 }
 
@@ -26,8 +31,8 @@ impl McpApplication {
     #[tool(description = "Run the configured workflow capability.")]
     async fn workflow(&self, Parameters(params): Parameters<WorkflowParams>) -> String {
         match self
-            .app
-            .run_workflow(WorkflowRequest {
+            .workflow
+            .run(WorkflowRequest {
                 runs: params.runs,
                 steps: params.steps,
             })
@@ -41,8 +46,8 @@ impl McpApplication {
 
     #[tool(description = "Probe the configured runtime-loaded component capability.")]
     async fn component_probe(&self) -> String {
-        self.app
-            .probe_component()
+        self.component_probe
+            .probe()
             .await
             .unwrap_or_else(|error| format!("component error: {error}"))
     }
