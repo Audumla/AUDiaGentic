@@ -22,7 +22,7 @@ use audiagentic_managed_config::{
     ConfigApplyResult, ConfigDesired, ManagedConfigTarget, apply as apply_config,
     observe as observe_config, plan as plan_config,
 };
-use audiagentic_reconcile::{EffectId, OwnershipId};
+use audiagentic_reconcile::{Desired, EffectId, OwnershipId};
 use audiagentic_time::{Deadline, TimerId, TimerSet, Timestamp};
 use audiagentic_workflow::{
     WorkflowDefinition, WorkflowInstance, WorkflowInstanceId, WorkflowStatus, WorkflowTransition,
@@ -237,7 +237,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             &app,
             &target,
             "config-create",
-            ConfigDesired(Some(b"mode=proof\n".to_vec())),
+            Desired(Some(b"mode=proof\n".to_vec())),
         )?,
         ConfigApplyResult::Created
     );
@@ -306,7 +306,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             &app,
             &target,
             "config-replace",
-            ConfigDesired(Some(b"mode=validated\n".to_vec())),
+            Desired(Some(b"mode=validated\n".to_vec())),
         )?,
         ConfigApplyResult::Replaced
     );
@@ -357,7 +357,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     assert!(!second.has_more());
 
     assert_eq!(
-        reconcile_config(&app, &target, "config-delete", ConfigDesired(None))?,
+        reconcile_config(&app, &target, "config-delete", Desired(None))?,
         ConfigApplyResult::Deleted
     );
     assert_eq!(
