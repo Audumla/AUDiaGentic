@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use audiagentic_bevy_runtime_spike::{BatchSpec, WorkflowRuntimeHandle};
-use audiagentic_capability_api_spike::{Workflow, WorkflowRequest, WorkflowResult};
+use audiagentic_workflow_api_spike::{Workflow, WorkflowRequest, WorkflowResult};
 
 pub struct BevyWorkflow {
     runtime: WorkflowRuntimeHandle,
