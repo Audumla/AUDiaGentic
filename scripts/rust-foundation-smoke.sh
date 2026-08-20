@@ -20,10 +20,10 @@ if [[ "$core_lines" -ne 1 ]]; then
     exit 1
 fi
 
-tiny_tree="$(cargo tree --locked -p audiagentic-example-tiny --edges normal --prefix none)"
+workspace_tree="$(cargo tree --workspace --locked --edges normal --prefix none)"
 for forbidden in bevy rmcp wasmtime wash-runtime tokio async-trait; do
-    if printf '%s\n' "$tiny_tree" | grep -Fq "$forbidden"; then
-        echo "TINY_APP_LAYER_LEAK: found $forbidden" >&2
+    if printf '%s\n' "$workspace_tree" | grep -E "^${forbidden}([[:space:]]|$)" >/dev/null; then
+        echo "FOUNDATION_RUNTIME_LEAK: resolved workspace dependency includes $forbidden" >&2
         exit 1
     fi
 done
@@ -36,13 +36,13 @@ for forbidden in audiagentic-config audiagentic-file-store audiagentic-template 
     fi
 done
 
-if grep -R --include='*.rs' -E '\b(Workflow|ComponentProbe|DynApplication)\b' crates/audiagentic-core >/dev/null; then
-    echo "CORE_DOMAIN_LEAK: spike-specific capability vocabulary entered audiagentic-core" >&2
+if grep -R --include='*.rs' -E '\b(Workflow|ComponentProbe|DynApplication|NoWorkflow|NoComponentProbe|CapabilityError)\b' crates/audiagentic-core >/dev/null; then
+    echo "CORE_DOMAIN_LEAK: rejected capability/framework vocabulary entered audiagentic-core" >&2
     exit 1
 fi
 
 if grep -R --include='Cargo.toml' -E '\b(bevy|rmcp|wasmtime|wash-runtime|tokio|async-trait)\b' crates examples >/dev/null; then
-    echo "FOUNDATION_RUNTIME_LEAK: runtime/transport dependency entered the production foundation" >&2
+    echo "FOUNDATION_RUNTIME_LEAK: runtime/transport dependency entered a production manifest" >&2
     exit 1
 fi
 

@@ -76,10 +76,12 @@ Human presentation remains separate from machine identity.
 2. the entire Rust workspace test suite;
 3. executable Tiny, Medium, and Large applications using the same `Application<C>` shape;
 4. zero normal dependencies in `audiagentic-core`;
-5. no Bevy/RMCP/Wasmtime/wash-runtime/Tokio/async-trait dependency in the production foundation;
-6. no spike-specific `Workflow`, `ComponentProbe`, or `DynApplication` vocabulary in core;
+5. no Bevy/RMCP/Wasmtime/wash-runtime/Tokio/async-trait dependency in either the resolved production dependency graph or production manifests;
+6. no rejected spike/framework vocabulary (`Workflow`, `ComponentProbe`, `DynApplication`, `NoWorkflow`, `NoComponentProbe`, or universal `CapabilityError`) in core;
 7. host contracts do not depend upward on config, file-store, template, or reconcile;
 8. all Cargo build/test/run/tree checks use the committed lockfile with `--locked`.
+
+The `rust-production-foundation` workflow executes this contract on Ubuntu, macOS, and Windows so platform-specific behavior cannot silently escape the foundation gate.
 
 ## Deliberately not in this baseline
 

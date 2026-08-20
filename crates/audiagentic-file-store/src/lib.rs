@@ -10,6 +10,7 @@ use std::{
 use thiserror::Error;
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
+const TEMP_CREATE_ATTEMPTS: usize = 16;
 
 #[derive(Debug, Error)]
 pub enum FileStoreError {
@@ -32,13 +33,41 @@ fn io_error(operation: &'static str, path: &Path, source: io::Error) -> FileStor
     }
 }
 
-fn temporary_path(path: &Path) -> Result<PathBuf, FileStoreError> {
+fn temporary_path(path: &Path, id: u64) -> Result<PathBuf, FileStoreError> {
     let name = path
         .file_name()
         .ok_or_else(|| FileStoreError::MissingFileName(path.to_path_buf()))?
         .to_string_lossy();
-    let id = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
     Ok(path.with_file_name(format!(".{name}.tmp-{}-{id}", std::process::id())))
+}
+
+fn next_temporary_path(path: &Path) -> Result<PathBuf, FileStoreError> {
+    let id = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    temporary_path(path, id)
+}
+
+fn create_temporary_file(path: &Path) -> Result<(PathBuf, File), FileStoreError> {
+    for _ in 0..TEMP_CREATE_ATTEMPTS {
+        let temp = next_temporary_path(path)?;
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp)
+        {
+            Ok(file) => return Ok((temp, file)),
+            Err(source) if source.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(source) => return Err(io_error("create temporary file", &temp, source)),
+        }
+    }
+
+    Err(io_error(
+        "create temporary file",
+        path,
+        io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "exhausted temporary file name attempts",
+        ),
+    ))
 }
 
 struct TempGuard(Option<PathBuf>);
@@ -68,9 +97,10 @@ pub fn read(path: impl AsRef<Path>) -> Result<Vec<u8>, FileStoreError> {
 
 /// Write through a same-directory temporary file, fsync it, atomically rename
 /// it using the operating system's rename semantics, then fsync the parent on
-/// Unix. Platforms that cannot atomically replace an existing destination
-/// return the rename error rather than silently falling back to a non-atomic
-/// delete-and-move sequence.
+/// Unix. Existing temporary-name collisions are retried without taking
+/// ownership of the colliding file. Platforms that cannot atomically replace
+/// an existing destination return the rename error rather than silently falling
+/// back to a non-atomic delete-and-move sequence.
 pub fn write_atomic(path: impl AsRef<Path>, bytes: &[u8]) -> Result<(), FileStoreError> {
     let path = path.as_ref();
     let parent = path
@@ -79,13 +109,8 @@ pub fn write_atomic(path: impl AsRef<Path>, bytes: &[u8]) -> Result<(), FileStor
         .unwrap_or(Path::new("."));
     fs::create_dir_all(parent).map_err(|source| io_error("create parent", parent, source))?;
 
-    let temp = temporary_path(path)?;
+    let (temp, mut file) = create_temporary_file(path)?;
     let mut guard = TempGuard::new(temp.clone());
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temp)
-        .map_err(|source| io_error("create temporary file", &temp, source))?;
     file.write_all(bytes)
         .map_err(|source| io_error("write temporary file", &temp, source))?;
     file.sync_all()
@@ -110,6 +135,9 @@ pub fn write_atomic(path: impl AsRef<Path>, bytes: &[u8]) -> Result<(), FileStor
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
 
     fn test_path(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
@@ -120,6 +148,7 @@ mod tests {
 
     #[test]
     fn writes_and_reads_new_file() {
+        let _test_guard = TEST_LOCK.lock().unwrap();
         let directory = test_path("new");
         let path = directory.join("state.bin");
         let _ = fs::remove_dir_all(&directory);
@@ -128,9 +157,29 @@ mod tests {
         fs::remove_dir_all(directory).unwrap();
     }
 
+    #[test]
+    fn temporary_name_collision_is_preserved_and_retried() {
+        let _test_guard = TEST_LOCK.lock().unwrap();
+        let directory = test_path("collision");
+        let path = directory.join("state.bin");
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir_all(&directory).unwrap();
+
+        let next_id = TEMP_COUNTER.load(Ordering::Relaxed);
+        let collision = temporary_path(&path, next_id).unwrap();
+        fs::write(&collision, b"owned elsewhere").unwrap();
+
+        write_atomic(&path, b"state").unwrap();
+
+        assert_eq!(read(&collision).unwrap(), b"owned elsewhere");
+        assert_eq!(read(&path).unwrap(), b"state");
+        fs::remove_dir_all(directory).unwrap();
+    }
+
     #[cfg(unix)]
     #[test]
     fn replaces_existing_file_atomically_on_unix() {
+        let _test_guard = TEST_LOCK.lock().unwrap();
         let directory = test_path("replace");
         let path = directory.join("state.bin");
         let _ = fs::remove_dir_all(&directory);
