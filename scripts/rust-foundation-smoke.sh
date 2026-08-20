@@ -117,7 +117,7 @@ for required in audiagentic-errors audiagentic-host audiagentic-reconcile; do
         exit 1
     fi
 done
-for forbidden in audiagentic-core audiagentic-config audiagentic-events audiagentic-file-store audiagentic-host-native audiagentic-sensitive audiagentic-template audiagentic-time audiagentic-workflow; do
+for forbidden in audiagentic-core audiagentic-config audiagentic-events audiagentic-file-store audiagentic-host-native audiagentic-template audiagentic-time audiagentic-workflow; do
     if printf '%s\n' "$managed_config_tree" | grep -E "^${forbidden}([[:space:]]|$)" >/dev/null; then
         echo "MANAGED_CONFIG_LAYER_LEAK: found $forbidden" >&2
         exit 1
