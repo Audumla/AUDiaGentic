@@ -1,29 +1,9 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
+pub use audiagentic_capability_api_spike::{NoComponentProbe, NoWorkflow};
 use audiagentic_capability_api_spike::{
-    CapabilityError, CapabilityResult, ComponentProbe, Workflow, WorkflowRequest, WorkflowResult,
+    CapabilityResult, ComponentProbe, Workflow, WorkflowRequest, WorkflowResult,
 };
-
-#[derive(Debug, Clone, Copy, Default)]
-pub struct NoWorkflow;
-
-#[async_trait]
-impl Workflow for NoWorkflow {
-    async fn run(&self, _request: WorkflowRequest) -> CapabilityResult<WorkflowResult> {
-        Err(CapabilityError::unavailable("workflow"))
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-pub struct NoComponentProbe;
-
-#[async_trait]
-impl ComponentProbe for NoComponentProbe {
-    async fn probe(&self) -> CapabilityResult<String> {
-        Err(CapabilityError::unavailable("component_probe"))
-    }
-}
 
 #[derive(Clone)]
 pub struct Application<W = NoWorkflow, C = NoComponentProbe> {
@@ -96,7 +76,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use audiagentic_capability_api_spike::CapabilityErrorKind;
+    use async_trait::async_trait;
+    use audiagentic_capability_api_spike::{CapabilityErrorKind, CapabilityResult};
 
     #[derive(Clone)]
     struct FakeWorkflow(u32);

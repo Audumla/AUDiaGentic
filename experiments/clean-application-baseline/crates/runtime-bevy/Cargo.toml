@@ -9,3 +9,6 @@ license.workspace = true
 audiagentic-capability-api-spike = { path = "../capability-api" }
 audiagentic-bevy-runtime-spike = { path = "../../../bevy-runtime-foundation/crates/runtime" }
 async-trait.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
