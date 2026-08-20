@@ -315,9 +315,6 @@ mod tests {
     #[test]
     fn identifiers_reject_empty_values() {
         assert!(CapabilityId::new("  ").is_err());
-        assert_eq!(
-            CapabilityId::new("calc.add").unwrap().as_str(),
-            "calc.add"
-        );
+        assert_eq!(CapabilityId::new("calc.add").unwrap().as_str(), "calc.add");
     }
 }
