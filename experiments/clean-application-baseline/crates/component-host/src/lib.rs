@@ -88,7 +88,8 @@ mod tests {
 
     #[test]
     fn parses_successful_component_provider() {
-        let provider = parse_provider(b"DEFAULT_PROVIDER=workflow-default:smoke\nSMOKE_OK\n").unwrap();
+        let provider =
+            parse_provider(b"DEFAULT_PROVIDER=workflow-default:smoke\nSMOKE_OK\n").unwrap();
         assert_eq!(provider, "workflow-default:smoke");
     }
 

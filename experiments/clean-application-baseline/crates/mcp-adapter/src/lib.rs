@@ -1,7 +1,5 @@
 use audiagentic_application_spike::DynApplication;
-use audiagentic_capability_api_spike::{
-    CapabilityError, CapabilityErrorKind, WorkflowRequest,
-};
+use audiagentic_capability_api_spike::{CapabilityError, CapabilityErrorKind, WorkflowRequest};
 use rmcp::{ErrorData, handler::server::wrapper::Parameters, tool, tool_router};
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -68,11 +66,7 @@ mod tests {
     use audiagentic_capability_api_spike::{
         CapabilityError, CapabilityResult, ComponentProbe, Workflow, WorkflowResult,
     };
-    use rmcp::{
-        ServiceExt,
-        model::CallToolRequestParams,
-        object,
-    };
+    use rmcp::{ServiceExt, model::CallToolRequestParams, object};
     use std::time::Duration;
 
     #[derive(Clone)]
@@ -104,10 +98,8 @@ mod tests {
 
     #[test]
     fn invalid_requests_map_to_protocol_invalid_params() {
-        let error = map_capability_error(CapabilityError::invalid_request(
-            "workflow",
-            "bad request",
-        ));
+        let error =
+            map_capability_error(CapabilityError::invalid_request("workflow", "bad request"));
         assert_eq!(error.code, rmcp::model::ErrorCode::INVALID_PARAMS);
     }
 
