@@ -15,6 +15,7 @@ dependencies = [
 name = "audiagentic-config"
 version = "0.1.0"
 dependencies = [
+ "audiagentic-errors",
  "figment",
  "schemars",
  "serde",
@@ -26,10 +27,15 @@ name = "audiagentic-core"
 version = "0.1.0"
 
 [[package]]
+name = "audiagentic-errors"
+version = "0.1.0"
+
+[[package]]
 name = "audiagentic-events"
 version = "0.1.0"
 dependencies = [
  "audiagentic-core",
+ "audiagentic-errors",
 ]
 
 [[package]]
@@ -69,6 +75,7 @@ dependencies = [
 name = "audiagentic-example-platform"
 version = "0.1.0"
 dependencies = [
+ "audiagentic-config",
  "audiagentic-core",
  "audiagentic-events",
  "audiagentic-host",
@@ -77,6 +84,8 @@ dependencies = [
  "audiagentic-reconcile",
  "audiagentic-time",
  "audiagentic-workflow",
+ "schemars",
+ "serde",
 ]
 
 [[package]]
@@ -113,6 +122,7 @@ dependencies = [
 name = "audiagentic-managed-config"
 version = "0.1.0"
 dependencies = [
+ "audiagentic-errors",
  "audiagentic-host",
  "audiagentic-reconcile",
 ]
@@ -132,10 +142,16 @@ version = "0.1.0"
 [[package]]
 name = "audiagentic-time"
 version = "0.1.0"
+dependencies = [
+ "audiagentic-errors",
+]
 
 [[package]]
 name = "audiagentic-workflow"
 version = "0.1.0"
+dependencies = [
+ "audiagentic-errors",
+]
 
 [[package]]
 name = "bytemuck"

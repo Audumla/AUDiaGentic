@@ -5,6 +5,14 @@
 
 use std::{collections::BTreeMap, error::Error, fmt, time::Duration};
 
+use audiagentic_errors::{CodedError, ErrorCode, ErrorDefinition};
+
+const TIMER_ID_EMPTY: ErrorDefinition = ErrorDefinition::new(
+    ErrorCode::new("VAL-TIME-001"),
+    "Timer id must not be empty.",
+    "Provide a non-empty timer identifier.",
+);
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Timestamp(u64);
 
@@ -59,6 +67,12 @@ impl TimerId {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TimerIdError;
+
+impl CodedError for TimerIdError {
+    fn definition(&self) -> &'static ErrorDefinition {
+        &TIMER_ID_EMPTY
+    }
+}
 
 impl fmt::Display for TimerIdError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -171,5 +185,11 @@ mod tests {
             timers.next_deadline(),
             Some(Deadline::at(Timestamp::from_millis(20)))
         );
+    }
+
+    #[test]
+    fn timer_id_error_has_stable_boundary_identity() {
+        let error = TimerId::new(" ").unwrap_err();
+        assert_eq!(error.code().as_str(), "VAL-TIME-001");
     }
 }

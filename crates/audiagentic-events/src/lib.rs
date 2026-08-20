@@ -5,9 +5,36 @@
 //! fan-out, retries, queues, and transport semantics stay with the application
 //! or a proven adapter rather than becoming implicit platform behavior.
 
-use std::{collections::VecDeque, error::Error, fmt};
+use std::{collections::VecDeque, error::Error, fmt, num::NonZeroUsize};
 
 use audiagentic_core::CorrelationId;
+use audiagentic_errors::{CodedError, ErrorCode, ErrorDefinition};
+
+const EVENT_ID_EMPTY: ErrorDefinition = ErrorDefinition::new(
+    ErrorCode::new("VAL-EVENT-001"),
+    "Event identifier must not be empty.",
+    "Provide a non-empty event, stream, or causation identifier.",
+);
+const ZERO_RETENTION_LIMIT: ErrorDefinition = ErrorDefinition::new(
+    ErrorCode::new("VAL-EVENT-002"),
+    "Event retention limit must be greater than zero.",
+    "Configure a positive retention limit or use an unbounded event policy.",
+);
+const ZERO_PAGE_LIMIT: ErrorDefinition = ErrorDefinition::new(
+    ErrorCode::new("VAL-EVENT-003"),
+    "Event page limit must be greater than zero.",
+    "Request at least one event per page.",
+);
+const CURSOR_EXPIRED: ErrorDefinition = ErrorDefinition::new(
+    ErrorCode::new("CON-EVENT-001"),
+    "Event cursor has expired.",
+    "Restart from an available cursor or use durable storage when replay is required.",
+);
+const CURSOR_AHEAD: ErrorDefinition = ErrorDefinition::new(
+    ErrorCode::new("CON-EVENT-002"),
+    "Event cursor is ahead of the stream.",
+    "Use a cursor at or before the latest available event sequence.",
+);
 
 macro_rules! define_event_id {
     ($name:ident, $label:literal) => {
@@ -42,6 +69,12 @@ define_event_id!(CausationId, "causation id");
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EventIdError(&'static str);
+
+impl CodedError for EventIdError {
+    fn definition(&self) -> &'static ErrorDefinition {
+        &EVENT_ID_EMPTY
+    }
+}
 
 impl fmt::Display for EventIdError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -139,6 +172,17 @@ pub enum EventStreamError {
     },
 }
 
+impl CodedError for EventStreamError {
+    fn definition(&self) -> &'static ErrorDefinition {
+        match self {
+            Self::ZeroRetentionLimit => &ZERO_RETENTION_LIMIT,
+            Self::ZeroPageLimit => &ZERO_PAGE_LIMIT,
+            Self::CursorExpired { .. } => &CURSOR_EXPIRED,
+            Self::CursorAhead { .. } => &CURSOR_AHEAD,
+        }
+    }
+}
+
 impl fmt::Display for EventStreamError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -170,6 +214,34 @@ impl fmt::Display for EventStreamError {
 
 impl Error for EventStreamError {}
 
+/// Behavioural policy for the in-memory event primitive. The application owns
+/// how raw configuration becomes this value; the event capability never reads
+/// configuration sources itself.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct EventPolicy {
+    retention_limit: Option<NonZeroUsize>,
+}
+
+impl EventPolicy {
+    pub const fn unbounded() -> Self {
+        Self {
+            retention_limit: None,
+        }
+    }
+
+    pub fn bounded(retention_limit: usize) -> Result<Self, EventStreamError> {
+        let retention_limit =
+            NonZeroUsize::new(retention_limit).ok_or(EventStreamError::ZeroRetentionLimit)?;
+        Ok(Self {
+            retention_limit: Some(retention_limit),
+        })
+    }
+
+    pub fn retention_limit(self) -> Option<usize> {
+        self.retention_limit.map(NonZeroUsize::get)
+    }
+}
+
 #[derive(Debug)]
 pub struct EventPage<'a, E> {
     events: Vec<&'a EventEnvelope<E>>,
@@ -191,44 +263,51 @@ impl<'a, E> EventPage<'a, E> {
     }
 }
 
-/// An ordered event stream owned by the caller. The optional retention bound is
-/// local memory policy only; this is intentionally not a publisher, broker,
+/// An ordered event stream owned by the caller. The retention policy is local
+/// memory policy only; this is intentionally not a publisher, broker,
 /// subscription registry, retry engine, or durable event store.
 #[derive(Debug, Clone)]
 pub struct EventStream<E> {
     stream_id: EventStreamId,
     events: VecDeque<EventEnvelope<E>>,
     next_sequence: u64,
-    retention_limit: Option<usize>,
+    policy: EventPolicy,
 }
 
 impl<E> EventStream<E> {
     pub fn new(stream_id: EventStreamId) -> Self {
-        Self {
-            stream_id,
-            events: VecDeque::new(),
-            next_sequence: 1,
-            retention_limit: None,
-        }
+        Self::with_policy(stream_id, EventPolicy::unbounded())
     }
 
     pub fn bounded(
         stream_id: EventStreamId,
         retention_limit: usize,
     ) -> Result<Self, EventStreamError> {
-        if retention_limit == 0 {
-            return Err(EventStreamError::ZeroRetentionLimit);
-        }
-        Ok(Self {
+        Ok(Self::with_policy(
             stream_id,
-            events: VecDeque::with_capacity(retention_limit),
+            EventPolicy::bounded(retention_limit)?,
+        ))
+    }
+
+    pub fn with_policy(stream_id: EventStreamId, policy: EventPolicy) -> Self {
+        let events = policy
+            .retention_limit()
+            .map(VecDeque::with_capacity)
+            .unwrap_or_default();
+        Self {
+            stream_id,
+            events,
             next_sequence: 1,
-            retention_limit: Some(retention_limit),
-        })
+            policy,
+        }
     }
 
     pub fn stream_id(&self) -> &EventStreamId {
         &self.stream_id
+    }
+
+    pub fn policy(&self) -> EventPolicy {
+        self.policy
     }
 
     pub fn len(&self) -> usize {
@@ -240,7 +319,7 @@ impl<E> EventStream<E> {
     }
 
     pub fn retention_limit(&self) -> Option<usize> {
-        self.retention_limit
+        self.policy.retention_limit()
     }
 
     pub fn oldest_sequence(&self) -> Option<EventSequence> {
@@ -272,7 +351,7 @@ impl<E> EventStream<E> {
             payload,
         });
 
-        if let Some(limit) = self.retention_limit {
+        if let Some(limit) = self.policy.retention_limit() {
             while self.events.len() > limit {
                 self.events.pop_front();
             }
@@ -386,6 +465,17 @@ mod tests {
     }
 
     #[test]
+    fn policy_is_explicit_and_can_be_built_before_the_stream() {
+        let policy = EventPolicy::bounded(3).unwrap();
+        let stream = EventStream::<JobEvent>::with_policy(
+            EventStreamId::new("policy-proof").unwrap(),
+            policy,
+        );
+        assert_eq!(stream.policy(), policy);
+        assert_eq!(stream.retention_limit(), Some(3));
+    }
+
+    #[test]
     fn bounded_stream_expires_old_cursors_and_pages_new_evidence() {
         let mut stream = EventStream::bounded(EventStreamId::new("job-42").unwrap(), 3).unwrap();
         append(&mut stream, 1, JobEvent::Started);
@@ -394,10 +484,8 @@ mod tests {
         append(&mut stream, 4, JobEvent::Completed);
 
         assert_eq!(stream.oldest_sequence(), Some(EventSequence::new(2)));
-        assert!(matches!(
-            stream.page_after(EventCursor::start(), 2),
-            Err(EventStreamError::CursorExpired { .. })
-        ));
+        let expired = stream.page_after(EventCursor::start(), 2).unwrap_err();
+        assert_eq!(expired.code().as_str(), "CON-EVENT-001");
 
         let first = stream.page_after(EventCursor::new(1), 2).unwrap();
         assert_eq!(first.events().len(), 2);
@@ -423,8 +511,9 @@ mod tests {
     }
 
     #[test]
-    fn event_ids_reject_empty_values() {
-        assert!(EventId::new(" ").is_err());
+    fn event_ids_reject_empty_values_with_stable_identity() {
+        let error = EventId::new(" ").unwrap_err();
+        assert_eq!(error.code().as_str(), "VAL-EVENT-001");
         assert!(EventStreamId::new("").is_err());
         assert!(CausationId::new("\t").is_err());
     }

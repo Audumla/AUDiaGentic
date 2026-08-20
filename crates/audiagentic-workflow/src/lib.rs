@@ -6,6 +6,29 @@
 
 use std::{error::Error, fmt};
 
+use audiagentic_errors::{CodedError, ErrorCode, ErrorDefinition};
+
+const WORKFLOW_ID_EMPTY: ErrorDefinition = ErrorDefinition::new(
+    ErrorCode::new("VAL-WORKFLOW-001"),
+    "Workflow instance id must not be empty.",
+    "Provide a non-empty workflow instance identifier.",
+);
+const WORKFLOW_TERMINAL: ErrorDefinition = ErrorDefinition::new(
+    ErrorCode::new("CON-WORKFLOW-001"),
+    "Workflow is already terminal.",
+    "Do not apply new input to a completed or failed workflow instance.",
+);
+const WORKFLOW_REVISION_CONFLICT: ErrorDefinition = ErrorDefinition::new(
+    ErrorCode::new("CON-WORKFLOW-002"),
+    "Workflow revision does not match the expected revision.",
+    "Reload the current workflow state and retry against its latest revision.",
+);
+const WORKFLOW_DEFINITION_REJECTED: ErrorDefinition = ErrorDefinition::new(
+    ErrorCode::new("CON-WORKFLOW-003"),
+    "Workflow definition rejected the transition.",
+    "Correct the domain input or state transition according to the owning workflow definition.",
+);
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct WorkflowInstanceId(String);
 
@@ -25,6 +48,12 @@ impl WorkflowInstanceId {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WorkflowIdError;
+
+impl CodedError for WorkflowIdError {
+    fn definition(&self) -> &'static ErrorDefinition {
+        &WORKFLOW_ID_EMPTY
+    }
+}
 
 impl fmt::Display for WorkflowIdError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -115,6 +144,16 @@ pub enum WorkflowApplyError<E> {
     Definition(E),
 }
 
+impl<E> CodedError for WorkflowApplyError<E> {
+    fn definition(&self) -> &'static ErrorDefinition {
+        match self {
+            Self::Terminal(_) => &WORKFLOW_TERMINAL,
+            Self::RevisionConflict { .. } => &WORKFLOW_REVISION_CONFLICT,
+            Self::Definition(_) => &WORKFLOW_DEFINITION_REJECTED,
+        }
+    }
+}
+
 impl<E: fmt::Display> fmt::Display for WorkflowApplyError<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -128,7 +167,14 @@ impl<E: fmt::Display> fmt::Display for WorkflowApplyError<E> {
     }
 }
 
-impl<E: Error + 'static> Error for WorkflowApplyError<E> {}
+impl<E: Error + 'static> Error for WorkflowApplyError<E> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Definition(error) => Some(error),
+            Self::Terminal(_) | Self::RevisionConflict { .. } => None,
+        }
+    }
+}
 
 /// Serializable-by-the-application workflow state. The crate does not choose a
 /// storage format or persistence backend; it only exposes the state required to
@@ -359,7 +405,8 @@ mod tests {
         let completed = workflow.apply(&JobWorkflow, &Input::Finish).unwrap();
         assert_eq!(completed.status(), WorkflowStatus::Completed);
         assert_eq!(workflow.state(), &State::Done);
-        assert!(workflow.apply(&JobWorkflow, &Input::Finish).is_err());
+        let error = workflow.apply(&JobWorkflow, &Input::Finish).unwrap_err();
+        assert_eq!(error.code().as_str(), "CON-WORKFLOW-001");
     }
 
     #[test]
@@ -395,5 +442,6 @@ mod tests {
                 actual: 0
             }
         ));
+        assert_eq!(error.code().as_str(), "CON-WORKFLOW-002");
     }
 }

@@ -11,10 +11,27 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use audiagentic_errors::{CodedError, ErrorCode, ErrorDefinition};
 use audiagentic_host::{FileHost, FileReadAuthority, FileWriteAuthority};
 use audiagentic_reconcile::{
     Change, Desired, EffectId, Observed, OwnershipId, Plan, Receipt, plan_presence,
 };
+
+const HOST_OPERATION_FAILED: ErrorDefinition = ErrorDefinition::new(
+    ErrorCode::new("IO-MCONFIG-001"),
+    "Managed configuration host operation failed.",
+    "Inspect the underlying host error and verify the target authority and storage state.",
+);
+const OWNERSHIP_MISMATCH: ErrorDefinition = ErrorDefinition::new(
+    ErrorCode::new("CON-MCONFIG-001"),
+    "Managed configuration ownership does not match the target.",
+    "Re-plan the change using the target's ownership identity.",
+);
+const INVALID_PLAN_SHAPE: ErrorDefinition = ErrorDefinition::new(
+    ErrorCode::new("INT-MCONFIG-001"),
+    "Managed configuration plan has an invalid shape.",
+    "Treat this as an application or reconciliation bug and rebuild the plan before applying it.",
+);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ManagedConfigTarget {
@@ -61,6 +78,16 @@ pub enum ManagedConfigError<E> {
     InvalidPlanShape(usize),
 }
 
+impl<E> CodedError for ManagedConfigError<E> {
+    fn definition(&self) -> &'static ErrorDefinition {
+        match self {
+            Self::Host(_) => &HOST_OPERATION_FAILED,
+            Self::OwnershipMismatch { .. } => &OWNERSHIP_MISMATCH,
+            Self::InvalidPlanShape(_) => &INVALID_PLAN_SHAPE,
+        }
+    }
+}
+
 impl<E: fmt::Display> fmt::Display for ManagedConfigError<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -79,7 +106,14 @@ impl<E: fmt::Display> fmt::Display for ManagedConfigError<E> {
     }
 }
 
-impl<E: Error + 'static> Error for ManagedConfigError<E> {}
+impl<E: Error + 'static> Error for ManagedConfigError<E> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Host(error) => Some(error),
+            Self::OwnershipMismatch { .. } | Self::InvalidPlanShape(_) => None,
+        }
+    }
+}
 
 pub fn observe<H: FileHost>(
     host: &H,
@@ -271,5 +305,23 @@ mod tests {
                 .result(),
             &ConfigApplyResult::Noop
         );
+    }
+
+    #[test]
+    fn boundary_errors_have_stable_codes() {
+        let target = target();
+        let wrong_plan = Plan::new(
+            OwnershipId::new("other").unwrap(),
+            effect("wrong-owner"),
+            Vec::<Change<Vec<u8>>>::new(),
+        );
+        let error = apply(
+            &MemoryFileHost::default(),
+            &write_authority(),
+            &target,
+            &wrong_plan,
+        )
+        .unwrap_err();
+        assert_eq!(error.code().as_str(), "CON-MCONFIG-001");
     }
 }

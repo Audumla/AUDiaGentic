@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/audiagentic-core",
+    "crates/audiagentic-errors",
     "crates/audiagentic-sensitive",
     "crates/audiagentic-template",
     "crates/audiagentic-reconcile",
