@@ -60,7 +60,7 @@ Foundation libraries are small semantic libraries, not managers:
 - `audiagentic-config` extracts application-owned typed Rust configuration through Serde + Figment and requires Schemars-compatible models.
 - `audiagentic-file-store` owns small durable file operations and deliberately does not own configuration schemas.
 
-`audiagentic-file-store::write_atomic` performs same-directory temporary writes, flushes file contents before replacement, preserves unrelated temporary-name collisions, and uses the platform replacement primitive so replacement semantics are exercised on Unix and Windows.
+`audiagentic-file-store::write_atomic` performs same-directory temporary writes, flushes file contents before replacement, preserves unrelated temporary-name collisions, and relies on `std::fs::rename` replacement semantics that are exercised on Unix and Windows by the same overwrite test.
 
 ## Host rule
 
