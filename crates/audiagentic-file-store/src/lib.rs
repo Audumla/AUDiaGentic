@@ -38,10 +38,7 @@ fn temporary_path(path: &Path) -> Result<PathBuf, FileStoreError> {
         .ok_or_else(|| FileStoreError::MissingFileName(path.to_path_buf()))?
         .to_string_lossy();
     let id = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
-    Ok(path.with_file_name(format!(
-        ".{name}.tmp-{}-{id}",
-        std::process::id()
-    )))
+    Ok(path.with_file_name(format!(".{name}.tmp-{}-{id}", std::process::id())))
 }
 
 struct TempGuard(Option<PathBuf>);
