@@ -1,13 +1,14 @@
 use std::{env, fs, sync::Arc};
 
 use audiagentic_application_spike::Application;
-use audiagentic_capability_api_spike::{ComponentProbe, Workflow, WorkflowRequest};
+use audiagentic_component_probe_api_spike::ComponentProbe;
 use audiagentic_component_host_spike::WasmComponentProbe;
 use audiagentic_filesystem_api_spike::{FileSystem, RelativePath};
 use audiagentic_filesystem_native_spike::NativeFileSystem;
 use audiagentic_kernel_core_spike::{ApplicationContext, ApplicationId};
 use audiagentic_mcp_adapter_spike::McpApplication;
 use audiagentic_runtime_bevy_spike::BevyWorkflow;
+use audiagentic_workflow_api_spike::{Workflow, WorkflowRequest};
 
 #[derive(Clone)]
 struct SpikeCapabilities {
