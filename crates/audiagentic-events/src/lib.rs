@@ -5,11 +5,7 @@
 //! fan-out, retries, queues, and transport semantics stay with the application
 //! or a proven adapter rather than becoming implicit platform behavior.
 
-use std::{
-    collections::VecDeque,
-    error::Error,
-    fmt,
-};
+use std::{collections::VecDeque, error::Error, fmt};
 
 use audiagentic_core::CorrelationId;
 
@@ -216,7 +212,10 @@ impl<E> EventStream<E> {
         }
     }
 
-    pub fn bounded(stream_id: EventStreamId, retention_limit: usize) -> Result<Self, EventStreamError> {
+    pub fn bounded(
+        stream_id: EventStreamId,
+        retention_limit: usize,
+    ) -> Result<Self, EventStreamError> {
         if retention_limit == 0 {
             return Err(EventStreamError::ZeroRetentionLimit);
         }
@@ -302,6 +301,12 @@ impl<E> EventStream<E> {
         }
 
         let Some(oldest) = self.oldest_sequence() else {
+            if cursor.get() > 0 {
+                return Err(EventStreamError::CursorAhead {
+                    cursor,
+                    latest_available: EventSequence::new(0),
+                });
+            }
             return Ok(EventPage {
                 events: Vec::new(),
                 next_cursor: cursor,
@@ -403,6 +408,18 @@ mod tests {
         assert_eq!(second.events().len(), 1);
         assert_eq!(second.next_cursor(), EventCursor::new(4));
         assert!(!second.has_more());
+    }
+
+    #[test]
+    fn empty_stream_rejects_a_cursor_ahead_of_sequence_zero() {
+        let stream = EventStream::<JobEvent>::new(EventStreamId::new("empty").unwrap());
+        assert!(matches!(
+            stream.page_after(EventCursor::new(1), 1),
+            Err(EventStreamError::CursorAhead {
+                latest_available,
+                ..
+            }) if latest_available == EventSequence::new(0)
+        ));
     }
 
     #[test]

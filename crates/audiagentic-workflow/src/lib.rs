@@ -142,12 +142,7 @@ pub struct WorkflowSnapshot<S> {
 }
 
 impl<S> WorkflowSnapshot<S> {
-    pub fn new(
-        id: WorkflowInstanceId,
-        revision: u64,
-        status: WorkflowStatus,
-        state: S,
-    ) -> Self {
+    pub fn new(id: WorkflowInstanceId, revision: u64, status: WorkflowStatus, state: S) -> Self {
         Self {
             id,
             revision,
@@ -369,8 +364,10 @@ mod tests {
 
     #[test]
     fn snapshot_restores_identity_revision_status_and_state() {
-        let mut workflow =
-            WorkflowInstance::new(WorkflowInstanceId::new("job-restore").unwrap(), State::Pending);
+        let mut workflow = WorkflowInstance::new(
+            WorkflowInstanceId::new("job-restore").unwrap(),
+            State::Pending,
+        );
         workflow.apply(&JobWorkflow, &Input::Start).unwrap();
 
         let snapshot = workflow.snapshot();

@@ -137,11 +137,7 @@ pub fn apply<H: FileHost>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{
-        collections::BTreeMap,
-        io,
-        sync::Mutex,
-    };
+    use std::{collections::BTreeMap, io, sync::Mutex};
 
     #[derive(Default)]
     struct MemoryFileHost {
@@ -185,11 +181,7 @@ mod tests {
             Ok(())
         }
 
-        fn remove(
-            &self,
-            _authority: &FileWriteAuthority,
-            path: &Path,
-        ) -> Result<(), Self::Error> {
+        fn remove(&self, _authority: &FileWriteAuthority, path: &Path) -> Result<(), Self::Error> {
             self.files.lock().unwrap().remove(path);
             Ok(())
         }

@@ -1,7 +1,6 @@
 use std::{
     error::Error,
-    fmt,
-    fs,
+    fmt, fs,
     io::{BufRead, BufReader, Write},
     path::PathBuf,
     thread,
@@ -12,7 +11,7 @@ use audiagentic_core::{
     Application, ApplicationId, ApplicationIdentity, ApplicationInstanceId, CorrelationId,
 };
 use audiagentic_events::{
-    CausationId, EventCursor, EventId, EventStream, EventStreamId, EventStreamError,
+    CausationId, EventCursor, EventId, EventStream, EventStreamError, EventStreamId,
 };
 use audiagentic_host::{
     FileHost, FileReadAuthority, FileWriteAuthority, ProcessAuthority, ProcessChild, ProcessHost,
@@ -99,12 +98,12 @@ impl WorkflowDefinition for PlatformWorkflow {
                     PlatformEffect::LaunchChild,
                 ],
             )),
-            (PlatformState::Running, PlatformInput::ChildObserved) => Ok(
-                WorkflowTransition::complete(
+            (PlatformState::Running, PlatformInput::ChildObserved) => {
+                Ok(WorkflowTransition::complete(
                     PlatformState::Done,
                     vec![PlatformEffect::Record(PlatformEvent::Completed)],
-                ),
-            ),
+                ))
+            }
             _ => Err(PlatformDefinitionError),
         }
     }
@@ -202,10 +201,7 @@ fn reconcile_config(
 }
 
 fn temp_root() -> PathBuf {
-    std::env::temp_dir().join(format!(
-        "audiagentic-platform-spike-{}",
-        std::process::id()
-    ))
+    std::env::temp_dir().join(format!("audiagentic-platform-spike-{}", std::process::id()))
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -341,12 +337,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     assert_eq!(workflow.status(), WorkflowStatus::Completed);
+    assert!(events.iter().any(|event| matches!(
+        event.payload(),
+        PlatformEvent::ChildRoundTrip(value) if value == "platform:ping"
+    )));
 
     assert!(matches!(
         events.page_after(EventCursor::start(), 2),
         Err(EventStreamError::CursorExpired { .. })
     ));
-    let oldest = events.oldest_sequence().expect("bounded stream has evidence");
+    let oldest = events
+        .oldest_sequence()
+        .expect("bounded stream has evidence");
     let first = events.page_after(EventCursor::new(oldest.get() - 1), 2)?;
     assert_eq!(first.events().len(), 2);
     assert!(first.has_more());

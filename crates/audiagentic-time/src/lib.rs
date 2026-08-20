@@ -3,12 +3,7 @@
 //! Callers supply the current timestamp explicitly. This crate never sleeps,
 //! spawns tasks, owns a clock, or registers global timers.
 
-use std::{
-    collections::BTreeMap,
-    error::Error,
-    fmt,
-    time::Duration,
-};
+use std::{collections::BTreeMap, error::Error, fmt, time::Duration};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Timestamp(u64);

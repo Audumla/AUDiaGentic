@@ -479,7 +479,10 @@ mod tests {
         host.write(&write, &path, b"one").unwrap();
         host.write(&write, &path, b"two").unwrap();
         assert_eq!(host.read(&read, &path).unwrap(), b"two");
-        assert_eq!(host.read_optional(&read, &path).unwrap(), Some(b"two".to_vec()));
+        assert_eq!(
+            host.read_optional(&read, &path).unwrap(),
+            Some(b"two".to_vec())
+        );
         host.remove(&write, &path).unwrap();
         assert_eq!(host.read_optional(&read, &path).unwrap(), None);
 
