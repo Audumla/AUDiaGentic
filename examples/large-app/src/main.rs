@@ -58,7 +58,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     );
 
     assert_eq!(app.composition().read_authority.root(), directory.as_path());
-    assert_eq!(app.composition().write_authority.root(), directory.as_path());
+    assert_eq!(
+        app.composition().write_authority.root(),
+        directory.as_path()
+    );
     assert_eq!(
         app.composition()
             .file_host
