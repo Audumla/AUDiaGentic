@@ -8,11 +8,21 @@ pub struct OwnedValue<T> {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Change<T> {
-    Create { desired: OwnedValue<T> },
-    Update { before: OwnedValue<T>, desired: OwnedValue<T> },
-    Remove { before: OwnedValue<T> },
+    Create {
+        desired: OwnedValue<T>,
+    },
+    Update {
+        before: OwnedValue<T>,
+        desired: OwnedValue<T>,
+    },
+    Remove {
+        before: OwnedValue<T>,
+    },
     Noop,
-    Conflict { current_owner: String, desired_owner: String },
+    Conflict {
+        current_owner: String,
+        desired_owner: String,
+    },
 }
 
 pub fn plan<T>(observed: Option<OwnedValue<T>>, desired: Option<OwnedValue<T>>) -> Change<T>
@@ -45,15 +55,33 @@ mod tests {
 
     #[test]
     fn foreign_ownership_conflicts_instead_of_overwriting() {
-        let observed = OwnedValue { owner: "user".into(), value: 1 };
-        let desired = OwnedValue { owner: "app".into(), value: 2 };
-        assert!(matches!(plan(Some(observed), Some(desired)), Change::Conflict { .. }));
+        let observed = OwnedValue {
+            owner: "user".into(),
+            value: 1,
+        };
+        let desired = OwnedValue {
+            owner: "app".into(),
+            value: 2,
+        };
+        assert!(matches!(
+            plan(Some(observed), Some(desired)),
+            Change::Conflict { .. }
+        ));
     }
 
     #[test]
     fn same_owner_can_update() {
-        let observed = OwnedValue { owner: "app".into(), value: 1 };
-        let desired = OwnedValue { owner: "app".into(), value: 2 };
-        assert!(matches!(plan(Some(observed), Some(desired)), Change::Update { .. }));
+        let observed = OwnedValue {
+            owner: "app".into(),
+            value: 1,
+        };
+        let desired = OwnedValue {
+            owner: "app".into(),
+            value: 2,
+        };
+        assert!(matches!(
+            plan(Some(observed), Some(desired)),
+            Change::Update { .. }
+        ));
     }
 }
