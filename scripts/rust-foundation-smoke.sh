@@ -5,14 +5,14 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
 
-cargo run --quiet -p audiagentic-example-tiny
-cargo run --quiet -p audiagentic-example-medium
-cargo run --quiet -p audiagentic-example-large
+cargo run --locked --quiet -p audiagentic-example-tiny
+cargo run --locked --quiet -p audiagentic-example-medium
+cargo run --locked --quiet -p audiagentic-example-large
 
-core_tree="$(cargo tree -p audiagentic-core --edges normal --prefix none)"
+core_tree="$(cargo tree --locked -p audiagentic-core --edges normal --prefix none)"
 core_lines="$(printf '%s\n' "$core_tree" | sed '/^[[:space:]]*$/d' | wc -l)"
 if [[ "$core_lines" -ne 1 ]]; then
     echo "CORE_DEPENDENCY_LEAK: audiagentic-core must have zero normal dependencies" >&2
@@ -20,7 +20,7 @@ if [[ "$core_lines" -ne 1 ]]; then
     exit 1
 fi
 
-tiny_tree="$(cargo tree -p audiagentic-example-tiny --edges normal --prefix none)"
+tiny_tree="$(cargo tree --locked -p audiagentic-example-tiny --edges normal --prefix none)"
 for forbidden in bevy rmcp wasmtime wash-runtime tokio async-trait; do
     if printf '%s\n' "$tiny_tree" | grep -Fq "$forbidden"; then
         echo "TINY_APP_LAYER_LEAK: found $forbidden" >&2
@@ -28,7 +28,7 @@ for forbidden in bevy rmcp wasmtime wash-runtime tokio async-trait; do
     fi
 done
 
-host_tree="$(cargo tree -p audiagentic-host --edges normal --prefix none)"
+host_tree="$(cargo tree --locked -p audiagentic-host --edges normal --prefix none)"
 for forbidden in audiagentic-config audiagentic-file-store audiagentic-template audiagentic-reconcile; do
     if printf '%s\n' "$host_tree" | grep -Fq "$forbidden"; then
         echo "HOST_LAYER_LEAK: found $forbidden" >&2

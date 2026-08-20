@@ -16,7 +16,13 @@ impl<T> ConfigModel for T where T: DeserializeOwned + JsonSchema {}
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("configuration extraction failed: {0}")]
-    Extract(#[from] figment::Error),
+    Extract(#[source] Box<figment::Error>),
+}
+
+impl From<figment::Error> for ConfigError {
+    fn from(error: figment::Error) -> Self {
+        Self::Extract(Box::new(error))
+    }
 }
 
 pub fn from_toml<T: ConfigModel>(source: &str) -> Result<T, ConfigError> {
