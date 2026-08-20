@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-pub use audiagentic_capability_api_spike::{NoComponentProbe, NoWorkflow};
 use audiagentic_capability_api_spike::{
     CapabilityResult, ComponentProbe, Workflow, WorkflowRequest, WorkflowResult,
 };
+pub use audiagentic_capability_api_spike::{NoComponentProbe, NoWorkflow};
 
 #[derive(Clone)]
 pub struct Application<W = NoWorkflow, C = NoComponentProbe> {
