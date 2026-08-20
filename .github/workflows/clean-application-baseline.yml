@@ -12,6 +12,9 @@ on:
       - 'experiments/rust-wasm-foundation/**'
       - '.github/workflows/clean-application-baseline.yml'
 
+permissions:
+  contents: write
+
 jobs:
   smoke:
     runs-on: ubuntu-latest
@@ -38,6 +41,26 @@ jobs:
             experiments/rust-wasm-foundation/components/workflow-alt -> target
       - name: Run clean baseline smoke
         run: bash experiments/clean-application-baseline/scripts/smoke.sh
+      - name: Materialize all baseline lockfiles
+        run: cargo generate-lockfile --manifest-path experiments/bevy-runtime-foundation/Cargo.toml
+      - name: Commit resolved lockfiles on hardening branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/work/production-application-baseline'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            experiments/clean-application-baseline/Cargo.lock \
+            experiments/bevy-runtime-foundation/Cargo.lock \
+            experiments/rust-wasm-foundation/components/process/Cargo.lock \
+            experiments/rust-wasm-foundation/components/workflow-alt/Cargo.lock \
+            experiments/rust-wasm-foundation/components/workflow-default/Cargo.lock \
+            experiments/rust-wasm-foundation/host/Cargo.lock
+          if git diff --cached --quiet; then
+            echo 'LOCKFILES_ALREADY_PINNED=1'
+          else
+            git commit -m 'chore: pin Rust baseline lockfiles'
+            git push origin HEAD:${GITHUB_REF_NAME}
+          fi
       - name: Capture resolved lockfiles
         if: always()
         uses: actions/upload-artifact@v4
