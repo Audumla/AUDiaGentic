@@ -9,7 +9,10 @@ pub struct ConfigLayer {
 
 impl ConfigLayer {
     pub fn new(source: impl Into<String>, value: Value) -> Self {
-        Self { source: source.into(), value }
+        Self {
+            source: source.into(),
+            value,
+        }
     }
 }
 
@@ -26,7 +29,10 @@ pub fn merge_layers(layers: impl IntoIterator<Item = ConfigLayer>) -> ResolvedCo
         merge_value(&mut resolved, layer.value);
         sources.push(layer.source);
     }
-    ResolvedConfig { value: resolved, sources }
+    ResolvedConfig {
+        value: resolved,
+        sources,
+    }
 }
 
 pub fn deserialize<T: DeserializeOwned>(config: &ResolvedConfig) -> Result<T, serde_json::Error> {
@@ -51,12 +57,15 @@ fn merge_value(base: &mut Value, overlay: Value) {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use serde::Deserialize;
     use serde_json::json;
-    use super::*;
 
     #[derive(Debug, Deserialize, PartialEq)]
-    struct Example { host: String, port: u16 }
+    struct Example {
+        host: String,
+        port: u16,
+    }
 
     #[test]
     fn later_layers_override_without_erasing_siblings() {
@@ -65,6 +74,12 @@ mod tests {
             ConfigLayer::new("project", json!({"port":8080})),
         ]);
         assert_eq!(resolved.sources, ["base", "project"]);
-        assert_eq!(deserialize::<Example>(&resolved).unwrap(), Example { host: "localhost".into(), port: 8080 });
+        assert_eq!(
+            deserialize::<Example>(&resolved).unwrap(),
+            Example {
+                host: "localhost".into(),
+                port: 8080
+            }
+        );
     }
 }
