@@ -30,6 +30,7 @@ jobs:
         os:
           - ubuntu-24.04
           - macos-15
+          - windows-2025
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
@@ -40,6 +41,7 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - name: Validate architecture layers
+        shell: bash
         run: bash scripts/rust-foundation-smoke.sh
       - name: Capture resolved lockfile
         if: always()
