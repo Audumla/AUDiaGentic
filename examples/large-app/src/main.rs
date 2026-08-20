@@ -4,7 +4,7 @@ use audiagentic_core::{Application, ApplicationId, ApplicationIdentity, Applicat
 use audiagentic_file_store::{read, write_atomic};
 use audiagentic_host::FileWriteAuthority;
 use audiagentic_reconcile::{Change, Desired, EffectId, Observed, OwnershipId, Plan, plan_replace};
-use audiagentic_sensitive::{SafeMetadata, Secret, SensitiveKey, REDACTED};
+use audiagentic_sensitive::{REDACTED, SafeMetadata, Secret, SensitiveKey};
 
 #[derive(Debug)]
 struct StateFeature {
@@ -49,7 +49,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         composition,
     );
 
-    assert!(app.composition().authority.allows(&path));
+    assert_eq!(app.composition().authority.root(), directory.as_path());
     assert_eq!(read(&path)?, b"new");
     assert_eq!(app.composition().plan.changes().len(), 1);
     assert!(!format!("{:?}", app.composition().token).contains("never-log-me"));
