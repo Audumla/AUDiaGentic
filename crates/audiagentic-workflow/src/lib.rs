@@ -204,9 +204,7 @@ impl<S> WorkflowInstance<S> {
             WorkflowTransition::Complete { state, effects } => {
                 (state, WorkflowStatus::Completed, effects)
             }
-            WorkflowTransition::Fail { state, effects } => {
-                (state, WorkflowStatus::Failed, effects)
-            }
+            WorkflowTransition::Fail { state, effects } => (state, WorkflowStatus::Failed, effects),
         };
 
         self.state = state;
@@ -283,10 +281,8 @@ mod tests {
 
     #[test]
     fn workflow_is_deterministic_and_effects_are_data() {
-        let mut workflow = WorkflowInstance::new(
-            WorkflowInstanceId::new("job-1").unwrap(),
-            State::Pending,
-        );
+        let mut workflow =
+            WorkflowInstance::new(WorkflowInstanceId::new("job-1").unwrap(), State::Pending);
 
         let started = workflow.apply(&JobWorkflow, &Input::Start).unwrap();
         assert_eq!(started.revision(), 1);
@@ -301,10 +297,8 @@ mod tests {
 
     #[test]
     fn stale_revision_is_rejected_before_domain_logic() {
-        let mut workflow = WorkflowInstance::new(
-            WorkflowInstanceId::new("job-2").unwrap(),
-            State::Pending,
-        );
+        let mut workflow =
+            WorkflowInstance::new(WorkflowInstanceId::new("job-2").unwrap(), State::Pending);
         let error = workflow
             .apply_at(4, &JobWorkflow, &Input::Start)
             .unwrap_err();

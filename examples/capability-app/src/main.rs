@@ -68,10 +68,7 @@ impl WorkflowDefinition for JobWorkflow {
         match (state, input) {
             (JobState::Pending, JobInput::Start) => Ok(WorkflowTransition::continuing(
                 JobState::Running,
-                vec![
-                    JobEffect::Record(JobEvent::Started),
-                    JobEffect::LaunchChild,
-                ],
+                vec![JobEffect::Record(JobEvent::Started), JobEffect::LaunchChild],
             )),
             (JobState::Running, JobInput::ChildObserved) => Ok(WorkflowTransition::complete(
                 JobState::Done,
@@ -120,14 +117,18 @@ fn launch_child(program: PathBuf) -> Result<String, Box<dyn Error>> {
     )?;
 
     {
-        let stdin = child.stdin().ok_or_else(|| std::io::Error::other("child stdin was not piped"))?;
+        let stdin = child
+            .stdin()
+            .ok_or_else(|| std::io::Error::other("child stdin was not piped"))?;
         stdin.write_all(b"ping\n")?;
         stdin.flush()?;
     }
 
     let mut line = String::new();
     {
-        let stdout = child.stdout().ok_or_else(|| std::io::Error::other("child stdout was not piped"))?;
+        let stdout = child
+            .stdout()
+            .ok_or_else(|| std::io::Error::other("child stdout was not piped"))?;
         let mut reader = BufReader::new(stdout);
         reader.read_line(&mut line)?;
     }
@@ -149,10 +150,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let causation = CausationId::new("workflow-job-1")?;
     let mut events = EventStream::new(EventStreamId::new("job-1")?);
     let mut event_counter = 0;
-    let mut workflow = WorkflowInstance::new(
-        WorkflowInstanceId::new("job-1")?,
-        JobState::Pending,
-    );
+    let mut workflow = WorkflowInstance::new(WorkflowInstanceId::new("job-1")?, JobState::Pending);
 
     let started = workflow.apply(&JobWorkflow, &JobInput::Start)?;
     for effect in started.into_effects() {
