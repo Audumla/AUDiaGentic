@@ -54,10 +54,7 @@ fn load_policy() -> Result<PlatformPolicy, Box<dyn Error>> {
             ConfigLayerId::new("package-default")?,
             "[events]\nretention = 8\n",
         )
-        .merge_toml(
-            ConfigLayerId::new("project")?,
-            "[events]\nretention = 4\n",
-        )
+        .merge_toml(ConfigLayerId::new("project")?, "[events]\nretention = 4\n")
         .resolve::<PlatformConfig>()?;
 
     Ok(PlatformPolicy {

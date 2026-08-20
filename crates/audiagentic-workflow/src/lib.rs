@@ -435,6 +435,7 @@ mod tests {
         let error = workflow
             .apply_at(4, &JobWorkflow, &Input::Start)
             .unwrap_err();
+        assert_eq!(error.code().as_str(), "CON-WORKFLOW-002");
         assert!(matches!(
             error,
             WorkflowApplyError::RevisionConflict {
@@ -442,6 +443,5 @@ mod tests {
                 actual: 0
             }
         ));
-        assert_eq!(error.code().as_str(), "CON-WORKFLOW-002");
     }
 }

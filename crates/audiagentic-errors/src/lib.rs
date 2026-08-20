@@ -138,8 +138,7 @@ const fn valid_error_code(value: &str) -> bool {
 
 const fn known_prefix(bytes: &[u8], len: usize) -> bool {
     if len == 2 {
-        return (bytes[0] == b'I' && bytes[1] == b'O')
-            || (bytes[0] == b'T' && bytes[1] == b'O');
+        return (bytes[0] == b'I' && bytes[1] == b'O') || (bytes[0] == b'T' && bytes[1] == b'O');
     }
     if len != 3 {
         return false;

@@ -227,10 +227,7 @@ mod tests {
     fn config_revision_changes_when_a_source_changes() {
         fn revision(source: &str) -> ConfigRevision {
             ConfigLayers::new()
-                .merge_toml(
-                    ConfigLayerId::new("project").unwrap(),
-                    source,
-                )
+                .merge_toml(ConfigLayerId::new("project").unwrap(), source)
                 .resolve::<TestConfig>()
                 .unwrap()
                 .revision()
@@ -246,6 +243,9 @@ mod tests {
     fn invalid_configuration_is_a_coded_local_error() {
         let error = from_toml::<TestConfig>("name = 42\ncount = 3\n").unwrap_err();
         assert_eq!(error.code().as_str(), "CFG-CONFIG-001");
-        assert_eq!(error.canonical_message(), "Configuration extraction failed.");
+        assert_eq!(
+            error.canonical_message(),
+            "Configuration extraction failed."
+        );
     }
 }
