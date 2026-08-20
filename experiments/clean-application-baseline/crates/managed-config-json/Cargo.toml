@@ -11,3 +11,6 @@ audiagentic-foundation-reconcile-spike = { path = "../foundation-reconcile" }
 audiagentic-managed-config-api-spike = { path = "../managed-config-api" }
 async-trait.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
