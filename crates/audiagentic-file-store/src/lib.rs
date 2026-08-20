@@ -49,11 +49,7 @@ fn next_temporary_path(path: &Path) -> Result<PathBuf, FileStoreError> {
 fn create_temporary_file(path: &Path) -> Result<(PathBuf, File), FileStoreError> {
     for _ in 0..TEMP_CREATE_ATTEMPTS {
         let temp = next_temporary_path(path)?;
-        match OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temp)
-        {
+        match OpenOptions::new().write(true).create_new(true).open(&temp) {
             Ok(file) => return Ok((temp, file)),
             Err(source) if source.kind() == io::ErrorKind::AlreadyExists => continue,
             Err(source) => return Err(io_error("create temporary file", &temp, source)),
