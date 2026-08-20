@@ -1,0 +1,14 @@
+[package]
+name = "audiagentic-example-large"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+audiagentic-core = { path = "../../crates/audiagentic-core" }
+audiagentic-file-store = { path = "../../crates/audiagentic-file-store" }
+audiagentic-host = { path = "../../crates/audiagentic-host" }
+audiagentic-reconcile = { path = "../../crates/audiagentic-reconcile" }
+audiagentic-sensitive = { path = "../../crates/audiagentic-sensitive" }
