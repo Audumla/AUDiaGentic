@@ -2,6 +2,8 @@
 resolver = "2"
 members = [
   "crates/kernel-core",
+  "crates/kernel-manifest",
+  "crates/kernel-composition",
   "crates/capability-api",
   "crates/application",
   "crates/foundation-diagnostics",
