@@ -11,4 +11,5 @@ audiagentic-capability-api-spike = { path = "../capability-api" }
 audiagentic-component-host-spike = { path = "../component-host" }
 audiagentic-mcp-adapter-spike = { path = "../mcp-adapter" }
 audiagentic-runtime-bevy-spike = { path = "../runtime-bevy" }
+rmcp.workspace = true
 tokio.workspace = true
