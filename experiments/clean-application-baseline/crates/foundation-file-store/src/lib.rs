@@ -1,4 +1,8 @@
-use std::{fs, io::{self, Write}, path::{Path, PathBuf}};
+use std::{
+    fs,
+    io::{self, Write},
+    path::{Path, PathBuf},
+};
 
 use thiserror::Error;
 
@@ -16,20 +20,39 @@ pub fn read_text(path: &Path) -> Result<Option<String>, FileStoreError> {
     match fs::read_to_string(path) {
         Ok(value) => Ok(Some(value)),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(source) => Err(FileStoreError::Io { path: path.to_owned(), source }),
+        Err(source) => Err(FileStoreError::Io {
+            path: path.to_owned(),
+            source,
+        }),
     }
 }
 
 pub fn atomic_write_text(path: &Path, content: &str) -> Result<(), FileStoreError> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    fs::create_dir_all(parent).map_err(|source| FileStoreError::Io { path: parent.to_owned(), source })?;
+    fs::create_dir_all(parent).map_err(|source| FileStoreError::Io {
+        path: parent.to_owned(),
+        source,
+    })?;
     let temp = temporary_path(path);
 
     let result = (|| {
-        let mut file = fs::File::create(&temp).map_err(|source| FileStoreError::Io { path: temp.clone(), source })?;
-        file.write_all(content.as_bytes()).map_err(|source| FileStoreError::Io { path: temp.clone(), source })?;
-        file.sync_all().map_err(|source| FileStoreError::Io { path: temp.clone(), source })?;
-        fs::rename(&temp, path).map_err(|source| FileStoreError::Io { path: path.to_owned(), source })?;
+        let mut file = fs::File::create(&temp).map_err(|source| FileStoreError::Io {
+            path: temp.clone(),
+            source,
+        })?;
+        file.write_all(content.as_bytes())
+            .map_err(|source| FileStoreError::Io {
+                path: temp.clone(),
+                source,
+            })?;
+        file.sync_all().map_err(|source| FileStoreError::Io {
+            path: temp.clone(),
+            source,
+        })?;
+        fs::rename(&temp, path).map_err(|source| FileStoreError::Io {
+            path: path.to_owned(),
+            source,
+        })?;
         Ok(())
     })();
 
@@ -51,7 +74,8 @@ mod tests {
 
     #[test]
     fn absence_is_distinct_from_corruption_or_other_io_errors() {
-        let dir = std::env::temp_dir().join(format!("audiagentic-filestore-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("audiagentic-filestore-{}", std::process::id()));
         let path = dir.join("state.txt");
         let _ = fs::remove_dir_all(&dir);
         assert_eq!(read_text(&path).unwrap(), None);
