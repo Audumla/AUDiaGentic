@@ -110,19 +110,13 @@ mod tests {
         .unwrap();
 
         let too_many_runs = workflow
-            .run(WorkflowRequest {
-                runs: 11,
-                steps: 1,
-            })
+            .run(WorkflowRequest { runs: 11, steps: 1 })
             .await
             .unwrap_err();
         assert_eq!(too_many_runs.kind(), CapabilityErrorKind::InvalidRequest);
 
         let too_many_steps = workflow
-            .run(WorkflowRequest {
-                runs: 1,
-                steps: 21,
-            })
+            .run(WorkflowRequest { runs: 1, steps: 21 })
             .await
             .unwrap_err();
         assert_eq!(too_many_steps.kind(), CapabilityErrorKind::InvalidRequest);

@@ -143,11 +143,15 @@ mod tests {
 
     #[test]
     fn workflow_request_rejects_zero_dimensions() {
-        let runs = WorkflowRequest { runs: 0, steps: 1 }.validate().unwrap_err();
+        let runs = WorkflowRequest { runs: 0, steps: 1 }
+            .validate()
+            .unwrap_err();
         assert_eq!(runs.kind(), CapabilityErrorKind::InvalidRequest);
         assert_eq!(runs.capability(), "workflow");
 
-        let steps = WorkflowRequest { runs: 1, steps: 0 }.validate().unwrap_err();
+        let steps = WorkflowRequest { runs: 1, steps: 0 }
+            .validate()
+            .unwrap_err();
         assert_eq!(steps.kind(), CapabilityErrorKind::InvalidRequest);
         assert_eq!(steps.capability(), "workflow");
     }
