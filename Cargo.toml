@@ -1,0 +1,27 @@
+[workspace]
+members = [
+    "crates/audiagentic-core",
+    "crates/audiagentic-sensitive",
+    "crates/audiagentic-template",
+    "crates/audiagentic-reconcile",
+    "crates/audiagentic-config",
+    "crates/audiagentic-file-store",
+    "crates/audiagentic-host",
+    "examples/tiny-app",
+    "examples/medium-app",
+    "examples/large-app",
+]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+repository = "https://github.com/Audumla/AUDiaGentic"
+
+[workspace.dependencies]
+figment = { version = "0.10.19", features = ["env", "toml"] }
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"

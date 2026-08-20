@@ -1,0 +1,40 @@
+name: rust-production-foundation
+
+on:
+  push:
+    branches:
+      - foundation/rust-production-baseline
+  pull_request:
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'crates/**'
+      - 'examples/**'
+      - 'scripts/rust-foundation-smoke.sh'
+      - 'docs/architecture/rust-production-foundation.md'
+      - '.github/workflows/rust-production-foundation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  architecture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.95.0'
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Validate architecture layers
+        run: bash scripts/rust-foundation-smoke.sh
+      - name: Capture resolved lockfile
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-production-foundation-lockfile
+          if-no-files-found: ignore
+          path: Cargo.lock

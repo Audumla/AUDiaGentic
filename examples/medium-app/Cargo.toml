@@ -1,0 +1,14 @@
+[package]
+name = "audiagentic-example-medium"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+audiagentic-config = { path = "../../crates/audiagentic-config" }
+audiagentic-core = { path = "../../crates/audiagentic-core" }
+audiagentic-template = { path = "../../crates/audiagentic-template" }
+schemars.workspace = true
+serde.workspace = true

@@ -1,0 +1,10 @@
+[package]
+name = "audiagentic-example-tiny"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+audiagentic-core = { path = "../../crates/audiagentic-core" }
