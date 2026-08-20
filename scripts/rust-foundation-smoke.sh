@@ -12,6 +12,7 @@ cargo run --locked --quiet -p audiagentic-example-tiny
 cargo run --locked --quiet -p audiagentic-example-medium
 cargo run --locked --quiet -p audiagentic-example-large
 cargo run --locked --quiet -p audiagentic-example-capabilities
+cargo run --locked --quiet -p audiagentic-example-platform
 
 core_tree="$(cargo tree --locked -p audiagentic-core --edges normal --prefix none)"
 core_lines="$(printf '%s\n' "$core_tree" | sed '/^[[:space:]]*$/d' | wc -l)"
@@ -30,7 +31,7 @@ for forbidden in bevy rmcp wasmtime wash-runtime tokio async-trait; do
 done
 
 host_tree="$(cargo tree --locked -p audiagentic-host --edges normal --prefix none)"
-for forbidden in audiagentic-config audiagentic-events audiagentic-file-store audiagentic-template audiagentic-reconcile audiagentic-workflow audiagentic-host-native; do
+for forbidden in audiagentic-config audiagentic-events audiagentic-file-store audiagentic-template audiagentic-reconcile audiagentic-time audiagentic-workflow audiagentic-managed-config audiagentic-host-native; do
     if printf '%s\n' "$host_tree" | grep -Fq "$forbidden"; then
         echo "HOST_LAYER_LEAK: found $forbidden" >&2
         exit 1
@@ -44,7 +45,7 @@ for required in audiagentic-host audiagentic-file-store; do
         exit 1
     fi
 done
-for forbidden in audiagentic-core audiagentic-config audiagentic-events audiagentic-template audiagentic-reconcile audiagentic-workflow; do
+for forbidden in audiagentic-core audiagentic-config audiagentic-events audiagentic-template audiagentic-reconcile audiagentic-time audiagentic-workflow audiagentic-managed-config; do
     if printf '%s\n' "$native_host_tree" | grep -E "^${forbidden}([[:space:]]|$)" >/dev/null; then
         echo "NATIVE_HOST_LAYER_LEAK: found $forbidden" >&2
         exit 1
@@ -52,7 +53,7 @@ for forbidden in audiagentic-core audiagentic-config audiagentic-events audiagen
 done
 
 events_tree="$(cargo tree --locked -p audiagentic-events --edges normal --prefix none)"
-for forbidden in audiagentic-host audiagentic-host-native audiagentic-config audiagentic-file-store audiagentic-reconcile audiagentic-workflow; do
+for forbidden in audiagentic-host audiagentic-host-native audiagentic-config audiagentic-file-store audiagentic-reconcile audiagentic-time audiagentic-workflow audiagentic-managed-config; do
     if printf '%s\n' "$events_tree" | grep -E "^${forbidden}([[:space:]]|$)" >/dev/null; then
         echo "EVENT_LAYER_LEAK: found $forbidden" >&2
         exit 1
@@ -67,7 +68,29 @@ if [[ "$workflow_lines" -ne 1 ]]; then
     exit 1
 fi
 
-if grep -R --include='*.rs' -E '\b(Workflow|ComponentProbe|DynApplication|NoWorkflow|NoComponentProbe|CapabilityError|EventBus|ServiceRegistry)\b' crates/audiagentic-core >/dev/null; then
+time_tree="$(cargo tree --locked -p audiagentic-time --edges normal --prefix none)"
+time_lines="$(printf '%s\n' "$time_tree" | sed '/^[[:space:]]*$/d' | wc -l)"
+if [[ "$time_lines" -ne 1 ]]; then
+    echo "TIME_DEPENDENCY_LEAK: time primitive must remain pure" >&2
+    printf '%s\n' "$time_tree" >&2
+    exit 1
+fi
+
+managed_config_tree="$(cargo tree --locked -p audiagentic-managed-config --edges normal --prefix none)"
+for required in audiagentic-host audiagentic-reconcile; do
+    if ! printf '%s\n' "$managed_config_tree" | grep -E "^${required}([[:space:]]|$)" >/dev/null; then
+        echo "MANAGED_CONFIG_LAYER_MISSING: expected $required" >&2
+        exit 1
+    fi
+done
+for forbidden in audiagentic-core audiagentic-config audiagentic-events audiagentic-file-store audiagentic-host-native audiagentic-template audiagentic-time audiagentic-workflow; do
+    if printf '%s\n' "$managed_config_tree" | grep -E "^${forbidden}([[:space:]]|$)" >/dev/null; then
+        echo "MANAGED_CONFIG_LAYER_LEAK: found $forbidden" >&2
+        exit 1
+    fi
+done
+
+if grep -R --include='*.rs' -E '\b(Workflow|ComponentProbe|DynApplication|NoWorkflow|NoComponentProbe|CapabilityError|EventBus|ServiceRegistry|TimerRuntime|WorkflowRuntime)\b' crates/audiagentic-core >/dev/null; then
     echo "CORE_DOMAIN_LEAK: rejected capability/framework vocabulary entered audiagentic-core" >&2
     exit 1
 fi
@@ -83,8 +106,15 @@ if grep -Eq 'audiagentic-file-store' examples/large-app/Cargo.toml || \
     exit 1
 fi
 
-if grep -R --include='*.rs' -E '\b(EventBus|GlobalEvent|WorkflowRuntime|WorkflowManager)\b' crates/audiagentic-events crates/audiagentic-workflow >/dev/null; then
-    echo "CAPABILITY_MANAGER_LEAK: event/workflow primitives must not become global managers" >&2
+if grep -Eq 'audiagentic-file-store' examples/platform-app/Cargo.toml || \
+   grep -Eq 'audiagentic_file_store' examples/platform-app/src/main.rs; then
+    echo "PLATFORM_APP_HOST_BYPASS: platform spike must perform state I/O through capabilities/host" >&2
+    exit 1
+fi
+
+if grep -R --include='*.rs' -E '\b(EventBus|GlobalEvent|WorkflowRuntime|WorkflowManager|TimerRuntime|GlobalTimer|ServiceRegistry)\b' \
+    crates/audiagentic-events crates/audiagentic-workflow crates/audiagentic-time crates/audiagentic-managed-config >/dev/null; then
+    echo "CAPABILITY_MANAGER_LEAK: semantic primitives must not become global managers" >&2
     exit 1
 fi
 
@@ -95,6 +125,9 @@ echo "NATIVE_FILE_HOST_OK"
 echo "NATIVE_PROCESS_HOST_OK"
 echo "EVENT_CAPABILITY_OK"
 echo "WORKFLOW_CAPABILITY_OK"
+echo "TIME_CAPABILITY_OK"
+echo "MANAGED_CONFIG_CAPABILITY_OK"
 echo "APPLICATION_CAPABILITY_COMPOSITION_OK"
+echo "APPLICATION_PLATFORM_SPIKE_OK"
 echo "TINY_MEDIUM_LARGE_OK"
 echo "RUST_PRODUCTION_FOUNDATION_OK"

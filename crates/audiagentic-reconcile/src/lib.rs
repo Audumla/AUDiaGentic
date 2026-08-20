@@ -48,7 +48,9 @@ pub struct Desired<T>(pub T);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Change<T> {
+    Create { after: T },
     Replace { before: T, after: T },
+    Delete { before: T },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -121,15 +123,49 @@ pub fn plan_replace<T: Clone + PartialEq>(
     Plan::new(ownership, effect, changes)
 }
 
+/// Plans presence-aware state without performing I/O. This is the primitive
+/// used by capabilities such as managed configuration where create/delete are
+/// semantically distinct from replacement.
+pub fn plan_presence<T: Clone + PartialEq>(
+    ownership: OwnershipId,
+    effect: EffectId,
+    observed: &Observed<Option<T>>,
+    desired: &Desired<Option<T>>,
+) -> Plan<Change<T>> {
+    let changes = match (&observed.0, &desired.0) {
+        (None, None) => Vec::new(),
+        (None, Some(after)) => vec![Change::Create {
+            after: after.clone(),
+        }],
+        (Some(before), None) => vec![Change::Delete {
+            before: before.clone(),
+        }],
+        (Some(before), Some(after)) if before == after => Vec::new(),
+        (Some(before), Some(after)) => vec![Change::Replace {
+            before: before.clone(),
+            after: after.clone(),
+        }],
+    };
+    Plan::new(ownership, effect, changes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn ownership() -> OwnershipId {
+        OwnershipId::new("owner").unwrap()
+    }
+
+    fn effect() -> EffectId {
+        EffectId::new("effect").unwrap()
+    }
+
     #[test]
     fn equal_state_produces_no_effect() {
         let plan = plan_replace(
-            OwnershipId::new("owner").unwrap(),
-            EffectId::new("effect").unwrap(),
+            ownership(),
+            effect(),
             &Observed("same"),
             &Desired("same"),
         );
@@ -139,11 +175,57 @@ mod tests {
     #[test]
     fn differing_state_produces_explicit_change() {
         let plan = plan_replace(
-            OwnershipId::new("owner").unwrap(),
-            EffectId::new("effect").unwrap(),
+            ownership(),
+            effect(),
             &Observed("old"),
             &Desired("new"),
         );
         assert_eq!(plan.changes().len(), 1);
+        assert!(matches!(
+            plan.changes(),
+            [Change::Replace {
+                before: "old",
+                after: "new"
+            }]
+        ));
+    }
+
+    #[test]
+    fn presence_planning_distinguishes_create_replace_and_delete() {
+        let create = plan_presence(
+            ownership(),
+            effect(),
+            &Observed::<Option<&str>>(None),
+            &Desired(Some("one")),
+        );
+        assert!(matches!(
+            create.changes(),
+            [Change::Create { after: "one" }]
+        ));
+
+        let replace = plan_presence(
+            ownership(),
+            effect(),
+            &Observed(Some("one")),
+            &Desired(Some("two")),
+        );
+        assert!(matches!(
+            replace.changes(),
+            [Change::Replace {
+                before: "one",
+                after: "two"
+            }]
+        ));
+
+        let delete = plan_presence(
+            ownership(),
+            effect(),
+            &Observed(Some("two")),
+            &Desired(None),
+        );
+        assert!(matches!(
+            delete.changes(),
+            [Change::Delete { before: "two" }]
+        ));
     }
 }
