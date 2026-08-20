@@ -12,7 +12,12 @@ audiagentic-component-host-spike = { path = "../component-host" }
 audiagentic-filesystem-api-spike = { path = "../filesystem-api" }
 audiagentic-filesystem-native-spike = { path = "../filesystem-native" }
 audiagentic-kernel-core-spike = { path = "../kernel-core" }
+audiagentic-managed-config-api-spike = { path = "../managed-config-api" }
+audiagentic-managed-config-json-spike = { path = "../managed-config-json" }
 audiagentic-mcp-adapter-spike = { path = "../mcp-adapter" }
+audiagentic-process-api-spike = { path = "../process-api" }
+audiagentic-process-native-spike = { path = "../process-native" }
 audiagentic-runtime-bevy-spike = { path = "../runtime-bevy" }
 audiagentic-workflow-api-spike = { path = "../workflow-api" }
+serde_json.workspace = true
 tokio.workspace = true
