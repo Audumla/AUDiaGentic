@@ -29,9 +29,23 @@ for forbidden in bevy rmcp wasmtime wash-runtime tokio async-trait; do
 done
 
 host_tree="$(cargo tree --locked -p audiagentic-host --edges normal --prefix none)"
-for forbidden in audiagentic-config audiagentic-file-store audiagentic-template audiagentic-reconcile; do
+for forbidden in audiagentic-config audiagentic-file-store audiagentic-template audiagentic-reconcile audiagentic-host-native; do
     if printf '%s\n' "$host_tree" | grep -Fq "$forbidden"; then
         echo "HOST_LAYER_LEAK: found $forbidden" >&2
+        exit 1
+    fi
+done
+
+native_host_tree="$(cargo tree --locked -p audiagentic-host-native --edges normal --prefix none)"
+for required in audiagentic-host audiagentic-file-store; do
+    if ! printf '%s\n' "$native_host_tree" | grep -E "^${required}([[:space:]]|$)" >/dev/null; then
+        echo "NATIVE_HOST_LAYER_MISSING: expected $required" >&2
+        exit 1
+    fi
+done
+for forbidden in audiagentic-core audiagentic-config audiagentic-template audiagentic-reconcile; do
+    if printf '%s\n' "$native_host_tree" | grep -E "^${forbidden}([[:space:]]|$)" >/dev/null; then
+        echo "NATIVE_HOST_LAYER_LEAK: found $forbidden" >&2
         exit 1
     fi
 done
@@ -46,8 +60,15 @@ if grep -R --include='Cargo.toml' -E '\b(bevy|rmcp|wasmtime|wash-runtime|tokio|a
     exit 1
 fi
 
+if grep -Eq 'audiagentic-file-store' examples/large-app/Cargo.toml || \
+   grep -Eq 'audiagentic_file_store' examples/large-app/src/main.rs; then
+    echo "LARGE_APP_HOST_BYPASS: large proof must perform state I/O through FileHost" >&2
+    exit 1
+fi
+
 echo "CORE_LAYER_OK"
 echo "FOUNDATION_LIBRARIES_OK"
 echo "HOST_BOUNDARY_OK"
+echo "NATIVE_FILE_HOST_OK"
 echo "TINY_MEDIUM_LARGE_OK"
 echo "RUST_PRODUCTION_FOUNDATION_OK"
