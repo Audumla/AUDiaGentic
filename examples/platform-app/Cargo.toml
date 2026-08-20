@@ -8,6 +8,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+audiagentic-config = { path = "../../crates/audiagentic-config" }
 audiagentic-core = { path = "../../crates/audiagentic-core" }
 audiagentic-events = { path = "../../crates/audiagentic-events" }
 audiagentic-host = { path = "../../crates/audiagentic-host" }
@@ -16,3 +17,5 @@ audiagentic-managed-config = { path = "../../crates/audiagentic-managed-config" 
 audiagentic-reconcile = { path = "../../crates/audiagentic-reconcile" }
 audiagentic-time = { path = "../../crates/audiagentic-time" }
 audiagentic-workflow = { path = "../../crates/audiagentic-workflow" }
+schemars.workspace = true
+serde.workspace = true

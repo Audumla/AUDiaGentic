@@ -7,11 +7,13 @@ use std::{
     time::Duration,
 };
 
+use audiagentic_config::{ConfigLayerId, ConfigLayers, ConfigRevision};
 use audiagentic_core::{
     Application, ApplicationId, ApplicationIdentity, ApplicationInstanceId, CorrelationId,
+    ExecutionContext, ExecutionId,
 };
 use audiagentic_events::{
-    CausationId, EventCursor, EventId, EventStream, EventStreamError, EventStreamId,
+    CausationId, EventCursor, EventId, EventPolicy, EventStream, EventStreamError, EventStreamId,
 };
 use audiagentic_host::{
     FileHost, FileReadAuthority, FileWriteAuthority, ProcessAuthority, ProcessChild, ProcessHost,
@@ -27,6 +29,42 @@ use audiagentic_time::{Deadline, TimerId, TimerSet, Timestamp};
 use audiagentic_workflow::{
     WorkflowDefinition, WorkflowInstance, WorkflowInstanceId, WorkflowStatus, WorkflowTransition,
 };
+use schemars::JsonSchema;
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct PlatformConfig {
+    events: PlatformEventConfig,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct PlatformEventConfig {
+    retention: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PlatformPolicy {
+    events: EventPolicy,
+    config_revision: ConfigRevision,
+}
+
+fn load_policy() -> Result<PlatformPolicy, Box<dyn Error>> {
+    let resolved = ConfigLayers::new()
+        .merge_toml(
+            ConfigLayerId::new("package-default")?,
+            "[events]\nretention = 8\n",
+        )
+        .merge_toml(
+            ConfigLayerId::new("project")?,
+            "[events]\nretention = 4\n",
+        )
+        .resolve::<PlatformConfig>()?;
+
+    Ok(PlatformPolicy {
+        events: EventPolicy::bounded(resolved.value().events.retention)?,
+        config_revision: resolved.revision(),
+    })
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum PlatformState {
@@ -115,6 +153,7 @@ struct PlatformComposition {
     read_authority: FileReadAuthority,
     write_authority: FileWriteAuthority,
     process_authority: ProcessAuthority,
+    policy: PlatformPolicy,
 }
 
 fn child_mode() -> Result<(), Box<dyn Error>> {
@@ -213,6 +252,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root)?;
 
+    let policy = load_policy()?;
+    assert_eq!(policy.events.retention_limit(), Some(4));
+    assert_ne!(policy.config_revision.value(), 0);
+
     let executable = std::env::current_exe()?;
     let app = Application::new(
         ApplicationIdentity::new(
@@ -225,8 +268,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             read_authority: FileReadAuthority::new(&root),
             write_authority: FileWriteAuthority::new(&root),
             process_authority: ProcessAuthority::new([executable]),
+            policy,
         },
     );
+
+    let execution = ExecutionContext::new(
+        ExecutionId::new("platform-execution-1")?,
+        CorrelationId::new("platform-spike")?,
+    );
+    let causation = CausationId::new("workflow-platform-1")?;
 
     let target = ManagedConfigTarget::new(
         "application.conf",
@@ -242,14 +292,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         ConfigApplyResult::Created
     );
 
-    let correlation = CorrelationId::new("platform-spike")?;
-    let causation = CausationId::new("workflow-platform-1")?;
-    let mut events = EventStream::bounded(EventStreamId::new("platform-1")?, 4)?;
+    let mut events = EventStream::with_policy(
+        EventStreamId::new("platform-1")?,
+        app.composition().policy.events,
+    );
     let mut event_counter = 0;
     record_event(
         &mut events,
         &mut event_counter,
-        &correlation,
+        execution.correlation_id(),
         &causation,
         PlatformEvent::ConfigCreated,
     )?;
@@ -271,7 +322,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             PlatformEffect::Record(event) => record_event(
                 &mut events,
                 &mut event_counter,
-                &correlation,
+                execution.correlation_id(),
                 &causation,
                 event,
             )?,
@@ -283,7 +334,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 record_event(
                     &mut events,
                     &mut event_counter,
-                    &correlation,
+                    execution.correlation_id(),
                     &causation,
                     PlatformEvent::ChildRoundTrip(observed),
                 )?;
@@ -296,7 +347,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     record_event(
         &mut events,
         &mut event_counter,
-        &correlation,
+        execution.correlation_id(),
         &causation,
         PlatformEvent::TimerFired,
     )?;
@@ -319,7 +370,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     record_event(
         &mut events,
         &mut event_counter,
-        &correlation,
+        execution.correlation_id(),
         &causation,
         PlatformEvent::ConfigReplaced,
     )?;
@@ -330,7 +381,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             record_event(
                 &mut events,
                 &mut event_counter,
-                &correlation,
+                execution.correlation_id(),
                 &causation,
                 event,
             )?;
@@ -369,10 +420,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     record_event(
         &mut events,
         &mut event_counter,
-        &correlation,
+        execution.correlation_id(),
         &causation,
         PlatformEvent::ConfigDeleted,
     )?;
+
+    println!(
+        "OBSERVABILITY_SEAM_OK execution={} correlation={} config_revision={}",
+        execution.execution_id(),
+        execution.correlation_id(),
+        app.composition().policy.config_revision
+    );
+    println!("CONFIG_POLICY_OK");
 
     fs::remove_dir_all(root)?;
     println!("APPLICATION_PLATFORM_SPIKE_OK");

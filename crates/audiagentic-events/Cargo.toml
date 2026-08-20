@@ -8,3 +8,4 @@ repository.workspace = true
 
 [dependencies]
 audiagentic-core = { path = "../audiagentic-core" }
+audiagentic-errors = { path = "../audiagentic-errors" }

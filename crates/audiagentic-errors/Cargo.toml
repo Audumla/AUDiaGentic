@@ -1,5 +1,5 @@
 [package]
-name = "audiagentic-workflow"
+name = "audiagentic-errors"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -7,4 +7,3 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-audiagentic-errors = { path = "../audiagentic-errors" }

@@ -7,5 +7,6 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+audiagentic-errors = { path = "../audiagentic-errors" }
 audiagentic-host = { path = "../audiagentic-host" }
 audiagentic-reconcile = { path = "../audiagentic-reconcile" }
