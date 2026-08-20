@@ -12,6 +12,13 @@ use thiserror::Error;
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 const TEMP_CREATE_ATTEMPTS: usize = 16;
 
+#[cfg(windows)]
+#[link(name = "Kernel32")]
+unsafe extern "system" {
+    #[link_name = "MoveFileExW"]
+    fn move_file_ex_w(existing: *const u16, new: *const u16, flags: u32) -> i32;
+}
+
 #[derive(Debug, Error)]
 pub enum FileStoreError {
     #[error("path has no file name: {0:?}")]
@@ -66,6 +73,45 @@ fn create_temporary_file(path: &Path) -> Result<(PathBuf, File), FileStoreError>
     ))
 }
 
+#[cfg(not(windows))]
+fn replace_file(source: &Path, destination: &Path) -> io::Result<()> {
+    fs::rename(source, destination)
+}
+
+#[cfg(windows)]
+fn replace_file(source: &Path, destination: &Path) -> io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+
+    const MOVEFILE_REPLACE_EXISTING: u32 = 0x0000_0001;
+    const MOVEFILE_WRITE_THROUGH: u32 = 0x0000_0008;
+
+    let source = source
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let destination = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+
+    // SAFETY: both vectors are valid NUL-terminated UTF-16 path buffers for the
+    // duration of the call, and MoveFileExW does not retain the pointers.
+    let result = unsafe {
+        move_file_ex_w(
+            source.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if result == 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
 struct TempGuard(Option<PathBuf>);
 
 impl TempGuard {
@@ -91,12 +137,10 @@ pub fn read(path: impl AsRef<Path>) -> Result<Vec<u8>, FileStoreError> {
     fs::read(path).map_err(|source| io_error("read", path, source))
 }
 
-/// Write through a same-directory temporary file, fsync it, atomically rename
-/// it using the operating system's rename semantics, then fsync the parent on
-/// Unix. Existing temporary-name collisions are retried without taking
-/// ownership of the colliding file. Platforms that cannot atomically replace
-/// an existing destination return the rename error rather than silently falling
-/// back to a non-atomic delete-and-move sequence.
+/// Write through a same-directory temporary file, fsync it, atomically replace
+/// the destination using the platform's same-filesystem replacement primitive,
+/// then fsync the parent on Unix. Existing temporary-name collisions are
+/// retried without taking ownership of the colliding file.
 pub fn write_atomic(path: impl AsRef<Path>, bytes: &[u8]) -> Result<(), FileStoreError> {
     let path = path.as_ref();
     let parent = path
@@ -113,7 +157,7 @@ pub fn write_atomic(path: impl AsRef<Path>, bytes: &[u8]) -> Result<(), FileStor
         .map_err(|source| io_error("fsync temporary file", &temp, source))?;
     drop(file);
 
-    fs::rename(&temp, path).map_err(|source| io_error("rename temporary file", path, source))?;
+    replace_file(&temp, path).map_err(|source| io_error("replace destination", path, source))?;
     guard.disarm();
 
     #[cfg(unix)]
@@ -172,9 +216,8 @@ mod tests {
         fs::remove_dir_all(directory).unwrap();
     }
 
-    #[cfg(unix)]
     #[test]
-    fn replaces_existing_file_atomically_on_unix() {
+    fn replaces_existing_file_atomically() {
         let _test_guard = TEST_LOCK.lock().unwrap();
         let directory = test_path("replace");
         let path = directory.join("state.bin");

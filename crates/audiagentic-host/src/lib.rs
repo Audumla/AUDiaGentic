@@ -63,8 +63,8 @@ impl ProcessAuthority {
         }
     }
 
-    pub fn allows(&self, program: &Path) -> bool {
-        self.programs.contains(program)
+    pub fn programs(&self) -> &BTreeSet<PathBuf> {
+        &self.programs
     }
 }
 
@@ -80,8 +80,8 @@ impl NetworkAuthority {
         }
     }
 
-    pub fn allows(&self, host: &str) -> bool {
-        self.hosts.contains(host)
+    pub fn hosts(&self) -> &BTreeSet<String> {
+        &self.hosts
     }
 }
 
@@ -97,8 +97,8 @@ impl SecretAuthority {
         }
     }
 
-    pub fn allows(&self, name: &str) -> bool {
-        self.names.contains(name)
+    pub fn names(&self) -> &BTreeSet<String> {
+        &self.names
     }
 }
 
@@ -128,21 +128,25 @@ pub struct NetworkResponse {
     pub body: Vec<u8>,
 }
 
+/// Filesystem access is synchronous at this contract boundary. Native
+/// filesystem operations are blocking and WIT filesystem calls are naturally
+/// synchronous; runtimes that require offloading may adapt this contract at
+/// their runtime edge rather than forcing an async framework into foundation.
 pub trait FileHost: Send + Sync {
     type Error: Error + Send + Sync + 'static;
 
-    fn read<'a>(
-        &'a self,
-        authority: &'a FileReadAuthority,
-        path: &'a Path,
-    ) -> HostFuture<'a, Result<Vec<u8>, Self::Error>>;
+    fn read(
+        &self,
+        authority: &FileReadAuthority,
+        path: &Path,
+    ) -> Result<Vec<u8>, Self::Error>;
 
-    fn write<'a>(
-        &'a self,
-        authority: &'a FileWriteAuthority,
-        path: &'a Path,
-        bytes: &'a [u8],
-    ) -> HostFuture<'a, Result<(), Self::Error>>;
+    fn write(
+        &self,
+        authority: &FileWriteAuthority,
+        path: &Path,
+        bytes: &[u8],
+    ) -> Result<(), Self::Error>;
 }
 
 pub trait ProcessHost: Send + Sync {
@@ -185,11 +189,14 @@ mod tests {
         assert_eq!(files.root(), Path::new("/tmp/app"));
 
         let processes = ProcessAuthority::new([PathBuf::from("/usr/bin/git")]);
-        assert!(processes.allows(Path::new("/usr/bin/git")));
-        assert!(!processes.allows(Path::new("/bin/sh")));
+        assert!(processes.programs().contains(Path::new("/usr/bin/git")));
+        assert!(!processes.programs().contains(Path::new("/bin/sh")));
 
         let network = NetworkAuthority::new(["example.com".to_owned()]);
-        assert!(network.allows("example.com"));
-        assert!(!network.allows("other.example"));
+        assert!(network.hosts().contains("example.com"));
+        assert!(!network.hosts().contains("other.example"));
+
+        let secrets = SecretAuthority::new(["api-token".to_owned()]);
+        assert!(secrets.names().contains("api-token"));
     }
 }

@@ -30,8 +30,8 @@ name = "audiagentic-example-large"
 version = "0.1.0"
 dependencies = [
  "audiagentic-core",
- "audiagentic-file-store",
  "audiagentic-host",
+ "audiagentic-host-native",
  "audiagentic-reconcile",
  "audiagentic-sensitive",
 ]
@@ -66,6 +66,15 @@ name = "audiagentic-host"
 version = "0.1.0"
 dependencies = [
  "audiagentic-sensitive",
+]
+
+[[package]]
+name = "audiagentic-host-native"
+version = "0.1.0"
+dependencies = [
+ "audiagentic-file-store",
+ "audiagentic-host",
+ "thiserror",
 ]
 
 [[package]]
