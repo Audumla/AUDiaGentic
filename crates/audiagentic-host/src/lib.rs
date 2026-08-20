@@ -12,8 +12,7 @@ use std::{
     pin::Pin,
 };
 
-use audiagentic_core::ExecutionContext;
-use audiagentic_sensitive::{SafeMetadata, Secret};
+use audiagentic_sensitive::Secret;
 
 pub type HostFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
@@ -129,13 +128,6 @@ pub struct NetworkResponse {
     pub body: Vec<u8>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EventRecord {
-    pub name: String,
-    pub execution: ExecutionContext,
-    pub metadata: SafeMetadata,
-}
-
 pub trait FileHost: Send + Sync {
     type Error: Error + Send + Sync + 'static;
 
@@ -181,12 +173,6 @@ pub trait SecretHost: Send + Sync {
         authority: &'a SecretAuthority,
         name: &'a str,
     ) -> HostFuture<'a, Result<Secret<Vec<u8>>, Self::Error>>;
-}
-
-pub trait EventSink: Send + Sync {
-    type Error: Error + Send + Sync + 'static;
-
-    fn emit<'a>(&'a self, event: EventRecord) -> HostFuture<'a, Result<(), Self::Error>>;
 }
 
 #[cfg(test)]
