@@ -37,7 +37,10 @@ mod tests {
     #[test]
     fn strict_render_replaces_known_values() {
         let values = BTreeMap::from([("name".to_owned(), "AUDiaGentic".to_owned())]);
-        assert_eq!(render("hello {{ name }}", &values).unwrap(), "hello AUDiaGentic");
+        assert_eq!(
+            render("hello {{ name }}", &values).unwrap(),
+            "hello AUDiaGentic"
+        );
     }
 
     #[test]
