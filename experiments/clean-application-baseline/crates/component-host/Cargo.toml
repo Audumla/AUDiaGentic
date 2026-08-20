@@ -6,6 +6,6 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-audiagentic-capability-api-spike = { path = "../capability-api" }
+audiagentic-component-probe-api-spike = { path = "../component-probe-api" }
 async-trait.workspace = true
 tokio = { workspace = true, features = ["process"] }
