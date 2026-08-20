@@ -17,6 +17,8 @@ use audiagentic_sensitive::{SafeMetadata, Secret};
 
 pub type HostFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
+/// A filesystem read grant. The grant carries the configured root only;
+/// concrete host implementations must canonicalize and enforce containment.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileReadAuthority {
     root: PathBuf,
@@ -30,12 +32,11 @@ impl FileReadAuthority {
     pub fn root(&self) -> &Path {
         &self.root
     }
-
-    pub fn allows(&self, path: &Path) -> bool {
-        path.starts_with(&self.root)
-    }
 }
 
+/// A filesystem write grant. The grant deliberately has no lexical `allows`
+/// helper because path prefix checks are not a safe substitute for platform
+/// canonicalization and symlink-aware enforcement.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileWriteAuthority {
     root: PathBuf,
@@ -48,10 +49,6 @@ impl FileWriteAuthority {
 
     pub fn root(&self) -> &Path {
         &self.root
-    }
-
-    pub fn allows(&self, path: &Path) -> bool {
-        path.starts_with(&self.root)
     }
 }
 
@@ -199,8 +196,7 @@ mod tests {
     #[test]
     fn authorities_are_narrow_and_explicit() {
         let files = FileWriteAuthority::new("/tmp/app");
-        assert!(files.allows(Path::new("/tmp/app/state.json")));
-        assert!(!files.allows(Path::new("/tmp/other/state.json")));
+        assert_eq!(files.root(), Path::new("/tmp/app"));
 
         let processes = ProcessAuthority::new([PathBuf::from("/usr/bin/git")]);
         assert!(processes.allows(Path::new("/usr/bin/git")));
