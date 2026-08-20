@@ -159,10 +159,7 @@ impl<E> EventStream<E> {
         self.events.iter()
     }
 
-    pub fn after(
-        &self,
-        sequence: EventSequence,
-    ) -> impl Iterator<Item = &EventEnvelope<E>> {
+    pub fn after(&self, sequence: EventSequence) -> impl Iterator<Item = &EventEnvelope<E>> {
         self.events
             .iter()
             .filter(move |event| event.sequence() > sequence)
