@@ -5,8 +5,7 @@
 //! global host object.
 
 use std::{
-    fs,
-    io,
+    fs, io,
     path::{Path, PathBuf},
 };
 
@@ -62,12 +61,11 @@ pub enum NativeFileError {
 }
 
 fn canonical_root(root: &Path) -> Result<PathBuf, NativeFileError> {
-    let canonical = fs::canonicalize(root).map_err(|source| {
-        NativeFileError::CanonicalizeAuthorityRoot {
+    let canonical =
+        fs::canonicalize(root).map_err(|source| NativeFileError::CanonicalizeAuthorityRoot {
             path: root.to_path_buf(),
             source,
-        }
-    })?;
+        })?;
     if !canonical.is_dir() {
         return Err(NativeFileError::AuthorityRootNotDirectory(canonical));
     }
@@ -101,12 +99,11 @@ fn ensure_contained(
 fn authorize_read(authority: &FileReadAuthority, path: &Path) -> Result<PathBuf, NativeFileError> {
     let root = canonical_root(authority.root())?;
     let requested = requested_path(&root, path);
-    let canonical = fs::canonicalize(&requested).map_err(|source| {
-        NativeFileError::CanonicalizeReadPath {
+    let canonical =
+        fs::canonicalize(&requested).map_err(|source| NativeFileError::CanonicalizeReadPath {
             path: requested,
             source,
-        }
-    })?;
+        })?;
     ensure_contained("read", &root, &canonical)?;
     Ok(canonical)
 }
@@ -135,12 +132,11 @@ fn authorize_write(
     let parent = requested
         .parent()
         .ok_or_else(|| NativeFileError::MissingWriteParent(requested.clone()))?;
-    let canonical_parent = fs::canonicalize(parent).map_err(|source| {
-        NativeFileError::CanonicalizeWriteParent {
+    let canonical_parent =
+        fs::canonicalize(parent).map_err(|source| NativeFileError::CanonicalizeWriteParent {
             path: parent.to_path_buf(),
             source,
-        }
-    })?;
+        })?;
     ensure_contained("write", &root, &canonical_parent)?;
 
     let file_name = requested
@@ -152,11 +148,7 @@ fn authorize_write(
 impl FileHost for NativeFileHost {
     type Error = NativeFileError;
 
-    fn read(
-        &self,
-        authority: &FileReadAuthority,
-        path: &Path,
-    ) -> Result<Vec<u8>, Self::Error> {
+    fn read(&self, authority: &FileReadAuthority, path: &Path) -> Result<Vec<u8>, Self::Error> {
         let path = authorize_read(authority, path)?;
         read_file(path).map_err(NativeFileError::from)
     }
