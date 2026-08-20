@@ -135,11 +135,7 @@ pub struct NetworkResponse {
 pub trait FileHost: Send + Sync {
     type Error: Error + Send + Sync + 'static;
 
-    fn read(
-        &self,
-        authority: &FileReadAuthority,
-        path: &Path,
-    ) -> Result<Vec<u8>, Self::Error>;
+    fn read(&self, authority: &FileReadAuthority, path: &Path) -> Result<Vec<u8>, Self::Error>;
 
     fn write(
         &self,
