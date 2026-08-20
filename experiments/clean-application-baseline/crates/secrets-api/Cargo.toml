@@ -1,0 +1,11 @@
+[package]
+name = "audiagentic-secrets-api-spike"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+audiagentic-foundation-sensitive-spike = { path = "../foundation-sensitive" }
+async-trait.workspace = true
+thiserror.workspace = true
