@@ -42,10 +42,10 @@ pub struct ErrorDefinition {
 
 impl ErrorDefinition {
     pub const fn new(code: ErrorCode, message: &'static str, resolution: &'static str) -> Self {
-        if message.as_bytes().is_empty() {
+        if message.is_empty() {
             panic!("error message must not be empty");
         }
-        if resolution.as_bytes().is_empty() {
+        if resolution.is_empty() {
             panic!("error resolution must not be empty");
         }
         Self {
@@ -138,7 +138,7 @@ const fn valid_error_code(value: &str) -> bool {
 
 const fn known_prefix(bytes: &[u8], len: usize) -> bool {
     if len == 2 {
-        return (bytes[0] == b'I' && bytes[1] == b'O') || (bytes[0] == b'T' && bytes[1] == b'O');
+        return (bytes[0] == b'I' || bytes[0] == b'T') && bytes[1] == b'O';
     }
     if len != 3 {
         return false;
