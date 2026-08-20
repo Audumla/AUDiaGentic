@@ -12,6 +12,8 @@ use audiagentic_mcp_adapter_spike::McpApplication;
 use audiagentic_process_api_spike::{ProcessError, ProcessRequest, ProcessRunner};
 use audiagentic_process_native_spike::NativeProcessRunner;
 use audiagentic_runtime_bevy_spike::BevyWorkflow;
+use audiagentic_secrets_api_spike::{SecretRef, SecretStore};
+use audiagentic_secrets_memory_spike::MemorySecretStore;
 use audiagentic_workflow_api_spike::{Workflow, WorkflowRequest};
 use serde_json::{Value, json};
 
@@ -21,6 +23,7 @@ struct SpikeCapabilities {
     component_probe: Arc<dyn ComponentProbe>,
     filesystem: Arc<dyn FileSystem>,
     process: Arc<dyn ProcessRunner>,
+    secrets: Arc<dyn SecretStore>,
     managed_config: Arc<dyn ManagedConfig>,
 }
 
@@ -44,6 +47,10 @@ async fn main() -> Result<(), String> {
     let filesystem: Arc<dyn FileSystem> =
         Arc::new(NativeFileSystem::open(&root).map_err(|e| e.to_string())?);
     let process: Arc<dyn ProcessRunner> = Arc::new(NativeProcessRunner::new(Vec::new()));
+    let secrets: Arc<dyn SecretStore> = Arc::new(MemorySecretStore::new([(
+        "example/default".to_owned(),
+        "do-not-log-me".to_owned(),
+    )]));
     let managed_config: Arc<dyn ManagedConfig> = Arc::new(JsonManagedConfig::new(filesystem.clone()));
 
     let app = Application::new(
@@ -53,6 +60,7 @@ async fn main() -> Result<(), String> {
             component_probe: component_probe.clone(),
             filesystem: filesystem.clone(),
             process,
+            secrets,
             managed_config,
         },
     );
@@ -107,6 +115,19 @@ async fn main() -> Result<(), String> {
         return Err(format!("process authority was not enforced: {denied:?}"));
     }
 
+    let secret = app
+        .capabilities()
+        .secrets
+        .resolve(&SecretRef::new("example/default").map_err(|e| e.to_string())?)
+        .await
+        .map_err(|e| e.to_string())?;
+    if secret.expose() != "do-not-log-me"
+        || format!("{secret}") != "[REDACTED]"
+        || format!("{secret:?}") != "Secret([REDACTED])"
+    {
+        return Err("secret capability failed redaction boundary".to_owned());
+    }
+
     let managed_path = RelativePath::new("config/settings.json").map_err(|e| e.to_string())?;
     app.capabilities()
         .filesystem
@@ -151,6 +172,7 @@ async fn main() -> Result<(), String> {
     println!("WASM_COMPONENT={component}");
     println!("FILESYSTEM_CAPABILITY_OK=1");
     println!("PROCESS_AUTHORITY_OK=1");
+    println!("SECRETS_CAPABILITY_OK=1");
     println!("MANAGED_CONFIG_OK=1");
     println!("MCP_PROJECTION_CONSTRUCTED=1");
     println!("CLEAN_BASELINE_OK");
