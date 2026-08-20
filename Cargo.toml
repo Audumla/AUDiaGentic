@@ -10,10 +10,13 @@ members = [
     "crates/audiagentic-host-native",
     "crates/audiagentic-events",
     "crates/audiagentic-workflow",
+    "crates/audiagentic-time",
+    "crates/audiagentic-managed-config",
     "examples/tiny-app",
     "examples/medium-app",
     "examples/large-app",
     "examples/capability-app",
+    "examples/platform-app",
 ]
 resolver = "3"
 

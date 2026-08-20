@@ -130,6 +130,48 @@ impl<E: fmt::Display> fmt::Display for WorkflowApplyError<E> {
 
 impl<E: Error + 'static> Error for WorkflowApplyError<E> {}
 
+/// Serializable-by-the-application workflow state. The crate does not choose a
+/// storage format or persistence backend; it only exposes the state required to
+/// recover deterministic execution at the same revision.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowSnapshot<S> {
+    id: WorkflowInstanceId,
+    revision: u64,
+    status: WorkflowStatus,
+    state: S,
+}
+
+impl<S> WorkflowSnapshot<S> {
+    pub fn new(id: WorkflowInstanceId, revision: u64, status: WorkflowStatus, state: S) -> Self {
+        Self {
+            id,
+            revision,
+            status,
+            state,
+        }
+    }
+
+    pub fn id(&self) -> &WorkflowInstanceId {
+        &self.id
+    }
+
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    pub fn status(&self) -> WorkflowStatus {
+        self.status
+    }
+
+    pub fn state(&self) -> &S {
+        &self.state
+    }
+
+    pub fn into_state(self) -> S {
+        self.state
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkflowInstance<S> {
     id: WorkflowInstanceId,
@@ -148,6 +190,15 @@ impl<S> WorkflowInstance<S> {
         }
     }
 
+    pub fn from_snapshot(snapshot: WorkflowSnapshot<S>) -> Self {
+        Self {
+            id: snapshot.id,
+            revision: snapshot.revision,
+            status: snapshot.status,
+            state: snapshot.state,
+        }
+    }
+
     pub fn id(&self) -> &WorkflowInstanceId {
         &self.id
     }
@@ -162,6 +213,22 @@ impl<S> WorkflowInstance<S> {
 
     pub fn state(&self) -> &S {
         &self.state
+    }
+
+    pub fn snapshot(&self) -> WorkflowSnapshot<S>
+    where
+        S: Clone,
+    {
+        WorkflowSnapshot::new(
+            self.id.clone(),
+            self.revision,
+            self.status,
+            self.state.clone(),
+        )
+    }
+
+    pub fn into_snapshot(self) -> WorkflowSnapshot<S> {
+        WorkflowSnapshot::new(self.id, self.revision, self.status, self.state)
     }
 
     pub fn apply<D>(
@@ -293,6 +360,25 @@ mod tests {
         assert_eq!(completed.status(), WorkflowStatus::Completed);
         assert_eq!(workflow.state(), &State::Done);
         assert!(workflow.apply(&JobWorkflow, &Input::Finish).is_err());
+    }
+
+    #[test]
+    fn snapshot_restores_identity_revision_status_and_state() {
+        let mut workflow = WorkflowInstance::new(
+            WorkflowInstanceId::new("job-restore").unwrap(),
+            State::Pending,
+        );
+        workflow.apply(&JobWorkflow, &Input::Start).unwrap();
+
+        let snapshot = workflow.snapshot();
+        let mut restored = WorkflowInstance::from_snapshot(snapshot);
+        assert_eq!(restored.id().as_str(), "job-restore");
+        assert_eq!(restored.revision(), 1);
+        assert_eq!(restored.status(), WorkflowStatus::Running);
+        assert_eq!(restored.state(), &State::Running);
+
+        restored.apply(&JobWorkflow, &Input::Finish).unwrap();
+        assert_eq!(restored.status(), WorkflowStatus::Completed);
     }
 
     #[test]
