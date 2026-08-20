@@ -8,6 +8,7 @@ the new review in active/ until the review itself is closed.
 Reviews use the same structure as regular items but with review-of frontmatter
 and their own workflow (created → considered → closed), defined in workflows.yaml.
 """
+
 from __future__ import annotations
 
 import fnmatch
@@ -18,6 +19,7 @@ from typing import Any
 
 from audiagentic.components.planning import events, item_store, planning_paths
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.io import atomic_write_text
 from audiagentic.foundation.workflow.frontmatter import (
     build_sectioned_body,
     parse_custom_headings,
@@ -32,12 +34,15 @@ def _parse_review_sections(body: str) -> dict[str, str]:
     """Extract review sections (notes/findings/conclusion), last occurrence wins."""
     sections: dict[str, str] = {}
     for key, heading in item_store.REVIEW_SECTIONS.items():
-        matches = list(re.finditer(rf"^## {heading}\n\n(.*?)(?=^## |\Z)", body, re.MULTILINE | re.DOTALL))
+        matches = list(
+            re.finditer(rf"^## {heading}\n\n(.*?)(?=^## |\Z)", body, re.MULTILINE | re.DOTALL)
+        )
         if matches:
             sections[key] = matches[-1].group(1).strip()
     return sections
 
 
+@item_store.serialize_planning_collection_write
 def create_review(project_root: Path, review: dict[str, Any]) -> dict[str, Any]:
     """Create a new review linked to a plan item.
 
@@ -52,9 +57,15 @@ def create_review(project_root: Path, review: dict[str, Any]) -> dict[str, Any]:
     title = review.get("title")
 
     if not parent_id:
-        raise AudiaGenticError(code="VAL-PLN-008", kind="validation", message="review 'review-of' (or 'review_of') is required")
+        raise AudiaGenticError(
+            code="VAL-PLN-008",
+            kind="validation",
+            message="review 'review-of' (or 'review_of') is required",
+        )
     if not title:
-        raise AudiaGenticError(code="VAL-PLN-009", kind="validation", message="review 'title' is required")
+        raise AudiaGenticError(
+            code="VAL-PLN-009", kind="validation", message="review 'title' is required"
+        )
 
     # Verify parent item exists
     parent_path = item_store.find_item(project_root, parent_id)
@@ -84,15 +95,15 @@ def create_review(project_root: Path, review: dict[str, Any]) -> dict[str, Any]:
         "review-of": parent_path.stem,
         "plan": parent_fm.get("plan", slug),
         "state": "created",
-        "reviewed-by": review.get("reviewed-by") or review.get("reviewed_by") or review.get("reviewer_id") or "",
+        "reviewed-by": review.get("reviewed-by")
+        or review.get("reviewed_by")
+        or review.get("reviewer_id")
+        or "",
         "reviewed-at": review.get("reviewed-at", ""),
     }
     raw_sections = {k: review.get(k, "") for k in item_store.REVIEW_SECTIONS}
     # Serialize non-string values (dicts, lists) into markdown.
-    sections = {
-        k: item_store._serialize_section_value(v)
-        for k, v in raw_sections.items()
-    }
+    sections = {k: item_store._serialize_section_value(v) for k, v in raw_sections.items()}
     body = build_sectioned_body(title, sections, item_store.REVIEW_SECTIONS)
 
     target = (
@@ -103,7 +114,7 @@ def create_review(project_root: Path, review: dict[str, Any]) -> dict[str, Any]:
         / f"{review_id}.md"
     )
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(item_store.render_item(fm, body), encoding="utf-8")
+    atomic_write_text(target, item_store.render_item(fm, body))
 
     payload = {
         "id": review_id,
@@ -120,7 +131,9 @@ def create_review(project_root: Path, review: dict[str, Any]) -> dict[str, Any]:
         subject_kind="planning-review",
         subject_id=review_id,
     )
-    logger.info("review created", extra={"review_id": review_id, "review_of": parent_id, "plan": slug})
+    logger.info(
+        "review created", extra={"review_id": review_id, "review_of": parent_id, "plan": slug}
+    )
     return {key: payload[key] for key in ("id", "title", "review-of", "plan", "path")}
 
 
@@ -169,16 +182,18 @@ def list_reviews(
             review_id = fm.get("id", path.stem)
             if prefix and not str(review_id).upper().startswith(prefix):
                 continue
-            results.append({
-                "id": review_id,
-                "review-of": fm.get("review-of", ""),
-                "plan": fm.get("plan", ""),
-                "state": fm.get("state", "created"),
-                "reviewed-by": fm.get("reviewed-by", ""),
-                "reviewed-at": fm.get("reviewed-at", ""),
-                "title": parse_title(body) or "",
-                "path": str(path.relative_to(project_root)),
-            })
+            results.append(
+                {
+                    "id": review_id,
+                    "review-of": fm.get("review-of", ""),
+                    "plan": fm.get("plan", ""),
+                    "state": fm.get("state", "created"),
+                    "reviewed-by": fm.get("reviewed-by", ""),
+                    "reviewed-at": fm.get("reviewed-at", ""),
+                    "title": parse_title(body) or "",
+                    "path": str(path.relative_to(project_root)),
+                }
+            )
 
     return results
 
@@ -208,7 +223,7 @@ def list_reviews_page(
     query_state = None if effective_state == "all" else effective_state
     reviews = list_reviews(project_root, query_state, plan, review_of, id_prefix)
     total = len(reviews)
-    page = reviews[offset:offset + limit] if limit else reviews[offset:]
+    page = reviews[offset : offset + limit] if limit else reviews[offset:]
     result: dict[str, Any] = {
         "items": page,
         "total": total,
@@ -252,6 +267,7 @@ def get_review(project_root: Path, review_id: str) -> dict[str, Any]:
     }
 
 
+@item_store.serialize_item_update
 def set_review_state(project_root: Path, review_id: str, new_state: str) -> dict[str, Any]:
     """Transition a review to a new state.
 
@@ -278,10 +294,10 @@ def set_review_state(project_root: Path, review_id: str, new_state: str) -> dict
     target = target_dir / slug / "reviews" / parent_id / path.name
     if target != path:
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(item_store.render_item(fm, body), encoding="utf-8")
+        atomic_write_text(target, item_store.render_item(fm, body))
         path.unlink()
     else:
-        target.write_text(item_store.render_item(fm, body), encoding="utf-8")
+        atomic_write_text(target, item_store.render_item(fm, body))
 
     item_store.cleanup_empty_plan_dirs(project_root, slug, [source_state_dir])
 
@@ -303,6 +319,7 @@ def set_review_state(project_root: Path, review_id: str, new_state: str) -> dict
     return result
 
 
+@item_store.serialize_item_update
 def update_review(project_root: Path, review_id: str, updates: dict[str, Any]) -> dict[str, Any]:
     """Update frontmatter fields and/or body sections of a review.
 
@@ -329,7 +346,15 @@ def update_review(project_root: Path, review_id: str, updates: dict[str, Any]) -
 
     for key, value in updates.items():
         frontmatter_key = "reviewed-by" if key in ("reviewed_by", "reviewer_id") else key
-        if frontmatter_key in ("reviewed-by", "reviewed-at", "review-of", "review_of", "id", "plan", "state"):
+        if frontmatter_key in (
+            "reviewed-by",
+            "reviewed-at",
+            "review-of",
+            "review_of",
+            "id",
+            "plan",
+            "state",
+        ):
             fm[frontmatter_key] = value
         elif key != "title":
             # Any non-frontmatter key is a body section — known, custom, or
@@ -337,18 +362,14 @@ def update_review(project_root: Path, review_id: str, updates: dict[str, Any]) -
             # the call still reported success.
             # Serialize non-string values (dicts, lists) into markdown.
             sections[key] = (
-                value
-                if isinstance(value, str)
-                else item_store._serialize_section_value(value)
+                value if isinstance(value, str) else item_store._serialize_section_value(value)
             )
 
     if "title" in updates:
         title = updates["title"]
 
-    new_body = build_sectioned_body(
-        title, sections, item_store.REVIEW_SECTIONS, custom_headings
-    )
-    path.write_text(item_store.render_item(fm, new_body), encoding="utf-8")
+    new_body = build_sectioned_body(title, sections, item_store.REVIEW_SECTIONS, custom_headings)
+    atomic_write_text(path, item_store.render_item(fm, new_body))
 
     result = {"id": review_id, "path": str(path.relative_to(project_root))}
     events.publish_planning_event(
@@ -367,6 +388,7 @@ def update_review(project_root: Path, review_id: str, updates: dict[str, Any]) -
     return result
 
 
+@item_store.serialize_item_update
 def delete_review(project_root: Path, review_id: str) -> dict[str, Any]:
     """Permanently delete a review."""
     path = item_store.require_item(project_root, review_id)
