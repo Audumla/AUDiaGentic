@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use audiagentic_capability_api_spike::{ComponentProbe, Workflow, WorkflowRequest};
+use audiagentic_component_probe_api_spike::ComponentProbe;
+use audiagentic_workflow_api_spike::{Workflow, WorkflowRequest};
 use rmcp::{handler::server::wrapper::Parameters, tool, tool_router};
 use schemars::JsonSchema;
 use serde::Deserialize;
