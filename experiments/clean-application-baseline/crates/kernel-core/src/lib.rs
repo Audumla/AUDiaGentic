@@ -83,7 +83,10 @@ mod tests {
     fn ids_reject_whitespace_and_empty_values() {
         assert!(ApplicationId::new("").is_err());
         assert!(CapabilityId::new("workflow execute").is_err());
-        assert_eq!(CapabilityId::new("workflow/execute:1").unwrap().as_str(), "workflow/execute:1");
+        assert_eq!(
+            CapabilityId::new("workflow/execute:1").unwrap().as_str(),
+            "workflow/execute:1"
+        );
     }
 
     #[test]
