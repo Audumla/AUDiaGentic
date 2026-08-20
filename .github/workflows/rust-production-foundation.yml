@@ -3,7 +3,7 @@ name: rust-production-foundation
 on:
   push:
     branches:
-      - foundation/rust-production-baseline
+      - main
   pull_request:
     paths:
       - 'Cargo.toml'
@@ -14,6 +14,10 @@ on:
       - 'scripts/rust-foundation-smoke.sh'
       - 'docs/architecture/rust-production-foundation.md'
       - '.github/workflows/rust-production-foundation.yml'
+
+concurrency:
+  group: rust-production-foundation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
