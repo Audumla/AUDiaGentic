@@ -110,10 +110,7 @@ mod tests {
     use super::*;
 
     fn test_root(name: &str) -> PathBuf {
-        std::env::temp_dir().join(format!(
-            "audiagentic-fs-{name}-{}",
-            std::process::id()
-        ))
+        std::env::temp_dir().join(format!("audiagentic-fs-{name}-{}", std::process::id()))
     }
 
     #[tokio::test]
