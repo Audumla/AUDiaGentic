@@ -30,9 +30,18 @@ impl<T> fmt::Display for Secret<T> {
 
 pub fn is_sensitive_key(key: &str) -> bool {
     let key = key.to_ascii_lowercase();
-    ["token", "secret", "password", "passwd", "api_key", "apikey", "authorization", "credential"]
-        .iter()
-        .any(|needle| key.contains(needle))
+    [
+        "token",
+        "secret",
+        "password",
+        "passwd",
+        "api_key",
+        "apikey",
+        "authorization",
+        "credential",
+    ]
+    .iter()
+    .any(|needle| key.contains(needle))
 }
 
 pub fn redact_pairs<I, K, V>(pairs: I) -> Vec<(String, String)>
