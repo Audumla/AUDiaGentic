@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
 use audiagentic_filesystem_api_spike::{FileSystem, RelativePath};
-use audiagentic_foundation_reconcile_spike::{plan, Change, OwnedValue};
+use audiagentic_foundation_reconcile_spike::{Change, OwnedValue, plan};
 use audiagentic_managed_config_api_spike::{ManagedConfig, ManagedConfigError, ReconcileOutcome};
 use serde_json::{Map, Value};
 
@@ -16,8 +16,12 @@ impl JsonManagedConfig {
         Self { filesystem }
     }
 
-    async fn load_document(&self, document: &str) -> Result<Map<String, Value>, ManagedConfigError> {
-        let path = RelativePath::new(document).map_err(|e| ManagedConfigError::Storage(e.to_string()))?;
+    async fn load_document(
+        &self,
+        document: &str,
+    ) -> Result<Map<String, Value>, ManagedConfigError> {
+        let path =
+            RelativePath::new(document).map_err(|e| ManagedConfigError::Storage(e.to_string()))?;
         match self
             .filesystem
             .read_text(&path)
@@ -29,11 +33,16 @@ impl JsonManagedConfig {
                 .map_err(|e| ManagedConfigError::Format(e.to_string()))?
                 .as_object()
                 .cloned()
-                .ok_or_else(|| ManagedConfigError::Format("managed JSON document must be an object".into())),
+                .ok_or_else(|| {
+                    ManagedConfigError::Format("managed JSON document must be an object".into())
+                }),
         }
     }
 
-    async fn load_owners(&self, document: &str) -> Result<BTreeMap<String, String>, ManagedConfigError> {
+    async fn load_owners(
+        &self,
+        document: &str,
+    ) -> Result<BTreeMap<String, String>, ManagedConfigError> {
         let path = ownership_path(document)?;
         match self
             .filesystem
@@ -42,7 +51,9 @@ impl JsonManagedConfig {
             .map_err(|e| ManagedConfigError::Storage(e.to_string()))?
         {
             None => Ok(BTreeMap::new()),
-            Some(text) => serde_json::from_str(&text).map_err(|e| ManagedConfigError::Format(e.to_string())),
+            Some(text) => {
+                serde_json::from_str(&text).map_err(|e| ManagedConfigError::Format(e.to_string()))
+            }
         }
     }
 
@@ -213,12 +224,14 @@ mod tests {
         let managed = JsonManagedConfig::new(filesystem.clone());
 
         let result = managed
-            .ensure_value("settings.json", "user_key", "app", Value::String("replace".into()))
+            .ensure_value(
+                "settings.json",
+                "user_key",
+                "app",
+                Value::String("replace".into()),
+            )
             .await;
-        assert_eq!(
-            result,
-            Err(ManagedConfigError::Conflict("user_key".into()))
-        );
+        assert_eq!(result, Err(ManagedConfigError::Conflict("user_key".into())));
 
         managed
             .ensure_value("settings.json", "managed_key", "app", Value::Bool(true))
@@ -246,7 +259,9 @@ mod tests {
             ReconcileOutcome::Created
         );
         assert!(matches!(
-            managed.remove_owned("settings.json", "managed", "other").await,
+            managed
+                .remove_owned("settings.json", "managed", "other")
+                .await,
             Err(ManagedConfigError::Conflict(_))
         ));
         assert_eq!(
