@@ -21,7 +21,9 @@ assert_clean_tree() {
   fi
 }
 
-assert_clean_tree audiagentic-kernel-core-spike KERNEL
+assert_clean_tree audiagentic-kernel-core-spike KERNEL_CORE
+assert_clean_tree audiagentic-kernel-manifest-spike KERNEL_MANIFEST
+assert_clean_tree audiagentic-kernel-composition-spike KERNEL_COMPOSITION
 assert_clean_tree audiagentic-application-spike APPLICATION
 assert_clean_tree audiagentic-foundation-diagnostics-spike FOUNDATION_DIAGNOSTICS
 assert_clean_tree audiagentic-foundation-sensitive-spike FOUNDATION_SENSITIVE
