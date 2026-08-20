@@ -163,23 +163,13 @@ mod tests {
 
     #[test]
     fn equal_state_produces_no_effect() {
-        let plan = plan_replace(
-            ownership(),
-            effect(),
-            &Observed("same"),
-            &Desired("same"),
-        );
+        let plan = plan_replace(ownership(), effect(), &Observed("same"), &Desired("same"));
         assert!(plan.is_noop());
     }
 
     #[test]
     fn differing_state_produces_explicit_change() {
-        let plan = plan_replace(
-            ownership(),
-            effect(),
-            &Observed("old"),
-            &Desired("new"),
-        );
+        let plan = plan_replace(ownership(), effect(), &Observed("old"), &Desired("new"));
         assert_eq!(plan.changes().len(), 1);
         assert!(matches!(
             plan.changes(),
