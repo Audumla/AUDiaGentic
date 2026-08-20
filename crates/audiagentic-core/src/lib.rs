@@ -3,7 +3,7 @@
 //! This crate deliberately does not know any concrete capability, runtime,
 //! transport, component technology, or I/O framework.
 
-use std::{collections::BTreeSet, error::Error, fmt};
+use std::{error::Error, fmt};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IdentifierError {
@@ -60,41 +60,6 @@ define_id!(CapabilityId);
 define_id!(ExecutionId);
 define_id!(CorrelationId);
 define_id!(DiagnosticCode);
-
-/// Static component metadata. It describes semantic requirements/exports only;
-/// it does not resolve, discover, instantiate, or register implementations.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ComponentDescriptor {
-    component_id: ComponentId,
-    exports: BTreeSet<CapabilityId>,
-    requires: BTreeSet<CapabilityId>,
-}
-
-impl ComponentDescriptor {
-    pub fn new(
-        component_id: ComponentId,
-        exports: impl IntoIterator<Item = CapabilityId>,
-        requires: impl IntoIterator<Item = CapabilityId>,
-    ) -> Self {
-        Self {
-            component_id,
-            exports: exports.into_iter().collect(),
-            requires: requires.into_iter().collect(),
-        }
-    }
-
-    pub fn component_id(&self) -> &ComponentId {
-        &self.component_id
-    }
-
-    pub fn exports(&self) -> &BTreeSet<CapabilityId> {
-        &self.exports
-    }
-
-    pub fn requires(&self) -> &BTreeSet<CapabilityId> {
-        &self.requires
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApplicationIdentity {
@@ -335,25 +300,6 @@ mod tests {
         let app = app.map_composition(|_| Search);
         assert_eq!(app.composition(), &Search);
         assert_eq!(app.identity().application_id().as_str(), "test-app");
-    }
-
-    #[test]
-    fn component_metadata_is_descriptive_not_resolving() {
-        let descriptor = ComponentDescriptor::new(
-            ComponentId::new("calculator-component").unwrap(),
-            [CapabilityId::new("calculator.add").unwrap()],
-            [CapabilityId::new("audit.record").unwrap()],
-        );
-        assert!(
-            descriptor
-                .exports()
-                .contains(&CapabilityId::new("calculator.add").unwrap())
-        );
-        assert!(
-            descriptor
-                .requires()
-                .contains(&CapabilityId::new("audit.record").unwrap())
-        );
     }
 
     #[test]
