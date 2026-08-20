@@ -38,14 +38,29 @@ fn temporary_path(path: &Path) -> Result<PathBuf, FileStoreError> {
         .ok_or_else(|| FileStoreError::MissingFileName(path.to_path_buf()))?
         .to_string_lossy();
     let id = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
-    Ok(path.with_file_name(format!(".{name}.tmp-{}-{id}", std::process::id())))
+    Ok(path.with_file_name(format!(
+        ".{name}.tmp-{}-{id}",
+        std::process::id()
+    )))
 }
 
-struct TempGuard(PathBuf);
+struct TempGuard(Option<PathBuf>);
+
+impl TempGuard {
+    fn new(path: PathBuf) -> Self {
+        Self(Some(path))
+    }
+
+    fn disarm(&mut self) {
+        self.0 = None;
+    }
+}
 
 impl Drop for TempGuard {
     fn drop(&mut self) {
-        let _ = fs::remove_file(&self.0);
+        if let Some(path) = self.0.as_ref() {
+            let _ = fs::remove_file(path);
+        }
     }
 }
 
@@ -61,11 +76,14 @@ pub fn read(path: impl AsRef<Path>) -> Result<Vec<u8>, FileStoreError> {
 /// delete-and-move sequence.
 pub fn write_atomic(path: impl AsRef<Path>, bytes: &[u8]) -> Result<(), FileStoreError> {
     let path = path.as_ref();
-    let parent = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
     fs::create_dir_all(parent).map_err(|source| io_error("create parent", parent, source))?;
 
     let temp = temporary_path(path)?;
-    let guard = TempGuard(temp.clone());
+    let mut guard = TempGuard::new(temp.clone());
     let mut file = OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -78,11 +96,12 @@ pub fn write_atomic(path: impl AsRef<Path>, bytes: &[u8]) -> Result<(), FileStor
     drop(file);
 
     fs::rename(&temp, path).map_err(|source| io_error("rename temporary file", path, source))?;
-    std::mem::forget(guard);
+    guard.disarm();
 
     #[cfg(unix)]
     {
-        let directory = File::open(parent).map_err(|source| io_error("open parent", parent, source))?;
+        let directory =
+            File::open(parent).map_err(|source| io_error("open parent", parent, source))?;
         directory
             .sync_all()
             .map_err(|source| io_error("fsync parent", parent, source))?;
