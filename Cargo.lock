@@ -26,6 +26,24 @@ name = "audiagentic-core"
 version = "0.1.0"
 
 [[package]]
+name = "audiagentic-events"
+version = "0.1.0"
+dependencies = [
+ "audiagentic-core",
+]
+
+[[package]]
+name = "audiagentic-example-capabilities"
+version = "0.1.0"
+dependencies = [
+ "audiagentic-core",
+ "audiagentic-events",
+ "audiagentic-host",
+ "audiagentic-host-native",
+ "audiagentic-workflow",
+]
+
+[[package]]
 name = "audiagentic-example-large"
 version = "0.1.0"
 dependencies = [
@@ -87,6 +105,10 @@ version = "0.1.0"
 
 [[package]]
 name = "audiagentic-template"
+version = "0.1.0"
+
+[[package]]
+name = "audiagentic-workflow"
 version = "0.1.0"
 
 [[package]]
@@ -221,7 +243,7 @@ dependencies = [
 [[package]]
 name = "ref-cast-impl"
 version = "1.0.27"
-source = "registry+https://github.com/rust-lang/crates.io-index"
+source = "registry+https://ggithub.com/rust-lang/crates.io-index"
 checksum = "92ecd8964f8453721699a1ed72037b0db49ce2f5a5138486ee89bed6f67cdf3a"
 dependencies = [
  "proc-macro2",
@@ -440,4 +462,4 @@ checksum = "cfe53a6657fd280eaa890a3bc59152892ffa3e30101319d168b781ed6529b049"
 name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
+checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbdac83319345b1b44ccfc1b"

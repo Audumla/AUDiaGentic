@@ -8,9 +8,12 @@ members = [
     "crates/audiagentic-file-store",
     "crates/audiagentic-host",
     "crates/audiagentic-host-native",
+    "crates/audiagentic-events",
+    "crates/audiagentic-workflow",
     "examples/tiny-app",
     "examples/medium-app",
     "examples/large-app",
+    "examples/capability-app",
 ]
 resolver = "3"
 
