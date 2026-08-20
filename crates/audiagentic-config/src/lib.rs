@@ -1,7 +1,10 @@
 //! Typed configuration extraction. Configuration models remain application-
 //! owned Rust types; there is no module-string/object loader or service registry.
 
-use figment::{Figment, providers::{Format, Toml}};
+use figment::{
+    Figment,
+    providers::{Format, Toml},
+};
 pub use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use thiserror::Error;
@@ -45,6 +48,10 @@ mod tests {
     #[test]
     fn invalid_configuration_is_a_local_typed_error() {
         let error = from_toml::<TestConfig>("name = 42\ncount = 3\n").unwrap_err();
-        assert!(error.to_string().contains("configuration extraction failed"));
+        assert!(
+            error
+                .to_string()
+                .contains("configuration extraction failed")
+        );
     }
 }
