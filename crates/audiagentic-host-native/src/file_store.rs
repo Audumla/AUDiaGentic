@@ -14,10 +14,7 @@ const TEMP_CREATE_ATTEMPTS: usize = 16;
 pub type FileStoreError = io::Error;
 
 fn io_error(operation: &'static str, path: &Path, source: io::Error) -> FileStoreError {
-    io::Error::new(
-        source.kind(),
-        format!("{operation} {path:?}: {source}"),
-    )
+    io::Error::new(source.kind(), format!("{operation} {path:?}: {source}"))
 }
 
 fn temporary_path(path: &Path, id: u64) -> Result<PathBuf, FileStoreError> {
