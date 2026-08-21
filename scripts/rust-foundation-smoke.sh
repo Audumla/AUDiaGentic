@@ -44,6 +44,10 @@ for forbidden in audiagentic-config audiagentic-errors audiagentic-events audiag
         exit 1
     fi
 done
+if grep -R --include='*.rs' -E '\b(NetworkHost|NetworkAuthority|NetworkRequest|NetworkResponse|SecretHost|SecretAuthority|HostFuture)\b' crates/audiagentic-host >/dev/null; then
+    echo "HOST_SPECULATION_LEAK: unproven network/secret host contracts entered the locked host layer" >&2
+    exit 1
+fi
 
 native_host_tree="$(cargo tree --locked -p audiagentic-host-native --edges normal --prefix none)"
 for required in audiagentic-host audiagentic-file-store; do
@@ -70,6 +74,14 @@ for forbidden in audiagentic-core audiagentic-events audiagentic-file-store audi
         exit 1
     fi
 done
+if grep -E 'figment[^\n]*features[^\n]*env' Cargo.toml >/dev/null; then
+    echo "CONFIG_CAPABILITY_LEAK: Figment environment support must not be enabled below composition" >&2
+    exit 1
+fi
+if grep -R --include='*.rs' -Fq 'into_value' crates/audiagentic-config; then
+    echo "CONFIG_PROVENANCE_ESCAPE: resolved configuration must retain revision/layer provenance" >&2
+    exit 1
+fi
 
 events_tree="$(cargo tree --locked -p audiagentic-events --edges normal --prefix none)"
 for required in audiagentic-core audiagentic-errors; do
@@ -153,6 +165,10 @@ for crate in "${semantic_crates[@]}"; do
         exit 1
     fi
 done
+if grep -R --include='*.rs' -Fq 'tracing_subscriber' crates; then
+    echo "GLOBAL_SUBSCRIBER_LEAK: libraries must not install or own a tracing subscriber" >&2
+    exit 1
+fi
 
 error_code_duplicates="$(grep -Rho --include='*.rs' -E 'ErrorCode::new\("[A-Z0-9-]+"\)' \
     crates/audiagentic-config crates/audiagentic-errors crates/audiagentic-events crates/audiagentic-workflow crates/audiagentic-time crates/audiagentic-managed-config \
@@ -183,6 +199,15 @@ fi
 if ! grep -Fq 'ExecutionContext::new' examples/platform-app/src/main.rs || \
    ! grep -Fq 'config_revision' examples/platform-app/src/main.rs; then
     echo "OBSERVABILITY_SEAM_MISSING: execution/correlation/config revision must be available at composition" >&2
+    exit 1
+fi
+if ! grep -Fq 'tracing.workspace = true' examples/platform-app/Cargo.toml || \
+   ! grep -Fq 'tracing-subscriber.workspace = true' examples/platform-app/Cargo.toml || \
+   ! grep -Fq 'info_span!' examples/platform-app/tests/observability.rs || \
+   ! grep -Fq 'execution_id' examples/platform-app/tests/observability.rs || \
+   ! grep -Fq 'correlation_id' examples/platform-app/tests/observability.rs || \
+   ! grep -Fq 'config_revision' examples/platform-app/tests/observability.rs; then
+    echo "STRUCTURED_TRACING_PROOF_MISSING: application edge must prove canonical tracing fields" >&2
     exit 1
 fi
 
