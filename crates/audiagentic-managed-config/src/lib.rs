@@ -253,11 +253,7 @@ mod tests {
             Err(io::Error::other("write failed"))
         }
 
-        fn remove(
-            &self,
-            _authority: &FileWriteAuthority,
-            _path: &Path,
-        ) -> Result<(), Self::Error> {
+        fn remove(&self, _authority: &FileWriteAuthority, _path: &Path) -> Result<(), Self::Error> {
             Err(io::Error::other("remove failed"))
         }
     }
