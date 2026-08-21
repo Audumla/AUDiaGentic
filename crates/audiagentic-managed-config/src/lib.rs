@@ -119,8 +119,10 @@ pub fn observe<H: FileHost>(
     host: &H,
     authority: &FileReadAuthority,
     target: &ManagedConfigTarget,
-) -> Result<ConfigObserved, H::Error> {
-    host.read_optional(authority, target.path()).map(Observed)
+) -> Result<ConfigObserved, ManagedConfigError<H::Error>> {
+    host.read_optional(authority, target.path())
+        .map(Observed)
+        .map_err(ManagedConfigError::Host)
 }
 
 pub fn plan(
@@ -221,6 +223,45 @@ mod tests {
         }
     }
 
+    struct FailingFileHost;
+
+    impl FileHost for FailingFileHost {
+        type Error = io::Error;
+
+        fn read(
+            &self,
+            _authority: &FileReadAuthority,
+            _path: &Path,
+        ) -> Result<Vec<u8>, Self::Error> {
+            Err(io::Error::other("read failed"))
+        }
+
+        fn read_optional(
+            &self,
+            _authority: &FileReadAuthority,
+            _path: &Path,
+        ) -> Result<Option<Vec<u8>>, Self::Error> {
+            Err(io::Error::other("observe failed"))
+        }
+
+        fn write(
+            &self,
+            _authority: &FileWriteAuthority,
+            _path: &Path,
+            _bytes: &[u8],
+        ) -> Result<(), Self::Error> {
+            Err(io::Error::other("write failed"))
+        }
+
+        fn remove(
+            &self,
+            _authority: &FileWriteAuthority,
+            _path: &Path,
+        ) -> Result<(), Self::Error> {
+            Err(io::Error::other("remove failed"))
+        }
+    }
+
     fn target() -> ManagedConfigTarget {
         ManagedConfigTarget::new(
             "config/app.conf",
@@ -305,6 +346,23 @@ mod tests {
                 .result(),
             &ConfigApplyResult::Noop
         );
+    }
+
+    #[test]
+    fn observe_and_apply_host_failures_share_stable_boundary_identity() {
+        let target = target();
+        let observe_error = observe(&FailingFileHost, &read_authority(), &target).unwrap_err();
+        assert_eq!(observe_error.code().as_str(), "IO-MCONFIG-001");
+
+        let plan = Plan::new(
+            target.ownership().clone(),
+            effect("create"),
+            vec![Change::Create {
+                after: b"value".to_vec(),
+            }],
+        );
+        let apply_error = apply(&FailingFileHost, &write_authority(), &target, &plan).unwrap_err();
+        assert_eq!(apply_error.code().as_str(), "IO-MCONFIG-001");
     }
 
     #[test]
