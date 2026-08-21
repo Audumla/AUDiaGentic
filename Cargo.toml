@@ -16,7 +16,6 @@ members = [
     "examples/tiny-app",
     "examples/medium-app",
     "examples/large-app",
-    "examples/capability-app",
     "examples/platform-app",
 ]
 resolver = "3"

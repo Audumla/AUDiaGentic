@@ -39,17 +39,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "audiagentic-example-capabilities"
-version = "0.1.0"
-dependencies = [
- "audiagentic-core",
- "audiagentic-events",
- "audiagentic-host",
- "audiagentic-host-native",
- "audiagentic-workflow",
-]
-
-[[package]]
 name = "audiagentic-example-large"
 version = "0.1.0"
 dependencies = [
@@ -223,7 +212,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 name = "pear"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bdeeaa00ce488657faba8ebf44ab9361f9365a97bd39ffb8a60663f57ff4b467"
+checksum = "bdeeaa00ce488657faba8ebf44ab9361f9365a97bd39e448439ba8bd69c93f147"
 dependencies = [
  "inlinable_string",
  "pear_codegen",

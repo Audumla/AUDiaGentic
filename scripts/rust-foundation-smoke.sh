@@ -11,7 +11,6 @@ cargo test --workspace --locked
 cargo run --locked --quiet -p audiagentic-example-tiny
 cargo run --locked --quiet -p audiagentic-example-medium
 cargo run --locked --quiet -p audiagentic-example-large
-cargo run --locked --quiet -p audiagentic-example-capabilities
 cargo run --locked --quiet -p audiagentic-example-platform
 
 core_tree="$(cargo tree --locked -p audiagentic-core --edges normal --prefix none)"
@@ -155,6 +154,15 @@ for crate in "${semantic_crates[@]}"; do
     fi
 done
 
+error_code_duplicates="$(grep -Rho --include='*.rs' -E 'ErrorCode::new\("[A-Z0-9-]+"\)' \
+    crates/audiagentic-config crates/audiagentic-errors crates/audiagentic-events crates/audiagentic-workflow crates/audiagentic-time crates/audiagentic-managed-config \
+    | sed -E 's/.*ErrorCode::new\("([A-Z0-9-]+)"\).*/\1/' | sort | uniq -d)"
+if [[ -n "$error_code_duplicates" ]]; then
+    echo "DUPLICATE_ERROR_CODE: stable error codes must identify exactly one semantic condition" >&2
+    printf '%s\n' "$error_code_duplicates" >&2
+    exit 1
+fi
+
 for crate in audiagentic-config audiagentic-events audiagentic-workflow audiagentic-time audiagentic-managed-config; do
     if ! grep -R --include='*.rs' -Fq 'CodedError for' "crates/$crate"; then
         echo "CODED_ERROR_CONTRACT_MISSING: $crate exposes a locked boundary without CodedError" >&2
@@ -186,7 +194,7 @@ fi
 
 if grep -Eq 'audiagentic-file-store' examples/platform-app/Cargo.toml || \
    grep -Eq 'audiagentic_file_store' examples/platform-app/src/main.rs; then
-    echo "PLATFORM_APP_HOST_BYPASS: platform spike must perform state I/O through capabilities/host" >&2
+    echo "PLATFORM_APP_HOST_BYPASS: platform proof must perform state I/O through capabilities/host" >&2
     exit 1
 fi
 
@@ -209,7 +217,6 @@ echo "WORKFLOW_CAPABILITY_OK"
 echo "TIME_CAPABILITY_OK"
 echo "MANAGED_CONFIG_CAPABILITY_OK"
 echo "APPLICATION_CAPABILITY_COMPOSITION_OK"
-echo "APPLICATION_PLATFORM_SPIKE_OK"
 echo "APPLICATION_CAPABILITIES_LOCK_OK"
 echo "TINY_MEDIUM_LARGE_OK"
 echo "RUST_PRODUCTION_FOUNDATION_OK"
