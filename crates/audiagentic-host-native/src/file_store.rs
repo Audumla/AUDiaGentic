@@ -5,36 +5,30 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use thiserror::Error;
-
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 const TEMP_CREATE_ATTEMPTS: usize = 16;
 
-#[derive(Debug, Error)]
-pub(super) enum FileStoreError {
-    #[error("path has no file name: {0:?}")]
-    MissingFileName(PathBuf),
-    #[error("{operation} {path:?}: {source}")]
-    Io {
-        operation: &'static str,
-        path: PathBuf,
-        #[source]
-        source: io::Error,
-    },
-}
+/// Private durability operations surface as ordinary I/O failures to the
+/// enclosing native host. The file-store module remains an implementation
+/// detail rather than creating a second public error/API boundary.
+pub type FileStoreError = io::Error;
 
 fn io_error(operation: &'static str, path: &Path, source: io::Error) -> FileStoreError {
-    FileStoreError::Io {
-        operation,
-        path: path.to_path_buf(),
-        source,
-    }
+    io::Error::new(
+        source.kind(),
+        format!("{operation} {path:?}: {source}"),
+    )
 }
 
 fn temporary_path(path: &Path, id: u64) -> Result<PathBuf, FileStoreError> {
     let name = path
         .file_name()
-        .ok_or_else(|| FileStoreError::MissingFileName(path.to_path_buf()))?
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("path has no file name: {path:?}"),
+            )
+        })?
         .to_string_lossy();
     Ok(path.with_file_name(format!(".{name}.tmp-{}-{id}", std::process::id())))
 }
