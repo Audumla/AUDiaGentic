@@ -5,8 +5,21 @@
 
 use std::{error::Error, fmt};
 
+use audiagentic_errors::{CodedError, ErrorCode, ErrorDefinition};
+
+const OWNERSHIP_ID_EMPTY: ErrorDefinition = ErrorDefinition::new(
+    ErrorCode::new("VAL-RECONCILE-001"),
+    "Reconciliation ownership id must not be empty.",
+    "Provide a stable non-empty ownership identifier.",
+);
+const EFFECT_ID_EMPTY: ErrorDefinition = ErrorDefinition::new(
+    ErrorCode::new("VAL-RECONCILE-002"),
+    "Reconciliation effect id must not be empty.",
+    "Provide a stable non-empty effect identifier.",
+);
+
 macro_rules! define_reconcile_id {
-    ($name:ident) => {
+    ($name:ident, $label:literal, $definition:ident) => {
         #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub struct $name(String);
 
@@ -14,7 +27,10 @@ macro_rules! define_reconcile_id {
             pub fn new(value: impl Into<String>) -> Result<Self, ReconcileIdError> {
                 let value = value.into();
                 if value.trim().is_empty() {
-                    return Err(ReconcileIdError(stringify!($name)));
+                    return Err(ReconcileIdError {
+                        label: $label,
+                        definition: &$definition,
+                    });
                 }
                 Ok(Self(value))
             }
@@ -26,15 +42,24 @@ macro_rules! define_reconcile_id {
     };
 }
 
-define_reconcile_id!(OwnershipId);
-define_reconcile_id!(EffectId);
+define_reconcile_id!(OwnershipId, "ownership id", OWNERSHIP_ID_EMPTY);
+define_reconcile_id!(EffectId, "effect id", EFFECT_ID_EMPTY);
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ReconcileIdError(&'static str);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReconcileIdError {
+    label: &'static str,
+    definition: &'static ErrorDefinition,
+}
+
+impl CodedError for ReconcileIdError {
+    fn definition(&self) -> &'static ErrorDefinition {
+        self.definition
+    }
+}
 
 impl fmt::Display for ReconcileIdError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} must not be empty", self.0)
+        write!(f, "{} must not be empty", self.label)
     }
 }
 
@@ -159,6 +184,18 @@ mod tests {
 
     fn effect() -> EffectId {
         EffectId::new("effect").unwrap()
+    }
+
+    #[test]
+    fn identifiers_have_distinct_stable_error_identity() {
+        assert_eq!(
+            OwnershipId::new(" ").unwrap_err().code().as_str(),
+            "VAL-RECONCILE-001"
+        );
+        assert_eq!(
+            EffectId::new("").unwrap_err().code().as_str(),
+            "VAL-RECONCILE-002"
+        );
     }
 
     #[test]
