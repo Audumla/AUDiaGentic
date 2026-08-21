@@ -2,6 +2,24 @@
 
 use std::{collections::BTreeMap, error::Error, fmt};
 
+use audiagentic_errors::{CodedError, ErrorCode, ErrorDefinition};
+
+const EMPTY_SLOT: ErrorDefinition = ErrorDefinition::new(
+    ErrorCode::new("VAL-TEMPLATE-001"),
+    "Template slot must not be empty.",
+    "Give every template slot a non-empty name.",
+);
+const UNCLOSED_SLOT: ErrorDefinition = ErrorDefinition::new(
+    ErrorCode::new("VAL-TEMPLATE-002"),
+    "Template slot is not closed.",
+    "Close every '{{' template slot with '}}'.",
+);
+const MISSING_VALUE: ErrorDefinition = ErrorDefinition::new(
+    ErrorCode::new("RES-TEMPLATE-001"),
+    "Template value is missing.",
+    "Provide a value for every named slot before rendering.",
+);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Part {
     Literal(String),
@@ -66,6 +84,16 @@ pub enum TemplateError {
     MissingValue(String),
 }
 
+impl CodedError for TemplateError {
+    fn definition(&self) -> &'static ErrorDefinition {
+        match self {
+            Self::EmptySlot => &EMPTY_SLOT,
+            Self::UnclosedSlot => &UNCLOSED_SLOT,
+            Self::MissingValue(_) => &MISSING_VALUE,
+        }
+    }
+}
+
 impl fmt::Display for TemplateError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -90,11 +118,26 @@ mod tests {
     }
 
     #[test]
-    fn missing_values_are_typed_errors() {
-        let template = Template::parse("{{ name }}").unwrap();
+    fn parse_failures_have_distinct_stable_codes() {
         assert_eq!(
-            template.render(&BTreeMap::new()).unwrap_err(),
+            Template::parse("{{ }}").unwrap_err().code().as_str(),
+            "VAL-TEMPLATE-001"
+        );
+        assert_eq!(
+            Template::parse("{{ name").unwrap_err().code().as_str(),
+            "VAL-TEMPLATE-002"
+        );
+    }
+
+    #[test]
+    fn missing_values_are_typed_and_coded_errors() {
+        let template = Template::parse("{{ name }}").unwrap();
+        let error = template.render(&BTreeMap::new()).unwrap_err();
+        assert_eq!(
+            error,
             TemplateError::MissingValue("name".to_owned())
         );
+        assert_eq!(error.code().as_str(), "RES-TEMPLATE-001");
+        assert_eq!(error.canonical_message(), "Template value is missing.");
     }
 }
