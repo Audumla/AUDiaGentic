@@ -133,10 +133,7 @@ mod tests {
     fn missing_values_are_typed_and_coded_errors() {
         let template = Template::parse("{{ name }}").unwrap();
         let error = template.render(&BTreeMap::new()).unwrap_err();
-        assert_eq!(
-            error,
-            TemplateError::MissingValue("name".to_owned())
-        );
+        assert_eq!(error, TemplateError::MissingValue("name".to_owned()));
         assert_eq!(error.code().as_str(), "RES-TEMPLATE-001");
         assert_eq!(error.canonical_message(), "Template value is missing.");
     }
