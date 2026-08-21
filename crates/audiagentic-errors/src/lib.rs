@@ -8,7 +8,49 @@
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ErrorCode(&'static str);
+pub enum ErrorCategory {
+    Validation,
+    Conflict,
+    Resource,
+    Io,
+    Network,
+    Timeout,
+    External,
+    Configuration,
+    Version,
+    Internal,
+    Unsupported,
+}
+
+impl ErrorCategory {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Validation => "validation",
+            Self::Conflict => "conflict",
+            Self::Resource => "resource",
+            Self::Io => "io",
+            Self::Network => "network",
+            Self::Timeout => "timeout",
+            Self::External => "external",
+            Self::Configuration => "configuration",
+            Self::Version => "version",
+            Self::Internal => "internal",
+            Self::Unsupported => "unsupported",
+        }
+    }
+}
+
+impl fmt::Display for ErrorCategory {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ErrorCode {
+    value: &'static str,
+    category: ErrorCategory,
+}
 
 impl ErrorCode {
     /// Construct a compile-time validated AUDiaGentic error code.
@@ -19,17 +61,29 @@ impl ErrorCode {
         if !valid_error_code(value) {
             panic!("invalid AUDiaGentic error code");
         }
-        Self(value)
+
+        let bytes = value.as_bytes();
+        let prefix_end = prefix_end(bytes);
+        let category = match category_for_prefix(bytes, prefix_end) {
+            Some(category) => category,
+            None => panic!("invalid AUDiaGentic error category"),
+        };
+
+        Self { value, category }
     }
 
     pub const fn as_str(self) -> &'static str {
-        self.0
+        self.value
+    }
+
+    pub const fn category(self) -> ErrorCategory {
+        self.category
     }
 }
 
 impl fmt::Display for ErrorCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.0)
+        f.write_str(self.value)
     }
 }
 
@@ -59,6 +113,10 @@ impl ErrorDefinition {
         self.code
     }
 
+    pub const fn category(self) -> ErrorCategory {
+        self.code.category()
+    }
+
     pub const fn message(self) -> &'static str {
         self.message
     }
@@ -79,6 +137,10 @@ pub trait CodedError {
         self.definition().code()
     }
 
+    fn category(&self) -> ErrorCategory {
+        self.definition().category()
+    }
+
     fn canonical_message(&self) -> &'static str {
         self.definition().message()
     }
@@ -95,11 +157,8 @@ const fn valid_error_code(value: &str) -> bool {
         return false;
     }
 
-    let mut prefix_end = 0;
-    while prefix_end < len && bytes[prefix_end] != b'-' {
-        prefix_end += 1;
-    }
-    if prefix_end == 0 || prefix_end >= len || !known_prefix(bytes, prefix_end) {
+    let prefix_end = prefix_end(bytes);
+    if prefix_end == 0 || prefix_end >= len || category_for_prefix(bytes, prefix_end).is_none() {
         return false;
     }
 
@@ -136,23 +195,49 @@ const fn valid_error_code(value: &str) -> bool {
     !previous_hyphen
 }
 
-const fn known_prefix(bytes: &[u8], len: usize) -> bool {
+const fn prefix_end(bytes: &[u8]) -> usize {
+    let mut index = 0;
+    while index < bytes.len() && bytes[index] != b'-' {
+        index += 1;
+    }
+    index
+}
+
+const fn category_for_prefix(bytes: &[u8], len: usize) -> Option<ErrorCategory> {
     if len == 2 {
-        return (bytes[0] == b'I' || bytes[0] == b'T') && bytes[1] == b'O';
+        if bytes[0] == b'I' && bytes[1] == b'O' {
+            return Some(ErrorCategory::Io);
+        }
+        if bytes[0] == b'T' && bytes[1] == b'O' {
+            return Some(ErrorCategory::Timeout);
+        }
+        return None;
     }
     if len != 3 {
-        return false;
+        return None;
     }
 
-    (bytes[0] == b'V' && bytes[1] == b'A' && bytes[2] == b'L')
-        || (bytes[0] == b'C' && bytes[1] == b'O' && bytes[2] == b'N')
-        || (bytes[0] == b'R' && bytes[1] == b'E' && bytes[2] == b'S')
-        || (bytes[0] == b'N' && bytes[1] == b'E' && bytes[2] == b'T')
-        || (bytes[0] == b'E' && bytes[1] == b'X' && bytes[2] == b'T')
-        || (bytes[0] == b'C' && bytes[1] == b'F' && bytes[2] == b'G')
-        || (bytes[0] == b'V' && bytes[1] == b'E' && bytes[2] == b'R')
-        || (bytes[0] == b'I' && bytes[1] == b'N' && bytes[2] == b'T')
-        || (bytes[0] == b'U' && bytes[1] == b'N' && bytes[2] == b'S')
+    if bytes[0] == b'V' && bytes[1] == b'A' && bytes[2] == b'L' {
+        Some(ErrorCategory::Validation)
+    } else if bytes[0] == b'C' && bytes[1] == b'O' && bytes[2] == b'N' {
+        Some(ErrorCategory::Conflict)
+    } else if bytes[0] == b'R' && bytes[1] == b'E' && bytes[2] == b'S' {
+        Some(ErrorCategory::Resource)
+    } else if bytes[0] == b'N' && bytes[1] == b'E' && bytes[2] == b'T' {
+        Some(ErrorCategory::Network)
+    } else if bytes[0] == b'E' && bytes[1] == b'X' && bytes[2] == b'T' {
+        Some(ErrorCategory::External)
+    } else if bytes[0] == b'C' && bytes[1] == b'F' && bytes[2] == b'G' {
+        Some(ErrorCategory::Configuration)
+    } else if bytes[0] == b'V' && bytes[1] == b'E' && bytes[2] == b'R' {
+        Some(ErrorCategory::Version)
+    } else if bytes[0] == b'I' && bytes[1] == b'N' && bytes[2] == b'T' {
+        Some(ErrorCategory::Internal)
+    } else if bytes[0] == b'U' && bytes[1] == b'N' && bytes[2] == b'S' {
+        Some(ErrorCategory::Unsupported)
+    } else {
+        None
+    }
 }
 
 const fn is_upper(byte: u8) -> bool {
@@ -174,8 +259,9 @@ mod tests {
     );
 
     #[test]
-    fn definitions_keep_one_stable_code_message_and_resolution() {
+    fn definitions_keep_one_stable_code_message_resolution_and_category() {
         assert_eq!(VALID.code().as_str(), "CON-ERRORS-001");
+        assert_eq!(VALID.category(), ErrorCategory::Conflict);
         assert_eq!(VALID.message(), "Event cursor has expired.");
         assert_eq!(VALID.resolution(), "Restart from an available cursor.");
     }
@@ -185,6 +271,10 @@ mod tests {
         assert!(valid_error_code("VAL-CONFIG-001"));
         assert!(valid_error_code("EXT-HOST-PROC-042"));
         assert!(valid_error_code("IO-FILESTORE-999"));
+        assert_eq!(
+            ErrorCode::new("IO-FILESTORE-999").category(),
+            ErrorCategory::Io
+        );
     }
 
     #[test]
