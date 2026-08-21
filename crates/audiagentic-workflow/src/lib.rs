@@ -28,6 +28,11 @@ const WORKFLOW_DEFINITION_REJECTED: ErrorDefinition = ErrorDefinition::new(
     "Workflow definition rejected the transition.",
     "Correct the domain input or state transition according to the owning workflow definition.",
 );
+const WORKFLOW_REVISION_EXHAUSTED: ErrorDefinition = ErrorDefinition::new(
+    ErrorCode::new("RES-WORKFLOW-001"),
+    "Workflow revision space is exhausted.",
+    "Create a new workflow instance rather than allowing the revision to wrap.",
+);
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct WorkflowInstanceId(String);
@@ -141,6 +146,7 @@ impl<E> WorkflowReceipt<E> {
 pub enum WorkflowApplyError<E> {
     Terminal(WorkflowStatus),
     RevisionConflict { expected: u64, actual: u64 },
+    RevisionExhausted,
     Definition(E),
 }
 
@@ -149,6 +155,7 @@ impl<E> CodedError for WorkflowApplyError<E> {
         match self {
             Self::Terminal(_) => &WORKFLOW_TERMINAL,
             Self::RevisionConflict { .. } => &WORKFLOW_REVISION_CONFLICT,
+            Self::RevisionExhausted => &WORKFLOW_REVISION_EXHAUSTED,
             Self::Definition(_) => &WORKFLOW_DEFINITION_REJECTED,
         }
     }
@@ -162,6 +169,7 @@ impl<E: fmt::Display> fmt::Display for WorkflowApplyError<E> {
                 f,
                 "workflow revision conflict: expected {expected}, actual {actual}"
             ),
+            Self::RevisionExhausted => f.write_str("workflow revision space is exhausted"),
             Self::Definition(error) => write!(f, "workflow definition error: {error}"),
         }
     }
@@ -171,7 +179,7 @@ impl<E: Error + 'static> Error for WorkflowApplyError<E> {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Definition(error) => Some(error),
-            Self::Terminal(_) | Self::RevisionConflict { .. } => None,
+            Self::Terminal(_) | Self::RevisionConflict { .. } | Self::RevisionExhausted => None,
         }
     }
 }
@@ -306,6 +314,10 @@ impl<S> WorkflowInstance<S> {
                 actual: self.revision,
             });
         }
+        let next_revision = self
+            .revision
+            .checked_add(1)
+            .ok_or(WorkflowApplyError::RevisionExhausted)?;
 
         let transition = definition
             .decide(&self.state, input)
@@ -322,7 +334,7 @@ impl<S> WorkflowInstance<S> {
 
         self.state = state;
         self.status = status;
-        self.revision += 1;
+        self.revision = next_revision;
 
         Ok(WorkflowReceipt {
             revision: self.revision,
@@ -443,5 +455,21 @@ mod tests {
                 actual: 0
             }
         ));
+    }
+
+    #[test]
+    fn revision_exhaustion_is_rejected_without_wrapping() {
+        let snapshot = WorkflowSnapshot::new(
+            WorkflowInstanceId::new("job-max").unwrap(),
+            u64::MAX,
+            WorkflowStatus::Running,
+            State::Pending,
+        );
+        let mut workflow = WorkflowInstance::from_snapshot(snapshot);
+        let error = workflow.apply(&JobWorkflow, &Input::Start).unwrap_err();
+        assert_eq!(error.code().as_str(), "RES-WORKFLOW-001");
+        assert!(matches!(error, WorkflowApplyError::RevisionExhausted));
+        assert_eq!(workflow.revision(), u64::MAX);
+        assert_eq!(workflow.state(), &State::Pending);
     }
 }
