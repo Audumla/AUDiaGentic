@@ -4,6 +4,8 @@
 //! contracts in `audiagentic-host`. It does not aggregate facilities into a
 //! global host object.
 
+mod file_store;
+
 use std::{
     fs,
     io::{self, Read, Write},
@@ -11,11 +13,11 @@ use std::{
     process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, ExitStatus, Stdio},
 };
 
-use audiagentic_file_store::{FileStoreError, read as read_file, write_atomic};
 use audiagentic_host::{
     FileHost, FileReadAuthority, FileWriteAuthority, ProcessAuthority, ProcessChild, ProcessExit,
     ProcessHost, ProcessRequest, ProcessStdio,
 };
+use file_store::{FileStoreError, read as read_file, write_atomic};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, Default)]
