@@ -1,7 +1,0 @@
-# Memory (MEM) and Recipe Spec (RSPEC) error resolutions
-VAL-MEM-001: "No implementation with this ID exists in the memory component descriptors. Check the implementation name."
-VAL-MEM-002: "This option key is not defined in the memory implementation's options schema. Check the available options."
-VAL-MEM-003: "The value failed validation against the memory option's schema type and constraints. Check the expected type."
-VAL-RSPEC-009: "The RecipeSpec failed schema validation. Check required fields, valid enum values, and structure of the spec definition."
-VAL-RSPEC-010: "The recipe pattern is not recognized. Use a supported pattern such as 'no_automation' or 'declared_step'."
-VAL-RSPEC-011: "The 'declared_step' pattern requires a non-None backend for parameter resolution. Provide a valid backend."

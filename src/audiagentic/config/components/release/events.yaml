@@ -1,8 +1,0 @@
-# Release component — ledger archival request
-release.finalization.ledger-archive.requested:
-  description: "Request to archive ledger for release finalization"
-  payload-required: ["project_root", "release_id"]
-  payload-optional: ["result"]
-  metadata-keys: []
-  delivery: sync
-  since: v1.0.0

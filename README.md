@@ -1,52 +1,43 @@
 # AUDiaGentic
 
-Multi-agent workflow orchestration system for AI coding agents. Provides the infrastructure to plan, execute, and track software engineering work across coordinated agent sessions.
+AUDiaGentic is a Rust platform for composing agentic applications and execution capabilities without turning the platform into a universal runtime or service container.
 
-## Quick links
+The repository is currently locked through the **Application Capabilities** layer. The working tree contains only the active Rust product line; superseded implementations remain available through Git history rather than living beside current code.
 
-- **[docs/layout.md](docs/layout.md)** — directory layout and config hierarchy
-- **[docs/planning/](docs/planning/)** — planning system (requests, specs, tasks, plans, work packages)
-- **[docs/releases/](docs/releases/)** — current release and audit docs
-- **[docs/testing/](docs/testing/)** — test environment and architecture
-- **[docs/knowledge/](docs/knowledge/)** — knowledge vault
-- **[docs/examples/](docs/examples/)** — example project scaffold
-- **[docs/archive/](docs/archive/)** — superseded references
+## Current layers
 
-## Source code
+- `crates/audiagentic-core` — generic identity, execution/correlation identity, lifecycle, diagnostics, and opaque `Application<C>` composition.
+- foundation crates — stable coded-error vocabulary, sensitive values, templates, deterministic reconciliation, typed configuration resolution/provenance, and low-level file storage.
+- `crates/audiagentic-host` — narrow effect contracts and explicit authorities.
+- `crates/audiagentic-host-native` — native filesystem and direct-child process implementations.
+- application capabilities — typed domain events, deterministic workflow, deterministic time, and managed configuration.
+- `examples/` — tiny/medium/large independence proofs plus the integrated application-capabilities proof.
 
-| Layer | Path | Contents |
-|-------|------|----------|
-| Foundation | `src/audiagentic/foundation/` | Contracts, config, events, workflow primitives |
-| Runtime | `src/audiagentic/runtime/` | Lifecycle management, state |
-| Components | `src/audiagentic/components/optional/` | Providers, coding LSP, ledger, agent jobs, release, source control |
+## Architecture principles
 
-## Docker test path
+- Core remains capability-neutral and zero-dependency.
+- Raw configuration stops at application composition and becomes typed policy.
+- Policy controls behaviour; authority controls permitted effects.
+- External effects cross narrow host contracts.
+- Public/reusable boundary failures have stable managed error identity while domain errors remain locally typed.
+- Operational observability uses structured `tracing`; domain events are not telemetry.
+- No global registry, service locator, generic plugin framework, event bus, scheduler, artifact system, or workflow manager is introduced without a proven requirement.
+- Provider- and harness-native state remains provider-private; outer adapters do not become competing execution authorities.
 
-Use the existing Docker base image as the normal test path. Do not rebuild test images for routine validation unless the image inputs changed.
+The normative contracts are in:
 
-Normal path:
+- `docs/architecture/rust-production-foundation.md`
+- `docs/architecture/application-capabilities.md`
+
+## Build and validate
+
+Rust is pinned by `rust-toolchain.toml`.
 
 ```bash
-docker run --rm \
-  -v "${PWD}:/app" \
-  -w /app \
-  -e AUDIAGENTIC_DOCKER_TESTS=1 \
-  -e AUDIAGENTIC_REPO_ROOT=/app \
-  audia-test-base:latest \
-  bash -lc "python3 -m pip install --no-cache-dir --break-system-packages -e . pytest pytest-asyncio mcp==1.27.0 && pytest tests/integration/release tests/e2e/release -q"
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+bash scripts/rust-foundation-smoke.sh
 ```
 
-Rebuild only when one of these changed:
-
-- `tests/docker/Dockerfile.test-base`
-- `tests/docker/Dockerfile.test`
-- `tests/docker/Dockerfile.release-test`
-- image-level package/tool bootstrap requirements
-- the local image is missing or known-bad
-
-Use `tests/docker/Dockerfile.release-test` only when validating the wheel-installed release path or package-data bundling. It is not the default recheck path.
-
-## Testing
-
-- **[docs/testing/TEST_ENVIRONMENT.md](docs/testing/TEST_ENVIRONMENT.md)** — primary test environment guide
-- **[docs/testing/TEST_ARCHITECTURE.md](docs/testing/TEST_ARCHITECTURE.md)** — test architecture overview
+The GitHub `rust-production-foundation` workflow runs the architecture gate on Ubuntu, macOS, and Windows.

@@ -1,135 +1,23 @@
-# =============================================================================
-# AUDiaGentic — .gitignore
-# Consolidated ignore rules for the public repository.
-# =============================================================================
+/target/
+**/*.rs.bk
 
-# --- IDE / editor directories ---
-/.vscode
-/.idea/
+# Editor and OS state
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
 *.swp
 *.swo
-*~
 
-# --- Agent / tool working directories ---
-/.audiagentic/
-/.pi-subagents/
-/.claude/
-/.cline/
-/.clinerules/
-/.codex/
-/.coding-lsp/
-/.continue/
-/.gemini/
-/.goose/
-/.openhands/
-/.opencode/
-/.pi/
-/.roo/
-/.aider*
-/.caveman-mode
-/.tmp/
-
-# --- Generated agent config files ---
-/.mcp.json
-/.lsp.json
-/opencode.json
-# Generated provider agent instruction files (MANAGED_BY_AUDIAGENTIC — regenerated from component configs)
-/AGENTS.md
-/CLAUDE.md
-/COPILOT.md
-/GEMINI.md
-/QWEN.md
-
-# --- AUDiaGentic runtime / private state ---
-/.audiagentic/components/
-/.audiagentic/runtime/
-/.audiagentic/sessions/
-/.audiagentic/logs/
-/.audiagentic/config/foundation/logging.local.yaml
-/.audiagentic/planning/extracts/
-/.audiagentic/planning/indexes/
-/.audiagentic/planning/meta/
-/.audiagentic/provisioning/logs/
-/.audiagentic/provisioning/build-cache/
-/.audiagentic/provisioning/goose/bin/
-/.audiagentic/provisioning/rig/embedded/bin/
-/.audiagentic/provisioning/rig/embedded/build/
-/src/audiagentic/runtime/rig/embedded/rig/
-/agent/
-/test/planning/
-
-# --- Python build artifacts and virtual environment ---
-__pycache__/
-.py[cod]
-**/*.pyc
-*.pyd
-*.so
-*.dll
-src/*.egg-info/
-dist/
-build/
-*.egg
-.venv/
-venv/
-env/
-
-# --- Docker test logs ---
-/docker-build-test*.log
-
-# --- Node modules (tool-specific) ---
-/.opencode/node_modules/
-/.pi/npm/node_modules/
-
-# --- Archive ---
-/archive/
-
-# =============================================================================
-# General sensitive / local-state protection
-# =============================================================================
-
-# Environment and local overrides
+# Local environment and secrets
 .env
 .env.*
-!.env.example
-*.local
-*.local.*
 
-# Credentials and key material
-*.pem
-*.key
-*.p12
-*.pfx
-*.jks
-*.keystore
-*.crt
-*.cer
-credentials*.json
-service-account*.json
-secrets*.json
-secrets*.yaml
-secrets*.yml
-auth.json
-auth.yaml
-auth.yml
-auth.toml
-.netrc
-.npmrc
-.pypirc
-
-# Local databases and state
-*.sqlite
-*.sqlite3
-*.db
-*.db-journal
-*.db-wal
-*.db-shm
-
-# Logs and dumps
-*.log
-*.trace
-*.dump
-*.dmp
-crash-*.txt
-
-# Windows system drive placeholder
-%SystemDrive%/
+# Local AUDiaGentic / agent-tool state
+/.audiagentic/
+/.agents/
+/.qwen/
+CLAUDE.md
+COPILOT.md
+GEMINI.md
+QWEN.md
