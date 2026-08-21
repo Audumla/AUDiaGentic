@@ -1,22 +1,19 @@
 //! Narrow host-facility contracts with explicit authority scopes.
 //!
 //! This crate provides boundaries, not a global host container. Applications
-//! pass only the facility and authority a capability actually needs.
+//! pass only the facility and authority a capability actually needs. New host
+//! contracts are added only when a real capability proves their semantics.
 
 use std::{
     collections::BTreeSet,
     error::Error,
     ffi::{OsStr, OsString},
     fmt,
-    future::Future,
     io::{Read, Write},
     path::{Path, PathBuf},
-    pin::Pin,
 };
 
 use audiagentic_sensitive::Secret;
-
-pub type HostFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// A filesystem read grant. The grant carries the configured root only;
 /// concrete host implementations must canonicalize and enforce containment.
@@ -72,40 +69,6 @@ impl ProcessAuthority {
 
     pub fn programs(&self) -> &BTreeSet<PathBuf> {
         &self.programs
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct NetworkAuthority {
-    hosts: BTreeSet<String>,
-}
-
-impl NetworkAuthority {
-    pub fn new(hosts: impl IntoIterator<Item = String>) -> Self {
-        Self {
-            hosts: hosts.into_iter().collect(),
-        }
-    }
-
-    pub fn hosts(&self) -> &BTreeSet<String> {
-        &self.hosts
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct SecretAuthority {
-    names: BTreeSet<String>,
-}
-
-impl SecretAuthority {
-    pub fn new(names: impl IntoIterator<Item = String>) -> Self {
-        Self {
-            names: names.into_iter().collect(),
-        }
-    }
-
-    pub fn names(&self) -> &BTreeSet<String> {
-        &self.names
     }
 }
 
@@ -261,19 +224,6 @@ impl ProcessExit {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NetworkRequest {
-    pub method: String,
-    pub url: String,
-    pub body: Vec<u8>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NetworkResponse {
-    pub status: u16,
-    pub body: Vec<u8>,
-}
-
 /// Filesystem access is synchronous at this contract boundary. Native
 /// filesystem operations are blocking and WIT filesystem calls are naturally
 /// synchronous; runtimes that require offloading may adapt this contract at
@@ -338,26 +288,6 @@ pub trait ProcessHost: Send + Sync {
     ) -> Result<Self::Child, Self::Error>;
 }
 
-pub trait NetworkHost: Send + Sync {
-    type Error: Error + Send + Sync + 'static;
-
-    fn send<'a>(
-        &'a self,
-        authority: &'a NetworkAuthority,
-        request: NetworkRequest,
-    ) -> HostFuture<'a, Result<NetworkResponse, Self::Error>>;
-}
-
-pub trait SecretHost: Send + Sync {
-    type Error: Error + Send + Sync + 'static;
-
-    fn read_secret<'a>(
-        &'a self,
-        authority: &'a SecretAuthority,
-        name: &'a str,
-    ) -> HostFuture<'a, Result<Secret<Vec<u8>>, Self::Error>>;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -370,13 +300,6 @@ mod tests {
         let processes = ProcessAuthority::new([PathBuf::from("/usr/bin/git")]);
         assert!(processes.programs().contains(Path::new("/usr/bin/git")));
         assert!(!processes.programs().contains(Path::new("/bin/sh")));
-
-        let network = NetworkAuthority::new(["example.com".to_owned()]);
-        assert!(network.hosts().contains("example.com"));
-        assert!(!network.hosts().contains("other.example"));
-
-        let secrets = SecretAuthority::new(["api-token".to_owned()]);
-        assert!(secrets.names().contains("api-token"));
     }
 
     #[test]
