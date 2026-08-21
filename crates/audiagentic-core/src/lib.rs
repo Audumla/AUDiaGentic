@@ -188,9 +188,6 @@ mod tests {
     #[test]
     fn identifiers_reject_empty_values() {
         assert!(ExecutionId::new("  ").is_err());
-        assert_eq!(
-            CorrelationId::new("corr-1").unwrap().as_str(),
-            "corr-1"
-        );
+        assert_eq!(CorrelationId::new("corr-1").unwrap().as_str(), "corr-1");
     }
 }
