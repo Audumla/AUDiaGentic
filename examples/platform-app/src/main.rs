@@ -237,7 +237,10 @@ fn reconcile_config(
 }
 
 fn temp_root() -> PathBuf {
-    std::env::temp_dir().join(format!("audiagentic-capabilities-proof-{}", std::process::id()))
+    std::env::temp_dir().join(format!(
+        "audiagentic-capabilities-proof-{}",
+        std::process::id()
+    ))
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
