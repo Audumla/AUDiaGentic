@@ -118,10 +118,6 @@ impl<T> ResolvedConfig<T> {
     pub fn layers(&self) -> &[ConfigLayerId] {
         &self.layers
     }
-
-    pub fn into_value(self) -> T {
-        self.value
-    }
 }
 
 /// Ordered in-memory configuration composition. Later TOML layers override
