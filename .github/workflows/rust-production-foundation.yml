@@ -40,6 +40,9 @@ jobs:
           toolchain: '1.95.0'
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - name: Resolve lockfile for tracing dependency transition
+        shell: bash
+        run: cargo generate-lockfile
       - name: Validate architecture layers
         shell: bash
         run: bash scripts/rust-foundation-smoke.sh
