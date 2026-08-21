@@ -2,30 +2,30 @@
 
 Status: **normative** for the production Rust layers below reusable Application Capabilities.
 
-This standard defines the dependency floor and host boundary on which the application-capability layer is built. It is intentionally small and does not select a runtime, transport, plugin system, provider model, workflow engine, lifecycle framework, diagnostics framework, or application framework.
+This standard defines a deliberately small dependency floor, pure semantic foundation, host-contract boundary, and native-effect implementation layer. It does not select an application runtime, transport, plugin system, provider model, scheduler, lifecycle framework, diagnostics framework, or service container.
 
-## Layering
+## Locked layering
 
 ```text
 reusable application capabilities
         |
-concrete host implementations
+concrete native effects
   audiagentic-host-native
         |
-proven narrow host contracts + authorities
+proven host contracts + authorities
   audiagentic-host
         |
-foundation libraries
-  errors / config / sensitive / template / reconcile / file-store
+pure foundation semantics
+  errors / config / sensitive / template / reconcile
         |
 audiagentic-core
 ```
 
-Dependencies point downward only. A lower layer gains a concept only after a real consumer proves that the concept belongs there.
+Dependencies point downward only. Lower layers gain concepts only after a real consumer proves that the concept belongs there.
 
-## Core
+## 1. Core: identity and opaque composition only
 
-`audiagentic-core` owns only proven generic application/execution identity and opaque `Application<C>` composition:
+`audiagentic-core` owns only:
 
 - `ApplicationId`;
 - `ApplicationInstanceId`;
@@ -33,95 +33,117 @@ Dependencies point downward only. A lower layer gains a concept only after a rea
 - `CorrelationId`;
 - `ApplicationIdentity`;
 - `ExecutionContext`;
-- `Application<C>`.
+- opaque `Application<C>` composition.
 
-Core has zero normal dependencies and does not define component/capability registries, lifecycle state, diagnostics, errors, host facilities, runtimes, transports, providers, protocols, Wasm engines, ECS frameworks, or async runtimes. Those concepts are introduced in the layer that first proves they are needed.
+Core has zero normal dependencies. It does not predeclare capabilities/components, lifecycle, diagnostics, errors, host facilities, runtimes, transports, providers, protocols, schedulers, registries, Wasm engines, ECS frameworks, or async runtimes.
 
-`Application<C>` treats `C` as opaque application-owned composition. Adding an unrelated capability must not require modifying core.
+Adding an unrelated application or capability must not require modifying core.
 
-## Foundation libraries
+Core's `IdentifierError` is intentionally a zero-dependency construction invariant rather than a coded platform error. When a higher reusable/public boundary exposes such a failure externally, that higher boundary is responsible for projecting it into its own stable coded error contract.
 
-Foundation crates are small semantic libraries rather than managers.
+## 2. Pure foundation semantics
 
-- `audiagentic-errors` owns stable boundary error identity: validated codes, a machine-readable category derived from the code prefix, canonical messages, resolutions, and the optional `CodedError` projection trait. It has zero normal dependencies and no registry/runtime loader.
-- `audiagentic-config` owns typed extraction and ordered resolution of already-acquired in-memory TOML sources. It does not discover files, environment, projects, or global configuration. Every public resolution returns `ResolvedConfig<T>` retaining ordered layer identities and a deterministic `ConfigRevision`; there is no convenience API that silently discards provenance.
-- `audiagentic-sensitive` owns secret-safe values and redaction-safe metadata.
-- `audiagentic-template` is deterministic text transformation.
-- `audiagentic-reconcile` owns pure observed/desired/plan/change/receipt semantics.
-- `audiagentic-file-store` owns low-level durable file replacement and is not an application storage API.
+Foundation crates perform no filesystem, environment, process, or network discovery/effects. They do not install observability subscribers or depend on an observability backend.
 
-Raw configuration acquisition belongs at the application/host edge. Application composition translates resolved typed configuration into narrow capability-owned policy values.
+- `audiagentic-errors` — zero-dependency stable boundary error vocabulary: validated `ErrorCode`, prefix-derived `ErrorCategory`, canonical message, resolution, and optional `CodedError` projection.
+- `audiagentic-sensitive` — secret-safe values, redaction-safe metadata, and coded validation of reusable metadata keys.
+- `audiagentic-template` — deterministic text transformation with coded parse/render failure identity.
+- `audiagentic-reconcile` — pure observed/desired/plan/change/receipt semantics with coded identifier validation.
+- `audiagentic-config` — typed extraction and ordered resolution of already-acquired in-memory TOML. Every resolution returns `ResolvedConfig<T>` retaining layer identities and deterministic `ConfigRevision` provenance.
 
-## Error standard
+There is deliberately **no standalone storage/file-store foundation crate**. Durable filesystem mechanics are native effects and are private implementation details of `audiagentic-host-native` until a real cross-host storage abstraction proves otherwise.
 
-Errors remain owned by the crate/domain that understands the failure. Internal implementation errors may remain ordinary typed Rust errors.
+Raw configuration acquisition belongs at an application/effect edge. Application composition translates resolved typed configuration into narrow capability-owned policy values.
 
-A failure that forms part of a reusable capability/application boundary exposes stable identity through `audiagentic-errors`:
+## 3. Error standard
+
+Errors remain typed and owned by the crate/domain that understands the failure. A reusable boundary failure exposes stable identity through `audiagentic-errors`:
 
 ```text
 stable code
-machine category derived from code
+category derived from code
 canonical message
 operator/developer resolution
+typed dynamic detail in the domain error
 ```
 
-One code identifies one semantic condition and one canonical message. Dynamic values stay in typed error fields/details. Error definitions are compiled with their owning capability so error identity works before runtime configuration bootstrap. Public transport envelopes remain edge projections.
+Rules:
 
-## Host contracts and authority
+1. one code identifies one semantic condition;
+2. one code has one canonical message;
+3. dynamic values are typed fields/details, not alternate canonical messages;
+4. error definitions are compiled with the owning crate, so stable identity works before configuration/bootstrap;
+5. underlying implementation errors remain in the source chain when appropriate;
+6. stable definitions are globally unique below the lock line;
+7. transport/protocol envelopes remain later edge projections.
 
-`audiagentic-host` contains only host-facility contracts whose semantics are currently proven by consumers. It is not a DI container and does not aggregate facilities into a global service locator.
+The coded-error contract is currently proven in sensitive, template, reconcile, config, events, workflow, time, and managed-config.
+
+## 4. Host contracts and authority
+
+`audiagentic-host` contains only proven effect contracts and explicit authority values. It performs no native filesystem/process effects and is not a global `HostServices` object or DI container.
 
 **Policy decides desired behaviour. Authority decides which external effects are permitted.**
 
-Concrete host implementations enforce authority. Capabilities receive only the host facility and authority they actually require.
+Current proven host contracts are only:
+
+- filesystem read/write authority + `FileHost`;
+- executable launch authority + owned direct-child `ProcessHost`/`ProcessChild` lifecycle.
+
+There are no speculative network, secret, async-host-future, storage-service, or universal host-service contracts. Those are designed only when a concrete consumer proves the required operations and authority model.
+
+## 5. Native effects
+
+`audiagentic-host-native` owns operating-system implementation details behind the host contracts.
 
 ### Filesystem
 
-`NativeFileHost` proves contained filesystem access by canonicalizing authority roots and targets/parents, rejecting escapes and symbolic-link write leaves, and routing durable replacement through `audiagentic-file-store`.
+`NativeFileHost` canonicalizes authority roots and target/parent paths, rejects containment escapes and symbolic-link write leaves, and performs durable same-directory temporary-write/fsync/rename behavior through a **private module inside host-native**.
 
-This is portable authority enforcement, not a hostile-filesystem sandbox. Stronger adversarial containment would require platform-specific handle-relative semantics and must not be claimed until implemented.
+This is portable authority enforcement, not a hostile-filesystem sandbox. Stronger adversarial containment requires platform-specific handle-relative semantics and must not be claimed until implemented.
 
-### Process lifecycle
+### Process
 
-The native process host owns direct-child lifecycle with explicit executable authority and stdio policy. Process authority is launch authority, not a sandbox. Complete descendant-tree ownership is intentionally not claimed until Unix process-group/session and Windows Job Object semantics are proven by a real harness consumer.
+`NativeProcessHost` launches only canonicalized executable paths admitted by `ProcessAuthority`, supports explicit stdio/environment behavior, and owns the direct child until wait/kill/drop cleanup.
 
-### Future facilities
+Process authority is launch authority, not a sandbox. Descendant-tree ownership is deliberately not claimed until Unix process-group/session and Windows Job Object semantics (or equivalent) are implemented and proven by a harness consumer.
 
-There are currently **no speculative network or secret host contracts** in the locked host layer. When a real provider/application consumer proves those needs, the contracts will be designed from the required operations, authority model, sync/async boundary, and error semantics rather than predeclared generically.
+## 6. Observability
 
-## Observability
+Observability is a core design concern, not a foundation service.
 
-Observability is a design concern, not a foundation service.
+Operational instrumentation uses Rust `tracing` at meaningful application/runtime/effect boundaries. Pure semantic crates do not depend on tracing/OpenTelemetry and libraries do not install a subscriber.
 
-Operational instrumentation uses the Rust `tracing` ecosystem at meaningful application/runtime/effect boundaries. Foundation and pure semantic capability crates do not install a global subscriber, define a telemetry bus, or depend on OpenTelemetry merely to obtain logs.
+The current application-edge proof owns `tracing`/`tracing-subscriber` and proves a structured `application.execution` span with:
 
-Execution/correlation identity comes from core; configuration provenance comes from `ConfigRevision`; stable failures come from coded boundary errors. The application-edge proof owns `tracing`/`tracing-subscriber` and verifies a structured `application.execution` span containing `execution_id`, `correlation_id`, and `config_revision`. Semantic libraries remain independent of that subscriber choice.
+- `execution_id`;
+- `correlation_id`;
+- `config_revision`.
 
-OpenTelemetry, JSON logs, rotating files, consoles, remote collectors, sampling, and metrics remain runtime/subscriber/exporter choices. Domain events, operational trace events, stable errors, and externally consumable execution output are distinct concepts and must not be collapsed into one generic event model.
+OpenTelemetry, JSON/file/console formatting, collectors, sampling, and metrics remain subscriber/exporter choices above the semantic contract. Domain events, stable errors, operational trace events, and externally consumable execution output remain distinct concepts.
 
-## Architecture gates
+## 7. Architecture acceptance gate
 
-`scripts/rust-foundation-smoke.sh` is part of this standard. It must continue to prove:
+`scripts/rust-foundation-smoke.sh` is normative. It must prove on every supported OS:
 
-1. Rust formatting and strict Clippy;
-2. the complete Rust workspace test suite;
-3. Tiny, Medium, Large and integrated application-capability composition proofs;
-4. zero normal dependencies in `audiagentic-core` and `audiagentic-errors`;
-5. downward dependency direction through foundation, host and application-capability layers;
-6. no Bevy/RMCP/Wasmtime/wash-runtime/Tokio/async-trait leakage into the production foundation;
-7. no raw filesystem/environment discovery in semantic configuration/capability crates;
-8. configuration cannot enable environment acquisition or discard resolved provenance through a convenience API;
-9. no speculative network/secret contracts in the locked host layer;
-10. no custom observability/service/event/workflow/timer manager abstractions in the locked layers;
-11. stable coded boundary errors and globally unique stable error-code definitions across the locked boundary crates;
-12. a real structured tracing proof exists only at the application edge and no library owns a tracing subscriber;
-13. application state I/O uses host/capability boundaries rather than bypassing them;
-14. all Cargo build/test/run/tree checks use the committed lockfile with `--locked`.
+1. formatting, strict Clippy, workspace tests, and executable composition proofs;
+2. zero normal dependencies in core and error vocabulary;
+3. explicit downward dependencies for every pure-foundation, host, native-host, and application-capability crate;
+4. no filesystem/environment/process/network effects in pure semantic layers;
+5. no speculative host/service-container contracts;
+6. native filesystem durability exists only inside host-native; no standalone file-store crate or dependency may return;
+7. config cannot enable environment acquisition or silently discard resolved provenance;
+8. stable coded reusable errors exist and codes are globally unique;
+9. public event/workflow monotonic identities reject exhaustion rather than panic or wrap;
+10. semantic crates have no telemetry backend dependency and libraries own no tracing subscriber;
+11. the application-edge structured tracing proof contains the canonical execution fields;
+12. no global capability/service/event/workflow/timer/observability manager vocabulary enters locked layers;
+13. all Cargo build/test/run/tree checks use the committed lockfile with `--locked`.
 
-The `rust-production-foundation` workflow executes the contract on Ubuntu, macOS and Windows.
+A successful run emits `PURE_FOUNDATION_OK`, `LAYER_CONTRACT_OK`, `APPLICATION_CAPABILITIES_LOCK_OK`, and `RUST_PRODUCTION_FOUNDATION_OK` among the detailed layer markers. GitHub validates the same contract on Ubuntu, macOS, and Windows.
 
 ## Relationship to Application Capabilities
 
-The next layer is defined by [`application-capabilities.md`](application-capabilities.md). Events, workflow, deterministic time, managed configuration and their policies belong there; they do not move into core or foundation merely because multiple applications use them.
+The next layer is defined by [`application-capabilities.md`](application-capabilities.md). Events, workflow, deterministic time, and managed configuration belong there; they do not move into core/foundation merely because multiple applications use them.
 
-Higher Context/AgentWork/provider/gateway/protocol/runtime work may build on these layers but may not weaken the foundation contract implicitly. Lifecycle, diagnostics, network/secrets, artifact storage, schedulers and other future concepts are added only where real consumers prove the boundary.
+Context, AgentWork, provider/harness/gateway/protocol work may build above these locked layers but may not weaken them implicitly. Future lifecycle, diagnostics, network/secrets, artifact/storage, scheduler, or runtime concepts are added only where a real consumer proves the boundary.
