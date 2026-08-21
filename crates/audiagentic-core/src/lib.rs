@@ -1,7 +1,7 @@
 //! Thin, capability-neutral application foundation.
 //!
 //! This crate deliberately does not know any concrete capability, runtime,
-//! transport, component technology, or I/O framework.
+//! transport, component technology, diagnostics system, or I/O framework.
 
 use std::{error::Error, fmt};
 
@@ -55,11 +55,8 @@ macro_rules! define_id {
 
 define_id!(ApplicationId);
 define_id!(ApplicationInstanceId);
-define_id!(ComponentId);
-define_id!(CapabilityId);
 define_id!(ExecutionId);
 define_id!(CorrelationId);
-define_id!(DiagnosticCode);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApplicationIdentity {
@@ -124,6 +121,10 @@ impl<C> Application<C> {
     }
 }
 
+/// Correlation identity for one application-owned execution.
+///
+/// Core carries the values but does not create spans, install tracing
+/// subscribers, persist execution state, or define an execution runtime.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecutionContext {
     execution_id: ExecutionId,
@@ -144,134 +145,6 @@ impl ExecutionContext {
 
     pub fn correlation_id(&self) -> &CorrelationId {
         &self.correlation_id
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LifecycleState {
-    Constructed,
-    Starting,
-    Running,
-    Stopping,
-    Stopped,
-    Failed,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Lifecycle {
-    state: LifecycleState,
-}
-
-impl Default for Lifecycle {
-    fn default() -> Self {
-        Self {
-            state: LifecycleState::Constructed,
-        }
-    }
-}
-
-impl Lifecycle {
-    pub fn state(&self) -> LifecycleState {
-        self.state
-    }
-
-    pub fn transition(&mut self, next: LifecycleState) -> Result<(), LifecycleError> {
-        if self.state == next || transition_allowed(self.state, next) {
-            self.state = next;
-            return Ok(());
-        }
-        Err(LifecycleError {
-            from: self.state,
-            to: next,
-        })
-    }
-}
-
-fn transition_allowed(from: LifecycleState, to: LifecycleState) -> bool {
-    matches!(
-        (from, to),
-        (LifecycleState::Constructed, LifecycleState::Starting)
-            | (LifecycleState::Constructed, LifecycleState::Stopped)
-            | (LifecycleState::Starting, LifecycleState::Running)
-            | (LifecycleState::Starting, LifecycleState::Failed)
-            | (LifecycleState::Running, LifecycleState::Stopping)
-            | (LifecycleState::Running, LifecycleState::Failed)
-            | (LifecycleState::Stopping, LifecycleState::Stopped)
-            | (LifecycleState::Stopping, LifecycleState::Failed)
-            | (LifecycleState::Failed, LifecycleState::Stopping)
-            | (LifecycleState::Failed, LifecycleState::Stopped)
-            | (LifecycleState::Stopped, LifecycleState::Starting)
-    )
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LifecycleError {
-    from: LifecycleState,
-    to: LifecycleState,
-}
-
-impl LifecycleError {
-    pub fn from(&self) -> LifecycleState {
-        self.from
-    }
-
-    pub fn to(&self) -> LifecycleState {
-        self.to
-    }
-}
-
-impl fmt::Display for LifecycleError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "invalid lifecycle transition {:?} -> {:?}",
-            self.from, self.to
-        )
-    }
-}
-
-impl Error for LifecycleError {}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DiagnosticSeverity {
-    Info,
-    Warning,
-    Error,
-}
-
-/// Machine-readable diagnostic data. Domain errors remain domain-local and
-/// may be projected into this form at a boundary; this is not a universal
-/// error type.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Diagnostic {
-    code: DiagnosticCode,
-    severity: DiagnosticSeverity,
-    summary: String,
-}
-
-impl Diagnostic {
-    pub fn new(
-        code: DiagnosticCode,
-        severity: DiagnosticSeverity,
-        summary: impl Into<String>,
-    ) -> Self {
-        Self {
-            code,
-            severity,
-            summary: summary.into(),
-        }
-    }
-
-    pub fn code(&self) -> &DiagnosticCode {
-        &self.code
-    }
-
-    pub fn severity(&self) -> DiagnosticSeverity {
-        self.severity
-    }
-
-    pub fn summary(&self) -> &str {
-        &self.summary
     }
 }
 
@@ -303,18 +176,21 @@ mod tests {
     }
 
     #[test]
-    fn lifecycle_enforces_only_generic_lifecycle_semantics() {
-        let mut lifecycle = Lifecycle::default();
-        lifecycle.transition(LifecycleState::Starting).unwrap();
-        lifecycle.transition(LifecycleState::Running).unwrap();
-        assert!(lifecycle.transition(LifecycleState::Starting).is_err());
-        lifecycle.transition(LifecycleState::Stopping).unwrap();
-        lifecycle.transition(LifecycleState::Stopped).unwrap();
+    fn execution_context_carries_identity_without_runtime_semantics() {
+        let context = ExecutionContext::new(
+            ExecutionId::new("execution-1").unwrap(),
+            CorrelationId::new("correlation-1").unwrap(),
+        );
+        assert_eq!(context.execution_id().as_str(), "execution-1");
+        assert_eq!(context.correlation_id().as_str(), "correlation-1");
     }
 
     #[test]
     fn identifiers_reject_empty_values() {
-        assert!(CapabilityId::new("  ").is_err());
-        assert_eq!(CapabilityId::new("calc.add").unwrap().as_str(), "calc.add");
+        assert!(ExecutionId::new("  ").is_err());
+        assert_eq!(
+            CorrelationId::new("corr-1").unwrap().as_str(),
+            "corr-1"
+        );
     }
 }
