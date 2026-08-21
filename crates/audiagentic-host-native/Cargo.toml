@@ -1,0 +1,11 @@
+[package]
+name = "audiagentic-host-native"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+audiagentic-host = { path = "../audiagentic-host" }
+thiserror.workspace = true
