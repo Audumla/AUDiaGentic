@@ -168,14 +168,14 @@ mod tests {
     use super::*;
 
     const VALID: ErrorDefinition = ErrorDefinition::new(
-        ErrorCode::new("CON-EVENT-001"),
+        ErrorCode::new("CON-ERRORS-001"),
         "Event cursor has expired.",
         "Restart from an available cursor.",
     );
 
     #[test]
     fn definitions_keep_one_stable_code_message_and_resolution() {
-        assert_eq!(VALID.code().as_str(), "CON-EVENT-001");
+        assert_eq!(VALID.code().as_str(), "CON-ERRORS-001");
         assert_eq!(VALID.message(), "Event cursor has expired.");
         assert_eq!(VALID.resolution(), "Restart from an available cursor.");
     }

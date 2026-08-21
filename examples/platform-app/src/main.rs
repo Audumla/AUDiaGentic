@@ -237,7 +237,7 @@ fn reconcile_config(
 }
 
 fn temp_root() -> PathBuf {
-    std::env::temp_dir().join(format!("audiagentic-platform-spike-{}", std::process::id()))
+    std::env::temp_dir().join(format!("audiagentic-capabilities-proof-{}", std::process::id()))
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -256,7 +256,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let executable = std::env::current_exe()?;
     let app = Application::new(
         ApplicationIdentity::new(
-            ApplicationId::new("application-platform-spike")?,
+            ApplicationId::new("application-capabilities-proof")?,
             ApplicationInstanceId::new("local")?,
         ),
         PlatformComposition {
@@ -271,7 +271,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let execution = ExecutionContext::new(
         ExecutionId::new("platform-execution-1")?,
-        CorrelationId::new("platform-spike")?,
+        CorrelationId::new("application-capabilities")?,
     );
     let causation = CausationId::new("workflow-platform-1")?;
 
@@ -431,6 +431,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("CONFIG_POLICY_OK");
 
     fs::remove_dir_all(root)?;
-    println!("APPLICATION_PLATFORM_SPIKE_OK");
+    println!("APPLICATION_CAPABILITIES_OK");
     Ok(())
 }
