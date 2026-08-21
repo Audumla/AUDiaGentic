@@ -127,6 +127,9 @@ impl<T> ResolvedConfig<T> {
 /// Ordered in-memory configuration composition. Later TOML layers override
 /// earlier layers through Figment. Source acquisition remains outside this
 /// crate so filesystem/environment authority cannot leak into semantic config.
+///
+/// Resolution always returns provenance with the typed value. There is no
+/// convenience extraction path that silently discards layer identity/revision.
 pub struct ConfigLayers {
     figment: Figment,
     revision_state: u64,
@@ -176,14 +179,6 @@ fn hash_bytes(mut state: u64, bytes: &[u8]) -> u64 {
     state
 }
 
-pub fn from_toml<T: ConfigModel>(source: &str) -> Result<T, ConfigError> {
-    from_figment(Figment::new().merge(Toml::string(source)))
-}
-
-pub fn from_figment<T: ConfigModel>(figment: Figment) -> Result<T, ConfigError> {
-    figment.extract::<T>().map_err(ConfigError::from)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -195,11 +190,19 @@ mod tests {
         count: u16,
     }
 
+    fn resolve(source: &str) -> Result<ResolvedConfig<TestConfig>, ConfigError> {
+        ConfigLayers::new()
+            .merge_toml(ConfigLayerId::new("test")?, source)
+            .resolve()
+    }
+
     #[test]
-    fn extracts_typed_toml() {
-        let config: TestConfig = from_toml("name = 'demo'\ncount = 3\n").unwrap();
-        assert_eq!(config.name, "demo");
-        assert_eq!(config.count, 3);
+    fn extracts_typed_toml_with_provenance() {
+        let resolved = resolve("name = 'demo'\ncount = 3\n").unwrap();
+        assert_eq!(resolved.value().name, "demo");
+        assert_eq!(resolved.value().count, 3);
+        assert_eq!(resolved.layers()[0].as_str(), "test");
+        assert_ne!(resolved.revision().value(), 0);
     }
 
     #[test]
@@ -226,11 +229,7 @@ mod tests {
     #[test]
     fn config_revision_changes_when_a_source_changes() {
         fn revision(source: &str) -> ConfigRevision {
-            ConfigLayers::new()
-                .merge_toml(ConfigLayerId::new("project").unwrap(), source)
-                .resolve::<TestConfig>()
-                .unwrap()
-                .revision()
+            resolve(source).unwrap().revision()
         }
 
         assert_ne!(
@@ -241,7 +240,7 @@ mod tests {
 
     #[test]
     fn invalid_configuration_is_a_coded_local_error() {
-        let error = from_toml::<TestConfig>("name = 42\ncount = 3\n").unwrap_err();
+        let error = resolve("name = 42\ncount = 3\n").unwrap_err();
         assert_eq!(error.code().as_str(), "CFG-CONFIG-001");
         assert_eq!(
             error.canonical_message(),
