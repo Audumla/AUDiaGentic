@@ -87,13 +87,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "audiagentic-file-store"
-version = "0.1.0"
-dependencies = [
- "thiserror",
-]
-
-[[package]]
 name = "audiagentic-host"
 version = "0.1.0"
 dependencies = [
@@ -104,7 +97,6 @@ dependencies = [
 name = "audiagentic-host-native"
 version = "0.1.0"
 dependencies = [
- "audiagentic-file-store",
  "audiagentic-host",
  "thiserror",
 ]
@@ -121,14 +113,23 @@ dependencies = [
 [[package]]
 name = "audiagentic-reconcile"
 version = "0.1.0"
+dependencies = [
+ "audiagentic-errors",
+]
 
 [[package]]
 name = "audiagentic-sensitive"
 version = "0.1.0"
+dependencies = [
+ "audiagentic-errors",
+]
 
 [[package]]
 name = "audiagentic-template"
 version = "0.1.0"
+dependencies = [
+ "audiagentic-errors",
+]
 
 [[package]]
 name = "audiagentic-time"
