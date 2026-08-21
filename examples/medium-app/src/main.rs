@@ -29,10 +29,7 @@ impl Greeter {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let resolved = ConfigLayers::new()
-        .merge_toml(
-            ConfigLayerId::new("application")?,
-            "greeting = 'hello'\n",
-        )
+        .merge_toml(ConfigLayerId::new("application")?, "greeting = 'hello'\n")
         .resolve::<GreetingConfig>()?;
     let composition = Greeter {
         greeting: resolved.value().greeting.clone(),
