@@ -35,6 +35,11 @@ const CURSOR_AHEAD: ErrorDefinition = ErrorDefinition::new(
     "Event cursor is ahead of the stream.",
     "Use a cursor at or before the latest available event sequence.",
 );
+const SEQUENCE_EXHAUSTED: ErrorDefinition = ErrorDefinition::new(
+    ErrorCode::new("RES-EVENT-001"),
+    "Event sequence space is exhausted.",
+    "Start a new event stream rather than allowing sequence identity to wrap.",
+);
 
 macro_rules! define_event_id {
     ($name:ident, $label:literal) => {
@@ -170,6 +175,7 @@ pub enum EventStreamError {
         cursor: EventCursor,
         latest_available: EventSequence,
     },
+    SequenceExhausted,
 }
 
 impl CodedError for EventStreamError {
@@ -179,6 +185,7 @@ impl CodedError for EventStreamError {
             Self::ZeroPageLimit => &ZERO_PAGE_LIMIT,
             Self::CursorExpired { .. } => &CURSOR_EXPIRED,
             Self::CursorAhead { .. } => &CURSOR_AHEAD,
+            Self::SequenceExhausted => &SEQUENCE_EXHAUSTED,
         }
     }
 }
@@ -208,6 +215,7 @@ impl fmt::Display for EventStreamError {
                 cursor.get(),
                 latest_available.get()
             ),
+            Self::SequenceExhausted => f.write_str("event sequence space is exhausted"),
         }
     }
 }
@@ -330,18 +338,20 @@ impl<E> EventStream<E> {
         self.events.back().map(EventEnvelope::sequence)
     }
 
+    /// Append one event and return its assigned sequence. Sequence identity is
+    /// monotonic and never wraps; exhaustion is a stable resource error.
     pub fn append(
         &mut self,
         event_id: EventId,
         correlation_id: CorrelationId,
         causation_id: Option<CausationId>,
         payload: E,
-    ) -> &EventEnvelope<E> {
+    ) -> Result<EventSequence, EventStreamError> {
         let sequence = EventSequence::new(self.next_sequence);
-        self.next_sequence = self
+        let next_sequence = self
             .next_sequence
             .checked_add(1)
-            .expect("event sequence space exhausted");
+            .ok_or(EventStreamError::SequenceExhausted)?;
         self.events.push_back(EventEnvelope {
             event_id,
             stream_id: self.stream_id.clone(),
@@ -350,6 +360,7 @@ impl<E> EventStream<E> {
             causation_id,
             payload,
         });
+        self.next_sequence = next_sequence;
 
         if let Some(limit) = self.policy.retention_limit() {
             while self.events.len() > limit {
@@ -357,7 +368,7 @@ impl<E> EventStream<E> {
             }
         }
 
-        self.events.back().expect("event was just appended")
+        Ok(sequence)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &EventEnvelope<E>> {
@@ -392,9 +403,7 @@ impl<E> EventStream<E> {
                 has_more: false,
             });
         };
-        let latest = self
-            .last_sequence()
-            .expect("non-empty stream must have a latest sequence");
+        let latest = self.last_sequence().unwrap_or(oldest);
 
         if cursor.get().saturating_add(1) < oldest.get() {
             return Err(EventStreamError::CursorExpired {
@@ -444,12 +453,14 @@ mod tests {
     }
 
     fn append(stream: &mut EventStream<JobEvent>, id: u64, event: JobEvent) {
-        stream.append(
-            EventId::new(format!("event-{id}")).unwrap(),
-            CorrelationId::new("corr-42").unwrap(),
-            None,
-            event,
-        );
+        stream
+            .append(
+                EventId::new(format!("event-{id}")).unwrap(),
+                CorrelationId::new("corr-42").unwrap(),
+                None,
+                event,
+            )
+            .unwrap();
     }
 
     #[test]
@@ -508,6 +519,24 @@ mod tests {
                 ..
             }) if latest_available == EventSequence::new(0)
         ));
+    }
+
+    #[test]
+    fn sequence_exhaustion_is_rejected_without_appending_or_wrapping() {
+        let mut stream = EventStream::new(EventStreamId::new("max").unwrap());
+        stream.next_sequence = u64::MAX;
+        let error = stream
+            .append(
+                EventId::new("event-max").unwrap(),
+                CorrelationId::new("corr-max").unwrap(),
+                None,
+                JobEvent::Completed,
+            )
+            .unwrap_err();
+        assert_eq!(error.code().as_str(), "RES-EVENT-001");
+        assert!(matches!(error, EventStreamError::SequenceExhausted));
+        assert!(stream.is_empty());
+        assert_eq!(stream.next_sequence, u64::MAX);
     }
 
     #[test]
