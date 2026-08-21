@@ -19,3 +19,5 @@ audiagentic-time = { path = "../../crates/audiagentic-time" }
 audiagentic-workflow = { path = "../../crates/audiagentic-workflow" }
 schemars.workspace = true
 serde.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
