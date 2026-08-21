@@ -1,5 +1,0 @@
-CFG-SESSSTAT-001: "No model is configured in the harness config. Set the model in harness/ag.yaml."
-CFG-SESSION-001: "Session runtime status configuration is missing or invalid. Check the session status settings and the configured model/runtime values."
-RES-SESSION-001: "The requested session runtime status resource could not be resolved. Check the session identifier and runtime state."
-RES-SESSION-004: "The requested session runtime status is unavailable. Verify that the session is active and its runtime status has been materialized."
-RES-SESSSTAT-001: "The materialized models config file does not exist. Check the runtime harness setup."
