@@ -2,7 +2,15 @@
 
 use std::{collections::BTreeMap, error::Error, fmt};
 
+use audiagentic_errors::{CodedError, ErrorCode, ErrorDefinition};
+
 pub const REDACTED: &str = "[REDACTED]";
+
+const SENSITIVE_KEY_EMPTY: ErrorDefinition = ErrorDefinition::new(
+    ErrorCode::new("VAL-SENSITIVE-001"),
+    "Sensitive metadata key must not be empty.",
+    "Provide a stable non-empty key name for sensitive metadata.",
+);
 
 pub struct Secret<T>(T);
 
@@ -55,6 +63,12 @@ impl SensitiveKey {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SensitiveKeyError;
+
+impl CodedError for SensitiveKeyError {
+    fn definition(&self) -> &'static ErrorDefinition {
+        &SENSITIVE_KEY_EMPTY
+    }
+}
 
 impl fmt::Display for SensitiveKeyError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -142,6 +156,16 @@ mod tests {
         metadata.insert_sensitive(SensitiveKey::new("token").unwrap());
         assert_eq!(metadata.get("operation"), Some("write"));
         assert_eq!(metadata.get("token"), Some(REDACTED));
+    }
+
+    #[test]
+    fn sensitive_key_validation_has_stable_error_identity() {
+        let error = SensitiveKey::new(" ").unwrap_err();
+        assert_eq!(error.code().as_str(), "VAL-SENSITIVE-001");
+        assert_eq!(
+            error.canonical_message(),
+            "Sensitive metadata key must not be empty."
+        );
     }
 
     #[test]
