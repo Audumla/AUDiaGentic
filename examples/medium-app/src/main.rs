@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, error::Error};
 
-use audiagentic_config::from_toml;
+use audiagentic_config::{ConfigLayerId, ConfigLayers, ConfigRevision};
 use audiagentic_core::{Application, ApplicationId, ApplicationIdentity, ApplicationInstanceId};
 use audiagentic_template::{Template, TemplateError};
 use schemars::JsonSchema;
@@ -14,6 +14,7 @@ struct GreetingConfig {
 #[derive(Debug)]
 struct Greeter {
     greeting: String,
+    config_revision: ConfigRevision,
     template: Template,
 }
 
@@ -27,9 +28,15 @@ impl Greeter {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let config: GreetingConfig = from_toml("greeting = 'hello'\n")?;
+    let resolved = ConfigLayers::new()
+        .merge_toml(
+            ConfigLayerId::new("application")?,
+            "greeting = 'hello'\n",
+        )
+        .resolve::<GreetingConfig>()?;
     let composition = Greeter {
-        greeting: config.greeting,
+        greeting: resolved.value().greeting.clone(),
+        config_revision: resolved.revision(),
         template: Template::parse("{{ greeting }}, {{ name }}!")?,
     };
     let app = Application::new(
@@ -40,6 +47,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         composition,
     );
 
+    assert_ne!(app.composition().config_revision.value(), 0);
     assert_eq!(app.composition().greet("world")?, "hello, world!");
     println!("MEDIUM_APP_OK");
     Ok(())
