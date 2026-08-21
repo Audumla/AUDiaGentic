@@ -163,7 +163,9 @@ fn child_mode() -> Result<(), Box<dyn Error>> {
 }
 
 fn next_event_id(counter: &mut u64) -> Result<EventId, Box<dyn Error>> {
-    *counter += 1;
+    *counter = counter
+        .checked_add(1)
+        .ok_or_else(|| std::io::Error::other("platform event id counter exhausted"))?;
     Ok(EventId::new(format!("platform-event-{}", *counter))?)
 }
 
@@ -179,7 +181,7 @@ fn record_event(
         correlation.clone(),
         Some(causation.clone()),
         event,
-    );
+    )?;
     Ok(())
 }
 
