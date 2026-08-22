@@ -95,6 +95,29 @@ Fields map to `ComponentDescriptor` ([base.py](../../src/audiagentic/foundation/
 | `lifecycle-observer` | Dotted **module** imported at registration to self-subscribe to the event bus. |
 | `lifecycle-hook` | Dotted `fn(event_type, payload, metadata)`. |
 | `status-hook` | Dotted `fn(project_root) -> ComponentStatusPayload \| None` powering status. |
+| `context-hook` | Dotted `fn(project_root) -> Mapping[str, Any] \| None` supplying bounded, read-only template facts. |
+| `context-namespace` | Optional underscore-only namespace for the hook's template facts; defaults from `id`. |
+
+### Template context hooks
+
+Use a context hook only for small, read-only facts that may be frozen at gateway
+admission and resolved in agent prompt templates. Declare the hook as component
+metadata; runtime orchestration resolves and invokes it, while Foundation only
+validates and sanitizes its returned mapping.
+
+```yaml
+context-hook: audiagentic.components.my_thing.my_thing_api.context
+context-namespace: my_thing
+```
+
+```python
+def context(project_root: Path) -> Mapping[str, Any] | None:
+    """Return bounded, read-only component-owned facts, or None."""
+```
+
+Returned values must be JSON-compatible scalars, mappings, or lists; sensitive
+keys are removed and each namespace is size-bounded. Do not return secrets,
+raw prompts, provider transcripts, mutable handles, or perform mutations.
 
 ## 5. Managed files
 
@@ -301,6 +324,5 @@ Keep observers idempotent — `register_all_components()` may run multiple times
 - **`planning.yaml`** + `components/planning/` — clean two-server (mgmt + activity) component, `contributions`, `exclusive`, one implementation.
 - **`coding-lsp.yaml`** + `config/components/coding-lsp/` — full feature tier: role-grouped `implementations/`, `features/`, and `bindings/`; dependencies live on implementations/features, while bindings carry projection glue.
 - **`project.yaml`** / **`session.yaml`** — always-on `core: true` components.
-
 
 
