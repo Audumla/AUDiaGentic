@@ -275,13 +275,25 @@ def _dispatch_session_request(
         DEFAULT_TURN_TIMEOUT_SECONDS,
         get_session_runtime,
     )
-    from audiagentic.components.agents.gateway.profiles import resolve_authoritative_profile
+    from audiagentic.components.agents.gateway import profiles as profiles_mod
 
     request_id = record["request-id"]
     execution_profile_id = record["execution-profile-id"]
     runtime = get_session_runtime()
 
-    profile = resolve_authoritative_profile(project_root, execution_profile_id)
+    admitted_snapshot = profiles_mod.snapshot_from_record(record)
+    if admitted_snapshot is not None:
+        profile = profiles_mod.profile_mapping_from_snapshot(admitted_snapshot, record)
+    elif profiles_mod.get_gateway_registry() is not None:
+        raise AudiaGenticError(
+            code="CON-AGW-101", kind="agents",
+            message="shared gateway session has no immutable admission profile snapshot",
+            details={"request-id": record.get("request-id")},
+        )
+    else:
+        from audiagentic.components.agents.models.execution_profile_api import resolve_execution_profile
+
+        profile = resolve_execution_profile(project_root, execution_profile_id)
     provider_id = profile["provider_id"]
     params = profile.get("params", {})
     # AS88 composition facts are admission-owned.  Dispatch forwards only

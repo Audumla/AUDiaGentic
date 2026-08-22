@@ -17,25 +17,35 @@ from audiagentic.components.agents.models.execution_profile import (
     execution_profile_from_dict,
     execution_profile_to_dict,
 )
+from audiagentic.components.agents.models.role import role_from_dict
 
 
 def global_agents_repository() -> AgentsConfigRepository:
-    return AgentsConfigRepository(global_agents_config_path())
+    return AgentsConfigRepository(global_agents_config_path(), required=True)
 
 
 def read_global_agents_config(project_root: Path | None = None) -> AgentsConfigSnapshot:
     """Read the machine catalog; project_root is only API-shape context."""
-    return global_agents_repository().read(project_root or Path.cwd())
+    snapshot = global_agents_repository().read(project_root or Path.cwd())
+    # A machine execution authority is all-or-nothing. Validate every typed
+    # collection before publishing any discovery result; tolerant CRUD stores
+    # must not turn one malformed record into a partially valid catalog.
+    for role in snapshot.document.roles:
+        role_from_dict(dict(role))
+    for profile in snapshot.document.execution_profiles:
+        execution_profile_from_dict(dict(profile))
+    AgentDefinitionStore.from_dicts(list(snapshot.document.agents), strict=True)
+    return snapshot
 
 
 def list_global_agent_definitions(project_root: Path | None = None) -> list[dict[str, Any]]:
     snapshot = read_global_agents_config(project_root)
-    store = AgentDefinitionStore.from_dicts(list(snapshot.document.agents))
+    store = AgentDefinitionStore.from_dicts(list(snapshot.document.agents), strict=True)
     return [agent_definition_to_dict(item) for item in store.list_all()]
 
 
 def get_global_agent_definition(project_root: Path, agent_id: str) -> dict[str, Any]:
-    store = AgentDefinitionStore.from_dicts(list(read_global_agents_config(project_root).document.agents))
+    store = AgentDefinitionStore.from_dicts(list(read_global_agents_config(project_root).document.agents), strict=True)
     return agent_definition_to_dict(store.get(agent_id))
 
 
