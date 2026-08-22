@@ -4,6 +4,7 @@ core: true
 id: project
 display-name: Project
 description: Core project scaffold — config, prompts, and workflow files
+context-hook: audiagentic.components.project.project_api.context
 files:
   - path: .audiagentic/config/project.yaml
     lifecycle: create-if-missing

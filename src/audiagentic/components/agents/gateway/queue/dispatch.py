@@ -130,6 +130,7 @@ def _build_packet_ctx(
         "stream-controls": dict(profile.get("params", {}).get("stream-controls") or {}),
         "source": record.get("source"),
         "metadata": record.get("metadata", {}),
+        "template-context": record.get("template-context", {}),
     }
 
 

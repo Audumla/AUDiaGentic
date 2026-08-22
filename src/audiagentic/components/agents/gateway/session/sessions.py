@@ -2440,6 +2440,14 @@ class SessionRuntime:
     ) -> dict[str, Any]:
         handle = self._handles.get(session_id)
         if handle is not None and reason != "shutdown" and not handle.quiescent():
+            # An explicit client close is authoritative.  Do not wait for a
+            # provider recovery turn to become quiescent: GPT-auto can keep an
+            # unresolved turn alive (and recreate its browser tab) forever.
+            # Terminalize and remove the gateway handle first, then cancel and
+            # best-effort close the provider transport.  This prevents queued
+            # continuations and recovery from retaining a queue/session lock.
+            if reason == "client-request":
+                return await self._close_client_request(project_root, session_id, handle)
             deadline = self._clock() + _CLOSE_TIMEOUT_SECONDS
             while not handle.quiescent() and self._clock() < deadline:
                 await asyncio.sleep(0.05)
@@ -2499,6 +2507,76 @@ class SessionRuntime:
             )
         logger.info(
             "gateway session closed", extra={"session-id": session_id, "close-reason": reason}
+        )
+        return record if record is not None else {"session-id": session_id, "state": "closed"}
+
+    async def _close_client_request(
+        self,
+        project_root: Path,
+        session_id: str,
+        handle: _SessionHandle,
+    ) -> dict[str, Any]:
+        """Authoritatively close a busy session on explicit client request.
+
+        The durable terminal transition and handle removal happen before
+        touching the provider transport.  This is deliberately fail-closed:
+        an unresolved provider turn must not keep the session eligible for
+        recovery or hold a queue lock while browser cleanup is attempted.
+        """
+        self._handles.pop(session_id, None)
+        owning_task = handle.owning_turn_task
+        if owning_task is not None and not owning_task.done():
+            owning_task.cancel()
+
+        try:
+            record = session_store.read_session_record(project_root, session_id)
+        except AudiaGenticError:
+            record = None
+        if record is not None and record["state"] not in session_store.SESSION_TERMINAL_STATES:
+            record = session_store.transition_session_record(
+                project_root,
+                session_id,
+                "closed",
+                updates={"close-reason": "client-request", "closed-at": now_iso_z()},
+            )
+            binding_store.retire_binding(project_root, record, state="closed")
+            self._observer_ingress.invalidate_all_for_session(session_id)
+            self._evidence_projection.clear_for_session(session_id)
+            session_store.record_session_timeline(
+                project_root,
+                session_id,
+                "session.closed",
+                state="closed",
+                attributes={
+                    "close-reason": "client-request",
+                    "correlation-id": handle.correlation_id,
+                },
+            )
+            _publish_session_event(
+                SESSION_CLOSED_TOPIC,
+                {
+                    "session-id": session_id,
+                    "execution-profile-id": record["execution-profile-id"],
+                    "state": "closed",
+                    "provider-id": session_store.session_provider_id(record),
+                    "model-id": session_store.session_model_id(record),
+                    "close-reason": "client-request",
+                    "turn-count": session_store.session_turn_count(record),
+                },
+                correlation_id=handle.correlation_id,
+            )
+
+        try:
+            await asyncio.wait_for(handle.transport.close(), timeout=5.0)
+        except Exception:  # noqa: BLE001 - provider cleanup is best effort
+            logger.warning(
+                "provider transport close failed after authoritative session close",
+                extra={"session-id": session_id},
+                exc_info=True,
+            )
+        self._cleanup_handle_runtime(handle)
+        logger.info(
+            "gateway session closed", extra={"session-id": session_id, "close-reason": "client-request"}
         )
         return record if record is not None else {"session-id": session_id, "state": "closed"}
 

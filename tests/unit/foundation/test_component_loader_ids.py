@@ -70,6 +70,18 @@ def test_explicit_detection_marker_preserved(tmp_path: Path) -> None:
     assert desc.detection_marker == "custom/path.yaml"
 
 
+def test_context_hook_and_namespace_are_loaded(tmp_path: Path) -> None:
+    path = tmp_path / "context.yaml"
+    _write_component(
+        path,
+        "type: component\nid: context-comp\ncontext-hook: example.context\ncontext-namespace: context\n",
+    )
+
+    desc = register_from_yaml(path)
+    assert desc.context_hook == "example.context"
+    assert desc.context_namespace == "context"
+
+
 def test_default_marker_file_synthesized(tmp_path: Path) -> None:
     path = tmp_path / "no-files.yaml"
     _write_component(path, "type: component\ncontract-version: v1\nid: my-no-files\n")

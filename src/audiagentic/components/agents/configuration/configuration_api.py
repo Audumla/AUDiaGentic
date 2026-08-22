@@ -7,13 +7,19 @@ from typing import Any
 from .contracts import AgentsConfigDocument
 from .repository import AgentsConfigRepository, AgentsConfigSnapshot
 from .resolution import resolve_agent
+from audiagentic.components.agents.agents_paths import global_agents_config_path
 
 
 class AgentsConfigService:
-    """Project-scoped configuration operations for protocol adapters."""
+    """Machine-global configuration operations for protocol adapters."""
 
     def __init__(self, repository: AgentsConfigRepository | None = None) -> None:
-        self._repository = repository or AgentsConfigRepository()
+        # The hosted agent catalog is machine-global.  ``root`` is retained on
+        # methods for protocol compatibility, but cannot select a project-local
+        # authority accidentally.
+        self._repository = repository or AgentsConfigRepository(
+            global_agents_config_path(), required=True
+        )
 
     def read(self, root: Path) -> AgentsConfigSnapshot:
         return self._repository.read(root)

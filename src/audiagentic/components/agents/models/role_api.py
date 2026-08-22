@@ -1,15 +1,15 @@
 """Role API — load, save, CRUD (AS61).
 
 Pure-logic module with no MCP coupling, mirroring agents_api.py's shape for
-execution profiles. Deliberately not composed: role storage is stateless
-project-local config, read fresh on every call (see roles.RoleStore).
+execution profiles. Role storage is machine-global and read fresh on every
+call; ``project_root`` is retained only for API compatibility.
 """
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.agents.agents_paths import agents_config_path
+from audiagentic.components.agents.agents_paths import global_agents_config_path
 from audiagentic.components.agents.configuration.contracts import AgentsConfigDocument
 from audiagentic.components.agents.configuration.repository import AgentsConfigRepository
 from audiagentic.components.agents.models.role import (
@@ -20,6 +20,11 @@ from audiagentic.components.agents.models.role import (
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
+def _repository() -> AgentsConfigRepository:
+    """Use the machine-global catalog; project roots are not config authority."""
+    return AgentsConfigRepository(global_agents_config_path(), required=True)
+
+
 def load_roles(project_root: Path) -> RoleStore:
     """Load roles from the project config file.
 
@@ -27,7 +32,7 @@ def load_roles(project_root: Path) -> RoleStore:
     Raises AudiaGenticError(IO-ROL-001) on read failure.
     Raises AudiaGenticError(VAL-ROL-002) on contract-version mismatch.
     """
-    snapshot = AgentsConfigRepository().read(project_root)
+    snapshot = _repository().read(project_root)
     return RoleStore.from_dicts(list(snapshot.document.roles))
 
 
@@ -36,7 +41,7 @@ def save_roles(project_root: Path, store: RoleStore) -> None:
 
     Raises AudiaGenticError(IO-ROL-002) on write failure.
     """
-    repository = AgentsConfigRepository()
+    repository = _repository()
     snapshot = repository.read(project_root)
     document = AgentsConfigDocument(
         snapshot.document.contract_version,
@@ -45,9 +50,10 @@ def save_roles(project_root: Path, store: RoleStore) -> None:
         snapshot.document.execution_profiles,
         snapshot.document.agents,
         snapshot.document.triggers,
+        snapshot.document.prompt_profiles,
     )
     try:
-        repository.replace(project_root, document, expected_digest=(snapshot.digest if agents_config_path(project_root).exists() else None))
+        repository.replace(project_root, document, expected_digest=snapshot.digest)
     except Exception as exc:
         raise AudiaGenticError(
             code="IO-ROL-002",

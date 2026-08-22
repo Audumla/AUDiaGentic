@@ -3,6 +3,7 @@ contract-version: v1
 id: source-control
 display-name: Source Control
 description: Source control — installs and manages official git and GitHub MCP servers for providers
+context-hook: audiagentic.components.source_control.source_control_api.context
 depends-on:
   - project
 
@@ -114,4 +115,3 @@ contributions:
         Never use `git stash` — this is a shared, multi-agent working tree and a stash
         can silently collide with another session's live edits. If work needs to be set
         aside, split it into its own deliberate check-in group or leave it uncommitted.
-

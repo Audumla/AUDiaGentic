@@ -188,6 +188,12 @@
     "metadata": {
       "type": "object"
     },
+    "template-context": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object"
+      }
+    },
     "state": {
       "type": "string",
       "enum": ["queued", "running", "completed", "failed", "cancelled", "rejected", "interrupted"]

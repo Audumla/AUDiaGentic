@@ -16,6 +16,7 @@ from .base import (
     McpServerDeclaration,
 )
 from .hooks import initialize_lifecycle_hook_dispatch
+from .context import collect_component_context, context_namespace
 from .registry import (
     all_descriptors,
     get_descriptor,
@@ -43,4 +44,6 @@ __all__ = [
     "resolve_component_id",
     "reset",
     "initialize_lifecycle_hook_dispatch",
+    "collect_component_context",
+    "context_namespace",
 ]

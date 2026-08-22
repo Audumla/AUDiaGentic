@@ -779,6 +779,45 @@ def test_reaper_never_closes_processing_session(rig):
     assert stored["close-reason"] == "max-lifetime"
 
 
+def test_explicit_close_busy_session_terminalizes_before_provider_quiescence(rig):
+    """Client close must not wait on an unresolved provider turn.
+
+    A GPT-auto recovery turn can remain non-quiescent while its browser page
+    is being reconciled.  Explicit close must remove the gateway handle and
+    persist the terminal session state immediately so recovery/queue dispatch
+    cannot retain the session lock.
+    """
+    runtime, clock, transports, tmp_path = rig
+    record = _open(runtime, tmp_path)
+    session_id = record["session-id"]
+    transports[0].block_event = threading.Event()
+    results: list[BaseException] = []
+
+    def run_turn() -> None:
+        try:
+            runtime.prompt_in_session(tmp_path, session_id, "unresolved", request_id="req-close")
+        except BaseException as exc:  # cancellation is the expected close path
+            results.append(exc)
+
+    thread = threading.Thread(target=run_turn)
+    thread.start()
+    time.sleep(0.1)
+
+    started = time.monotonic()
+    closed = runtime.close_session(tmp_path, session_id)
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 5
+    assert closed["state"] == "closed"
+    assert closed["close-reason"] == "client-request"
+    stored = session_store.read_session_record(tmp_path, session_id)
+    assert stored["state"] == "closed"
+    assert runtime.live_session_ids() == []
+    thread.join(timeout=2)
+    assert not thread.is_alive()
+    assert transports[0].closed
+
+
 def test_dead_child_fails_session(rig):
     runtime, clock, transports, tmp_path = rig
     record = _open(runtime, tmp_path)

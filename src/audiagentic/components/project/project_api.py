@@ -12,6 +12,22 @@ from audiagentic.foundation.features.resolver import resolve_feature, resolve_im
 from . import project_components, project_files, project_surfaces
 
 
+def context(project_root: Path) -> dict[str, Any]:
+    """Return stable, public project facts for prompt templates."""
+    from audiagentic.foundation.io import load_yaml_file
+
+    config_path = project_root / ".audiagentic" / "config" / "project.yaml"
+    data = load_yaml_file(config_path) if config_path.is_file() else {}
+    return {
+        "id": data.get("project-id"),
+        "name": data.get("project-name") or project_root.name,
+        "root": str(project_root.resolve()),
+        "workflow_profile": data.get("workflow-profile"),
+        "tracked_docs_root": data.get("tracked-docs-root"),
+        "release_strategy": data.get("release-strategy"),
+    }
+
+
 def project_status(project_root: Path) -> dict[str, Any]:
     """Return project installation state and component details."""
     return project_components.project_status(project_root)

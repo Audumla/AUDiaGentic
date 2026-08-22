@@ -67,17 +67,17 @@ def _build_shared_gateway_registry_factory(
 
     def factory() -> Any:
         from audiagentic.components.agents.gateway import profiles as profiles_mod
-        from audiagentic.foundation.paths.home import global_config_dir
+        from audiagentic.components.agents.agents_paths import global_agents_config_path
 
-        resolved_path = gateway_profiles_config or global_config_dir() / "gateway-profiles.yaml"
-        # A hosted gateway is never allowed to infer embedded mode from a
-        # missing machine registry. Embedded resolution is an explicit test
-        # composition only; production startup must fail closed.
-        registry = profiles_mod.load_gateway_registry_from_config(resolved_path, required=True)
-        profiles_mod.set_gateway_registry(registry)
-        profiles_mod.set_gateway_registry_config_path(
-            resolved_path if registry is not None else None
+        # The legacy gateway-profiles-config argument is intentionally ignored:
+        # hosted admission has one authority, the machine-global Agents catalog.
+        # Test compositions should inject an explicit registry through overrides.
+        resolved_path = global_agents_config_path()
+        registry = profiles_mod.load_gateway_registry_from_agents_catalog(
+            resolved_path, required=True
         )
+        profiles_mod.set_gateway_registry(registry)
+        profiles_mod.set_gateway_registry_config_path(resolved_path)
         return registry
 
     return factory

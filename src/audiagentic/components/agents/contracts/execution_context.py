@@ -251,8 +251,10 @@ class SubmissionEnvelope:
         _require_string("mode", self.mode)
         _require_optional_number("timeout_seconds", self.timeout_seconds, positive=True)
         _validate_session_spec(self.session)
-        if self.prompt_body is not None:
-            _require_string("prompt_body", self.prompt_body)
+        # Every gateway request is an execution turn.  A session continuation
+        # still needs a new user message; an empty/no-body request cannot be
+        # rendered deterministically and must not select a legacy template.
+        _require_string("prompt_body", self.prompt_body)
         _validate_metadata(self.metadata)
         if self.schema_version not in SUPPORTED_ENVELOPE_VERSIONS:
             raise _err(

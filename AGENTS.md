@@ -171,8 +171,6 @@ profiles, stop the current session and restart with the desired profile.
 
 ## Source control doctrine
 
-Do not invoke git or GitHub APIs directly — use the MCP tools.
-Never use `git stash` — this is a shared, multi-agent working tree and a stash
-can silently collide with another session's live edits. If work needs to be set
+Never use `git stash`, `git reset`, `git rebase` — this is a shared, multi-agent working tree and destructuve git commands can silently collide with another session's live edits. If work needs to be set
 aside, split it into its own deliberate check-in group or leave it uncommitted.
 <!-- ag:managed:end -->

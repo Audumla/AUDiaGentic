@@ -32,6 +32,33 @@ def _resolve_session_info(project_root: Path) -> ProviderSessionInfo:
     return hs["resolve_session_info"](project_root)
 
 
+def context(project_root: Path) -> dict[str, Any]:
+    """Return the public provider-neutral harness facts for templates."""
+    try:
+        info = _resolve_session_info(project_root)
+    except RuntimeError:
+        # The session component is core but a standalone gateway process does
+        # not necessarily compose a harness-status capability.  Keep the
+        # namespace stable so templates remain renderable without making
+        # unrelated gateway admission depend on a harness runtime.
+        return {
+            "agent_version": None,
+            "mcp_adapter_version": None,
+            "model": None,
+            "model_profile": None,
+            "server_version": None,
+            "endpoint_reachable": False,
+        }
+    return {
+        "agent_version": info.agent_version,
+        "mcp_adapter_version": info.mcp_adapter_version,
+        "model": info.configured_model,
+        "model_profile": info.model_profile_name,
+        "server_version": info.server_version,
+        "endpoint_reachable": info.endpoint_reachable,
+    }
+
+
 def status(project_root: Path) -> dict[str, Any]:
     """Return current harness/session status."""
     ctx = _resolve_session_info(project_root)

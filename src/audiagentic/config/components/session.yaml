@@ -5,6 +5,7 @@ scope: harness
 id: session
 display-name: Session
 description: Harness status and configuration
+context-hook: audiagentic.components.session.session_api.context
 mcp-servers:
   - name: ag-session-mgmt
     module: audiagentic.components.session.session_mcp

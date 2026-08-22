@@ -94,6 +94,32 @@ def test_run_blocks_until_completion_and_returns_output(tmp_path: Path, monkeypa
     assert result["output"] == "the answer"
 
 
+def test_admission_freezes_component_template_context(tmp_path: Path, monkeypatch):
+    _make_profile(tmp_path, "default", "local-openai")
+    frozen = {"project": {"name": "At admission"}}
+    observed: dict = {}
+    monkeypatch.setattr(
+        "audiagentic.foundation.components.context.collect_component_context",
+        lambda _root: frozen,
+    )
+
+    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+        observed.update(execution_request["packet-data"])
+        return _result({
+            "provider-id": execution_request["provider-id"], "status": "ok",
+            "model": "gpt-4o", "output": "done",
+        })
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
+        fake_execute_provider,
+    )
+    result = gateway.run_execution_request(tmp_path, prompt_body="hi")
+    persisted = store.read_record(tmp_path, result["request-id"])
+    assert persisted["template-context"] == frozen
+    assert observed["template-context"] == frozen
+
+
 def test_public_status_contains_canonical_agent_status(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
 

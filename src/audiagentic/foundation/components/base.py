@@ -108,6 +108,8 @@ class ComponentDescriptor:
     lifecycle_observer: str | None = None  # dotted module path imported by register_all_components to self-register bus subscribers
     lifecycle_hook: str | None = None  # dotted import path to a function(event_type, payload, metadata)
     status_hook: str | None = None  # dotted import path to a function(project_root) -> dict
+    context_hook: str | None = None  # dotted import path to a function(project_root) -> mapping
+    context_namespace: str | None = None  # optional stable template namespace
 
     # --- feature ---
     harness_instructions: tuple[HarnessInstruction, ...] = ()

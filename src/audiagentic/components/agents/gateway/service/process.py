@@ -13,7 +13,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--token-file", type=Path, required=True)
     parser.add_argument("--service-root", type=Path, default=None)
-    parser.add_argument("--gateway-profiles-config", type=Path, default=None)
     args = parser.parse_args(argv)
     # Provider adapters use this neutral URL contract when they create their
     # dedicated browser-window anchor. The gateway itself remains HTTP-only.
@@ -22,7 +21,6 @@ def main(argv: list[str] | None = None) -> int:
         port=args.port,
         token_path=args.token_file,
         service_root=args.service_root,
-        gateway_profiles_config=args.gateway_profiles_config,
     )
     try:
         host.serve_forever()
