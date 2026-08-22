@@ -262,6 +262,7 @@ def submit_execution_request(
     project_root: Path,
     *,
     execution_profile_id: str | None = None,
+    prompt_profile_id: str = "default",
     prompt_body: str | None = None,
     mode: str = "async",
     timeout_seconds: float | None = None,
@@ -472,6 +473,7 @@ def submit_execution_request(
     record = store.build_record(
         request_id=request_id,
         execution_profile_id=resolved_profile_id,
+        prompt_profile_id=prompt_profile_id,
         prompt_body=prompt_body,  # carried in-memory; redacted before persistence
         mode=mode,
         timeout_seconds=timeout_seconds,

@@ -151,6 +151,7 @@ def build_record(
     *,
     request_id: str | None = None,
     execution_profile_id: str,
+    prompt_profile_id: str = "default",
     prompt_body: str | None,
     mode: str = "async",
     timeout_seconds: float | None = None,
@@ -260,6 +261,7 @@ def build_record(
         "contract-version": _shared._CONTRACT_VERSION,
         "request-id": request_id or generate_request_id(),
         "execution-profile-id": execution_profile_id,
+        "prompt-profile-id": prompt_profile_id,
         # SH02: prompt_body carried in-memory for dispatch; redacted before
         # persistence (write_record strips it). Only digest is persisted.
         "prompt-body": prompt_body,

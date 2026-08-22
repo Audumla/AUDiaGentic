@@ -18,6 +18,7 @@ from audiagentic.components.agents.models.execution_profile import (
     execution_profile_to_dict,
 )
 from audiagentic.components.agents.models.role import role_from_dict
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 def global_agents_repository() -> AgentsConfigRepository:
@@ -35,6 +36,15 @@ def read_global_agents_config(project_root: Path | None = None) -> AgentsConfigS
     for profile in snapshot.document.execution_profiles:
         execution_profile_from_dict(dict(profile))
     AgentDefinitionStore.from_dicts(list(snapshot.document.agents), strict=True)
+    for agent in snapshot.document.agents:
+        profile_id = agent.get("profile_id", "default")
+        if profile_id not in {"default", "review"}:
+            raise AudiaGenticError(
+                code="VAL-AGD-002",
+                kind="agents",
+                message="unknown global agent prompt profile",
+                details={"profile-id": profile_id, "known": ["default", "review"]},
+            )
     return snapshot
 
 

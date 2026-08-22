@@ -202,6 +202,7 @@ def test_agent_task_submit_resolves_agent_and_delegates():
         "submit_execution_request",
         _ROOT,
         execution_profile_id="fast",
+        prompt_profile_id="default",
         prompt_body="hi",
         timeout_seconds=None,
         source=None,
