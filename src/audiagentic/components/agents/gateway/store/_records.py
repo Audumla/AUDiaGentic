@@ -171,6 +171,7 @@ def build_record(
     gateway_profile_id: str | None = None,
     gateway_profile_generation: str | None = None,
     gateway_profile_config_digest: str | None = None,
+    gateway_profile_runtime: dict[str, Any] | None = None,
     gateway_execution_lane_key: str | None = None,
     resolved_provider_id: str | None = None,
     resolved_model_id: str | None = None,
@@ -271,6 +272,7 @@ def build_record(
         "gateway-profile-id": gateway_profile_id,
         "gateway-profile-generation": gateway_profile_generation,
         "gateway-profile-config-digest": gateway_profile_config_digest,
+        "gateway-profile-runtime": gateway_profile_runtime,
         "resolved-provider-id": resolved_provider_id,
         "resolved-model-id": resolved_model_id,
         # AS101: admission identifies compatible instances only. The concrete

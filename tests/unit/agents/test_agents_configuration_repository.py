@@ -76,6 +76,12 @@ def test_agents_config_repository_round_trip_and_digest(tmp_path: Path) -> None:
     assert read.digest == written.digest
 
 
+def test_required_agents_config_fails_closed_when_missing(tmp_path: Path) -> None:
+    repo = AgentsConfigRepository(tmp_path / "missing.yaml", required=True)
+    with pytest.raises(AgentsConfigValidationError, match="required agents config is missing"):
+        repo.read(tmp_path)
+
+
 def test_agents_config_repository_compare_and_swap_rejects_stale_digest(tmp_path: Path) -> None:
     repo = AgentsConfigRepository()
     repo.replace(tmp_path, _document(), expected_digest=None)

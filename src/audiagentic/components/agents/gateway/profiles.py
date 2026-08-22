@@ -603,7 +603,9 @@ def snapshot_from_record(record: dict[str, Any]) -> ResolvedExecutionProfile | N
             details={"request-id": record.get("request-id")},
         )
 
-    provider_id = record.get("resolved-provider-id", "")
+    runtime = record.get("gateway-profile-runtime") or {}
+    provider_id = runtime.get("provider-id") or record.get("resolved-provider-id", "")
+    params = runtime.get("params") or {}
 
     return ResolvedExecutionProfile(
         profile_id=profile_id,
@@ -611,8 +613,23 @@ def snapshot_from_record(record: dict[str, Any]) -> ResolvedExecutionProfile | N
         config_digest=config_digest,
         provider_id=provider_id,
         instances=tuple(instance_ids),
-        execution_params=MappingProxyType({}),  # not needed for queue ops
+        execution_params=MappingProxyType(dict(params)),
+        resolved_surface_id=runtime.get("surface-id"),
+        resolved_surface_version=runtime.get("surface-version"),
     )
+
+
+def profile_mapping_from_snapshot(snapshot: ResolvedExecutionProfile, record: dict[str, Any]) -> dict[str, Any]:
+    runtime = record.get("gateway-profile-runtime") or {}
+    return {
+        "profile_id": snapshot.profile_id,
+        "provider_id": snapshot.provider_id,
+        "instances": list(snapshot.instances),
+        "params": dict(snapshot.execution_params),
+        "model_alias": runtime.get("model-alias"),
+        "surface_id": snapshot.resolved_surface_id,
+        "surface_version": snapshot.resolved_surface_version,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -620,11 +637,14 @@ def snapshot_from_record(record: dict[str, Any]) -> ResolvedExecutionProfile | N
 # ---------------------------------------------------------------------------
 
 
-def load_gateway_registry_from_config(path: Path) -> InMemoryExecutionProfileRegistry | None:
+def load_gateway_registry_from_config(
+    path: Path, *, required: bool = False
+) -> InMemoryExecutionProfileRegistry | None:
     """Build an InMemoryExecutionProfileRegistry from a gateway profiles config file.
 
-    Returns None (embedded fallback) when *path* does not exist, so a fresh
-    machine with no shared-gateway config keeps prior embedded-mode behavior.
+    Returns None (embedded fallback) only when ``required`` is false. Hosted
+    composition passes ``required=True`` and therefore fails closed when the
+    machine registry is absent.
     The file uses the same profile-list shape as execution-profiles.yaml but is
     gateway-scoped (machine home config, not project-local). AS105/AS101:
     each entry's ``instances`` names the compatible model-sources.yaml
@@ -632,6 +652,15 @@ def load_gateway_registry_from_config(path: Path) -> InMemoryExecutionProfileReg
     queue limits.  Raises AudiaGenticError(IO-AGW-107) on a malformed file.
     """
     if not path.exists():
+        if required:
+            from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+            raise AudiaGenticError(
+                code="IO-AGW-107",
+                kind="agents",
+                message="required gateway profiles config file is missing",
+                details={"path": str(path)},
+            )
         return None
 
     from audiagentic.foundation.contracts.errors import AudiaGenticError

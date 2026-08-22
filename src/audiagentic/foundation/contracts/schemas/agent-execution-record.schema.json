@@ -66,6 +66,18 @@
     "gateway-profile-config-digest": {
       "type": ["string", "null"]
     },
+    "gateway-profile-runtime": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "provider-id": {"type": "string"},
+        "instances": {"type": "array", "items": {"type": "string"}},
+        "params": {"type": "object", "additionalProperties": true},
+        "model-alias": {"type": ["string", "null"]},
+        "surface-id": {"type": ["string", "null"]},
+        "surface-version": {"type": ["string", "null"]}
+      }
+    },
     "resolved-provider-id": {
       "type": ["string", "null"]
     },

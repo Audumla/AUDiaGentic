@@ -222,7 +222,7 @@ def test_agent_task_submit_unknown_agent_propagates_error():
     with (
         _patch_root(),
         patch(
-            "audiagentic.components.agents.models.agent_definition_api.get_agent_definition",
+            "audiagentic.components.agents.configuration.global_catalog.get_global_agent_definition",
             side_effect=AudiaGenticError(
                 code="RES-AGD-001", kind="agents", message="not found", details={}
             ),

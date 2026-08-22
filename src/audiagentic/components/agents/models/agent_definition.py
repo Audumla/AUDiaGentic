@@ -210,13 +210,15 @@ class AgentDefinitionStore:
         return [agent_definition_to_dict(d) for d in self._definitions.values()]
 
     @classmethod
-    def from_dicts(cls, data: list[dict[str, Any]]) -> AgentDefinitionStore:
+    def from_dicts(cls, data: list[dict[str, Any]], *, strict: bool = False) -> AgentDefinitionStore:
         """Construct a store from a list of definition dicts."""
         definitions = []
         for entry in data:
             try:
                 definitions.append(agent_definition_from_dict(entry))
             except AudiaGenticError:
+                if strict:
+                    raise
                 logger.warning(
                     "Skipping invalid agent definition entry: %s", entry.get("agent_id", "<unknown>")
                 )

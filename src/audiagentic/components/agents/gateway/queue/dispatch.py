@@ -141,6 +141,7 @@ def _dispatch_one_attempt(
     component_profile: str,
     provider_isolation_tier: str,
     worker_timeout_seconds: float,
+    profile: dict[str, Any],
 ) -> dict[str, Any]:
     """Resolve profile/provider/model and call execute_provider once.
 
@@ -155,10 +156,8 @@ def _dispatch_one_attempt(
     from audiagentic.components.agents.gateway.queue.worker import (
         execute_isolated_provider_turn,
     )
-    from audiagentic.components.agents.gateway.profiles import resolve_authoritative_profile
     from audiagentic.components.providers import providers_api
 
-    profile = resolve_authoritative_profile(project_root, execution_profile_id)
     provider_id = profile["provider_id"]
     if not providers_api.get_provider_runtime_config_state(project_root, provider_id)["enabled"]:
         raise AudiaGenticError(
@@ -314,9 +313,21 @@ def _try_profile_with_retries(
 
     SH02: dispatch_prompt is passed through to each attempt for provider dispatch.
     """
-    from audiagentic.components.agents.gateway.profiles import resolve_authoritative_profile
+    from audiagentic.components.agents.gateway import profiles as profiles_mod
 
-    profile = resolve_authoritative_profile(project_root, execution_profile_id)
+    admitted_snapshot = profiles_mod.snapshot_from_record(record)
+    if admitted_snapshot is not None:
+        profile = profiles_mod.profile_mapping_from_snapshot(admitted_snapshot, record)
+    elif profiles_mod.get_gateway_registry() is not None:
+        raise AudiaGenticError(
+            code="CON-AGW-101", kind="agents",
+            message="shared gateway request has no immutable admission profile snapshot",
+            details={"request-id": record.get("request-id")},
+        )
+    else:
+        from audiagentic.components.agents.models.execution_profile_api import resolve_execution_profile
+
+        profile = resolve_execution_profile(project_root, execution_profile_id)
     retry_count = resolve_retry_count(profile.get("params", {}))
     max_attempts = retry_count + 1
     # AS105/AS101: bound at dispatch time (see _dispatch_one_attempt), never
@@ -352,6 +363,7 @@ def _try_profile_with_retries(
                 component_profile=component_profile,
                 provider_isolation_tier=provider_isolation_tier,
                 worker_timeout_seconds=worker_timeout_seconds,
+                profile=profile,
             )
         except AudiaGenticError as exc:
             store.append_owned_attempt(

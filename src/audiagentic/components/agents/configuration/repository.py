@@ -32,14 +32,17 @@ class AgentsConfigSnapshot:
 
 
 class AgentsConfigRepository:
-    def __init__(self, config_path: Path | None = None) -> None:
+    def __init__(self, config_path: Path | None = None, *, required: bool = False) -> None:
         self._config_path = config_path
+        self._required = required
 
     def _path(self, project_root: Path) -> Path:
         return self._config_path or agents_config_path(project_root)
 
     def read(self, project_root: Path) -> AgentsConfigSnapshot:
         path = self._path(project_root)
+        if self._required and not path.exists():
+            raise AgentsConfigValidationError(f"required agents config is missing: {path}")
         data = load_yaml_file(path) if path.exists() else {}
         document = AgentsConfigDocument.from_mapping(data)
         self._validate_document(document)

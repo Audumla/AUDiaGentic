@@ -70,7 +70,10 @@ def _build_shared_gateway_registry_factory(
         from audiagentic.foundation.paths.home import global_config_dir
 
         resolved_path = gateway_profiles_config or global_config_dir() / "gateway-profiles.yaml"
-        registry = profiles_mod.load_gateway_registry_from_config(resolved_path)
+        # A hosted gateway is never allowed to infer embedded mode from a
+        # missing machine registry. Embedded resolution is an explicit test
+        # composition only; production startup must fail closed.
+        registry = profiles_mod.load_gateway_registry_from_config(resolved_path, required=True)
         profiles_mod.set_gateway_registry(registry)
         profiles_mod.set_gateway_registry_config_path(
             resolved_path if registry is not None else None
