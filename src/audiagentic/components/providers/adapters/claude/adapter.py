@@ -89,6 +89,8 @@ def _packet_doc_excerpt(working_root: str | None, packet_id: str | None) -> str 
 
 
 def _build_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> str:
+    from audiagentic.components.providers.providers_api import build_admitted_agent_prompt
+    return build_admitted_agent_prompt(packet_ctx, provider_cfg, provider_id="claude", title="Claude")
     packet_doc = _packet_doc_excerpt(
         packet_ctx.get("working-root"), packet_ctx.get("packet-id")
     )

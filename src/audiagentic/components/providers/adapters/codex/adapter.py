@@ -76,6 +76,10 @@ def _packet_doc_excerpt(path: Path, *, max_lines: int = 80) -> str:
 
 
 def _build_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> str:
+    from audiagentic.components.providers.providers_api import build_admitted_agent_prompt
+    return build_admitted_agent_prompt(packet_ctx, provider_cfg, provider_id="codex", title="Codex")
+    # Retained below as documentation of the provider-specific envelope shape.
+    # The admitted base prompt above is the only executable prompt authority.
     prompt_body = packet_ctx.get("prompt-body")
     packet_doc = _find_packet_doc(
         packet_ctx.get("working-root"), packet_ctx.get("packet-id")

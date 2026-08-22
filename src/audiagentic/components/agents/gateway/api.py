@@ -353,9 +353,9 @@ def submit_execution_request(
         execution_profile_id = definition["execution_profile_id"]
         prompt_profile_id = definition.get("profile_id", "default")
 
-    from audiagentic.components.providers.services.execution.agent_prompt_profiles import load_profile_template
+    from audiagentic.components.providers.providers_api import load_agent_prompt_template
 
-    _, prompt_template_name, prompt_template_digest = load_profile_template(
+    _, prompt_template_name, prompt_template_digest = load_agent_prompt_template(
         prompt_profile_id, has_body=bool(prompt_body)
     )
 

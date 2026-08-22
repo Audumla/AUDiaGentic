@@ -94,6 +94,32 @@ from audiagentic.foundation.transports.session_surface import PreparedSessionTra
 logger = logging.getLogger(__name__)
 
 
+def load_agent_prompt_template(profile_id: str, *, has_body: bool) -> tuple[str, str, str]:
+    """Public provider seam for admitted agent prompt template snapshots."""
+    from audiagentic.components.providers.services.execution.agent_prompt_profiles import load_profile_template
+    return load_profile_template(profile_id, has_body=has_body)
+
+
+def verify_agent_prompt_template(template_name: str, expected_digest: str) -> str:
+    """Verify and load an admitted packaged prompt template."""
+    from audiagentic.components.providers.services.execution.agent_prompt_profiles import verify_template_digest
+    return verify_template_digest(template_name, expected_digest)
+
+
+def known_agent_prompt_profile_ids() -> tuple[str, ...]:
+    from audiagentic.components.providers.services.execution.agent_prompt_profiles import known_profile_ids
+    return known_profile_ids()
+
+
+def build_admitted_agent_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any], *, provider_id: str, title: str) -> str:
+    """Build every adapter's base prompt through the admitted-template seam."""
+    from audiagentic.components.providers.adapters.base_runner import default_build_prompt
+    return default_build_prompt(
+        packet_ctx, provider_cfg, provider_id=provider_id, title=title,
+        prompt_profile_id=str(packet_ctx.get("prompt-profile-id") or "default"),
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class ProviderCapabilityEvidenceSnapshot:
     """One provider-owned evidence read for an admission decision."""
