@@ -142,8 +142,11 @@ def _parse_non_stream_response(
 def _build_messages(packet_ctx: dict[str, Any], prompt_body: str | None) -> list[dict[str, Any]]:
     """Build OpenAI-compatible messages from packet context."""
     from audiagentic.components.providers.providers_api import build_admitted_agent_prompt
-    admitted = build_admitted_agent_prompt(packet_ctx, {"default-model": packet_ctx.get("model-id")}, provider_id="local-openai", title="Local OpenAI")
-    return [{"role": "user", "content": admitted}]
+    admitted = build_admitted_agent_prompt(
+        {**packet_ctx, "prompt-body": prompt_body},
+        {"default-model": packet_ctx.get("model-id")},
+        provider_id="local-openai", title="Local OpenAI",
+    )
     system_prompt = (
         "AUDiaGentic execution request. "
         f"job={packet_ctx.get('job-id')} "
@@ -155,17 +158,7 @@ def _build_messages(packet_ctx: dict[str, Any], prompt_body: str | None) -> list
 
     messages = [{"role": "system", "content": system_prompt}]
 
-    user_content = (
-        "AUDiaGentic execution request. "
-        f"job={packet_ctx.get('job-id')} "
-        f"packet={packet_ctx.get('packet-id')} "
-        f"provider={packet_ctx.get('provider-id', 'local-openai')} "
-        f"workflow={packet_ctx.get('workflow-profile')}. "
-        "Return a concise execution summary or the blocking reason if execution is impossible."
-    )
-
-    if prompt_body:
-        user_content += f"\n\nPrompt body:\n{prompt_body.strip()}"
+    user_content = admitted
 
     messages.append({"role": "user", "content": user_content})
     return messages

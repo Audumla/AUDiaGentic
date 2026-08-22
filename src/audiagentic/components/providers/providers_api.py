@@ -111,12 +111,13 @@ def known_agent_prompt_profile_ids() -> tuple[str, ...]:
     return known_profile_ids()
 
 
-def build_admitted_agent_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any], *, provider_id: str, title: str) -> str:
+def build_admitted_agent_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any], *, provider_id: str, title: str, context_overrides: dict[str, Any] | None = None) -> str:
     """Build every adapter's base prompt through the admitted-template seam."""
     from audiagentic.components.providers.adapters.base_runner import default_build_prompt
     return default_build_prompt(
         packet_ctx, provider_cfg, provider_id=provider_id, title=title,
         prompt_profile_id=str(packet_ctx.get("prompt-profile-id") or "default"),
+        context_overrides=context_overrides,
     )
 
 
