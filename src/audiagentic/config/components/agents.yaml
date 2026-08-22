@@ -284,6 +284,8 @@ mcp-servers:
       agent_task_status: >
         Return the current persisted record for request-id (state, output,
         completion, usage, error, attempts). Raises RES-AGW-001 if not found.
+      agent_task_response: >
+        Retrieve the complete verified terminal response for a request.
       agent_task_cancel: >
         Cancel a queued request, or best-effort mark a running one. See
         instructions for the best-effort semantics.

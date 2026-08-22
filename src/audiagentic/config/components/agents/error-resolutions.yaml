@@ -134,6 +134,8 @@ IO-AGD-002: "Failed to write the agent definitions configuration file. Check dis
 CFG-APT-001: "The configured prompt profile is unknown. Use a registered prompt profile."
 IO-APT-001: "The packaged prompt-profile template is missing or unreadable."
 CON-APT-001: "The admitted prompt-profile template changed before dispatch; resubmit the request."
+CON-AGW-140: "The gateway response artifact failed its integrity check."
+RES-AGW-141: "The gateway response artifact is unavailable for this request."
 # Test-only error codes for classify_failure unit tests
 VAL-X-001: "Test validation error code"
 RES-X-001: "Test resource error code"

@@ -369,7 +369,8 @@ def _redact_for_persistence(payload: dict[str, Any]) -> dict[str, Any]:
     redacted = dict(payload)
     redacted["prompt-body"] = None
     # v6 stores the complete response only in the request-owned artifact.
-    redacted["output"] = None
+    if redacted.get("response-artifact") is not None:
+        redacted["output"] = None
     return redacted
 
 
@@ -513,9 +514,17 @@ def read_record(project_root: Path, request_id: str) -> dict[str, Any]:
         and "activity-source" in payload
         and "activity-lease-expires-at" in payload
     ):
-        return _validate(payload, code="VAL-AGW-005")
-    with _shared._request_lock(project_root, request_id):
-        return _read_record_locked(project_root, request_id)
+        record = _validate(payload, code="VAL-AGW-005")
+    else:
+        with _shared._request_lock(project_root, request_id):
+            record = _read_record_locked(project_root, request_id)
+    if record.get("output") is None and isinstance(record.get("response-artifact"), dict):
+        try:
+            from audiagentic.components.agents.gateway.output import read_final_response
+            record["output"] = read_final_response(project_root, request_id, record["response-artifact"])
+        except Exception:
+            pass
+    return record
 
 
 def latest_transition_projection(project_root: Path, request_id: str) -> dict[str, str | None] | None:
