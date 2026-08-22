@@ -195,6 +195,15 @@ live protocol, unprovable process owner, or unhealthy startup is reported as a
 managed-service error; an unrelated live process is never terminated. This
 mode remains opt-in until the SH11 consumer cutover.
 
+### Dashboard recent window
+
+The loopback dashboard serves only records in the configured recent activity
+window. Set `AUDIAGENTIC_GATEWAY_DASHBOARD_RECENT_SECONDS` in the gateway
+process to change the default (12 hours; maximum 30 days). Active requests and
+live sessions remain visible even when idle beyond that window. The dashboard
+can temporarily override the gateway default with `?recent-seconds=<n>` or its
+Recent window control; the override affects only that dashboard view.
+
 ### Durable trigger ingress (SH09)
 
 Cross-process gateway triggers use a durable file spool beside the service

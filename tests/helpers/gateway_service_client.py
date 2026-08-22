@@ -12,6 +12,11 @@ from audiagentic.components.agents.gateway.remote_client import (
 
 
 def main() -> None:
+    # Gateway payloads may contain provider text outside the Windows ANSI
+    # code page. Always emit UTF-8 so a successful probe cannot fail while
+    # printing its result after the gateway call has already completed.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     endpoint, token_file, project_root = sys.argv[1:]
     client = StandaloneGatewayClient(endpoint, load_auth_token(Path(token_file)))
     try:

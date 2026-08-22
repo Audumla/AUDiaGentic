@@ -2,13 +2,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from audiagentic.components.agents.configuration.global_catalog import global_agents_repository
 from audiagentic.components.agents.configuration.resolution import resolve_agent_composition
 from audiagentic.components.agents.context.contracts import AgentContextRecord, AgentContextState
 from audiagentic.components.agents.context.store import AgentContextStore
 
 
 def open_context(project_root: Path, agent_id: str, title: str | None = None) -> AgentContextRecord:
-    composition = resolve_agent_composition(project_root, agent_id)
+    composition = resolve_agent_composition(
+        project_root,
+        agent_id,
+        repository=global_agents_repository(),
+    )
     return AgentContextStore().create(project_root, composition.identity, title)
 
 

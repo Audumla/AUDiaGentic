@@ -32,8 +32,14 @@ class AgentsConfigSnapshot:
 
 
 class AgentsConfigRepository:
+    def __init__(self, config_path: Path | None = None) -> None:
+        self._config_path = config_path
+
+    def _path(self, project_root: Path) -> Path:
+        return self._config_path or agents_config_path(project_root)
+
     def read(self, project_root: Path) -> AgentsConfigSnapshot:
-        path = agents_config_path(project_root)
+        path = self._path(project_root)
         data = load_yaml_file(path) if path.exists() else {}
         document = AgentsConfigDocument.from_mapping(data)
         self._validate_document(document)
@@ -49,7 +55,7 @@ class AgentsConfigRepository:
         issues = self.validate(document)
         if issues:
             raise AgentsConfigValidationError("; ".join(issues))
-        path = agents_config_path(project_root)
+        path = self._path(project_root)
         lock = path.with_name("agents.yaml.lock")
         with StartupLock(lock):
             current = self.read(project_root) if path.exists() else None

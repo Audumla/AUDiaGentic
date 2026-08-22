@@ -319,9 +319,6 @@ class GptAutoTurn:
             if self._stop_task is not None:
                 await asyncio.gather(self._stop_task, return_exceptions=True)
             self.chat.active_turn_id = None
-            refresh = getattr(self.chat.runtime, "refresh_status_page", None)
-            if refresh is not None:
-                await refresh()
             if self.chat.state not in {ChatState.FAILED, ChatState.CLOSED, ChatState.RECOVERING}:
                 self._set_chat_state(ChatState.READY)
             self._done.set()
@@ -578,7 +575,6 @@ class GptAutoTurn:
         loop = asyncio.get_running_loop()
         tracker = ObservationTracker(policy=policy, now=loop.time())
         expected_fingerprint = PromptFingerprint.from_text(self.request.body)
-        last_observation_error: BaseException | None = None
         # Edge-triggered, not level-triggered: an unchanged fact observed on
         # every poll (e.g. the new user message still being "new" relative
         # to baseline) must not count as PROGRESS again each time -- only a
@@ -595,7 +591,6 @@ class GptAutoTurn:
             try:
                 snap = await self.chat.snapshot()
             except Exception as exc:  # noqa: BLE001 - reconcile after attempted side effect
-                last_observation_error = exc
                 self._last_observation_error = exc
                 logger.info(
                     "gpt-auto submission proof observation interrupted; awaiting same conversation",
@@ -743,7 +738,6 @@ class GptAutoTurn:
         previous = current
         response_started = False
         emitted = False
-        last_observation_error: BaseException | None = None
         final_outcome: ObservationOutcome | None = None
         # GP47 (2026-08-19): _advance_with_trace only logs on a tracker STATE
         # TRANSITION. A turn that stalls for the full response-total-timeout
@@ -766,7 +760,6 @@ class GptAutoTurn:
             try:
                 raw_current = await self.chat.snapshot()
             except Exception as exc:  # noqa: BLE001 - never re-submit after an attempted send
-                last_observation_error = exc
                 self._last_observation_error = exc
                 logger.info(
                     "gpt-auto response observation interrupted; awaiting conversation recovery",

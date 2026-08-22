@@ -4,12 +4,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from audiagentic.foundation.paths.home import audiagentic_home
 from audiagentic.foundation.paths.names import project_marker_path
 
 
 def agents_config_path(project_root: Path) -> Path:
     """Return the canonical project-owned Agents configuration document."""
     return project_marker_path(project_root) / "config" / "agents.yaml"
+
+
+def global_agents_config_path() -> Path:
+    """Return the machine-global canonical Agents configuration document."""
+    return audiagentic_home() / "config" / "agents.yaml"
 
 
 def agents_runtime_root(project_root: Path) -> Path:

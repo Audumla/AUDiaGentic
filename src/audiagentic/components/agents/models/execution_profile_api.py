@@ -5,7 +5,6 @@ any programmatic consumers (e.g., agent-jobs launch).
 """
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import Any
 
@@ -22,37 +21,6 @@ from audiagentic.components.agents.models.execution_profile import (
 )
 from audiagentic.foundation.components.hooks import ComponentStatusPayload
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import load_yaml_file
-
-logger = logging.getLogger(__name__)
-
-SEED_PROFILES_YAML = """\
-# Execution profiles — bind a provider to a set of acceptable model instances.
-# 'instances' entries are provider model-sources.yaml source ids (AS105/AS101).
-# Managed by the 'agents' component. Do not edit by hand unless you understand the schema.
-contract-version: v2
-profiles:
-  - profile_id: default
-    provider_id: local-openai
-    instances: [default]
-    is_default: true
-    description: Default execution profile
-"""
-
-
-def _load_yaml_lenient(path: Path) -> dict[str, Any]:
-    """Load YAML without raising on missing file; returns empty dict."""
-    if not path.exists():
-        return {}
-    try:
-        return load_yaml_file(path)
-    except Exception as exc:
-        raise AudiaGenticError(
-            code="IO-EXP-001",
-            kind="agents",
-            message="failed to read execution profiles config",
-            details={"path": str(path), "error": str(exc)},
-        ) from exc
 
 
 def load_execution_profiles(project_root: Path) -> ExecutionProfileStore:
