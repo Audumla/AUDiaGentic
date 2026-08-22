@@ -112,6 +112,9 @@ def _classify_terminal_quality(
             session_id,
             request_id=request_id,
         )
+    if not record.get("output") and isinstance(record.get("output-preview"), str):
+        record = dict(record)
+        record["output"] = record["output-preview"]
     report = classify_terminal_output(
         record=record,
         latest_turn=latest_turn,
@@ -699,7 +702,9 @@ def request_runtime_status(project_root: Path, request_id: str) -> dict[str, Any
         if capabilities is not None:
             result["capabilities"] = capabilities
     if state in store.TERMINAL_STATES:
-        tq = _classify_terminal_quality(project_root, record)
+        # Quality classification is an internal consumer of the verified
+        # artifact; the public runtime/status envelope remains bounded.
+        tq = _classify_terminal_quality(project_root, store.read_record(project_root, request_id))
         if tq is not None:
             result["terminal-quality"] = tq
     return result
