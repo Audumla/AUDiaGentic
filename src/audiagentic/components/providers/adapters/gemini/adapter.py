@@ -41,6 +41,8 @@ def _build_prompt(
     provider_cfg: dict[str, Any],
     modified_prompt: str | None = None,
 ) -> str:
+    from audiagentic.components.providers.providers_api import build_admitted_agent_prompt
+    return build_admitted_agent_prompt(packet_ctx, provider_cfg, provider_id="gemini", title="Gemini")
     prompt_body = modified_prompt or packet_ctx.get("prompt-body")
     prompt = (
         "AUDiaGentic Gemini provider execution request. "
