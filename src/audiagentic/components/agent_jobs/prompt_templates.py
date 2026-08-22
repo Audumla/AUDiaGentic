@@ -29,16 +29,24 @@ def _template_roots(project_root: Path, tag: str, provider_id: str) -> list[Path
     return candidates
 
 
-def load_prompt_template(project_root: Path, *, tag: str, provider_id: str, template_name: str | None = None) -> tuple[str | None, Path | None]:
+def load_prompt_template(
+    project_root: Path,
+    *,
+    tag: str,
+    provider_id: str,
+    template_name: str | None = None,
+    allow_project_override: bool = True,
+) -> tuple[str | None, Path | None]:
     candidates = []
-    if template_name:
+    if allow_project_override and template_name:
         roots = [project_root / ".audiagentic" / "prompts" / tag]
         if tag.startswith("ag-"):
             roots.append(project_root / ".audiagentic" / "prompts" / tag.removeprefix("ag-"))
         for root in roots:
             candidates.append(root / f"{template_name}.md")
             candidates.append(root / provider_id / f"{template_name}.md")
-    candidates.extend(_template_roots(project_root, tag, provider_id))
+    if allow_project_override:
+        candidates.extend(_template_roots(project_root, tag, provider_id))
     for path in candidates:
         if path.exists():
             return path.read_text(encoding="utf-8"), path
@@ -140,7 +148,12 @@ def load_prompt_context(project_root: Path, context_name: str | None) -> tuple[s
     return context_name, None
 
 
-def render_prompt_template(template_text: str, values: dict[str, Any]) -> str:
+def render_prompt_template(
+    template_text: str,
+    values: dict[str, Any],
+    *,
+    preserve_whitespace: bool = False,
+) -> str:
     """Render a prompt template with dotted-path placeholder support.
 
     Delegates to :func:`audiagentic.foundation.templates.render_template` for
@@ -148,4 +161,5 @@ def render_prompt_template(template_text: str, values: dict[str, Any]) -> str:
     (e.g. ``{project-root}``) continue to work as before. Additionally supports
     nested paths like ``{event.payload.id}``.
     """
-    return _render_dotted(template_text, values).strip()
+    rendered = _render_dotted(template_text, values)
+    return rendered if preserve_whitespace else rendered.strip()

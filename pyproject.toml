@@ -89,6 +89,7 @@ where = ["src"]
   "components/optional/knowledge/runtime_data/*.yml",
   # Provider instruction / prompt-tag templates materialized onto surfaces
   "components/providers/adapters/**/*.md",
+  "components/providers/services/execution/templates/agents/*.md",
   "components/providers/surfaces/templates/*.md",
   # Misc runtime data
   "runtime/build/*.yaml",

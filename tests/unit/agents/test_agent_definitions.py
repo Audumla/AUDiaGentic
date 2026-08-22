@@ -114,7 +114,7 @@ def test_agent_definition_to_dict_includes_all_fields():
     result = agent_definition_to_dict(d)
     assert set(result.keys()) == {
         "agent_id", "name", "execution_profile_id", "prompt_id", "role_ids",
-        "description", "advertised_skills", "internal", "acp", "a2a",
+        "description", "advertised_skills", "internal", "acp", "a2a", "profile_id",
     }
 
 
