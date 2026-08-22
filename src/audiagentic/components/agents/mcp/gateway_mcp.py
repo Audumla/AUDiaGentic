@@ -239,6 +239,7 @@ def agent_task_submit(
     definition = get_global_agent_definition(project_root, agent_id)
     submit_kwargs: dict[str, Any] = {
         "execution_profile_id": definition["execution_profile_id"],
+        "prompt_profile_id": definition.get("profile_id", "default"),
         "prompt_body": prompt_body,
         "timeout_seconds": timeout_seconds,
         "source": source,

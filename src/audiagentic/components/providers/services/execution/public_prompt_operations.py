@@ -113,6 +113,19 @@ def load_packaged_prompt_template(
     if descriptor is None and tag.startswith("ag-"):
         descriptor = all_tags().get(tag.removeprefix("ag-"))
     if descriptor is None:
+        if tag in {"prompt-profile", "prompt-profiles"}:
+            from pathlib import Path
+
+            source = Path(__file__).with_name("templates") / "agents" / f"{template_name or 'default'}.md"
+            if source.is_file():
+                text = source.read_text(encoding="utf-8")
+                # Agent compatibility templates are authored with a terminal
+                # newline for source-control readability; the legacy builder
+                # emitted no terminal newline.  Normalize only this packaged
+                # asset boundary, never rendered prompt content.
+                if text.endswith("\n"):
+                    text = text[:-1]
+                return text, source
         return None
     requested = template_name or "default"
     for prompt in descriptor.prompts:

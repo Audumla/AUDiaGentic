@@ -230,20 +230,43 @@ def default_build_prompt(
     *,
     provider_id: str,
     title: str,
+    prompt_profile_id: str = "default",
 ) -> str:
+    """Build the provider prompt from the resolved prompt profile.
+
+    The default profile is a compatibility extraction of the former f-string;
+    profile resolution happens before this seam and is never read from config
+    here.
+    """
     prompt_body = packet_ctx.get("prompt-body")
-    prompt = (
-        f"AUDiaGentic {title} provider execution request. "
-        f"job={packet_ctx.get('job-id')} "
-        f"packet={packet_ctx.get('packet-id')} "
-        f"provider={packet_ctx.get('provider-id', provider_id)} "
-        f"model={provider_cfg.get('default-model')} "
-        f"workflow={packet_ctx.get('workflow-profile')}. "
-        "Return a concise execution summary or the blocking reason if execution is impossible."
+    from audiagentic.components.agent_jobs.prompt_templates import (
+        load_prompt_template,
+        render_prompt_template,
     )
-    if prompt_body:
-        prompt += f" Prompt body: {str(prompt_body).strip()}"
-    return prompt.strip()
+
+    if not isinstance(prompt_profile_id, str) or not prompt_profile_id.strip():
+        raise ValueError("prompt_profile_id must be a non-empty string")
+    has_body = bool(prompt_body)
+    template_name = prompt_profile_id if not has_body else f"{prompt_profile_id}-with-body"
+    template, _ = load_prompt_template(
+        Path(packet_ctx.get("working-root") or "."),
+        tag="prompt-profile",
+        provider_id=provider_id,
+        template_name=template_name,
+        allow_project_override=False,
+    )
+    if template is None:
+        raise ValueError(f"unknown prompt profile: {prompt_profile_id!r}")
+    context = {
+        "title": title,
+        "job-id": packet_ctx.get("job-id"),
+        "packet-id": packet_ctx.get("packet-id"),
+        "provider-id": packet_ctx.get("provider-id", provider_id),
+        "model": provider_cfg.get("default-model"),
+        "workflow-profile": packet_ctx.get("workflow-profile"),
+        "prompt-body": str(prompt_body).strip() if has_body else "",
+    }
+    return render_prompt_template(template, context, preserve_whitespace=True).strip()
 
 
 def default_parse_completion(
@@ -356,7 +379,11 @@ def make_cli_runner(
             prompt = build_prompt(packet_ctx, provider_cfg)
         else:
             prompt = default_build_prompt(
-                packet_ctx, provider_cfg, provider_id=provider_id, title=title
+                packet_ctx,
+                provider_cfg,
+                provider_id=provider_id,
+                title=title,
+                prompt_profile_id=str(packet_ctx.get("prompt-profile-id") or "default"),
             )
         default_model = resolve_execution_model(packet_ctx, provider_cfg)
         working_root = packet_ctx.get("working-root")
