@@ -421,6 +421,7 @@ def _required(arguments: dict[str, Any], name: str) -> Any:
 
 _SUBMISSION_ARGUMENTS = {
     "execution_profile_id",
+    "prompt_profile_id",
     "prompt_body",
     "mode",
     "timeout_seconds",
