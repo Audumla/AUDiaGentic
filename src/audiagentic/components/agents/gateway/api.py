@@ -491,6 +491,18 @@ def submit_execution_request(
         gateway_profile_id=gateway_snapshot.profile_id if gateway_snapshot else None,
         gateway_profile_generation=gateway_snapshot.generation if gateway_snapshot else None,
         gateway_profile_config_digest=gateway_snapshot.config_digest if gateway_snapshot else None,
+        gateway_profile_runtime=(
+            {
+                "provider-id": gateway_snapshot.provider_id,
+                "instances": list(gateway_snapshot.instances),
+                "params": dict(gateway_snapshot.execution_params),
+                "model-alias": profile.get("model_alias"),
+                "surface-id": gateway_snapshot.resolved_surface_id,
+                "surface-version": gateway_snapshot.resolved_surface_version,
+            }
+            if gateway_snapshot
+            else None
+        ),
         # AS105/AS101: GatewayExecutionLaneKey is retired -- capacity is
         # instance-scoped, not lane-scoped. Kept in the schema (always None
         # going forward) purely so a pre-pivot value on an old record stays

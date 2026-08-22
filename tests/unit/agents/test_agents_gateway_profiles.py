@@ -42,6 +42,14 @@ def test_machine_gateway_profile_config_rejects_invalid_present_entry(tmp_path):
     assert raised.value.code == "IO-AGW-107"
 
 
+def test_required_machine_gateway_profile_config_rejects_missing_file(tmp_path):
+    with pytest.raises(AudiaGenticError) as raised:
+        profiles_mod.load_gateway_registry_from_config(
+            tmp_path / "missing-gateway-profiles.yaml", required=True
+        )
+    assert raised.value.code == "IO-AGW-107"
+
+
 def test_machine_gateway_profile_config_rejects_non_mapping_params(tmp_path):
     path = tmp_path / "gateway-profiles.yaml"
     path.write_text(
