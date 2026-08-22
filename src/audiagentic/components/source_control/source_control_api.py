@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
+from pathlib import Path
 from typing import Any
 
 from audiagentic.components.source_control.source_control_bootstrap import (
@@ -19,6 +21,34 @@ from audiagentic.foundation.io import load_yaml_file
 from audiagentic.foundation.steps import SequenceStep
 
 _PROBES = load_dependency_probes("source-control")
+_GIT_CONTEXT_TIMEOUT_SECONDS = 2.0
+
+
+def _git_value(project_root: Path, *args: str) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", *args], cwd=project_root, capture_output=True, text=True,
+            timeout=_GIT_CONTEXT_TIMEOUT_SECONDS, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    value = result.stdout.strip() if result.returncode == 0 else ""
+    return value or None
+
+
+def context(project_root: Path) -> dict[str, Any]:
+    """Return bounded, read-only local Git facts for prompt templates."""
+    root = _git_value(project_root, "rev-parse", "--show-toplevel")
+    branch = _git_value(project_root, "branch", "--show-current")
+    commit = _git_value(project_root, "rev-parse", "HEAD")
+    return {
+        "repository": Path(root).name if root else project_root.name,
+        "root": root,
+        "branch": branch,
+        "commit": commit,
+        "commit_short": commit[:12] if commit else None,
+        "detached": bool(commit and not branch),
+    }
 
 def _load_dep_cfgs() -> dict[str, Any]:
     cfg = load_yaml_file(component_yaml_path("source-control"))

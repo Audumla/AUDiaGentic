@@ -406,7 +406,7 @@ def _build_registry_on_worker_thread(config_path: Path) -> InMemoryExecutionProf
     Returns None when *config_path* does not exist (embedded fallback).
     Raises AudiaGenticError(IO-AGW-107) on a malformed file.
     """
-    return load_gateway_registry_from_config(config_path)
+    return load_gateway_registry_from_agents_catalog(config_path, required=True)
 
 
 def reload_profile_registry(
@@ -717,6 +717,58 @@ def load_gateway_registry_from_config(
             provider_id=provider_id,
             instances=tuple(instances),
             execution_params=params,
+        )
+    return registry
+
+
+def load_gateway_registry_from_agents_catalog(
+    path: Path | None = None, *, required: bool = True
+) -> InMemoryExecutionProfileRegistry:
+    """Compile the hosted registry from the machine-global Agents catalog.
+
+    ``agents.yaml`` is the sole declarative authority for hosted execution
+    profiles.  This loader deliberately does not consult project-local
+    configuration or ``gateway-profiles.yaml``.
+    """
+    from audiagentic.components.agents.agents_paths import global_agents_config_path
+    from audiagentic.components.agents.configuration.repository import AgentsConfigRepository
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    catalog_path = path or global_agents_config_path()
+    try:
+        snapshot = AgentsConfigRepository(catalog_path, required=required).read(catalog_path.parent)
+    except Exception as exc:  # noqa: BLE001 - configuration boundary
+        raise AudiaGenticError(
+            code="IO-AGW-107",
+            kind="agents",
+            message="required global agents catalog is unavailable",
+            details={"path": str(catalog_path)},
+        ) from exc
+
+    registry = InMemoryExecutionProfileRegistry()
+    for index, entry in enumerate(snapshot.document.execution_profiles):
+        profile_id = entry.get("profile_id") or entry.get("profile-id")
+        provider_id = entry.get("provider_id") or entry.get("provider-id")
+        instances = entry.get("instances")
+        params = entry.get("params", {})
+        if (
+            not isinstance(profile_id, str) or not profile_id.strip()
+            or not isinstance(provider_id, str) or not provider_id.strip()
+            or not isinstance(instances, (list, tuple)) or not instances
+            or not all(isinstance(item, str) and item.strip() for item in instances)
+            or not isinstance(params, Mapping)
+        ):
+            raise AudiaGenticError(
+                code="VAL-AGW-107",
+                kind="agents",
+                message="global execution profile is invalid",
+                details={"path": str(catalog_path), "index": index},
+            )
+        registry.register(
+            profile_id.strip(),
+            provider_id=provider_id.strip(),
+            instances=tuple(item.strip() for item in instances),
+            execution_params=dict(params),
         )
     return registry
 

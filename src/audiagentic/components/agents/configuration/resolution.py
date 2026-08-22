@@ -17,6 +17,7 @@ from audiagentic.components.agents.models.role import role_from_dict
 
 from .contracts import AgentsConfigDocument
 from .repository import AgentsConfigRepository, AgentsConfigSnapshot
+from audiagentic.components.agents.agents_paths import global_agents_config_path
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,7 +76,9 @@ def resolve_agent_composition(
     snapshot: AgentsConfigSnapshot | None = None,
     repository: AgentsConfigRepository | None = None,
 ) -> ResolvedAgentComposition:
-    repository = repository or AgentsConfigRepository()
+    repository = repository or AgentsConfigRepository(
+        global_agents_config_path(), required=True
+    )
     current = snapshot or repository.read(project_root)
     raw = next((item for item in current.document.agents if item.get("agent_id") == agent_id), None)
     if raw is None:

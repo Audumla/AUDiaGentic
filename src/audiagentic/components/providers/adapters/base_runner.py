@@ -248,7 +248,7 @@ def default_build_prompt(
 
     if not isinstance(prompt_profile_id, str) or not prompt_profile_id.strip():
         raise ValueError("prompt_profile_id must be a non-empty string")
-    has_body = bool(prompt_body)
+    has_body = isinstance(prompt_body, str) and bool(prompt_body.strip())
     template_name = packet_ctx.get("prompt-template-name")
     template_digest = packet_ctx.get("prompt-template-digest")
     if isinstance(template_name, str) and isinstance(template_digest, str):
@@ -261,11 +261,15 @@ def default_build_prompt(
         "title": str(title),
         "job-id": str(packet_ctx.get("job-id")),
         "packet-id": str(packet_ctx.get("packet-id")),
+        "request-id": str(packet_ctx.get("request-id")),
         "provider-id": str(packet_ctx.get("provider-id", provider_id)),
         "model": str(provider_cfg.get("default-model")),
         "workflow-profile": str(packet_ctx.get("workflow-profile")),
         "prompt-body": str(prompt_body).strip() if has_body else "",
     }
+    template_context = packet_ctx.get("template-context")
+    if isinstance(template_context, dict):
+        context.update(template_context)
     if context_overrides:
         context.update(context_overrides)
     return render_template(template, context).strip()

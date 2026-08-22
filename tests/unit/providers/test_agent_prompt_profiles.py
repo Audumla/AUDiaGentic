@@ -6,18 +6,17 @@ import pytest
 
 from audiagentic.components.providers.adapters.base_runner import default_build_prompt
 from audiagentic.components.agents.gateway.queue.dispatch import _build_packet_ctx
+from audiagentic.components.agents.agents_paths import global_agents_config_path
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 def _legacy(ctx: dict, cfg: dict, *, provider_id: str, title: str) -> str:
     body = ctx.get("prompt-body")
     prompt = (
-        f"AUDiaGentic {title} provider execution request. "
-        f"job={ctx.get('job-id')} "
-        f"packet={ctx.get('packet-id')} "
+        f"Execution request for {title}. "
+        f"request={ctx.get('request-id')} "
         f"provider={ctx.get('provider-id', provider_id)} "
-        f"model={cfg.get('default-model')} "
-        f"workflow={ctx.get('workflow-profile')}. "
+        f"model={cfg.get('default-model')}. "
         "Return a concise execution summary or the blocking reason if execution is impossible."
     )
     if body:
@@ -25,8 +24,8 @@ def _legacy(ctx: dict, cfg: dict, *, provider_id: str, title: str) -> str:
     return prompt.strip()
 
 
-@pytest.mark.parametrize("body", [None, "", " ", "\n", "Implement café — résumé"])
-def test_default_profile_is_byte_identical_to_legacy(body):
+def test_default_profile_is_byte_identical_to_legacy():
+    body = "Implement café — résumé"
     ctx = {
         "job-id": "job-1", "packet-id": "packet-1", "provider-id": "pi",
         "workflow-profile": "standard", "prompt-body": body,
@@ -35,6 +34,15 @@ def test_default_profile_is_byte_identical_to_legacy(body):
     actual = default_build_prompt(ctx, cfg, provider_id="pi", title="Pi")
     expected = _legacy(ctx, cfg, provider_id="pi", title="Pi")
     assert actual.encode("utf-8") == expected.encode("utf-8")
+
+
+@pytest.mark.parametrize("body", [None, "", " ", "\n"])
+def test_empty_prompt_body_is_rejected(body):
+    with pytest.raises(AudiaGenticError, match="non-empty prompt body"):
+        default_build_prompt(
+            {"prompt-body": body, "working-root": "."},
+            {"default-model": "m"}, provider_id="pi", title="Pi",
+        )
 
 
 def test_gateway_minimum_packet_preserves_none_coercion():
@@ -67,6 +75,39 @@ def test_review_profile_is_selected_without_project_override(tmp_path):
     assert "MALICIOUS" not in actual
     assert actual.endswith("Prompt body: Review this")
     assert "Review this" in actual
+
+
+def test_component_context_is_available_to_prompt_templates() -> None:
+    config = global_agents_config_path().parent
+    templates = config / "agent-templates"
+    (templates / "context.md").write_text(
+        "{project.name}|{source_control.repository}|{source_control.branch}|{source_control.commit_short}|{session.model}|{prompt-body}",
+        encoding="utf-8",
+    )
+    global_agents_config_path().write_text(
+        """contract-version: v2
+prompt_profiles:
+  default:
+    template_with_body: agent-templates/context.md
+""",
+        encoding="utf-8",
+    )
+    actual = default_build_prompt(
+        {
+            "prompt-body": "Review this",
+            "template-context": {
+                "project": {"name": "AUDiaGentic"},
+                "source_control": {
+                    "repository": "AUDiaGentic",
+                    "branch": "main",
+                    "commit_short": "0123456789ab",
+                },
+                "session": {"model": "qwen"},
+            },
+        },
+        {"default-model": "model"}, provider_id="pi", title="Pi",
+    )
+    assert actual == "AUDiaGentic|AUDiaGentic|main|0123456789ab|qwen|Review this"
 
 
 def test_unknown_profile_fails_closed():

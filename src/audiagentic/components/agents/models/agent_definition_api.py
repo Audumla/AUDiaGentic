@@ -1,7 +1,8 @@
 """Agent Definition API — load, save, CRUD, and resolution (AS62).
 
 Pure-logic module with no MCP coupling, mirroring roles_api.py's shape.
-Deliberately not composed (RV890): storage is stateless project-local config.
+The machine-global catalog is the sole configuration authority; ``project_root``
+is retained only for API compatibility.
 """
 from __future__ import annotations
 
@@ -9,7 +10,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.agents.agents_paths import agents_config_path, global_agents_config_path
+from audiagentic.components.agents.agents_paths import global_agents_config_path
 from audiagentic.components.agents.configuration.contracts import AgentsConfigDocument
 from audiagentic.components.agents.configuration.repository import AgentsConfigRepository
 from audiagentic.components.agents.models.agent_definition import (
@@ -20,6 +21,16 @@ from audiagentic.components.agents.models.agent_definition import (
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
+def _repository() -> AgentsConfigRepository:
+    """Return the machine-global agent catalog repository.
+
+    ``project_root`` remains in the public API for protocol compatibility, but
+    it is deliberately not an authority selector.  Hosted agent definitions
+    are machine-global and must not be shadowed by a project-local document.
+    """
+    return AgentsConfigRepository(global_agents_config_path(), required=True)
+
+
 def load_agent_definitions(project_root: Path) -> AgentDefinitionStore:
     """Load agent definitions from the project config file.
 
@@ -27,7 +38,7 @@ def load_agent_definitions(project_root: Path) -> AgentDefinitionStore:
     Raises AudiaGenticError(IO-AGD-001) on read failure.
     Raises AudiaGenticError(VAL-AGD-002) on contract-version mismatch.
     """
-    snapshot = AgentsConfigRepository().read(project_root)
+    snapshot = _repository().read(project_root)
     return AgentDefinitionStore.from_dicts(list(snapshot.document.agents))
 
 
@@ -36,7 +47,7 @@ def save_agent_definitions(project_root: Path, store: AgentDefinitionStore) -> N
 
     Raises AudiaGenticError(IO-AGD-002) on write failure.
     """
-    repository = AgentsConfigRepository()
+    repository = _repository()
     snapshot = repository.read(project_root)
     document = AgentsConfigDocument(
         snapshot.document.contract_version,
@@ -45,9 +56,10 @@ def save_agent_definitions(project_root: Path, store: AgentDefinitionStore) -> N
         snapshot.document.execution_profiles,
         tuple(store.to_dicts()),
         snapshot.document.triggers,
+        snapshot.document.prompt_profiles,
     )
     try:
-        repository.replace(project_root, document, expected_digest=(snapshot.digest if agents_config_path(project_root).exists() else None))
+        repository.replace(project_root, document, expected_digest=snapshot.digest)
     except Exception as exc:
         raise AudiaGenticError(
             code="IO-AGD-002",

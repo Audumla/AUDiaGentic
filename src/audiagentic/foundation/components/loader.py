@@ -202,6 +202,8 @@ def register_from_yaml(path: Path) -> ComponentDescriptor:
         lifecycle_observer=data.get("lifecycle-observer") or None,
         lifecycle_hook=data.get("lifecycle-hook") or None,
         status_hook=data.get("status-hook") or None,
+        context_hook=data.get("context-hook") or None,
+        context_namespace=data.get("context-namespace") or None,
         implementation_cardinality=data.get("implementation-cardinality") or None,
     )
     register(descriptor, replace=True)
