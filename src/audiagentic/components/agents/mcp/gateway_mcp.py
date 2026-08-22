@@ -97,6 +97,14 @@ def agent_task_status(request_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 @tool_boundary
+def agent_task_response(request_id: str) -> str:
+    """Retrieve the complete verified terminal response for a request."""
+    project_root = project_root_from_env()
+    return call_gateway_method("get_execution_response", project_root, request_id)
+
+
+@mcp.tool()
+@tool_boundary
 def agent_task_cancel(request_id: str) -> dict[str, Any]:
     """Cancel a queued request, or best-effort mark a running one cancel-requested."""
     project_root = project_root_from_env()

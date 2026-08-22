@@ -251,6 +251,12 @@ def _enrich_terminal_result(
     """Add terminal quality and canonical status to terminal results."""
     if result["state"] in store.TERMINAL_STATES:
         enriched = dict(result)
+        if enriched.get("output") is None and isinstance(enriched.get("response-artifact"), dict):
+            from audiagentic.foundation.contracts.errors import AudiaGenticError
+            try:
+                enriched["output"] = get_execution_response(project_root, enriched["request-id"])
+            except AudiaGenticError:
+                pass
         tq = _classify_terminal_quality(project_root, enriched)
         if tq is not None:
             enriched["terminal-quality"] = tq
@@ -629,6 +635,16 @@ def get_execution_request(project_root: Path, request_id: str) -> dict[str, Any]
     result["response-version"] = _PUBLIC_RESPONSE_VERSION
     result["agent-status"] = snapshot_to_mapping(snapshot_for_request(record, decision=decision))
     return result
+
+
+def get_execution_response(project_root: Path, request_id: str) -> str:
+    """Return the complete verified terminal response artifact."""
+    record = store.read_record(project_root, request_id)
+    artifact = record.get("response-artifact")
+    if record.get("state") not in store.TERMINAL_STATES or not isinstance(artifact, dict):
+        raise AudiaGenticError(code="RES-AGW-141", kind="agents", message="gateway response artifact unavailable", details={})
+    from audiagentic.components.agents.gateway.output import read_final_response
+    return read_final_response(project_root, request_id, artifact)
 
 
 def request_runtime_status(project_root: Path, request_id: str) -> dict[str, Any]:

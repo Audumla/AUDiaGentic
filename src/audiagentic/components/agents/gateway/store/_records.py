@@ -155,6 +155,9 @@ def build_record(
     prompt_profile_id: str = "default",
     prompt_template_name: str | None = None,
     prompt_template_digest: str | None = None,
+    response_artifact: dict[str, Any] | None = None,
+    output_preview: str | None = None,
+    output_truncated: bool = False,
     prompt_body: str | None,
     mode: str = "async",
     timeout_seconds: float | None = None,
@@ -268,6 +271,9 @@ def build_record(
         "prompt-profile-id": prompt_profile_id,
         "prompt-template-name": prompt_template_name,
         "prompt-template-digest": prompt_template_digest,
+        "response-artifact": response_artifact,
+        "output-preview": output_preview,
+        "output-truncated": output_truncated,
         # SH02: prompt_body carried in-memory for dispatch; redacted before
         # persistence (write_record strips it). Only digest is persisted.
         "prompt-body": prompt_body,
@@ -362,6 +368,8 @@ def _redact_for_persistence(payload: dict[str, Any]) -> dict[str, Any]:
     """
     redacted = dict(payload)
     redacted["prompt-body"] = None
+    # v6 stores the complete response only in the request-owned artifact.
+    redacted["output"] = None
     return redacted
 
 
@@ -430,13 +438,16 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     migrated.setdefault("cancel-acknowledged-at", None)
     migrated.setdefault("cancel-acknowledged-by", None)
     migrated.setdefault("dispatch-service-root", None)
+    migrated.setdefault("response-artifact", None)
+    migrated.setdefault("output-preview", migrated.get("output"))
+    migrated.setdefault("output-truncated", False)
     contract_version = payload.get("contract-version")
     # A briefly deployed v4 writer could have persisted the version before
     # adding all activity fields. Treat that shape as migratable too; never
     # strand a durable request merely because a process restarted mid-cutover.
-    if contract_version not in {"v1", "v2", "v3", "v4", _shared._CONTRACT_VERSION}:
+    if contract_version not in {"v1", "v2", "v3", "v4", "v5", _shared._CONTRACT_VERSION}:
         return _validate(migrated, code="VAL-AGW-005")
-    migrated["contract-version"] = _shared._CONTRACT_VERSION
+    migrated["contract-version"] = _shared._CONTRACT_VERSION if contract_version == _shared._CONTRACT_VERSION else "v5"
     if contract_version != _shared._CONTRACT_VERSION:
         migrated.update({
             "dispatch-owner-epoch": None,
@@ -537,10 +548,11 @@ def project_public_status(
     """Return safe durable status without submission secrets or prompt material."""
     visible = (
         "contract-version", "request-id", "agent-id", "prompt-profile-id", "prompt-template-name", "prompt-template-digest", "execution-profile-id", "mode", "state",
+        "response-artifact", "output-preview", "output-truncated",
         "cancel-requested", "revision", "dispatch-owner-epoch", "dispatch-claimed-at",
         "cancel-acknowledged-at", "cancel-acknowledged-by",
         "recovery", "worker-id", "attempt-epoch", "provider-id", "model-id",
-        "session-id", "session-keep-alive", "output", "completion", "usage", "error", "attempts", "created-at",
+        "session-id", "session-keep-alive", "completion", "usage", "error", "attempts", "created-at",
         "updated-at", "started-at", "finished-at",
         "replay-required", "replay-reason", "replayed-by-request-id", "resumed-from-request-id",
         "metadata",
