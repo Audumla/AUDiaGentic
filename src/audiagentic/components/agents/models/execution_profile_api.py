@@ -1,14 +1,14 @@
 """Execution profile API — load, save, CRUD, and resolution.
 
-Pure-logic module with no MCP coupling. Used by both the MCP servers and
-any programmatic consumers (e.g., agent-jobs launch).
+Pure-logic module with no MCP coupling. The machine-global catalog is the sole
+authority; ``project_root`` is retained only for call-site compatibility.
 """
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.agents.agents_paths import agents_config_path
+from audiagentic.components.agents.agents_paths import global_agents_config_path
 from audiagentic.components.agents.configuration.contracts import AgentsConfigDocument
 from audiagentic.components.agents.configuration.repository import (
     AgentsConfigRepository,
@@ -23,6 +23,11 @@ from audiagentic.foundation.components.hooks import ComponentStatusPayload
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
+def _repository() -> AgentsConfigRepository:
+    """Return the machine-global execution-profile authority."""
+    return AgentsConfigRepository(global_agents_config_path(), required=True)
+
+
 def load_execution_profiles(project_root: Path) -> ExecutionProfileStore:
     """Load execution profiles from the project config file.
 
@@ -31,7 +36,7 @@ def load_execution_profiles(project_root: Path) -> ExecutionProfileStore:
     Raises AudiaGenticError(VAL-EXP-004) on contract-version mismatch.
     """
     try:
-        snapshot = AgentsConfigRepository().read(project_root)
+        snapshot = _repository().read(project_root)
     except AgentsConfigValidationError as exc:
         code = "VAL-EXP-004" if "contract-version" in str(exc) else "IO-EXP-001"
         raise AudiaGenticError(code=code, kind="agents", message=str(exc), details={}) from exc
@@ -45,7 +50,7 @@ def save_execution_profiles(project_root: Path, store: ExecutionProfileStore) ->
 
     Raises AudiaGenticError(IO-EXP-002) on write failure.
     """
-    repository = AgentsConfigRepository()
+    repository = _repository()
     snapshot = repository.read(project_root)
     document = AgentsConfigDocument(
         snapshot.document.contract_version,
@@ -54,9 +59,10 @@ def save_execution_profiles(project_root: Path, store: ExecutionProfileStore) ->
         tuple(store.to_dicts()),
         snapshot.document.agents,
         snapshot.document.triggers,
+        snapshot.document.prompt_profiles,
     )
     try:
-        repository.replace(project_root, document, expected_digest=(snapshot.digest if agents_config_path(project_root).exists() else None))
+        repository.replace(project_root, document, expected_digest=snapshot.digest)
     except Exception as exc:
         raise AudiaGenticError(
             code="IO-EXP-002",
@@ -68,7 +74,7 @@ def save_execution_profiles(project_root: Path, store: ExecutionProfileStore) ->
 
 def seed_execution_profiles(project_root: Path) -> None:
     """Ensure the canonical Agents document has a default profile."""
-    repository = AgentsConfigRepository()
+    repository = _repository()
     snapshot = repository.read(project_root)
     if any(profile.get("is_default") for profile in snapshot.document.execution_profiles):
         return
@@ -87,11 +93,13 @@ def seed_execution_profiles(project_root: Path) -> None:
         snapshot.document.roles,
         (*snapshot.document.execution_profiles, execution_profile_to_dict(profile)),
         snapshot.document.agents,
+        snapshot.document.triggers,
+        snapshot.document.prompt_profiles,
     )
     repository.replace(
         project_root,
         document,
-        expected_digest=snapshot.digest if agents_config_path(project_root).exists() else None,
+        expected_digest=snapshot.digest,
     )
 
 

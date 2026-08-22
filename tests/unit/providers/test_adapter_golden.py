@@ -41,8 +41,7 @@ class _FakeCompleted:
 
 def _expected_prompt(provider_id: str, title: str) -> str:
     return (
-        f"AUDiaGentic {title} provider execution request. "
-        f"job=job_1 packet=pkt_1 provider={provider_id} model=model-x workflow=standard. "
+        f"Execution request for {title}. request=None provider={provider_id} model=model-x. "
         "Return a concise execution summary or the blocking reason if execution "
         f"is impossible. Prompt body: do the thing"
     )

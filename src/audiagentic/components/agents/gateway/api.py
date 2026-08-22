@@ -352,6 +352,13 @@ def submit_execution_request(
     envelope = SubmissionEnvelope.from_mapping(envelope_mapping)
     canonical_root = envelope.validate()
 
+    # Capture component-owned template facts once at admission.  Dispatch,
+    # retries, and recovery use the durable snapshot rather than re-reading
+    # project state such as the current Git branch.
+    from audiagentic.foundation.components.context import collect_component_context
+
+    template_context = collect_component_context(Path(canonical_root.display))
+
     # Resolve the machine-global agent definition at gateway admission. MCP
     # transports pass only agent_id so execution and prompt identity come from
     # one authoritative catalog snapshot.
@@ -365,7 +372,7 @@ def submit_execution_request(
     from audiagentic.components.providers.providers_api import load_agent_prompt_template
 
     _, prompt_template_name, prompt_template_digest = load_agent_prompt_template(
-        prompt_profile_id, has_body=bool(prompt_body)
+        prompt_profile_id, has_body=bool(prompt_body and prompt_body.strip())
     )
 
     # --- 1b. Pre-generate session ID if keep-alive without continuation ---
@@ -513,6 +520,7 @@ def submit_execution_request(
         timeout_seconds=timeout_seconds,
         source=source,
         metadata=persisted_metadata,
+        template_context=template_context,
         session_id=session_id,
         session_keep_alive=session_keep_alive,
         session_idle_timeout_seconds=session_idle_timeout_seconds,

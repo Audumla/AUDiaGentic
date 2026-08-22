@@ -73,10 +73,10 @@ class AgentsConfigRepository:
     def get(self, project_root: Path, kind: ConfigKind, item_id: str) -> dict[str, Any]:
         """Return one canonical record by collection kind and stable id."""
         snapshot = self.read(project_root)
-        key = {"prompt": "prompt_id", "role": "role_id", "execution_profile": "profile_id", "agent": "agent_id", "trigger": "trigger_id"}.get(kind)
+        key = {"prompt": "prompt_id", "role": "role_id", "execution_profile": "profile_id", "agent": "agent_id", "trigger": "trigger_id", "prompt_profile": "profile_id"}.get(kind)
         if key is None:
             raise KeyError(f"unknown config kind: {kind}")
-        values = getattr(snapshot.document, {"prompt": "prompts", "role": "roles", "execution_profile": "execution_profiles", "agent": "agents", "trigger": "triggers"}[kind])
+        values = getattr(snapshot.document, {"prompt": "prompts", "role": "roles", "execution_profile": "execution_profiles", "agent": "agents", "trigger": "triggers", "prompt_profile": "prompt_profiles"}[kind])
         for value in values:
             mapping = value.to_dict() if hasattr(value, "to_dict") else value
             if mapping.get(key, mapping.get(key.replace("_", "-"))) == item_id:
@@ -94,12 +94,12 @@ class AgentsConfigRepository:
         """Replace or insert one record, validating the complete document."""
         snapshot = self.read(project_root)
         collections = {
-            "prompt": "prompts", "role": "roles", "execution_profile": "execution_profiles", "agent": "agents", "trigger": "triggers"
+            "prompt": "prompts", "role": "roles", "execution_profile": "execution_profiles", "agent": "agents", "trigger": "triggers", "prompt_profile": "prompt_profiles"
         }
         collection = collections.get(kind)
         if collection is None:
             raise KeyError(f"unknown config kind: {kind}")
-        key = {"prompt": "prompt_id", "role": "role_id", "execution_profile": "profile_id", "agent": "agent_id", "trigger": "trigger_id"}[kind]
+        key = {"prompt": "prompt_id", "role": "role_id", "execution_profile": "profile_id", "agent": "agent_id", "trigger": "trigger_id", "prompt_profile": "profile_id"}[kind]
         values = list(getattr(snapshot.document, collection))
         item_id = item.get(key, item.get(key.replace("_", "-")))
         for index, existing in enumerate(values):
@@ -115,12 +115,13 @@ class AgentsConfigRepository:
             snapshot.document.execution_profiles if collection != "execution_profiles" else tuple(values),
             snapshot.document.agents if collection != "agents" else tuple(values),
             snapshot.document.triggers if collection != "triggers" else tuple(values),
+            snapshot.document.prompt_profiles if collection != "prompt_profiles" else tuple(values),
         )
         return self.replace(project_root, document, expected_digest=expected_digest)
 
     def delete(self, project_root: Path, kind: ConfigKind, item_id: str, *, expected_digest: str) -> AgentsConfigSnapshot:
         snapshot = self.read(project_root)
-        collections = {"prompt": "prompts", "role": "roles", "execution_profile": "execution_profiles", "agent": "agents", "trigger": "triggers"}
+        collections = {"prompt": "prompts", "role": "roles", "execution_profile": "execution_profiles", "agent": "agents", "trigger": "triggers", "prompt_profile": "prompt_profiles"}
         collection = collections.get(kind)
         if collection is None:
             raise KeyError(f"unknown config kind: {kind}")
@@ -135,6 +136,7 @@ class AgentsConfigRepository:
             snapshot.document.execution_profiles if collection != "execution_profiles" else values,
             snapshot.document.agents if collection != "agents" else values,
             snapshot.document.triggers if collection != "triggers" else values,
+            snapshot.document.prompt_profiles if collection != "prompt_profiles" else values,
         )
         return self.replace(project_root, document, expected_digest=expected_digest)
 

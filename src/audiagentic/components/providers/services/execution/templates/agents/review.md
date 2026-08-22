@@ -1,1 +1,0 @@
-AUDiaGentic {title} provider execution request. job={job-id} packet={packet-id} provider={provider-id} model={model} workflow={workflow-profile}. Review the supplied work carefully and return a concise execution summary or the blocking reason if execution is impossible.
