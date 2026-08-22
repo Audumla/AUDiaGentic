@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from audiagentic.components.providers.adapters.base_runner import default_build_prompt
+from audiagentic.components.agents.gateway.queue.dispatch import _build_packet_ctx
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 def _legacy(ctx: dict, cfg: dict, *, provider_id: str, title: str) -> str:
@@ -33,6 +37,19 @@ def test_default_profile_is_byte_identical_to_legacy(body):
     assert actual.encode("utf-8") == expected.encode("utf-8")
 
 
+def test_gateway_minimum_packet_preserves_none_coercion():
+    packet = _build_packet_ctx(
+        Path("."),
+        {"request-id": "r", "prompt-body": "x"},
+        {"profile_id": "p", "provider_id": "pi", "params": {}},
+        {"model-id": None},
+        dispatch_prompt="x",
+    )
+    actual = default_build_prompt(packet, {"default-model": None}, provider_id="pi", title="Pi")
+    expected = _legacy(packet, {"default-model": None}, provider_id="pi", title="Pi")
+    assert actual.encode("utf-8") == expected.encode("utf-8")
+
+
 def test_review_profile_is_selected_without_project_override(tmp_path):
     override = tmp_path / ".audiagentic" / "prompts" / "prompt-profile"
     override.mkdir(parents=True)
@@ -53,7 +70,7 @@ def test_review_profile_is_selected_without_project_override(tmp_path):
 
 
 def test_unknown_profile_fails_closed():
-    with pytest.raises(ValueError, match="unknown prompt profile"):
+    with pytest.raises(AudiaGenticError, match="unknown prompt profile"):
         default_build_prompt(
             {"prompt-body": "x", "working-root": "."}, {"default-model": "m"},
             provider_id="pi", title="Pi", prompt_profile_id="revieew",
