@@ -90,7 +90,6 @@ def _packet_doc_excerpt(working_root: str | None, packet_id: str | None) -> str 
 
 def _build_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> str:
     from audiagentic.components.providers.providers_api import build_admitted_agent_prompt
-    return build_admitted_agent_prompt(packet_ctx, provider_cfg, provider_id="claude", title="Claude")
     packet_doc = _packet_doc_excerpt(
         packet_ctx.get("working-root"), packet_ctx.get("packet-id")
     )
@@ -109,13 +108,8 @@ def _build_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> s
     }
     if packet_doc is not None:
         envelope["packet-doc-path"] = str(packet_doc)
-    lines = [
-        "AUDiaGentic Claude provider execution request.",
-        "Use the packet document excerpt as the task definition.",
-        "Do not ask for follow-up details unless the packet context is unusable.",
-        "Carry out the requested work or, if execution is impossible, report the blocking reason and the next concrete step.",
-        json.dumps(envelope, indent=2, sort_keys=True),
-    ]
+    lines = [build_admitted_agent_prompt(packet_ctx, provider_cfg, provider_id="claude", title="Claude")]
+    lines.extend(["Provider packet context:", json.dumps(envelope, indent=2, sort_keys=True)])
     if packet_doc is not None:
         lines.extend(["", "Packet document excerpt:", packet_doc])
     if prompt_body:

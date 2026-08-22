@@ -231,6 +231,7 @@ def default_build_prompt(
     provider_id: str,
     title: str,
     prompt_profile_id: str = "default",
+    context_overrides: dict[str, Any] | None = None,
 ) -> str:
     """Build the provider prompt from the resolved prompt profile.
 
@@ -265,6 +266,8 @@ def default_build_prompt(
         "workflow-profile": str(packet_ctx.get("workflow-profile")),
         "prompt-body": str(prompt_body).strip() if has_body else "",
     }
+    if context_overrides:
+        context.update(context_overrides)
     return render_template(template, context).strip()
 
 
