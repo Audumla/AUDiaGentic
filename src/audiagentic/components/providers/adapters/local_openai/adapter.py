@@ -141,6 +141,9 @@ def _parse_non_stream_response(
 
 def _build_messages(packet_ctx: dict[str, Any], prompt_body: str | None) -> list[dict[str, Any]]:
     """Build OpenAI-compatible messages from packet context."""
+    from audiagentic.components.providers.providers_api import build_admitted_agent_prompt
+    admitted = build_admitted_agent_prompt(packet_ctx, {"default-model": packet_ctx.get("model-id")}, provider_id="local-openai", title="Local OpenAI")
+    return [{"role": "user", "content": admitted}]
     system_prompt = (
         "AUDiaGentic execution request. "
         f"job={packet_ctx.get('job-id')} "
