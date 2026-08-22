@@ -36,6 +36,9 @@
     "request-id": {
       "type": "string"
     },
+    "agent-id": {
+      "type": ["string", "null"]
+    },
     "execution-profile-id": {
       "type": "string"
     },
@@ -43,6 +46,8 @@
       "type": "string",
       "minLength": 1
     },
+    "prompt-template-name": {"type": ["string", "null"]},
+    "prompt-template-digest": {"type": ["string", "null"]},
     "prompt-body": {
       "type": ["string", "null"]
     },

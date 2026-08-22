@@ -130,6 +130,10 @@ RES-AGD-001: "The agent definition was not found. Check the agent-id against con
 RES-AGD-002: "An agent definition with this ID already exists. Use a different agent_id or update the existing definition."
 IO-AGD-001: "Failed to read the agent definitions configuration file. Check that agent-definitions.yaml exists and is valid YAML."
 IO-AGD-002: "Failed to write the agent definitions configuration file. Check disk permissions and available space."
+# Packaged prompt-profile assets (AG16/AG19)
+CFG-APT-001: "The configured prompt profile is unknown. Use a registered prompt profile."
+IO-APT-001: "The packaged prompt-profile template is missing or unreadable."
+CON-APT-001: "The admitted prompt-profile template changed before dispatch; resubmit the request."
 # Test-only error codes for classify_failure unit tests
 VAL-X-001: "Test validation error code"
 RES-X-001: "Test resource error code"

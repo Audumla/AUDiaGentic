@@ -150,8 +150,11 @@ def _project_gpt_auto_error_details(details: dict[str, Any]) -> dict[str, Any]:
 def build_record(
     *,
     request_id: str | None = None,
+    agent_id: str | None = None,
     execution_profile_id: str,
     prompt_profile_id: str = "default",
+    prompt_template_name: str | None = None,
+    prompt_template_digest: str | None = None,
     prompt_body: str | None,
     mode: str = "async",
     timeout_seconds: float | None = None,
@@ -260,8 +263,11 @@ def build_record(
     payload: dict[str, Any] = {
         "contract-version": _shared._CONTRACT_VERSION,
         "request-id": request_id or generate_request_id(),
+        "agent-id": agent_id,
         "execution-profile-id": execution_profile_id,
         "prompt-profile-id": prompt_profile_id,
+        "prompt-template-name": prompt_template_name,
+        "prompt-template-digest": prompt_template_digest,
         # SH02: prompt_body carried in-memory for dispatch; redacted before
         # persistence (write_record strips it). Only digest is persisted.
         "prompt-body": prompt_body,
@@ -530,7 +536,7 @@ def project_public_status(
 ) -> dict[str, Any]:
     """Return safe durable status without submission secrets or prompt material."""
     visible = (
-        "contract-version", "request-id", "execution-profile-id", "mode", "state",
+        "contract-version", "request-id", "agent-id", "prompt-profile-id", "prompt-template-name", "prompt-template-digest", "execution-profile-id", "mode", "state",
         "cancel-requested", "revision", "dispatch-owner-epoch", "dispatch-claimed-at",
         "cancel-acknowledged-at", "cancel-acknowledged-by",
         "recovery", "worker-id", "attempt-epoch", "provider-id", "model-id",

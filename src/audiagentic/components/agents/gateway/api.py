@@ -261,6 +261,7 @@ def _enrich_terminal_result(
 def submit_execution_request(
     project_root: Path,
     *,
+    agent_id: str | None = None,
     execution_profile_id: str | None = None,
     prompt_profile_id: str = "default",
     prompt_body: str | None = None,
@@ -342,6 +343,22 @@ def submit_execution_request(
     envelope = SubmissionEnvelope.from_mapping(envelope_mapping)
     canonical_root = envelope.validate()
 
+    # Resolve the machine-global agent definition at gateway admission. MCP
+    # transports pass only agent_id so execution and prompt identity come from
+    # one authoritative catalog snapshot.
+    if agent_id is not None:
+        from audiagentic.components.agents.configuration.global_catalog import get_global_agent_definition
+
+        definition = get_global_agent_definition(project_root, agent_id)
+        execution_profile_id = definition["execution_profile_id"]
+        prompt_profile_id = definition.get("profile_id", "default")
+
+    from audiagentic.components.providers.services.execution.agent_prompt_profiles import load_profile_template
+
+    _, prompt_template_name, prompt_template_digest = load_profile_template(
+        prompt_profile_id, has_body=bool(prompt_body)
+    )
+
     # --- 1b. Pre-generate session ID if keep-alive without continuation ---
     # The runtime owns session ID generation; the caller never invents one.
     # We pre-generate here so the submit response includes it immediately —
@@ -405,7 +422,12 @@ def submit_execution_request(
     agent_runtime_digest = compute_agent_runtime_digest(
         resolved_profile=profile,
         provider_config_state=provider_cfg,
-        component_overlay={"component-profile": component_profile or ""},
+        component_overlay={
+            "component-profile": component_profile or "",
+            "prompt-profile-id": prompt_profile_id,
+            "prompt-template-name": prompt_template_name,
+            "prompt-template-digest": prompt_template_digest,
+        },
     )
 
     # --- 4. Build the execution manifest -----------------------------------
@@ -472,6 +494,9 @@ def submit_execution_request(
     # renewal therefore cannot change semantics halfway through a request.
     record = store.build_record(
         request_id=request_id,
+        agent_id=agent_id,
+        prompt_template_name=prompt_template_name,
+        prompt_template_digest=prompt_template_digest,
         execution_profile_id=resolved_profile_id,
         prompt_profile_id=prompt_profile_id,
         prompt_body=prompt_body,  # carried in-memory; redacted before persistence

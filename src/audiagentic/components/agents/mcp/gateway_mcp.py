@@ -234,12 +234,8 @@ def agent_task_submit(
     This is the sole submission surface over MCP (RV891). Direct
     provider/model execution bypassing agent selection is not exposed over MCP."""
     project_root = project_root_from_env()
-    from audiagentic.components.agents.configuration.global_catalog import get_global_agent_definition
-
-    definition = get_global_agent_definition(project_root, agent_id)
     submit_kwargs: dict[str, Any] = {
-        "execution_profile_id": definition["execution_profile_id"],
-        "prompt_profile_id": definition.get("profile_id", "default"),
+        "agent_id": agent_id,
         "prompt_body": prompt_body,
         "timeout_seconds": timeout_seconds,
         "source": source,

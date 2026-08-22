@@ -239,34 +239,33 @@ def default_build_prompt(
     here.
     """
     prompt_body = packet_ctx.get("prompt-body")
-    from audiagentic.components.agent_jobs.prompt_templates import (
-        load_prompt_template,
-        render_prompt_template,
+    from audiagentic.components.providers.services.execution.agent_prompt_profiles import (
+        load_profile_template,
+        verify_template_digest,
     )
+    from audiagentic.foundation.templates import render_template
 
     if not isinstance(prompt_profile_id, str) or not prompt_profile_id.strip():
         raise ValueError("prompt_profile_id must be a non-empty string")
     has_body = bool(prompt_body)
-    template_name = prompt_profile_id if not has_body else f"{prompt_profile_id}-with-body"
-    template, _ = load_prompt_template(
-        Path(packet_ctx.get("working-root") or "."),
-        tag="prompt-profile",
-        provider_id=provider_id,
-        template_name=template_name,
-        allow_project_override=False,
-    )
-    if template is None:
-        raise ValueError(f"unknown prompt profile: {prompt_profile_id!r}")
+    template_name = packet_ctx.get("prompt-template-name")
+    template_digest = packet_ctx.get("prompt-template-digest")
+    if isinstance(template_name, str) and isinstance(template_digest, str):
+        template = verify_template_digest(template_name, template_digest)
+    else:
+        template, template_name, _ = load_profile_template(prompt_profile_id, has_body=has_body)
     context = {
-        "title": title,
-        "job-id": packet_ctx.get("job-id"),
-        "packet-id": packet_ctx.get("packet-id"),
-        "provider-id": packet_ctx.get("provider-id", provider_id),
-        "model": provider_cfg.get("default-model"),
-        "workflow-profile": packet_ctx.get("workflow-profile"),
+        # Preserve the legacy f-string's Python coercion. The shared renderer
+        # intentionally maps None to empty text, which is not compatible here.
+        "title": str(title),
+        "job-id": str(packet_ctx.get("job-id")),
+        "packet-id": str(packet_ctx.get("packet-id")),
+        "provider-id": str(packet_ctx.get("provider-id", provider_id)),
+        "model": str(provider_cfg.get("default-model")),
+        "workflow-profile": str(packet_ctx.get("workflow-profile")),
         "prompt-body": str(prompt_body).strip() if has_body else "",
     }
-    return render_prompt_template(template, context, preserve_whitespace=True).strip()
+    return render_template(template, context).strip()
 
 
 def default_parse_completion(

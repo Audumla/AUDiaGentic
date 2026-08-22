@@ -420,6 +420,7 @@ def _required(arguments: dict[str, Any], name: str) -> Any:
 
 
 _SUBMISSION_ARGUMENTS = {
+    "agent_id",
     "execution_profile_id",
     "prompt_profile_id",
     "prompt_body",

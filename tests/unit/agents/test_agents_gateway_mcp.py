@@ -184,10 +184,6 @@ def test_agent_task_submit_resolves_agent_and_delegates():
      the gateway client -- the sole MCP submission path (RV891)."""
     with (
         _patch_root(),
-        patch(
-            "audiagentic.components.agents.configuration.global_catalog.get_global_agent_definition",
-            return_value={"agent_id": "reviewer-agent", "execution_profile_id": "fast"},
-        ) as mock_get_definition,
         patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
     ):
         mock_call.return_value = {
@@ -197,12 +193,10 @@ def test_agent_task_submit_resolves_agent_and_delegates():
         result = agents_gateway_mcp.agent_task_submit("reviewer-agent", prompt_body="hi")
 
     assert result["state"] == "queued"
-    mock_get_definition.assert_called_once_with(_ROOT, "reviewer-agent")
     mock_call.assert_called_once_with(
         "submit_execution_request",
         _ROOT,
-        execution_profile_id="fast",
-        prompt_profile_id="default",
+        agent_id="reviewer-agent",
         prompt_body="hi",
         timeout_seconds=None,
         source=None,

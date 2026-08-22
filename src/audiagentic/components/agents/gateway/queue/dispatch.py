@@ -119,6 +119,8 @@ def _build_packet_ctx(
         "request-id": record["request-id"],
         "execution-profile-id": profile["profile_id"],
         "prompt-profile-id": record.get("prompt-profile-id", "default"),
+        "prompt-template-name": record.get("prompt-template-name"),
+        "prompt-template-digest": record.get("prompt-template-digest"),
         "provider-id": profile["provider_id"],
         "model-id": model.get("model-id") or model.get("resolved"),
         "model-alias": profile.get("model_alias"),
