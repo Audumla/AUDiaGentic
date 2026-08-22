@@ -42,20 +42,12 @@ def _build_prompt(
     modified_prompt: str | None = None,
 ) -> str:
     from audiagentic.components.providers.providers_api import build_admitted_agent_prompt
-    return build_admitted_agent_prompt(packet_ctx, provider_cfg, provider_id="gemini", title="Gemini")
-    prompt_body = modified_prompt or packet_ctx.get("prompt-body")
-    prompt = (
-        "AUDiaGentic Gemini provider execution request. "
-        f"job={packet_ctx.get('job-id')} "
-        f"packet={packet_ctx.get('packet-id')} "
-        f"provider={packet_ctx.get('provider-id', 'gemini')} "
-        f"model={resolve_execution_model(packet_ctx, provider_cfg)} "
-        f"workflow={packet_ctx.get('workflow-profile')}. "
-        "Return a concise execution summary or the blocking reason if execution is impossible."
+    prompt_body = modified_prompt if modified_prompt is not None else packet_ctx.get("prompt-body")
+    return build_admitted_agent_prompt(
+        {**packet_ctx, "prompt-body": prompt_body},
+        {**provider_cfg, "default-model": resolve_execution_model(packet_ctx, provider_cfg)},
+        provider_id="gemini", title="Gemini",
     )
-    if prompt_body:
-        prompt += f" Prompt body: {str(prompt_body).strip()}"
-    return prompt.strip()
 
 
 def _parse_gemini_completion(
