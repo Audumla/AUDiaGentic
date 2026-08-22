@@ -285,6 +285,23 @@ async def test_gpt_provider_send_click_is_synchronous_after_python_settle_delay(
 
 
 @pytest.mark.asyncio
+async def test_gpt_provider_waits_for_composer_state_before_click(monkeypatch):
+    """The input event gets a bounded React settle window before Send."""
+    import audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp as cdp
+
+    delays: list[float] = []
+
+    async def record_sleep(delay: float) -> None:
+        delays.append(delay)
+
+    monkeypatch.setattr(cdp.asyncio, "sleep", record_sleep)
+    browser = GptAutoCdpBrowserController(_GptOperationBridge())  # type: ignore[arg-type]
+    await browser.submit(CdpPageRef("page-1", "target-1"), "settle first")
+    assert delays[0] == GptAutoCdpBrowserController._COMPOSER_SETTLE_DELAY_SECONDS
+    assert delays[0] >= 0.1
+
+
+@pytest.mark.asyncio
 async def test_gpt_provider_submit_and_stop_use_fake_dom_responses():
     bridge = _GptOperationBridge()
     browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]

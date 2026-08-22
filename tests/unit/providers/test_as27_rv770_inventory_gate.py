@@ -175,14 +175,13 @@ class TestVendorSupportNotEligibility:
             is_eligible_transport_observation_publisher,
         )
 
-        # codex-acp has vendor support on windows/macOS/linux but
-        # is probe-required in the inventory.
+        # Codex ACP now has a Windows probe, while Linux remains unproven.
         assert not is_eligible_transport_observation_publisher(
             "codex",
             "codex-acp",
             platform="linux-amd64",
         )
-        assert not is_eligible_transport_observation_publisher(
+        assert is_eligible_transport_observation_publisher(
             "codex",
             "codex-acp",
             platform="windows-amd64",

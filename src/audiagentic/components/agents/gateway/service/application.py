@@ -59,12 +59,14 @@ class GatewayServiceApplication:
         service_store: ManagedServiceStore,
         *,
         lifecycle: Any = None,
+        dashboard_recent_seconds: int | None = None,
     ) -> None:
         self._application = application
         self._service_store = service_store
         # SH10: host-injected GatewayLifecycleController exposing the operator
         # status/drain/resume/stop surface; absent for bare in-process hosting.
         self._lifecycle = lifecycle
+        self._dashboard_recent_seconds = dashboard_recent_seconds
         # A distinct durable authority for gateway operator operations.  It
         # deliberately does not own request/session state or the work queue.
         self._operations = GatewayOperationsApplication(
@@ -87,6 +89,16 @@ class GatewayServiceApplication:
             },
             "capabilities": list(CAPABILITIES),
         }
+
+    def dashboard_snapshot(self, recent_seconds: int | None = None) -> dict[str, Any]:
+        """Read-only machine-wide dashboard data for the loopback page."""
+        from audiagentic.components.agents.gateway.service.dashboard import dashboard_snapshot
+
+        return dashboard_snapshot(
+            self._service_store.root,
+            recent_seconds=recent_seconds,
+            configured_recent_seconds=self._dashboard_recent_seconds,
+        )
 
     def acquire_client(
         self,

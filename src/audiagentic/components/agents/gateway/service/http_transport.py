@@ -7,6 +7,7 @@ import json
 import logging
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, cast
+from urllib.parse import parse_qs, urlsplit
 
 from audiagentic.components.agents.gateway.service.application import (
     GatewayServiceApplication,
@@ -38,11 +39,17 @@ class GatewayHTTPServer(ThreadingHTTPServer):
         address: tuple[str, int],
         application: GatewayServiceApplication,
         auth_token: str,
+        *,
+        dashboard_path: str = "/dashboard",
+        dashboard_recent_seconds: int | None = None,
     ) -> None:
         if address[0] != "127.0.0.1":
             raise transport_error(3, "gateway service must bind to IPv4 loopback")
         self.application = application
         self.auth_token = auth_token
+        self.dashboard_path = _dashboard_path(dashboard_path)
+        self.dashboard_snapshot_path = f"{self.dashboard_path}/snapshot"
+        self.dashboard_recent_seconds = dashboard_recent_seconds
         super().__init__(address, GatewayHTTPRequestHandler)
 
 
@@ -57,6 +64,27 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
 
     def _dispatch(self, method: str) -> None:
         try:
+            # The dashboard is a redacted, loopback-only operator surface.
+            # It must remain usable by an ordinary browser, which cannot know
+            # the service bearer token.  Every mutable/control route remains
+            # authenticated below.
+            parsed = urlsplit(self.path)
+            if method == "GET" and parsed.path == self.server.dashboard_path:
+                from audiagentic.components.agents.gateway.service.dashboard import (
+                    render_dashboard_html,
+                )
+
+                self._write_bytes(200, "text/html; charset=utf-8", render_dashboard_html(self.server.dashboard_snapshot_path))
+                return
+            if method == "GET" and parsed.path == self.server.dashboard_snapshot_path:
+                query = parse_qs(parsed.query, keep_blank_values=True)
+                raw_recent = query.get("recent-seconds", [None])[0]
+                recent_seconds = _positive_int(raw_recent)
+                self._write_json(
+                    200,
+                    self.server.application.dashboard_snapshot(recent_seconds=recent_seconds),
+                )
+                return
             self._authenticate()
             if method == "GET" and self.path == HEALTH_ROUTE:
                 result = self.server.application.health()
@@ -133,9 +161,12 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
 
     def _write_json(self, status: int, payload: dict[str, Any]) -> None:
         encoded = json.dumps(payload, sort_keys=True).encode("utf-8")
+        self._write_bytes(status, "application/json", encoded)
+
+    def _write_bytes(self, status: int, content_type: str, encoded: bytes) -> None:
         try:
             self.send_response(status)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(encoded)))
             self.end_headers()
             self.wfile.write(encoded)
@@ -171,12 +202,28 @@ def _number(body: dict[str, Any], name: str) -> float:
     return value * 1.0
 
 
+def _positive_int(value: object | None) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
 def _mapping(value: Any, name: str) -> dict[str, Any]:
     if value is None:
         return {}
     if not isinstance(value, dict):
         raise transport_error(10, "gateway service field must be a mapping", field=name)
     return cast(dict[str, Any], value)
+
+
+def _dashboard_path(value: str) -> str:
+    if not value.startswith("/") or value == "/" or "?" in value or "#" in value:
+        raise transport_error(18, "gateway dashboard path must be an absolute path", path=value)
+    return value.rstrip("/")
 
 
 __all__ = ["GatewayHTTPServer", "MAX_REQUEST_BYTES"]

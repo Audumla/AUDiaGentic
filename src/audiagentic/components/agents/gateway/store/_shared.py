@@ -50,6 +50,8 @@ _MUTABLE_RESULT_FIELDS = {
     "replay-reason",
     "replayed-by-request-id",
     "terminal-classification",
+    "watchdog-state",
+    "watchdog-reason",
 }
 
 _COMPONENT_ID = "agents"

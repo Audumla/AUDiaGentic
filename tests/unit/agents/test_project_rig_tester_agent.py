@@ -1,14 +1,12 @@
 """Regression coverage for this repo's own first real Agent Definition.
 
 Every other agents test composes profiles/roles/definitions in a tmp_path
-fixture. This is the one test that reads AUDiaGentic's own real project
-config (`.audiagentic/config/{execution-profiles,roles,agent-definitions}.yaml`)
-to guard the "rig-tester-agent" entry created to exercise the AS62/AS63
-composition path end-to-end for real, not synthetically -- if someone edits
-or deletes one of the three files and breaks the cross-references, this is
-what catches it. The GatewayClient's actual submit/dispatch mechanics are
+fixture. This is the one test that reads AUDiaGentic's own canonical project
+config (`.audiagentic/config/agents.yaml`) to guard the "rig-tester-agent"
+entry created to exercise the AS62/AS63 composition path end-to-end for real,
+not synthetically. The GatewayClient's actual submit/dispatch mechanics are
 already covered generically (with tmp_path fixtures, not this repo's live
-runtime state) by the gateway lifecycle tests -- deliberately not repeated here,
+ runtime state) by the gateway lifecycle tests -- deliberately not repeated here,
 so this test stays read-only and never writes into the real
 `.audiagentic/runtime/` directory.
 """
@@ -25,6 +23,18 @@ from audiagentic.components.agents.models.role_api import get_role
 from audiagentic.foundation.paths.package import PACKAGE_ROOT
 
 REPO_ROOT = PACKAGE_ROOT.parent.parent
+
+
+def test_canonical_agents_config_is_only_project_authority() -> None:
+    config_root = REPO_ROOT / ".audiagentic" / "config"
+    assert (config_root / "agents.yaml").is_file()
+    for stale_name in (
+        "agent-profiles.yaml",
+        "agent-definitions.yaml",
+        "execution-profiles.yaml",
+        "roles.yaml",
+    ):
+        assert not (config_root / stale_name).exists(), f"stale split config remains: {stale_name}"
 
 
 def test_rig_tester_execution_profile_exists() -> None:

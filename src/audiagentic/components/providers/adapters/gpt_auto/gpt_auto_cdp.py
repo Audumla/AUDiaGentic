@@ -190,6 +190,11 @@ class GptAutoCdpBrowserController(CdpBrowserController):
 
     _SUBMIT_MAX_ATTEMPTS = 3
     _SUBMIT_RETRY_DELAY_SECONDS = 0.2
+    # React needs a little time to propagate the synthetic input event into
+    # the Send control.  25 ms was occasionally enough to leave the prompt in
+    # the composer while the button was still disabled; keep this delay
+    # outside page execution so navigation cannot collect the timer promise.
+    _COMPOSER_SETTLE_DELAY_SECONDS = 0.15
 
     async def submit(
         self, page: CdpPageRef, text: str, *, timeout: float | None = None
@@ -223,7 +228,7 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             # tree; awaiting a browser-side timer across that replacement can
             # make CDP report "Promise was collected" even though the click
             # side effect was accepted.
-            await asyncio.sleep(0.025)
+            await asyncio.sleep(self._COMPOSER_SETTLE_DELAY_SECONDS)
             sent = await self.evaluate(
                 page,
                 """() => {
