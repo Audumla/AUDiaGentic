@@ -5,6 +5,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -22,6 +23,7 @@ from audiagentic.components.agents.gateway.remote_client import (
 )
 from audiagentic.components.agents.gateway.service.contract import PROTOCOL_VERSION
 from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
+from audiagentic.components.agents.gateway.service.known_projects import record_known_project
 from audiagentic.components.agents.models.execution_profile_api import (
     create_execution_profile,
 )
@@ -38,6 +40,7 @@ class SharedApplication:
     def __init__(self) -> None:
         self.guard = threading.Lock()
         self.requests: dict[str, dict] = {}
+        self.session_records: dict[str, list[dict]] = {}
         self.next_id = 0
         self.run_started = threading.Event()
         self.run_release = threading.Event()
@@ -75,7 +78,7 @@ class SharedApplication:
         return {"total_requests": len(self.requests), "project-root": str(project_root)}
 
     def list_execution_sessions(self, project_root, **kwargs):
-        return []
+        return [dict(value) for value in self.session_records.get(str(project_root), [])]
 
     def close_execution_session(self, project_root, session_id):
         return {"session-id": session_id, "state": "closed"}
@@ -122,6 +125,11 @@ def _raw_post(endpoint: str, token: str, route: str, body: dict) -> dict:
             return json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
         return json.loads(exc.read().decode("utf-8"))
+
+
+def _raw_get(endpoint: str, route: str) -> tuple[str, bytes]:
+    with urlopen(f"{endpoint}{route}", timeout=2) as response:
+        return response.headers["Content-Type"], response.read()
 
 
 def _make_profile(project_root: Path) -> None:
@@ -193,6 +201,134 @@ def test_authenticated_raw_calls_cannot_bypass_protocol_or_lease_authority(
         assert mismatch["error-code"] == "VAL-AGSV-013"
         assert bypass["error-code"] == "CON-AGSV-018"
         assert application.requests == {}
+    finally:
+        _stop_host(host, thread)
+
+
+def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
+    tmp_path: Path,
+) -> None:
+    application = SharedApplication()
+    host, thread, _service_root, _token_path = _start_host(tmp_path, application)
+    try:
+        content_type, page = _raw_get(host.endpoint, "/dashboard")
+        assert content_type.startswith("text/html")
+        assert b"Agent gateway" in page
+        assert b"fetch(endpoint)" in page
+        assert b'id="state-filter"' in page
+        assert b'id="show-closed"' in page
+        assert b'id="show-empty"' in page
+        assert b'id="recent-window"' in page
+        assert b"recent-seconds" in page
+        assert b"Requests without a session" not in page
+        assert b"newest first" in page
+        assert b"Watchdog monitoring guide" in page
+        assert b"stale monitoring marker" in page
+
+        content_type, snapshot = _raw_get(host.endpoint, "/dashboard/snapshot")
+        assert content_type.startswith("application/json")
+        payload = json.loads(snapshot)
+        assert payload["contract-version"] == "v1"
+        assert payload["projects"] == []
+        assert payload["requests"] == []
+        assert payload["failures"] == []
+        assert "prompt" not in json.dumps(payload).lower()
+    finally:
+        _stop_host(host, thread)
+
+
+def test_dashboard_recent_window_filters_history_and_supports_query_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    now = datetime.now(timezone.utc)
+    fresh = (now - timedelta(seconds=20)).isoformat().replace("+00:00", "Z")
+    old = (now - timedelta(seconds=180)).isoformat().replace("+00:00", "Z")
+    application = SharedApplication()
+    application.requests = {
+        "req-fresh": {
+            "request-id": "req-fresh",
+            "state": "completed",
+            "session-id": "ses-fresh",
+            "execution-profile-id": "default",
+            "resolved-provider-id": "local-openai",
+            "resolved-model-id": "model",
+            "updated-at": fresh,
+        },
+        "req-old": {
+            "request-id": "req-old",
+            "state": "failed",
+            "session-id": "ses-old",
+            "execution-profile-id": "default",
+            "resolved-provider-id": "local-openai",
+            "resolved-model-id": "model",
+            "updated-at": old,
+            "error": {"code": "EXT-TEST", "message": "old"},
+        },
+    }
+    application.session_records[str(project_root)] = [
+        {
+            "session-id": "ses-fresh",
+            "execution-profile-id": "default",
+            "state": "closed",
+            "timing": {"updated-at": fresh},
+            "activity": {"turn-count": 1},
+        },
+        {
+            "session-id": "ses-old",
+            "execution-profile-id": "default",
+            "state": "closed",
+            "timing": {"updated-at": old},
+            "activity": {"turn-count": 1},
+        },
+    ]
+    from audiagentic.components.agents.gateway import api as gateway_api
+
+    monkeypatch.setattr(
+        gateway_api,
+        "list_execution_requests",
+        lambda _root: list(application.requests.values()),
+    )
+    monkeypatch.setattr(
+        gateway_api,
+        "list_execution_sessions",
+        lambda _root: list(application.session_records[str(project_root)]),
+    )
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_DASHBOARD_RECENT_SECONDS", "60")
+    host, thread, _service_root, _token_path = _start_host(tmp_path, application)
+    record_known_project(
+        host.service_store.root / "known-projects.json", project_root=project_root
+    )
+    try:
+        _content_type, response = _raw_get(host.endpoint, "/dashboard/snapshot")
+        payload = json.loads(response)
+        assert payload["dashboard"]["recent-window-seconds"] == 60
+        assert [row["request-id"] for row in payload["requests"]] == ["req-fresh"]
+        assert [row["session-id"] for row in payload["projects"][0]["sessions"]] == ["ses-fresh"]
+        assert payload["failures"] == []
+
+        _content_type, response = _raw_get(
+            host.endpoint, "/dashboard/snapshot?recent-seconds=240"
+        )
+        override = json.loads(response)
+        assert override["dashboard"]["recent-window-seconds"] == 240
+        assert {row["request-id"] for row in override["requests"]} == {"req-fresh", "req-old"}
+        assert override["dashboard"]["recent-window-source"] == "dashboard"
+    finally:
+        _stop_host(host, thread)
+
+
+def test_dashboard_path_is_configurable_without_changing_gateway_rpc_port(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_DASHBOARD_PATH", "/operations")
+    application = SharedApplication()
+    host, thread, _service_root, _token_path = _start_host(tmp_path, application)
+    try:
+        content_type, page = _raw_get(host.endpoint, "/operations")
+        assert content_type.startswith("text/html")
+        assert b"/operations/snapshot" in page
     finally:
         _stop_host(host, thread)
 

@@ -92,6 +92,9 @@ class GatewayServiceHost:
         # limits/generations are gateway-authoritative from first request.
         # This process (not the CLI/launcher) is the second, deliberate root
         # Stage 1 anticipated -- see gateway_service_composition.py.
+        from audiagentic.components.agents.gateway.service.dashboard import (
+            recent_window_seconds,
+        )
         from audiagentic.runtime.bootstrap.gateway_service_composition import (
             build_gateway_service_graph,
         )
@@ -104,8 +107,19 @@ class GatewayServiceHost:
             resolved_token_path = token_path or store.root / "auth.token"
             token = load_or_create_auth_token(resolved_token_path)
             domain_application = application or get_gateway_application()
-            service_application = GatewayServiceApplication(domain_application, store)
-            server = GatewayHTTPServer((host, port), service_application, token)
+            configured_recent_seconds = recent_window_seconds()
+            service_application = GatewayServiceApplication(
+                domain_application,
+                store,
+                dashboard_recent_seconds=configured_recent_seconds,
+            )
+            server = GatewayHTTPServer(
+                (host, port),
+                service_application,
+                token,
+                dashboard_path=os.environ.get("AUDIAGENTIC_GATEWAY_DASHBOARD_PATH", "/dashboard"),
+                dashboard_recent_seconds=configured_recent_seconds,
+            )
             owner = ManagedServiceOwner(store)
             address = f"{server.server_address[0]}:{server.server_address[1]}"
             managed_epoch = os.environ.get("AUDIAGENTIC_SERVICE_OWNER_EPOCH")

@@ -90,7 +90,7 @@ def write_execution_profile(
 ) -> dict[str, Any]:
     """Create a project-local execution profile through the real profile API.
 
-    Replaces hand-written execution-profiles.yaml: create_execution_profile validates and
+    Replaces hand-written split profile files: create_execution_profile validates and
     persists through the same path a real caller would use, so a schema
     drift or validation bug in profile creation is exercised, not bypassed.
     """
@@ -256,7 +256,7 @@ def write_gateway_profiles_config(
 ) -> Path:
     """Write a gateway-owned profile registry config file.
 
-    Unlike execution-profiles.yaml (which has a real create_execution_profile API), the
+    Unlike the canonical agents.yaml API (which has a real create_execution_profile API), the
     gateway-owned registry has no CRUD API — agents_gateway_profiles.
     load_gateway_registry_from_config reads this file directly by design, so
     hand-authoring it is the real provisioning path, same status as any other

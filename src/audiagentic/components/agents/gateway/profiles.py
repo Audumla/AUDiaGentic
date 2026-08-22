@@ -724,17 +724,28 @@ def resolve_for_admission(
     surface that does not resolve or is not validated -- an explicitly
     named surface never silently falls back to the provider default.
     """
+    from audiagentic.components.agents.configuration.global_catalog import (
+        resolve_global_default_execution_profile,
+        resolve_global_execution_profile,
+    )
     from audiagentic.components.agents.models.execution_profile_api import (
         resolve_default_execution_profile,
         resolve_execution_profile,
     )
 
-    if execution_profile_id:
+    registry = get_gateway_registry()
+    if registry is not None:
+        if execution_profile_id:
+            profile = resolve_global_execution_profile(project_root, execution_profile_id)
+        else:
+            profile = resolve_global_default_execution_profile(project_root)
+    elif execution_profile_id:
+        # Embedded/unit mode has no shared registry; retain the pure local
+        # resolver for isolated callers. The running gateway always installs
+        # a registry and therefore never takes this branch.
         profile = resolve_execution_profile(project_root, execution_profile_id)
     else:
         profile = resolve_default_execution_profile(project_root)
-
-    registry = get_gateway_registry()
     if registry is not None:
         snapshot = registry.resolve_snapshot(profile["profile_id"])
     else:
@@ -767,6 +778,17 @@ def resolve_for_admission(
         resolved_surface_id=resolved_surface.ref.surface_id,
         resolved_surface_version=resolved_surface.ref.resolved_version,
     )
+
+
+def resolve_authoritative_profile(project_root: Path, profile_id: str) -> dict[str, Any]:
+    """Use the global catalog in the hosted gateway; local only in embedded tests."""
+    if get_gateway_registry() is not None:
+        from audiagentic.components.agents.configuration.global_catalog import resolve_global_execution_profile
+
+        return resolve_global_execution_profile(project_root, profile_id)
+    from audiagentic.components.agents.models.execution_profile_api import resolve_execution_profile
+
+    return resolve_execution_profile(project_root, profile_id)
 
 
 def _default_surface_resolver(project_root: Path, provider_id: str, surface_id: str) -> Any:

@@ -155,12 +155,10 @@ def _dispatch_one_attempt(
     from audiagentic.components.agents.gateway.queue.worker import (
         execute_isolated_provider_turn,
     )
-    from audiagentic.components.agents.models.execution_profile_api import (
-        resolve_execution_profile,
-    )
+    from audiagentic.components.agents.gateway.profiles import resolve_authoritative_profile
     from audiagentic.components.providers import providers_api
 
-    profile = resolve_execution_profile(project_root, execution_profile_id)
+    profile = resolve_authoritative_profile(project_root, execution_profile_id)
     provider_id = profile["provider_id"]
     if not providers_api.get_provider_runtime_config_state(project_root, provider_id)["enabled"]:
         raise AudiaGenticError(
@@ -316,11 +314,9 @@ def _try_profile_with_retries(
 
     SH02: dispatch_prompt is passed through to each attempt for provider dispatch.
     """
-    from audiagentic.components.agents.models.execution_profile_api import (
-        resolve_execution_profile,
-    )
+    from audiagentic.components.agents.gateway.profiles import resolve_authoritative_profile
 
-    profile = resolve_execution_profile(project_root, execution_profile_id)
+    profile = resolve_authoritative_profile(project_root, execution_profile_id)
     retry_count = resolve_retry_count(profile.get("params", {}))
     max_attempts = retry_count + 1
     # AS105/AS101: bound at dispatch time (see _dispatch_one_attempt), never

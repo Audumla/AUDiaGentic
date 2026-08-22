@@ -134,9 +134,9 @@ def _build_inventory() -> dict[tuple[str, str], HarnessSurfaceCapabilityFact]:
     """Aggregate the authoritative harness observability inventory across
     every provider's own descriptor.
 
-    OpenCode ACP (opencode-acp) is the only validated transport-observation
-    publisher. All other surfaces are inventory-only: probe-required/blocked/
-    unsupported with O0 effective level.
+    OpenCode ACP and the locally-probed Windows Codex ACP surface are validated
+    transport-observation publishers. Other surfaces remain inventory-only or
+    platform-gated until their own probes pass.
     """
     from audiagentic.components.providers.descriptors.loader import (
         get_providers_config_dir,

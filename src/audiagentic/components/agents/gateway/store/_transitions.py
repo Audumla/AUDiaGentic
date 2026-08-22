@@ -418,6 +418,10 @@ def transition_recovered_terminal(
                 "updated-at": timestamp,
                 "revision": record["revision"] + 1,
                 "recovery": recovery_meta,
+                # Terminal: the watchdog no longer applies, and a leftover
+                # "active" state would falsely suggest still-running work.
+                "watchdog-state": "not-started",
+                "watchdog-reason": None,
             }
         )
         if recovered_evidence is not None:
@@ -849,6 +853,11 @@ def transition_owned_terminal(
         classification = details.get("watchdog-classification") if isinstance(details, dict) else None
         if isinstance(classification, str) and classification:
             terminal_updates["terminal-classification"] = classification
+    # The watchdog only monitors a request while it is running; once
+    # terminal, a leftover "active"/"intervention" state is stale and
+    # falsely suggests the request is still being worked on.
+    terminal_updates["watchdog-state"] = "not-started"
+    terminal_updates["watchdog-reason"] = None
     updated = transition_record(
         project_root,
         request_id,

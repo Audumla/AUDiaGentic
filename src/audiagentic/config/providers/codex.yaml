@@ -3,6 +3,7 @@
 
 provider_id: codex
 execution_isolation_tier: full-isolation
+mcp_launch_isolation_tier: exact
 display_name: "Codex (OpenAI)"
 description: "OpenAI's CLI coding agent. Runs tasks autonomously in a sandboxed environment."
 url: "https://github.com/openai/codex"
@@ -91,15 +92,14 @@ capabilities:
         feature: stdio-transport
       evidence:
         note: >-
-          @agentclientprotocol/codex-acp bridge (npx or local binary) exposing
-          an ACP stdio server over Codex App Server; launched via
-          adapters/codex/acp.py build_acp_launch. Bridge package is not yet a
-          managed install (AS13 step 2 — aux_installs extension); npx fallback
-          is ad-hoc. Cannot attach to an already-open interactive Codex TUI —
-          the ACP client owns the session. model_id passthrough unverified;
-          model selection rides on codex config.toml/CODEX_HOME. NEXT: AS13
-          managed install, model passthrough verification, live validation
-          against real codex-acp.
+          @agentclientprotocol/codex-acp bridge (pinned npx or local binary)
+          exposing an ACP stdio server over Codex App Server; launched via
+          adapters/codex/acp.py build_acp_launch. Model ids use
+          model[reasoning-effort] and are passed through process-local
+          CODEX_CONFIG. Cannot attach to an already-open interactive Codex TUI
+          — the ACP client owns the session. The auxiliary bridge install is
+          still pending AS13; the pinned npx route is the deterministic local
+          fallback until that install seam is available.
         source: "tests/unit/providers/test_codex_acp_launch.py"
     - mechanism:
         feature: live-session
@@ -141,11 +141,13 @@ harness_observability:
   - surface_id: codex-acp
     candidate_source: ACP adapter bridge
     evidence:
-      validated: false
-      reference: AS13 bridge/version proof
+      validated: true
+      reference: tests/unit/providers/test_codex_acp_launch.py
     recipe: A
-    lifecycle_source: none
+    lifecycle_source: transport
     probe_anchor: AS13 bridge/version proof
+    platform_evidence:
+      - windows-amd64
   - surface_id: codex-cli
     candidate_source: native hooks TOML reader/writer/remover
     evidence:
@@ -154,3 +156,43 @@ harness_observability:
     recipe: B
     lifecycle_source: none
     probe_anchor: installed TOML/hooks reader-writer-remover proof
+
+# AS29 session-surface declaration for the provider-owned ACP bridge.  The
+# bridge is versioned independently from the Codex CLI; the local CLI probe
+# supplies the installed-version anchor used for compatibility selection.
+session_surfaces:
+  - surface_id: codex-acp
+    version_constraint: ">=0.147"
+    identity_operations:
+      open: "supported"
+      attach-existing: "unsupported"
+      resume-by-ref: "unsupported"
+      discover: "unsupported"
+    ownership_modes:
+      - "owned"
+    controls:
+      cancel-turn: "unsupported"
+      interrupt-turn: "unsupported"
+      steer-turn: "unsupported"
+      respond-permission: "unsupported"
+      close-session: "supported"
+    lifecycle_source: "transport"
+    lifecycle_installation: "none"
+    correlation_id_supported: true
+    event_ordering_guaranteed: true
+    source_idempotency: true
+    content_channels:
+      - channel: "assistant-text"
+        max_bytes: 65536
+        max_events: 100
+    evidence:
+      validated: true
+      reference: "tests/unit/providers/test_codex_acp_launch.py"
+    platforms:
+      - platform: "windows-amd64"
+        tool_version: "0.147.0"
+        probe_artifact: "tests/unit/providers/test_codex_acp_launch.py"
+        evidence:
+          validated: true
+          reference: "tests/unit/providers/test_codex_acp_launch.py"
+    adapter_ref: "audiagentic.components.providers.adapters.codex.acp:build_acp_launch"

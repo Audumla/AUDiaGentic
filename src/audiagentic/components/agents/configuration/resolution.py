@@ -73,8 +73,9 @@ def resolve_agent_composition(
     agent_id: str,
     *,
     snapshot: AgentsConfigSnapshot | None = None,
+    repository: AgentsConfigRepository | None = None,
 ) -> ResolvedAgentComposition:
-    repository = AgentsConfigRepository()
+    repository = repository or AgentsConfigRepository()
     current = snapshot or repository.read(project_root)
     raw = next((item for item in current.document.agents if item.get("agent_id") == agent_id), None)
     if raw is None:

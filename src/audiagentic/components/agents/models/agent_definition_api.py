@@ -5,12 +5,11 @@ Deliberately not composed (RV890): storage is stateless project-local config.
 """
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.agents.agents_paths import agents_config_path
+from audiagentic.components.agents.agents_paths import agents_config_path, global_agents_config_path
 from audiagentic.components.agents.configuration.contracts import AgentsConfigDocument
 from audiagentic.components.agents.configuration.repository import AgentsConfigRepository
 from audiagentic.components.agents.models.agent_definition import (
@@ -19,31 +18,6 @@ from audiagentic.components.agents.models.agent_definition import (
     agent_definition_to_dict,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import load_yaml_file
-
-logger = logging.getLogger(__name__)
-
-SEED_AGENT_DEFINITIONS_YAML = """\
-# Agent definitions — logical agents composing one Execution Profile and one Role.
-# Managed by the 'agents' component. Do not edit by hand unless you understand the schema.
-contract-version: v1
-agent-definitions: []
-"""
-
-
-def _load_yaml_lenient(path: Path) -> dict[str, Any]:
-    """Load YAML without raising on missing file; returns empty dict."""
-    if not path.exists():
-        return {}
-    try:
-        return load_yaml_file(path)
-    except Exception as exc:
-        raise AudiaGenticError(
-            code="IO-AGD-001",
-            kind="agents",
-            message="failed to read agent definitions config",
-            details={"path": str(path), "error": str(exc)},
-        ) from exc
 
 
 def load_agent_definitions(project_root: Path) -> AgentDefinitionStore:

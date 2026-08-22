@@ -28,6 +28,8 @@ from audiagentic.components.providers.protocols.streaming.provider_streaming imp
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
+from .model_selection import split_model_selection
+
 logger = logging.getLogger(__name__)
 
 
@@ -159,9 +161,20 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
         str(output_path),
     ]
     if full_auto:
-        command.insert(2, "--full-auto")
+        # Codex CLI 0.147+ replaced the removed --full-auto switch with the
+        # explicit dangerous-bypass form.  The provider's existing
+        # execution-policy.full-auto setting still means unattended runs, so
+        # map it to the current CLI spelling rather than silently dropping it.
+        command.insert(2, "--dangerously-bypass-approvals-and-sandbox")
     if default_model:
-        command.extend(["--model", str(default_model)])
+        model, effort = split_model_selection(str(default_model))
+        if model:
+            command.extend(["--model", model])
+        if effort:
+            # Codex CLI exposes reasoning effort as a config override rather
+            # than a dedicated flag.  Keep the profile's ``model[effort]``
+            # spelling consistent with the ACP bridge.
+            command.extend(["-c", f"model_reasoning_effort={effort}"])
     command.append(prompt)
 
     stream_controls = packet_ctx.get("stream-controls", {})

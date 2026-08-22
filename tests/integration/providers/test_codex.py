@@ -50,18 +50,20 @@ def test_codex_adapter_executes_cli(monkeypatch, tmp_path: Path) -> None:
             "workflow-profile": "standard",
             "working-root": tmp_path,
         },
-        {"default-model": "gpt-5.4-mini", "access-mode": "cli"},
+        {"default-model": "gpt-5.6-luna[xhigh]", "access-mode": "cli"},
     )
 
     assert result["provider-id"] == "codex"
     assert result["status"] == "ok"
     assert result["execution-mode"] == "cli"
-    assert result["model"] == "gpt-5.4-mini"
+    assert result["model"] == "gpt-5.6-luna[xhigh]"
     assert result["output"] == "codex completed"
     assert captured["command"][0] == r"C:\\Tools\\codex.exe"
     assert captured["command"][1] == "exec"
     assert "--skip-git-repo-check" in captured["command"]
-    assert "--full-auto" in captured["command"]
+    assert "--dangerously-bypass-approvals-and-sandbox" in captured["command"]
+    assert captured["command"][captured["command"].index("--model") + 1] == "gpt-5.6-luna"
+    assert "model_reasoning_effort=xhigh" in captured["command"]
     assert captured["command"][-1].startswith(
         "AUDiaGentic Codex provider execution request."
     )

@@ -81,11 +81,9 @@ def agent_task_list_definitions() -> list[dict[str, Any]]:
     It exists so a caller using ONLY the gateway server can discover valid
     agent_id values without also needing the configuration server
     attached."""
-    from audiagentic.components.agents.models.agent_definition_api import (
-        list_agent_definitions,
-    )
+    from audiagentic.components.agents.configuration.global_catalog import list_global_agent_definitions
 
-    definitions = list_agent_definitions(project_root_from_env())
+    definitions = list_global_agent_definitions(project_root_from_env())
     return _sparse([_agent_card(definition) for definition in definitions])
 
 
@@ -236,9 +234,9 @@ def agent_task_submit(
     This is the sole submission surface over MCP (RV891). Direct
     provider/model execution bypassing agent selection is not exposed over MCP."""
     project_root = project_root_from_env()
-    from audiagentic.components.agents.models.agent_definition_api import get_agent_definition
+    from audiagentic.components.agents.configuration.global_catalog import get_global_agent_definition
 
-    definition = get_agent_definition(project_root, agent_id)
+    definition = get_global_agent_definition(project_root, agent_id)
     submit_kwargs: dict[str, Any] = {
         "execution_profile_id": definition["execution_profile_id"],
         "prompt_body": prompt_body,

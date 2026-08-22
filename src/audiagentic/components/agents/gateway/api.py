@@ -53,11 +53,20 @@ def set_queue_manager(manager: queue_mod.GatewayQueueManager) -> None:
 def _resolve_profile_for_submit(
     project_root: Path, execution_profile_id: str | None
 ) -> dict[str, Any]:
+    from audiagentic.components.agents.configuration.global_catalog import (
+        resolve_global_default_execution_profile,
+        resolve_global_execution_profile,
+    )
     from audiagentic.components.agents.models.execution_profile_api import (
         resolve_default_execution_profile,
         resolve_execution_profile,
     )
 
+    from audiagentic.components.agents.gateway.profiles import get_gateway_registry
+    if get_gateway_registry() is not None:
+        if execution_profile_id:
+            return resolve_global_execution_profile(project_root, execution_profile_id)
+        return resolve_global_default_execution_profile(project_root)
     if execution_profile_id:
         return resolve_execution_profile(project_root, execution_profile_id)
     return resolve_default_execution_profile(project_root)

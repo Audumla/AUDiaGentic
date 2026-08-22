@@ -6,7 +6,6 @@ project-local config, read fresh on every call (see roles.RoleStore).
 """
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import Any
 
@@ -19,31 +18,6 @@ from audiagentic.components.agents.models.role import (
     role_to_dict,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import load_yaml_file
-
-logger = logging.getLogger(__name__)
-
-SEED_ROLES_YAML = """\
-# Roles — small, reusable behavioral definitions independent of provider/model.
-# Managed by the 'agents' component. Do not edit by hand unless you understand the schema.
-contract-version: v1
-roles: []
-"""
-
-
-def _load_yaml_lenient(path: Path) -> dict[str, Any]:
-    """Load YAML without raising on missing file; returns empty dict."""
-    if not path.exists():
-        return {}
-    try:
-        return load_yaml_file(path)
-    except Exception as exc:
-        raise AudiaGenticError(
-            code="IO-ROL-001",
-            kind="agents",
-            message="failed to read roles config",
-            details={"path": str(path), "error": str(exc)},
-        ) from exc
 
 
 def load_roles(project_root: Path) -> RoleStore:

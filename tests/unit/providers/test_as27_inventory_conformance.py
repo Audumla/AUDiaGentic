@@ -214,7 +214,11 @@ class TestTransportObservationEligibility:
             is_eligible_transport_observation_publisher,
         )
 
-        assert not is_eligible_transport_observation_publisher("codex", "codex-acp")
+        # The local default platform is Windows; Codex ACP is eligible there
+        # after the bridge launch/close proof.  Linux remains unproven below.
+        assert is_eligible_transport_observation_publisher(
+            "codex", "codex-acp", platform="windows-amd64"
+        )
 
     def test_gemini_cli_not_eligible(self):
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
@@ -272,13 +276,14 @@ class TestTransportObservationEligibility:
         assert ("pi", "pi-community-acp") in eligible
 
     def test_eligible_list_windows_includes_current_validated_surfaces(self):
-        """Windows includes the validated Pi and gpt-auto (+ t1/t2 alias) surfaces."""
+        """Windows includes Codex ACP, Pi and gpt-auto (+ t1/t2 aliases)."""
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             list_eligible_transport_observation_surfaces,
         )
 
         eligible = list_eligible_transport_observation_surfaces(platform="windows-amd64")
         assert eligible == [
+            ("codex", "codex-acp"),
             ("gpt-auto", "gpt-auto-browser"),
             ("gpt-auto-t1", "gpt-auto-browser"),
             ("gpt-auto-t2", "gpt-auto-browser"),
@@ -588,15 +593,15 @@ class TestPlatformNeutralEligibility:
         assert "windows-amd64" not in fact.platform_evidence
         assert "darwin-arm64" not in fact.platform_evidence
 
-    def test_non_eligible_surface_has_empty_platform_evidence(self):
-        """Non-validated surfaces have empty platform_evidence — no OS restriction needed."""
+    def test_codex_surface_records_its_local_platform_evidence(self):
+        """Codex ACP validation is currently limited to the Windows probe."""
         from audiagentic.components.providers.services.session.harness_observability_inventory import (
             get_harness_surface_capability_fact,
         )
 
         fact = get_harness_surface_capability_fact("codex", "codex-acp")
         assert fact is not None
-        assert fact.platform_evidence == ()
+        assert fact.platform_evidence == ("windows-amd64",)
 
     def test_eligibility_gate_requires_validation_not_just_platform(self):
         """Platform match alone does not grant eligibility — validation_state must be VALIDATED."""
@@ -604,8 +609,8 @@ class TestPlatformNeutralEligibility:
             is_eligible_transport_observation_publisher,
         )
 
-        # codex-acp has no platform_evidence (empty = no restriction)
-        # but it is NOT validated, so it is not eligible.
+        # Codex ACP is validated on Windows, but the Linux target has no local
+        # proof and therefore remains ineligible there.
         assert not is_eligible_transport_observation_publisher(
             "codex",
             "codex-acp",

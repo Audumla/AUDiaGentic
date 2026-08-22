@@ -54,7 +54,7 @@ def test_agent_task_list_definitions_returns_slim_client_facing_cards():
     with (
         _patch_root(),
         patch(
-            "audiagentic.components.agents.models.agent_definition_api.list_agent_definitions",
+            "audiagentic.components.agents.configuration.global_catalog.list_global_agent_definitions",
             return_value=raw,
         ),
     ):
@@ -76,7 +76,7 @@ def test_agent_task_list_definitions_delegates():
     with (
         _patch_root(),
         patch(
-            "audiagentic.components.agents.models.agent_definition_api.list_agent_definitions",
+            "audiagentic.components.agents.configuration.global_catalog.list_global_agent_definitions",
             return_value=[{"agent_id": "reviewer-agent"}],
         ) as mock_list,
     ):
@@ -185,7 +185,7 @@ def test_agent_task_submit_resolves_agent_and_delegates():
     with (
         _patch_root(),
         patch(
-            "audiagentic.components.agents.models.agent_definition_api.get_agent_definition",
+            "audiagentic.components.agents.configuration.global_catalog.get_global_agent_definition",
             return_value={"agent_id": "reviewer-agent", "execution_profile_id": "fast"},
         ) as mock_get_definition,
         patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
