@@ -153,6 +153,7 @@ def _request_row(status: dict[str, Any]) -> dict[str, Any]:
         "state", "session-id", "provider-turn-pending", "created-at", "updated-at",
         "started-at", "finished-at", "last-activity-at", "watchdog-state", "watchdog-reason",
         "latest-transition", "error",
+        "output-preview", "output-truncated", "response-artifact",
     )
     return {key: status.get(key) for key in visible if status.get(key) is not None}
 

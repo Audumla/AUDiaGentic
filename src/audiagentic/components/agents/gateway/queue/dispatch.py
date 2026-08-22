@@ -496,11 +496,14 @@ def dispatch_request(
     except AudiaGenticError as exc:
         error = exc
     else:
+        from audiagentic.components.agents.gateway.output import persist_final_response
+        artifact = persist_final_response(project_root, record["request-id"], str(outcome.get("output") or ""))
+        artifact_ref = {key: artifact[key] for key in ("artifact-id", "request-id", "media-type", "bytes", "sha256")}
         return _transition_owned_attempt(
             project_root,
             record,
             "completed",
-            updates={**outcome, "finished-at": now_iso_z()},
+            updates={**outcome, "response-artifact": artifact_ref, "output-preview": artifact["output-preview"], "output-truncated": artifact["output-truncated"], "finished-at": now_iso_z()},
         )
     return _transition_owned_attempt(
         project_root,
