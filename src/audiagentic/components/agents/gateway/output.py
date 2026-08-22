@@ -15,13 +15,15 @@ Design principles:
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
-from audiagentic.foundation.io import atomic_write_json, load_ndjson
+from audiagentic.foundation.io import atomic_write_json, atomic_write_text, load_ndjson
+from audiagentic.components.agents.agents_paths import gateway_final_response_path
 from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports.agent_output import (
@@ -34,6 +36,48 @@ from audiagentic.foundation.transports.session_surface import (
 )
 
 logger = logging.getLogger(__name__)
+
+FINAL_RESPONSE_PREVIEW_BYTES = 4096
+
+
+def _utf8_preview(text: str, limit: int = FINAL_RESPONSE_PREVIEW_BYTES) -> tuple[str, bool]:
+    raw = text.encode("utf-8")
+    if len(raw) <= limit:
+        return text, False
+    marker = "\n…[truncated]"
+    marker_bytes = marker.encode("utf-8")
+    body_limit = max(0, limit - len(marker_bytes))
+    body = raw[:body_limit].decode("utf-8", errors="ignore")
+    preview = (body + marker).encode("utf-8")[:limit].decode("utf-8", errors="ignore")
+    return preview, True
+
+
+def persist_final_response(project_root: Path, request_id: str, text: str) -> dict[str, Any]:
+    """Persist the exact terminal UTF-8 response before terminal record commit."""
+    if not isinstance(text, str):
+        text = str(text)
+    path = gateway_final_response_path(project_root, request_id)
+    atomic_write_text(path, text)
+    raw = text.encode("utf-8")
+    preview, truncated = _utf8_preview(text)
+    return {
+        "artifact-id": "final-response",
+        "request-id": request_id,
+        "media-type": "text/plain; charset=utf-8",
+        "bytes": len(raw),
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "output-preview": preview,
+        "output-truncated": truncated,
+    }
+
+
+def read_final_response(project_root: Path, request_id: str, artifact: dict[str, Any]) -> str:
+    """Read and verify the fixed request-owned terminal artifact."""
+    path = gateway_final_response_path(project_root, request_id)
+    raw = path.read_bytes()
+    if len(raw) != artifact.get("bytes") or hashlib.sha256(raw).hexdigest() != artifact.get("sha256"):
+        raise AudiaGenticError(code="CON-AGW-140", kind="agents", message="gateway response artifact integrity check failed", details={})
+    return raw.decode("utf-8")
 
 # ── Coded error constants ────────────────────────────────────────────────
 

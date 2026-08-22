@@ -218,6 +218,7 @@ mcp-servers:
       - agent_task_list_definitions
       - agent_task_submit
       - agent_task_status
+      - agent_task_response
       - agent_task_cancel
       - agent_task_list_requests
       - agent_task_gateway_overview

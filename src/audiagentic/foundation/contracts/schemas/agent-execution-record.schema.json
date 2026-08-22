@@ -31,7 +31,7 @@
   "additionalProperties": false,
   "properties": {
     "contract-version": {
-      "const": "v5"
+      "enum": ["v5", "v6"]
     },
     "request-id": {
       "type": "string"
@@ -48,6 +48,20 @@
     },
     "prompt-template-name": {"type": ["string", "null"]},
     "prompt-template-digest": {"type": ["string", "null"]},
+    "response-artifact": {
+      "type": ["object", "null"],
+      "properties": {
+        "artifact-id": {"const": "final-response"},
+        "request-id": {"type": "string"},
+        "media-type": {"type": "string"},
+        "bytes": {"type": "integer", "minimum": 0},
+        "sha256": {"type": "string", "minLength": 1}
+      },
+      "required": ["artifact-id", "request-id", "media-type", "bytes", "sha256"],
+      "additionalProperties": false
+    },
+    "output-preview": {"type": ["string", "null"]},
+    "output-truncated": {"type": "boolean"},
     "prompt-body": {
       "type": ["string", "null"]
     },

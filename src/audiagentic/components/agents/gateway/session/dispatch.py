@@ -692,6 +692,9 @@ def _dispatch_session_request(
     session_record = session_store.read_session_record(project_root, session_id)
     model_id = session_store.session_model_id(session_record) or record.get("resolved-model-id")
     output_text = _session_output_from_result(result)
+    from audiagentic.components.agents.gateway.output import persist_final_response
+    artifact = persist_final_response(project_root, request_id, output_text)
+    artifact_ref = {key: artifact[key] for key in ("artifact-id", "request-id", "media-type", "bytes", "sha256")}
     store.append_owned_attempt(
         project_root,
         request_id,
@@ -722,6 +725,9 @@ def _dispatch_session_request(
             "provider-id": provider_id,
             "model-id": model_id,
             "output": output_text,
+            "response-artifact": artifact_ref,
+            "output-preview": artifact["output-preview"],
+            "output-truncated": artifact["output-truncated"],
             "completion": {
                 "stop-reason": result.stop_reason,
                 "binding": binding_store.public_binding_projection(session_record.get("binding")),

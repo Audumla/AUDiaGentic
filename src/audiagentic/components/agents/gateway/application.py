@@ -15,6 +15,7 @@ class GatewayApplication(Protocol):
 
     def submit_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]: ...
     def get_execution_request(self, project_root: Path, request_id: str) -> dict[str, Any]: ...
+    def get_execution_response(self, project_root: Path, request_id: str) -> str: ...
     def wait_execution_request(
         self, project_root: Path, request_id: str, timeout_seconds: float | None = None
     ) -> dict[str, Any]: ...
@@ -61,6 +62,9 @@ class InProcessGatewayApplication:
 
     def get_execution_request(self, project_root: Path, request_id: str) -> dict[str, Any]:
         return self._api().get_execution_request(project_root, request_id)
+
+    def get_execution_response(self, project_root: Path, request_id: str) -> str:
+        return self._api().get_execution_response(project_root, request_id)
 
     def wait_execution_request(
         self, project_root: Path, request_id: str, timeout_seconds: float | None = None

@@ -191,6 +191,9 @@ class GatewayServiceApplication:
             )
         if operation == "get_execution_request":
             return self._application.get_execution_request(root, _required(arguments, "request_id"))
+        if operation == "get_execution_response":
+            _reject_unknown(arguments, {"request_id"})
+            return self._application.get_execution_response(root, _required(arguments, "request_id"))
         if operation == "wait_execution_request":
             return self._application.wait_execution_request(
                 root, _required(arguments, "request_id"), arguments.get("timeout_seconds")
