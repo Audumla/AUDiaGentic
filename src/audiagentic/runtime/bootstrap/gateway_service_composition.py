@@ -47,6 +47,16 @@ GPT_AUTO_RUNTIME_OWNER = ServiceId("providers.gpt-auto-runtime-owner")
 SESSION_RUNTIME_OWNER = ServiceId("agents.gateway-session-runtime-owner")
 
 
+def build_gateway_application() -> Any:
+    """Wire the gateway application to the runtime-owned context reader."""
+    from audiagentic.components.agents.gateway.application import InProcessGatewayApplication
+    from audiagentic.runtime.component_context import collect_component_context
+
+    return InProcessGatewayApplication(
+        component_context_reader=collect_component_context,
+    )
+
+
 def _pkg_default_path() -> Path:
     return (
         PACKAGE_ROOT / "config" / "provisioning" / "foundation" / "gateway-service-composition.yaml"

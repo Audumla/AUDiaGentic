@@ -9,47 +9,16 @@ from audiagentic.components.session import session_api
 from audiagentic.components.source_control import source_control_api
 from audiagentic.components.providers.contracts.session_status import ProviderSessionInfo
 from audiagentic.foundation.components import context as context_mod
-from audiagentic.foundation.components.base import ComponentDescriptor
-from audiagentic.foundation.components.registry import register, reset
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
-def _registered_context_component(tmp_path: Path, *, component_id: str = "source-control") -> None:
-    marker = tmp_path / ".audiagentic" / "components"
-    marker.mkdir(parents=True)
-    (marker / f"{component_id}.yaml").write_text("enabled: true\n", encoding="utf-8")
-    register(
-        ComponentDescriptor(
-            component_id=component_id,
-            display_name=component_id,
-            description="",
-            detection_marker=f".audiagentic/components/{component_id}.yaml",
-            context_hook="test.context",
-        )
-    )
+def test_sanitize_context_section_redacts_and_bounds_values() -> None:
+    assert context_mod.sanitize_context_section(
+        "source-control", {"branch": "main", "api_key": "secret"}
+    ) == {"branch": "main"}
 
-
-def test_collect_component_context_namespaces_and_redacts(tmp_path: Path, monkeypatch) -> None:
-    reset()
-    _registered_context_component(tmp_path)
-    monkeypatch.setattr(
-        context_mod,
-        "_resolve_hook",
-        lambda _path: lambda _root: {"branch": "main", "api_key": "secret"},
-    )
-
-    assert context_mod.collect_component_context(tmp_path) == {
-        "source_control": {"branch": "main"}
-    }
-
-
-def test_collect_component_context_rejects_invalid_hook_result(tmp_path: Path, monkeypatch) -> None:
-    reset()
-    _registered_context_component(tmp_path)
-    monkeypatch.setattr(context_mod, "_resolve_hook", lambda _path: lambda _root: "bad")
-
-    with pytest.raises(AudiaGenticError, match="must return a mapping"):
-        context_mod.collect_component_context(tmp_path)
+    with pytest.raises(AudiaGenticError, match="JSON-compatible"):
+        context_mod.sanitize_context_section("source-control", {"bad": object()})
 
 
 def test_project_context_reads_identity(tmp_path: Path) -> None:

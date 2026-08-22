@@ -11,7 +11,6 @@ from typing import Any
 
 from audiagentic.components.agents.gateway.application import (
     GatewayApplication,
-    get_gateway_application,
 )
 from audiagentic.components.agents.gateway.remote_client import load_auth_token
 from audiagentic.components.agents.gateway.service.application import (
@@ -96,6 +95,7 @@ class GatewayServiceHost:
             recent_window_seconds,
         )
         from audiagentic.runtime.bootstrap.gateway_service_composition import (
+            build_gateway_application,
             build_gateway_service_graph,
         )
 
@@ -106,7 +106,7 @@ class GatewayServiceHost:
             store = ManagedServiceStore(GATEWAY_SERVICE_KEY, root=service_root)
             resolved_token_path = token_path or store.root / "auth.token"
             token = load_or_create_auth_token(resolved_token_path)
-            domain_application = application or get_gateway_application()
+            domain_application = application or build_gateway_application()
             configured_recent_seconds = recent_window_seconds()
             service_application = GatewayServiceApplication(
                 domain_application,
