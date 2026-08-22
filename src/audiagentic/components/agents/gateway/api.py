@@ -17,6 +17,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.agents.gateway.admission.context import ComponentContextReader
+
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.queue import dispatch as dispatch
 from audiagentic.components.agents.gateway.queue import queue as queue_mod
@@ -286,6 +288,7 @@ def submit_execution_request(
     component_profile: str | None = None,
     _dispatch_owner_epoch: str | None = None,
     _dispatch_service_root: str | None = None,
+    component_context_reader: "ComponentContextReader | None" = None,
 ) -> dict[str, Any]:
     """Submit a gateway request. Returns immediately with request-id and initial state
     unless mode='blocking', in which case it waits for a terminal result (see run_execution_request).
@@ -355,9 +358,13 @@ def submit_execution_request(
     # Capture component-owned template facts once at admission.  Dispatch,
     # retries, and recovery use the durable snapshot rather than re-reading
     # project state such as the current Git branch.
-    from audiagentic.foundation.components.context import collect_component_context
+    if component_context_reader is None:
+        from audiagentic.components.agents.gateway.admission.context import (
+            empty_component_context,
+        )
 
-    template_context = collect_component_context(Path(canonical_root.display))
+        component_context_reader = empty_component_context
+    template_context = component_context_reader(Path(canonical_root.display))
 
     # Resolve the machine-global agent definition at gateway admission. MCP
     # transports pass only agent_id so execution and prompt identity come from
@@ -765,6 +772,7 @@ def run_execution_request(
     component_profile: str | None = None,
     _dispatch_owner_epoch: str | None = None,
     _dispatch_service_root: str | None = None,
+    component_context_reader: "ComponentContextReader | None" = None,
 ) -> dict[str, Any]:
     """Submit and block until a terminal result or timeout. Not for event-triggered
     paths (AG12 handles those asynchronously through lifecycle events)."""
@@ -783,6 +791,7 @@ def run_execution_request(
         component_profile=component_profile,
         _dispatch_owner_epoch=_dispatch_owner_epoch,
         _dispatch_service_root=_dispatch_service_root,
+        component_context_reader=component_context_reader,
     )
 
 

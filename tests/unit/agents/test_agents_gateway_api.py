@@ -13,6 +13,7 @@ import pytest
 from audiagentic.components.agents.agents_paths import gateway_idempotency_index_path
 from audiagentic.components.agents.gateway import api as gateway
 from audiagentic.components.agents.gateway import store as store
+from audiagentic.components.agents.gateway.application import InProcessGatewayApplication
 from audiagentic.components.agents.gateway.queue import queue as agents_gateway_queue
 from audiagentic.components.agents.models.execution_profile_api import (
     create_execution_profile,
@@ -98,10 +99,6 @@ def test_admission_freezes_component_template_context(tmp_path: Path, monkeypatc
     _make_profile(tmp_path, "default", "local-openai")
     frozen = {"project": {"name": "At admission"}}
     observed: dict = {}
-    monkeypatch.setattr(
-        "audiagentic.foundation.components.context.collect_component_context",
-        lambda _root: frozen,
-    )
 
     def fake_execute_provider(*, identity, execution_request, timeout_seconds):
         observed.update(execution_request["packet-data"])
@@ -114,10 +111,29 @@ def test_admission_freezes_component_template_context(tmp_path: Path, monkeypatc
         "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
         fake_execute_provider,
     )
-    result = gateway.run_execution_request(tmp_path, prompt_body="hi")
+    result = gateway.run_execution_request(
+        tmp_path, prompt_body="hi", component_context_reader=lambda _root: frozen
+    )
     persisted = store.read_record(tmp_path, result["request-id"])
     assert persisted["template-context"] == frozen
     assert observed["template-context"] == frozen
+
+
+def test_application_injects_its_component_context_reader(tmp_path: Path, monkeypatch) -> None:
+    observed: dict[str, object] = {}
+    reader = lambda _root: {"project": {"name": "Injected"}}
+
+    def fake_submit(_root: Path, **kwargs: object) -> dict[str, object]:
+        observed.update(kwargs)
+        return {"request-id": "req_test"}
+
+    monkeypatch.setattr(gateway, "submit_execution_request", fake_submit)
+    application = InProcessGatewayApplication(component_context_reader=reader)
+
+    assert application.submit_execution_request(tmp_path, prompt_body="hi") == {
+        "request-id": "req_test"
+    }
+    assert observed["component_context_reader"] is reader
 
 
 def test_public_status_contains_canonical_agent_status(tmp_path: Path, monkeypatch):

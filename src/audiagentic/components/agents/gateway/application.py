@@ -9,6 +9,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Protocol
 
+from audiagentic.components.agents.gateway.admission.context import (
+    ComponentContextReader,
+    empty_component_context,
+)
+
 
 class GatewayApplication(Protocol):
     """Operations owned by the gateway control plane."""
@@ -51,6 +56,13 @@ class GatewayApplication(Protocol):
 class InProcessGatewayApplication:
     """The existing API implementation presented as one control-plane owner."""
 
+    def __init__(
+        self,
+        *,
+        component_context_reader: ComponentContextReader = empty_component_context,
+    ) -> None:
+        self._component_context_reader = component_context_reader
+
     @staticmethod
     def _api() -> Any:
         from audiagentic.components.agents.gateway import api as agents_gateway_api
@@ -58,7 +70,11 @@ class InProcessGatewayApplication:
         return agents_gateway_api
 
     def submit_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]:
-        return self._api().submit_execution_request(project_root, **kwargs)
+        return self._api().submit_execution_request(
+            project_root,
+            component_context_reader=self._component_context_reader,
+            **kwargs,
+        )
 
     def get_execution_request(self, project_root: Path, request_id: str) -> dict[str, Any]:
         return self._api().get_execution_request(project_root, request_id)
@@ -78,7 +94,11 @@ class InProcessGatewayApplication:
         return self._api().request_runtime_status(project_root, request_id)
 
     def run_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]:
-        return self._api().run_execution_request(project_root, **kwargs)
+        return self._api().run_execution_request(
+            project_root,
+            component_context_reader=self._component_context_reader,
+            **kwargs,
+        )
 
     def list_execution_requests(self, project_root: Path, **kwargs: Any) -> list[dict[str, Any]]:
         return self._api().list_execution_requests(project_root, **kwargs)
