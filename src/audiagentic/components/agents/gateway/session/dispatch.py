@@ -95,6 +95,7 @@ def _auto_resume_shutdown_closed_session(
     record: dict[str, Any],
     context_fingerprint: str | None,
     request_runtime_root: Path,
+    project_name: str | None = None,
 ) -> tuple[str, dict[str, Any], dict[str, Any]]:
     """Transparently reattach a session closed by a gateway shutdown.
 
@@ -143,6 +144,7 @@ def _auto_resume_shutdown_closed_session(
             identity_context_fingerprint=manifest_context_fingerprint,
             execution_context_fingerprint=manifest_context_fingerprint,
             request_runtime_root=request_runtime_root,
+            project_name=project_name,
         )
     except AudiaGenticError as exc:
         if exc.code in _AUTO_RESUME_EXPECTED_REFUSAL_CODES:
@@ -214,6 +216,14 @@ def _is_session_request(record: dict[str, Any]) -> bool:
     return bool(record.get("session-id") or record.get("session-keep-alive"))
 
 
+def _admitted_project_name(record: dict[str, Any]) -> str | None:
+    """Return the frozen project name from an admitted request context."""
+    template_context = record.get("template-context")
+    project = template_context.get("project") if isinstance(template_context, dict) else None
+    name = project.get("name") if isinstance(project, dict) else None
+    return name.strip() if isinstance(name, str) and name.strip() else None
+
+
 def _session_output_from_result(result: Any) -> str | None:
     """Read the bounded final summary from a SessionTurnResult.
 
@@ -280,6 +290,7 @@ def _dispatch_session_request(
     request_id = record["request-id"]
     execution_profile_id = record["execution-profile-id"]
     runtime = get_session_runtime()
+    project_name = _admitted_project_name(record)
 
     admitted_snapshot = profiles_mod.snapshot_from_record(record)
     if admitted_snapshot is not None:
@@ -362,6 +373,7 @@ def _dispatch_session_request(
                 execution_profile_digest=execution_profile_digest,
                 effective_capability_digest=effective_capability_digest,
                 capacity_source_id=record.get("resolved-source-id"),
+                project_name=project_name,
                 # Request value wins over profile params; 0 disables the bound
                 # (RV513) — use explicit None checks so 0 survives resolution.
                 idle_timeout_seconds=(
@@ -458,6 +470,7 @@ def _dispatch_session_request(
                         record=record,
                         context_fingerprint=context_fingerprint,
                         request_runtime_root=request_runtime_root,
+                        project_name=project_name,
                     )
                 elif session_record.get("state") != "active":
                     raise AudiaGenticError(
@@ -504,6 +517,7 @@ def _dispatch_session_request(
                         correlation_id=record.get("correlation-id"),
                         request_runtime_root=rehydrate_root,
                         mcp_entries=providers_api.collect_management_mcp_launch_entries(project_root),
+                        project_name=project_name,
                     )
 
             # Global/profile policy is applied only to the in-memory handle;

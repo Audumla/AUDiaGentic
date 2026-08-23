@@ -100,6 +100,7 @@ def test_resume_build_forwards_durable_chat_url_without_submitting(monkeypatch: 
         config=valid_config(),
         ag_session_id="ses-resumed",
         binding_sink=lambda _update: None,
+        project_name="project",
         resume_provider_ref="conversation-42",
         resume_metadata_hint={
             "project-url": "https://chatgpt.com/g/g-p-project/project",
@@ -120,6 +121,7 @@ def test_resume_build_tolerates_missing_chat_url(monkeypatch: pytest.MonkeyPatch
         config=valid_config(),
         ag_session_id="ses-resumed",
         binding_sink=lambda _update: None,
+        project_name="project",
         resume_provider_ref="conversation-42",
         resume_metadata_hint={
             "project-url": "https://chatgpt.com/g/g-p-project/project",
@@ -140,6 +142,7 @@ def test_resume_build_rejects_conflicting_chat_url(monkeypatch: pytest.MonkeyPat
             config=valid_config(),
             ag_session_id="ses-resumed",
             binding_sink=lambda _update: None,
+            project_name="project",
             resume_provider_ref="conversation-42",
             resume_metadata_hint={
                 "project-url": "https://chatgpt.com/g/g-p-project/project",
@@ -161,6 +164,7 @@ def test_resume_build_rejects_unprojected_chat_url(
             config=valid_config(),
             ag_session_id="ses-resumed",
             binding_sink=lambda _update: None,
+            project_name="project",
             resume_provider_ref="conversation-42",
             resume_metadata_hint={
                 "project-url": "https://chatgpt.com/g/g-p-project/project",

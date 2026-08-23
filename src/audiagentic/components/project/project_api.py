@@ -8,19 +8,48 @@ from typing import Any
 from audiagentic.foundation.components.registry import is_enabled, is_installed
 from audiagentic.foundation.features.registry import all_features, all_implementations
 from audiagentic.foundation.features.resolver import resolve_feature, resolve_implementation
+from audiagentic.foundation.io import load_yaml_file
 
 from . import project_components, project_files, project_surfaces
 
 
-def context(project_root: Path) -> dict[str, Any]:
-    """Return stable, public project facts for prompt templates."""
-    from audiagentic.foundation.io import load_yaml_file
+def resolve_project_name(
+    project_root: Path,
+    *,
+    workspace_name: str | None = None,
+) -> str:
+    """Resolve one canonical display name for project-owned consumers.
+
+    Host callers may provide the active workspace name.  CLI and gateway
+    callers that do not have one use the project configuration, then the
+    resolved project-directory name.
+    """
+    if isinstance(workspace_name, str) and workspace_name.strip():
+        return workspace_name.strip()
 
     config_path = project_root / ".audiagentic" / "config" / "project.yaml"
     data = load_yaml_file(config_path) if config_path.is_file() else {}
+    if not isinstance(data, dict):
+        data = {}
+    configured_name = data.get("project-name") or data.get("project_name")
+    if isinstance(configured_name, str) and configured_name.strip():
+        return configured_name.strip()
+    return project_root.resolve().name
+
+
+def context(
+    project_root: Path,
+    *,
+    workspace_name: str | None = None,
+) -> dict[str, Any]:
+    """Return stable, public project facts for prompt templates."""
+    config_path = project_root / ".audiagentic" / "config" / "project.yaml"
+    data = load_yaml_file(config_path) if config_path.is_file() else {}
+    if not isinstance(data, dict):
+        data = {}
     return {
         "id": data.get("project-id"),
-        "name": data.get("project-name") or project_root.name,
+        "name": resolve_project_name(project_root, workspace_name=workspace_name),
         "root": str(project_root.resolve()),
         "workflow_profile": data.get("workflow-profile"),
         "tracked_docs_root": data.get("tracked-docs-root"),

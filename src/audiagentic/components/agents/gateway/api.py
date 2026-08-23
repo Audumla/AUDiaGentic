@@ -286,6 +286,7 @@ def submit_execution_request(
     session_idle_timeout_seconds: float | None = None,
     session_max_lifetime_seconds: float | None = None,
     execution_context_fingerprint: str | None = None,
+    workspace_name: str | None = None,
     component_profile: str | None = None,
     _dispatch_owner_epoch: str | None = None,
     _dispatch_service_root: str | None = None,
@@ -382,10 +383,20 @@ def submit_execution_request(
         # as a fully installed AUDiaGentic project.  Component context is an
         # optional enrichment layer, never a prerequisite for these baseline
         # project/source-control template namespaces.
-        template_context = {
-            **baseline_agent_template_context(Path(canonical_root.display)),
-            **template_context,
-        }
+        baseline_context = baseline_agent_template_context(
+            Path(canonical_root.display), workspace_name=workspace_name
+        )
+        template_context = {**baseline_context, **template_context}
+        # The project component owns the canonical name precedence. Preserve
+        # richer component-provided project facts, but never let an older
+        # reader overwrite that canonical value.
+        if isinstance(baseline_context.get("project"), dict) and isinstance(
+            template_context.get("project"), dict
+        ):
+            template_context["project"] = {
+                **template_context["project"],
+                "name": baseline_context["project"]["name"],
+            }
         catalog = read_global_agents_config(project_root)
         try:
             composition = resolve_agent_composition(project_root, agent_id, snapshot=catalog)
@@ -803,6 +814,7 @@ def run_execution_request(
     session_keep_alive: bool = False,
     session_idle_timeout_seconds: float | None = None,
     session_max_lifetime_seconds: float | None = None,
+    workspace_name: str | None = None,
     component_profile: str | None = None,
     _dispatch_owner_epoch: str | None = None,
     _dispatch_service_root: str | None = None,
@@ -822,6 +834,7 @@ def run_execution_request(
         session_keep_alive=session_keep_alive,
         session_idle_timeout_seconds=session_idle_timeout_seconds,
         session_max_lifetime_seconds=session_max_lifetime_seconds,
+        workspace_name=workspace_name,
         component_profile=component_profile,
         _dispatch_owner_epoch=_dispatch_owner_epoch,
         _dispatch_service_root=_dispatch_service_root,
@@ -1085,6 +1098,30 @@ def resume_execution_session(
         identity_context_fingerprint = identity_context_fingerprint or fresh_fingerprint
         execution_context_fingerprint = execution_context_fingerprint or fresh_fingerprint
 
+    # Preserve an explicitly supplied workspace name across an explicit
+    # session resume.  The opening request owns the frozen template context;
+    # reading that record here avoids re-resolving mutable project metadata.
+    project_name = None
+    try:
+        opening_request_ids = session_store.session_request_ids(
+            session_store.read_session_record(project_root, source_session_id)
+        )
+        if opening_request_ids:
+            opening_record = store.read_record(project_root, opening_request_ids[0])
+            template_context = opening_record.get("template-context")
+            project_section = (
+                template_context.get("project")
+                if isinstance(template_context, dict)
+                else None
+            )
+            candidate = project_section.get("name") if isinstance(project_section, dict) else None
+            if isinstance(candidate, str) and candidate.strip():
+                project_name = candidate.strip()
+    except (AudiaGenticError, KeyError, FileNotFoundError):
+        # The provider/session resume path still has its canonical project
+        # fallback when old records predate template-context persistence.
+        project_name = None
+
     runtime = get_session_runtime()
     record = runtime.resume_session(
         project_root,
@@ -1100,6 +1137,7 @@ def resume_execution_session(
         execution_profile_digest=execution_profile_digest,
         effective_capability_digest=effective_capability_digest,
         model_id=model_id,
+        project_name=project_name,
     )
     return _public_session_projection(record)
 

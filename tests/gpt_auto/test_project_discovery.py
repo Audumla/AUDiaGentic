@@ -7,9 +7,8 @@ import pytest
 
 from audiagentic.components.providers.adapters.gpt_auto.chat import ChatState, PersistentChat
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
-from audiagentic.components.providers.adapters.gpt_auto.session_transport import (
-    _active_project_name,
-)
+from audiagentic.components.providers.adapters.gpt_auto import session_transport
+from audiagentic.components.project.project_api import resolve_project_name
 
 from .test_greenfield_config_urls import valid_config
 
@@ -95,12 +94,34 @@ async def test_initial_chat_discovers_project_by_active_project_name(monkeypatch
     assert runtime.bridge.calls[3][1]["url"] == chat.project_url
 
 
-def test_active_project_name_uses_config_then_directory(tmp_path: Path):
-    assert _active_project_name(tmp_path) == tmp_path.name
+def test_project_name_uses_workspace_then_config_then_directory(tmp_path: Path):
+    assert resolve_project_name(tmp_path) == tmp_path.name
     config_dir = tmp_path / ".audiagentic" / "config"
     config_dir.mkdir(parents=True)
     (config_dir / "project.yaml").write_text("project-name: Big Cherry\n", encoding="utf-8")
-    assert _active_project_name(tmp_path) == "Big Cherry"
+    assert resolve_project_name(tmp_path) == "Big Cherry"
+    assert resolve_project_name(tmp_path, workspace_name="Workspace Name") == "Workspace Name"
+
+
+def test_session_transport_uses_admitted_project_name(monkeypatch, tmp_path: Path):
+    captured: dict[str, object] = {}
+
+    class FakeChat:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(session_transport, "PersistentChat", FakeChat)
+    monkeypatch.setattr(session_transport, "get_runtime", lambda *_args: object())
+
+    session_transport.build_session_transport(
+        tmp_path,
+        config=valid_config(),
+        ag_session_id="session-1",
+        binding_sink=lambda _update: None,
+        project_name="Workspace Name",
+    )
+
+    assert captured["project_name"] == "Workspace Name"
 
 
 @pytest.mark.asyncio

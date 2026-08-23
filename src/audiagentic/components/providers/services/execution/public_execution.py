@@ -554,6 +554,7 @@ def prepare_provider_session_transport(
     enable_observability_tap: bool = False,
     resume_provider_metadata: dict[str, Any] | None = None,
     checkpoint_sink: Any | None = None,
+    project_name: str | None = None,
 ) -> PreparedSessionTransport:
     """Resolve a session-surface snapshot and build the transport factory.
 
@@ -647,6 +648,7 @@ def prepare_provider_session_transport(
             resume_provider_ref=resume_provider_ref,
             resume_metadata_hint=resume_provider_metadata,
             checkpoint_sink=checkpoint_sink,
+            project_name=project_name,
         )
         return PreparedSessionTransport(
             transport=transport,
