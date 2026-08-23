@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AgentStatusSnapshot",
+  "description": "Provider-neutral request/session/turn status projection.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "scope", "lifecycle", "outcome", "wait-reason", "decisions",
+    "request-id", "session-id", "turn-id", "generation", "attempt",
+    "observed-at", "projected-at"
+  ],
+  "properties": {
+    "scope": {"type": "string", "enum": ["execution-request", "session", "turn", "workflow"]},
+    "lifecycle": {"type": "string", "enum": ["pending", "active", "waiting", "completing", "available", "terminal", "unknown"]},
+    "outcome": {"type": ["string", "null"], "enum": ["success", "failed", "cancelled", "interrupted", "rejected", "timed-out", "expired", "abandoned", "superseded", null]},
+    "wait-reason": {"type": ["string", "null"], "enum": ["permission", "queue-capacity", "retry-backoff", "dependency", "child-work", "provider-response", "tool-response", "operator-action", "recovery-decision", "unknown", null]},
+    "decisions": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["accepts-new-turn", "session-reusable", "turn-terminal", "dependent-work-releasable", "evidence-confidence", "reason"],
+      "properties": {
+        "accepts-new-turn": {"type": "boolean"},
+        "session-reusable": {"type": "boolean"},
+        "turn-terminal": {"type": "boolean"},
+        "dependent-work-releasable": {"type": "boolean"},
+        "evidence-confidence": {"type": "string", "enum": ["validated", "candidate", "contradictory", "insufficient", "rejected"]},
+        "reason": {"type": "string"}
+      }
+    },
+    "request-id": {"type": ["string", "null"]},
+    "session-id": {"type": ["string", "null"]},
+    "turn-id": {"type": ["string", "null"]},
+    "generation": {"type": ["integer", "null"], "minimum": 0},
+    "attempt": {"type": ["integer", "null"], "minimum": 0},
+    "observed-at": {"type": ["string", "null"]},
+    "projected-at": {"type": "string", "minLength": 1}
+  }
+}
