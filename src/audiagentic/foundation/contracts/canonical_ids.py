@@ -13,6 +13,7 @@ CANONICAL_SCHEMA_IDS = (
     "agent-execution-record",
     "agent-execution-session",
     "agent-output-event",
+    "agent-status-snapshot",
     "approval-request",
     "change-event",
     "component-config",
