@@ -17,6 +17,7 @@ from audiagentic.components.agents.status.status_projection import (
     snapshot_for_request,
     snapshot_to_mapping,
 )
+from audiagentic.foundation.contracts.schema_registry import validate_with_schema
 from audiagentic.foundation.transports.agent_status import (
     AgentLifecycle,
     AgentOutcome,
@@ -88,6 +89,15 @@ class TestSnapshotSerialization:
         assert mapping["lifecycle"] == "terminal"
         assert mapping["outcome"] == "success"
         assert mapping["decisions"] is None
+
+    def test_mapping_validates_against_canonical_schema(self) -> None:
+        mapping = snapshot_to_mapping(snapshot_for_request(_record("completed")))
+        assert validate_with_schema("agent-status-snapshot", mapping) == []
+
+    def test_schema_rejects_provider_native_fields(self) -> None:
+        mapping = snapshot_to_mapping(snapshot_for_request(_record("queued")))
+        mapping["provider-state"] = "generating"
+        assert validate_with_schema("agent-status-snapshot", mapping)
 
 
 class TestFailedRecord:
