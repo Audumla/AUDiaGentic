@@ -1,8 +1,10 @@
 # Agents Component
 
 Agent composition — prompts, roles, execution profiles, agent definitions, and
-triggers are stored together in the canonical per-project
-`.audiagentic/config/agents.yaml` document and resolved at admission time.
+triggers are stored together in the machine-global
+`~/.audiagentic/config/agents.yaml` document and resolved at admission time.
+The project marker contains runtime records only; it is not an agent
+definition authority.
 
 ## Architecture
 

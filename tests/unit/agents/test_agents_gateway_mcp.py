@@ -148,7 +148,7 @@ def test_agent_task_response_returns_project_relative_artifact_for_large_respons
             "response-artifact": {
                 "artifact-id": "final-response",
                 "request-id": "req_x",
-                "bytes": agents_gateway_mcp.DEFAULT_MCP_INLINE_RESPONSE_MAX_BYTES + 1,
+                "bytes": agents_gateway_mcp._configured_inline_response_limit(_ROOT) + 1,
                 "sha256": "digest",
             },
         }
@@ -164,7 +164,9 @@ def test_agent_task_response_returns_project_relative_artifact_for_large_respons
     mock_call.assert_called_once_with("get_execution_request", _ROOT, "req_x")
 
 
-def test_agent_task_response_inline_limit_reads_project_component_config(tmp_path: Path):
+def test_agent_task_response_inline_limit_reads_packaged_component_config(tmp_path: Path):
+    # Agent definitions are machine-global; a project-local agents.yaml cannot
+    # override the MCP egress budget.
     config_dir = tmp_path / ".audiagentic" / "config"
     config_dir.mkdir(parents=True)
     (config_dir / "agents.yaml").write_text(
@@ -172,7 +174,7 @@ def test_agent_task_response_inline_limit_reads_project_component_config(tmp_pat
         encoding="utf-8",
     )
 
-    assert agents_gateway_mcp._configured_inline_response_limit(tmp_path) == 1234
+    assert agents_gateway_mcp._configured_inline_response_limit(tmp_path) == 32768
 
 
 def test_agent_task_cancel_delegates():

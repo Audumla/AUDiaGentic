@@ -353,7 +353,7 @@ gateway:
     # delivery boundary is exercised. The complete response is always
     # persisted as the request-owned artifact. Raise per deployment only when
     # inline delivery is deliberately wanted.
-    max-inline-response-bytes: 4096
+    max-inline-response-bytes: 32768
 
 contributions:
   - id: agents/profile-doctrine

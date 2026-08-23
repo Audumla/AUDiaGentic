@@ -9,7 +9,12 @@ from audiagentic.foundation.paths.names import project_marker_path
 
 
 def agents_config_path(project_root: Path) -> Path:
-    """Return the canonical project-owned Agents configuration document."""
+    """Return the legacy project-local Agents path.
+
+    Hosted/runtime agent resolution uses :func:`global_agents_config_path`.
+    This path remains only for explicit migration/test seams and is not a
+    supported authority for hosted agent definitions.
+    """
     return project_marker_path(project_root) / "config" / "agents.yaml"
 
 
