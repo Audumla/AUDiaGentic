@@ -145,7 +145,11 @@ def validate_resume_eligibility(
         )
     current_ref_namespace = surface.identity.mapping_facts.ref_namespace
     source_ref_namespace = source_binding.get("ref-namespace")
-    if source_ref_namespace and current_ref_namespace != source_ref_namespace:
+    if (
+        not isinstance(source_ref_namespace, str)
+        or not source_ref_namespace.strip()
+        or current_ref_namespace != source_ref_namespace
+    ):
         raise AudiaGenticError(
             code=ERR_VERSION_OR_REF_INCOMPATIBLE,
             kind="agents",

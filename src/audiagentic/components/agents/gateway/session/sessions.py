@@ -1931,6 +1931,21 @@ class SessionRuntime:
                 details={"session-id": successor_session_id},
             )
         provider_session_ref = open_result.provider_session_ref.value
+        source_provider_ref = source_binding["provider-session-ref"]
+        if provider_session_ref != source_provider_ref:
+            await _close_failed_transport(transport)
+            exc = AudiaGenticError(
+                code="CON-AGW-123",
+                kind="agents",
+                message="resumed transport returned a different provider session identity",
+                details={
+                    "session-id": successor_session_id,
+                    "source-provider-session-ref": source_provider_ref,
+                    "returned-provider-session-ref": provider_session_ref,
+                },
+            )
+            _record_failure(exc)
+            raise exc
 
         # ── Build the new generation's record + RESUMED_FROM binding ──
         record = session_store.build_session_record(
