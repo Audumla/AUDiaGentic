@@ -67,6 +67,8 @@ def test_submit_returns_immediately_for_long_running_request(tmp_path: Path, mon
     result = gateway.submit_execution_request(tmp_path, prompt_body="hi")
     assert result["request-id"].startswith("req_")
     assert result["state"] in ("queued", "running")  # returned without waiting for completion
+    assert result["response-version"] == 3
+    assert result["agent-status"]["scope"] == "execution-request"
 
     hold.set()
     gateway.wait_execution_request(tmp_path, result["request-id"], timeout_seconds=5)
@@ -410,6 +412,10 @@ def test_list_execution_requests_most_recent_first_and_filterable(tmp_path: Path
 
     all_requests = gateway.list_execution_requests(tmp_path)
     assert [r["request-id"] for r in all_requests] == [second["request-id"], first["request-id"]]
+    assert all(r["response-version"] == 3 for r in all_requests)
+    assert all(r["agent-status"]["scope"] == "execution-request" for r in all_requests)
+    assert all_requests[0]["agent-status"]["outcome"] == "failed"
+    assert all_requests[1]["agent-status"]["outcome"] == "success"
 
     failed_only = gateway.list_execution_requests(tmp_path, state="failed")
     assert [r["request-id"] for r in failed_only] == [second["request-id"]]
@@ -417,6 +423,39 @@ def test_list_execution_requests_most_recent_first_and_filterable(tmp_path: Path
     limited = gateway.list_execution_requests(tmp_path, limit=1)
     assert len(limited) == 1
     assert limited[0]["request-id"] == second["request-id"]
+
+
+def test_terminal_status_is_equivalent_across_get_wait_and_list(
+    tmp_path: Path, monkeypatch
+):
+    """All request-returning entry points use the same canonical projector."""
+    _make_profile(tmp_path, "default", "local-openai")
+
+    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+        return _result(
+            {
+                "provider-id": execution_request["provider-id"],
+                "status": "ok",
+                "model": "gpt-4o",
+                "output": "done",
+            }
+        )
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
+        fake_execute_provider,
+    )
+
+    submitted = gateway.submit_execution_request(tmp_path, prompt_body="terminal")
+    request_id = submitted["request-id"]
+    waited = gateway.wait_execution_request(tmp_path, request_id, timeout_seconds=5)
+    fetched = gateway.get_execution_request(tmp_path, request_id)
+    listed = next(
+        row for row in gateway.list_execution_requests(tmp_path) if row["request-id"] == request_id
+    )
+
+    assert waited["agent-status"] == fetched["agent-status"] == listed["agent-status"]
+    assert fetched["response-version"] == listed["response-version"] == 3
 
 
 def test_gateway_overview_reflects_persisted_state_across_restart(tmp_path: Path, monkeypatch):
