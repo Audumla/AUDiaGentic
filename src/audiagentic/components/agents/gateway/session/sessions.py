@@ -114,6 +114,7 @@ def _default_prepare_fn(
     resume_provider_ref: str | None = None,
     resume_provider_metadata: dict[str, Any] | None = None,
     checkpoint_sink: Any | None = None,
+    project_name: str | None = None,
 ) -> PreparedSessionTransport:
     """Default provider preparation via the public providers_api seam.
 
@@ -144,6 +145,7 @@ def _default_prepare_fn(
         resume_provider_ref=resume_provider_ref,
         resume_provider_metadata=resume_provider_metadata,
         checkpoint_sink=checkpoint_sink,
+        project_name=project_name,
     )
 
 
@@ -490,6 +492,7 @@ class SessionRuntime:
         execution_profile_digest: str | None = None,
         effective_capability_digest: str | None = None,
         capacity_source_id: str | None = None,
+        project_name: str | None = None,
     ) -> dict[str, Any]:
         """Open a live session; returns the persisted session record.
 
@@ -552,6 +555,7 @@ class SessionRuntime:
                 execution_profile_digest=execution_profile_digest,
                 effective_capability_digest=effective_capability_digest,
                 capacity_source_id=capacity_source_id,
+                project_name=project_name,
             ),
             timeout=_OPEN_TIMEOUT_SECONDS,
         )
@@ -602,6 +606,7 @@ class SessionRuntime:
         turn_silence_timeout_seconds: float | None = None,
         correlation_id: str | None = None,
         request_runtime_root: Path | None = None,
+        project_name: str | None = None,
     ) -> dict[str, Any]:
         """AS49: explicitly resume a terminal session as a new linked generation.
 
@@ -653,6 +658,7 @@ class SessionRuntime:
                 ),
                 correlation_id=correlation_id,
                 request_runtime_root=request_runtime_root,
+                project_name=project_name,
             ),
             timeout=_OPEN_TIMEOUT_SECONDS,
         )
@@ -747,6 +753,7 @@ class SessionRuntime:
         correlation_id: str | None = None,
         request_runtime_root: Path | None = None,
         mcp_entries=(),
+        project_name: str | None = None,
     ) -> dict[str, Any]:
         """Reattach an active durable generation after a runtime restart.
 
@@ -788,6 +795,7 @@ class SessionRuntime:
                 correlation_id=correlation_id,
                 request_runtime_root=request_runtime_root,
                 mcp_entries=tuple(mcp_entries),
+                project_name=project_name,
             ),
             timeout=_OPEN_TIMEOUT_SECONDS,
         )
@@ -1050,6 +1058,7 @@ class SessionRuntime:
         correlation_id: str | None,
         request_runtime_root: Path | None,
         mcp_entries,
+        project_name: str | None,
     ) -> dict[str, Any]:
         # The loop serializes this check with every other session operation;
         # concurrent continuations cannot open two browser/provider handles.
@@ -1173,6 +1182,7 @@ class SessionRuntime:
             "resume_provider_ref": provider_ref,
             "resume_provider_metadata": session_store.session_provider_metadata(record),
             "checkpoint_sink": checkpoint_sink,
+            "project_name": project_name,
         }
         if request_runtime_root is not None:
             prepare_kwargs["request_runtime_root"] = request_runtime_root
@@ -1293,6 +1303,7 @@ class SessionRuntime:
         execution_profile_digest: str | None = None,
         effective_capability_digest: str | None = None,
         capacity_source_id: str | None = None,
+        project_name: str | None = None,
     ) -> dict[str, Any]:
         started = time.monotonic()
         logger.info(
@@ -1357,6 +1368,7 @@ class SessionRuntime:
             "surface_hint": surface_hint,
             "model_id": model_id,
             "checkpoint_sink": checkpoint_sink,
+            "project_name": project_name,
         }
         if request_runtime_root is not None:
             prepare_kwargs["request_runtime_root"] = request_runtime_root
@@ -1670,6 +1682,7 @@ class SessionRuntime:
         turn_silence_timeout_seconds: float,
         correlation_id: str | None,
         request_runtime_root: Path | None,
+        project_name: str | None,
     ) -> dict[str, Any]:
         """AS49: resolve, validate, and dispatch an explicit resume request.
 
@@ -1860,6 +1873,7 @@ class SessionRuntime:
             # it as an opaque supplementary hint -- generic here, only
             # meaningful to whichever provider builder chooses to read it.
             "resume_provider_metadata": session_store.session_provider_metadata(source_record),
+            "project_name": project_name,
         }
         if request_runtime_root is not None:
             prepare_kwargs["request_runtime_root"] = request_runtime_root

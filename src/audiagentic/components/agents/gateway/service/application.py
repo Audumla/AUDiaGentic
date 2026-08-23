@@ -435,6 +435,7 @@ _SUBMISSION_ARGUMENTS = {
     "session_keep_alive",
     "session_idle_timeout_seconds",
     "session_max_lifetime_seconds",
+    "workspace_name",
     "execution_context_fingerprint",
     "component_profile",
 }
@@ -448,6 +449,8 @@ def _validated_submission_arguments(
     metadata = arguments.get("metadata")
     if metadata is not None and not isinstance(metadata, dict):
         raise service_validation_error(21, "gateway submission metadata must be a mapping")
+    if "workspace_name" in arguments:
+        arguments["workspace_name"] = _optional_string(arguments, "workspace_name")
     metadata = dict(metadata or {})
     envelope = SubmissionEnvelope.from_mapping(
         {

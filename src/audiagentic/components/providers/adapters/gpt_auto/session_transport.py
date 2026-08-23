@@ -26,19 +26,6 @@ from .turn import GptAutoTurn
 from .urls import canonical_chat_url, url_matches_provider_session
 
 
-def _active_project_name(project_root: Path) -> str:
-    from audiagentic.foundation.io import load_yaml_file
-
-    config_path = project_root / ".audiagentic" / "config" / "project.yaml"
-    if config_path.exists():
-        data = load_yaml_file(config_path)
-        if isinstance(data, dict):
-            value = data.get("project-name", data.get("project_name"))
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-    return project_root.resolve().name
-
-
 class GptAutoSessionTransport:
     def __init__(self, chat: PersistentChat) -> None:
         self.chat = chat
@@ -162,7 +149,10 @@ def build_session_transport(
     resume_provider_ref: str | None = None,
     resume_metadata_hint: dict[str, Any] | None = None,
     checkpoint_sink: Any | None = None,
+    project_name: str,
 ) -> GptAutoSessionTransport:
+    if not isinstance(project_name, str) or not project_name.strip():
+        raise ValueError("gpt-auto session transport requires an admitted project name")
     parsed = GptAutoConfig.from_project_dict(config)
     runtime = get_runtime(project_root, parsed)
     metadata = resume_metadata_hint or {}
@@ -191,7 +181,7 @@ def build_session_transport(
             chat_url = None
     chat = PersistentChat(
         ag_session_id=ag_session_id,
-        project_name=_active_project_name(project_root),
+        project_name=project_name.strip(),
         project_url=project_url,
         runtime=runtime,
         config=parsed,

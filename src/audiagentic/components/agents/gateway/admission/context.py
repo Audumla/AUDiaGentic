@@ -13,7 +13,11 @@ def empty_component_context(_project_root: Path) -> dict[str, dict[str, Any]]:
     return {}
 
 
-def baseline_agent_template_context(project_root: Path) -> dict[str, dict[str, Any]]:
+def baseline_agent_template_context(
+    project_root: Path,
+    *,
+    workspace_name: str | None = None,
+) -> dict[str, dict[str, Any]]:
     """Facts global agent prompts may rely on in any filesystem project.
 
     These remain available when the target has not installed AUDiaGentic
@@ -24,7 +28,7 @@ def baseline_agent_template_context(project_root: Path) -> dict[str, dict[str, A
     from audiagentic.components.source_control.source_control_api import context as source_control_context
 
     return {
-        "project": project_context(project_root),
+        "project": project_context(project_root, workspace_name=workspace_name),
         "source_control": source_control_context(project_root),
     }
 
