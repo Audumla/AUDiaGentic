@@ -669,7 +669,10 @@ def submit_execution_request(
         wait_timeout = timeout_seconds or DEFAULT_BLOCKING_TIMEOUT_SECONDS
         raw = get_queue_manager().wait(project_root, record["request-id"], wait_timeout)
         return _enrich_terminal_result(raw, project_root)
-    return record
+    # Keep the async admission response on the same canonical status surface
+    # as get/wait/list.  The request may race from queued to running here, so
+    # the projector owns the transient lifecycle value.
+    return _attach_agent_status(record, project_root)
 
 
 # AS56 — public response schema version.  Version 3 makes the explicit
@@ -680,24 +683,7 @@ _PUBLIC_RESPONSE_VERSION: int = 3
 def get_execution_request(project_root: Path, request_id: str) -> dict[str, Any]:
     """Return the public durable status plus the canonical agent-status snapshot."""
     record = store.read_public_status(project_root, request_id)
-    decision = None
-    session_id = record.get("session-id")
-    if session_id:
-        from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
-
-        runtime = peek_session_runtime()
-        if runtime is not None:
-            decision = runtime.latest_lifecycle_decision(session_id, request_id)
-
-    from audiagentic.components.agents.status.status_projection import (
-        snapshot_for_request,
-        snapshot_to_mapping,
-    )
-
-    result = dict(record)
-    result["response-version"] = _PUBLIC_RESPONSE_VERSION
-    result["agent-status"] = snapshot_to_mapping(snapshot_for_request(record, decision=decision))
-    return result
+    return _attach_agent_status(record, project_root)
 
 
 def get_execution_response(project_root: Path, request_id: str) -> str:
@@ -870,11 +856,14 @@ def list_execution_requests(
     if limit is not None:
         records = records[:limit]
     return [
-        store.project_public_status(
-            record,
-            latest_transition=store.latest_transition_projection(
-                project_root, record["request-id"]
+        _attach_agent_status(
+            store.project_public_status(
+                record,
+                latest_transition=store.latest_transition_projection(
+                    project_root, record["request-id"]
+                ),
             ),
+            project_root,
         )
         for record in records
     ]
