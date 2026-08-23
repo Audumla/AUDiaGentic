@@ -276,6 +276,7 @@ def _dispatch_session_request(
     persisted record (which only carries prompt_digest).
     """
     from audiagentic.components.agents.agents_paths import gateway_request_dir
+    from audiagentic.components.agents.gateway import profiles as profiles_mod
     from audiagentic.components.agents.gateway.session import bindings as binding_store
     from audiagentic.components.agents.gateway.session import sessions_store as session_store
     from audiagentic.components.agents.gateway.session.sessions import (
@@ -283,7 +284,6 @@ def _dispatch_session_request(
         get_session_runtime,
     )
     from audiagentic.components.providers import providers_api
-    from audiagentic.components.agents.gateway import profiles as profiles_mod
 
     request_id = record["request-id"]
     execution_profile_id = record["execution-profile-id"]
@@ -300,7 +300,9 @@ def _dispatch_session_request(
             details={"request-id": record.get("request-id")},
         )
     else:
-        from audiagentic.components.agents.models.execution_profile_api import resolve_execution_profile
+        from audiagentic.components.agents.models.execution_profile_api import (
+            resolve_execution_profile,
+        )
 
         profile = resolve_execution_profile(project_root, execution_profile_id)
     provider_id = profile["provider_id"]
