@@ -1804,6 +1804,7 @@ def prepare_provider_session_transport(
     enable_observability_tap: bool = False,
     resume_provider_metadata: dict[str, Any] | None = None,
     checkpoint_sink: Any | None = None,
+    project_name: str | None = None,
 ) -> PreparedSessionTransport:
     """Prepare a session transport with resolved surface snapshot.
 
@@ -1855,6 +1856,7 @@ def prepare_provider_session_transport(
             enable_observability_tap=enable_observability_tap,
             resume_provider_metadata=resume_provider_metadata,
             checkpoint_sink=checkpoint_sink,
+            project_name=project_name,
         )
     except Exception:
         logger.exception(

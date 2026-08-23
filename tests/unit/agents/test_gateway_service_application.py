@@ -92,10 +92,15 @@ def test_closed_operation_router_calls_public_application(tmp_path: Path) -> Non
     submitted = service.invoke(
         "submit_execution_request",
         str(tmp_path),
-        {"prompt_body": "hello", "component_profile": "client-profile"},
+        {
+            "prompt_body": "hello",
+            "component_profile": "client-profile",
+            "workspace_name": "Workspace Name",
+        },
         **authorization,
     )
     assert submitted["component_profile"] == "client-profile"
+    assert submitted["workspace_name"] == "Workspace Name"
 
     resumed = service.invoke(
         "resume_execution_session",

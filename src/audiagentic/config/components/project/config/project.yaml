@@ -1,6 +1,6 @@
 contract-version: v1
-project-id: my-project
-project-name: My Project
+project-id:
+project-name:
 workflow-profile: standard
 tracked-docs-root: docs
 runtime-root: .audiagentic/runtime

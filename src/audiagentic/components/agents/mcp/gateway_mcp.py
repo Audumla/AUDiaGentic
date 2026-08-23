@@ -380,6 +380,7 @@ def agent_task_submit(
     session_keep_alive: bool = False,
     session_idle_timeout_seconds: float | None = None,
     session_max_lifetime_seconds: float | None = None,
+    workspace_name: str | None = None,
     execution_context_fingerprint: str | None = None,
 ) -> dict[str, Any]:
     """Submit async work as `agent_id` (AS62's Agent Definition — an Execution
@@ -412,6 +413,8 @@ def agent_task_submit(
         "session_idle_timeout_seconds": session_idle_timeout_seconds,
         "session_max_lifetime_seconds": session_max_lifetime_seconds,
     }
+    if workspace_name is not None:
+        submit_kwargs["workspace_name"] = workspace_name
     if execution_context_fingerprint is not None:
         submit_kwargs["execution_context_fingerprint"] = execution_context_fingerprint
     status = call_gateway_method("submit_execution_request", project_root, **submit_kwargs)

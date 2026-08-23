@@ -67,6 +67,7 @@ from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoCon
 from audiagentic.components.providers.adapters.gpt_auto.session_transport import (
     build_session_transport,
 )
+from audiagentic.components.project.project_api import resolve_project_name
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import load_yaml_file
 from audiagentic.foundation.transports.agent_session import (
@@ -136,6 +137,7 @@ async def _open_transport(provider_id: str):
         ag_session_id=ag_session_id,
         binding_sink=lambda _update: None,
         checkpoint_sink=_make_checkpoint_sink(ag_session_id),
+        project_name=resolve_project_name(_PROJECT_ROOT),
     )
     await transport.open()
     return transport, config
