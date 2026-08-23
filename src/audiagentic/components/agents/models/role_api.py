@@ -26,7 +26,7 @@ def _repository() -> AgentsConfigRepository:
 
 
 def load_roles(project_root: Path) -> RoleStore:
-    """Load roles from the project config file.
+    """Load roles from the machine-global config file.
 
     Returns an empty store if the file doesn't exist.
     Raises AudiaGenticError(IO-ROL-001) on read failure.
@@ -37,7 +37,7 @@ def load_roles(project_root: Path) -> RoleStore:
 
 
 def save_roles(project_root: Path, store: RoleStore) -> None:
-    """Serialize roles store back to YAML config file.
+    """Serialize roles store back to the global YAML config file.
 
     Raises AudiaGenticError(IO-ROL-002) on write failure.
     """

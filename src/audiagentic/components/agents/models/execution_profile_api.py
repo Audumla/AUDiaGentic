@@ -29,7 +29,7 @@ def _repository() -> AgentsConfigRepository:
 
 
 def load_execution_profiles(project_root: Path) -> ExecutionProfileStore:
-    """Load execution profiles from the project config file.
+    """Load execution profiles from the machine-global config file.
 
     Returns an empty store if the file doesn't exist.
     Raises AudiaGenticError(IO-EXP-001) on read failure.
@@ -46,7 +46,7 @@ def load_execution_profiles(project_root: Path) -> ExecutionProfileStore:
 
 
 def save_execution_profiles(project_root: Path, store: ExecutionProfileStore) -> None:
-    """Serialize profiles store back to YAML config file.
+    """Serialize profiles store back to the global YAML config file.
 
     Raises AudiaGenticError(IO-EXP-002) on write failure.
     """
