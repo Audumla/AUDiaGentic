@@ -590,7 +590,6 @@ class SessionRuntime:
         source_session_id: str,
         *,
         control_id: str,
-        identity_context_fingerprint: str | None = None,
         execution_context_fingerprint: str | None = None,
         context_id: str | None = None,
         agent_definition_id: str | None = None,
@@ -615,18 +614,16 @@ class SessionRuntime:
         makes the request idempotent: a repeated call with the same id returns
         the original result rather than creating a second successor.
 
-        ``identity_context_fingerprint``/``execution_context_fingerprint`` are
-        the CALLER's current SH02 context (same convention as
-        ``agents_gateway_session_dispatch``'s continuation path) — they are
-        compared against the source binding's stored values, never re-derived
-        from the source binding itself (that would make the check meaningless).
+        ``execution_context_fingerprint`` is an internally derived current
+        SH02 context used only when the resolved provider surface declares
+        that resume requires the same execution context. Persistent provider
+        conversations opt out through their surface mapping facts.
         """
         return self._call(
             self._resume_session(
                 project_root,
                 source_session_id,
                 control_id=control_id,
-                identity_context_fingerprint=identity_context_fingerprint,
                 execution_context_fingerprint=execution_context_fingerprint,
                 context_id=context_id,
                 agent_definition_id=agent_definition_id,
@@ -1666,7 +1663,6 @@ class SessionRuntime:
         source_session_id: str,
         *,
         control_id: str,
-        identity_context_fingerprint: str | None,
         execution_context_fingerprint: str | None,
         context_id: str | None,
         agent_definition_id: str | None,
@@ -1781,7 +1777,6 @@ class SessionRuntime:
                 source_state=source_record["state"],
                 source_binding=source_binding,
                 surface=surface,
-                identity_context_fingerprint=identity_context_fingerprint,
                 execution_context_fingerprint=execution_context_fingerprint,
             )
         except AudiaGenticError as exc:

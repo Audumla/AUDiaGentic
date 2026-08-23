@@ -348,8 +348,6 @@ def agent_task_session_control(
 def agent_task_session_resume(
     source_session_id: str,
     control_id: str,
-    identity_context_fingerprint: str | None = None,
-    execution_context_fingerprint: str | None = None,
     model_id: str | None = None,
     component_profile: str | None = None,
 ) -> dict[str, Any]:
@@ -357,8 +355,6 @@ def agent_task_session_resume(
     project_root = project_root_from_env()
     kwargs: dict[str, Any] = {
         "control_id": control_id,
-        "identity_context_fingerprint": identity_context_fingerprint,
-        "execution_context_fingerprint": execution_context_fingerprint,
         "model_id": model_id,
     }
     if component_profile is not None:

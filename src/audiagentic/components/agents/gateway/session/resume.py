@@ -22,7 +22,6 @@ for the -09x/-10x band already in use):
     RES-AGW-111 — source session has no usable provider binding
     UNS-AGW-112 — resolved surface does not support resume-by-ref
     VER-AGW-113 — surface id or ref namespace incompatible with the source binding
-    CON-AGW-114 — identity context fingerprint unknown or mismatched
     CON-AGW-115 — execution context fingerprint unknown or mismatched
     CON-AGW-116 — idempotent replay of a request that previously failed
     UNS-AGW-117 — surface declares resume-by-ref but evidence.validated is False
@@ -40,7 +39,6 @@ from audiagentic.components.agents.agents_paths import (
 from audiagentic.components.agents.gateway.session import sessions_store as session_store
 from audiagentic.components.agents.gateway.session.bindings import (
     DEFAULT_EXECUTION_CONTEXT,
-    DEFAULT_IDENTITY_CONTEXT,
 )
 from audiagentic.components.agents.gateway.store import hash_idempotency_key
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -56,7 +54,6 @@ ERR_SOURCE_NOT_TERMINAL = "CON-AGW-110"
 ERR_STALE_OR_MISSING_BINDING = "RES-AGW-111"
 ERR_UNSUPPORTED_CAPABILITY = "UNS-AGW-112"
 ERR_VERSION_OR_REF_INCOMPATIBLE = "VER-AGW-113"
-ERR_IDENTITY_MISMATCH = "CON-AGW-114"
 ERR_EXECUTION_CONTEXT_MISMATCH = "CON-AGW-115"
 ERR_IDEMPOTENT_REPLAY_OF_FAILURE = "CON-AGW-116"
 # AS29's declaration schema only requires evidence.validated=True for
@@ -77,12 +74,15 @@ def validate_resume_eligibility(
     source_state: str,
     source_binding: dict[str, Any] | None,
     surface: ResolvedSessionSurface,
-    identity_context_fingerprint: str | None,
-    execution_context_fingerprint: str | None,
+    identity_context_fingerprint: str | None = None,
+    execution_context_fingerprint: str | None = None,
 ) -> dict[str, Any]:
     """Validate an explicit resume request. Returns the source binding on
     success. Pure — no I/O, no provider dispatch. Raises AudiaGenticError for
     every distinct AS49 rejection reason (never a generic catch-all)."""
+    # ``identity_context_fingerprint`` remains accepted for private test and
+    # extension compatibility, but is intentionally ignored: provider
+    # conversation identity is proven by the durable provider ref below.
     if source_state not in session_store.SESSION_TERMINAL_STATES:
         raise AudiaGenticError(
             code=ERR_SOURCE_NOT_TERMINAL,
@@ -132,6 +132,17 @@ def validate_resume_eligibility(
                 "resolved-surface-id": surface.ref.surface_id,
             },
         )
+    if surface.ref.provider_id != source_binding.get("provider-id"):
+        raise AudiaGenticError(
+            code=ERR_VERSION_OR_REF_INCOMPATIBLE,
+            kind="agents",
+            message="current surface provider does not match the source binding's provider",
+            details={
+                "session-id": source_session_id,
+                "source-provider-id": source_binding.get("provider-id"),
+                "resolved-provider-id": surface.ref.provider_id,
+            },
+        )
     current_ref_namespace = surface.identity.mapping_facts.ref_namespace
     source_ref_namespace = source_binding.get("ref-namespace")
     if source_ref_namespace and current_ref_namespace != source_ref_namespace:
@@ -145,32 +156,25 @@ def validate_resume_eligibility(
                 "resolved-ref-namespace": current_ref_namespace,
             },
         )
-    stored_identity_fp = source_binding.get("identity-context-fingerprint")
-    if (
-        not identity_context_fingerprint
-        or not stored_identity_fp
-        or stored_identity_fp == DEFAULT_IDENTITY_CONTEXT
-        or identity_context_fingerprint != stored_identity_fp
-    ):
-        raise AudiaGenticError(
-            code=ERR_IDENTITY_MISMATCH,
-            kind="agents",
-            message="provider identity context fingerprint is unknown or does not match the source binding",
-            details={"session-id": source_session_id},
-        )
-    stored_execution_fp = source_binding.get("execution-context-fingerprint")
-    if (
-        not execution_context_fingerprint
-        or not stored_execution_fp
-        or stored_execution_fp == DEFAULT_EXECUTION_CONTEXT
-        or execution_context_fingerprint != stored_execution_fp
-    ):
-        raise AudiaGenticError(
-            code=ERR_EXECUTION_CONTEXT_MISMATCH,
-            kind="agents",
-            message="execution context fingerprint is unknown or does not match the source binding",
-            details={"session-id": source_session_id},
-        )
+    # Provider conversation identity is the durable provider ref, not the
+    # gateway's mutable runtime fingerprint.  Only surfaces that explicitly
+    # require the same execution context enforce that additional constraint;
+    # persistent provider sessions such as GPT Auto opt out in their mapping
+    # facts while retaining all provider-ref/surface safety checks above.
+    if surface.identity.mapping_facts.requires_same_execution_context:
+        stored_execution_fp = source_binding.get("execution-context-fingerprint")
+        if (
+            not execution_context_fingerprint
+            or not stored_execution_fp
+            or stored_execution_fp == DEFAULT_EXECUTION_CONTEXT
+            or execution_context_fingerprint != stored_execution_fp
+        ):
+            raise AudiaGenticError(
+                code=ERR_EXECUTION_CONTEXT_MISMATCH,
+                kind="agents",
+                message="execution context fingerprint is unknown or does not match the source binding",
+                details={"session-id": source_session_id},
+            )
     return source_binding
 
 
