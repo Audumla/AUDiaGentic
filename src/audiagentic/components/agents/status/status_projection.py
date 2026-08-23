@@ -79,7 +79,7 @@ def snapshot_for_request(
 
     Priority order:
         1. Durable terminal state in the record (completed/failed/cancelled/
-           interrupted) always wins — SH07 is the source of truth for whether
+           interrupted/rejected) always wins — SH07 is the source of truth for whether
            a request finished.
         2. When no durable terminal state, an AS21 decision if available.
         3. When neither, UNKNOWN with no outcome and no decisions.
