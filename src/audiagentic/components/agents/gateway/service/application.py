@@ -251,8 +251,6 @@ class GatewayServiceApplication:
                 {
                     "source_session_id",
                     "control_id",
-                    "identity_context_fingerprint",
-                    "execution_context_fingerprint",
                     "context_id",
                     "agent_definition_id",
                     "agent_definition_digest",
@@ -267,12 +265,6 @@ class GatewayServiceApplication:
                 root,
                 _required(arguments, "source_session_id"),
                 control_id=_required(arguments, "control_id"),
-                identity_context_fingerprint=_optional_string(
-                    arguments, "identity_context_fingerprint"
-                ),
-                execution_context_fingerprint=_optional_string(
-                    arguments, "execution_context_fingerprint"
-                ),
                 context_id=_optional_string(arguments, "context_id"),
                 agent_definition_id=_optional_string(arguments, "agent_definition_id"),
                 agent_definition_digest=_optional_string(arguments, "agent_definition_digest"),

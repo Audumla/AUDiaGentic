@@ -157,7 +157,6 @@ class TestResumeSuccess:
                 tmp_path,
                 source["session-id"],
                 control_id="ctrl-provider-neutral",
-                identity_context_fingerprint=_IDENTITY_FP,
                 execution_context_fingerprint=_EXECUTION_FP,
             )
             assert resumed["binding"]["provider-id"] == _PROVIDER_ID
@@ -174,7 +173,6 @@ class TestResumeSuccess:
                 tmp_path,
                 source["session-id"],
                 control_id="ctrl-1",
-                identity_context_fingerprint=_IDENTITY_FP,
                 execution_context_fingerprint=_EXECUTION_FP,
                 model_id="m1",
             )
@@ -207,12 +205,10 @@ class TestResumeSuccess:
         try:
             first = runtime.resume_session(
                 tmp_path, source["session-id"], control_id="ctrl-replay",
-                identity_context_fingerprint=_IDENTITY_FP,
                 execution_context_fingerprint=_EXECUTION_FP,
             )
             second = runtime.resume_session(
                 tmp_path, source["session-id"], control_id="ctrl-replay",
-                identity_context_fingerprint=_IDENTITY_FP,
                 execution_context_fingerprint=_EXECUTION_FP,
             )
             assert first["session-id"] == second["session-id"]
@@ -231,7 +227,6 @@ class TestResumeRejections:
         try:
             resumed = runtime.resume_session(
                 tmp_path, source["session-id"], control_id=f"ctrl-{surface_id}",
-                identity_context_fingerprint=_IDENTITY_FP,
                 execution_context_fingerprint=_EXECUTION_FP,
             )
             assert resumed["binding"]["relation"] == "resumed-from"
@@ -248,7 +243,6 @@ class TestResumeRejections:
             with pytest.raises(AudiaGenticError) as exc:
                 runtime.resume_session(
                     tmp_path, source["session-id"], control_id="ctrl-2",
-                    identity_context_fingerprint=_IDENTITY_FP,
                     execution_context_fingerprint=_EXECUTION_FP,
                 )
             assert exc.value.code == ERR_SOURCE_NOT_TERMINAL
@@ -272,7 +266,6 @@ class TestResumeRejections:
             with pytest.raises(AudiaGenticError, match="CON-AGW-095"):
                 runtime.resume_session(
                     tmp_path, source["session-id"], control_id="ctrl-3",
-                    identity_context_fingerprint=_IDENTITY_FP,
                     execution_context_fingerprint=_EXECUTION_FP,
                 )
             assert runtime.live_session_ids() == []
@@ -286,8 +279,7 @@ class TestResumeRejections:
             with pytest.raises(AudiaGenticError):
                 runtime.resume_session(
                     tmp_path, source["session-id"], control_id="ctrl-4",
-                    identity_context_fingerprint="wrong-fp",
-                    execution_context_fingerprint=_EXECUTION_FP,
+                    execution_context_fingerprint="wrong-fp",
                 )
             entry = lookup_resume_attempt(tmp_path, source["session-id"], "ctrl-4")
             assert entry is not None
@@ -296,7 +288,6 @@ class TestResumeRejections:
             with pytest.raises(AudiaGenticError) as exc:
                 runtime.resume_session(
                     tmp_path, source["session-id"], control_id="ctrl-4",
-                    identity_context_fingerprint=_IDENTITY_FP,
                     execution_context_fingerprint=_EXECUTION_FP,
                 )
             assert exc.value.code == ERR_IDEMPOTENT_REPLAY_OF_FAILURE
@@ -345,7 +336,6 @@ class TestResumeRejections:
             with pytest.raises(AudiaGenticError) as exc:
                 runtime.resume_session(
                     tmp_path, source["session-id"], control_id="ctrl-5",
-                    identity_context_fingerprint=_IDENTITY_FP,
                     execution_context_fingerprint=_EXECUTION_FP,
                 )
             assert exc.value.code == ERR_UNSUPPORTED_CAPABILITY

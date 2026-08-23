@@ -193,7 +193,7 @@ def test_agent_task_session_resume_delegates_to_gateway_client():
     ):
         mock_call.return_value = {"session-id": "ses_new", "state": "active"}
         result = agents_gateway_mcp.agent_task_session_resume(
-            "ses_old", "ctl_001", "identity", "execution", "chatgpt"
+            "ses_old", "ctl_001", model_id="chatgpt"
         )
     assert result["session-id"] == "ses_new"
     mock_call.assert_called_once_with(
@@ -201,8 +201,6 @@ def test_agent_task_session_resume_delegates_to_gateway_client():
         _ROOT,
         "ses_old",
         control_id="ctl_001",
-        identity_context_fingerprint="identity",
-        execution_context_fingerprint="execution",
         model_id="chatgpt",
     )
 

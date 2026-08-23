@@ -11,7 +11,6 @@ import pytest
 
 from audiagentic.components.agents.gateway.session.resume import (
     ERR_EXECUTION_CONTEXT_MISMATCH,
-    ERR_IDENTITY_MISMATCH,
     ERR_SOURCE_NOT_TERMINAL,
     ERR_STALE_OR_MISSING_BINDING,
     ERR_UNSUPPORTED_CAPABILITY,
@@ -42,6 +41,7 @@ def _surface(
     resume_supported: bool = True,
     validated: bool = True,
     ref_namespace: str = "provider-session-ref",
+    requires_same_execution_context: bool = True,
 ) -> ResolvedSessionSurface:
     identity_operations = {
         SessionIdentityOperation.OPEN: ControlSupport.SUPPORTED,
@@ -53,7 +53,11 @@ def _surface(
         ref=SessionSurfaceRef(provider_id="pi", surface_id=surface_id, resolved_version="0.82.1"),
         identity=SessionIdentityCapabilities(
             identity_operations=identity_operations,
-            mapping_facts=SessionMappingFacts(ref_namespace=ref_namespace),
+            mapping_facts=SessionMappingFacts(
+                ref_namespace=ref_namespace,
+                requires_same_project=True,
+                requires_same_execution_context=requires_same_execution_context,
+            ),
         ),
         validation=SurfaceValidation(
             evidence=ValidationEvidence(
@@ -186,45 +190,29 @@ class TestVersionOrRefIncompatible:
 
 
 class TestIdentityContextMismatch:
-    def test_missing_request_fingerprint_rejected(self):
-        with pytest.raises(AudiaGenticError) as exc:
-            validate_resume_eligibility(
-                source_session_id=_SOURCE_SESSION_ID,
-                source_state="closed",
-                source_binding=_binding(),
-                surface=_surface(),
-                identity_context_fingerprint=None,
-                execution_context_fingerprint="exec-fp-abc",
-            )
-        assert exc.value.code == ERR_IDENTITY_MISMATCH
-
-    def test_mismatched_request_fingerprint_rejected(self):
-        with pytest.raises(AudiaGenticError) as exc:
-            validate_resume_eligibility(
-                source_session_id=_SOURCE_SESSION_ID,
-                source_state="closed",
-                source_binding=_binding(),
-                surface=_surface(),
-                identity_context_fingerprint="wrong-fp",
-                execution_context_fingerprint="exec-fp-abc",
-            )
-        assert exc.value.code == ERR_IDENTITY_MISMATCH
-
-    def test_unknown_stored_fingerprint_rejected(self):
-        """Stored 'unknown' sentinel must reject, never silently pass."""
-        with pytest.raises(AudiaGenticError) as exc:
-            validate_resume_eligibility(
-                source_session_id=_SOURCE_SESSION_ID,
-                source_state="closed",
-                source_binding=_binding(**{"identity-context-fingerprint": "unknown"}),
-                surface=_surface(),
-                identity_context_fingerprint="unknown",
-                execution_context_fingerprint="exec-fp-abc",
-            )
-        assert exc.value.code == ERR_IDENTITY_MISMATCH
+    def test_identity_fingerprint_is_not_required_for_provider_ref_resume(self):
+        validate_resume_eligibility(
+            source_session_id=_SOURCE_SESSION_ID,
+            source_state="closed",
+            source_binding=_binding(**{"identity-context-fingerprint": "unknown"}),
+            surface=_surface(requires_same_execution_context=False),
+            identity_context_fingerprint=None,
+            execution_context_fingerprint=None,
+        )
 
 
 class TestExecutionContextMismatch:
+    def test_missing_execution_fingerprint_rejected_when_required(self):
+        with pytest.raises(AudiaGenticError) as exc:
+            validate_resume_eligibility(
+                source_session_id=_SOURCE_SESSION_ID,
+                source_state="closed",
+                source_binding=_binding(),
+                surface=_surface(requires_same_execution_context=True),
+                execution_context_fingerprint=None,
+            )
+        assert exc.value.code == ERR_EXECUTION_CONTEXT_MISMATCH
+
     def test_mismatched_execution_fingerprint_rejected(self):
         with pytest.raises(AudiaGenticError) as exc:
             validate_resume_eligibility(
@@ -236,6 +224,37 @@ class TestExecutionContextMismatch:
                 execution_context_fingerprint="wrong-fp",
             )
         assert exc.value.code == ERR_EXECUTION_CONTEXT_MISMATCH
+
+    def test_unknown_stored_fingerprint_rejected_when_required(self):
+        with pytest.raises(AudiaGenticError) as exc:
+            validate_resume_eligibility(
+                source_session_id=_SOURCE_SESSION_ID,
+                source_state="closed",
+                source_binding=_binding(**{"execution-context-fingerprint": "unknown"}),
+                surface=_surface(requires_same_execution_context=True),
+                execution_context_fingerprint="unknown",
+            )
+        assert exc.value.code == ERR_EXECUTION_CONTEXT_MISMATCH
+
+    def test_persistence_compatible_surface_ignores_context_drift(self):
+        validate_resume_eligibility(
+            source_session_id=_SOURCE_SESSION_ID,
+            source_state="closed",
+            source_binding=_binding(**{"execution-context-fingerprint": "old-fp"}),
+            surface=_surface(requires_same_execution_context=False),
+            execution_context_fingerprint="new-fp",
+        )
+
+    def test_provider_id_mismatch_rejected(self):
+        with pytest.raises(AudiaGenticError) as exc:
+            validate_resume_eligibility(
+                source_session_id=_SOURCE_SESSION_ID,
+                source_state="closed",
+                source_binding=_binding(**{"provider-id": "other-provider"}),
+                surface=_surface(),
+                execution_context_fingerprint="exec-fp-abc",
+            )
+        assert exc.value.code == ERR_VERSION_OR_REF_INCOMPATIBLE
 
 
 class TestFullyEligible:

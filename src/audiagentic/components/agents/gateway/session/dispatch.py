@@ -79,7 +79,6 @@ _AUTO_RESUME_EXPECTED_REFUSAL_CODES = frozenset(
         "RES-AGW-111",  # source session has no usable provider binding
         "UNS-AGW-112",  # resolved surface does not support resume-by-ref
         "VER-AGW-113",  # surface id or ref namespace incompatible
-        "CON-AGW-114",  # identity context fingerprint unknown or mismatched
         "CON-AGW-115",  # execution context fingerprint unknown or mismatched
         "CON-AGW-116",  # idempotent replay of a control id that already failed
         "UNS-AGW-117",  # surface declares resume-by-ref but evidence unvalidated
@@ -131,7 +130,6 @@ def _auto_resume_shutdown_closed_session(
     """
     from audiagentic.components.agents.gateway.session import sessions_store as session_store
 
-    manifest_context_fingerprint = context_fingerprint or record.get("context-fingerprint")
     try:
         new_session_record = runtime.resume_session(
             project_root,
@@ -141,8 +139,7 @@ def _auto_resume_shutdown_closed_session(
             # the same idempotency lookup, which a request-id-derived key
             # would not give them.
             control_id=f"auto-resume:{source_session_id}",
-            identity_context_fingerprint=manifest_context_fingerprint,
-            execution_context_fingerprint=manifest_context_fingerprint,
+            execution_context_fingerprint=context_fingerprint or record.get("context-fingerprint"),
             request_runtime_root=request_runtime_root,
             project_name=project_name,
         )

@@ -1049,8 +1049,6 @@ def resume_execution_session(
     source_session_id: str,
     *,
     control_id: str,
-    identity_context_fingerprint: str | None = None,
-    execution_context_fingerprint: str | None = None,
     context_id: str | None = None,
     agent_definition_id: str | None = None,
     agent_definition_digest: str | None = None,
@@ -1073,30 +1071,22 @@ def resume_execution_session(
     see agents_gateway_session_resume.py) rather than silently opening a
     fresh conversation.
 
-    ``identity_context_fingerprint``/``execution_context_fingerprint``
-    default to a freshly computed SH02 manifest fingerprint for the CURRENT
-    resolution of the source session's execution profile/provider/model,
-    compared against the fingerprint stamped on the source binding when it
-    was originally opened (see dispatch.py's session-open path). Passing an
-    explicit override is for tests/diagnostics only — production callers
-    should leave both None and let this derive them from the live profile
-    resolution, exactly as the docstring on SessionRuntime.resume_session
-    always intended ("the CALLER's current SH02 context").
+    The provider's durable session reference is the authority for a
+    persistent conversation. The resolved session surface decides whether a
+    current execution-context fingerprint is relevant; callers never supply
+    gateway fingerprints as part of resume.
     """
     from audiagentic.components.agents.gateway.session import sessions_store as session_store
     from audiagentic.components.agents.gateway.session.sessions import get_session_runtime
 
-    if identity_context_fingerprint is None or execution_context_fingerprint is None:
-        source_record = session_store.read_session_record(project_root, source_session_id)
-        fresh_fingerprint = _compute_current_context_fingerprint(
-            project_root,
-            execution_profile_id=source_record["execution-profile-id"],
-            provider_id=session_store.session_provider_id(source_record) or "unknown-provider",
-            model_id=model_id or session_store.session_model_id(source_record),
-            component_profile=component_profile,
-        )
-        identity_context_fingerprint = identity_context_fingerprint or fresh_fingerprint
-        execution_context_fingerprint = execution_context_fingerprint or fresh_fingerprint
+    source_record = session_store.read_session_record(project_root, source_session_id)
+    execution_context_fingerprint = _compute_current_context_fingerprint(
+        project_root,
+        execution_profile_id=source_record["execution-profile-id"],
+        provider_id=session_store.session_provider_id(source_record) or "unknown-provider",
+        model_id=model_id or session_store.session_model_id(source_record),
+        component_profile=component_profile,
+    )
 
     # Preserve an explicitly supplied workspace name across an explicit
     # session resume.  The opening request owns the frozen template context;
@@ -1127,7 +1117,6 @@ def resume_execution_session(
         project_root,
         source_session_id,
         control_id=control_id,
-        identity_context_fingerprint=identity_context_fingerprint,
         execution_context_fingerprint=execution_context_fingerprint,
         context_id=context_id,
         agent_definition_id=agent_definition_id,

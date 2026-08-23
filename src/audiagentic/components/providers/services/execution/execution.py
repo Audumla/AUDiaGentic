@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import keyword
 from collections.abc import Callable
 from importlib import import_module
@@ -194,7 +195,41 @@ def load_session_transport_builder(provider_id: str) -> Callable[..., Any] | Non
     routed through it, with no dispatcher edit needed to add another one
     (including a same-implementation alias package such as gpt-auto-t1/t2).
     """
-    return _adapter_hook(provider_id, "session_transport", "build_session_transport")
+    builder = _adapter_hook(provider_id, "session_transport", "build_session_transport")
+    if builder is None:
+        return None
+
+    # Session transport builders are an owned extension contract.  Validate
+    # the required admitted project-name seam at discovery time, before a
+    # provider can be reported as capable and before invocation can surface a
+    # misleading raw TypeError.
+    try:
+        signature = inspect.signature(builder)
+    except (TypeError, ValueError) as exc:
+        raise AudiaGenticError(
+            code="INT-EXEC-004",
+            kind="providers",
+            message="provider session transport builder has no inspectable signature",
+            details={"provider-id": provider_id, "entrypoint": "build_session_transport"},
+        ) from exc
+    parameter = signature.parameters.get("project_name")
+    if (
+        parameter is None
+        or parameter.kind is not inspect.Parameter.KEYWORD_ONLY
+        or parameter.default is not inspect.Parameter.empty
+    ):
+        raise AudiaGenticError(
+            code="INT-EXEC-004",
+            kind="providers",
+            message="provider session transport builder violates the required contract",
+            details={
+                "provider-id": provider_id,
+                "entrypoint": "build_session_transport",
+                "required-parameter": "project_name",
+                "signature": str(signature),
+            },
+        )
+    return builder
 
 
 _EXECUTION_MODE_BY_DECLARATION: dict[str, str] = {

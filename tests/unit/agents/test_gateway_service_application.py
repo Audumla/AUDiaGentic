@@ -122,8 +122,6 @@ def test_closed_operation_router_calls_public_application(tmp_path: Path) -> Non
         "operation": "resume",
         "source-session-id": "ses_old",
         "control_id": "ctl_1",
-        "identity_context_fingerprint": None,
-        "execution_context_fingerprint": None,
         "context_id": "ctx-1",
         "agent_definition_id": "agent-a",
         "agent_definition_digest": "a" * 64,
