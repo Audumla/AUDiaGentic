@@ -73,6 +73,10 @@ session_surfaces:
       attach-existing: "unsupported"
       resume-by-ref: "supported"
       discover: "unsupported"
+    mapping_facts:
+      ref_namespace: "provider-session-ref"
+      requires_same_project: true
+      requires_same_execution_context: false
     ownership_modes:
       - "external"
     controls:

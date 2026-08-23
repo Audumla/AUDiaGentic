@@ -97,7 +97,6 @@ CON-AGW-123: "The resumed provider transport did not return a provider session i
 RES-AGW-111: "The source session has no usable provider binding (missing or empty provider-session-ref) to resume from."
 UNS-AGW-112: "The resolved session surface does not declare resume-by-ref as supported for this provider/surface."
 VER-AGW-113: "The current resolved surface's id or ref namespace is incompatible with the source binding's surface — resume across incompatible surfaces is not allowed."
-CON-AGW-114: "The request's identity context fingerprint is unknown or does not match the source binding's stored identity context fingerprint."
 CON-AGW-115: "The request's execution context fingerprint is unknown or does not match the source binding's stored execution context fingerprint."
 CON-AGW-116: "This resume control id was already used for a request that failed; resubmit with a new control id rather than replaying a failed attempt."
 UNS-AGW-117: "The resolved session surface declares resume-by-ref as supported but its evidence is not validated (evidence.validated=False); prove the capability (AS29) before enabling resume."
