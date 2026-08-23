@@ -1820,7 +1820,13 @@ class SessionRuntime:
                 surface_id=surface_id,
                 provider_session_ref=update.provider_session_ref.value,
                 metadata=dict(update.metadata),
-                identity_context_fingerprint=identity_context_fingerprint,
+                # Identity is provider-conversation provenance, not a
+                # caller-controlled resume input.  Preserve the immutable
+                # source binding value while allowing persistent surfaces to
+                # ignore gateway execution-context drift.
+                identity_context_fingerprint=source_binding.get(
+                    "identity-context-fingerprint"
+                ),
                 execution_context_fingerprint=execution_context_fingerprint,
                 context_id=source_binding.get("context-id"),
                 agent_definition_id=source_binding.get("agent-definition-id"),

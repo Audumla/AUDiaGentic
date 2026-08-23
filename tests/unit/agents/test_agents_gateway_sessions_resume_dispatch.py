@@ -154,6 +154,10 @@ class TestResumeSuccess:
             assert resumed["binding"]["provider-id"] == _PROVIDER_ID
             assert resumed["binding"]["surface-id"] == _SURFACE_ID
             assert resumed["binding"]["relation"] == "resumed-from"
+            assert (
+                resumed["binding"]["identity-context-fingerprint"]
+                == source["binding"]["identity-context-fingerprint"]
+            )
         finally:
             runtime.shutdown()
 
