@@ -185,6 +185,7 @@ def _make_on_event_callback(
     *,
     activity_marker: Callable[[], None] | None = None,
     latest_event_recorder: Callable[[str, dict[str, Any]], None] | None = None,
+    activity_relay: Any | None = None,
 ) -> Any:
     """Build an on_event callback for transport.prompt that publishes normalized events.
 
@@ -201,6 +202,16 @@ def _make_on_event_callback(
     async def _on_event(obs: TransportObservation) -> None:
         if activity_marker is not None:
             activity_marker()
+        if activity_relay is not None:
+            try:
+                activity_relay.observe_provider(
+                    source="session-transport",
+                    source_instance=f"session:{session_id}:turn:{request_id or 'unknown'}",
+                    source_sequence=obs.sequence,
+                    phase=(obs.kind.value if hasattr(obs.kind, "value") else str(obs.kind)),
+                )
+            except Exception:  # noqa: BLE001 - liveness must never break a turn
+                pass
         resolved = projector.resolve(obs)
         if resolved is None:
             return

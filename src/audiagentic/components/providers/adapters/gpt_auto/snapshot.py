@@ -77,9 +77,18 @@ class ChatSnapshot:
     assistant_message_ids: tuple[str, ...] = ()
     assistant_message_texts: tuple[str, ...] = ()
     message_refs: tuple[ChatMessageRef, ...] = ()
+    # Bounded, provider-neutral projection of visible tool/app affordances in
+    # the current assistant turn. Values are counts by stable UI label (for
+    # example ``called-tool`` or ``talked-to-app``), never tool arguments or
+    # provider output. A changed count is verified evidence that the provider
+    # is still working even when the assistant text is unchanged.
+    tool_activity_counts: tuple[tuple[str, int], ...] = ()
 
     @classmethod
     def from_bridge(cls, value: dict[str, Any]) -> ChatSnapshot:
+        raw_tool_counts = value.get("toolActivityCounts") or {}
+        if not isinstance(raw_tool_counts, dict):
+            raw_tool_counts = {}
         return cls(
             url=str(value.get("url") or ""),
             composer_present=bool(value.get("composerPresent")),
@@ -126,6 +135,19 @@ class ChatSnapshot:
                 )
                 for item in (value.get("messageRefs") or ())
                 if isinstance(item, dict)
+            ),
+            tool_activity_counts=tuple(
+                sorted(
+                    (
+                        str(name),
+                        int(count),
+                    )
+                    for name, count in raw_tool_counts.items()
+                    if isinstance(name, str)
+                    and isinstance(count, int)
+                    and not isinstance(count, bool)
+                    and count >= 0
+                )
             ),
         )
 

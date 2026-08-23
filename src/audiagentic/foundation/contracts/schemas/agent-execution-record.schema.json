@@ -31,7 +31,7 @@
   "additionalProperties": false,
   "properties": {
     "contract-version": {
-      "enum": ["v5", "v6"]
+      "enum": ["v5", "v6", "v7"]
     },
     "request-id": {
       "type": "string"
@@ -129,6 +129,42 @@
     },
     "activity-lease-expires-at": {
       "type": ["string", "null"]
+    },
+    "activity": {
+      "type": "object",
+      "required": ["sequence", "last-at", "last-source", "provider", "owner"],
+      "properties": {
+        "sequence": {"type": "integer", "minimum": 0},
+        "last-at": {"type": ["string", "null"]},
+        "last-source": {"type": ["string", "null"]},
+        "provider": {
+          "type": "object",
+          "required": ["capability", "last-at", "lease-expires-at", "source", "source-instance", "source-sequence", "phase"],
+          "properties": {
+            "capability": {"enum": ["unsupported", "supported", "unknown"]},
+            "last-at": {"type": ["string", "null"]},
+            "lease-expires-at": {"type": ["string", "null"]},
+            "source": {"type": ["string", "null"]},
+            "source-instance": {"type": ["string", "null"]},
+            "source-sequence": {"type": "integer", "minimum": 0},
+            "phase": {"type": ["string", "null"]}
+          },
+          "additionalProperties": false
+        },
+        "owner": {
+          "type": "object",
+          "required": ["last-at", "lease-expires-at", "source", "source-instance", "source-sequence"],
+          "properties": {
+            "last-at": {"type": ["string", "null"]},
+            "lease-expires-at": {"type": ["string", "null"]},
+            "source": {"type": ["string", "null"]},
+            "source-instance": {"type": ["string", "null"]},
+            "source-sequence": {"type": "integer", "minimum": 0}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
     },
     "watchdog-state": {
       "type": ["string", "null"],

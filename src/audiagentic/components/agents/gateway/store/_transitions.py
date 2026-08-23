@@ -683,6 +683,52 @@ def renew_owned_activity(
         raise AudiaGenticError("VAL-AGW-088", "agents", "activity source is required", {})
     if isinstance(activity_lease_seconds, bool) or activity_lease_seconds <= 0:
         raise AudiaGenticError("VAL-AGW-088", "agents", "activity lease seconds must be positive", {})
+    return record_owned_activity(
+        project_root,
+        request_id,
+        owner_epoch=owner_epoch,
+        worker_id=worker_id,
+        attempt_epoch=attempt_epoch,
+        kind="owner-heartbeat",
+        source=activity_source,
+        source_instance=worker_id,
+        source_sequence=activity_seq,
+        activity_lease_seconds=activity_lease_seconds,
+        aggregate_sequence=activity_seq,
+    )
+
+
+def record_owned_activity(
+    project_root: Path,
+    request_id: str,
+    *,
+    owner_epoch: str,
+    worker_id: str,
+    attempt_epoch: int,
+    kind: str,
+    source: str,
+    source_instance: str | None = None,
+    source_sequence: int | None = None,
+    phase: str | None = None,
+    provider_capability: str | None = None,
+    activity_lease_seconds: float = 300.0,
+    aggregate_sequence: int | None = None,
+) -> dict[str, Any]:
+    """Accept provider or owner activity and allocate aggregate sequence.
+
+    The aggregate sequence is allocated while holding the request mutation
+    lock. Provider/source sequence values are only dedupe cursors inside their
+    source namespace and can restart on a new worker/session attempt.
+    """
+    _require_owned_identity(owner_epoch, worker_id, attempt_epoch)
+    if kind not in {"provider", "owner-heartbeat"}:
+        raise AudiaGenticError("VAL-AGW-088", "agents", "unknown activity kind", {"kind": kind})
+    if not isinstance(source, str) or not source:
+        raise AudiaGenticError("VAL-AGW-088", "agents", "activity source is required", {})
+    if source_sequence is not None and (isinstance(source_sequence, bool) or not isinstance(source_sequence, int) or source_sequence < 0):
+        raise AudiaGenticError("VAL-AGW-088", "agents", "source activity sequence is invalid", {})
+    if activity_lease_seconds <= 0:
+        raise AudiaGenticError("VAL-AGW-088", "agents", "activity lease seconds must be positive", {})
     with _request_lock(project_root, request_id):
         record = _read_record_locked(project_root, request_id)
         _check_expected_identity(
@@ -694,16 +740,39 @@ def renew_owned_activity(
         )
         if record["state"] != "running":
             raise AudiaGenticError("CON-AGW-088", "agents", "gateway request is not running", {})
-        if activity_seq <= int(record.get("activity-sequence") or 0):
+        activity = record.get("activity")
+        if not isinstance(activity, dict):
+            activity = _shared.default_activity()
+        bucket_name = "provider" if kind == "provider" else "owner"
+        bucket = dict(activity.get(bucket_name) or {})
+        if (
+            source_sequence is not None
+            and bucket.get("source-instance") == source_instance
+            and source_sequence <= int(bucket.get("source-sequence") or 0)
+        ):
             return record
         received_at = now_iso_z()
+        aggregate = aggregate_sequence if aggregate_sequence is not None else int(activity.get("sequence") or record.get("activity-sequence") or 0) + 1
+        bucket.update({
+            "last-at": received_at,
+            "lease-expires-at": add_seconds(received_at, activity_lease_seconds),
+            "source": source,
+            "source-instance": source_instance,
+            "source-sequence": source_sequence if source_sequence is not None else int(bucket.get("source-sequence") or 0) + 1,
+        })
+        if kind == "provider":
+            bucket["phase"] = phase
+            if provider_capability in {"unsupported", "supported", "unknown"}:
+                bucket["capability"] = provider_capability
+        activity.update({"sequence": aggregate, "last-at": received_at, "last-source": source, bucket_name: bucket})
         updated = dict(record)
         updated.update(
             {
                 "last-activity-at": received_at,
-                "activity-sequence": activity_seq,
-                "activity-source": activity_source,
+                "activity-sequence": aggregate,
+                "activity-source": source,
                 "activity-lease-expires-at": add_seconds(received_at, activity_lease_seconds),
+                "activity": activity,
                 "watchdog-state": "active",
                 "watchdog-reason": "verified-activity-renewed",
                 "updated-at": received_at,
@@ -716,7 +785,7 @@ def renew_owned_activity(
             request_id,
             "activity.renewed",
             state="running",
-            attributes={"activity-sequence": activity_seq, "activity-source": activity_source},
+            attributes={"activity-sequence": aggregate, "activity-source": source, "activity-kind": kind},
         )
         return updated
 
@@ -750,7 +819,14 @@ def mark_watchdog_intervention_if_expired(
         )
         if record["state"] != "running":
             return record
-        expiry = record.get("activity-lease-expires-at")
+        activity = record.get("activity") if isinstance(record.get("activity"), dict) else {}
+        provider = activity.get("provider") if isinstance(activity.get("provider"), dict) else {}
+        # A provider stall is meaningful only when the provider advertises a
+        # liveness capability and has emitted evidence. Otherwise retain the
+        # legacy owner-lease diagnostic (useful for older records).
+        if provider.get("capability") == "unsupported":
+            return record
+        expiry = provider.get("lease-expires-at") if provider.get("capability") == "supported" and provider.get("last-at") else record.get("activity-lease-expires-at")
         if not isinstance(expiry, str) or not expiry:
             return record
         try:

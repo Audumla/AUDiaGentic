@@ -157,6 +157,12 @@ class StandaloneGatewayClient:
             self._call("get_execution_request", project_root, {"request_id": request_id}),
         )
 
+    def get_execution_response(self, project_root: Path, request_id: str) -> str:
+        return cast(
+            str,
+            self._call("get_execution_response", project_root, {"request_id": request_id}),
+        )
+
     def wait_execution_request(
         self, project_root: Path, request_id: str, timeout_seconds: float | None = None
     ) -> dict[str, Any]:

@@ -46,6 +46,53 @@ _SNAPSHOT_FN = r"""
   const assistantTurn = latestAssistant && (
     latestAssistant.closest(".agent-turn") || latestAssistant.closest("article") || latestAssistant.parentElement?.parentElement
   );
+  // ChatGPT renders connector/tool work as bounded affordances such as
+  // "Called tool", "Talked to App", "Searching the web", "Read resource",
+  // and "Thinking" inside the current .agent-turn. These nodes often appear
+  // while assistant text is unchanged and the stop/busy widget is absent, so
+  // count only their stable labels as activity evidence. Do not return their
+  // expanded contents, tool names, arguments, or results.
+  const toolActivityCounts = {};
+  const activityLabels = [
+    ["talked to app", "talked-to-app"],
+    ["called tool", "called-tool"],
+    ["searching the web", "searching-web"],
+    ["search the web", "searching-web"],
+    ["web search", "searching-web"],
+    ["read resource", "read-resource"],
+    ["reading resource", "read-resource"],
+    ["thinking", "thinking"]
+  ];
+  const knownLabel = (value) => {
+    const label = (value || "").trim().toLowerCase();
+    if (!label || label.length > 80) return null;
+    for (const [needle, kind] of activityLabels) {
+      if (label === needle) return kind;
+    }
+    return null;
+  };
+  const toolNodes = assistantTurn
+    ? Array.from(new Set([
+        ...assistantTurn.querySelectorAll(
+          '[class~="group/tool-message"], [data-testid*="tool" i], [data-testid*="connector" i], ' +
+          '[aria-label*="search" i], [aria-label*="resource" i]'
+        ),
+        // A few UI revisions render the affordance as an unadorned short
+        // label. Include those exact-label nodes without scanning arbitrary
+        // response prose as activity.
+        ...Array.from(assistantTurn.querySelectorAll("*"))
+          .filter(node => knownLabel(node.innerText || node.textContent || ""))
+      ]))
+    : [];
+  for (const node of toolNodes) {
+    const label = (node.innerText || node.textContent || "").trim().toLowerCase();
+    let kind = null;
+    for (const [needle, value] of activityLabels) {
+      if (label.includes(needle)) { kind = value; break; }
+    }
+    if (!kind) kind = knownLabel(label);
+    if (kind) toolActivityCounts[kind] = (toolActivityCounts[kind] || 0) + 1;
+  }
   const domSignals = {};
   for (const spec of signalSpecs) {
     const root = spec.scope === "latest-assistant-turn" ? assistantTurn : document;
@@ -138,6 +185,7 @@ _SNAPSHOT_FN = r"""
     latestUserId: userRefs.length ? userRefs[userRefs.length - 1].messageId : null,
     latestAssistantId: latestAssistant?.getAttribute("data-message-id") || null,
     latestUserText: lastText(userRefs), latestAssistantText: lastText(assistantRefs), generating, domSignals,
+    toolActivityCounts,
     errorPresent: !!document.querySelector('.error-page, [data-testid*="error"]')
   };
 }
@@ -301,7 +349,16 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         ready_timeout: float,
     ) -> dict[str, Any]:
         page = await self.new_tab(in_window=anchor_page) if anchor_page else await self.new_window()
-        target = project_url
+        # A configured URL identifies the project, not necessarily its chat
+        # workspace.  The bare ``/g/<project-id>`` route can redirect a new
+        # conversation to a global ``/c/<id>`` URL, outside the project.
+        # Always enter the project workspace explicitly, just as the
+        # discovery path below does.
+        target = (
+            canonical_project_url(project_url) + "/project"
+            if project_url and parse_project_id(project_url)
+            else None
+        )
         try:
             if not target or not parse_project_id(target):
                 async with asyncio.timeout(navigation_timeout):
@@ -312,6 +369,13 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 raise RuntimeError("gpt-auto could not resolve a ChatGPT project URL")
             async with asyncio.timeout(navigation_timeout):
                 page = await self.navigate(page, target)
+            expected_project_id = parse_project_id(target)
+            observed_url = str((await self.snapshot(page)).get("url") or "")
+            if expected_project_id and parse_project_id(observed_url) != expected_project_id:
+                raise RuntimeError(
+                    "configured ChatGPT Project is unavailable to the connected browser "
+                    "profile or no longer exists; refusing to send outside that Project"
+                )
             await self.wait_for_composer(page, timeout=ready_timeout)
             return {"page": page, "projectUrl": target}
         except Exception as exc:

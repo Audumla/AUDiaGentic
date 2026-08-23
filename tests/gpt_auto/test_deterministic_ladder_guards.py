@@ -134,7 +134,7 @@ def test_resume_build_rejects_conflicting_chat_url(monkeypatch: pytest.MonkeyPat
     """A chat-url that actively conflicts with the provider ref is still a hard failure."""
     runtime = SimpleNamespace()
     monkeypatch.setattr(session_transport, "get_runtime", lambda _root, _config: runtime)
-    with pytest.raises(RuntimeError, match="matching durable chat-url"):
+    with pytest.raises(RuntimeError, match="matching project-scoped durable chat-url"):
         session_transport.build_session_transport(
             tmp_path,
             config=valid_config(),
@@ -144,6 +144,27 @@ def test_resume_build_rejects_conflicting_chat_url(monkeypatch: pytest.MonkeyPat
             resume_metadata_hint={
                 "project-url": "https://chatgpt.com/g/g-p-project/project",
                 "chat-url": "https://chatgpt.com/g/g-p-project/c/some-other-conversation",
+            },
+        )
+
+
+def test_resume_build_rejects_unprojected_chat_url(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A persisted generic ChatGPT conversation must never be reopened."""
+    runtime = SimpleNamespace()
+    monkeypatch.setattr(session_transport, "get_runtime", lambda _root, _config: runtime)
+
+    with pytest.raises(RuntimeError, match="project-scoped durable chat-url"):
+        session_transport.build_session_transport(
+            tmp_path,
+            config=valid_config(),
+            ag_session_id="ses-resumed",
+            binding_sink=lambda _update: None,
+            resume_provider_ref="conversation-42",
+            resume_metadata_hint={
+                "project-url": "https://chatgpt.com/g/g-p-project/project",
+                "chat-url": "https://chatgpt.com/c/conversation-42",
             },
         )
 

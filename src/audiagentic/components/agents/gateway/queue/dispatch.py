@@ -265,14 +265,16 @@ def _renew_activity(
     if activity.identity.worker_id != record.get("worker-id") or activity.identity.attempt_epoch != record.get("attempt-epoch"):
         return
     try:
-        store.renew_owned_activity(
+        store.record_owned_activity(
             project_root,
             record["request-id"],
             owner_epoch=record["dispatch-owner-epoch"],
             worker_id=activity.identity.worker_id,
             attempt_epoch=activity.identity.attempt_epoch,
-            activity_seq=activity.activity_seq,
-            activity_source=activity.activity_source,
+            kind="owner-heartbeat",
+            source=activity.activity_source,
+            source_instance=activity.identity.worker_id,
+            source_sequence=activity.activity_seq,
             activity_lease_seconds=activity_lease_seconds,
         )
     except AudiaGenticError:

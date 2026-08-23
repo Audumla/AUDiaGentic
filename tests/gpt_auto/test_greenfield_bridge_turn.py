@@ -40,6 +40,7 @@ def snap(
     complete=False,
     extra_signals=(),
     composer_editable=True,
+    tool_activity_counts=(),
 ):
     signals = set(extra_signals)
     if generating:
@@ -48,10 +49,10 @@ def snap(
         # GP17/GP32: response-complete requires completion-control AND a
         # corroborating partner together (all-of, not any-of) -- either
         # alone was proven live-unreliable. That partner was
-        # message-finalized until GP32 (2026-08-17), when ChatGPT removed
-        # its underlying DOM marker entirely; more-actions-menu replaced
-        # it. Set both so `complete=True` still means "genuinely done" for
-        # tests exercising the happy path.
+        # Renderer-position markers (data-is-last-node/data-is-only-node) are
+        # deliberately not used: they can appear while output is still
+        # streaming. Set the independently validated action-bar pair so
+        # `complete=True` means "genuinely done" in happy-path fixtures.
         signals.add("completion-control")
         signals.add("more-actions-menu")
     resolved_user_id = user_id or (f"prompt-{users}" if users else None)
@@ -88,6 +89,7 @@ def snap(
         # just the decoupled dom_signals fact.
         generating=generating,
         message_refs=tuple(message_refs),
+        tool_activity_counts=tuple(tool_activity_counts),
     )
 
 
@@ -371,6 +373,137 @@ async def test_response_progress_activity_emits_repeatedly_not_just_once():
         if obs.attributes.get("model_activity") == "response-progress"
     ]
     assert len(progress_observations) >= 2
+
+
+@pytest.mark.asyncio
+async def test_tool_app_activity_emits_progress_when_response_text_is_unchanged():
+    """Connector/tool affordances are real current-turn activity.
+
+    ChatGPT can spend a long interval showing ``Called tool`` or ``Talked to
+    App`` while the assistant text and busy widget remain unchanged. Those
+    bounded label-count edges must renew both the provider observation lease
+    and the internal response-progress clock.
+    """
+    chat = _Chat()
+    observations = []
+    chat._snapshots = iter(
+        [
+            snap(),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01", generating=True),
+            snap(users=1, assistants=1, user="Review AU01", assistant="Working"),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Working",
+                tool_activity_counts=(("called-tool", 1),),
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Working",
+                tool_activity_counts=(("called-tool", 1), ("talked-to-app", 1)),
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Done",
+                complete=True,
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Done",
+                complete=True,
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Done",
+                complete=True,
+            ),
+        ]
+    )
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-tool-progress", body="Review AU01"), observations.append
+    )
+
+    result = await turn.run()
+
+    assert result.stop_reason == "end-turn"
+    tool_progress = [
+        obs
+        for obs in observations
+        if obs.attributes.get("model_activity") == "tool-progress"
+    ]
+    assert len(tool_progress) >= 2
+
+
+@pytest.mark.asyncio
+async def test_static_tool_activity_renews_with_bounded_heartbeat():
+    """A visible tool row need not change its count every poll.
+
+    The browser can display one ``Searching the web``/``Read resource`` row
+    for minutes while that operation is still executing.  The gateway must
+    receive periodic activity rather than treating the unchanged row as
+    silence.  The production cadence is five seconds; this test forces it to
+    zero so the deterministic fixture can exercise multiple heartbeats.
+    """
+    chat = _Chat()
+    observations = []
+    chat._snapshots = iter(
+        [
+            snap(),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01", generating=True),
+            snap(users=1, assistants=1, user="Review AU01", assistant="Working"),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Working",
+                tool_activity_counts=(("searching-web", 1),),
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Working",
+                tool_activity_counts=(("searching-web", 1),),
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Working",
+                tool_activity_counts=(("searching-web", 1),),
+            ),
+            snap(users=1, assistants=1, user="Review AU01", assistant="Done", complete=True),
+            snap(users=1, assistants=1, user="Review AU01", assistant="Done", complete=True),
+            snap(users=1, assistants=1, user="Review AU01", assistant="Done", complete=True),
+        ]
+    )
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-tool-heartbeat", body="Review AU01"), observations.append
+    )
+    turn._TOOL_ACTIVITY_HEARTBEAT_INTERVAL_SECONDS = 0.0
+
+    result = await turn.run()
+
+    assert result.stop_reason == "end-turn"
+    tool_progress = [
+        obs
+        for obs in observations
+        if obs.attributes.get("model_activity") == "tool-progress"
+    ]
+    assert len(tool_progress) >= 2
 
 
 @pytest.mark.asyncio

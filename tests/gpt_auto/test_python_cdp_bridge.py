@@ -196,8 +196,8 @@ async def test_refresh_pages_skips_window_lookup_for_unrelated_browser_tabs():
     """GP42: the shared browser can have dozens of ordinary tabs open that
     have nothing to do with gpt-auto. _refresh_pages() must not spend a
     Browser.getWindowForTarget round-trip resolving a window for every one
-    of them -- only tabs that could plausibly be ours (chatgpt.com, the
-    data: dashboard, about:blank) are worth resolving."""
+    of them -- only tabs that could plausibly be ours (ChatGPT, the gateway
+    dashboard, data: pages, and about:blank) are worth resolving."""
     bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
     fake = _FakeClient()
     window_lookup_targets: list[str] = []
@@ -208,6 +208,7 @@ async def test_refresh_pages_skips_window_lookup_for_unrelated_browser_tabs():
             return {
                 "targetInfos": [
                     {"targetId": "target-chatgpt", "type": "page", "url": "https://chatgpt.com/c/abc"},
+                    {"targetId": "target-dashboard", "type": "page", "url": "http://127.0.0.1:8765/dashboard?audiagentic-window-anchor=1"},
                     {"targetId": "target-reddit", "type": "page", "url": "https://reddit.com/r/x"},
                     {"targetId": "target-amazon", "type": "page", "url": "https://amazon.com/dp/1"},
                     {"targetId": "target-blank", "type": "page", "url": "about:blank"},
@@ -223,12 +224,13 @@ async def test_refresh_pages_skips_window_lookup_for_unrelated_browser_tabs():
 
     pages = await bridge._refresh_pages()
 
-    assert len(pages) == 4
-    assert set(window_lookup_targets) == {"target-chatgpt", "target-blank"}
+    assert len(pages) == 5
+    assert set(window_lookup_targets) == {"target-chatgpt", "target-dashboard", "target-blank"}
     by_target = {p["targetId"]: p for p in pages}
     assert by_target["target-reddit"]["windowId"] is None
     assert by_target["target-amazon"]["windowId"] is None
     assert by_target["target-chatgpt"]["windowId"] == 42
+    assert by_target["target-dashboard"]["windowId"] == 42
     assert by_target["target-blank"]["windowId"] == 42
 
 

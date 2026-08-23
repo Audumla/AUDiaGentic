@@ -100,6 +100,33 @@ def atomic_write_text(path: Path, content: str) -> None:
             os.unlink(tmp)
 
 
+def atomic_write_bytes(path: Path, content: bytes) -> None:
+    """Atomically write exact bytes via a temp file + fsync + rename.
+
+    This is deliberately separate from :func:`atomic_write_text`: text-mode
+    files on Windows perform newline translation, which changes the bytes that
+    were hashed by callers persisting UTF-8 response artifacts.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=path.stem + ".", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(content)
+            fh.flush()
+            os.fsync(fh.fileno())
+        for attempt in range(_REPLACE_RETRY_ATTEMPTS):
+            try:
+                os.replace(tmp, path)
+                break
+            except PermissionError:
+                if attempt == _REPLACE_RETRY_ATTEMPTS - 1:
+                    raise
+                time.sleep(_REPLACE_RETRY_DELAY_SECONDS)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+
 def load_json_file(path: Path) -> dict[str, Any]:
     """Load JSON mapping from path.
 
