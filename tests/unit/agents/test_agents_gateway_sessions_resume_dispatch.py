@@ -4,18 +4,10 @@ Unlike test_agents_gateway_session_resume.py (pure validate_resume_eligibility
 unit tests), this exercises the real orchestration path: real AS29 surface
 resolution against a registered fake descriptor, real session-store/binding
 persistence, a fake provider_prepare_fn standing in for the real ACP
-transport, and the idempotency record.
-
-Real production sessions opened via SessionRuntime.open_session() today never
-carry real identity/execution-context fingerprints (build_session_record's
-binding always defaults both to "unknown" — no open_session call site plumbs
-real SH02 fingerprints through yet). Since validate_resume_eligibility
-unconditionally rejects the "unknown" sentinel, no session opened through the
-current gateway open path can actually be resumed yet. That's a real,
-separate gap (SH02/AS08 territory, not AS49's own scope) — worth flagging,
-not silently worked around. This test file constructs its source session's
-binding directly with real fingerprints to exercise resume in isolation from
-that gap.
+transport, and the idempotency record. Context fingerprints are supplied only
+for the fake surface because it declares that same-context resume is required;
+persistence-compatible surfaces such as GPT Auto intentionally ignore gateway
+fingerprint drift.
 """
 from __future__ import annotations
 
@@ -268,6 +260,32 @@ class TestResumeRejections:
                     tmp_path, source["session-id"], control_id="ctrl-3",
                     execution_context_fingerprint=_EXECUTION_FP,
                 )
+            assert runtime.live_session_ids() == []
+        finally:
+            runtime.shutdown()
+
+    def test_returned_provider_ref_must_match_source(self, tmp_path: Path):
+        source = _write_terminal_source_session(tmp_path)
+
+        def mismatched_prepare(
+            project_root, *, provider_id, surface_hint, model_id=None,
+            resume_provider_ref=None, **_ignored
+        ):
+            transport = FakeAgentSessionTransport()
+            transport.ag_session_id = _ignored["ag_session_id"]
+            transport.provider_session_ref = "different-provider-ref"
+            return _build_fake_prepared(transport)
+
+        runtime = _make_runtime(resume_prepare=mismatched_prepare)
+        try:
+            with pytest.raises(AudiaGenticError) as exc:
+                runtime.resume_session(
+                    tmp_path,
+                    source["session-id"],
+                    control_id="ctrl-ref-mismatch",
+                    execution_context_fingerprint=_EXECUTION_FP,
+                )
+            assert exc.value.code == "CON-AGW-123"
             assert runtime.live_session_ids() == []
         finally:
             runtime.shutdown()
