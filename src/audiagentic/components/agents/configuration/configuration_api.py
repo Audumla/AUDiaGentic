@@ -43,5 +43,5 @@ class AgentsConfigService:
         return resolve_agent(self.read(root).document, agent_id)
 
     def triggers(self, root: Path) -> tuple[dict[str, Any], ...]:
-        """Return validated project-owned trigger definitions."""
+        """Return validated machine-global trigger definitions."""
         return self.read(root).document.triggers

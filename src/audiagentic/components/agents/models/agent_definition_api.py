@@ -32,7 +32,7 @@ def _repository() -> AgentsConfigRepository:
 
 
 def load_agent_definitions(project_root: Path) -> AgentDefinitionStore:
-    """Load agent definitions from the project config file.
+    """Load agent definitions from the machine-global config file.
 
     Returns an empty store if the file doesn't exist.
     Raises AudiaGenticError(IO-AGD-001) on read failure.
@@ -43,7 +43,7 @@ def load_agent_definitions(project_root: Path) -> AgentDefinitionStore:
 
 
 def save_agent_definitions(project_root: Path, store: AgentDefinitionStore) -> None:
-    """Serialize agent definitions store back to YAML config file.
+    """Serialize agent definitions store back to the global YAML config file.
 
     Raises AudiaGenticError(IO-AGD-002) on write failure.
     """

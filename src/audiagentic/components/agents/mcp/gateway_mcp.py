@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agents.agents_paths import (
-    agents_config_path,
     gateway_final_response_path,
 )
 from audiagentic.components.agents.gateway.client import call_gateway_method
@@ -35,7 +34,7 @@ mcp = mcp_server(__name__)
 # config. The complete response remains in the request-owned artifact. Keep
 # the packaged fallback deliberately small while this boundary is exercised;
 # deployments can raise it through gateway.mcp.max-inline-response-bytes.
-DEFAULT_MCP_INLINE_RESPONSE_MAX_BYTES = 4 * 1024
+DEFAULT_MCP_INLINE_RESPONSE_MAX_BYTES = 24 * 1024
 
 _RESPONSE_PREVIEW_FIELDS = frozenset({"output-preview", "output-truncated"})
 
@@ -43,17 +42,18 @@ _RESPONSE_PREVIEW_FIELDS = frozenset({"output-preview", "output-truncated"})
 def _configured_inline_response_limit(project_root: Path) -> int:
     """Return the MCP inline-response byte budget.
 
-    Project configuration wins over the package default. Invalid or missing
-    values fail safe to the bounded default; they must never make the MCP
-    result unbounded.
+    The packaged component configuration supplies the deployment value.
+    Invalid or missing values fail safe to the bounded default; they must
+    never make the MCP result unbounded. ``project_root`` remains in the
+    callable signature because the MCP operation is project-scoped.
     """
     from audiagentic.foundation.io import load_yaml_file
     from audiagentic.foundation.paths.names import get_package_components_config_dir
 
-    paths = (
-        agents_config_path(project_root),
-        get_package_components_config_dir() / "agents.yaml",
-    )
+    # Agent definitions are machine-global.  The response budget is a
+    # component policy, so read only the packaged component configuration;
+    # never let a stale project-level Agents catalog shadow it.
+    paths = (get_package_components_config_dir() / "agents.yaml",)
     for config_path in paths:
         try:
             if not config_path.exists():

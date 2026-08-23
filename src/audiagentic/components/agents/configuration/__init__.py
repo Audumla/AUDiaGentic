@@ -1,4 +1,4 @@
-"""Canonical project-owned Agents configuration."""
+"""Canonical machine-global Agents configuration."""
 
 from .repository import (
     AgentsConfigConflictError,

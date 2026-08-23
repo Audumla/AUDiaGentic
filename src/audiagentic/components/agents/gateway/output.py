@@ -711,9 +711,14 @@ def _get_output_policy_from_config(project_root: Path) -> OutputPolicy:
     try:
         from audiagentic.foundation.io import load_yaml_file
 
-        # Component config lives at src/audiagentic/config/components/agents.yaml
-        # but we read the project overlay at .audiagentic/config/agents.yaml
-        config_path = Path(project_root) / ".audiagentic" / "config" / "agents.yaml"
+        # Component policy is packaged/global; agent definitions are not
+        # project-local authorities.
+        config_path = (
+            Path(__file__).parent.parent.parent.parent
+            / "config"
+            / "components"
+            / "agents.yaml"
+        )
         if config_path.exists():
             config = load_yaml_file(config_path)
             gateway_config = config.get("gateway", {})
@@ -721,26 +726,8 @@ def _get_output_policy_from_config(project_root: Path) -> OutputPolicy:
             return OutputPolicy.from_config(output_config)
     except Exception:  # noqa: BLE001
         logger.debug(
-            "failed to load output relay policy from project config; using disabled default",
+            "failed to load output relay policy from component config; using disabled default",
             exc_info=True,
         )
-
-    # Fallback: read package-level default from component config
-    try:
-        from audiagentic.foundation.io import load_yaml_file
-
-        pkg_config_path = (
-            Path(__file__).parent.parent.parent.parent
-            / "config"
-            / "components"
-            / "agents.yaml"
-        )
-        if pkg_config_path.exists():
-            config = load_yaml_file(pkg_config_path)
-            gateway_config = config.get("gateway", {})
-            output_config = gateway_config.get("output", {})
-            return OutputPolicy.from_config(output_config)
-    except Exception:  # noqa: BLE001
-        pass
 
     return OutputPolicy.disabled()
