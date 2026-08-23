@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agents.gateway.admission.context import ComponentContextReader
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.queue import dispatch as dispatch
@@ -365,16 +366,49 @@ def submit_execution_request(
 
         component_context_reader = empty_component_context
     template_context = component_context_reader(Path(canonical_root.display))
+    dispatch_prompt = prompt_body
 
     # Resolve the machine-global agent definition at gateway admission. MCP
     # transports pass only agent_id so execution and prompt identity come from
     # one authoritative catalog snapshot.
     if agent_id is not None:
-        from audiagentic.components.agents.configuration.global_catalog import get_global_agent_definition
+        from audiagentic.components.agents.agents_paths import global_agents_config_path
+        from audiagentic.components.agents.configuration.global_catalog import read_global_agents_config
+        from audiagentic.components.agents.configuration.resolution import resolve_agent_composition
+        from audiagentic.components.agents.gateway.admission.context import baseline_agent_template_context
+        from audiagentic.components.agents.gateway.admission.instructions import materialize_agent_prompt
 
-        definition = get_global_agent_definition(project_root, agent_id)
-        execution_profile_id = definition["execution_profile_id"]
-        prompt_profile_id = definition.get("profile_id", "default")
+        # Global agents must be usable from an unmanaged repository as well
+        # as a fully installed AUDiaGentic project.  Component context is an
+        # optional enrichment layer, never a prerequisite for these baseline
+        # project/source-control template namespaces.
+        template_context = {
+            **baseline_agent_template_context(Path(canonical_root.display)),
+            **template_context,
+        }
+        catalog = read_global_agents_config(project_root)
+        try:
+            composition = resolve_agent_composition(project_root, agent_id, snapshot=catalog)
+        except KeyError as exc:
+            raise AudiaGenticError(
+                code="RES-AGD-001",
+                kind="agents",
+                message=f"agent definition not found: {agent_id!r}",
+                details={"agent-id": agent_id},
+            ) from exc
+        execution_profile_id = composition.execution_profile.profile_id
+        # ``profile_id`` is the provider packet wrapper. ``prompt_id`` is the
+        # agent's actual global instruction definition; they are distinct
+        # configuration axes and must never be substituted for each other.
+        raw_agent = next(item for item in catalog.document.agents if item.get("agent_id") == agent_id)
+        prompt_profile_id = str(raw_agent.get("profile_id") or "default")
+        render_context = {**template_context, "prompt-body": prompt_body}
+        dispatch_prompt = materialize_agent_prompt(
+            composition.prompt,
+            prompts=catalog.document.prompts,
+            config_root=global_agents_config_path().parent,
+            template_context=render_context,
+        )
 
     from audiagentic.components.providers.providers_api import load_agent_prompt_template
 
@@ -599,7 +633,7 @@ def submit_execution_request(
         # --- 6. Enqueue with dispatch_prompt threaded via functools.partial -
         runner = functools.partial(
             dispatch.dispatch_request,
-            dispatch_prompt=prompt_body,  # type: ignore[arg-type]
+            dispatch_prompt=dispatch_prompt,
             preallocated_session_id=(
                 session_id if session_keep_alive and not envelope.session.session_id else None
             ),

@@ -20,7 +20,10 @@ from audiagentic.components.providers.adapters.gpt_auto.runtime import (
     ProviderState,
 )
 from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatSnapshot
-from audiagentic.components.providers.adapters.gpt_auto.window_anchor import gateway_dashboard_url
+from audiagentic.components.providers.adapters.gpt_auto.window_anchor import (
+    gateway_dashboard_anchor_url,
+    gateway_dashboard_url,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 from .test_greenfield_config_urls import valid_config
@@ -211,8 +214,10 @@ class _Page:
 class _GptBrowser:
     def __init__(self) -> None:
         self.closed: list[_Page] = []
+        self.open_kwargs: list[dict] = []
 
-    async def open_project_page(self, **_kwargs):
+    async def open_project_page(self, **kwargs):
+        self.open_kwargs.append(kwargs)
         return {"page": _Page(), "projectUrl": "https://chatgpt.com/g/g-p-project/project"}
 
     async def close(self, page: _Page) -> None:
@@ -225,6 +230,7 @@ class _OpenRuntime:
         config["browser"]["dedicated-window"] = False
         self.config = GptAutoConfig.from_dict(config)
         self.gpt_browser = _GptBrowser()
+        self.anchor_page = _Page()
         self._owners: dict[str, str] = {}
 
     async def ensure_available(self) -> None:
@@ -232,6 +238,9 @@ class _OpenRuntime:
 
     async def register_chat(self, _chat) -> None:
         return None
+
+    async def dedicated_window_anchor_page(self):
+        return self.anchor_page
 
     def unregister_chat(self, _chat) -> None:
         return None
@@ -269,6 +278,36 @@ async def test_fast_open_claims_page_before_ready_and_rejects_second_session() -
     with pytest.raises(RuntimeError, match="already owned"):
         await second.open()
     assert len(runtime.gpt_browser.closed) == 1
+
+
+@pytest.mark.asyncio
+async def test_new_project_session_reuses_dashboard_anchor_window() -> None:
+    """A new session is opened as a tab in the managed GPT window."""
+    runtime = _OpenRuntime()
+    config = valid_config()
+    config["browser"]["dedicated-window"] = True
+    runtime.config = GptAutoConfig.from_dict(config)
+
+    chat = PersistentChat(
+        ag_session_id="session-independent-window",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=runtime.config,
+        binding_sink=lambda _update: None,
+    )
+
+    await chat.open()
+
+    assert runtime.gpt_browser.open_kwargs == [
+        {
+            "project_name": "project",
+            "project_url": "https://chatgpt.com/g/g-p-project/project",
+            "anchor_page": runtime.anchor_page,
+            "navigation_timeout": runtime.config.chat.navigation_timeout_seconds,
+            "ready_timeout": runtime.config.chat.ready_timeout_seconds,
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -457,7 +496,6 @@ async def test_unresolved_recovery_reports_missing_completion_evidence() -> None
     assert error.value.details["recovery-details"]["required-signal"] == (
         "completion-control+more-actions-menu"
         "-or-canvas-edit-control+canvas-open-editor-control+not-generating"
-        "-or-message-finalized+not-generating"
     )
 
 
@@ -937,8 +975,8 @@ async def test_find_conversation_page_picks_deterministically_among_duplicate_ta
     runtime.state = ProviderState.AVAILABLE
     runtime._dedicated_window_id = 7
     same_conversation_pages = [
-        {"pageHandle": "page-32", "targetId": "target-b", "windowId": 7, "url": "https://chatgpt.com/c/provider-session"},
-        {"pageHandle": "page-17", "targetId": "target-a", "windowId": 7, "url": "https://chatgpt.com/c/provider-session"},
+        {"pageHandle": "page-32", "targetId": "target-b", "windowId": 7, "url": "https://chatgpt.com/g/g-p-project/c/provider-session"},
+        {"pageHandle": "page-17", "targetId": "target-a", "windowId": 7, "url": "https://chatgpt.com/g/g-p-project/c/provider-session"},
     ]
 
     class _Bridge:
@@ -974,8 +1012,8 @@ async def test_find_conversation_page_never_hops_onto_a_page_owned_by_another_li
     runtime.state = ProviderState.AVAILABLE
     runtime._dedicated_window_id = 7
     same_conversation_pages = [
-        {"pageHandle": "page-17", "targetId": "target-a", "windowId": 7, "url": "https://chatgpt.com/c/provider-session"},
-        {"pageHandle": "page-32", "targetId": "target-b", "windowId": 7, "url": "https://chatgpt.com/c/provider-session"},
+        {"pageHandle": "page-17", "targetId": "target-a", "windowId": 7, "url": "https://chatgpt.com/g/g-p-project/c/provider-session"},
+        {"pageHandle": "page-32", "targetId": "target-b", "windowId": 7, "url": "https://chatgpt.com/g/g-p-project/c/provider-session"},
     ]
     # page-17 has the lower handle (would win the deterministic tiebreak),
     # but it's already owned by a different chat -- must be skipped.
@@ -1125,13 +1163,13 @@ async def test_find_conversation_page_restores_window_before_selecting_retained_
                     "pageHandle": "manual-copy",
                     "targetId": "target-manual",
                     "windowId": 99,
-                    "url": "https://chatgpt.com/c/provider-session",
+                    "url": "https://chatgpt.com/g/g-p-project/c/provider-session",
                 },
                 {
                     "pageHandle": "retained",
                     "targetId": "target-retained",
                     "windowId": 7,
-                    "url": "https://chatgpt.com/c/provider-session",
+                    "url": "https://chatgpt.com/g/g-p-project/c/provider-session",
                 },
             ]
 
@@ -1168,13 +1206,13 @@ async def test_find_conversation_page_does_not_trust_recycled_target_id(
                     "pageHandle": "recycled",
                     "targetId": "target-retained",
                     "windowId": 7,
-                    "url": "https://chatgpt.com/c/a-different-conversation",
+                    "url": "https://chatgpt.com/g/g-p-project/c/a-different-conversation",
                 },
                 {
                     "pageHandle": "matching",
                     "targetId": "target-matching",
                     "windowId": 7,
-                    "url": "https://chatgpt.com/c/provider-session",
+                    "url": "https://chatgpt.com/g/g-p-project/c/provider-session",
                 },
             ]
 
@@ -1402,6 +1440,31 @@ async def test_anchor_rediscovery_reuses_only_the_gateway_http_page(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_anchor_rediscovery_prefers_marked_dashboard_tab_and_normalizes_url(monkeypatch) -> None:
+    """A restart can recover a marked or decorated dashboard tab by URL."""
+    runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
+    runtime.state = ProviderState.AVAILABLE
+
+    class _Bridge:
+        async def call(self, method, params=None):
+            assert method == "list_pages"
+            return [
+                {"pageHandle": "bare", "url": f"{gateway_dashboard_url()}/?old=1", "windowId": 4},
+                {"pageHandle": "marked", "url": gateway_dashboard_anchor_url(), "windowId": 9},
+            ]
+
+    runtime._bridge = _Bridge()  # type: ignore[assignment]
+
+    async def available():
+        return None
+
+    monkeypatch.setattr(runtime, "ensure_available", available)
+
+    assert await runtime.ensure_dedicated_window_anchor() == "marked"
+    assert runtime._dedicated_window_id == 9
+
+
+@pytest.mark.asyncio
 async def test_legacy_dashboard_tab_is_not_reused_or_repointed(monkeypatch) -> None:
     runtime = GptAutoProviderRuntime(GptAutoConfig.from_dict(valid_config()))
     runtime.state = ProviderState.AVAILABLE
@@ -1426,7 +1489,7 @@ async def test_legacy_dashboard_tab_is_not_reused_or_repointed(monkeypatch) -> N
 
     assert await runtime.ensure_dedicated_window_anchor() == "new-anchor"
     assert calls[-1] == (
-        "navigate", {"pageHandle": "new-anchor", "url": gateway_dashboard_url()}
+        "navigate", {"pageHandle": "new-anchor", "url": gateway_dashboard_anchor_url()}
     )
 
 

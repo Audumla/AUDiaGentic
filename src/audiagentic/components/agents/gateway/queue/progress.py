@@ -60,19 +60,23 @@ def _disposition(record: dict[str, Any]) -> tuple[ProgressDisposition, Interrupt
             Interruptibility.NOT_SAFE,
             "cancellation-requested-but-not-terminal",
         )
-    if record.get("watchdog-state") == "intervention":
+    activity = record.get("activity") if isinstance(record.get("activity"), dict) else {}
+    provider_activity = activity.get("provider") if isinstance(activity.get("provider"), dict) else {}
+    provider_seen = bool(provider_activity.get("last-at"))
+    provider_capability = provider_activity.get("capability", "unknown")
+    if record.get("watchdog-state") == "intervention" and (provider_capability in {"supported", "unknown"} and not provider_seen):
         return (
             ProgressDisposition.STALLED_DIAGNOSTIC,
             Interruptibility.DIAGNOSTIC_ONLY,
             "activity-lease-expired-diagnostic-only",
         )
-    if record.get("provider-turn-pending") is True:
+    if record.get("provider-turn-pending") is True and not provider_seen:
         return (
             ProgressDisposition.PROCESSING_UNVERIFIED,
             Interruptibility.NOT_SAFE,
             "provider-turn-unresolved-live-attempt",
         )
-    if record.get("activity-sequence", 0) or record.get("watchdog-reason") == "verified-activity-renewed":
+    if provider_seen or record.get("watchdog-reason") == "verified-activity-renewed":
         return (
             ProgressDisposition.PROCESSING_VERIFIED,
             Interruptibility.NOT_SAFE,

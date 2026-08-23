@@ -565,6 +565,7 @@ class SessionRuntime:
         request_id: str | None = None,
         correlation_id: str | None = None,
         timeout_seconds: float | None = None,
+        activity_relay: Any | None = None,
     ) -> SessionTurnResult:
         """Run one turn on a live session; refreshes its idle clock."""
         return self._call(
@@ -574,6 +575,7 @@ class SessionRuntime:
                 prompt,
                 request_id=request_id,
                 correlation_id=correlation_id,
+                activity_relay=activity_relay,
             ),
             timeout=timeout_seconds,
         )
@@ -2112,6 +2114,7 @@ class SessionRuntime:
         *,
         request_id: str | None,
         correlation_id: str | None,
+        activity_relay: Any | None = None,
     ) -> SessionTurnResult:
         handle = self._require_handle(session_id)
         # Turns queue FIFO on the session lock (RV513) — reject only when the
@@ -2220,6 +2223,7 @@ class SessionRuntime:
                 correlation_id,
                 activity_marker=_mark_activity,
                 latest_event_recorder=_record_latest_turn_event,
+                activity_relay=activity_relay,
             )
 
             # AS19 Stage-2 Slice B: create per-turn evidence sink with immutable

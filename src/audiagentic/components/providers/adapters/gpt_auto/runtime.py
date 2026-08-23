@@ -14,9 +14,14 @@ from .cdp.bridge import PythonCdpBridge
 from .config import GptAutoConfig
 from .gpt_auto_cdp import GptAutoCdpBrowserController
 from .urls import url_matches_provider_session
-from .window_anchor import gateway_dashboard_url
+from .window_anchor import (
+    gateway_dashboard_anchor_url,
+    is_gateway_dashboard_anchor_url,
+    is_gateway_dashboard_url,
+)
 
 if TYPE_CHECKING:
+    from .cdp.cdp_browser import CdpPageRef
     from .chat import PersistentChat
 
 
@@ -173,7 +178,6 @@ class GptAutoProviderRuntime:
         async with self._dedicated_window_lock:
             await self.ensure_available()
             pages = await self.bridge.call("list_pages")
-            dashboard_url = gateway_dashboard_url()
             if self._dedicated_window_anchor and any(
                 str(p.get("pageHandle")) == self._dedicated_window_anchor for p in pages
             ):
@@ -183,10 +187,22 @@ class GptAutoProviderRuntime:
                 self._dedicated_window_id = _window_id(anchor_page)
                 return self._dedicated_window_anchor
             # Gateway/runtime recovery can lose the in-memory handle while the
-            # browser tab survives. Reuse only the gateway-owned HTTP page;
-            # legacy provider-rendered tabs are intentionally left untouched.
+            # browser tab survives. Reuse only a gateway-owned dashboard tab;
+            # matching the canonical origin/path (rather than the exact URL)
+            # handles a trailing slash or marker across a gateway restart.
+            dashboard_pages = [
+                p for p in pages if is_gateway_dashboard_url(str(p.get("url") or ""))
+            ]
+            preferred = next(
+                (
+                    p
+                    for p in dashboard_pages
+                    if is_gateway_dashboard_anchor_url(str(p.get("url") or ""))
+                ),
+                None,
+            )
             existing = next(
-                (str(p["pageHandle"]) for p in pages if str(p.get("url") or "") == dashboard_url),
+                (str(p["pageHandle"]) for p in (preferred, *dashboard_pages) if p is not None),
                 None,
             )
             if existing:
@@ -203,10 +219,15 @@ class GptAutoProviderRuntime:
                 "navigate",
                 {
                     "pageHandle": self._dedicated_window_anchor,
-                    "url": dashboard_url,
+                    "url": gateway_dashboard_anchor_url(),
                 },
             )
             return self._dedicated_window_anchor
+
+    async def dedicated_window_anchor_page(self) -> CdpPageRef:
+        """Return the live dashboard anchor page for a new session tab."""
+        handle = await self.ensure_dedicated_window_anchor()
+        return await self.gpt_browser.page_by_handle(handle)
 
     async def _route_events(self, bridge: PythonCdpBridge) -> None:
         while self._bridge is bridge:

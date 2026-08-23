@@ -299,6 +299,7 @@ def build_record(
         "activity-sequence": 0,
         "activity-source": None,
         "activity-lease-expires-at": None,
+        "activity": _shared.default_activity(),
         "watchdog-state": "not-started",
         "watchdog-reason": None,
         "watchdog-policy": dict(watchdog_policy) if watchdog_policy is not None else None,
@@ -448,9 +449,17 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     # A briefly deployed v4 writer could have persisted the version before
     # adding all activity fields. Treat that shape as migratable too; never
     # strand a durable request merely because a process restarted mid-cutover.
-    if contract_version not in {"v1", "v2", "v3", "v4", "v5", _shared._CONTRACT_VERSION}:
+    if contract_version not in {"v1", "v2", "v3", "v4", "v5", "v6", _shared._CONTRACT_VERSION}:
         return _validate(migrated, code="VAL-AGW-005")
-    migrated["contract-version"] = _shared._CONTRACT_VERSION if contract_version == _shared._CONTRACT_VERSION else "v5"
+    # v7 is the first record contract with nested provider/owner activity.
+    # Keep the historical v5 migration target for pre-v6 records, while
+    # explicitly upgrading v6 records that already carry the flat activity
+    # fields to v7 under the same request lock.
+    migrated["contract-version"] = (
+        _shared._CONTRACT_VERSION
+        if contract_version in {"v6", _shared._CONTRACT_VERSION}
+        else "v5"
+    )
     if contract_version != _shared._CONTRACT_VERSION:
         migrated.update({
             "dispatch-owner-epoch": None,
@@ -475,6 +484,28 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     migrated.setdefault("activity-sequence", 0)
     migrated.setdefault("activity-source", None)
     migrated.setdefault("activity-lease-expires-at", None)
+    activity = migrated.get("activity")
+    if not isinstance(activity, dict):
+        activity = _shared.default_activity()
+    else:
+        base = _shared.default_activity()
+        for kind in ("provider", "owner"):
+            if isinstance(activity.get(kind), dict):
+                base[kind].update(activity[kind])
+        base.update({k: activity.get(k) for k in ("sequence", "last-at", "last-source") if k in activity})
+        activity = base
+    # Older records only had one worker lease. Preserve it as owner evidence.
+    if activity["sequence"] == 0 and migrated.get("activity-sequence"):
+        activity["sequence"] = int(migrated.get("activity-sequence") or 0)
+        activity["last-at"] = migrated.get("last-activity-at")
+        activity["last-source"] = migrated.get("activity-source")
+        activity["owner"].update({
+            "last-at": migrated.get("last-activity-at"),
+            "lease-expires-at": migrated.get("activity-lease-expires-at"),
+            "source": migrated.get("activity-source"),
+            "source-sequence": int(migrated.get("activity-sequence") or 0),
+        })
+    migrated["activity"] = activity
     migrated.setdefault("watchdog-state", "not-started")
     migrated.setdefault("watchdog-reason", None)
     migrated.setdefault("watchdog-policy", None)
@@ -515,6 +546,7 @@ def read_record(project_root: Path, request_id: str) -> dict[str, Any]:
         and "activity-sequence" in payload
         and "activity-source" in payload
         and "activity-lease-expires-at" in payload
+        and "activity" in payload
     ):
         record = _validate(payload, code="VAL-AGW-005")
     else:
@@ -572,11 +604,13 @@ def project_public_status(
         "gateway-execution-lane-key", "resolved-provider-id", "resolved-model-id",
         "resolved-source-id", "resolved-capacity-generation",
         "last-activity-at", "activity-sequence", "activity-source", "activity-lease-expires-at",
+        "activity",
         "watchdog-state", "watchdog-reason",
         "watchdog-policy", "terminal-classification",
         "resolved-instance-ids", "resolved-queue-limits", "admission-policy-digest",
     )
     status = {field: record.get(field) for field in visible}
+    status["activity"] = record.get("activity")
     # Provider metadata is deliberately not exposed wholesale.  This one
     # boolean is safe and essential for interpreting a running request:
     # ``True`` means the provider may still be completing the submitted turn,
