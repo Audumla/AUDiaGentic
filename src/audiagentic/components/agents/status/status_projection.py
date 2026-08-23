@@ -9,8 +9,6 @@ Pure function, no I/O, no gateway/store imports beyond reading a plain dict.
 
 from __future__ import annotations
 
-import datetime
-
 from audiagentic.components.agents.status.session_lifecycle_projection import (
     SessionLifecycleDecision,
     snapshot_from_decision,
@@ -21,6 +19,7 @@ from audiagentic.foundation.transports.agent_status import (
     AgentStatusScope,
     AgentStatusSnapshot,
 )
+from audiagentic.foundation.time import now_iso_z
 
 # ---------------------------------------------------------------------------
 # Durable state → outcome mapping (SH07 authority)
@@ -31,12 +30,8 @@ _DURABLE_OUTCOME_MAP: dict[str, AgentOutcome] = {
     "failed": AgentOutcome.FAILED,
     "cancelled": AgentOutcome.CANCELLED,
     "interrupted": AgentOutcome.INTERRUPTED,
+    "rejected": AgentOutcome.REJECTED,
 }
-
-
-def _now_iso() -> str:
-    """Current UTC timestamp as ISO-8601 string."""
-    return datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
 
 
 # ---------------------------------------------------------------------------
@@ -115,7 +110,7 @@ def snapshot_for_request(
                 record.get("finished-at")
                 or record.get("updated-at")
                 or record.get("created-at")
-                or _now_iso()
+                or now_iso_z()
             ),
         )
 
@@ -143,7 +138,7 @@ def snapshot_for_request(
             generation=None,
             attempt=None,
             observed_at=None,
-            projected_at=record.get("updated-at") or record.get("created-at") or _now_iso(),
+            projected_at=record.get("updated-at") or record.get("created-at") or now_iso_z(),
         )
 
     # -- Case 3b: no durable terminal state, no decision → UNKNOWN ----------
@@ -159,5 +154,5 @@ def snapshot_for_request(
         generation=None,
         attempt=None,
         observed_at=None,
-        projected_at=record.get("updated-at") or record.get("created-at") or _now_iso(),
+        projected_at=record.get("updated-at") or record.get("created-at") or now_iso_z(),
     )

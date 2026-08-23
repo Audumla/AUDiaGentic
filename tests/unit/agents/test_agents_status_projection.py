@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import pytest
 
+import audiagentic.components.agents.status.status_projection as status_projection
+
 from audiagentic.components.agents.status.session_lifecycle_projection import (
     SessionLifecycleDecision,
 )
@@ -112,6 +114,46 @@ class TestCancelledRecord:
         snap = snapshot_for_request(_record("cancelled"))
         assert snap.lifecycle == AgentLifecycle.TERMINAL
         assert snap.outcome == AgentOutcome.CANCELLED
+
+
+class TestRejectedRecord:
+    def test_rejected_is_terminal_and_wins_over_stale_decision(self) -> None:
+        decision = SessionLifecycleDecision(
+            coarse_state="active",
+            accepts_new_turn=True,
+            session_reusable=True,
+            turn_terminal=False,
+            dependent_work_releasable=False,
+            evidence_state="accepted",
+            reason="stale active evidence",
+        )
+        snap = snapshot_for_request(
+            _record("rejected", **{"updated-at": "2025-06-01T12:00:00Z"}),
+            decision=decision,
+        )
+        assert snap.lifecycle == AgentLifecycle.TERMINAL
+        assert snap.outcome == AgentOutcome.REJECTED
+        assert snap.decisions is None
+
+    def test_rejected_uses_updated_at_when_finished_at_is_absent(self) -> None:
+        snap = snapshot_for_request(
+            _record("rejected", **{"updated-at": "2025-06-01T12:00:00Z"})
+        )
+        assert snap.observed_at == "2025-06-01T12:00:00Z"
+        assert snap.projected_at == "2025-06-01T12:00:00Z"
+
+
+@pytest.mark.parametrize("state", ["completed", "queued", "running"])
+def test_projection_uses_shared_clock_for_final_fallback(
+    monkeypatch: pytest.MonkeyPatch, state: str
+) -> None:
+    monkeypatch.setattr(status_projection, "now_iso_z", lambda: "2026-08-23T09:00:00Z")
+    record = _record(state)
+    for key in ("finished-at", "updated-at", "created-at"):
+        record.pop(key, None)
+
+    snapshot = snapshot_for_request(record)
+    assert snapshot.projected_at == "2026-08-23T09:00:00Z"
 
 
 class TestInterruptedRecord:
