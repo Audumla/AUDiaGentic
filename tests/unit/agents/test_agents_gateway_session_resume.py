@@ -188,6 +188,18 @@ class TestVersionOrRefIncompatible:
             )
         assert exc.value.code == ERR_VERSION_OR_REF_INCOMPATIBLE
 
+    @pytest.mark.parametrize("namespace", [None, ""])
+    def test_missing_ref_namespace_rejected(self, namespace):
+        with pytest.raises(AudiaGenticError) as exc:
+            validate_resume_eligibility(
+                source_session_id=_SOURCE_SESSION_ID,
+                source_state="closed",
+                source_binding=_binding(**{"ref-namespace": namespace}),
+                surface=_surface(),
+                execution_context_fingerprint="exec-fp-abc",
+            )
+        assert exc.value.code == ERR_VERSION_OR_REF_INCOMPATIBLE
+
 
 class TestIdentityContextMismatch:
     def test_identity_fingerprint_is_not_required_for_provider_ref_resume(self):
