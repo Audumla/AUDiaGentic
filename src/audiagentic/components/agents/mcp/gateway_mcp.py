@@ -12,8 +12,13 @@ GatewayClient seam, just not over MCP
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
+from audiagentic.components.agents.agents_paths import (
+    agents_config_path,
+    gateway_final_response_path,
+)
 from audiagentic.components.agents.gateway.client import call_gateway_method
 from audiagentic.foundation.mcp.component_server import (
     mcp_server,
@@ -23,6 +28,91 @@ from audiagentic.foundation.mcp.component_server import (
 )
 
 mcp = mcp_server(__name__)
+
+# Successful MCP tool results are subject to limits owned by the MCP host,
+# not by the gateway. Keep the inline envelope comfortably below common host
+# limits and make the policy configurable through the agents component
+# config. The complete response remains in the request-owned artifact. Keep
+# the packaged fallback deliberately small while this boundary is exercised;
+# deployments can raise it through gateway.mcp.max-inline-response-bytes.
+DEFAULT_MCP_INLINE_RESPONSE_MAX_BYTES = 4 * 1024
+
+_RESPONSE_PREVIEW_FIELDS = frozenset({"output-preview", "output-truncated"})
+
+
+def _configured_inline_response_limit(project_root: Path) -> int:
+    """Return the MCP inline-response byte budget.
+
+    Project configuration wins over the package default. Invalid or missing
+    values fail safe to the bounded default; they must never make the MCP
+    result unbounded.
+    """
+    from audiagentic.foundation.io import load_yaml_file
+    from audiagentic.foundation.paths.names import get_package_components_config_dir
+
+    paths = (
+        agents_config_path(project_root),
+        get_package_components_config_dir() / "agents.yaml",
+    )
+    for config_path in paths:
+        try:
+            if not config_path.exists():
+                continue
+            config = load_yaml_file(config_path)
+            value = (
+                config.get("gateway", {})
+                .get("mcp", {})
+                .get("max-inline-response-bytes")
+            )
+            if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+                return value
+        except Exception:  # noqa: BLE001
+            continue
+    return DEFAULT_MCP_INLINE_RESPONSE_MAX_BYTES
+
+
+def _project_relative_artifact_path(project_root: Path, request_id: str) -> str:
+    """Return an artifact location without exposing a host filesystem path."""
+    path = gateway_final_response_path(project_root, request_id)
+    try:
+        return path.resolve().relative_to(Path(project_root).resolve()).as_posix()
+    except ValueError:
+        # The gateway path is fixed beneath the project marker. This fallback
+        # handles unusual Path implementations without returning an absolute
+        # path.
+        return (
+            Path(".audiagentic")
+            / "runtime"
+            / "agent-execution-gateway"
+            / request_id
+            / "output"
+            / "final-response.txt"
+        ).as_posix()
+
+
+def _artifact_reference(
+    project_root: Path,
+    request_id: str,
+    artifact: dict[str, Any],
+    status: dict[str, Any],
+    inline_limit: int,
+) -> dict[str, Any]:
+    """Build the bounded MCP response for a response too large to inline."""
+    return _sparse(
+        {
+            "request-id": request_id,
+            "delivery": "artifact",
+            "response-artifact": artifact,
+            "artifact-path": _project_relative_artifact_path(project_root, request_id),
+            "artifact-path-kind": "project-relative",
+            "inline-max-bytes": inline_limit,
+        }
+    )
+
+
+def _status_without_response_preview(status: dict[str, Any]) -> dict[str, Any]:
+    """Keep MCP status lifecycle/artifact-only; never spend tokens on a preview."""
+    return {key: value for key, value in status.items() if key not in _RESPONSE_PREVIEW_FIELDS}
 
 
 def _sparse(value: Any) -> Any:
@@ -81,7 +171,9 @@ def agent_task_list_definitions() -> list[dict[str, Any]]:
     It exists so a caller using ONLY the gateway server can discover valid
     agent_id values without also needing the configuration server
     attached."""
-    from audiagentic.components.agents.configuration.global_catalog import list_global_agent_definitions
+    from audiagentic.components.agents.configuration.global_catalog import (
+        list_global_agent_definitions,
+    )
 
     definitions = list_global_agent_definitions(project_root_from_env())
     return _sparse([_agent_card(definition) for definition in definitions])
@@ -90,17 +182,80 @@ def agent_task_list_definitions() -> list[dict[str, Any]]:
 @mcp.tool()
 @tool_boundary
 def agent_task_status(request_id: str) -> dict[str, Any]:
-    """Return the current persisted state of a gateway request."""
+    """Return lifecycle/activity status and artifact metadata only.
+
+    Response content is deliberately owned by ``agent_task_response``. This
+    polling surface must stay cheap and cannot spend MCP tokens on a bounded
+    preview that callers cannot use as the authoritative response.
+    """
     project_root = project_root_from_env()
-    return _sparse(call_gateway_method("get_execution_request", project_root, request_id))
+    status = call_gateway_method("get_execution_request", project_root, request_id)
+    return _sparse(_status_without_response_preview(status))
 
 
 @mcp.tool()
 @tool_boundary
-def agent_task_response(request_id: str) -> str:
-    """Retrieve the complete verified terminal response for a request."""
+def agent_task_response(request_id: str) -> dict[str, Any]:
+    """Return a bounded inline response or a durable artifact reference.
+
+    Responses larger than the configured MCP inline budget are never placed
+    in the MCP result. The exact UTF-8 response is already persisted by the
+    gateway; the returned project-relative artifact path and digest let a
+    same-project client read it without paging or relying on a truncated tool
+    envelope. The path is deliberately never absolute. No response preview
+    is included in this operation's artifact envelope.
+    """
     project_root = project_root_from_env()
-    return call_gateway_method("get_execution_response", project_root, request_id)
+    inline_limit = _configured_inline_response_limit(project_root)
+    status = call_gateway_method("get_execution_request", project_root, request_id)
+    artifact = status.get("response-artifact")
+
+    # Current terminal records always carry an artifact. Preserve the
+    # existing domain error for non-terminal/legacy records by delegating to
+    # the canonical response operation when no artifact metadata is present.
+    if not isinstance(artifact, dict):
+        text = call_gateway_method("get_execution_response", project_root, request_id)
+        raw_bytes = len(text.encode("utf-8"))
+        if raw_bytes > inline_limit:
+            # This branch is only reachable for pre-artifact records. Do not
+            # risk emitting an unbounded legacy body over MCP.
+            return _sparse(
+                {
+                    "request-id": request_id,
+                    "delivery": "artifact-unavailable",
+                    "inline-max-bytes": inline_limit,
+                    "bytes": raw_bytes,
+                    "message": "response artifact metadata is unavailable for this request",
+                }
+            )
+        # Do not pass the response body through _sparse: an empty terminal
+        # response is still an exact response and must retain its `text` key.
+        return {
+            "request-id": request_id,
+            "delivery": "inline",
+            "text": text,
+            "bytes": raw_bytes,
+        }
+
+    artifact_bytes = artifact.get("bytes")
+    if isinstance(artifact_bytes, int) and artifact_bytes > inline_limit:
+        return _artifact_reference(project_root, request_id, artifact, status, inline_limit)
+
+    text = call_gateway_method("get_execution_response", project_root, request_id)
+    raw_bytes = len(text.encode("utf-8"))
+    # Re-check the actual response size so a malformed/stale record can never
+    # make the MCP result exceed its declared budget.
+    if raw_bytes > inline_limit:
+        return _artifact_reference(project_root, request_id, artifact, status, inline_limit)
+    # Do not pass the response body through _sparse: an empty terminal
+    # response is still an exact response and must retain its `text` key.
+    return {
+        "request-id": request_id,
+        "delivery": "inline",
+        "text": text,
+        "bytes": raw_bytes,
+        "response-artifact": artifact,
+    }
 
 
 @mcp.tool()
@@ -123,8 +278,12 @@ def agent_task_list_requests(
     earlier process — unlike queue depths, which are in-memory only.
     """
     project_root = project_root_from_env()
+    requests = call_gateway_method("list_execution_requests", project_root, state=state, limit=limit)
     return _sparse(
-        call_gateway_method("list_execution_requests", project_root, state=state, limit=limit)
+        [
+            _status_without_response_preview(item) if isinstance(item, dict) else item
+            for item in requests
+        ]
     )
 
 

@@ -2,14 +2,18 @@
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
 
 import pytest
 
 from audiagentic.components.agents.gateway.output import (
     OutputPolicy,
     create_relay,
+    persist_final_response,
+    read_final_response,
     read_request_output,
 )
+from audiagentic.components.agents.agents_paths import gateway_final_response_path
 from audiagentic.foundation.transports.agent_output import (
     AgentOutputEvent,
     AgentOutputKind,
@@ -95,3 +99,14 @@ async def test_relay_rejects_surface_without_assistant_text_channel(tmp_path: Pa
 
     assert not relay.has_events
     assert read_request_output(tmp_path, "request")["events"] == []
+
+
+def test_final_response_artifact_hashes_exact_utf8_bytes(tmp_path: Path) -> None:
+    text = "line one\nβeta\n" * 700
+    artifact = persist_final_response(tmp_path, "request", text)
+    raw = gateway_final_response_path(tmp_path, "request").read_bytes()
+
+    assert raw == text.encode("utf-8")
+    assert artifact["bytes"] == len(raw)
+    assert artifact["sha256"] == hashlib.sha256(raw).hexdigest()
+    assert read_final_response(tmp_path, "request", artifact) == text

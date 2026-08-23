@@ -8,6 +8,7 @@ tested repeatably, including malformed/negative responses.
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 
@@ -32,6 +33,13 @@ from .test_greenfield_config_urls import valid_config
 def test_snapshot_does_not_promote_static_streaming_animation_to_busy() -> None:
     """The live ChatGPT DOM keeps this class after a response completes."""
     assert 'selector !== ".streaming-animation"' in _SNAPSHOT_FN
+
+
+def test_snapshot_activity_labels_are_case_insensitive_and_cover_tool_rows() -> None:
+    """The bridge recognizes the labels operators see in ChatGPT's UI."""
+    assert 'toLowerCase()' in _SNAPSHOT_FN
+    for label in ("talked to app", "called tool", "searching the web", "read resource", "thinking"):
+        assert label in _SNAPSHOT_FN
 
 
 class _ScenarioClient:
@@ -137,6 +145,78 @@ async def test_bridge_positive_lifecycle_sequence_is_typed_and_reusable():
     await browser.activate(page)
     await browser.close(same_window)
     assert "Target.closeTarget" in [method for method, _, _ in fake.calls]
+
+
+@pytest.mark.asyncio
+async def test_configured_project_opens_its_workspace_route(monkeypatch) -> None:
+    """A bare project URL must not create a global ChatGPT conversation."""
+    browser = GptAutoCdpBrowserController(SimpleNamespace())
+    page = CdpPageRef("page-1", "target-1", 1, "about:blank", "")
+    navigated: list[str] = []
+
+    async def new_window() -> CdpPageRef:
+        return page
+
+    async def navigate(_page: CdpPageRef, url: str) -> CdpPageRef:
+        navigated.append(url)
+        return page
+
+    async def composer_ready(_page: CdpPageRef, *, timeout: float) -> None:
+        assert timeout == 4
+
+    async def snapshot(_page: CdpPageRef) -> dict[str, str]:
+        return {"url": "https://chatgpt.com/g/g-p-test-project/project"}
+
+    monkeypatch.setattr(browser, "new_window", new_window)
+    monkeypatch.setattr(browser, "navigate", navigate)
+    monkeypatch.setattr(browser, "snapshot", snapshot)
+    monkeypatch.setattr(browser, "wait_for_composer", composer_ready)
+
+    opened = await browser.open_project_page(
+        project_name="ignored-when-url-is-configured",
+        project_url="https://chat.openai.com/g/g-p-test-project",
+        anchor_page=None,
+        navigation_timeout=3,
+        ready_timeout=4,
+    )
+
+    assert navigated == ["https://chatgpt.com/g/g-p-test-project/project"]
+    assert opened["projectUrl"] == navigated[0]
+
+
+@pytest.mark.asyncio
+async def test_project_redirect_to_global_chat_is_closed_and_rejected(monkeypatch) -> None:
+    browser = GptAutoCdpBrowserController(SimpleNamespace())
+    page = CdpPageRef("page-1", "target-1", 1, "about:blank", "")
+    closed: list[str] = []
+
+    async def new_window() -> CdpPageRef:
+        return page
+
+    async def navigate(_page: CdpPageRef, _url: str) -> CdpPageRef:
+        return page
+
+    async def snapshot(_page: CdpPageRef) -> dict[str, str]:
+        return {"url": "https://chatgpt.com/"}
+
+    async def close(closed_page: CdpPageRef) -> None:
+        closed.append(closed_page.handle)
+
+    monkeypatch.setattr(browser, "new_window", new_window)
+    monkeypatch.setattr(browser, "navigate", navigate)
+    monkeypatch.setattr(browser, "snapshot", snapshot)
+    monkeypatch.setattr(browser, "close", close)
+
+    with pytest.raises(RuntimeError, match="Project is unavailable"):
+        await browser.open_project_page(
+            project_name="unused",
+            project_url="https://chatgpt.com/g/g-p-test-project",
+            anchor_page=None,
+            navigation_timeout=3,
+            ready_timeout=4,
+        )
+
+    assert closed == ["page-1"]
 
 
 @pytest.mark.asyncio

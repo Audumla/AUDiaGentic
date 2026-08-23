@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from urllib.parse import urlsplit, urlunsplit
 
+from .window_anchor import is_gateway_dashboard_url
+
 _PROJECT_RE = re.compile(r"/g/(g-p-[^/]+)")
 _CHAT_RE = re.compile(r"/c/([^/?#]+)")
 
@@ -37,7 +39,13 @@ def canonical_chat_url(url: str) -> str | None:
 
 
 def url_matches_provider_session(url: str, provider_session_id: str) -> bool:
-    return parse_provider_session_id(url) == provider_session_id
+    """Match only a conversation that remains inside a ChatGPT Project.
+
+    A bare ``/c/<id>`` URL is a normal ChatGPT conversation, not an owned
+    gpt-auto target.  Treating it as one would let a persisted bad URL reopen
+    a session outside its configured project.
+    """
+    return bool(parse_project_id(url)) and parse_provider_session_id(url) == provider_session_id
 
 
 def is_gpt_auto_relevant_url(url: str) -> bool:
@@ -50,12 +58,14 @@ def is_gpt_auto_relevant_url(url: str) -> bool:
     machine with dozens of ordinary browsing tabs open turns one
     list_pages() call into dozens of round-trips. Used to scope that
     lookup to tabs that could actually be ours: a real ChatGPT
-    conversation/project, our own data: URL status dashboard, or a
-    freshly created but not-yet-navigated about:blank tab.
+    conversation/project, the gateway's HTTP dashboard, or a freshly
+    created but not-yet-navigated about:blank tab.
     """
     if url in ("", "about:blank"):
         return True
     if url.startswith("data:"):
+        return True
+    if is_gateway_dashboard_url(url):
         return True
     hostname = urlsplit(url).hostname
     return hostname in {"chatgpt.com", "chat.openai.com"}

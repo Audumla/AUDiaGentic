@@ -22,13 +22,48 @@ class _Policy:
     progress_lease_seconds: float = 300.0
     soft_grace_cap_seconds: float = 60.0
     candidate_stability_window_seconds: float = 6.0
+    candidate_contradiction_stability_window_seconds: float = 30.0
     candidate_max_verification_window_seconds: float = 30.0
     suspect_grace_seconds: float = 60.0
     absolute_ceiling_seconds: float = 1200.0
 
 
-def _obs(caps=NONE, *, candidate=False, verified=False) -> Observation:
-    return Observation(capabilities=caps, terminal_candidate=candidate, terminal_verified_ok=verified)
+def _obs(caps=NONE, *, candidate=False, verified=False, contradiction=False) -> Observation:
+    return Observation(
+        capabilities=caps,
+        terminal_candidate=candidate,
+        terminal_verified_ok=verified,
+        terminal_contradiction=contradiction,
+    )
+
+
+def test_generating_contradiction_requires_extended_stability_window():
+    tracker = ObservationTracker(policy=_Policy(), now=0.0)
+    tracker.advance(_obs(PROGRESS), now=1.0)
+    tracker.advance(_obs(WITNESS, candidate=True, contradiction=True), now=2.0)
+
+    assert tracker.advance(
+        _obs(WITNESS, candidate=True, verified=True, contradiction=True), now=9.0
+    ) is None
+    assert tracker.state is ObservationState.CANDIDATE_TERMINAL
+
+    assert tracker.advance(
+        _obs(WITNESS, candidate=True, verified=True, contradiction=True), now=32.0
+    ) is ObservationOutcome.VERIFIED_TERMINAL
+
+
+def test_generating_contradiction_survives_a_false_signal_flicker():
+    tracker = ObservationTracker(policy=_Policy(), now=0.0)
+    tracker.advance(_obs(PROGRESS), now=1.0)
+    tracker.advance(_obs(WITNESS, candidate=True, contradiction=True), now=2.0)
+
+    assert tracker.advance(
+        _obs(WITNESS, candidate=True, verified=True, contradiction=False), now=9.0
+    ) is None
+    assert tracker.clock.candidate_saw_contradiction is True
+    assert tracker.advance(
+        _obs(WITNESS, candidate=True, verified=True, contradiction=False), now=32.0
+    ) is ObservationOutcome.VERIFIED_TERMINAL
 
 
 def test_reaches_verified_terminal_on_stable_witnessed_candidate():

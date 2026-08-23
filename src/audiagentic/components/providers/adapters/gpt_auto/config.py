@@ -15,6 +15,8 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import load_yaml_file
 from audiagentic.foundation.workflow import EvidencePolicy
 
+from .urls import parse_project_id
+
 _DEFAULTS_PATH = Path(__file__).with_name("defaults.yaml")
 
 # gpt-auto only connects to an already-running browser via CDP -- it never
@@ -141,6 +143,7 @@ class TurnConfig:
     response_timeout_seconds: float
     poll_interval_seconds: float
     response_stability_seconds: float
+    response_generating_override_stability_seconds: float
     # GP07: submission-proof's observation clock must be activity-aware, not
     # a single fixed deadline from action-start -- submission_timeout_seconds
     # remains the raw type+send CDP-call timeout and this phase's start-bound
@@ -317,6 +320,7 @@ class GptAutoConfig:
                 "response-timeout-seconds",
                 "poll-interval-seconds",
                 "response-stability-seconds",
+                "response-generating-override-stability-seconds",
                 "submission-proof-progress-lease-seconds",
                 "submission-proof-absolute-ceiling-seconds",
             },
@@ -333,6 +337,9 @@ class GptAutoConfig:
             response_timeout_seconds=_non_negative(turn_data, "response-timeout-seconds"),
             poll_interval_seconds=_positive(turn_data, "poll-interval-seconds"),
             response_stability_seconds=_positive(turn_data, "response-stability-seconds"),
+            response_generating_override_stability_seconds=_positive(
+                turn_data, "response-generating-override-stability-seconds"
+            ),
             submission_proof_progress_lease_seconds=_positive(
                 turn_data, "submission-proof-progress-lease-seconds"
             ),
@@ -653,4 +660,6 @@ def _chatgpt_url(value: Any) -> str:
     parsed = urlparse(value)
     if parsed.scheme != "https" or parsed.hostname not in {"chatgpt.com", "chat.openai.com"}:
         _invalid("project-url must be a ChatGPT URL")
+    if not parse_project_id(value):
+        _invalid("project-url must identify a ChatGPT Project")
     return value.rstrip("/")

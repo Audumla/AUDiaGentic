@@ -60,6 +60,10 @@ class Observation:
     capabilities: EvidenceCapability
     terminal_candidate: bool
     terminal_verified_ok: bool = False
+    # Terminal evidence while the provider still reports active generation is
+    # contradictory. Keep this fact for the lifetime of the candidate so a
+    # one-poll false flicker cannot select the fast completion path.
+    terminal_contradiction: bool = False
 
 
 class ObservationPolicy(Protocol):
@@ -67,6 +71,7 @@ class ObservationPolicy(Protocol):
     progress_lease_seconds: float
     soft_grace_cap_seconds: float
     candidate_stability_window_seconds: float
+    candidate_contradiction_stability_window_seconds: float
     candidate_max_verification_window_seconds: float
     suspect_grace_seconds: float
     absolute_ceiling_seconds: float
@@ -81,6 +86,7 @@ class ObservationClock:
     progress_generation: int = 0
     candidate_entered_at: float | None = None
     candidate_generation: int | None = None
+    candidate_saw_contradiction: bool = False
     suspect_entered_at: float | None = None
 
 
@@ -135,6 +141,7 @@ class ObservationTracker:
                 self.state = ObservationState.CANDIDATE_TERMINAL
                 clock.candidate_entered_at = now
                 clock.candidate_generation = clock.progress_generation
+                clock.candidate_saw_contradiction = observation.terminal_contradiction
             elif now >= self._progress_lease_deadline():
                 self.state = ObservationState.SUSPECT_STALLED
                 clock.suspect_entered_at = now
@@ -148,6 +155,7 @@ class ObservationTracker:
                 self.state = ObservationState.ACTIVE
                 clock.candidate_entered_at = None
                 clock.candidate_generation = None
+                clock.candidate_saw_contradiction = False
             elif not observation.terminal_candidate:
                 # GP40 (code review, 2026-08-17): losing terminal_candidate
                 # alone used to be silently ignored -- the candidate timer
@@ -164,21 +172,33 @@ class ObservationTracker:
                 self.state = ObservationState.ACTIVE
                 clock.candidate_entered_at = None
                 clock.candidate_generation = None
-            elif now - clock.candidate_entered_at >= self.policy.candidate_stability_window_seconds:
-                if (
-                    observation.terminal_verified_ok
-                    and clock.progress_generation == clock.candidate_generation
-                ):
-                    self.state = ObservationState.DONE
-                    return ObservationOutcome.VERIFIED_TERMINAL
-                if (
-                    now - clock.candidate_entered_at
-                    >= self.policy.candidate_max_verification_window_seconds
-                ):
-                    self.state = ObservationState.SUSPECT_STALLED
-                    clock.suspect_entered_at = now
-                    clock.candidate_entered_at = None
-                    clock.candidate_generation = None
+                clock.candidate_saw_contradiction = False
+            else:
+                clock.candidate_saw_contradiction |= observation.terminal_contradiction
+                contradiction_window = getattr(
+                    self.policy,
+                    "candidate_contradiction_stability_window_seconds",
+                    self.policy.candidate_stability_window_seconds,
+                )
+                required_stability = (
+                    contradiction_window
+                    if clock.candidate_saw_contradiction
+                    else self.policy.candidate_stability_window_seconds
+                )
+                candidate_age = now - clock.candidate_entered_at
+                if candidate_age >= required_stability:
+                    if (
+                        observation.terminal_verified_ok
+                        and clock.progress_generation == clock.candidate_generation
+                    ):
+                        self.state = ObservationState.DONE
+                        return ObservationOutcome.VERIFIED_TERMINAL
+                    if candidate_age >= self.policy.candidate_max_verification_window_seconds:
+                        self.state = ObservationState.SUSPECT_STALLED
+                        clock.suspect_entered_at = now
+                        clock.candidate_entered_at = None
+                        clock.candidate_generation = None
+                        clock.candidate_saw_contradiction = False
 
         elif self.state is ObservationState.SUSPECT_STALLED:
             assert clock.suspect_entered_at is not None
@@ -189,6 +209,7 @@ class ObservationTracker:
                 self.state = ObservationState.CANDIDATE_TERMINAL
                 clock.candidate_entered_at = now
                 clock.candidate_generation = clock.progress_generation
+                clock.candidate_saw_contradiction = observation.terminal_contradiction
                 clock.suspect_entered_at = None
             elif now - clock.suspect_entered_at >= self.policy.suspect_grace_seconds:
                 self.state = ObservationState.DONE

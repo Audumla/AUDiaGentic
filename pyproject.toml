@@ -12,6 +12,7 @@ license = { text = "MIT" }
 
 dependencies = [
   "babel>=2.15",
+  "dulwich>=0.24,<0.26",
   "pyyaml>=6.0",
   "rapidfuzz>=3.0",
   "jsonschema>=4.18",

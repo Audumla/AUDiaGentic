@@ -32,7 +32,7 @@ def project_status(project_root: Path) -> dict[str, Any]:
     for component_id, descriptor in all_descriptors().items():
         if not is_installed(component_id, project_root):
             continue
-        payload = get_component_status(descriptor, project_root)
+        payload = _safe_component_status(descriptor, project_root)
         if payload is not None:
             component_details[component_id] = payload
     return {
@@ -108,10 +108,33 @@ def component_row(descriptor, project_root: Path) -> dict[str, Any]:
         "file_count": len(descriptor.files),
     }
     if installed:
-        payload = get_component_status(descriptor, project_root)
+        payload = _safe_component_status(descriptor, project_root)
         if payload is not None:
-            row["component_status"] = payload
+            if "error" in payload:
+                row["component_status_error"] = payload["error"]
+            else:
+                row["component_status"] = payload
     return row
+
+
+def _safe_component_status(descriptor, project_root: Path) -> dict[str, Any] | None:
+    """Read one optional component status without breaking Project management.
+
+    Component status hooks are diagnostic extensions.  A faulty hook must be
+    visible to the caller, but cannot make ``project_status`` or
+    ``list_components`` unavailable for every other installed component.
+    """
+    try:
+        return get_component_status(descriptor, project_root)
+    except AudiaGenticError as exc:
+        return {
+            "error": {
+                "code": exc.code,
+                "kind": exc.kind,
+                "message": exc.message,
+                "details": exc.details,
+            }
+        }
 
 
 def attach_harness_refresh(

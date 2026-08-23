@@ -554,6 +554,15 @@ def _dispatch_session_request(
             if configured_turn_timeout
             else None
         )
+        from audiagentic.components.agents.gateway.activity import RequestActivityRelay
+        activity_relay = RequestActivityRelay(
+            project_root,
+            request_id,
+            owner_epoch=record["dispatch-owner-epoch"],
+            worker_id=record["worker-id"],
+            attempt_epoch=record["attempt-epoch"],
+            provider_capability="supported" if str(provider_id).startswith("gpt-auto") else "unknown",
+        )
         result = runtime.prompt_in_session(
             project_root,
             session_id,
@@ -561,6 +570,7 @@ def _dispatch_session_request(
             request_id=request_id,
             correlation_id=record.get("correlation-id"),
             timeout_seconds=call_timeout,
+            activity_relay=activity_relay,
         )
     except _CancelledDuringDispatch:
         if request_runtime is not None:
@@ -626,6 +636,19 @@ def _dispatch_session_request(
             updates={"error": wrapped, "session-id": session_id, "finished-at": now_iso_z()},
         )
 
+    # Freeze the last provider observation before terminal evidence/artifact
+    # persistence. This is liveness evidence only; terminal state still owns
+    # completion and cancellation decisions.
+    try:
+        activity_relay.observe_provider(
+            source="session-transport",
+            source_instance=f"session:{session_id}:turn:{request_id}",
+            source_sequence=None,
+            phase="finalizing",
+            force=True,
+        )
+    except Exception:  # noqa: BLE001
+        pass
     provider_metadata = dict(getattr(result, "metadata", {}) or {})
     if provider_metadata:
         record = store.update_owned_running_session(

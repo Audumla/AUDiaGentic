@@ -49,6 +49,7 @@ def valid_config() -> dict:
             "response-timeout-seconds": 600,
             "poll-interval-seconds": 1,
             "response-stability-seconds": 6,
+            "response-generating-override-stability-seconds": 30,
             "submission-proof-progress-lease-seconds": 300,
             "submission-proof-absolute-ceiling-seconds": 900,
         },
@@ -79,11 +80,6 @@ def valid_config() -> dict:
                     "selectors": ['button[aria-label="Open editor"]'],
                     "visible": True,
                 },
-                "message-finalized": {
-                    "scope": "latest-assistant-turn",
-                    "selectors": ['[data-is-last-node]'],
-                    "visible": False,
-                },
                 "error-page": {
                     "scope": "document",
                     "selectors": [".error-page"],
@@ -98,7 +94,6 @@ def valid_config() -> dict:
                     "any-of-groups": [
                         ["completion-control", "more-actions-menu"],
                         ["canvas-edit-control", "canvas-open-editor-control", "not-generating"],
-                        ["message-finalized", "not-generating"],
                     ],
                     "none-of": ["error-page"],
                 },
@@ -143,15 +138,12 @@ def test_response_complete_policy_never_regresses_to_either_witness_alone(): # G
     reintroduce the false-positive-early-completion bug that produced
     real truncated live results on 2026-08-16.
 
-    GP32 (2026-08-17): response-complete used to require its corroborating
-    pair via a single flat all-of, which made it permanently unsatisfiable
-    the moment ChatGPT removed the DOM marker one signal in that pair
-    (message-finalized) depended on -- a total block on completion
-    detection, not a degraded state. Moved to any-of-groups (a disjunction
-    of AND-groups) specifically so a future signal loss degrades to
-    surviving groups instead of total failure; every individual group
-    must still require its full pair together, which is what this test
-    guards, independent of which signals fill a given group."""
+    GP32 (2026-08-17): response-complete uses any-of-groups (a disjunction
+    of AND-groups) so a future signal loss can degrade to surviving groups
+    instead of total failure. Every individual group must still require its
+    full corroborating set together. Renderer-position markers such as
+    data-is-last-node/data-is-only-node are intentionally excluded because
+    they can appear before a response is complete."""
     policy = GptAutoConfig.from_dict(valid_config()).workflow.policy("response-complete")
     assert not policy.any_of, (
         "response-complete must not accept any single corroborating witness "
@@ -195,6 +187,14 @@ def test_project_url_is_optional_for_project_name_discovery():
     assert GptAutoConfig.from_dict(value).project_url is None
 
 
+def test_configured_project_url_must_identify_a_chatgpt_project():
+    value = valid_config()
+    value["project-url"] = "https://chatgpt.com/c/general-conversation"
+
+    with pytest.raises(AudiaGenticError, match="ChatGPT Project"):
+        GptAutoConfig.from_dict(value)
+
+
 @pytest.mark.parametrize(
     "mutation",
     [
@@ -221,12 +221,16 @@ def test_chatgpt_url_identity_helpers_are_pure_and_exact():
     )
     assert url_matches_provider_session(url, "conversation-1")
     assert not url_matches_provider_session(url, "conversation-2")
+    assert not url_matches_provider_session(
+        "https://chatgpt.com/c/conversation-1", "conversation-1"
+    )
 
 
 def test_is_gpt_auto_relevant_url_scopes_to_plausible_owned_tabs():
     assert is_gpt_auto_relevant_url("https://chatgpt.com/c/abc")
     assert is_gpt_auto_relevant_url("https://chat.openai.com/g/g-p-x")
     assert is_gpt_auto_relevant_url("data:text/html;charset=utf-8,<html></html>")
+    assert is_gpt_auto_relevant_url("http://127.0.0.1:8765/dashboard?audiagentic-window-anchor=1")
     assert is_gpt_auto_relevant_url("about:blank")
     assert is_gpt_auto_relevant_url("")
     assert not is_gpt_auto_relevant_url("https://reddit.com/r/x")
@@ -351,20 +355,14 @@ def test_real_merged_config_canvas_group_rejects_mid_generation_false_positive()
     assert policy.evaluate(genuinely_done_canvas).satisfied
 
 
-def test_real_merged_config_message_finalized_group_covers_stalled_action_bar() -> None:
-    """GP39: live-observed on a trivial single-paragraph answer -- text
-    fully rendered and stable for several minutes with NEITHER
-    completion-control NOR more-actions-menu present anywhere in the
-    document (not just out of scope). message-finalized
-    ([data-is-last-node]) was present and correctly scoped the whole
-    time. Reinstated (removed under GP32 on the mistaken belief ChatGPT
-    had dropped it entirely -- it is conditional on the response's last
-    block being a plain paragraph, not gone) as a third any-of-groups
-    entry, paired with not-generating rather than completion-control
-    since completion-control never appearing at all is exactly the gap
-    this group routes around. Like the canvas group, message-finalized
-    alone (generating=True) must NOT satisfy response-complete -- GP17
-    proved it fires on genuinely-incomplete short responses too."""
+def test_real_merged_config_ignores_renderer_position_markers() -> None:
+    """Renderer-position markers are not end-of-turn evidence.
+
+    ``data-is-last-node`` and ``data-is-only-node`` describe the current
+    render tree and can be present while a response is still growing.  They
+    must not satisfy the real merged completion policy, even when the raw
+    snapshot says the page is not currently generating.
+    """
     root = Path(__file__).resolve().parents[2]
     document = yaml.safe_load(
         (root / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
@@ -373,12 +371,16 @@ def test_real_merged_config_message_finalized_group_covers_stalled_action_bar() 
     policy = config.workflow.policy("response-complete")
     baseline = _synthetic_snapshot([], assistant_id=None)
 
-    stalled_action_bar = _facts(
-        baseline, baseline, _synthetic_snapshot(["message-finalized"], generating=False)
-    )
-    assert policy.evaluate(stalled_action_bar).satisfied
+    for marker in ("message-finalized", "data-is-last-node", "data-is-only-node"):
+        marker_only = _facts(
+            baseline, baseline, _synthetic_snapshot([marker], generating=False)
+        )
+        assert not policy.evaluate(marker_only).satisfied, marker
 
-    still_generating = _facts(
-        baseline, baseline, _synthetic_snapshot(["message-finalized"], generating=True)
+    bridge_signals = {item["name"]: item for item in config.workflow.bridge_signals()}
+    assert "message-finalized" not in bridge_signals
+    assert not any(
+        "data-is-last-node" in selector or "data-is-only-node" in selector
+        for item in bridge_signals.values()
+        for selector in item["selectors"]
     )
-    assert not policy.evaluate(still_generating).satisfied

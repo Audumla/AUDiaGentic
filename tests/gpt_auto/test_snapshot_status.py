@@ -99,6 +99,40 @@ def test_bridge_snapshot_preserves_latest_user_message_id() -> None:
     assert snapshot.latest_user_id == "prompt-2"
 
 
+def test_bridge_snapshot_preserves_bounded_tool_activity_counts() -> None:
+    snapshot = ChatSnapshot.from_bridge(
+        {
+            "url": "https://chatgpt.com/g/g-p-test/c/c1",
+            "composerPresent": True,
+            "composerEditable": True,
+            "toolActivityCounts": {"talked-to-app": 2, "called-tool": 3},
+        }
+    )
+
+    assert snapshot.tool_activity_counts == (("called-tool", 3), ("talked-to-app", 2))
+
+
+def test_bridge_snapshot_preserves_web_and_resource_activity_counts() -> None:
+    snapshot = ChatSnapshot.from_bridge(
+        {
+            "url": "https://chatgpt.com/g/g-p-test/c/c1",
+            "composerPresent": True,
+            "composerEditable": True,
+            "toolActivityCounts": {
+                "searching-web": 1,
+                "read-resource": 2,
+                "thinking": 1,
+            },
+        }
+    )
+
+    assert snapshot.tool_activity_counts == (
+        ("read-resource", 2),
+        ("searching-web", 1),
+        ("thinking", 1),
+    )
+
+
 def test_bridge_snapshot_preserves_ordered_assistant_message_sequence() -> None:
     """GP08: the full ordered assistant sequence must survive the bridge
     round-trip, not just the single 'latest' projection -- this is the raw

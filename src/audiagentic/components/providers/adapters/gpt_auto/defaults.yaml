@@ -35,6 +35,11 @@ settings:
     response-timeout-seconds: 3600
     poll-interval-seconds: 1
     response-stability-seconds: 6
+    # A completion witness while ChatGPT still reports generation is active
+    # is contradictory evidence. Require a longer stable window before
+    # overriding that signal, while preserving the normal fast path when it
+    # is inactive.
+    response-generating-override-stability-seconds: 30
     submission-proof-progress-lease-seconds: 300
     submission-proof-absolute-ceiling-seconds: 900
   workflow:
@@ -80,26 +85,6 @@ settings:
         # qualifier, not an independently-sufficient alternative.
         scope: latest-assistant-turn
         selectors: ['button[data-testid="copy-turn-action-button"][aria-label="Copy response"]']
-        visible: false
-      message-finalized:
-        # ChatGPT's markdown renderer's own "this is the currently-last
-        # rendered node" marker on the final paragraph. Reinstated
-        # 2026-08-17 (GP39) after being removed under GP32 on the mistaken
-        # belief ChatGPT had dropped it entirely -- it was only absent from
-        # THAT investigation's specific long technical-essay response
-        # (which likely ended in a list/code-block/heading, not a plain
-        # paragraph); confirmed live to still be present and correctly
-        # scoped to the assistant message on a short, single-paragraph
-        # response. Still individually unreliable (GP17, 2026-08-16:
-        # proven live to fire on a genuinely-incomplete 7-35 char response
-        # -- a paragraph can be marked "last so far" before more content
-        # streams in and moves the marker). Never trusted alone; paired
-        # with not-generating below, not completion-control, since this
-        # signal exists specifically to cover responses where
-        # completion-control/more-actions-menu are slow to mount or never
-        # appear within a reasonable window.
-        scope: latest-assistant-turn
-        selectors: ['[data-is-last-node]']
         visible: false
       error-page:
         scope: document
@@ -204,16 +189,14 @@ settings:
         # flat all-of) so a future DOM change breaking one corroborating
         # signal degrades to the other surviving groups instead of making
         # response-complete permanently unsatisfiable -- exactly what
-        # happened on 2026-08-17 when message-finalized's DOM marker
-        # ([data-is-last-node]) was absent from the one long technical
-        # response GP32 was diagnosed against, live-reproduced as a 600s
-        # hang with zero adapter-side signal despite ChatGPT itself having
-        # finished. (CORRECTION, GP39 same day: the marker was NOT removed
-        # by ChatGPT as GP32 concluded -- it is conditional on the
-        # response's last rendered block being a plain paragraph, absent
-        # for other endings like lists/code-blocks/headings. Reinstated
-        # below as a third group once this was confirmed live.) Same day, a
-        # second variant of the same failure mode was live-reproduced:
+        # happened on 2026-08-17 when one DOM marker was absent from the
+        # long technical response GP32 was diagnosed against, which caused
+        # a 600s hang despite ChatGPT having finished. DOM renderer-position
+        # markers such as data-is-last-node/data-is-only-node are deliberately
+        # diagnostics only: they can identify the last node rendered so far
+        # while generation is still continuing, so they are not terminal
+        # authority. A second variant of the same failure mode was
+        # live-reproduced:
         # ChatGPT's canvas/writing-block response type renders a
         # different action bar entirely, so the standard pair was
         # document-scoped-absent for a genuinely complete canvas turn
@@ -233,22 +216,14 @@ settings:
         # mid-generation pause, where ChatGPT's own busy indicator is
         # still active, cannot satisfy this group.
         #
-        # GP39 (2026-08-17): a third group covers responses where
-        # completion-control/more-actions-menu are slow to mount or never
-        # appear within a reasonable window (observed live on a trivial
-        # short single-paragraph answer -- text fully rendered and stable
-        # for several minutes with neither signal present anywhere in the
-        # document). message-finalized ([data-is-last-node]) is present
-        # and correctly scoped for exactly this response shape, but is
-        # proven individually unreliable (GP17); paired with
-        # not-generating rather than completion-control, since
-        # completion-control not appearing at all is the exact gap this
-        # group exists to route around.
+        # Renderer-position markers are intentionally not an alternate
+        # completion path: "last node" and "only node" describe the current
+        # render tree, not the end of the provider turn, and have been
+        # observed before substantial additional output arrives.
         all-of: [assistant-fresh, text-present]
         any-of-groups:
           - [completion-control, more-actions-menu]
           - [canvas-edit-control, canvas-open-editor-control, not-generating]
-          - [message-finalized, not-generating]
         none-of: [streaming-indicator, thinking-indicator, error-page, error-alert, auth-required]
       response-failed:
         any-of: [error-page, error-alert, auth-required]

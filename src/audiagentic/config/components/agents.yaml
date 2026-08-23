@@ -282,10 +282,19 @@ mcp-servers:
         also includes provider-metadata when available. Raises RES-AGD-001
         if agent_id is not a configured agent definition.
       agent_task_status: >
-        Return the current persisted record for request-id (state, output,
-        completion, usage, error, attempts). Raises RES-AGW-001 if not found.
+        Return lifecycle/activity status for request-id (state,
+        response-artifact, activity, completion, usage, error, attempts).
+        Response content and previews are never included in status; use
+        agent_task_response for the exact terminal response. Raises
+        RES-AGW-001 if not found.
       agent_task_response: >
-        Retrieve the complete verified terminal response for a request.
+        Return a bounded response envelope. Small verified terminal responses
+        are returned inline as {delivery: inline, text, bytes}. Responses
+        larger than gateway.mcp.max-inline-response-bytes return
+        {delivery: artifact, response-artifact, artifact-path,
+        artifact-path-kind: project-relative}; the exact UTF-8 response is
+        already stored at that request-owned path. Never expect an absolute
+        filesystem path or a paged MCP result.
       agent_task_cancel: >
         Cancel a queued request, or best-effort mark a running one. See
         instructions for the best-effort semantics.
@@ -339,6 +348,12 @@ gateway:
     enabled: false
     max-fragment-bytes: 65536
     max-turn-bytes: 524288
+  mcp:
+    # Keep successful MCP response envelopes small while the artifact
+    # delivery boundary is exercised. The complete response is always
+    # persisted as the request-owned artifact. Raise per deployment only when
+    # inline delivery is deliberately wanted.
+    max-inline-response-bytes: 4096
 
 contributions:
   - id: agents/profile-doctrine

@@ -25,7 +25,7 @@ from audiagentic.foundation.workflow import (
 )
 
 _SCHEMA_STEM = "agent-execution-record"
-_CONTRACT_VERSION = "v6"
+_CONTRACT_VERSION = "v7"
 _WORKFLOW = load_workflow(Path(__file__).parent.parent.parent / "workflows.yaml", "gateway-request")
 TERMINAL_STATES: set[str] = set(states_in_set(_WORKFLOW, "terminal"))
 
@@ -56,6 +56,30 @@ _MUTABLE_RESULT_FIELDS = {
     "watchdog-state",
     "watchdog-reason",
 }
+
+def default_activity() -> dict:
+    """Return the durable provider/owner liveness projection."""
+    return {
+        "sequence": 0,
+        "last-at": None,
+        "last-source": None,
+        "provider": {
+            "capability": "unknown",
+            "last-at": None,
+            "lease-expires-at": None,
+            "source": None,
+            "source-instance": None,
+            "source-sequence": 0,
+            "phase": None,
+        },
+        "owner": {
+            "last-at": None,
+            "lease-expires-at": None,
+            "source": None,
+            "source-instance": None,
+            "source-sequence": 0,
+        },
+    }
 
 _COMPONENT_ID = "agents"
 _RESOURCE_KIND = "agent-execution-gateway-request"

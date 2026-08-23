@@ -220,15 +220,20 @@ class PersistentChat:
         browser = self._gpt_browser()
         composite_open = getattr(browser, "open_project_page", None)
         if self.provider_session_id is None and composite_open is not None:
-            anchor = None
+            # The dashboard tab is the durable owner/anchor for the managed
+            # GPT window. New sessions become tabs in that existing window;
+            # only the first session creates the anchor window. This keeps
+            # all GPT projects in one discoverable browser window and lets a
+            # later gateway process recover it from the dashboard URL.
+            anchor_page = None
             if self.config.browser.dedicated_window:
-                ensure_anchor = getattr(self.runtime, "ensure_dedicated_window_anchor", None)
-                if ensure_anchor is not None:
-                    anchor = await ensure_anchor()
+                resolve_anchor = getattr(self.runtime, "dedicated_window_anchor_page", None)
+                if resolve_anchor is not None:
+                    anchor_page = await resolve_anchor()
             result = await composite_open(
                 project_name=self.project_name,
                 project_url=self.project_url,
-                anchor_page=await browser.page(anchor) if anchor else None,
+                anchor_page=anchor_page,
                 navigation_timeout=self.config.chat.navigation_timeout_seconds,
                 ready_timeout=self.config.chat.ready_timeout_seconds,
             )

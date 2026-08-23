@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 from dataclasses import dataclass, replace
 from enum import StrEnum
@@ -38,6 +39,13 @@ from .urls import parse_provider_session_id
 logger = logging.getLogger(__name__)
 
 
+def _text_digest(text: str | None) -> str | None:
+    """Return a bounded diagnostic fingerprint without logging response text."""
+    if text is None:
+        return None
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
 def _advance_with_trace(
     tracker: ObservationTracker,
     observation: Observation,
@@ -47,6 +55,7 @@ def _advance_with_trace(
     phase: str,
     dom_signals: frozenset[str] | None = None,
     text_length: int | None = None,
+    text_digest: str | None = None,
 ) -> ObservationOutcome | None:
     """Advance an ObservationTracker and log any resulting state transition.
 
@@ -67,7 +76,8 @@ def _advance_with_trace(
         logger.info(
             "gpt-auto observation transition phase=%s state=%s->%s outcome=%s "
             "caps=%s terminal_candidate=%s terminal_verified_ok=%s "
-            "text_len=%s dom_signals=%s",
+            "text_len=%s text_digest=%s dom_signals=%s candidate_age=%s "
+            "candidate_required_stability=%s candidate_saw_generating=%s",
             phase,
             prev_state.value,
             tracker.state.value,
@@ -76,7 +86,23 @@ def _advance_with_trace(
             observation.terminal_candidate,
             observation.terminal_verified_ok,
             text_length,
+            text_digest,
             sorted(dom_signals) if dom_signals is not None else None,
+            (
+                now - tracker.clock.candidate_entered_at
+                if tracker.clock.candidate_entered_at is not None
+                else None
+            ),
+            (
+                getattr(
+                    tracker.policy,
+                    "candidate_contradiction_stability_window_seconds",
+                    tracker.policy.candidate_stability_window_seconds,
+                )
+                if tracker.clock.candidate_saw_contradiction
+                else tracker.policy.candidate_stability_window_seconds
+            ),
+            tracker.clock.candidate_saw_contradiction,
             extra={"turn-id": turn_id},
         )
     return outcome
@@ -153,6 +179,10 @@ class _SubmissionProofPolicy:
         return self.turn_config.poll_interval_seconds
 
     @property
+    def candidate_contradiction_stability_window_seconds(self) -> float:
+        return self.candidate_stability_window_seconds
+
+    @property
     def candidate_max_verification_window_seconds(self) -> float:
         return max(10.0, self.turn_config.poll_interval_seconds * 10)
 
@@ -205,11 +235,30 @@ class _ResponseCompletionPolicy:
         return self.turn_config.response_stability_seconds
 
     @property
+    def candidate_contradiction_stability_window_seconds(self) -> float:
+        # SimpleNamespace-based test doubles from older tests do not have the
+        # new field; preserving their normal window keeps the seam compatible.
+        return getattr(
+            self.turn_config,
+            "response_generating_override_stability_seconds",
+            self.turn_config.response_stability_seconds,
+        )
+
+    @property
     def candidate_max_verification_window_seconds(self) -> float:
         stall = self.turn_config.response_stall_timeout_seconds
-        if not stall:
+        configured_override = getattr(
+            self.turn_config, "response_generating_override_stability_seconds", None
+        )
+        override = self.candidate_contradiction_stability_window_seconds
+        if not stall and configured_override is None:
+            # Compatibility for older test/config objects: with stall
+            # detection disabled, the legacy verification ceiling was also
+            # unbounded. Real parsed configs always carry the override.
             return float("inf")
-        return max(self.turn_config.response_stability_seconds * 5, stall)
+        if not stall:
+            return max(self.turn_config.response_stability_seconds * 5, override)
+        return max(self.turn_config.response_stability_seconds * 5, stall, override)
 
     @property
     def suspect_grace_seconds(self) -> float:
@@ -246,6 +295,7 @@ class GptAutoTurn:
         self._last_snapshot: ChatSnapshot | None = None
         self._last_observation_error: BaseException | None = None
         self._baseline_snapshot: ChatSnapshot | None = None
+        self._terminal_evidence: dict[str, Any] = {}
 
     def _move(self, target: TurnState) -> None:
         failure = _ENGINE.check(self.state.value, target.value)
@@ -696,10 +746,11 @@ class GptAutoTurn:
     _SOFT_LIVENESS_SIGNALS = frozenset(
         {"stop-control", "streaming-indicator", "thinking-indicator", "busy-indicator"}
     )
-    # GP32 (2026-08-17): message-finalized's underlying DOM marker
-    # ([data-is-last-node]) was removed by ChatGPT entirely; more-actions-menu
-    # replaced it as the corroborating signal. This is an any-of
-    # intersection so completion-control alone already suffices here.
+    # Renderer-position DOM markers (data-is-last-node/data-is-only-node)
+    # describe the last node rendered so far, not the end of the provider
+    # turn. They have appeared while substantial output was still streaming,
+    # so they are never terminal witnesses. The action-bar pair below is the
+    # only standard-bubble terminal witness set.
     #
     # GP34/code review: canvas-edit-control/canvas-open-editor-control are
     # deliberately NOT included, even though they cover ChatGPT's canvas
@@ -716,6 +767,10 @@ class GptAutoTurn:
     # GP47: cadence for the poll-loop heartbeat log, independent of tracker
     # state transitions -- see _await_response's heartbeat comment.
     _HEARTBEAT_INTERVAL_SECONDS = 30.0
+    # A tool/app row can remain visible with the same count for a long time
+    # while the provider is still working. Edge-only detection then stops
+    # renewing the gateway lease even though the browser is visibly busy.
+    _TOOL_ACTIVITY_HEARTBEAT_INTERVAL_SECONDS = 5.0
 
     async def _await_response(self, baseline: ChatSnapshot, current: ChatSnapshot) -> str | None:
         """GP07: re-expresses the previously-bespoke start/stall/total timer
@@ -741,7 +796,7 @@ class GptAutoTurn:
         final_outcome: ObservationOutcome | None = None
         # GP47 (2026-08-19): _advance_with_trace only logs on a tracker STATE
         # TRANSITION. A turn that stalls for the full response-total-timeout
-        # (observed live: message-finalized present but never promoted past
+        # (observed live: completion evidence present but never promoted past
         # candidacy) can spend up to an hour with zero transitions and
         # therefore zero log lines -- the only evidence surviving to the
         # failure report was a single final snapshot, not enough to tell
@@ -750,6 +805,9 @@ class GptAutoTurn:
         # A coarse heartbeat, independent of transitions, makes a future
         # stall's timeline reconstructable from the gateway process log.
         last_heartbeat_at = loop.time()
+        last_tool_activity_emit_at = (
+            loop.time() - self._TOOL_ACTIVITY_HEARTBEAT_INTERVAL_SECONDS
+        )
         while True:
             if self.cancel_event.is_set():
                 if self._stop_task is None:
@@ -863,19 +921,37 @@ class GptAutoTurn:
                 last_heartbeat_at = now
                 logger.info(
                     "gpt-auto response poll heartbeat tracker_state=%s generating=%s "
-                    "complete_satisfied=%s complete_evidence=%s text_len=%d dom_signals=%s",
+                    "complete_satisfied=%s complete_evidence=%s text_len=%d "
+                    "text_digest=%s dom_signals=%s",
                     tracker.state.value,
                     current.generating,
                     complete.satisfied,
                     sorted(complete.matched),
                     len(current.latest_assistant_text or ""),
+                    _text_digest(current.latest_assistant_text),
                     sorted(current.dom_signals),
                     extra={"turn-id": self.request.turn_id},
                 )
 
+            tool_activity_edge = current.tool_activity_counts != previous.tool_activity_counts
+            # Tool rows remain in the completed assistant turn's DOM. Treat
+            # their presence as liveness only until the completion policy is
+            # satisfied, then stop heartbeating so terminal stability can
+            # still be proven.
+            active_tool_activity = bool(current.tool_activity_counts) and not complete.satisfied
+            tool_activity_heartbeat_due = (
+                active_tool_activity
+                and now - last_tool_activity_emit_at
+                >= self._TOOL_ACTIVITY_HEARTBEAT_INTERVAL_SECONDS
+            )
             progress_edge = (
                 current.latest_assistant_id != previous.latest_assistant_id
                 or current.latest_assistant_text != previous.latest_assistant_text
+                or current.assistant_count != previous.assistant_count
+                or current.user_count != previous.user_count
+                or current.assistant_message_ids != previous.assistant_message_ids
+                or current.user_message_ids != previous.user_message_ids
+                or tool_activity_edge
             )
             current_soft = current.dom_signals & self._SOFT_LIVENESS_SIGNALS
             previous_soft = previous.dom_signals & self._SOFT_LIVENESS_SIGNALS
@@ -883,6 +959,13 @@ class GptAutoTurn:
             soft_present = bool(current_soft) or current.generating
             caps = EvidenceCapability.NONE
             if response_started and progress_edge:
+                caps |= EvidenceCapability.PROGRESS
+            elif tool_activity_edge or tool_activity_heartbeat_due:
+                # A verified current-turn tool/app affordance is strong
+                # provider progress even before assistant text begins. Once
+                # the row's count stops changing, the bounded heartbeat keeps
+                # the provider lease alive without treating DOM leftovers as
+                # terminal evidence.
                 caps |= EvidenceCapability.PROGRESS
             if response_started and soft_edge and soft_present:
                 caps |= EvidenceCapability.SOFT_LIVENESS
@@ -898,8 +981,16 @@ class GptAutoTurn:
                 # at the start.
                 await self._emit(
                     TransportObservationKind.ACTIVITY,
-                    {"model_activity": "response-progress"},
+                    {
+                        "model_activity": (
+                            "tool-progress"
+                            if tool_activity_edge or tool_activity_heartbeat_due
+                            else "response-progress"
+                        )
+                    },
                 )
+                if tool_activity_edge or tool_activity_heartbeat_due:
+                    last_tool_activity_emit_at = now
                 emitted = True
 
             terminal_candidate = complete.satisfied and bool(current.latest_assistant_text)
@@ -908,9 +999,17 @@ class GptAutoTurn:
             response_text = current.latest_assistant_text
             if terminal_candidate and tracker.state.value != "candidate-terminal":
                 logger.info(
-                    "gpt-auto response terminal-candidate evidence=%s text_len=%d dom_signals=%s",
+                    "gpt-auto response terminal-candidate evidence=%s text_len=%d "
+                    "text_digest=%s generating=%s required_stability=%s dom_signals=%s",
                     sorted(complete.matched),
                     len(response_text or ""),
+                    _text_digest(response_text),
+                    current.generating,
+                    (
+                        policy.candidate_contradiction_stability_window_seconds
+                        if current.generating
+                        else policy.candidate_stability_window_seconds
+                    ),
                     sorted(current.dom_signals),
                     extra={"turn-id": self.request.turn_id},
                 )
@@ -976,11 +1075,26 @@ class GptAutoTurn:
                 response_text = verify.latest_assistant_text
                 logger.info(
                     "gpt-auto response completion verification result=%s evidence=%s "
-                    "candidate_text_len=%d verify_text_len=%d dom_signals=%s",
+                    "candidate_text_len=%d candidate_text_digest=%s "
+                    "verify_text_len=%d verify_text_digest=%s generating=%s "
+                    "candidate_age=%.3f required_stability=%s dom_signals=%s",
                     terminal_verified_ok,
                     sorted(verified.matched),
                     len(current.latest_assistant_text or ""),
+                    _text_digest(current.latest_assistant_text),
                     len(response_text or ""),
+                    _text_digest(response_text),
+                    verify.generating,
+                    (
+                        loop.time() - tracker.clock.candidate_entered_at
+                        if tracker.clock.candidate_entered_at is not None
+                        else -1.0
+                    ),
+                    (
+                        policy.candidate_contradiction_stability_window_seconds
+                        if tracker.clock.candidate_saw_contradiction
+                        else policy.candidate_stability_window_seconds
+                    ),
                     sorted(verify.dom_signals),
                     extra={"turn-id": self.request.turn_id},
                 )
@@ -989,6 +1103,7 @@ class GptAutoTurn:
                 capabilities=caps,
                 terminal_candidate=terminal_candidate,
                 terminal_verified_ok=terminal_verified_ok,
+                terminal_contradiction=terminal_candidate and current.generating,
             )
             outcome = _advance_with_trace(
                 tracker,
@@ -998,10 +1113,32 @@ class GptAutoTurn:
                 phase="response-complete",
                 dom_signals=current.dom_signals,
                 text_length=len(response_text or ""),
+                text_digest=_text_digest(response_text),
             )
             if outcome is ObservationOutcome.VERIFIED_TERMINAL:
                 assert response_text is not None
                 self._response_message_id = response_message_id
+                self._terminal_evidence = {
+                    "policy": "response-complete",
+                    "generating-at-terminal": bool(current.generating or verify.generating)
+                    if "verify" in locals()
+                    else bool(current.generating),
+                    "candidate-stability-seconds": round(
+                        loop.time() - tracker.clock.candidate_entered_at, 3
+                    )
+                    if tracker.clock.candidate_entered_at is not None
+                    else None,
+                    "required-stability-seconds": (
+                        policy.candidate_contradiction_stability_window_seconds
+                        if tracker.clock.candidate_saw_contradiction
+                        else policy.candidate_stability_window_seconds
+                    ),
+                    "text-length": len(response_text),
+                    "text-digest": _text_digest(response_text),
+                    "verification-evidence": sorted(verified.matched)
+                    if "verified" in locals()
+                    else [],
+                }
                 return response_text
             if outcome is not None:
                 final_outcome = outcome
@@ -1142,6 +1279,8 @@ class GptAutoTurn:
         unresolved_metadata = getattr(self.chat, "unresolved_metadata", None)
         if unresolved_metadata is not None:
             metadata.update(unresolved_metadata())
+        if self._terminal_evidence:
+            metadata["terminal-evidence"] = dict(self._terminal_evidence)
         return SessionTurnResult(
             turn_id=self.request.turn_id,
             stop_reason=reason,

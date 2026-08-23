@@ -173,9 +173,14 @@ def build_session_transport(
         if isinstance(chat_url, str) and chat_url:
             if not url_matches_provider_session(chat_url, resume_provider_ref):
                 raise RuntimeError(
-                    "gpt-auto resume requires a matching durable chat-url and provider ref"
+                    "gpt-auto resume requires a matching project-scoped durable chat-url "
+                    "and provider ref"
                 )
             chat_url = canonical_chat_url(chat_url)
+            if chat_url is None:
+                raise RuntimeError(
+                    "gpt-auto resume requires a project-scoped durable chat-url"
+                )
         else:
             # A missing chat-url does not mean the conversation is lost --
             # PersistentChat.open()/reconcile() can still locate the live tab

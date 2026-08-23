@@ -133,6 +133,12 @@ def is_enabled(component_id: str, project_root: Path) -> bool:
     except Exception:
         logger.warning("Failed to read marker for %s", component_id, exc_info=True)
         return False
+    # Markers are user/project state and older installations may contain an
+    # empty YAML document.  Treat malformed marker content as disabled rather
+    # than allowing a status read to raise AttributeError.
+    if not isinstance(data, dict):
+        logger.warning("Invalid marker content for %s", component_id)
+        return False
     return bool(data.get("enabled", True))
 
 
@@ -154,4 +160,8 @@ def get_external_probe_results(component_id: str, project_root: Path) -> dict[st
     except Exception:
         logger.warning("Failed to read marker for %s", component_id, exc_info=True)
         return {}
-    return dict(data.get("external-mcp-probe", {}))
+    if not isinstance(data, dict):
+        logger.warning("Invalid marker content for %s", component_id)
+        return {}
+    probe_results = data.get("external-mcp-probe", {})
+    return dict(probe_results) if isinstance(probe_results, dict) else {}

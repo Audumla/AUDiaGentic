@@ -24,6 +24,10 @@ class _ApplicationStub:
         self.calls.append(("submit", (project_root,), kwargs))
         return {"state": "queued"}
 
+    def get_execution_response(self, project_root: Path, request_id: str) -> str:
+        self.calls.append(("response", (project_root, request_id), {}))
+        return "complete response"
+
 
 def test_in_process_client_delegates_to_its_application(tmp_path: Path) -> None:
     application = _ApplicationStub()
@@ -31,6 +35,14 @@ def test_in_process_client_delegates_to_its_application(tmp_path: Path) -> None:
 
     assert client.submit_execution_request(tmp_path, prompt_body="hello") == {"state": "queued"}
     assert application.calls == [("submit", (tmp_path,), {"prompt_body": "hello"})]
+
+
+def test_in_process_client_exposes_full_execution_response(tmp_path: Path) -> None:
+    application = _ApplicationStub()
+    client = EmbeddedGatewayClient(application)  # type: ignore[arg-type]
+
+    assert client.get_execution_response(tmp_path, "req-1") == "complete response"
+    assert application.calls == [("response", (tmp_path, "req-1"), {})]
 
 
 def test_inbound_adapters_depend_on_public_client_not_core_api() -> None:
