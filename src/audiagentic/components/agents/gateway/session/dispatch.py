@@ -282,6 +282,7 @@ def _dispatch_session_request(
         DEFAULT_TURN_TIMEOUT_SECONDS,
         get_session_runtime,
     )
+    from audiagentic.components.providers import providers_api
     from audiagentic.components.agents.gateway import profiles as profiles_mod
 
     request_id = record["request-id"]
@@ -430,8 +431,34 @@ def _dispatch_session_request(
                         "request-profile": execution_profile_id,
                     },
                 )
-            # AS08: validate execution-context fingerprint exact match on continuation.
+            # AS08/AS49: validate execution-context fingerprint exact match
+            # only when the resolved provider surface declares that the
+            # provider conversation is coupled to this gateway execution
+            # context.  Persistent provider conversations (for example
+            # GPT Auto's browser conversation) deliberately opt out through
+            # SessionMappingFacts so a gateway restart/config reload does not
+            # invalidate the durable provider session.  Resolution failure is
+            # fail-closed: unknown surfaces retain the historical strict
+            # fingerprint guard.
+            requires_same_execution_context = True
             if context_fingerprint is not None:
+                try:
+                    current_surface = providers_api.resolve_session_surface(
+                        project_root,
+                        provider_id,
+                        _build_surface_hint(profile),
+                    )
+                    requires_same_execution_context = bool(
+                        current_surface.identity.mapping_facts.requires_same_execution_context
+                    )
+                except Exception:
+                    logger.warning(
+                        "could not resolve session surface mapping facts; enforcing execution fingerprint",
+                        extra={"session-id": session_id, "provider-id": provider_id},
+                        exc_info=True,
+                    )
+
+            if context_fingerprint is not None and requires_same_execution_context:
                 stored_fingerprint = _get_stored_context_fingerprint(session_record)
                 if stored_fingerprint and context_fingerprint != stored_fingerprint:
                     raise AudiaGenticError(

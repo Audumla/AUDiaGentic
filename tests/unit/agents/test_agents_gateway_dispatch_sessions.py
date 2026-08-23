@@ -160,6 +160,7 @@ def _dispatch(
     dispatch_prompt,
     preallocated_session_id=None,
     provider_isolation_tier="full-isolation",
+    context_fingerprint="0" * 64,
 ):
     return dispatch.dispatch_request(
         tmp_path,
@@ -167,7 +168,7 @@ def _dispatch(
         dispatch_prompt=dispatch_prompt,
         preallocated_session_id=preallocated_session_id,
         manifest_id="mf_test",
-        context_fingerprint="0" * 64,
+        context_fingerprint=context_fingerprint,
         component_profile="",
         provider_isolation_tier=provider_isolation_tier,
         worker_timeout_seconds=10,
@@ -223,6 +224,50 @@ def test_session_id_continues_same_live_transport(rig):
     assert second["session-id"] == session_id
     assert len(transports) == 1  # no second child spawned
     assert transports[0].turns == ["hello", "hello"]
+
+
+def test_persistent_surface_ignores_execution_context_drift_on_continuation(
+    rig, monkeypatch
+):
+    """Persistent provider conversations survive a gateway context change.
+
+    The request manifest fingerprint changes across a gateway restart/config
+    reload.  A surface that explicitly declares
+    ``requires_same_execution_context=False`` must continue its durable
+    provider conversation; strict surfaces keep the exact-match guard.
+    """
+    runtime, transports, tmp_path = rig
+    first = _dispatch(
+        tmp_path,
+        _running_record(tmp_path, session_keep_alive=True),
+        dispatch_prompt="hello",
+        context_fingerprint="0" * 64,
+    )
+    session_id = first["session-id"]
+
+    from audiagentic.foundation.transports.session_surface import SessionMappingFacts
+
+    surface = SimpleNamespace(
+        identity=SimpleNamespace(
+            mapping_facts=SessionMappingFacts(
+                requires_same_execution_context=False,
+            )
+        )
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.providers.providers_api.resolve_session_surface",
+        lambda *args, **kwargs: surface,
+    )
+
+    second = _dispatch(
+        tmp_path,
+        _running_record(tmp_path, session_id=session_id),
+        dispatch_prompt="after restart",
+        context_fingerprint="1" * 64,
+    )
+    assert second["state"] == "completed", second
+    assert second["session-id"] == session_id
+    assert transports[0].turns == ["hello", "after restart"]
 
 
 def test_unsupported_provider_terminal(rig, monkeypatch):
