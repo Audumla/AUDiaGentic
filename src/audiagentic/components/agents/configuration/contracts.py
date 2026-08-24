@@ -18,11 +18,6 @@ class AgentsConfigDocument:
     execution_profiles: tuple[dict[str, Any], ...]
     agents: tuple[dict[str, Any], ...]
     triggers: tuple[dict[str, Any], ...] = ()
-    # Retained as a read-only compatibility slot for callers constructing
-    # older v2 documents positionally.  It is deliberately not serialized,
-    # validated, or consulted by execution; prompt definitions are the sole
-    # public prompt authority now.
-    prompt_profiles: tuple[dict[str, Any], ...] = ()
 
     def __post_init__(self) -> None:
         for field_name in ("roles", "execution_profiles", "agents", "triggers"):
@@ -58,9 +53,6 @@ class AgentsConfigDocument:
             execution_profiles=tuple(_collection(data, "execution_profiles", "profile_id")),
             agents=tuple(_collection(data, "agents", "agent_id")),
             triggers=tuple(_collection(data, "triggers", "trigger_id")),
-            # Older documents may still contain this key; ignore it so a
-            # subsequent atomic write removes the stale public collection.
-            prompt_profiles=(),
         )
 
 

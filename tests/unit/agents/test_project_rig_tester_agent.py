@@ -18,7 +18,7 @@ REPO_ROOT = PACKAGE_ROOT.parent.parent
 
 
 @pytest.fixture(autouse=True)
-def _seed_global_agent_catalog(_seed_global_agent_prompt_profiles) -> None:
+def _seed_project_rig_catalog(_seed_global_agent_catalog) -> None:
     """Provide the minimal global catalog required by this test."""
     path = global_agents_config_path()
     path.parent.mkdir(parents=True, exist_ok=True)

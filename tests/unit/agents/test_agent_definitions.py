@@ -107,14 +107,14 @@ def test_agent_definition_from_dict_accepts_hyphen_keys():
     assert d.advertised_skills == ["a"]
 
 
-def test_agent_definition_to_dict_includes_all_fields():
+def test_agent_definition_to_dict_uses_one_prompt_authority():
     d = AgentDefinition(
         agent_id="x", name="X", execution_profile_id="p", role_ids=["r"]
     )
     result = agent_definition_to_dict(d)
     assert set(result.keys()) == {
         "agent_id", "name", "execution_profile_id", "prompt_id", "role_ids",
-        "description", "advertised_skills", "internal", "acp", "a2a", "profile_id",
+        "description", "advertised_skills", "internal", "acp", "a2a",
     }
 
 

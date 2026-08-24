@@ -40,7 +40,6 @@ def test_legacy_prompt_profiles_are_not_republished() -> None:
             },
         }
     )
-    assert document.prompt_profiles == ()
     assert "prompt_profiles" not in document.to_mapping()
 
 
