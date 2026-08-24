@@ -359,9 +359,10 @@ class GptAutoConfig:
         block that is genuinely shared across every project on this machine
         (confirmed near-identical across gpt-auto.yaml/gpt-auto-t1.yaml/
         gpt-auto-t2.yaml by diff, 2026-08-17) -- duplicating it risked exactly
-        the schema-drift incident GP09 was raised about. A project overlay now
-        only needs project-url plus any genuine overrides; everything else is
-        inherited from defaults.yaml.
+        the schema-drift incident GP09 was raised about. A project overlay may
+        specify project-url when the profile is intentionally pinned to a
+        known ChatGPT project; when it is absent, the admitted project name
+        drives discovery. Everything else is inherited from defaults.yaml.
 
         Tolerant of both a full ``{"settings": {...}}``-wrapped payload
         (the on-disk shape of every provider config file) and an
@@ -510,8 +511,25 @@ def _load_packaged_defaults() -> dict[str, Any]:
 
 
 def provider_settings(data: dict[str, Any]) -> dict[str, Any]:
-    """Return the one project-owned settings mapping without aliases."""
-    settings = data.get("settings", data)
+    """Return the provider runtime settings, excluding provider metadata.
+
+    Provider files may be metadata-only stubs (for example a project that
+    declares gpt-auto but relies entirely on the packaged defaults):
+    ``install-mode`` and ``access-mode`` are provider-descriptor metadata, not
+    gpt-auto runtime settings.  Treating that wrapper as the settings mapping
+    makes the strict runtime schema reject an otherwise valid project with
+    ``VAL-GPTAUTO-001``.  Wrapped settings remain authoritative; for legacy
+    unwrapped files, strip only the known metadata keys so genuine unknown
+    runtime keys still fail closed in ``GptAutoConfig.from_dict``.
+    """
+    if "settings" in data:
+        settings = data["settings"]
+    else:
+        settings = {
+            key: value
+            for key, value in data.items()
+            if key not in {"install-mode", "access-mode"}
+        }
     if not isinstance(settings, dict):
         _invalid("settings must be a mapping")
     return dict(settings)
@@ -663,3 +681,4 @@ def _chatgpt_url(value: Any) -> str:
     if not parse_project_id(value):
         _invalid("project-url must identify a ChatGPT Project")
     return value.rstrip("/")
+
