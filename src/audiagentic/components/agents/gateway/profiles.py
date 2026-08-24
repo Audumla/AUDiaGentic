@@ -419,7 +419,7 @@ def load_gateway_registry_from_agents_catalog(
 
     ``agents.yaml`` is the sole declarative authority for hosted execution
     profiles.  This loader deliberately does not consult project-local
-    configuration or ``gateway-profiles.yaml``.
+    configuration or any secondary profile document.
     """
     from audiagentic.components.agents.agents_paths import global_agents_config_path
     from audiagentic.components.agents.configuration.repository import AgentsConfigRepository
@@ -474,6 +474,7 @@ def resolve_for_admission(
     execution_profile_id: str | None,
     *,
     surface_resolver: Any = None,
+    allow_test_fallback: bool = False,
 ) -> ResolvedExecutionProfile:
     """Resolve an execution profile for admission, in one schema-validated shape.
 
@@ -482,10 +483,11 @@ def resolve_for_admission(
     Python parameter injection (RV890) for tests. Defaults to
     ``providers_api.resolve_session_surface`` wrapped in the identity check.
 
-    The machine-global Agents catalog is the sole declarative authority.  When
-    a shared-gateway registry is installed, it supplies the immutable
-    admission snapshot; without one, the same global profile is projected into
-    a test-only snapshot.  Project-local agent files are never consulted.
+    The machine-global Agents catalog is the sole declarative authority.  A
+    hosted gateway must have its shared registry installed so admission uses
+    the immutable gateway snapshot.  The optional no-registry projection is
+    available only when an isolated unit test explicitly opts into it;
+    project-local agent files are never consulted.
 
     Raises AudiaGenticError(RES-EXP-001) if the profile is not found in
     whichever source is authoritative for this process.
@@ -502,6 +504,15 @@ def resolve_for_admission(
         profile = resolve_global_execution_profile(project_root, execution_profile_id)
     else:
         profile = resolve_global_default_execution_profile(project_root)
+    if registry is None and not allow_test_fallback:
+        from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+        raise AudiaGenticError(
+            code="IO-AGW-108",
+            kind="agents",
+            message="shared gateway profile registry is not installed",
+            details={"profile_id": profile["profile_id"]},
+        )
     if registry is not None:
         snapshot = registry.resolve_snapshot(profile["profile_id"])
     else:
