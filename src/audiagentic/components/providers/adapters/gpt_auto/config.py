@@ -515,8 +515,9 @@ def provider_settings(data: dict[str, Any]) -> dict[str, Any]:
 
     Provider files may be metadata-only stubs (for example a project that
     declares gpt-auto but relies entirely on the packaged defaults):
-    ``install-mode`` and ``access-mode`` are provider-descriptor metadata, not
-    gpt-auto runtime settings.  Treating that wrapper as the settings mapping
+    ``install-mode``, ``access-mode``, and the derived ``enabled`` flag are
+    provider-descriptor metadata, not gpt-auto runtime settings. Treating
+    that wrapper as the settings mapping
     makes the strict runtime schema reject an otherwise valid project with
     ``VAL-GPTAUTO-001``.  Wrapped settings remain authoritative; for legacy
     unwrapped files, strip only the known metadata keys so genuine unknown
@@ -528,7 +529,7 @@ def provider_settings(data: dict[str, Any]) -> dict[str, Any]:
         settings = {
             key: value
             for key, value in data.items()
-            if key not in {"install-mode", "access-mode"}
+            if key not in {"install-mode", "access-mode", "enabled"}
         }
     if not isinstance(settings, dict):
         _invalid("settings must be a mapping")
