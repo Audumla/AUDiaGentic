@@ -12,7 +12,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from audiagentic.components.agents.gateway.queue.work_index import (
     clear_stale_terminal_index,
@@ -362,6 +362,8 @@ def cancel_queued_or_mark_requested(
     actor_type: str = "worker",
     actor_id: str | None = None,
     reason: str | None = None,
+    diagnostics: Mapping[str, Any] | None = None,
+    expected_revision: int | None = None,
 ) -> dict[str, Any]:
     """Linearize cancellation with the queued-to-running dispatch boundary.
 
@@ -373,15 +375,30 @@ def cancel_queued_or_mark_requested(
     """
     with _request_lock(project_root, request_id):
         record = _read_record_locked(project_root, request_id)
+        if expected_revision is not None and record.get("revision") != expected_revision:
+            raise AudiaGenticError(
+                code="CON-AGW-143",
+                kind="agents",
+                message="diagnostic recovery revision is stale",
+                details={"request-id": request_id},
+            )
+        cancellation_diagnostics = merge_diagnostics(
+            record.get("diagnostics"),
+            diagnostics
+            if isinstance(diagnostics, Mapping)
+            else classify_error(
+                {"code": "CON-AGW-CANCELLED"},
+                phase="cancellation",
+                side_effect_state=(record.get("diagnostics") or {}).get("side-effect-state")
+                if isinstance(record.get("diagnostics"), dict)
+                else None,
+            ),
+        )
         if record["state"] != "queued":
             if record["state"] == "running" and not record["cancel-requested"]:
                 updated = dict(record)
                 updated["cancel-requested"] = True
-                updated["diagnostics"] = classify_error(
-                    {"code": "CON-AGW-CANCELLED"}, phase="cancellation",
-                    side_effect_state=(record.get("diagnostics") or {}).get("side-effect-state")
-                    if isinstance(record.get("diagnostics"), dict) else None,
-                )
+                updated["diagnostics"] = cancellation_diagnostics
                 updated["cancel-provenance"] = {
                     "source": source if source in {"api", "operator", "watchdog", "worker-shutdown", "system", "unknown-legacy"} else "unknown-legacy",
                     "actor-type": actor_type if actor_type in {"client", "operator", "worker", "system", "unknown"} else "unknown",
@@ -399,6 +416,13 @@ def cancel_queued_or_mark_requested(
                     state=updated["state"],
                 )
                 return updated
+            if isinstance(diagnostics, Mapping):
+                updated = dict(record)
+                updated["diagnostics"] = cancellation_diagnostics
+                updated["updated-at"] = now_iso_z()
+                updated["revision"] = record["revision"] + 1
+                write_record(project_root, updated)
+                return updated
             return record
 
         updated = dict(record)
@@ -406,11 +430,7 @@ def cancel_queued_or_mark_requested(
             {
                 "state": "cancelled",
                 "cancel-requested": True,
-                "diagnostics": classify_error(
-                    {"code": "CON-AGW-CANCELLED"}, phase="cancellation",
-                    side_effect_state=(record.get("diagnostics") or {}).get("side-effect-state")
-                    if isinstance(record.get("diagnostics"), dict) else None,
-                ),
+                "diagnostics": cancellation_diagnostics,
                 "cancel-provenance": {
                     "source": source if source in {"api", "operator", "watchdog", "worker-shutdown", "system", "unknown-legacy"} else "unknown-legacy",
                     "actor-type": actor_type if actor_type in {"client", "operator", "worker", "system", "unknown"} else "unknown",
