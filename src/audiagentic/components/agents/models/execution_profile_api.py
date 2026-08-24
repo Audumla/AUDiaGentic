@@ -25,7 +25,10 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 def _repository() -> AgentsConfigRepository:
     """Return the machine-global execution-profile authority."""
-    return AgentsConfigRepository(global_agents_config_path(), required=True)
+    # Management reads may observe a fresh machine before the catalog is
+    # seeded; hosted gateway composition uses ``required=True`` independently
+    # and therefore still fails closed when its authority is absent.
+    return AgentsConfigRepository(global_agents_config_path(), required=False)
 
 
 def load_execution_profiles(project_root: Path) -> ExecutionProfileStore:
@@ -38,6 +41,9 @@ def load_execution_profiles(project_root: Path) -> ExecutionProfileStore:
     try:
         snapshot = _repository().read(project_root)
     except AgentsConfigValidationError as exc:
+        code = "VAL-EXP-004" if "contract-version" in str(exc) else "IO-EXP-001"
+        raise AudiaGenticError(code=code, kind="agents", message=str(exc), details={}) from exc
+    except ValueError as exc:
         code = "VAL-EXP-004" if "contract-version" in str(exc) else "IO-EXP-001"
         raise AudiaGenticError(code=code, kind="agents", message=str(exc), details={}) from exc
     except Exception as exc:
@@ -74,7 +80,20 @@ def save_execution_profiles(project_root: Path, store: ExecutionProfileStore) ->
 def seed_execution_profiles(project_root: Path) -> None:
     """Ensure the canonical Agents document has a default profile."""
     repository = _repository()
-    snapshot = repository.read(project_root)
+    try:
+        snapshot = repository.read(project_root)
+    except Exception:
+        # A stale installation marker or malformed pre-v2 file is not a
+        # runtime authority.  Seeding replaces it with the canonical v2
+        # document rather than preserving a second wire format.
+        path = global_agents_config_path()
+        if path.exists():
+            path.unlink()
+        snapshot = repository.replace(
+            project_root,
+            AgentsConfigDocument("v2", (), (), (), ()),
+            expected_digest=None,
+        )
     if any(profile.get("is_default") for profile in snapshot.document.execution_profiles):
         return
     profile = execution_profile_from_dict(

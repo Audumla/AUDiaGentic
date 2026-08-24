@@ -34,37 +34,6 @@ class TestStripSecrets:
         assert profiles_mod._strip_secrets({}) == {}
 
 
-def test_machine_gateway_profile_config_rejects_invalid_present_entry(tmp_path):
-    path = tmp_path / "gateway-profiles.yaml"
-    path.write_text("profiles:\n  - profile-id: review\n", encoding="utf-8")
-    with pytest.raises(AudiaGenticError) as raised:
-        profiles_mod.load_gateway_registry_from_config(path)
-    assert raised.value.code == "IO-AGW-107"
-
-
-def test_required_machine_gateway_profile_config_rejects_missing_file(tmp_path):
-    with pytest.raises(AudiaGenticError) as raised:
-        profiles_mod.load_gateway_registry_from_config(
-            tmp_path / "missing-gateway-profiles.yaml", required=True
-        )
-    assert raised.value.code == "IO-AGW-107"
-
-
-def test_machine_gateway_profile_config_rejects_non_mapping_params(tmp_path):
-    path = tmp_path / "gateway-profiles.yaml"
-    path.write_text(
-        "profiles:\n"
-        "  - profile-id: review\n"
-        "    provider-id: gpt-auto\n"
-        "    instances: [gpt-auto]\n"
-        "    params: []\n",
-        encoding="utf-8",
-    )
-    with pytest.raises(AudiaGenticError) as raised:
-        profiles_mod.load_gateway_registry_from_config(path)
-    assert raised.value.code == "IO-AGW-107"
-
-
 class TestConfigDigest:
     def test_deterministic_for_same_params(self):
         params_a = {"virtual-capacity": 2, "model_id": "gpt-4", "provider_id": "openai"}
@@ -258,6 +227,32 @@ class TestResolveForAdmissionSurface:
 
         fake = _NoLaunchFake()
         profiles_mod.resolve_for_admission(tmp_path, "with-surface", surface_resolver=fake)
+
+    def test_project_local_agents_catalog_is_ignored(self, tmp_path):
+        """Agent admission must not be shadowed by a project-local catalog."""
+        from audiagentic.components.agents.models.execution_profile_api import (
+            create_execution_profile,
+        )
+
+        create_execution_profile(
+            tmp_path,
+            {
+                "profile_id": "global-only",
+                "provider_id": "pi",
+                "instances": ["global-model"],
+            },
+        )
+        local = tmp_path / ".audiagentic" / "config" / "agents.yaml"
+        local.parent.mkdir(parents=True)
+        local.write_text(
+            "contract-version: v2\nexecution_profiles:\n"
+            "  local-only:\n    provider_id: local-openai\n    instances: [wrong]\n",
+            encoding="utf-8",
+        )
+
+        snapshot = profiles_mod.resolve_for_admission(tmp_path, "global-only")
+        assert snapshot.provider_id == "pi"
+        assert snapshot.instances == ("global-model",)
 
 
 class TestInMemoryExecutionProfileRegistry:

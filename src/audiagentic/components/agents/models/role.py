@@ -115,10 +115,9 @@ class RoleStore:
     """In-memory store for roles with CRUD operations.
 
     Deliberately not composed (AS61 step 7 / ARCHITECTURE_STANDARDS.md §1
-    "Composition candidates"): role definitions are stateless, project-local
-    config -- read fresh, no connection, no shutdown -- exactly like
-    project-local execution-profile resolution. There is nothing here with a
-    lifetime worth owning.
+    "Composition candidates"): role definitions are stateless values from
+    the machine-global Agents catalog, read fresh with no connection or
+    shutdown lifecycle.
     """
 
     def __init__(self, roles: list[Role] | None = None) -> None:

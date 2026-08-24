@@ -11,9 +11,16 @@ from __future__ import annotations
 import logging
 import os
 import time
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
+from audiagentic.components.agents.gateway.diagnostics import (
+    classify_error,
+    evidence_from_activity,
+    merge_diagnostics,
+    stale_progress_diagnostic,
+)
 from audiagentic.components.agents.gateway.queue.work_index import (
     clear_stale_terminal_index,
     update_work_index_phase,
@@ -22,11 +29,7 @@ from audiagentic.components.agents.gateway.queue.work_index import (
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.system.managed_service_contracts import add_seconds
 from audiagentic.foundation.time import now_iso_z
-from audiagentic.components.agents.gateway.diagnostics import (
-    classify_error,
-    evidence_from_activity,
-    merge_diagnostics,
-)
+from audiagentic.foundation.transports.agent_session import is_meaningful_activity
 
 from . import _shared
 from ._admission import (
@@ -816,7 +819,7 @@ def renew_owned_activity(
         owner_epoch=owner_epoch,
         worker_id=worker_id,
         attempt_epoch=attempt_epoch,
-        kind="owner-heartbeat",
+        kind=("provider" if is_meaningful_activity(activity_source, activity_source) else "owner-heartbeat"),
         source=activity_source,
         source_instance=worker_id,
         source_sequence=activity_seq,
@@ -887,6 +890,24 @@ def record_owned_activity(
             "source-instance": source_instance,
             "source-sequence": source_sequence if source_sequence is not None else int(bucket.get("source-sequence") or 0) + 1,
         })
+        if kind == "owner-heartbeat":
+            # Ownership/process heartbeats are useful audit evidence, but are
+            # not provider work and therefore cannot renew the meaningful
+            # activity lease or clear a stale-progress observation.
+            activity["owner"] = bucket
+            updated = dict(record)
+            updated["activity"] = activity
+            updated["updated-at"] = received_at
+            updated["revision"] = record["revision"] + 1
+            write_record(project_root, updated)
+            record_gateway_timeline(
+                project_root,
+                request_id,
+                "activity.owner-heartbeat",
+                state="running",
+                attributes={"activity-source": source, "activity-kind": kind},
+            )
+            return updated
         if kind == "provider":
             bucket["phase"] = phase
             if provider_capability in {"unsupported", "supported", "unknown"}:
@@ -913,6 +934,12 @@ def record_owned_activity(
                 diagnostics.get("coalesced-observation-count") or 0
             ) + 1
             diagnostics["evidence-count"] = int(diagnostics.get("evidence-count") or 0) + 1
+            if diagnostics.get("classification") == "stale-progress":
+                diagnostics.update({
+                    "resolution-state": "resolved",
+                    "reason-code": "activity-resumed",
+                    "recovery": {"disposition": "none", "allowed-actions": []},
+                })
             updated["diagnostics"] = diagnostics
         updated.update(
             {
@@ -985,11 +1012,7 @@ def mark_watchdog_intervention_if_expired(
             return record
         timestamp = now_iso_z()
         updated = dict(record)
-        diagnostics = classify_error(
-            {"code": "TO-AGW-076", "details": {"failure-reason": "activity-lease-expired"}},
-            phase="reconciliation",
-            side_effect_state="may-have-started",
-        )
+        diagnostics = stale_progress_diagnostic()
         prior = record.get("diagnostics")
         if isinstance(prior, dict):
             diagnostics["evidence-count"] = int(prior.get("evidence-count") or 0) + 1

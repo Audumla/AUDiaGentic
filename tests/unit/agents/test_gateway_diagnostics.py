@@ -100,12 +100,48 @@ def test_lease_expiry_persists_bounded_diagnostics_and_evidence(tmp_path) -> Non
 
     diagnosed = diagnose_activity_lease(tmp_path, expired)
 
-    assert diagnosed["diagnostics"]["classification"] == "timeout"
+    assert diagnosed["diagnostics"]["classification"] == "stale-progress"
+    assert diagnosed["diagnostics"]["failure-code"] is None
     assert diagnosed["diagnostics"]["phase"] == "reconciliation"
     assert diagnosed["diagnostic-evidence"][-1]["kind"] == "activity-lease-expired"
     projected = get_execution_diagnostics(tmp_path, record["request-id"], limit=1)
     assert len(projected["evidence"]) == 1
     assert "prompt" not in str(projected).lower()
+
+
+def test_lease_expiry_then_valid_activity_resolves_stale_observation(tmp_path) -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="inspect")
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(tmp_path, record["request-id"], owner_epoch="service", expected_revision=0)
+    running = store.start_owned_attempt(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service",
+        worker_id="worker",
+        expected_revision=claimed["revision"],
+    )
+    expired = dict(running)
+    expired["activity-lease-expires-at"] = "2000-01-01T00:00:00Z"
+    store.write_record(tmp_path, expired)
+    diagnosed = diagnose_activity_lease(tmp_path, expired)
+    resumed = store.record_owned_activity(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service",
+        worker_id="worker",
+        attempt_epoch=running["attempt-epoch"],
+        kind="provider",
+        source="provider-progress",
+        source_instance="worker",
+        source_sequence=1,
+        phase="response-progress",
+        activity_lease_seconds=300,
+    )
+    assert diagnosed["state"] == "running"
+    assert resumed["state"] == "running"
+    assert resumed["diagnostics"]["classification"] == "stale-progress"
+    assert resumed["diagnostics"]["resolution-state"] == "resolved"
+    assert resumed["diagnostics"]["reason-code"] == "activity-resumed"
 
 
 def test_cancellation_provenance_is_durable(tmp_path) -> None:

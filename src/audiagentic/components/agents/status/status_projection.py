@@ -13,13 +13,13 @@ from audiagentic.components.agents.status.session_lifecycle_projection import (
     SessionLifecycleDecision,
     snapshot_from_decision,
 )
+from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports.agent_status import (
     AgentLifecycle,
     AgentOutcome,
     AgentStatusScope,
     AgentStatusSnapshot,
 )
-from audiagentic.foundation.time import now_iso_z
 
 # ---------------------------------------------------------------------------
 # Durable state → outcome mapping (SH07 authority)

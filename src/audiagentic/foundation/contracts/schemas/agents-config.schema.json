@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://audiagentic.local/schemas/agents-config.schema.json",
+  "title": "AUDiaGentic machine-global agents catalog",
+  "description": "Canonical v2 authority for prompts, roles, execution profiles, agents, and triggers.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract-version"],
+  "properties": {
+    "contract-version": {"const": "v2"},
+    "prompts": {"$ref": "#/$defs/collection"},
+    "roles": {"$ref": "#/$defs/collection"},
+    "execution_profiles": {"$ref": "#/$defs/collection"},
+    "agents": {"$ref": "#/$defs/collection"},
+    "triggers": {"$ref": "#/$defs/collection"}
+  },
+  "$defs": {
+    "collection": {
+      "type": "object",
+      "additionalProperties": {"type": "object"}
+    }
+  }
+}

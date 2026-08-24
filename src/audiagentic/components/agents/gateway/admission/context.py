@@ -25,7 +25,9 @@ def baseline_agent_template_context(
     admission, so an enabled component remains the richer authority.
     """
     from audiagentic.components.project.project_api import context as project_context
-    from audiagentic.components.source_control.source_control_api import context as source_control_context
+    from audiagentic.components.source_control.source_control_api import (
+        context as source_control_context,
+    )
 
     return {
         "project": project_context(project_root, workspace_name=workspace_name),

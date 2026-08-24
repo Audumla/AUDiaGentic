@@ -14,16 +14,20 @@ Design principles:
 """
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
-from audiagentic.foundation.io import atomic_write_bytes, atomic_write_json, atomic_write_text, load_ndjson
 from audiagentic.components.agents.agents_paths import gateway_final_response_path
+from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error
+from audiagentic.foundation.io import (
+    atomic_write_bytes,
+    atomic_write_json,
+    load_ndjson,
+)
 from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports.agent_output import (

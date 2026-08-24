@@ -9,9 +9,9 @@ from __future__ import annotations
 import threading
 import time
 from pathlib import Path
-from typing import Any
 
 from audiagentic.components.agents.gateway import store
+from audiagentic.foundation.transports.agent_session import is_meaningful_activity
 
 
 class RequestActivityRelay:
@@ -48,6 +48,11 @@ class RequestActivityRelay:
         phase: str | None = None,
         force: bool = False,
     ) -> None:
+        # Only actual provider work renews the gateway lease.  Heartbeats and
+        # contextual flags remain useful ownership evidence, but cannot mask
+        # a stalled provider turn.
+        if not is_meaningful_activity(source, phase):
+            return
         self._observe("provider", source, source_instance, source_sequence, phase, force)
 
     def observe_owner(

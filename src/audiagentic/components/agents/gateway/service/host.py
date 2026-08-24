@@ -78,7 +78,6 @@ class GatewayServiceHost:
         token_path: Path | None = None,
         application: GatewayApplication | None = None,
         service_root: Path | None = None,
-        gateway_profiles_config: Path | None = None,
     ) -> GatewayServiceHost:
         if host != "127.0.0.1" or isinstance(port, bool) or not 0 <= port <= 65535:
             from audiagentic.components.agents.gateway.service.http_transport import transport_error
@@ -99,9 +98,7 @@ class GatewayServiceHost:
             build_gateway_service_graph,
         )
 
-        composition_graph = build_gateway_service_graph(
-            gateway_profiles_config=gateway_profiles_config
-        )
+        composition_graph = build_gateway_service_graph()
         try:
             store = ManagedServiceStore(GATEWAY_SERVICE_KEY, root=service_root)
             resolved_token_path = token_path or store.root / "auth.token"

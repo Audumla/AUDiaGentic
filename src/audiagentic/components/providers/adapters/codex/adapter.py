@@ -171,7 +171,14 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
             # than a dedicated flag.  Keep the profile's ``model[effort]``
             # spelling consistent with the ACP bridge.
             command.extend(["-c", f"model_reasoning_effort={effort}"])
-    command.append(prompt)
+    # Codex accepts a prompt as a positional argument, but that is not a safe
+    # delivery channel for an admitted multiline prompt on Windows: the Node
+    # wrapper reconstructs the child command line and can truncate at the
+    # first newline.  Use Codex's documented ``-`` stdin mode instead.  This
+    # also prevents the worker's protocol stdin from being treated as an
+    # unsolicited second prompt; run_streaming_command writes the exact UTF-8
+    # prompt and closes the pipe before waiting for the child.
+    command.append("-")
 
     stream_controls = packet_ctx.get("stream-controls", {})
     stdout_sinks, stderr_sinks = build_extractor_stream_sinks(
@@ -184,6 +191,7 @@ def run(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> dict[str, A
         completed = run_streaming_command(
             command,
             cwd=cwd,
+            input_text=prompt,
             stdout_sinks=stdout_sinks,
             stderr_sinks=stderr_sinks,
         )

@@ -32,7 +32,7 @@ def materialize_agent_prompt(
     def expand(current: PromptDefinition, stack: tuple[str, ...] = ()) -> str:
         if current.prompt_id in stack:
             raise AudiaGenticError(
-                code="VAL-AGP-001",
+                code="VAL-AGW-110",
                 kind="agents",
                 message="agent prompt include cycle",
                 details={"prompt-id": current.prompt_id},
@@ -45,7 +45,7 @@ def materialize_agent_prompt(
                 included = by_id.get(part.prompt_id)
                 if included is None:
                     raise AudiaGenticError(
-                        code="RES-AGP-001",
+                        code="RES-AGW-110",
                         kind="agents",
                         message="agent prompt includes an unknown prompt",
                         details={"prompt-id": current.prompt_id, "included-prompt-id": part.prompt_id},
@@ -55,7 +55,7 @@ def materialize_agent_prompt(
                 candidate = (config_root / part.path).resolve()
                 if config_root.resolve() not in candidate.parents:
                     raise AudiaGenticError(
-                        code="VAL-AGP-002",
+                        code="VAL-AGW-111",
                         kind="agents",
                         message="agent prompt file must remain inside the global config root",
                         details={"prompt-id": current.prompt_id},
@@ -64,7 +64,7 @@ def materialize_agent_prompt(
                     fragments.append(candidate.read_text(encoding="utf-8"))
                 except OSError as exc:
                     raise AudiaGenticError(
-                        code="RES-AGP-002",
+                        code="RES-AGW-111",
                         kind="agents",
                         message="agent prompt file could not be read",
                         details={"prompt-id": current.prompt_id, "path": part.path},

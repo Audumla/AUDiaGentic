@@ -74,6 +74,64 @@ class TransportObservationKind(StrEnum):
     TRANSPORT_UNKNOWN = "transport-unknown"
 
 
+# Shared liveness vocabulary used by the gateway watchdog and provider
+# adapters.  This is deliberately foundation-neutral: it describes whether
+# an observation is evidence of work, not how any provider implements it.
+_NON_WORK_ACTIVITY_LABELS = frozenset({
+    "heartbeat",
+    "owner-heartbeat",
+    "worker-heartbeat",
+    "process-heartbeat",
+    "provider-turn-pending",
+    "transport-unknown",
+})
+_WORK_ACTIVITY_LABELS = frozenset({
+    "thinking",
+    "searching-web",
+    "searching-the-web",
+    "read-resource",
+    "talked-to-app",
+    "called-tool",
+    "tool-call",
+    "tool-requested",
+    "tool-result",
+    "tool-finished",
+    "response-progress",
+    "response-observed",
+    "response-started",
+    "assistant-message",
+    "thought",
+    "in-progress",
+})
+
+
+def is_meaningful_activity_label(value: str | None) -> bool:
+    """Return whether *value* is evidence of actual provider work.
+
+    Heartbeats and contextual flags deliberately do not renew execution
+    liveness.  Progress labels are extensible by suffix so provider-neutral
+    values such as ``acp-progress`` remain valid without importing a provider
+    vocabulary into Foundation.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return False
+    label = value.strip().lower().replace("_", "-").replace(" ", "-")
+    if label in _NON_WORK_ACTIVITY_LABELS:
+        return False
+    return label in _WORK_ACTIVITY_LABELS or label.endswith("-progress")
+
+
+def is_meaningful_activity(source: str | None, phase: str | None = None) -> bool:
+    """Classify one bounded activity frame for watchdog renewal.
+
+    A phase is authoritative when present.  If a provider supplies no phase,
+    its source is accepted unless it is explicitly a heartbeat category.
+    """
+    if isinstance(phase, str) and phase.strip():
+        return is_meaningful_activity_label(phase)
+    return is_meaningful_activity_label(source)
+
+
 # ---------------------------------------------------------------------------
 # Bounded allowed attribute keys per observation kind
 # ---------------------------------------------------------------------------

@@ -3,7 +3,14 @@
   "title": "Gateway task status V4",
   "type": "object",
   "additionalProperties": false,
-  "required": ["task_id", "lifecycle", "activity", "outcome"],
+  "required": [
+    "task_id",
+    "lifecycle",
+    "activity",
+    "activity_seq",
+    "activity_at",
+    "outcome"
+  ],
   "properties": {
     "task_id": {
       "type": "string",
@@ -16,6 +23,14 @@
     "activity": {
       "type": ["string", "null"],
       "enum": ["waiting", "running", "cancelling", "completing", null]
+    },
+    "activity_seq": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "activity_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
     },
     "outcome": {
       "type": ["string", "null"],

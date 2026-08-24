@@ -1,26 +1,20 @@
-"""Gateway-owned immutable execution-profile snapshot (SH07 C2).
+"""Gateway-owned immutable execution-profile snapshots (SH07 C2).
 
-InMemoryExecutionProfileRegistry is the gateway-owned authority for shared gateway
-mode: GatewayServiceHost loads it from the machine-scoped gateway profiles
-config file (see load_gateway_registry_from_config) at startup and installs
-it with set_gateway_registry(). EmbeddedCompatibilityRegistry remains the
-fallback for non-shared/embedded mode, deriving a snapshot from
-project-resolved profile data.
+Hosted admission uses the machine-global Agents catalog.  The in-memory
+registry is an immutable admission snapshot/cache; the optional no-registry
+path is retained only as an explicit unit-test seam and still reads the same
+global catalog.  Project-local agent configuration is never an authority.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
-import logging
-import threading
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Protocol
-
-logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Redacted execution snapshot — never carries auth/env/provider secrets
@@ -85,9 +79,8 @@ class ResolvedExecutionProfile:
 
     Contains only non-secret, queue-relevant data.  The snapshot is derived at
     admission time and never modified.  Provider auth, env vars, and raw config
-    are excluded. This is the one shape both project-local and shared-gateway
-    resolution return -- schema-validated at construction so the two sources
-    cannot silently drift (AS60 step 2).
+    are excluded. This is the one shape global gateway admission returns;
+    project-scoped execution-profile resolution is not a supported authority.
 
     AS105/AS101 v2: capacity (virtual_capacity/pending_capacity) is retired --
     it lives per-instance on providers' model-sources.yaml sources now, not
@@ -189,7 +182,7 @@ class InMemoryExecutionProfileRegistry:
 
     Stores gateway-owned profile definitions keyed by profile id.  This is the
     authoritative source for shared gateway mode: queue limits, provider/model
-    binding, and generation come from here, not project-local config.
+    binding, and generation come from here, not project-scoped config.
 
     Each call to register() increments an internal version counter so the
     generated generation changes on every update — making stale-generation
@@ -216,13 +209,8 @@ class InMemoryExecutionProfileRegistry:
 
         ``generation`` is content-derived (a digest of provider/instances
         and non-secret execution params) rather than an incrementing counter:
-        callers such as ``load_gateway_registry_from_config`` build a fresh
-        registry instance on every reload, so a per-instance counter would
-        reset to the same value every time and generation would never
-        actually change across a config edit — silently breaking the
-        stale-generation rejection (CON-AGW-101) this registry exists to
-        support. A content digest changes exactly when the config changes,
-        and is stable (idempotent) when it doesn't.
+        A content digest changes exactly when the admitted profile changes,
+        and is stable (idempotent) when it does not.
         """
         params = execution_params or {}
         if generation is None:
@@ -293,9 +281,8 @@ def snapshot_from_resolved_profile(
 ) -> ResolvedExecutionProfile:
     """Build a ResolvedExecutionProfile from already-resolved project profile data.
 
-    Used by EmbeddedCompatibilityRegistry when no shared gateway registry is
-    active.  The generation is deterministic from (profile_id + config_digest)
-    so two projects with identical non-secret configs produce the same generation.
+    Used for the explicit no-registry test seam.  The generation is
+    deterministic from the admitted profile content.
     """
     config_digest = _config_digest(params)
     gen_payload = json.dumps(
@@ -317,19 +304,13 @@ def snapshot_from_resolved_profile(
     )
 
 
-class EmbeddedCompatibilityRegistry:
-    """Derives snapshots from project-resolved profile data (non-shared mode).
-
-    In embedded/non-shared mode, there is no gateway-wide registry — the
-    snapshot comes from whatever the project-local resolver returned.  This
-    is a transitional fallback; shared gateway mode uses InMemoryExecutionProfileRegistry.
-    """
+class _AlwaysCurrentSnapshotValidator:
+    """Validator seam for isolated tests without a live registry."""
 
     def resolve_snapshot(self, profile_id: str) -> ResolvedExecutionProfile:
         raise NotImplementedError(
-            "EmbeddedCompatibilityRegistry.resolve_snapshot requires project "
-            "profile resolution context — use snapshot_from_resolved_profile() directly "
-            "or switch to shared-mode registry."
+            "snapshot resolution requires the global Agents catalog or an "
+            "explicit in-memory registry"
         )
 
     def validate_snapshot_current(self, snapshot: ResolvedExecutionProfile) -> bool:
@@ -341,8 +322,6 @@ class EmbeddedCompatibilityRegistry:
 # ---------------------------------------------------------------------------
 
 _gateway_registry: ExecutionProfileRegistry | None = None
-_gateway_registry_lock = threading.Lock()
-_gateway_registry_config_path: Path | None = None
 
 
 def get_gateway_registry() -> ExecutionProfileRegistry | None:
@@ -353,223 +332,24 @@ def get_gateway_registry() -> ExecutionProfileRegistry | None:
 def set_gateway_registry(registry: ExecutionProfileRegistry | None) -> None:
     """Replace the module-level gateway profile registry.
 
-    Pass an InMemoryExecutionProfileRegistry for shared-mode tests, or None to fall back
-    to embedded compatibility (project-resolved profiles).
+    Pass an InMemoryExecutionProfileRegistry for shared-mode tests, or None
+    for the explicit always-current test seam.
     """
     global _gateway_registry
     _gateway_registry = registry
 
 
-def set_gateway_registry_config_path(path: Path | None) -> None:
-    """Record the config path used for the current registry.
-
-    Used by reload_profile_registry to re-read from the same source.
-    """
-    global _gateway_registry_config_path
-    _gateway_registry_config_path = path
-
-
-def get_gateway_registry_config_path() -> Path | None:
-    """Return the config path used for the current registry, or None."""
-    return _gateway_registry_config_path
-
-
-def _profile_generation_summary(registry: InMemoryExecutionProfileRegistry) -> dict[str, Any]:
-    """Return a redacted summary of profile generations (no secrets).
-
-    Used for reload status output — carries only profile ids, generation
-    strings, and config digests. Provider auth material is excluded.
-    """
-    profiles: list[dict[str, Any]] = []
-    for profile_id, defn in registry._profiles.items():  # noqa: SLF001
-        params_digest = _config_digest(_strip_secrets(defn.execution_params))
-        profiles.append(
-            {
-                "profile-id": profile_id,
-                "generation": defn.generation,
-                "config-digest": params_digest,
-                "provider-id": defn.provider_id,
-                "instances": list(defn.instances),
-            }
-        )
-    return {"profiles": profiles}
-
-
-def _build_registry_on_worker_thread(config_path: Path) -> InMemoryExecutionProfileRegistry | None:
-    """Load and validate a candidate registry on a worker thread.
-
-    SH13 step 3: building the new registry off-thread prevents blocking the
-    calling thread during config I/O and YAML parsing — important when reload
-    is called from an MCP tool call or HTTP handler that has transport-level
-    deadlines.
-
-    Returns None when *config_path* does not exist (embedded fallback).
-    Raises AudiaGenticError(IO-AGW-107) on a malformed file.
-    """
-    return load_gateway_registry_from_agents_catalog(config_path, required=True)
-
-
-def reload_profile_registry(
-    config_path: Path | None = None,
-) -> dict[str, Any]:
-    """Atomically reload the gateway profile registry from config.
-
-    Build a new InMemoryExecutionProfileRegistry from *config_path* (or the originally
-    recorded config path), validate it off-thread, and swap the module-level
-    pointer under a short lock.  On failure the previous registry is retained.
-
-    On successful reload a redacted ``agents.execution.gateway.profile-reloaded``
-    event is published on the event bus with only profile ids, generation
-    strings, and config digests — no provider auth material (SH13 step 4).
-
-    Returns a redacted summary of the reload outcome:
-    - ``success``: bool — whether the swap succeeded
-    - ``old-generation-summary``: redacted profile list before the swap (if any)
-    - ``new-generation-summary``: redacted profile list after the swap (on success)
-    - ``error``: dict with code/message/details on failure
-
-    Raises AudiaGenticError if no registry is currently installed (embedded
-    mode has nothing to reload).
-    """
-    global _gateway_registry  # noqa: PLW0603
-    from concurrent.futures import ThreadPoolExecutor
-
-    from audiagentic.foundation.contracts.errors import AudiaGenticError
-
-    current = _gateway_registry
-    if current is None:
-        raise AudiaGenticError(
-            code="CON-AGW-102",
-            kind="agents",
-            message="no shared gateway registry installed; reload requires shared mode",
-            details={"registry-present": False},
-        )
-
-    # Resolve source path
-    resolved_path = config_path or _gateway_registry_config_path
-    if resolved_path is None:
-        raise AudiaGenticError(
-            code="VAL-AGW-092",
-            kind="agents",
-            message="no config path available for registry reload",
-            details={
-                "config-path-provided": bool(config_path),
-                "recorded-path": bool(_gateway_registry_config_path),
-            },
-        )
-
-    # Capture old summary before attempting swap
-    old_summary = (
-        _profile_generation_summary(current) if isinstance(current, InMemoryExecutionProfileRegistry) else {}
-    )
-
-    # SH13 step 3: build new registry off-thread so config I/O + YAML parsing
-    # does not block the calling thread (MCP tool call / HTTP handler).
-    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="gateway-reload") as executor:
-        future = executor.submit(_build_registry_on_worker_thread, resolved_path)
-        try:
-            new_registry = future.result(timeout=30)
-        except Exception as exc:
-            # Re-wrap so the caller gets a consistent error shape
-            if isinstance(exc, AudiaGenticError):
-                return {
-                    "success": False,
-                    "old-generation-summary": old_summary,
-                    "error": {"code": exc.code, "message": str(exc), "kind": "agents"},
-                }
-            return {
-                "success": False,
-                "old-generation-summary": old_summary,
-                "error": {
-                    "code": "IO-AGW-108",
-                    "message": f"failed to build candidate registry: {exc}",
-                    "kind": "agents",
-                },
-            }
-
-    # new_registry is None when config file vanished; treat as failure
-    if new_registry is None:
-        return {
-            "success": False,
-            "old-generation-summary": old_summary,
-            "error": {
-                "code": "IO-AGW-109",
-                "message": "gateway profiles config file missing; reload aborted",
-                "kind": "agents",
-                "details": {"path": str(resolved_path)},
-            },
-        }
-
-    # Atomic swap under lock
-    with _gateway_registry_lock:
-        old_registry = _gateway_registry
-        if old_registry is None:
-            # Registry was cleared concurrently; retain the attempt
-            return {
-                "success": False,
-                "old-generation-summary": {},
-                "error": {
-                    "code": "CON-AGW-102",
-                    "message": "registry was cleared during reload; retry",
-                    "kind": "agents",
-                },
-            }
-        _gateway_registry = new_registry
-
-    # Build redacted new summary (no secrets)
-    new_summary = _profile_generation_summary(new_registry)
-
-    logger.info(
-        "gateway profile registry reloaded",
-        extra={
-            "config-path": str(resolved_path),
-            "old-profile-count": len(old_summary.get("profiles", [])),
-            "new-profile-count": len(new_summary.get("profiles", [])),
-        },
-    )
-
-    # SH13 step 4: publish redacted profile-generation-changed event on success.
-    # Only carries profile ids, generation strings, config digests — never
-    # provider auth material or filesystem paths beyond the config file name.
-    try:
-        from audiagentic.components.agents.gateway.event_topics import (
-            GATEWAY_PROFILE_RELOADED_TOPIC,
-        )
-        from audiagentic.foundation.event import get_bus
-
-        get_bus().publish(
-            GATEWAY_PROFILE_RELOADED_TOPIC,
-            {
-                "config-path": resolved_path.name,
-                "old-generation-summary": old_summary,
-                "new-generation-summary": new_summary,
-            },
-            metadata={},
-        )
-    except Exception:  # noqa: BLE001 — event publish must not break reload
-        logger.warning(
-            "failed to publish profile-reloaded event",
-            exc_info=True,
-        )
-
-    return {
-        "success": True,
-        "old-generation-summary": old_summary,
-        "new-generation-summary": new_summary,
-    }
-
-
 def get_snapshot_validator() -> ExecutionProfileRegistry:
-    """Return a validator tied to the active registry, or embedded fallback.
+    """Return the active registry validator, or an always-current test seam.
 
     The registry's validate_snapshot_current is the single source of truth for
-    staleness.  When no registry is set (embedded mode), returns an always-current
-    validator that preserves existing behavior.
+    staleness.  Admission still reads the global catalog when no registry is
+    installed; this fallback only supports isolated unit tests.
     """
     reg = _gateway_registry
     if reg is not None:
         return reg
-    return EmbeddedCompatibilityRegistry()
+    return _AlwaysCurrentSnapshotValidator()
 
 
 def snapshot_from_record(record: dict[str, Any]) -> ResolvedExecutionProfile | None:
@@ -630,95 +410,6 @@ def profile_mapping_from_snapshot(snapshot: ResolvedExecutionProfile, record: di
         "surface_id": snapshot.resolved_surface_id,
         "surface_version": snapshot.resolved_surface_version,
     }
-
-
-# ---------------------------------------------------------------------------
-# Gateway-owned config loading (SH07 C2/RV745 — service-host startup wiring)
-# ---------------------------------------------------------------------------
-
-
-def load_gateway_registry_from_config(
-    path: Path, *, required: bool = False
-) -> InMemoryExecutionProfileRegistry | None:
-    """Build an InMemoryExecutionProfileRegistry from a gateway profiles config file.
-
-    Returns None (embedded fallback) only when ``required`` is false. Hosted
-    composition passes ``required=True`` and therefore fails closed when the
-    machine registry is absent.
-    The file uses the same profile-list shape as execution-profiles.yaml but is
-    gateway-scoped (machine home config, not project-local). AS105/AS101:
-    each entry's ``instances`` names the compatible model-sources.yaml
-    source-id set; capacity comes from those sources, not from gateway-owned
-    queue limits.  Raises AudiaGenticError(IO-AGW-107) on a malformed file.
-    """
-    if not path.exists():
-        if required:
-            from audiagentic.foundation.contracts.errors import AudiaGenticError
-
-            raise AudiaGenticError(
-                code="IO-AGW-107",
-                kind="agents",
-                message="required gateway profiles config file is missing",
-                details={"path": str(path)},
-            )
-        return None
-
-    from audiagentic.foundation.contracts.errors import AudiaGenticError
-    from audiagentic.foundation.io import load_yaml_file
-
-    try:
-        data = load_yaml_file(path)
-    except Exception as exc:
-        raise AudiaGenticError(
-            code="IO-AGW-107",
-            kind="agents",
-            message="failed to read gateway profiles config",
-            details={"path": str(path)},
-        ) from exc
-
-    if not isinstance(data, dict) or not isinstance(data.get("profiles", []), list):
-        raise AudiaGenticError(
-            code="IO-AGW-107",
-            kind="agents",
-            message="gateway profiles config must contain a profiles list",
-            details={"path": str(path)},
-        )
-    registry = InMemoryExecutionProfileRegistry()
-    for index, entry in enumerate(data.get("profiles", [])):
-        if not isinstance(entry, dict):
-            raise AudiaGenticError(
-                code="IO-AGW-107", kind="agents",
-                message="gateway profile entry must be a mapping",
-                details={"path": str(path), "index": index},
-            )
-        profile_id = entry.get("profile_id") or entry.get("profile-id")
-        provider_id = entry.get("provider_id") or entry.get("provider-id")
-        instances = entry.get("instances")
-        if (
-            not isinstance(profile_id, str) or not profile_id.strip()
-            or not isinstance(provider_id, str) or not provider_id.strip()
-            or not isinstance(instances, list) or not instances
-            or not all(isinstance(instance, str) and instance.strip() for instance in instances)
-        ):
-            raise AudiaGenticError(
-                code="IO-AGW-107", kind="agents",
-                message="gateway profile entry requires profile-id, provider-id, and instances",
-                details={"path": str(path), "index": index},
-            )
-        params = entry.get("params", {})
-        if not isinstance(params, dict):
-            raise AudiaGenticError(
-                code="IO-AGW-107", kind="agents",
-                message="gateway profile params must be a mapping",
-                details={"path": str(path), "index": index},
-            )
-        registry.register(
-            profile_id,
-            provider_id=provider_id,
-            instances=tuple(instances),
-            execution_params=params,
-        )
-    return registry
 
 
 def load_gateway_registry_from_agents_catalog(
@@ -791,13 +482,10 @@ def resolve_for_admission(
     Python parameter injection (RV890) for tests. Defaults to
     ``providers_api.resolve_session_surface`` wrapped in the identity check.
 
-    Project-local resolution stays a plain function call -- it is stateless,
-    so there is nothing composition needs to own. When a shared-gateway
-    registry is installed for this process, it is authoritative for
-    provider/instances instead; project-local data only selects
-    which gateway profile id to reference (SH07 C2). Callers no longer need
-    to know which source answered -- both return the same
-    ResolvedExecutionProfile.
+    The machine-global Agents catalog is the sole declarative authority.  When
+    a shared-gateway registry is installed, it supplies the immutable
+    admission snapshot; without one, the same global profile is projected into
+    a test-only snapshot.  Project-local agent files are never consulted.
 
     Raises AudiaGenticError(RES-EXP-001) if the profile is not found in
     whichever source is authoritative for this process.
@@ -809,24 +497,11 @@ def resolve_for_admission(
         resolve_global_default_execution_profile,
         resolve_global_execution_profile,
     )
-    from audiagentic.components.agents.models.execution_profile_api import (
-        resolve_default_execution_profile,
-        resolve_execution_profile,
-    )
-
     registry = get_gateway_registry()
-    if registry is not None:
-        if execution_profile_id:
-            profile = resolve_global_execution_profile(project_root, execution_profile_id)
-        else:
-            profile = resolve_global_default_execution_profile(project_root)
-    elif execution_profile_id:
-        # Embedded/unit mode has no shared registry; retain the pure local
-        # resolver for isolated callers. The running gateway always installs
-        # a registry and therefore never takes this branch.
-        profile = resolve_execution_profile(project_root, execution_profile_id)
+    if execution_profile_id:
+        profile = resolve_global_execution_profile(project_root, execution_profile_id)
     else:
-        profile = resolve_default_execution_profile(project_root)
+        profile = resolve_global_default_execution_profile(project_root)
     if registry is not None:
         snapshot = registry.resolve_snapshot(profile["profile_id"])
     else:
@@ -862,14 +537,12 @@ def resolve_for_admission(
 
 
 def resolve_authoritative_profile(project_root: Path, profile_id: str) -> dict[str, Any]:
-    """Use the global catalog in the hosted gateway; local only in embedded tests."""
-    if get_gateway_registry() is not None:
-        from audiagentic.components.agents.configuration.global_catalog import resolve_global_execution_profile
+    """Resolve a profile from the machine-global Agents catalog."""
+    from audiagentic.components.agents.configuration.global_catalog import (
+        resolve_global_execution_profile,
+    )
 
-        return resolve_global_execution_profile(project_root, profile_id)
-    from audiagentic.components.agents.models.execution_profile_api import resolve_execution_profile
-
-    return resolve_execution_profile(project_root, profile_id)
+    return resolve_global_execution_profile(project_root, profile_id)
 
 
 def _default_surface_resolver(project_root: Path, provider_id: str, surface_id: str) -> Any:

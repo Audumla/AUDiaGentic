@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.agents.agents_paths import agents_config_path
+from audiagentic.components.agents.agents_paths import global_agents_config_path
 from audiagentic.components.agents.configuration.contracts import (
+    AGENTS_CONTRACT_VERSION,
     AgentsConfigDocument,
     ConfigKind,
 )
@@ -37,21 +38,32 @@ class AgentsConfigRepository:
         self._required = required
 
     def _path(self, project_root: Path) -> Path:
-        return self._config_path or agents_config_path(project_root)
+        # Agent definitions, prompts, roles, and execution profiles are
+        # machine-global.  ``project_root`` remains part of the protocol
+        # surface for callers that also operate on project-owned runtime
+        # records, but it must never select an agent catalog.
+        return self._config_path or global_agents_config_path()
 
     def read(self, project_root: Path) -> AgentsConfigSnapshot:
         path = self._path(project_root)
         if self._required and not path.exists():
             raise AgentsConfigValidationError(f"required agents config is missing: {path}")
-        data = load_yaml_file(path) if path.exists() else {}
+        # A non-required management read may start from an empty machine
+        # installation.  Materialize the canonical empty document in memory;
+        # an actually present file still has to carry an explicit version.
+        data = (
+            load_yaml_file(path)
+            if path.exists()
+            else {"contract-version": AGENTS_CONTRACT_VERSION}
+        )
         document = AgentsConfigDocument.from_mapping(data)
         self._validate_document(document)
         return AgentsConfigSnapshot(document, _digest(document))
 
     def validate(self, document: AgentsConfigDocument) -> tuple[str, ...]:
         issues = list(validate_document(document))
-        if document.contract_version != "v2":
-            issues.append("contract-version must be v2")
+        if document.contract_version != AGENTS_CONTRACT_VERSION:
+            issues.append(f"contract-version must be {AGENTS_CONTRACT_VERSION}")
         return tuple(sorted(issues))
 
     def replace(self, project_root: Path, document: AgentsConfigDocument, *, expected_digest: str | None) -> AgentsConfigSnapshot:

@@ -121,6 +121,45 @@ def test_qwen_synthetic_fallback_on_plain_text(monkeypatch):
     assert result["output"] == "just some text"
 
 
+def test_codex_delivers_multiline_prompt_via_stdin(monkeypatch):
+    """Codex must not receive an admitted multiline prompt in argv.
+
+    The Windows Node wrapper can truncate newline-containing positional
+    arguments. ``codex exec -`` is the documented stdin form and preserves
+    the exact materialized prompt bytes.
+    """
+    import importlib
+
+    captured: dict = {}
+
+    def fake_stream(command, *, input_text=None, cwd=None, stdout_sinks=None, stderr_sinks=None, **kw):
+        captured["command"] = list(command)
+        captured["input_text"] = input_text
+        return _FakeCompleted(stdout="DIRECT_CODEX_OK")
+
+    mod = importlib.import_module("audiagentic.components.providers.adapters.codex.adapter")
+    monkeypatch.setattr(mod, "run_streaming_command", fake_stream)
+    monkeypatch.setattr(mod, "require_executable", lambda pid, *a: f"/bin/{pid}")
+    monkeypatch.setattr(mod, "build_extractor_stream_sinks", lambda *a, **k: ([], []))
+
+    from audiagentic.components.providers.services.execution.execution import execute_provider
+
+    body = "Provide a concise wrapper.\n\nUNIQUE_CODEX_TASK: inspect pyproject.toml."
+    ctx = dict(
+        _PACKET_CTX,
+        **{"provider-id": "codex", "prompt-body": body, "model-id": "gpt-5.6-luna[medium]"},
+    )
+    result = execute_provider(
+        provider_id="codex", packet_ctx=ctx, provider_cfg=dict(_PROVIDER_CFG)
+    )
+
+    assert captured["command"][-1] == "-"
+    assert all(body not in arg for arg in captured["command"])
+    assert captured["input_text"] is not None
+    assert captured["input_text"].endswith("Prompt body:\n" + body)
+    assert result["output"] == "DIRECT_CODEX_OK"
+
+
 def test_copilot_golden_command(monkeypatch):
     payload = {"kind": "adhoc", "summary": "done"}
     result, captured = _run_with_fakes(monkeypatch, "copilot", json.dumps(payload))

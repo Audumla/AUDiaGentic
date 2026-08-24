@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.agents.agents_paths import global_agents_config_path
 from audiagentic.components.agents.capabilities.contracts import RoleManifest
 from audiagentic.components.agents.capabilities.resolver import resolve_role_manifest
 from audiagentic.components.agents.capabilities.source_filter import eligible_instance_ids
@@ -17,7 +18,6 @@ from audiagentic.components.agents.models.role import role_from_dict
 
 from .contracts import AgentsConfigDocument
 from .repository import AgentsConfigRepository, AgentsConfigSnapshot
-from audiagentic.components.agents.agents_paths import global_agents_config_path
 
 
 @dataclass(frozen=True, slots=True)

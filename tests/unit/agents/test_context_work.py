@@ -6,7 +6,11 @@ from pathlib import Path
 import pytest
 import yaml
 
-from audiagentic.components.agents.agents_paths import agent_context_path, agent_work_inputs_path
+from audiagentic.components.agents.agents_paths import (
+    agent_context_path,
+    agent_work_inputs_path,
+    global_agents_config_path,
+)
 from audiagentic.components.agents.configuration.contracts import AgentsConfigDocument
 from audiagentic.components.agents.configuration.repository import AgentsConfigRepository
 from audiagentic.components.agents.context.service import close_context, open_context
@@ -55,7 +59,8 @@ def _seed(root: Path) -> None:
         ({"profile_id": "p", "provider_id": "local-openai", "instances": ["plain"]},),
         ({"agent_id": "a", "name": "A", "prompt_id": "p", "role_ids": ["r"], "execution_profile_id": "p"},),
     )
-    AgentsConfigRepository().replace(root, document, expected_digest=None)
+    repository = AgentsConfigRepository(global_agents_config_path())
+    repository.replace(root, document, expected_digest=repository.read(root).digest)
 
 
 def test_context_and_work_transitions_use_foundation_workflow_authority() -> None:
@@ -399,7 +404,7 @@ def test_event_ingress_subscription_lifecycle_is_idempotent(tmp_path: Path) -> N
 
 def test_event_ingress_can_load_triggers_from_canonical_agents_config(tmp_path: Path) -> None:
     _seed(tmp_path)
-    path = tmp_path / ".audiagentic" / "config" / "agents.yaml"
+    path = global_agents_config_path()
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     data["triggers"] = {
         "orders-created": {

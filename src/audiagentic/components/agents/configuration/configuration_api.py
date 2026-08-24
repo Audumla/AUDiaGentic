@@ -4,10 +4,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.agents.agents_paths import global_agents_config_path
+
 from .contracts import AgentsConfigDocument
 from .repository import AgentsConfigRepository, AgentsConfigSnapshot
 from .resolution import resolve_agent
-from audiagentic.components.agents.agents_paths import global_agents_config_path
 
 
 class AgentsConfigService:

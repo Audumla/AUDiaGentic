@@ -8,6 +8,7 @@ from typing import Any, TypeAlias
 from audiagentic.components.agents.models.prompt_definition import PromptDefinition
 
 ConfigKind: TypeAlias = str
+AGENTS_CONTRACT_VERSION = "v2"
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,8 +47,28 @@ class AgentsConfigDocument:
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> AgentsConfigDocument:
+        if not isinstance(data, dict):
+            raise ValueError("agents config must be a mapping")
+        if "contract-version" not in data:
+            raise ValueError("contract-version is required")
+        contract_version = data["contract-version"]
+        if contract_version != AGENTS_CONTRACT_VERSION:
+            raise ValueError(
+                f"unsupported agents config contract-version: {contract_version!r}"
+            )
+        unknown = set(data) - {
+            "contract-version",
+            "prompts",
+            "roles",
+            "execution_profiles",
+            "agents",
+            "triggers",
+        }
+        if unknown:
+            names = ", ".join(sorted(unknown))
+            raise ValueError(f"unknown agents config keys: {names}")
         return cls(
-            contract_version=str(data.get("contract-version", "v2")),
+            contract_version=AGENTS_CONTRACT_VERSION,
             prompts=tuple(PromptDefinition.from_dict(item) for item in _collection(data, "prompts", "prompt_id")),
             roles=tuple(_collection(data, "roles", "role_id")),
             execution_profiles=tuple(_collection(data, "execution_profiles", "profile_id")),

@@ -25,7 +25,7 @@ runtime/harness/pi/install/__init__.py:_should_provision_embedded_rig), and
 write_execution_profile / patch_provider_config for the gateway-facing config.
 The only hand-authored file here is the harness's own ag.yaml (rig port/model)
 — genuine project-authored config with no creation API, the same status as
-gateway-profiles.yaml in gateway_docker_harness.py.
+    the canonical global agents catalog.
 """
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ def _require_docker_gate() -> None:
 
 def _write_harness_config(project_root: Path, rig_port: int) -> None:
     """Genuine operator-authored harness config — no CRUD API exists for it,
-    same status as gateway_docker_harness.write_gateway_profiles_config."""
+    same status as the canonical global agents catalog."""
     config_root = project_root / ".audiagentic" / "config" / "harness"
     config_root.mkdir(parents=True, exist_ok=True)
     (config_root / "ag.yaml").write_text(
