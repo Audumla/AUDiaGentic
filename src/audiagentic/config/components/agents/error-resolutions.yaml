@@ -72,6 +72,7 @@ CON-AGW-104: "The work-index phase update was rejected because the entry's curre
 CON-AGW-105: "The work-index phase transition is illegal; use only transitions defined in the legal-transition graph (admitted→claimed|terminal-cleanup, claimed→running|terminal-cleanup, running→terminal-cleanup)."
 CON-AGW-106: "A different dispatch owner epoch already holds this work-index entry; do not mutate it from a stale owner."
 IO-AGW-107: "Fix the gateway profiles config file so it parses as the documented profile-list YAML shape."
+IO-AGW-108: "The hosted gateway profile registry is not installed. Start the composed gateway service before admitting execution requests."
 VAL-AGW-085: "Provide the complete current dispatch owner, worker, and positive attempt identity for an owned request mutation."
 VAL-AGW-086: "Provide the non-empty component identity acknowledging a gateway cancellation request."
 UNS-AGW-076: "This provider declares partial-isolation, or a full-isolation materializer that has not been proven safe — neither can run through the disposable-subprocess-per-attempt worker pool. A no-isolation provider does not hit this error; it dispatches through a live gateway session instead (submit with session_keep_alive=true, or an existing session_id, to use one directly)."

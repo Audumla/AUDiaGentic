@@ -468,7 +468,15 @@ def submit_execution_request(
     # without re-deriving from mutable project inputs.
     from audiagentic.components.agents.gateway import profiles as profiles_mod
 
-    resolved = profiles_mod.resolve_for_admission(project_root, execution_profile_id)
+    # Hosted composition installs the shared registry before this API is
+    # reachable.  Direct in-process callers (including isolated unit seams)
+    # have no composed registry and may use the explicit global-catalog
+    # projection; they never consult project-local authority.
+    resolved = profiles_mod.resolve_for_admission(
+        project_root,
+        execution_profile_id,
+        allow_test_fallback=profiles_mod.get_gateway_registry() is None,
+    )
     resolved_provider_id = resolved.provider_id
     resolved_instance_ids = list(resolved.instances)
     params = dict(resolved.execution_params)

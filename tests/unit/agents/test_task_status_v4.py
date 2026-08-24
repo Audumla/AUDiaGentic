@@ -10,13 +10,13 @@ from audiagentic.components.agents.status.task_status_v4 import (
     TaskStatusContractError,
     project_task_status_v4,
 )
+from audiagentic.foundation.contracts.schema_registry import validate_with_schema
 from audiagentic.foundation.transports.agent_status import (
     AgentLifecycle,
     AgentOutcome,
     AgentStatusScope,
     AgentStatusSnapshot,
 )
-from audiagentic.foundation.contracts.schema_registry import validate_with_schema
 
 
 def _record(state: str, **extra: object) -> dict[str, object]:

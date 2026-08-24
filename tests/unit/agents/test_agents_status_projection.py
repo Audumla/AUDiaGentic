@@ -11,7 +11,6 @@ from __future__ import annotations
 import pytest
 
 import audiagentic.components.agents.status.status_projection as status_projection
-
 from audiagentic.components.agents.status.session_lifecycle_projection import (
     SessionLifecycleDecision,
 )
