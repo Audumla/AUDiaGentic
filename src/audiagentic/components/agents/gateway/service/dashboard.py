@@ -285,3 +285,4 @@ stateFilter.addEventListener('change',()=>latest&&draw(latest)); showClosed.addE
 
 
 __all__ = ["dashboard_snapshot", "render_dashboard_html"]
+

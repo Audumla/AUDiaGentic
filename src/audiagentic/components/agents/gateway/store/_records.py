@@ -677,3 +677,4 @@ def list_records(project_root: Path) -> list[dict[str, Any]]:
         except AudiaGenticError:
             logger.warning("skipping unreadable gateway request", extra={"request-id": entry.name}, exc_info=True)
     return records
+

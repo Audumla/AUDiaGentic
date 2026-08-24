@@ -56,7 +56,6 @@ def save_agent_definitions(project_root: Path, store: AgentDefinitionStore) -> N
         snapshot.document.execution_profiles,
         tuple(store.to_dicts()),
         snapshot.document.triggers,
-        snapshot.document.prompt_profiles,
     )
     try:
         repository.replace(project_root, document, expected_digest=snapshot.digest)

@@ -1211,3 +1211,4 @@ def _unresolved_observation_details(snapshot: ChatSnapshot | None) -> dict[str, 
     if snapshot.dom_signals:
         details["observed-dom-signals"] = sorted(snapshot.dom_signals)
     return details
+

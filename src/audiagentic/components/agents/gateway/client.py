@@ -448,3 +448,4 @@ def call_gateway_method(
                 reset_gateway_client()
                 client = get_gateway_client(project_root)
         raise last_exc
+

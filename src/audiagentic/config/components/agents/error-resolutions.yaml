@@ -225,3 +225,4 @@ UNS-AGM-001: "This gateway operation is not enabled because its explicit safety 
 CON-AGSV-029: "The gateway implementation option value does not match the declared implementation schema."
 CON-AGSV-030: "The gateway implementation option conflicts with another declared option."
 CFG-AGW-110: "Select a queue backend that has passed the gateway conformance suite; unavailable broker backends fail closed."
+

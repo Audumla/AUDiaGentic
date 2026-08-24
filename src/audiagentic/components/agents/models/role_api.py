@@ -50,7 +50,6 @@ def save_roles(project_root: Path, store: RoleStore) -> None:
         snapshot.document.execution_profiles,
         snapshot.document.agents,
         snapshot.document.triggers,
-        snapshot.document.prompt_profiles,
     )
     try:
         repository.replace(project_root, document, expected_digest=snapshot.digest)

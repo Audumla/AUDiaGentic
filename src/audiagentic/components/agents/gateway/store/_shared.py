@@ -171,3 +171,4 @@ def extract_worker_evidence(error: BaseException | dict | None) -> dict | None:
         "error-type": type(error).__name__,
         "worker-diagnostic": diag,
     }
+

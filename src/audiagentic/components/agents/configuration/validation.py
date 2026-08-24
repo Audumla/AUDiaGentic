@@ -27,15 +27,6 @@ def validate_document(document: AgentsConfigDocument) -> tuple[str, ...]:
     profiles = collect("execution_profiles", document.execution_profiles, "profile_id")
     agents = collect("agents", document.agents, "agent_id")
     triggers = collect("triggers", document.triggers, "trigger_id")
-    prompt_profiles = collect("prompt_profiles", document.prompt_profiles, "profile_id")
-    for profile_id, profile in sorted(prompt_profiles.items()):
-        # Prompt profiles represent real execution turns.  The old no-body
-        # variant allowed a task with no user message and is no longer part of
-        # the contract; only the body-bearing template is authoritative.
-        key = "template_with_body"
-        value = profile.get(key, profile.get(key.replace("_", "-")))
-        if not isinstance(value, str) or not value.strip():
-            errors.append(f"prompt_profiles[{profile_id}].{key}: required non-empty string")
     for trigger_id, trigger in sorted(triggers.items()):
         pattern = trigger.get("event_pattern", trigger.get("event-pattern"))
         if not isinstance(pattern, str) or not pattern.strip():

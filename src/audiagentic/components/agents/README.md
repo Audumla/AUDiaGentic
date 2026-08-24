@@ -244,3 +244,4 @@ recovered record-only via `agents_gateway_lifecycle.recover_unprovable_owner`
 - **Automatic mode is not yet the default**: SH11 owns consumer cutover and
   removal of in-process ownership. SH04 standalone and SH05 automatic modes
   remain explicit migration choices.
+

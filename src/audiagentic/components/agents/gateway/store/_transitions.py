@@ -1302,3 +1302,4 @@ def _check_expected_identity(
             message="gateway request attempt epoch changed",
             details={"expected": expected_attempt_epoch, "actual": record["attempt-epoch"]},
         )
+
