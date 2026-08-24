@@ -95,7 +95,7 @@ def project_task_status_v4(
             if actual != expected:
                 raise TaskStatusContractError("durable terminal state contradicts snapshot outcome")
         return {
-            "request-id": request_id,
+            "task_id": request_id,
             "lifecycle": "terminal",
             "activity": None,
             "outcome": expected,
@@ -106,7 +106,7 @@ def project_task_status_v4(
 
     if state == "queued":
         return {
-            "request-id": request_id,
+            "task_id": request_id,
             "lifecycle": "pending",
             "activity": "waiting",
             "outcome": None,
@@ -124,7 +124,7 @@ def project_task_status_v4(
         else:
             activity = "running"
         return {
-            "request-id": request_id,
+            "task_id": request_id,
             "lifecycle": "active",
             "activity": activity,
             "outcome": None,

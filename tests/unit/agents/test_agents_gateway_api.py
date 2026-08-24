@@ -188,7 +188,7 @@ def test_public_status_v4_is_explicit_slim_four_key_projection(tmp_path: Path, m
         tmp_path, result["request-id"], response_version=4
     )
     assert status == {
-        "request-id": result["request-id"],
+        "task_id": result["request-id"],
         "lifecycle": "terminal",
         "activity": None,
         "outcome": "success",

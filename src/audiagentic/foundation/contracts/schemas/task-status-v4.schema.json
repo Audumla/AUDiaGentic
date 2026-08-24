@@ -3,9 +3,9 @@
   "title": "Gateway task status V4",
   "type": "object",
   "additionalProperties": false,
-  "required": ["request-id", "lifecycle", "activity", "outcome"],
+  "required": ["task_id", "lifecycle", "activity", "outcome"],
   "properties": {
-    "request-id": {
+    "task_id": {
       "type": "string",
       "minLength": 1
     },
