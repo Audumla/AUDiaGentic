@@ -31,6 +31,19 @@ def test_agents_config_path_is_canonical(tmp_path: Path) -> None:
     assert agents_config_path(tmp_path) == tmp_path / ".audiagentic" / "config" / "agents.yaml"
 
 
+def test_legacy_prompt_profiles_are_not_republished() -> None:
+    document = AgentsConfigDocument.from_mapping(
+        {
+            "contract-version": "v2",
+            "prompt_profiles": {
+                "coder": {"template_with_body": "agent-templates/coder.md"}
+            },
+        }
+    )
+    assert document.prompt_profiles == ()
+    assert "prompt_profiles" not in document.to_mapping()
+
+
 def test_agents_component_does_not_depend_on_legacy_agent_jobs() -> None:
     root = Path(__file__).resolve().parents[3] / "src" / "audiagentic" / "components" / "agents"
     violations: list[str] = []

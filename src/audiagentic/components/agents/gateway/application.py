@@ -274,3 +274,4 @@ _APPLICATION: GatewayApplication = InProcessGatewayApplication()
 def get_gateway_application() -> GatewayApplication:
     """Return this process's sole gateway control-plane application."""
     return _APPLICATION
+

@@ -86,3 +86,4 @@ def resolve_pending_capacity(params: dict[str, Any], virtual_capacity: int | Non
     return value
 
 __all__ = ["resolve_capacity_limits", "resolve_pending_capacity", "resolve_virtual_capacity"]
+

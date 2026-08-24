@@ -333,3 +333,4 @@ def test_validate_project_config_rejects_incompatible_project(
         validate_project_gpt_auto_config(project)
 
     assert exc_info.value.code == "VAL-GPTAUTO-001"
+

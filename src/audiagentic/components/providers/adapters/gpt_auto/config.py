@@ -682,3 +682,4 @@ def _chatgpt_url(value: Any) -> str:
     if not parse_project_id(value):
         _invalid("project-url must identify a ChatGPT Project")
     return value.rstrip("/")
+
