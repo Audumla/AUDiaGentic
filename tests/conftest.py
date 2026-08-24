@@ -60,7 +60,11 @@ def _isolate_audiagentic_home(
 
 @pytest.fixture(autouse=True)
 def _seed_global_agent_prompt_profiles(_isolate_audiagentic_home) -> None:
-    """Provide the canonical global prompt-profile authority to unit tests."""
+    """Provide a minimal global prompt authority to unit tests.
+
+    The fixture name is retained for test-call compatibility; prompt profiles
+    are no longer part of the canonical agents document.
+    """
     from audiagentic.foundation.paths.home import audiagentic_home
 
     config = audiagentic_home() / "config"
@@ -68,20 +72,8 @@ def _seed_global_agent_prompt_profiles(_isolate_audiagentic_home) -> None:
     templates.mkdir(parents=True, exist_ok=True)
     (config / "agents.yaml").write_text(
         """contract-version: v2
-prompt_profiles:
-  default:
-    template_with_body: agent-templates/default-with-body.md
-  review:
-    template_with_body: agent-templates/review-with-body.md
+prompts: {}
 """,
-        encoding="utf-8",
-    )
-    (templates / "default-with-body.md").write_text(
-        "Execution request for {title}. request={request-id} provider={provider-id} model={model}. Return a concise execution summary or the blocking reason if execution is impossible. Prompt body: {prompt-body}",
-        encoding="utf-8",
-    )
-    (templates / "review-with-body.md").write_text(
-        "Review execution request for {title}. request={request-id} provider={provider-id} model={model}. Review the supplied work carefully and return a concise execution summary or the blocking reason if execution is impossible. Prompt body: {prompt-body}",
         encoding="utf-8",
     )
 

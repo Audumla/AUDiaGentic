@@ -59,7 +59,6 @@ def save_execution_profiles(project_root: Path, store: ExecutionProfileStore) ->
         tuple(store.to_dicts()),
         snapshot.document.agents,
         snapshot.document.triggers,
-        snapshot.document.prompt_profiles,
     )
     try:
         repository.replace(project_root, document, expected_digest=snapshot.digest)
@@ -94,7 +93,6 @@ def seed_execution_profiles(project_root: Path) -> None:
         (*snapshot.document.execution_profiles, execution_profile_to_dict(profile)),
         snapshot.document.agents,
         snapshot.document.triggers,
-        snapshot.document.prompt_profiles,
     )
     repository.replace(
         project_root,

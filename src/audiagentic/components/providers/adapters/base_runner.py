@@ -233,46 +233,34 @@ def default_build_prompt(
     prompt_profile_id: str = "default",
     context_overrides: dict[str, Any] | None = None,
 ) -> str:
-    """Build the provider prompt from the resolved prompt profile.
+    """Return the immutable prompt admitted by the gateway.
 
-    The default profile is a compatibility extraction of the former f-string;
-    profile resolution happens before this seam and is never read from config
-    here.
+    Prompt definitions are now the sole public prompt authority.  The gateway
+    materializes their complete text (including context and user body) before
+    dispatch, so provider adapters must not consult a second prompt-template
+    catalog or re-render mutable configuration here.  ``prompt_profile_id``
+    remains an ignored compatibility parameter for direct adapter callers.
     """
     prompt_body = packet_ctx.get("prompt-body")
-    from audiagentic.components.providers.services.execution.agent_prompt_profiles import (
-        load_profile_template,
-        verify_template_digest,
-    )
-    from audiagentic.foundation.templates import render_template
+    if not isinstance(prompt_body, str) or not prompt_body.strip():
+        from audiagentic.foundation.contracts.errors import AudiaGenticError
 
-    if not isinstance(prompt_profile_id, str) or not prompt_profile_id.strip():
-        raise ValueError("prompt_profile_id must be a non-empty string")
-    has_body = isinstance(prompt_body, str) and bool(prompt_body.strip())
-    template_name = packet_ctx.get("prompt-template-name")
-    template_digest = packet_ctx.get("prompt-template-digest")
-    if isinstance(template_name, str) and isinstance(template_digest, str):
-        template = verify_template_digest(template_name, template_digest)
-    else:
-        template, template_name, _ = load_profile_template(prompt_profile_id, has_body=has_body)
-    context = {
-        # Preserve the legacy f-string's Python coercion. The shared renderer
-        # intentionally maps None to empty text, which is not compatible here.
-        "title": str(title),
-        "job-id": str(packet_ctx.get("job-id")),
-        "packet-id": str(packet_ctx.get("packet-id")),
-        "request-id": str(packet_ctx.get("request-id")),
-        "provider-id": str(packet_ctx.get("provider-id", provider_id)),
-        "model": str(provider_cfg.get("default-model")),
-        "workflow-profile": str(packet_ctx.get("workflow-profile")),
-        "prompt-body": str(prompt_body).strip() if has_body else "",
-    }
-    template_context = packet_ctx.get("template-context")
-    if isinstance(template_context, dict):
-        context.update(template_context)
-    if context_overrides:
-        context.update(context_overrides)
-    return render_template(template, context).strip()
+        raise AudiaGenticError(
+            code="VAL-APT-001",
+            kind="agents",
+            message="agent execution requires a non-empty prompt body",
+            details={},
+        )
+    # This is provider-internal framing, not a configurable prompt authority.
+    # The admitted prompt remains the only mutable/user-owned content.
+    return (
+        f"Execution request for {title}. "
+        f"request={packet_ctx.get('request-id')} "
+        f"provider={packet_ctx.get('provider-id', provider_id)} "
+        f"model={provider_cfg.get('default-model')}. "
+        "Return a concise execution summary or the blocking reason if execution is impossible. "
+        f"Prompt body: {prompt_body.strip()}"
+    ).strip()
 
 
 def default_parse_completion(

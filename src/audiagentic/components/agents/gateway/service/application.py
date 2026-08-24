@@ -459,7 +459,6 @@ def _required(arguments: dict[str, Any], name: str) -> Any:
 _SUBMISSION_ARGUMENTS = {
     "agent_id",
     "execution_profile_id",
-    "prompt_profile_id",
     "prompt_body",
     "mode",
     "timeout_seconds",
@@ -601,3 +600,4 @@ _WORK_PRODUCING_OPERATIONS = frozenset(
 
 
 __all__ = ["CAPABILITIES", "GatewayServiceApplication", "PROTOCOL_VERSION"]
+

@@ -1563,3 +1563,4 @@ def test_project_queue_depths_redacted(tmp_path: Path):
 
     # Keys are lane public ids — no project paths
     assert "overview-profile" in depths
+

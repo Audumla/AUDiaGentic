@@ -13,6 +13,7 @@ never persisted (only its digest); it is threaded to dispatch via functools.part
 from __future__ import annotations
 
 import functools
+import hashlib
 import uuid
 from pathlib import Path
 from typing import Any
@@ -432,11 +433,11 @@ def submit_execution_request(
                 details={"agent-id": agent_id},
             ) from exc
         execution_profile_id = composition.execution_profile.profile_id
-        # ``profile_id`` is the provider packet wrapper. ``prompt_id`` is the
-        # agent's actual global instruction definition; they are distinct
-        # configuration axes and must never be substituted for each other.
-        raw_agent = next(item for item in catalog.document.agents if item.get("agent_id") == agent_id)
-        prompt_profile_id = str(raw_agent.get("profile_id") or "default")
+        # Prompt definitions are the sole public prompt authority.  The old
+        # provider prompt-profile collection was a second, mutable authority;
+        # retain only the canonical prompt identity in the durable provenance
+        # slot while the provider receives the admitted materialized text.
+        prompt_profile_id = composition.prompt.prompt_id
         render_context = {**template_context, "prompt-body": prompt_body}
         dispatch_prompt = materialize_agent_prompt(
             composition.prompt,
@@ -445,11 +446,8 @@ def submit_execution_request(
             template_context=render_context,
         )
 
-    from audiagentic.components.providers.providers_api import load_agent_prompt_template
-
-    _, prompt_template_name, prompt_template_digest = load_agent_prompt_template(
-        prompt_profile_id, has_body=bool(prompt_body and prompt_body.strip())
-    )
+    prompt_template_name = f"prompt-definition:{prompt_profile_id}"
+    prompt_template_digest = hashlib.sha256(dispatch_prompt.encode("utf-8")).hexdigest()
 
     # --- 1b. Pre-generate session ID if keep-alive without continuation ---
     # The runtime owns session ID generation; the caller never invents one.
@@ -738,6 +736,119 @@ def get_execution_request(
     """Return the public durable status plus the canonical agent-status snapshot."""
     record = store.read_public_status(project_root, request_id)
     return _attach_agent_status(record, project_root, response_version=response_version)
+
+
+def get_execution_diagnostics(
+    project_root: Path, request_id: str, *, limit: int = 25
+) -> dict[str, Any]:
+    """Return bounded operator diagnostics for one request.
+
+    This is intentionally separate from the cheap lifecycle status operation:
+    it returns the semantic rollup and at most ``limit`` redacted evidence
+    items, never prompts, full provider payloads, DOM, CDP handles, or output.
+    """
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+        raise AudiaGenticError(
+            code="VAL-AGW-142",
+            kind="agents",
+            message="diagnostic limit must be an integer between 1 and 100",
+            details={"limit": limit},
+        )
+    record = store.read_record(project_root, request_id)
+    evidence = record.get("diagnostic-evidence")
+    if not isinstance(evidence, list):
+        evidence = []
+    return {
+        "request-id": request_id,
+        "session-id": record.get("session-id"),
+        "state": record.get("state"),
+        "diagnostics": record.get("diagnostics"),
+        "evidence": evidence[-limit:],
+        "latest-transition": store.latest_transition_projection(project_root, request_id),
+    }
+
+
+def recover_execution_request(
+    project_root: Path,
+    request_id: str,
+    *,
+    action: str,
+    expected_revision: int | None = None,
+) -> dict[str, Any]:
+    """Apply one safe, idempotent recovery intent to a request.
+
+    ``reconcile`` only records the operator intent; the provider adapter owns
+    the actual read-only reconciliation. ``abandon`` records cancellation
+    provenance and asks the live session to stop. ``clear-not-submitted`` is
+    deliberately allowed only when the durable side-effect axis is
+    definitively ``not-started``. No action ever sends a new provider prompt.
+    """
+    if action not in {"reconcile", "abandon", "clear-not-submitted"}:
+        raise AudiaGenticError(
+            code="VAL-AGW-144", kind="agents", message="unknown gateway recovery action", details={"action": action}
+        )
+    record = store.read_record(project_root, request_id)
+    if expected_revision is not None and record.get("revision") != expected_revision:
+        raise AudiaGenticError(
+            code="CON-AGW-143", kind="agents", message="diagnostic recovery revision is stale", details={"request-id": request_id}
+        )
+    diagnostics = record.get("diagnostics")
+    if not isinstance(diagnostics, dict):
+        raise AudiaGenticError(
+            code="CON-AGW-145", kind="agents", message="request has no recoverable diagnostic evidence", details={"request-id": request_id}
+        )
+    if action == "clear-not-submitted" and diagnostics.get("side-effect-state") != "not-started":
+        raise AudiaGenticError(
+            code="CON-AGW-146", kind="agents", message="request side effect is not proven absent", details={"request-id": request_id}
+        )
+    updated_diagnostics = dict(diagnostics)
+    recovery = dict(updated_diagnostics.get("recovery") or {})
+    if action == "reconcile":
+        recovery["disposition"] = "reconcile-required"
+        recovery["allowed-actions"] = ["reconcile", "abandon"]
+        updated_diagnostics["resolution-state"] = "reconciliation-requested"
+    elif action == "abandon":
+        recovery["disposition"] = "retire-conversation-required"
+        recovery["allowed-actions"] = []
+        updated_diagnostics["resolution-state"] = "abandon-requested"
+        updated = store.cancel_queued_or_mark_requested(
+            project_root,
+            request_id,
+            source="operator",
+            actor_type="operator",
+            reason="diagnostic-recovery-abandon",
+            diagnostics=updated_diagnostics,
+            expected_revision=record.get("revision"),
+        )
+        return {
+            "request-id": request_id,
+            "action": action,
+            "disposition": "accepted",
+            "state": updated.get("state"),
+            "revision": updated.get("revision"),
+            "diagnostics": updated.get("diagnostics"),
+        }
+    else:
+        recovery["disposition"] = "retry-safe"
+        recovery["allowed-actions"] = ["retry"]
+        updated_diagnostics["resolution-state"] = "cleared-not-submitted"
+    updated_diagnostics["recovery"] = recovery
+    updated = store.update_diagnostics(
+        project_root,
+        request_id,
+        updated_diagnostics,
+        # Every recovery intent is a compare-and-swap mutation.  Abandon is
+        # handled above as one atomic cancellation+diagnostic operation.
+        expected_revision=record.get("revision"),
+    )
+    return {
+        "request-id": request_id,
+        "action": action,
+        "disposition": "accepted",
+        "state": updated.get("state"),
+        "revision": updated.get("revision"),
+        "diagnostics": updated.get("diagnostics"),
+    }
 
 
 def get_execution_diagnostics(
@@ -1370,3 +1481,4 @@ def gateway_overview(project_root: Path) -> dict[str, Any]:
         "runtime-fingerprint": _runtime_fingerprint(),
         "diagnostics": provider_diagnostics,
     }
+

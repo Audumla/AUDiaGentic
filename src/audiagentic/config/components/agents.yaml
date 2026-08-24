@@ -434,3 +434,4 @@ contributions:
         `workflow-profile`, and `component-profile` — three distinct
         "profile" concepts already exist in this project; a role is a fourth,
         separate axis and must not collapse into any of them by accident.
+
