@@ -177,6 +177,55 @@
       "type": ["string", "null"],
       "enum": ["cancelled", "worker-process-exited", "provider-terminal-error", "verified-stall", "absolute-safety-ceiling", null]
     },
+    "diagnostics": {
+      "type": ["object", "null"],
+      "properties": {
+        "version": {"type": "integer", "minimum": 1},
+        "classification": {"type": "string"},
+        "certainty": {"type": "string"},
+        "phase": {"type": "string"},
+        "side-effect-state": {"type": "string"},
+        "resolution-state": {"type": "string"},
+        "failure-code": {"type": ["string", "null"]},
+        "reason-code": {"type": ["string", "null"]},
+        "provider-signals": {"type": "array", "maxItems": 8, "items": {"type": "string", "maxLength": 128}},
+        "evidence-count": {"type": "integer", "minimum": 0},
+        "coalesced-observation-count": {"type": "integer", "minimum": 0},
+        "recovery": {
+          "type": "object",
+          "properties": {
+            "disposition": {"type": "string"},
+            "allowed-actions": {"type": "array", "maxItems": 8, "items": {"type": "string", "maxLength": 64}}
+          },
+          "required": ["disposition", "allowed-actions"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["version", "classification", "certainty", "phase", "side-effect-state", "resolution-state", "evidence-count", "coalesced-observation-count", "recovery"],
+      "additionalProperties": false
+    },
+    "diagnostic-evidence": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "properties": {
+          "evidence-id": {"type": "string", "maxLength": 128},
+          "sequence": {"type": "integer", "minimum": 0},
+          "request-id": {"type": ["string", "null"], "maxLength": 128},
+          "session-id": {"type": ["string", "null"], "maxLength": 128},
+          "attempt-epoch": {"type": "integer", "minimum": 0},
+          "phase": {"type": "string", "maxLength": 64},
+          "kind": {"type": "string", "maxLength": 64},
+          "certainty": {"type": "string", "maxLength": 32},
+          "side-effect-state": {"type": "string", "maxLength": 64},
+          "source": {"type": ["string", "null"], "maxLength": 128},
+          "source-sequence": {"type": ["integer", "null"], "minimum": 0}
+        },
+        "required": ["evidence-id", "sequence", "phase", "kind", "certainty", "side-effect-state"],
+        "additionalProperties": false
+      }
+    },
     "watchdog-policy": {
       "type": ["object", "null"],
       "properties": {
@@ -242,6 +291,18 @@
     },
     "cancel-acknowledged-by": {
       "type": ["string", "null"]
+    },
+    "cancel-provenance": {
+      "type": ["object", "null"],
+      "properties": {
+        "source": {"type": "string", "enum": ["api", "operator", "watchdog", "worker-shutdown", "system", "unknown-legacy"]},
+        "actor-type": {"type": "string", "enum": ["client", "operator", "worker", "system", "unknown"]},
+        "actor-id": {"type": ["string", "null"], "maxLength": 128},
+        "reason": {"type": ["string", "null"], "maxLength": 256},
+        "requested-at": {"type": "string"}
+      },
+      "required": ["source", "actor-type", "actor-id", "reason", "requested-at"],
+      "additionalProperties": false
     },
     "revision": {"type": "integer", "minimum": 0},
     "worker-id": {"type": ["string", "null"]},

@@ -218,6 +218,8 @@ mcp-servers:
       - agent_task_list_definitions
       - agent_task_submit
       - agent_task_status
+      - agent_task_diagnostics
+      - agent_task_recover
       - agent_task_response
       - agent_task_cancel
       - agent_task_list_requests
@@ -245,6 +247,7 @@ mcp-servers:
       the caller never invents one; it only references session-ids from
       previous responses to continue a conversation.
       agent_task_status/cancel/list_requests/gateway_overview/
+      diagnostics/recover/
       session_list/session_close/session_control/session_resume work identically regardless of which
       execution profile a request resolved through.
       Async-only over MCP: submit returns request-id immediately; poll
@@ -287,6 +290,14 @@ mcp-servers:
         Response content and previews are never included in status; use
         agent_task_response for the exact terminal response. Raises
         RES-AGW-001 if not found.
+      agent_task_diagnostics: >
+        Return bounded semantic failure classification, recovery disposition,
+        and redacted provider/activity evidence for one request. This never
+        includes prompts, full responses, DOM, CDP handles, or credentials.
+      agent_task_recover: >
+        Request a safe diagnostic recovery intent: reconcile, abandon, or
+        clear-not-submitted. Recovery never resends a provider prompt; poll
+        status and diagnostics for the resulting lifecycle evidence.
       agent_task_response: >
         Return a bounded response envelope. Small verified terminal responses
         are returned inline as {delivery: inline, text, bytes}. Responses
