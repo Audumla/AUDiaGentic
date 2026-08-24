@@ -220,12 +220,15 @@ def mark_cancel_requested(
             return record
         updated = dict(record)
         updated["cancel-requested"] = True
-        updated["diagnostics"] = classify_error(
-            {"code": "CON-AGW-CANCELLED"},
-            phase="cancellation",
-            side_effect_state=(record.get("diagnostics") or {}).get("side-effect-state")
-            if isinstance(record.get("diagnostics"), dict)
-            else None,
+        updated["diagnostics"] = merge_diagnostics(
+            record.get("diagnostics"),
+            classify_error(
+                {"code": "CON-AGW-CANCELLED"},
+                phase="cancellation",
+                side_effect_state=(record.get("diagnostics") or {}).get("side-effect-state")
+                if isinstance(record.get("diagnostics"), dict)
+                else None,
+            ),
         )
         updated["cancel-provenance"] = {
             "source": source if source in {"api", "operator", "watchdog", "worker-shutdown", "system", "unknown-legacy"} else "unknown-legacy",

@@ -169,6 +169,27 @@ def test_cancellation_preserves_unresolved_side_effect_diagnostics(tmp_path) -> 
     assert cancelled["diagnostics"]["resolution-state"] == "unresolved"
 
 
+def test_mark_cancel_requested_preserves_unresolved_side_effect_diagnostics(tmp_path) -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="cancel")
+    store.write_record(tmp_path, record)
+    running = store.transition_record(
+        tmp_path,
+        record["request-id"],
+        "running",
+        updates={"error": {"code": "EXT-GPTAUTO-003", "details": {"submission-ambiguous": True}}},
+    )
+    cancelled = store.mark_cancel_requested(
+        tmp_path,
+        record["request-id"],
+        source="watchdog",
+        actor_type="system",
+        reason="lease-expired",
+    )
+    assert cancelled["revision"] == running["revision"] + 1
+    assert cancelled["diagnostics"]["classification"] == "ambiguous-side-effect"
+    assert cancelled["diagnostics"]["resolution-state"] == "unresolved"
+
+
 def test_abandon_recovery_is_single_cas_operation(tmp_path) -> None:
     record = store.build_record(execution_profile_id="default", prompt_body="abandon")
     store.write_record(tmp_path, record)
