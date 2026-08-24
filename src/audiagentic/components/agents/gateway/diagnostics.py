@@ -246,9 +246,19 @@ def merge_diagnostics(
             "disposition": RecoveryDisposition.RECONCILE_REQUIRED.value,
             "allowed-actions": ["reconcile", "abandon"],
         }
-    if previous.get("classification") == FailureClass.AMBIGUOUS_SIDE_EFFECT.value:
+    # An ambiguous observation remains unresolved while the side-effect axis
+    # is unchanged or regresses. Once a later candidate carries stronger
+    # proof (submission-proven or terminal-evidence-seen), allow its
+    # resolution/classification to advance instead of pinning the record
+    # forever in unresolved state.
+    if (
+        previous.get("classification") == FailureClass.AMBIGUOUS_SIDE_EFFECT.value
+        and _SIDE_EFFECT_RANK.get(candidate_state, 0)
+        <= _SIDE_EFFECT_RANK.get(previous_state, 0)
+    ):
         merged["classification"] = previous["classification"]
-        merged["resolution-state"] = "unresolved"
+        if merged.get("resolution-state") not in {"abandon-requested", "reconciliation-requested"}:
+            merged["resolution-state"] = "unresolved"
     merged["evidence-count"] = max(int(previous.get("evidence-count", 0) or 0), int(merged.get("evidence-count", 0) or 0))
     merged["coalesced-observation-count"] = max(
         int(previous.get("coalesced-observation-count", 0) or 0),
@@ -259,12 +269,15 @@ def merge_diagnostics(
 
 def _allowed_actions(disposition: RecoveryDisposition) -> list[str]:
     return {
-        RecoveryDisposition.RETRY_SAFE: ["retry"],
+        # The public recovery endpoint deliberately has no force-resend or
+        # generic retry operation.  A definitively unsubmitted request can be
+        # cleared through the named safe operation instead.
+        RecoveryDisposition.RETRY_SAFE: ["clear-not-submitted"],
         RecoveryDisposition.RECONCILE_REQUIRED: ["reconcile", "abandon"],
-        RecoveryDisposition.ADOPT_SAFE: ["adopt"],
+        RecoveryDisposition.ADOPT_SAFE: [],
         RecoveryDisposition.OPERATOR_ADOPT_AVAILABLE: ["reconcile", "abandon"],
-        RecoveryDisposition.RETIRE_CONVERSATION_REQUIRED: ["retire"],
-        RecoveryDisposition.BLOCKED: ["inspect"],
+        RecoveryDisposition.RETIRE_CONVERSATION_REQUIRED: ["abandon"],
+        RecoveryDisposition.BLOCKED: [],
         RecoveryDisposition.NONE: [],
     }[disposition]
 

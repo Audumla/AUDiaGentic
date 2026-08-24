@@ -64,6 +64,25 @@ def test_diagnostics_side_effect_state_never_regresses() -> None:
     assert merged["resolution-state"] == "unresolved"
 
 
+def test_diagnostics_can_resolve_after_stronger_side_effect_evidence() -> None:
+    previous = classify_error(
+        {"code": "EXT-GPTAUTO-004", "details": {"submission-ambiguous": True}}
+    )
+    candidate = {
+        "version": 1,
+        "classification": "timeout",
+        "certainty": "strong",
+        "phase": "terminal-observation",
+        "side-effect-state": "submission-proven",
+        "resolution-state": "resolved",
+        "recovery": {"disposition": "none", "allowed-actions": []},
+    }
+    merged = merge_diagnostics(previous, candidate)
+    assert merged["side-effect-state"] == "submission-proven"
+    assert merged["classification"] == "timeout"
+    assert merged["resolution-state"] == "resolved"
+
+
 def test_lease_expiry_persists_bounded_diagnostics_and_evidence(tmp_path) -> None:
     record = store.build_record(execution_profile_id="default", prompt_body="inspect")
     store.write_record(tmp_path, record)
@@ -126,4 +145,46 @@ def test_recovery_requires_proven_absence_for_clear_not_submitted(tmp_path) -> N
         assert exc.code == "CON-AGW-146"
     else:  # pragma: no cover - assertion guard
         raise AssertionError("ambiguous side effect was incorrectly cleared")
+
+
+def test_cancellation_preserves_unresolved_side_effect_diagnostics(tmp_path) -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="cancel")
+    store.write_record(tmp_path, record)
+    running = store.transition_record(
+        tmp_path,
+        record["request-id"],
+        "running",
+        updates={"error": {"code": "EXT-GPTAUTO-003", "details": {"submission-ambiguous": True}}},
+    )
+    cancelled = store.cancel_queued_or_mark_requested(
+        tmp_path,
+        record["request-id"],
+        source="operator",
+        actor_type="operator",
+        reason="diagnostic-recovery-abandon",
+        expected_revision=running["revision"],
+    )
+    assert cancelled["diagnostics"]["classification"] == "ambiguous-side-effect"
+    assert cancelled["diagnostics"]["side-effect-state"] == "may-have-started"
+    assert cancelled["diagnostics"]["resolution-state"] == "unresolved"
+
+
+def test_abandon_recovery_is_single_cas_operation(tmp_path) -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="abandon")
+    store.write_record(tmp_path, record)
+    running = store.transition_record(
+        tmp_path,
+        record["request-id"],
+        "running",
+        updates={"error": {"code": "EXT-GPTAUTO-003", "details": {"submission-ambiguous": True}}},
+    )
+    result = recover_execution_request(
+        tmp_path,
+        record["request-id"],
+        action="abandon",
+        expected_revision=running["revision"],
+    )
+    assert result["disposition"] == "accepted"
+    assert result["revision"] == running["revision"] + 1
+    assert result["diagnostics"]["resolution-state"] == "abandon-requested"
 
