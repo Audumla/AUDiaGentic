@@ -202,6 +202,45 @@ def test_legacy_migration_writes_global_catalog_not_project_catalog(tmp_path: Pa
     assert second_digest == first_digest
 
 
+def test_legacy_migration_never_overwrites_existing_global_catalog(tmp_path: Path) -> None:
+    """Migration is an explicit create-only operation with collision safety."""
+    config = tmp_path / ".audiagentic" / "config"
+    config.mkdir(parents=True)
+    save_yaml_file(config / "roles.yaml", {"roles": [{"role_id": "legacy", "instructions": "old"}]})
+    save_yaml_file(config / "execution-profiles.yaml", {"profiles": []})
+    save_yaml_file(config / "agent-definitions.yaml", {"agent-definitions": []})
+
+    global_path = global_agents_config_path()
+    canonical = {
+        "contract-version": "v2",
+        "prompts": {},
+        "roles": {"current": {"description": "keep"}},
+        "execution_profiles": {},
+        "agents": {},
+        "triggers": {},
+    }
+    save_yaml_file(global_path, canonical)
+    before = global_path.read_bytes()
+
+    digest = migrate_legacy_config(tmp_path)
+
+    assert global_path.read_bytes() == before
+    assert digest == AgentsConfigRepository(global_path, required=True).read(tmp_path).digest
+
+
+def test_agents_schema_file_matches_canonical_document_shape() -> None:
+    """The packaged JSON schema must describe every canonical wire collection."""
+    import json
+
+    schema_path = Path(__file__).parents[3] / "src" / "audiagentic" / "foundation" / "contracts" / "schemas" / "agents-config.schema.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    document = AgentsConfigDocument("v2", (), (), (), ())
+    mapping = document.to_mapping()
+    assert schema["properties"]["contract-version"]["const"] == mapping["contract-version"]
+    assert set(schema["properties"]) == set(mapping)
+    assert schema["additionalProperties"] is False
+
+
 def test_canonical_mapping_key_rejects_conflicting_embedded_identity() -> None:
     with pytest.raises(ValueError, match="conflicting"):
         AgentsConfigDocument.from_mapping({

@@ -148,7 +148,6 @@ class TestResolveForAdmissionSurface:
         from audiagentic.components.agents.models.execution_profile_api import (
             create_execution_profile,
         )
-
         create_execution_profile(
             project_root,
             {
@@ -159,9 +158,22 @@ class TestResolveForAdmissionSurface:
             },
         )
 
+    def test_missing_shared_registry_fails_closed(self, tmp_path):
+        from audiagentic.components.agents.models.execution_profile_api import (
+            create_execution_profile,
+        )
+
+        create_execution_profile(
+            tmp_path,
+            {"profile_id": "registry-required", "provider_id": "pi", "instances": ["m"]},
+        )
+        profiles_mod.set_gateway_registry(None)
+        with pytest.raises(AudiaGenticError, match="shared gateway profile registry"):
+            profiles_mod.resolve_for_admission(tmp_path, "registry-required")
+
     def test_no_surface_id_resolves_unchanged(self, tmp_path):
         self._profile(tmp_path)
-        snapshot = profiles_mod.resolve_for_admission(tmp_path, "with-surface")
+        snapshot = profiles_mod.resolve_for_admission(tmp_path, "with-surface", allow_test_fallback=True)
         assert snapshot.resolved_surface_id is None
         assert snapshot.resolved_surface_version is None
 
@@ -174,7 +186,7 @@ class TestResolveForAdmissionSurface:
             return _make_resolved_surface(validated=True, surface_id=surface_id)
 
         snapshot = profiles_mod.resolve_for_admission(
-            tmp_path, "with-surface", surface_resolver=fake_resolver
+            tmp_path, "with-surface", surface_resolver=fake_resolver, allow_test_fallback=True
         )
         assert snapshot.resolved_surface_id == "pi-community-acp"
         assert snapshot.resolved_surface_version == "1.0"
@@ -189,7 +201,7 @@ class TestResolveForAdmissionSurface:
             return _make_resolved_surface(validated=False, surface_id=surface_id)
 
         with pytest.raises(AudiaGenticError) as exc_info:
-            profiles_mod.resolve_for_admission(tmp_path, "with-surface", surface_resolver=fake_resolver)
+            profiles_mod.resolve_for_admission(tmp_path, "with-surface", surface_resolver=fake_resolver, allow_test_fallback=True)
         assert exc_info.value.code == "RES-EXP-004"
         assert exc_info.value.kind == "agents"
 
@@ -205,7 +217,7 @@ class TestResolveForAdmissionSurface:
             return _make_resolved_surface(validated=False, surface_id=surface_id)
 
         try:
-            profiles_mod.resolve_for_admission(tmp_path, "with-surface", surface_resolver=fake_resolver)
+            profiles_mod.resolve_for_admission(tmp_path, "with-surface", surface_resolver=fake_resolver, allow_test_fallback=True)
         except AudiaGenticError:
             pass
         else:
@@ -226,7 +238,7 @@ class TestResolveForAdmissionSurface:
                 raise AssertionError("resolve_for_admission must not prompt")
 
         fake = _NoLaunchFake()
-        profiles_mod.resolve_for_admission(tmp_path, "with-surface", surface_resolver=fake)
+        profiles_mod.resolve_for_admission(tmp_path, "with-surface", surface_resolver=fake, allow_test_fallback=True)
 
     def test_project_local_agents_catalog_is_ignored(self, tmp_path):
         """Agent admission must not be shadowed by a project-local catalog."""
@@ -250,7 +262,7 @@ class TestResolveForAdmissionSurface:
             encoding="utf-8",
         )
 
-        snapshot = profiles_mod.resolve_for_admission(tmp_path, "global-only")
+        snapshot = profiles_mod.resolve_for_admission(tmp_path, "global-only", allow_test_fallback=True)
         assert snapshot.provider_id == "pi"
         assert snapshot.instances == ("global-model",)
 
