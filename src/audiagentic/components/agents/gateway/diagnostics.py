@@ -66,6 +66,12 @@ _MAX_ID = 128
 _MAX_TEXT = 512
 _MAX_SIGNALS = 8
 _MAX_EVIDENCE = 8
+_SIDE_EFFECT_RANK = {
+    SideEffectState.NOT_STARTED.value: 0,
+    SideEffectState.MAY_HAVE_STARTED.value: 1,
+    SideEffectState.SUBMISSION_PROVEN.value: 2,
+    SideEffectState.TERMINAL_EVIDENCE_SEEN.value: 3,
+}
 
 
 def _text(value: Any, limit: int = _MAX_TEXT) -> str | None:
@@ -123,7 +129,13 @@ def classify_error(
             details = raw_details
     code = _text(code, _MAX_ID)
     reason = _text(details.get("failure-reason") or details.get("reason-code"), _MAX_ID)
-    ambiguous = bool(details.get("submission-ambiguous")) or str(details.get("turn-state", "")) in {
+    attempted = bool(
+        details.get("submission-attempted")
+        or details.get("side-effect-attempted")
+        or str(details.get("turn-state", "")) == "side-effect-attempted"
+    )
+    proven = bool(details.get("submission-proven"))
+    ambiguous = bool(details.get("submission-ambiguous")) or attempted and not proven or str(details.get("turn-state", "")) in {
         "side-effect-attempted",
         "submission-ambiguous",
     }
@@ -132,6 +144,12 @@ def classify_error(
         certainty = EvidenceCertainty.STRONG
         recovery = RecoveryDisposition.OPERATOR_ADOPT_AVAILABLE
         default_phase = ObservationPhase.RECONCILIATION
+        default_side_effect = SideEffectState.MAY_HAVE_STARTED
+    elif code == "EXT-GPTAUTO-002" and reason == "response-policy-timeout":
+        classification = FailureClass.TIMEOUT
+        certainty = EvidenceCertainty.STRONG
+        recovery = RecoveryDisposition.RECONCILE_REQUIRED
+        default_phase = ObservationPhase.TERMINAL_OBSERVATION
         default_side_effect = SideEffectState.MAY_HAVE_STARTED
     elif code == "EXT-GPTAUTO-002" and (
         reason in {"rate-limit-dialog", "rate-limit", "usage-limit"}
@@ -178,7 +196,7 @@ def classify_error(
         recovery = RecoveryDisposition.BLOCKED
         default_phase = ObservationPhase.FINALIZATION
         default_side_effect = SideEffectState.NOT_STARTED
-    return {
+    result = {
         "version": 1,
         "classification": classification.value,
         "certainty": certainty.value,
@@ -195,6 +213,48 @@ def classify_error(
             "allowed-actions": _allowed_actions(recovery),
         },
     }
+    # A provider-side attempt without proof is never safe to clear or retry,
+    # regardless of which adapter error code wrapped the attempt.
+    if attempted and not proven:
+        result["classification"] = FailureClass.AMBIGUOUS_SIDE_EFFECT.value
+        result["certainty"] = EvidenceCertainty.STRONG.value
+        result["side-effect-state"] = SideEffectState.MAY_HAVE_STARTED.value
+        result["resolution-state"] = "unresolved"
+        result["recovery"] = {
+            "disposition": RecoveryDisposition.RECONCILE_REQUIRED.value,
+            "allowed-actions": ["reconcile", "abandon"],
+        }
+    return result
+
+
+def merge_diagnostics(
+    previous: Mapping[str, Any] | None,
+    candidate: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Merge a new rollup without regressing side-effect certainty."""
+    merged = dict(candidate)
+    if not isinstance(previous, Mapping):
+        return merged
+    previous_state = str(previous.get("side-effect-state", SideEffectState.NOT_STARTED.value))
+    candidate_state = str(merged.get("side-effect-state", SideEffectState.NOT_STARTED.value))
+    if _SIDE_EFFECT_RANK.get(previous_state, 0) > _SIDE_EFFECT_RANK.get(candidate_state, 0):
+        merged["side-effect-state"] = previous_state
+        merged["classification"] = previous.get("classification", merged.get("classification"))
+        merged["certainty"] = previous.get("certainty", merged.get("certainty"))
+        merged["resolution-state"] = "unresolved"
+        merged["recovery"] = {
+            "disposition": RecoveryDisposition.RECONCILE_REQUIRED.value,
+            "allowed-actions": ["reconcile", "abandon"],
+        }
+    if previous.get("classification") == FailureClass.AMBIGUOUS_SIDE_EFFECT.value:
+        merged["classification"] = previous["classification"]
+        merged["resolution-state"] = "unresolved"
+    merged["evidence-count"] = max(int(previous.get("evidence-count", 0) or 0), int(merged.get("evidence-count", 0) or 0))
+    merged["coalesced-observation-count"] = max(
+        int(previous.get("coalesced-observation-count", 0) or 0),
+        int(merged.get("coalesced-observation-count", 0) or 0),
+    )
+    return merged
 
 
 def _allowed_actions(disposition: RecoveryDisposition) -> list[str]:
@@ -202,7 +262,7 @@ def _allowed_actions(disposition: RecoveryDisposition) -> list[str]:
         RecoveryDisposition.RETRY_SAFE: ["retry"],
         RecoveryDisposition.RECONCILE_REQUIRED: ["reconcile", "abandon"],
         RecoveryDisposition.ADOPT_SAFE: ["adopt"],
-        RecoveryDisposition.OPERATOR_ADOPT_AVAILABLE: ["reconcile", "adopt", "abandon", "retire"],
+        RecoveryDisposition.OPERATOR_ADOPT_AVAILABLE: ["reconcile", "abandon"],
         RecoveryDisposition.RETIRE_CONVERSATION_REQUIRED: ["retire"],
         RecoveryDisposition.BLOCKED: ["inspect"],
         RecoveryDisposition.NONE: [],
@@ -244,5 +304,6 @@ __all__ = [
     "SideEffectState",
     "classify_error",
     "evidence_from_activity",
+    "merge_diagnostics",
 ]
 
