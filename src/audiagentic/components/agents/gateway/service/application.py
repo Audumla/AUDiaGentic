@@ -27,6 +27,9 @@ service_conflict_error = make_error_factory("CON", "AGSV", "gateway-service")
 CAPABILITIES = (
     "requests.submit",
     "requests.status",
+    "requests.diagnostics",
+    "requests.recover",
+    "requests.response",
     "requests.wait",
     "requests.cancel",
     "sessions.list",
