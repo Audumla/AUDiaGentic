@@ -165,6 +165,44 @@ def test_public_status_contains_canonical_agent_status(tmp_path: Path, monkeypat
     assert status["agent-status"]["outcome"] == "success"
 
 
+def test_public_status_v4_is_explicit_slim_four_key_projection(tmp_path: Path, monkeypatch):
+    _make_profile(tmp_path, "default", "local-openai")
+
+    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+        return _result(
+            {
+                "provider-id": execution_request["provider-id"],
+                "status": "ok",
+                "model": "gpt-4o",
+                "output": "done",
+            }
+        )
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
+        fake_execute_provider,
+    )
+    result = gateway.run_execution_request(tmp_path, prompt_body="hi")
+
+    status = gateway.get_execution_request(
+        tmp_path, result["request-id"], response_version=4
+    )
+    assert status == {
+        "request-id": result["request-id"],
+        "lifecycle": "terminal",
+        "activity": None,
+        "outcome": "success",
+    }
+
+
+def test_public_status_rejects_unknown_response_version(tmp_path: Path):
+    record = store.build_record(execution_profile_id="default", prompt_body="hi")
+    store.write_record(tmp_path, record)
+    with pytest.raises(AudiaGenticError) as exc_info:
+        gateway.get_execution_request(tmp_path, record["request-id"], response_version=99)
+    assert exc_info.value.code == "VAL-AGW-147"
+
+
 def test_active_component_profile_changes_execution_fingerprint(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
 

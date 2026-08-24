@@ -132,12 +132,15 @@ IO-AGD-001: "Failed to read the machine-global agents configuration file. Check 
 IO-AGD-002: "Failed to write the agent definitions configuration file. Check disk permissions and available space."
 # Packaged prompt-profile assets (AG16/AG19)
 CFG-APT-001: "The configured prompt profile is unknown. Use a registered prompt profile."
+CFG-APT-002: "The global agent prompt-profile configuration is unavailable or invalid."
 IO-APT-001: "The packaged prompt-profile template is missing or unreadable."
 CON-APT-001: "The admitted prompt-profile template changed before dispatch; resubmit the request."
 CON-AGW-140: "The gateway response artifact failed its integrity check."
 CON-AGW-143: "The diagnostic recovery request used a stale record revision; reload status and retry with the current revision."
 CON-AGW-145: "The request has no durable diagnostic evidence that can support recovery."
 CON-AGW-146: "Clear-not-submitted is allowed only when the gateway has proven that no provider side effect occurred."
+VAL-AGW-147: "The requested gateway public response version is unsupported or malformed."
+CON-AGW-147: "The request's durable state and canonical status snapshot contradict; status V4 cannot be emitted."
 RES-AGW-141: "The gateway response artifact is unavailable for this request."
 # Test-only error codes for classify_failure unit tests
 VAL-X-001: "Test validation error code"

@@ -1,9 +1,10 @@
 # GP09/GP20: packaged defaults for the gpt-auto provider's settings.
 #
 # Project config files under .audiagentic/config/providers/gpt-auto*.yaml
-# become sparse overlays -- they only need to specify project-url (always
-# required, since it identifies which ChatGPT project this project talks
-# to) plus any genuine overrides. Everything else is inherited from here.
+# become sparse overlays -- they may specify project-url when a provider
+# profile is intentionally pinned to one ChatGPT project. When it is absent,
+# the admitted project name is used for project discovery. Everything else is
+# inherited from here.
 #
 # This file was extracted from the AUDiaGentic project's own gpt-auto.yaml,
 # which had accumulated the fullest set of hard-won live-debugging comments;
