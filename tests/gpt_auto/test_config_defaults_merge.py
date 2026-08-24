@@ -286,6 +286,36 @@ def test_runtime_provider_metadata_enabled_flag_is_not_runtime_setting(
     assert config.turn.response_timeout_seconds == 3600
 
 
+def test_metadata_only_provider_file_still_rejects_unknown_runtime_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Metadata filtering must not turn arbitrary keys into valid config."""
+    monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path / "audihome"))
+    provider_dir = tmp_path / "project" / ".audiagentic" / "config" / "providers"
+    provider_dir.mkdir(parents=True)
+    (provider_dir / "gpt-auto.yaml").write_text(
+        "install-mode: external-configured\n"
+        "access-mode: none\n"
+        "typo-runtime-key: true\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(AudiaGenticError) as exc_info:
+        validate_project_gpt_auto_config(provider_dir.parents[2])
+
+    assert exc_info.value.code == "VAL-GPTAUTO-001"
+
+
+def test_enabled_inside_settings_is_not_silently_treated_as_metadata() -> None:
+    """Only the derived wrapper flag is metadata; settings remain strict."""
+    with pytest.raises(AudiaGenticError) as exc_info:
+        GptAutoConfig.from_project_dict(
+            {"settings": {"contract-version": "v1", "enabled": True}}
+        )
+
+    assert exc_info.value.code == "VAL-GPTAUTO-001"
+
+
 def test_validate_project_config_rejects_incompatible_project(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
