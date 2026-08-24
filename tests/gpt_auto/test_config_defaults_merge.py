@@ -262,6 +262,30 @@ def test_metadata_only_project_provider_file_resolves_to_defaults(
     assert config.turn.response_timeout_seconds == 3600
 
 
+def test_runtime_provider_metadata_enabled_flag_is_not_runtime_setting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The dispatch path receives the feature-derived ``enabled`` flag."""
+    monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path / "audihome"))
+    provider_dir = tmp_path / "project" / ".audiagentic" / "config" / "providers"
+    provider_dir.mkdir(parents=True)
+    (provider_dir / "gpt-auto.yaml").write_text(
+        "install-mode: external-configured\naccess-mode: none\n",
+        encoding="utf-8",
+    )
+
+    from audiagentic.components.providers.services.execution.public_execution import (
+        get_provider_runtime_config_state,
+    )
+
+    project = provider_dir.parents[2]
+    runtime_config = get_provider_runtime_config_state(project, "gpt-auto")["config"]
+    config = GptAutoConfig.from_project_dict(runtime_config)
+
+    assert isinstance(runtime_config["enabled"], bool)
+    assert config.turn.response_timeout_seconds == 3600
+
+
 def test_validate_project_config_rejects_incompatible_project(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
