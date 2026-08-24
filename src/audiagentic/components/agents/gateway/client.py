@@ -34,6 +34,8 @@ class GatewayClient(Protocol):
 
     def submit_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]: ...
     def get_execution_request(self, project_root: Path, request_id: str) -> dict[str, Any]: ...
+    def get_execution_diagnostics(self, project_root: Path, request_id: str, *, limit: int = 25) -> dict[str, Any]: ...
+    def recover_execution_request(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]: ...
     def get_execution_response(self, project_root: Path, request_id: str) -> str: ...
     def wait_execution_request(
         self, project_root: Path, request_id: str, timeout_seconds: float | None = None
@@ -81,6 +83,12 @@ class EmbeddedGatewayClient:
 
     def get_execution_request(self, project_root: Path, request_id: str) -> dict[str, Any]:
         return self._application.get_execution_request(project_root, request_id)
+
+    def get_execution_diagnostics(self, project_root: Path, request_id: str, *, limit: int = 25) -> dict[str, Any]:
+        return self._application.get_execution_diagnostics(project_root, request_id, limit=limit)
+
+    def recover_execution_request(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]:
+        return self._application.recover_execution_request(project_root, request_id, **kwargs)
 
     def get_execution_response(self, project_root: Path, request_id: str) -> str:
         return self._application.get_execution_response(project_root, request_id)
@@ -333,6 +341,7 @@ def reset_gateway_client() -> None:
 # client is always safe, but replaying a mutation blindly is not.
 _READ_ONLY_GATEWAY_METHODS = frozenset({
     "get_execution_request",
+    "get_execution_diagnostics",
     "get_execution_response",
     "list_execution_requests",
     "gateway_overview",
@@ -415,3 +424,4 @@ def call_gateway_method(
                 reset_gateway_client()
                 client = get_gateway_client(project_root)
         raise last_exc
+
