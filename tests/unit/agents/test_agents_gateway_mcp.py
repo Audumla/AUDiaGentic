@@ -246,6 +246,25 @@ def test_agent_task_list_requests_delegates():
     mock_call.assert_called_once_with("list_execution_requests", _ROOT, state="completed", limit=5)
 
 
+def test_agent_task_status_can_negotiate_slim_v4():
+    with (
+        _patch_root(),
+        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
+    ):
+        mock_call.return_value = {
+            "request-id": "req_x",
+            "lifecycle": "active",
+            "activity": "running",
+            "outcome": None,
+        }
+        result = agents_gateway_mcp.agent_task_status("req_x", response_version=4)
+
+    assert result == mock_call.return_value
+    mock_call.assert_called_once_with(
+        "get_execution_request", _ROOT, "req_x", response_version=4
+    )
+
+
 def test_agent_task_gateway_overview_delegates():
     with (
         _patch_root(),

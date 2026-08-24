@@ -181,7 +181,9 @@ def agent_task_list_definitions() -> list[dict[str, Any]]:
 
 @mcp.tool()
 @tool_boundary
-def agent_task_status(request_id: str) -> dict[str, Any]:
+def agent_task_status(
+    request_id: str, response_version: int | None = None
+) -> dict[str, Any]:
     """Return lifecycle/activity status and artifact metadata only.
 
     Response content is deliberately owned by ``agent_task_response``. This
@@ -189,7 +191,20 @@ def agent_task_status(request_id: str) -> dict[str, Any]:
     preview that callers cannot use as the authoritative response.
     """
     project_root = project_root_from_env()
-    status = call_gateway_method("get_execution_request", project_root, request_id)
+    if response_version is None:
+        status = call_gateway_method("get_execution_request", project_root, request_id)
+    else:
+        status = call_gateway_method(
+            "get_execution_request",
+            project_root,
+            request_id,
+            response_version=response_version,
+        )
+    # V4 is a fixed-shape contract: its inactive axes are explicitly null and
+    # must not be removed by the generic sparse projection.  V3 retains the
+    # historical compact MCP behavior.
+    if response_version == 4:
+        return _status_without_response_preview(status)
     return _sparse(_status_without_response_preview(status))
 
 
@@ -311,7 +326,9 @@ def agent_task_cancel(request_id: str) -> dict[str, Any]:
 @mcp.tool()
 @tool_boundary
 def agent_task_list_requests(
-    state: str | None = None, limit: int | None = None
+    state: str | None = None,
+    limit: int | None = None,
+    response_version: int | None = None,
 ) -> list[dict[str, Any]]:
     """List persisted gateway requests, most recently created first.
 
@@ -320,13 +337,17 @@ def agent_task_list_requests(
     earlier process — unlike queue depths, which are in-memory only.
     """
     project_root = project_root_from_env()
-    requests = call_gateway_method("list_execution_requests", project_root, state=state, limit=limit)
-    return _sparse(
-        [
-            _status_without_response_preview(item) if isinstance(item, dict) else item
-            for item in requests
-        ]
-    )
+    kwargs: dict[str, Any] = {"state": state, "limit": limit}
+    if response_version is not None:
+        kwargs["response_version"] = response_version
+    requests = call_gateway_method("list_execution_requests", project_root, **kwargs)
+    projected = [
+        _status_without_response_preview(item) if isinstance(item, dict) else item
+        for item in requests
+    ]
+    if response_version == 4:
+        return projected
+    return _sparse(projected)
 
 
 @mcp.tool()

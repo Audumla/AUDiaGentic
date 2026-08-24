@@ -228,8 +228,13 @@ def _runtime_fingerprint() -> dict[str, str]:
     return result
 
 
-def _attach_agent_status(result: dict[str, Any], project_root: Path) -> dict[str, Any]:
-    """Attach the versioned canonical status snapshot to a public result."""
+def _attach_agent_status(
+    result: dict[str, Any],
+    project_root: Path,
+    *,
+    response_version: int | None = None,
+) -> dict[str, Any]:
+    """Attach the requested public status projection to a result."""
     from audiagentic.components.agents.status.status_projection import (
         snapshot_for_request,
         snapshot_to_mapping,
@@ -244,15 +249,34 @@ def _attach_agent_status(result: dict[str, Any], project_root: Path) -> dict[str
         if runtime is not None:
             decision = runtime.latest_lifecycle_decision(session_id, result["request-id"])
 
+    snapshot = snapshot_for_request(result, decision=decision)
+    version = _resolve_public_response_version(response_version)
+    if version == 4:
+        from audiagentic.components.agents.status.task_status_v4 import (
+            TaskStatusContractError,
+            project_task_status_v4,
+        )
+
+        try:
+            return project_task_status_v4(result, snapshot)
+        except TaskStatusContractError as exc:
+            raise AudiaGenticError(
+                code="CON-AGW-147",
+                kind="agents",
+                message="request state cannot be represented by status response version 4",
+                details={"request-id": result.get("request-id"), "reason": str(exc)},
+            ) from exc
     enriched = dict(result)
     enriched["response-version"] = _PUBLIC_RESPONSE_VERSION
-    enriched["agent-status"] = snapshot_to_mapping(snapshot_for_request(result, decision=decision))
+    enriched["agent-status"] = snapshot_to_mapping(snapshot)
     return enriched
 
 
 def _enrich_terminal_result(
     result: dict[str, Any],
     project_root: Path,
+    *,
+    response_version: int | None = None,
 ) -> dict[str, Any]:
     """Add terminal quality and canonical status to terminal results."""
     if result["state"] in store.TERMINAL_STATES:
@@ -266,7 +290,7 @@ def _enrich_terminal_result(
         tq = _classify_terminal_quality(project_root, enriched)
         if tq is not None:
             enriched["terminal-quality"] = tq
-        return _attach_agent_status(enriched, project_root)
+        return _attach_agent_status(enriched, project_root, response_version=response_version)
     return result
 
 
@@ -678,12 +702,42 @@ def submit_execution_request(
 # AS56 — public response schema version.  Version 3 makes the explicit
 # progress-disposition/interruptibility vocabulary part of the contract.
 _PUBLIC_RESPONSE_VERSION: int = 3
+_SUPPORTED_PUBLIC_RESPONSE_VERSIONS = frozenset({3, 4})
 
 
-def get_execution_request(project_root: Path, request_id: str) -> dict[str, Any]:
+def _resolve_public_response_version(response_version: int | None) -> int:
+    """Validate public response negotiation without silently falling back."""
+    if response_version is None:
+        return _PUBLIC_RESPONSE_VERSION
+    if isinstance(response_version, bool) or not isinstance(response_version, int):
+        raise AudiaGenticError(
+            code="VAL-AGW-147",
+            kind="agents",
+            message="response version must be an integer",
+            details={"response-version": response_version},
+        )
+    if response_version not in _SUPPORTED_PUBLIC_RESPONSE_VERSIONS:
+        raise AudiaGenticError(
+            code="VAL-AGW-147",
+            kind="agents",
+            message="unsupported gateway response version",
+            details={
+                "response-version": response_version,
+                "supported": sorted(_SUPPORTED_PUBLIC_RESPONSE_VERSIONS),
+            },
+        )
+    return response_version
+
+
+def get_execution_request(
+    project_root: Path,
+    request_id: str,
+    *,
+    response_version: int | None = None,
+) -> dict[str, Any]:
     """Return the public durable status plus the canonical agent-status snapshot."""
     record = store.read_public_status(project_root, request_id)
-    return _attach_agent_status(record, project_root)
+    return _attach_agent_status(record, project_root, response_version=response_version)
 
 
 def get_execution_diagnostics(
@@ -870,7 +924,11 @@ def request_runtime_status(project_root: Path, request_id: str) -> dict[str, Any
 
 
 def wait_execution_request(
-    project_root: Path, request_id: str, timeout_seconds: float | None = None
+    project_root: Path,
+    request_id: str,
+    timeout_seconds: float | None = None,
+    *,
+    response_version: int | None = None,
 ) -> dict[str, Any]:
     """Block until a request reaches a terminal state or the timeout elapses.
 
@@ -879,16 +937,20 @@ def wait_execution_request(
     Terminal results are enriched with ``terminal-quality``; timeout responses
     carry ``wait-timeout: True`` and omit it.
     """
+    version = _resolve_public_response_version(response_version)
     raw = get_queue_manager().wait(
         project_root, request_id, timeout_seconds or DEFAULT_BLOCKING_TIMEOUT_SECONDS
     )
     if raw["state"] in store.TERMINAL_STATES:
-        return _enrich_terminal_result(raw, project_root)
+        return _enrich_terminal_result(raw, project_root, response_version=version)
+    if version == 4:
+        status = _attach_agent_status(raw, project_root, response_version=version)
+        return {"wait-outcome": "timeout", "status": status}
     # Non-terminal: timeout — signal it and omit terminal-quality
     result = dict(raw)
     result["wait-timeout"] = True
     result["progress"] = _request_progress(project_root, raw)
-    return _attach_agent_status(result, project_root)
+    return _attach_agent_status(result, project_root, response_version=version)
 
 
 def cancel_execution_request(project_root: Path, request_id: str) -> dict[str, Any]:
@@ -955,6 +1017,7 @@ def list_execution_requests(
     *,
     state: str | None = None,
     limit: int | None = None,
+    response_version: int | None = None,
 ) -> list[dict[str, Any]]:
     """List persisted gateway requests, most recently created first.
 
@@ -962,6 +1025,7 @@ def list_execution_requests(
     requests from any process — including ones orphaned by a restart, unlike
     unlike the removed in-memory-only status projections.
     """
+    version = _resolve_public_response_version(response_version)
     records = store.list_records(project_root)
     if state is not None:
         records = [r for r in records if r["state"] == state]
@@ -977,6 +1041,7 @@ def list_execution_requests(
                 ),
             ),
             project_root,
+            response_version=version,
         )
         for record in records
     ]
