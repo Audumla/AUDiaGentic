@@ -759,13 +759,23 @@ def recover_execution_request(
         recovery["disposition"] = "retire-conversation-required"
         recovery["allowed-actions"] = []
         updated_diagnostics["resolution-state"] = "abandon-requested"
-        store.cancel_queued_or_mark_requested(
+        updated = store.cancel_queued_or_mark_requested(
             project_root,
             request_id,
             source="operator",
             actor_type="operator",
             reason="diagnostic-recovery-abandon",
+            diagnostics=updated_diagnostics,
+            expected_revision=record.get("revision"),
         )
+        return {
+            "request-id": request_id,
+            "action": action,
+            "disposition": "accepted",
+            "state": updated.get("state"),
+            "revision": updated.get("revision"),
+            "diagnostics": updated.get("diagnostics"),
+        }
     else:
         recovery["disposition"] = "retry-safe"
         recovery["allowed-actions"] = ["retry"]
@@ -776,9 +786,7 @@ def recover_execution_request(
         request_id,
         updated_diagnostics,
         # Every recovery intent is a compare-and-swap mutation.  Abandon is
-        # not exempt: allowing a stale operator action to overwrite newer
-        # reconciliation evidence can reopen the very TOCTOU window this
-        # surface is meant to close.
+        # handled above as one atomic cancellation+diagnostic operation.
         expected_revision=record.get("revision"),
     )
     return {
