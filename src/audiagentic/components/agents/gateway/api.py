@@ -18,12 +18,11 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.agents.gateway.admission.context import ComponentContextReader
-from audiagentic.foundation.contracts.errors import AudiaGenticError
-
 from audiagentic.components.agents.gateway import store as store
+from audiagentic.components.agents.gateway.admission.context import ComponentContextReader
 from audiagentic.components.agents.gateway.queue import dispatch as dispatch
 from audiagentic.components.agents.gateway.queue import queue as queue_mod
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 # A blocking wait with no requested timeout still needs a bound so it cannot
 # hang forever; callers that want longer pass an explicit timeout_seconds.
@@ -61,19 +60,9 @@ def _resolve_profile_for_submit(
         resolve_global_default_execution_profile,
         resolve_global_execution_profile,
     )
-    from audiagentic.components.agents.models.execution_profile_api import (
-        resolve_default_execution_profile,
-        resolve_execution_profile,
-    )
-
-    from audiagentic.components.agents.gateway.profiles import get_gateway_registry
-    if get_gateway_registry() is not None:
-        if execution_profile_id:
-            return resolve_global_execution_profile(project_root, execution_profile_id)
-        return resolve_global_default_execution_profile(project_root)
     if execution_profile_id:
-        return resolve_execution_profile(project_root, execution_profile_id)
-    return resolve_default_execution_profile(project_root)
+        return resolve_global_execution_profile(project_root, execution_profile_id)
+    return resolve_global_default_execution_profile(project_root)
 
 
 def _resolve_provider_isolation_tier(provider_id: str) -> str:
@@ -315,7 +304,7 @@ def submit_execution_request(
     component_profile: str | None = None,
     _dispatch_owner_epoch: str | None = None,
     _dispatch_service_root: str | None = None,
-    component_context_reader: "ComponentContextReader | None" = None,
+    component_context_reader: ComponentContextReader | None = None,
 ) -> dict[str, Any]:
     """Submit a gateway request. Returns immediately with request-id and initial state
     unless mode='blocking', in which case it waits for a terminal result (see run_execution_request).
@@ -399,10 +388,16 @@ def submit_execution_request(
     # one authoritative catalog snapshot.
     if agent_id is not None:
         from audiagentic.components.agents.agents_paths import global_agents_config_path
-        from audiagentic.components.agents.configuration.global_catalog import read_global_agents_config
+        from audiagentic.components.agents.configuration.global_catalog import (
+            read_global_agents_config,
+        )
         from audiagentic.components.agents.configuration.resolution import resolve_agent_composition
-        from audiagentic.components.agents.gateway.admission.context import baseline_agent_template_context
-        from audiagentic.components.agents.gateway.admission.instructions import materialize_agent_prompt
+        from audiagentic.components.agents.gateway.admission.context import (
+            baseline_agent_template_context,
+        )
+        from audiagentic.components.agents.gateway.admission.instructions import (
+            materialize_agent_prompt,
+        )
 
         # Global agents must be usable from an unmanaged repository as well
         # as a fully installed AUDiaGentic project.  Component context is an
@@ -461,22 +456,16 @@ def submit_execution_request(
         session_id = _session_store.generate_session_id()
 
     # --- 2. Resolve profile ------------------------------------------------
-    # `profile` keeps project-resolved fields (model_alias has no shared-gateway
-    # equivalent, see agents_gateway_profiles.ResolvedExecutionProfile) that
-    # feed the runtime digest below unchanged from today's behavior.
+    # `profile` is resolved from the machine-global Agents catalog.  It keeps
+    # fields such as model_alias that are not part of the gateway snapshot and
+    # feeds the runtime digest below.
     profile = _resolve_profile_for_submit(project_root, execution_profile_id)
     resolved_profile_id = profile["profile_id"]
 
-    # AS60 step 2: one schema-validated resolver contract regardless of
-    # source. When a gateway-owned registry is installed (shared mode), it is
-    # authoritative for provider/instances — project-local profile
-    # data only selects which gateway profile id to reference. The resolved
-    # snapshot is persisted on the record so the queue can validate staleness
-    # on reload (CON-AGW-101) without re-deriving from mutable caller params.
-    # In embedded mode (no registry installed) the persisted snapshot fields
-    # stay None; the queue's own embedded-compatibility fallback covers that
-    # case -- preserved here rather than always persisting a snapshot, since
-    # that is a behavior change out of this item's scope.
+    # AS60 step 2: one schema-validated resolver contract.  The global
+    # catalog is authoritative in both hosted and explicit test composition;
+    # the resolved snapshot is persisted so the queue can validate staleness
+    # without re-deriving from mutable project inputs.
     from audiagentic.components.agents.gateway import profiles as profiles_mod
 
     resolved = profiles_mod.resolve_for_admission(project_root, execution_profile_id)
@@ -982,7 +971,7 @@ def run_execution_request(
     component_profile: str | None = None,
     _dispatch_owner_epoch: str | None = None,
     _dispatch_service_root: str | None = None,
-    component_context_reader: "ComponentContextReader | None" = None,
+    component_context_reader: ComponentContextReader | None = None,
 ) -> dict[str, Any]:
     """Submit and block until a terminal result or timeout. Not for event-triggered
     paths (AG12 handles those asynchronously through lifecycle events)."""

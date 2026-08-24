@@ -75,7 +75,7 @@ IO-AGW-107: "Fix the gateway profiles config file so it parses as the documented
 VAL-AGW-085: "Provide the complete current dispatch owner, worker, and positive attempt identity for an owned request mutation."
 VAL-AGW-086: "Provide the non-empty component identity acknowledging a gateway cancellation request."
 UNS-AGW-076: "This provider declares partial-isolation, or a full-isolation materializer that has not been proven safe — neither can run through the disposable-subprocess-per-attempt worker pool. A no-isolation provider does not hit this error; it dispatches through a live gateway session instead (submit with session_keep_alive=true, or an existing session_id, to use one directly)."
-TO-AGW-076: "Increase the request timeout or investigate the provider worker that exceeded its bounded execution time."
+TO-AGW-076: "Activity evidence became stale; reconcile the still-running request. This is not provider timeout proof unless an explicit absolute safety ceiling was exhausted."
 TO-AGW-090: "The session turn exceeded its deadline and the session was closed. Raise params.session-turn-timeout-seconds (0 disables) or investigate the hung agent harness."
 CON-AGW-095: "The resolved session surface is unsupported for this provider — no transport could be prepared. Check that the provider is enabled, installed, and declares a supported session surface for this platform."
 CON-AGW-096: "A provider session already has an active owned AG binding. Close or retire the existing session before opening another owner; use explicit attach only when the resolved surface supports it."

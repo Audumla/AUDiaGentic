@@ -49,6 +49,8 @@ def test_queued_is_pending_waiting_with_null_outcome() -> None:
         "task_id": "req-1",
         "lifecycle": "pending",
         "activity": "waiting",
+        "activity_seq": 0,
+        "activity_at": None,
         "outcome": None,
     }
 
@@ -62,6 +64,8 @@ def test_running_is_active_running_without_provider_details() -> None:
         "task_id": "req-1",
         "lifecycle": "active",
         "activity": "running",
+        "activity_seq": 0,
+        "activity_at": None,
         "outcome": None,
     }
 
@@ -72,6 +76,8 @@ def test_running_cancel_request_is_active_cancelling() -> None:
 
     assert result["lifecycle"] == "active"
     assert result["activity"] == "cancelling"
+    assert result["activity_seq"] == 0
+    assert result["activity_at"] is None
     assert result["outcome"] is None
 
 
@@ -119,11 +125,13 @@ def test_terminal_states_have_one_outcome_and_no_activity(
         "task_id": "req-1",
         "lifecycle": "terminal",
         "activity": None,
+        "activity_seq": 0,
+        "activity_at": None,
         "outcome": outcome,
     }
 
 
-def test_v4_has_exactly_four_keys_and_no_internal_fields() -> None:
+def test_v4_has_only_contract_keys_and_no_internal_fields() -> None:
     record = _record(
         "running",
         **{
@@ -135,7 +143,14 @@ def test_v4_has_exactly_four_keys_and_no_internal_fields() -> None:
     )
     result = project_task_status_v4(record, _snapshot(record, AgentLifecycle.ACTIVE))
 
-    assert set(result) == {"task_id", "lifecycle", "activity", "outcome"}
+    assert set(result) == {
+        "task_id",
+        "lifecycle",
+        "activity",
+        "activity_seq",
+        "activity_at",
+        "outcome",
+    }
 
 
 @pytest.mark.parametrize(
@@ -191,8 +206,42 @@ def test_dispatching_is_active_running_even_when_v3_snapshot_is_unknown() -> Non
         "task_id": "req-1",
         "lifecycle": "active",
         "activity": "running",
+        "activity_seq": 0,
+        "activity_at": None,
         "outcome": None,
     }
+
+
+def test_activity_progress_markers_are_projected_from_durable_record() -> None:
+    record = _record(
+        "running",
+        **{
+            "activity-sequence": 12,
+            "last-activity-at": "2026-08-24T07:12:31Z",
+        },
+    )
+
+    assert project_task_status_v4(record, _snapshot(record, AgentLifecycle.ACTIVE)) == {
+        "task_id": "req-1",
+        "lifecycle": "active",
+        "activity": "running",
+        "activity_seq": 12,
+        "activity_at": "2026-08-24T07:12:31Z",
+        "outcome": None,
+    }
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        _record("running", **{"activity-sequence": True}),
+        _record("running", **{"activity-sequence": -1}),
+        _record("running", **{"last-activity-at": 123}),
+    ],
+)
+def test_invalid_activity_progress_markers_fail_closed(record: dict[str, object]) -> None:
+    with pytest.raises(TaskStatusContractError):
+        project_task_status_v4(record)
 
 
 def test_v4_projection_validates_against_canonical_schema() -> None:

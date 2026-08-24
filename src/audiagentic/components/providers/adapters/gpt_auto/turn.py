@@ -979,15 +979,18 @@ class GptAutoTurn:
                 # gateway's own watchdog activity lease depends on these
                 # ACTIVITY emissions arriving throughout the turn, not just
                 # at the start.
+                activity_label = (
+                    "tool-progress"
+                    if tool_activity_edge or tool_activity_heartbeat_due
+                    else (
+                        "response-progress"
+                        if EvidenceCapability.PROGRESS in caps
+                        else "soft-liveness"
+                    )
+                )
                 await self._emit(
                     TransportObservationKind.ACTIVITY,
-                    {
-                        "model_activity": (
-                            "tool-progress"
-                            if tool_activity_edge or tool_activity_heartbeat_due
-                            else "response-progress"
-                        )
-                    },
+                    {"model_activity": activity_label},
                 )
                 if tool_activity_edge or tool_activity_heartbeat_due:
                     last_tool_activity_emit_at = now

@@ -8,7 +8,7 @@ keeping cohesion within each module (SH18).
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -204,11 +204,14 @@ def _make_on_event_callback(
             activity_marker()
         if activity_relay is not None:
             try:
+                activity_phase = obs.attributes.get("model_activity") if isinstance(obs.attributes, Mapping) else None
+                if not isinstance(activity_phase, str) or not activity_phase:
+                    activity_phase = obs.kind.value if hasattr(obs.kind, "value") else str(obs.kind)
                 activity_relay.observe_provider(
                     source="session-transport",
                     source_instance=f"session:{session_id}:turn:{request_id or 'unknown'}",
                     source_sequence=obs.sequence,
-                    phase=(obs.kind.value if hasattr(obs.kind, "value") else str(obs.kind)),
+                    phase=activity_phase,
                 )
             except Exception:  # noqa: BLE001 - liveness must never break a turn
                 pass

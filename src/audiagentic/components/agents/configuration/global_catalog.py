@@ -18,7 +18,6 @@ from audiagentic.components.agents.models.execution_profile import (
     execution_profile_to_dict,
 )
 from audiagentic.components.agents.models.role import role_from_dict
-from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 def global_agents_repository() -> AgentsConfigRepository:

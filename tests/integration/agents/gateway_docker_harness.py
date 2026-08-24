@@ -250,42 +250,11 @@ def free_port() -> int:
     return choose_free_port("127.0.0.1")
 
 
-def write_gateway_profiles_config(
-    path: Path,
-    profiles: list[dict[str, Any]],
-) -> Path:
-    """Write a gateway-owned profile registry config file.
-
-    Unlike the canonical agents.yaml API (which has a real create_execution_profile API), the
-    gateway-owned registry has no CRUD API — agents_gateway_profiles.
-    load_gateway_registry_from_config reads this file directly by design, so
-    hand-authoring it is the real provisioning path, same status as any other
-    operator-authored machine config.
-    """
-    import yaml
-
-    normalized_profiles: list[dict[str, Any]] = []
-    for profile in profiles:
-        normalized = dict(profile)
-        if "instances" not in normalized and normalized.get("model_id"):
-            model_id = normalized["model_id"]
-            normalized["instances"] = [model_id]
-        normalized_profiles.append(normalized)
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        yaml.safe_dump({"profiles": normalized_profiles}, sort_keys=False),
-        encoding="utf-8",
-    )
-    return path
-
-
 def start_gateway_subprocess(
     service_root: Path,
     token_path: Path,
     port: int,
     *,
-    gateway_profiles_config: Path | None = None,
     extra_env: dict[str, str] | None = None,
 ) -> subprocess.Popen:
     """Launch the real gateway service as an OS subprocess.
@@ -311,8 +280,6 @@ def start_gateway_subprocess(
         "--service-root",
         str(service_root),
     ]
-    if gateway_profiles_config is not None:
-        command += ["--gateway-profiles-config", str(gateway_profiles_config)]
     env = None
     if extra_env:
         import os as _os

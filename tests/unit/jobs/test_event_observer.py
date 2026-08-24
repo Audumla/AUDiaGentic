@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from audiagentic.components.agents.agents_paths import global_agents_config_path
 from audiagentic.components.agents.configuration.contracts import AgentsConfigDocument
 from audiagentic.components.agents.configuration.repository import AgentsConfigRepository
 from audiagentic.components.agents.context.service import open_context
@@ -15,7 +16,8 @@ from audiagentic.components.agents.work.service import get_work
 
 
 def _seed(root: Path) -> str:
-    AgentsConfigRepository().replace(
+    repository = AgentsConfigRepository(global_agents_config_path())
+    repository.replace(
         root,
         AgentsConfigDocument(
             "v2",
@@ -24,13 +26,13 @@ def _seed(root: Path) -> str:
             ({"profile_id": "p", "provider_id": "local-openai", "instances": ["plain"]},),
             ({"agent_id": "a", "name": "A", "prompt_id": "p", "role_ids": ["r"], "execution_profile_id": "p"},),
         ),
-        expected_digest=None,
+        expected_digest=repository.read(root).digest,
     )
     return open_context(root, "a", "event test").context_id
 
 
 def _write_trigger(root: Path, *, trigger_id: str = "t-01") -> None:
-    path = root / ".audiagentic" / "config" / "agents.yaml"
+    path = global_agents_config_path()
     document = yaml.safe_load(path.read_text(encoding="utf-8"))
     document["triggers"] = {trigger_id: {
         "trigger_id": trigger_id,

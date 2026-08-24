@@ -38,7 +38,6 @@ CAPABILITIES = (
     "sessions.resume-by-ref",
     "client-leases.v1",
     "service-lifecycle.v1",
-    "gateway-profiles.reload",  # SH13 step 3-4
     "gateway-operations.v1",  # SH24: typed operator-operation authority
     "contexts.open",
     "contexts.get",
@@ -371,21 +370,6 @@ class GatewayServiceApplication:
                     30, "gateway has active operator operations and cannot resume admission"
                 )
             return self._lifecycle_controller().request_resume()
-        # SH13 step 3-4: reload gateway profile registry atomically; publish
-        # only redacted generation metadata on success.
-        if operation == "reload_gateway_profiles":
-            _reject_unknown(arguments, {"config-path"})
-            from audiagentic.components.agents.gateway import profiles as profiles_mod
-
-            config_path: Path | None = None
-            if "config-path" in arguments:
-                raw_path = arguments["config-path"]
-                if not isinstance(raw_path, str) or not raw_path:
-                    raise service_validation_error(
-                        23, "gateway reload config-path must be a string", field="config-path"
-                    )
-                config_path = Path(raw_path)
-            return profiles_mod.reload_profile_registry(config_path)
         if operation == "service_stop":
             _reject_unknown(arguments, {"force"})
             force = arguments.get("force", False)

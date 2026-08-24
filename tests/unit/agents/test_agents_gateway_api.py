@@ -191,6 +191,8 @@ def test_public_status_v4_is_explicit_slim_four_key_projection(tmp_path: Path, m
         "task_id": result["request-id"],
         "lifecycle": "terminal",
         "activity": None,
+        "activity_seq": 0,
+        "activity_at": None,
         "outcome": "success",
     }
 

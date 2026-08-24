@@ -8,16 +8,6 @@ from audiagentic.foundation.paths.home import audiagentic_home
 from audiagentic.foundation.paths.names import project_marker_path
 
 
-def agents_config_path(project_root: Path) -> Path:
-    """Return the legacy project-local Agents path.
-
-    Hosted/runtime agent resolution uses :func:`global_agents_config_path`.
-    This path remains only for explicit migration/test seams and is not a
-    supported authority for hosted agent definitions.
-    """
-    return project_marker_path(project_root) / "config" / "agents.yaml"
-
-
 def global_agents_config_path() -> Path:
     """Return the machine-global canonical Agents configuration document."""
     return audiagentic_home() / "config" / "agents.yaml"
@@ -53,21 +43,6 @@ def agent_work_lock_path(project_root: Path, work_id: str) -> Path:
 
 def agent_work_inputs_path(project_root: Path, work_id: str) -> Path:
     return agent_work_root(project_root) / work_id / "inputs.ndjson"
-
-
-def execution_profiles_path(project_root: Path) -> Path:
-    """Return the legacy profile path used only by one-time migration."""
-    return project_marker_path(project_root) / "config" / "execution-profiles.yaml"
-
-
-def roles_path(project_root: Path) -> Path:
-    """Return the legacy roles path used only by one-time migration."""
-    return project_marker_path(project_root) / "config" / "roles.yaml"
-
-
-def agent_definitions_path(project_root: Path) -> Path:
-    """Return the legacy definitions path used only by one-time migration."""
-    return project_marker_path(project_root) / "config" / "agent-definitions.yaml"
 
 
 _GATEWAY_ROOT = Path("runtime") / "agent-execution-gateway"

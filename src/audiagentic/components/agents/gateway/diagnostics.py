@@ -9,8 +9,9 @@ It never accepts raw prompts, DOM, CDP payloads, cookies, or tracebacks.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from enum import StrEnum
-from typing import Any, Mapping
+from typing import Any
 
 
 class FailureClass(StrEnum):
@@ -20,6 +21,7 @@ class FailureClass(StrEnum):
     GATEWAY_OWNERSHIP_QUEUE_ERROR = "gateway-ownership-queue-error"
     CANCELLED = "cancelled"
     TIMEOUT = "timeout"
+    STALE_PROGRESS = "stale-progress"
     AMBIGUOUS_SIDE_EFFECT = "ambiguous-side-effect"
     UNKNOWN = "unknown"
 
@@ -227,6 +229,35 @@ def classify_error(
     return result
 
 
+def stale_progress_diagnostic(
+    *,
+    phase: str = ObservationPhase.RECONCILIATION.value,
+    side_effect_state: str = SideEffectState.MAY_HAVE_STARTED.value,
+) -> dict[str, Any]:
+    """Build non-terminal evidence for an expired activity observation.
+
+    This is deliberately not produced by :func:`classify_error`: elapsed
+    silence is an observation requiring reconciliation, not timeout proof.
+    """
+    return {
+        "version": 1,
+        "classification": FailureClass.STALE_PROGRESS.value,
+        "certainty": EvidenceCertainty.WEAK.value,
+        "phase": _phase(phase, ObservationPhase.RECONCILIATION),
+        "side-effect-state": _side_effect(side_effect_state, SideEffectState.MAY_HAVE_STARTED),
+        "resolution-state": "unresolved",
+        "failure-code": None,
+        "reason-code": "activity-lease-expired",
+        "provider-signals": [],
+        "evidence-count": 1,
+        "coalesced-observation-count": 0,
+        "recovery": {
+            "disposition": RecoveryDisposition.RECONCILE_REQUIRED.value,
+            "allowed-actions": _allowed_actions(RecoveryDisposition.RECONCILE_REQUIRED),
+        },
+    }
+
+
 def merge_diagnostics(
     previous: Mapping[str, Any] | None,
     candidate: Mapping[str, Any],
@@ -316,6 +347,7 @@ __all__ = [
     "RecoveryDisposition",
     "SideEffectState",
     "classify_error",
+    "stale_progress_diagnostic",
     "evidence_from_activity",
     "merge_diagnostics",
 ]
