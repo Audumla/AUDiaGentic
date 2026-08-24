@@ -120,6 +120,7 @@ class PersistentChat:
         # intentionally ephemeral and is surfaced in the next boundary error.
         self._unresolved_recovery_reason: str | None = None
         self._unresolved_recovery_details: dict[str, object] = {}
+        self._reconciliation_refresh_attempted = False
         self._checkpoint_metadata: dict[str, object] = {
             key: metadata[key]
             for key in (
@@ -488,6 +489,28 @@ class PersistentChat:
                 exception=str(exc),
             )
             return False
+        # A retained CDP page can have a stale React/DOM snapshot even though
+        # the provider conversation has already completed. One same-URL
+        # refresh is a read-only reconciliation attempt; it never resends the
+        # prompt and is bounded to once per unresolved turn.
+        if (
+            not snapshot.generating
+            and (
+                not _reconciliation_evidence_clear(snapshot)
+                or not snapshot.latest_assistant_id
+                or not snapshot.latest_assistant_text
+            )
+            and await self._refresh_for_reconciliation()
+        ):
+            try:
+                snapshot = await self.snapshot(allow_recovering=True)
+            except Exception as exc:  # noqa: BLE001 - preserve diagnostic context
+                self._set_unresolved_recovery(
+                    "refresh-observation-failed",
+                    exception_type=type(exc).__name__,
+                    exception=str(exc),
+                )
+                return False
         if snapshot.generating:
             logger.warning(
                 "gpt-auto Tier-3 generating signal disagreed with reconciliation "
@@ -637,6 +660,7 @@ class PersistentChat:
         self.unresolved_turn_pending = True
         self._unresolved_recovery_reason = None
         self._unresolved_recovery_details = {}
+        self._reconciliation_refresh_attempted = False
         if prompt_text:
             self.unresolved_prompt_text_digest = PromptFingerprint.from_text(prompt_text).digest
 
@@ -649,6 +673,7 @@ class PersistentChat:
         self.unresolved_turn_pending = True
         self._unresolved_recovery_reason = None
         self._unresolved_recovery_details = {}
+        self._reconciliation_refresh_attempted = False
         self.unresolved_prompt_message_id = prompt_id
         self.unresolved_assistant_before_id = assistant_before_id
         if prompt_text:
@@ -681,6 +706,31 @@ class PersistentChat:
         self._unresolved_match_fingerprint_at = None
         self._unresolved_recovery_reason = None
         self._unresolved_recovery_details = {}
+
+    async def _refresh_for_reconciliation(self) -> bool:
+        """Refresh the retained conversation page at most once per turn."""
+        if self._reconciliation_refresh_attempted or not self.page_handle:
+            return False
+        browser = getattr(self.runtime, "gpt_browser", None)
+        if browser is None:
+            return False
+        url = self.chat_url or self._last_url
+        if not url:
+            return False
+        try:
+            page = await browser.page_by_handle(self.page_handle)
+            await browser.navigate(page, url)
+            self._reconciliation_refresh_attempted = True
+            await asyncio.sleep(self.config.chat.poll_interval_seconds)
+            return True
+        except Exception as exc:  # noqa: BLE001 - bounded recovery evidence
+            self._reconciliation_refresh_attempted = True
+            self._set_unresolved_recovery(
+                "refresh-failed",
+                exception_type=type(exc).__name__,
+                exception=str(exc),
+            )
+            return False
 
     async def find_prompt_snapshot(
         self, baseline: ChatSnapshot, expected_text: str
@@ -1161,3 +1211,4 @@ def _unresolved_observation_details(snapshot: ChatSnapshot | None) -> dict[str, 
     if snapshot.dom_signals:
         details["observed-dom-signals"] = sorted(snapshot.dom_signals)
     return details
+

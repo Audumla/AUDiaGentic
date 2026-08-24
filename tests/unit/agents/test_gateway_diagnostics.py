@@ -5,7 +5,7 @@ from audiagentic.components.agents.gateway.api import (
     get_execution_diagnostics,
     recover_execution_request,
 )
-from audiagentic.components.agents.gateway.diagnostics import classify_error
+from audiagentic.components.agents.gateway.diagnostics import classify_error, merge_diagnostics
 from audiagentic.components.agents.gateway.queue.dispatch import diagnose_activity_lease
 
 
@@ -24,6 +24,44 @@ def test_ambiguous_gpt_auto_error_is_not_provider_failure() -> None:
     assert result["side-effect-state"] == "may-have-started"
     assert result["recovery"]["disposition"] == "operator-adopt-available"
     assert result["provider-signals"] == ["completion-control", "more-actions-menu"]
+
+
+def test_response_policy_timeout_is_reconciliation_timeout() -> None:
+    result = classify_error(
+        {
+            "code": "EXT-GPTAUTO-002",
+            "details": {"failure-reason": "response-policy-timeout"},
+        }
+    )
+    assert result["classification"] == "timeout"
+    assert result["side-effect-state"] == "may-have-started"
+    assert result["recovery"]["disposition"] == "reconcile-required"
+
+
+def test_attempted_without_submission_proof_is_ambiguous() -> None:
+    result = classify_error(
+        {
+            "code": "EXT-GPTAUTO-003",
+            "details": {"submission-attempted": True, "submission-proven": False},
+        }
+    )
+    assert result["classification"] == "ambiguous-side-effect"
+    assert result["side-effect-state"] == "may-have-started"
+    assert result["recovery"]["disposition"] == "reconcile-required"
+
+
+def test_diagnostics_side_effect_state_never_regresses() -> None:
+    previous = classify_error(
+        {
+            "code": "EXT-GPTAUTO-004",
+            "details": {"submission-ambiguous": True},
+        }
+    )
+    candidate = classify_error({"code": "EXT-GPTAUTO-003", "details": {}})
+    merged = merge_diagnostics(previous, candidate)
+    assert merged["classification"] == "ambiguous-side-effect"
+    assert merged["side-effect-state"] == "may-have-started"
+    assert merged["resolution-state"] == "unresolved"
 
 
 def test_lease_expiry_persists_bounded_diagnostics_and_evidence(tmp_path) -> None:
