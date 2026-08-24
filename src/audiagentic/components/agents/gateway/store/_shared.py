@@ -47,12 +47,15 @@ _MUTABLE_RESULT_FIELDS = {
     "started-at",
     "finished-at",
     "session-id",
+    "cancel-provenance",
     "provider-metadata",
     "recovery",
     "replay-required",
     "replay-reason",
     "replayed-by-request-id",
     "terminal-classification",
+    "diagnostics",
+    "diagnostic-evidence",
     "watchdog-state",
     "watchdog-reason",
 }
@@ -168,3 +171,4 @@ def extract_worker_evidence(error: BaseException | dict | None) -> dict | None:
         "error-type": type(error).__name__,
         "worker-diagnostic": diag,
     }
+
