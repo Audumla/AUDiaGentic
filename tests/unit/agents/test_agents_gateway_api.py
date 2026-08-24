@@ -123,7 +123,9 @@ def test_admission_freezes_component_template_context(tmp_path: Path, monkeypatc
 
 def test_application_injects_its_component_context_reader(tmp_path: Path, monkeypatch) -> None:
     observed: dict[str, object] = {}
-    reader = lambda _root: {"project": {"name": "Injected"}}
+
+    def reader(_root: Path) -> dict[str, object]:
+        return {"project": {"name": "Injected"}}
 
     def fake_submit(_root: Path, **kwargs: object) -> dict[str, object]:
         observed.update(kwargs)
