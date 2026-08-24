@@ -239,6 +239,29 @@ def test_validate_project_config_without_settings_resolves_to_defaults(
     assert config.turn.response_timeout_seconds == 3600
 
 
+def test_metadata_only_project_provider_file_resolves_to_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Provider descriptor metadata must not be parsed as runtime settings.
+
+    Other projects commonly carry an install/access declaration without a
+    gpt-auto ``settings`` block.  That is a valid sparse overlay and must use
+    the packaged defaults rather than fail with VAL-GPTAUTO-001.
+    """
+    monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path / "audihome"))
+    provider_dir = tmp_path / "project" / ".audiagentic" / "config" / "providers"
+    provider_dir.mkdir(parents=True)
+    (provider_dir / "gpt-auto.yaml").write_text(
+        "install-mode: external-configured\naccess-mode: none\n",
+        encoding="utf-8",
+    )
+
+    config = validate_project_gpt_auto_config(provider_dir.parents[2])
+
+    assert config.project_url is None
+    assert config.turn.response_timeout_seconds == 3600
+
+
 def test_validate_project_config_rejects_incompatible_project(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
