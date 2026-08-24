@@ -113,13 +113,6 @@ def load_packaged_prompt_template(
     if descriptor is None and tag.startswith("ag-"):
         descriptor = all_tags().get(tag.removeprefix("ag-"))
     if descriptor is None:
-        if tag in {"prompt-profile", "prompt-profiles"}:
-            from .agent_prompt_profiles import load_profile_template
-
-            profile_id = (template_name or "default").removesuffix("-with-body")
-            has_body = (template_name or "default").endswith("-with-body")
-            text, _, _ = load_profile_template(profile_id, has_body=has_body)
-            return text, None
         return None
     requested = template_name or "default"
     for prompt in descriptor.prompts:

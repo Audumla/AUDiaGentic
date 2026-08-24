@@ -59,12 +59,8 @@ def _isolate_audiagentic_home(
 
 
 @pytest.fixture(autouse=True)
-def _seed_global_agent_prompt_profiles(_isolate_audiagentic_home) -> None:
-    """Provide a minimal global prompt authority to unit tests.
-
-    The fixture name is retained for test-call compatibility; prompt profiles
-    are no longer part of the canonical agents document.
-    """
+def _seed_global_agent_catalog(_isolate_audiagentic_home) -> None:
+    """Provide a minimal canonical prompt authority to unit tests."""
     from audiagentic.foundation.paths.home import audiagentic_home
 
     config = audiagentic_home() / "config"
