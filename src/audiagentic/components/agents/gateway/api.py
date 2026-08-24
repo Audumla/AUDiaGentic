@@ -758,7 +758,7 @@ def get_execution_diagnostics(
     evidence = record.get("diagnostic-evidence")
     if not isinstance(evidence, list):
         evidence = []
-    return {
+    raw = {
         "request-id": request_id,
         "session-id": record.get("session-id"),
         "state": record.get("state"),
@@ -766,6 +766,11 @@ def get_execution_diagnostics(
         "evidence": evidence[-limit:],
         "latest-transition": store.latest_transition_projection(project_root, request_id),
     }
+    from audiagentic.components.agents.status.diagnostics_projection import (
+        project_public_diagnostics,
+    )
+
+    return project_public_diagnostics(raw)
 
 
 def recover_execution_request(

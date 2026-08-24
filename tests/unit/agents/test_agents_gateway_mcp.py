@@ -113,68 +113,28 @@ def test_agent_task_response_returns_small_verified_response_inline():
         _patch_root(),
         patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
     ):
-        mock_call.side_effect = [
-            {
-                "request-id": "req_x",
-                "state": "completed",
-                "response-artifact": {
-                    "artifact-id": "final-response",
-                    "request-id": "req_x",
-                    "bytes": 5,
-                    "sha256": "digest",
-                },
-            },
-            "hello",
-        ]
+        mock_call.return_value = "hello"
         result = agents_gateway_mcp.agent_task_response("req_x")
 
     assert result["delivery"] == "inline"
     assert result["text"] == "hello"
     assert result["bytes"] == 5
-    assert [call.args[0] for call in mock_call.call_args_list] == [
-        "get_execution_request",
-        "get_execution_response",
-    ]
+    mock_call.assert_called_once_with("get_execution_response", _ROOT, "req_x")
 
 
-def test_agent_task_response_returns_project_relative_artifact_for_large_response():
+def test_agent_task_response_returns_large_response_without_a_path():
     with (
         _patch_root(),
         patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
     ):
-        mock_call.return_value = {
-            "request-id": "req_x",
-            "state": "completed",
-            "response-artifact": {
-                "artifact-id": "final-response",
-                "request-id": "req_x",
-                "bytes": agents_gateway_mcp._configured_inline_response_limit(_ROOT) + 1,
-                "sha256": "digest",
-            },
-        }
+        mock_call.return_value = "x" * 100_000
         result = agents_gateway_mcp.agent_task_response("req_x")
 
-    assert result["delivery"] == "artifact"
-    assert result["response-artifact"]["sha256"] == "digest"
-    assert "output-preview" not in result
-    assert "output-truncated" not in result
-    assert result["artifact-path-kind"] == "project-relative"
-    assert result["artifact-path"].startswith(".audiagentic/")
-    assert not Path(result["artifact-path"]).is_absolute()
-    mock_call.assert_called_once_with("get_execution_request", _ROOT, "req_x")
-
-
-def test_agent_task_response_inline_limit_reads_packaged_component_config(tmp_path: Path):
-    # Agent definitions are machine-global; a project-local agents.yaml cannot
-    # override the MCP egress budget.
-    config_dir = tmp_path / ".audiagentic" / "config"
-    config_dir.mkdir(parents=True)
-    (config_dir / "agents.yaml").write_text(
-        "gateway:\n  mcp:\n    max-inline-response-bytes: 1234\n",
-        encoding="utf-8",
-    )
-
-    assert agents_gateway_mcp._configured_inline_response_limit(tmp_path) == 32768
+    assert result["delivery"] == "inline"
+    assert result["bytes"] == 100_000
+    assert "artifact-path" not in result
+    assert "response-artifact" not in result
+    mock_call.assert_called_once_with("get_execution_response", _ROOT, "req_x")
 
 
 def test_agent_task_cancel_delegates():
@@ -252,7 +212,7 @@ def test_agent_task_status_can_negotiate_slim_v4():
         patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
     ):
         mock_call.return_value = {
-            "request-id": "req_x",
+            "task_id": "req_x",
             "lifecycle": "active",
             "activity": "running",
             "outcome": None,

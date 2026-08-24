@@ -287,6 +287,9 @@ mcp-servers:
       agent_task_status: >
         Return lifecycle/activity status for request-id (state,
         response-artifact, activity, completion, usage, error, attempts).
+        Pass response_version=4 to negotiate the exact four-field status
+        contract {task_id, lifecycle, activity, outcome}; the default remains
+        the frozen V3 projection.
         Response content and previews are never included in status; use
         agent_task_response for the exact terminal response. Raises
         RES-AGW-001 if not found.
@@ -299,13 +302,9 @@ mcp-servers:
         clear-not-submitted. Recovery never resends a provider prompt; poll
         status and diagnostics for the resulting lifecycle evidence.
       agent_task_response: >
-        Return a bounded response envelope. Small verified terminal responses
-        are returned inline as {delivery: inline, text, bytes}. Responses
-        larger than gateway.mcp.max-inline-response-bytes return
-        {delivery: artifact, response-artifact, artifact-path,
-        artifact-path-kind: project-relative}; the exact UTF-8 response is
-        already stored at that request-owned path. Never expect an absolute
-        filesystem path or a paged MCP result.
+        Return the exact verified terminal response. The gateway dereferences
+        the request-owned artifact server-side; no filesystem path, URI, or
+        bounded preview is exposed through this operation.
       agent_task_cancel: >
         Cancel a queued request, or best-effort mark a running one. See
         instructions for the best-effort semantics.

@@ -46,7 +46,7 @@ def test_queued_is_pending_waiting_with_null_outcome() -> None:
     result = project_task_status_v4(_record("queued"))
 
     assert result == {
-        "request-id": "req-1",
+        "task_id": "req-1",
         "lifecycle": "pending",
         "activity": "waiting",
         "outcome": None,
@@ -59,7 +59,7 @@ def test_running_is_active_running_without_provider_details() -> None:
     )
 
     assert result == {
-        "request-id": "req-1",
+        "task_id": "req-1",
         "lifecycle": "active",
         "activity": "running",
         "outcome": None,
@@ -116,7 +116,7 @@ def test_terminal_states_have_one_outcome_and_no_activity(
     )
 
     assert result == {
-        "request-id": "req-1",
+        "task_id": "req-1",
         "lifecycle": "terminal",
         "activity": None,
         "outcome": outcome,
@@ -135,7 +135,7 @@ def test_v4_has_exactly_four_keys_and_no_internal_fields() -> None:
     )
     result = project_task_status_v4(record, _snapshot(record, AgentLifecycle.ACTIVE))
 
-    assert set(result) == {"request-id", "lifecycle", "activity", "outcome"}
+    assert set(result) == {"task_id", "lifecycle", "activity", "outcome"}
 
 
 @pytest.mark.parametrize(
@@ -188,7 +188,7 @@ def test_dispatching_is_active_running_even_when_v3_snapshot_is_unknown() -> Non
     snapshot = _snapshot(record, AgentLifecycle.UNKNOWN)
 
     assert project_task_status_v4(record, snapshot) == {
-        "request-id": "req-1",
+        "task_id": "req-1",
         "lifecycle": "active",
         "activity": "running",
         "outcome": None,
