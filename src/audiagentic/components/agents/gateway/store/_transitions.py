@@ -25,6 +25,7 @@ from audiagentic.foundation.time import now_iso_z
 from audiagentic.components.agents.gateway.diagnostics import (
     classify_error,
     evidence_from_activity,
+    merge_diagnostics,
 )
 
 from . import _shared
@@ -141,7 +142,10 @@ def transition_record(
                 # Keep semantic diagnostics alongside the redacted public
                 # error.  The provider code is evidence; this classification
                 # is the gateway-owned recovery contract.
-                updated["diagnostics"] = classify_error(updates.get("error"))
+                updated["diagnostics"] = merge_diagnostics(
+                    record.get("diagnostics"),
+                    classify_error(updates.get("error")),
+                )
         write_record(project_root, updated)
         record_gateway_timeline(
             project_root,
@@ -176,7 +180,7 @@ def update_diagnostics(
                 details={"request-id": request_id},
             )
         updated = dict(record)
-        updated["diagnostics"] = dict(diagnostics)
+        updated["diagnostics"] = merge_diagnostics(record.get("diagnostics"), diagnostics)
         if evidence is not None:
             updated["diagnostic-evidence"] = (
                 list(record.get("diagnostic-evidence") or []) + [dict(evidence)]
