@@ -3,22 +3,27 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.agents.agents_paths import (
-    agent_definitions_path,
-    execution_profiles_path,
-    roles_path,
-)
+from audiagentic.components.agents.agents_paths import global_agents_config_path
 from audiagentic.components.agents.configuration.contracts import AgentsConfigDocument
 from audiagentic.components.agents.configuration.repository import AgentsConfigRepository
 from audiagentic.components.agents.models.prompt_definition import PromptDefinition
 from audiagentic.foundation.io import load_yaml_file
+from audiagentic.foundation.paths.names import project_marker_path
+
+
+def _legacy_path(project_root: Path, filename: str) -> Path:
+    """Resolve an explicit pre-v2 input file during one-time migration only."""
+    return project_marker_path(project_root) / "config" / filename
 
 
 def build_legacy_document(project_root: Path) -> AgentsConfigDocument:
     """Read legacy files and build, but do not write, the canonical document."""
-    roles_data = load_yaml_file(roles_path(project_root)) if roles_path(project_root).exists() else {}
-    profiles_data = load_yaml_file(execution_profiles_path(project_root)) if execution_profiles_path(project_root).exists() else {}
-    agents_data = load_yaml_file(agent_definitions_path(project_root)) if agent_definitions_path(project_root).exists() else {}
+    roles_path = _legacy_path(project_root, "roles.yaml")
+    profiles_path = _legacy_path(project_root, "execution-profiles.yaml")
+    definitions_path = _legacy_path(project_root, "agent-definitions.yaml")
+    roles_data = load_yaml_file(roles_path) if roles_path.exists() else {}
+    profiles_data = load_yaml_file(profiles_path) if profiles_path.exists() else {}
+    agents_data = load_yaml_file(definitions_path) if definitions_path.exists() else {}
     roles = tuple(roles_data.get("roles", []))
     prompts = tuple(PromptDefinition.from_dict({
             "prompt_id": f"migrated-role-{role['role_id']}",
@@ -53,8 +58,10 @@ def migrate_legacy_config(project_root: Path) -> str:
     Existing canonical configuration is never merged with legacy data.  The
     caller must compare it separately before considering legacy files retired.
     """
-    repository = AgentsConfigRepository()
-    path = project_root / ".audiagentic" / "config" / "agents.yaml"
+    repository = AgentsConfigRepository(global_agents_config_path(), required=False)
+    # Legacy files are read from the project only as explicit migration input;
+    # the canonical output is always the machine-global catalog.
+    path = global_agents_config_path()
     if path.exists():
         return repository.read(project_root).digest
     document = build_legacy_document(project_root)

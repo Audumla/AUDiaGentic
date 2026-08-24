@@ -10,9 +10,6 @@ implementation-cardinality: exclusive
 lifecycle-observer: audiagentic.components.agents.gateway.events
 status-hook: audiagentic.components.agents.models.execution_profile_api.agent_status
 files:
-  - path: .audiagentic/config/agents.yaml
-    lifecycle: create-if-missing
-    description: Canonical per-project Agent, Role, Prompt, Profile, and Trigger configuration
   - path: .audiagentic/runtime/agent-execution-gateway
     lifecycle: runtime-only
     recursive: true
@@ -376,7 +373,7 @@ contributions:
       body: |
         Execution profiles bind a provider to a specific model with optional
         execution parameters. They are stored in the canonical
-        .audiagentic/config/agents.yaml document alongside prompts, roles,
+        ~/.audiagentic/config/agents.yaml document alongside prompts, roles,
         agent definitions, and triggers.
 
         ## When to use

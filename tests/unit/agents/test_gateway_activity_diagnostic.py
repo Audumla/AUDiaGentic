@@ -2,6 +2,20 @@ from __future__ import annotations
 
 from audiagentic.components.agents.gateway import store
 from audiagentic.components.agents.gateway.queue.dispatch import diagnose_activity_lease
+from audiagentic.foundation.transports.agent_session import (
+    is_meaningful_activity,
+    is_meaningful_activity_label,
+)
+
+
+def test_meaningful_activity_vocabulary_excludes_heartbeat_and_context_flags() -> None:
+    assert not is_meaningful_activity_label("worker-heartbeat")
+    assert not is_meaningful_activity_label("provider-turn-pending")
+    assert not is_meaningful_activity_label("transport-unknown")
+    for label in ("thinking", "searching the web", "read-resource", "tool-progress", "response-progress"):
+        assert is_meaningful_activity_label(label)
+    assert not is_meaningful_activity("session-transport", "activity")
+    assert is_meaningful_activity("session-transport", "tool-progress")
 
 
 def test_activity_diagnostic_delegates_to_fenced_nonterminal_transition(tmp_path):

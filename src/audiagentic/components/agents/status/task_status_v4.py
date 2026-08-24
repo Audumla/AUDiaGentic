@@ -68,12 +68,16 @@ def project_task_status_v4(
     record: Mapping[str, Any],
     canonical_snapshot: AgentStatusSnapshot | Any | None = None,
 ) -> dict[str, object]:
-    """Project one request into the fixed four-key V4 polling contract.
+    """Project one request into the fixed V4 polling contract.
 
     The inactive axis is represented by ``None`` so clients never need to
     infer whether a missing key means an unsupported state.  Durable terminal
     state wins; recognized durable ``queued``/``dispatching``/``running``
     states refine an ``unknown`` AS92 snapshot without changing V3 semantics.
+
+    ``activity_seq`` and ``activity_at`` are durable progress markers.  The
+    sequence advances only when verified provider/owner activity is accepted;
+    the timestamp is the time of that activity, not the status-read time.
     """
     request_id = record.get("request-id")
     state = record.get("state")
@@ -81,6 +85,13 @@ def project_task_status_v4(
         raise TaskStatusContractError("task request-id is missing")
     if not isinstance(state, str):
         raise TaskStatusContractError("task durable state is missing")
+
+    activity_seq = record.get("activity-sequence", 0)
+    if isinstance(activity_seq, bool) or not isinstance(activity_seq, int) or activity_seq < 0:
+        raise TaskStatusContractError("task activity sequence is invalid")
+    activity_at = record.get("last-activity-at")
+    if activity_at is not None and not isinstance(activity_at, str):
+        raise TaskStatusContractError("task activity timestamp is invalid")
 
     _validate_snapshot(record, canonical_snapshot)
     snapshot_lifecycle = getattr(canonical_snapshot, "lifecycle", None)
@@ -98,6 +109,8 @@ def project_task_status_v4(
             "task_id": request_id,
             "lifecycle": "terminal",
             "activity": None,
+            "activity_seq": activity_seq,
+            "activity_at": activity_at,
             "outcome": expected,
         }
 
@@ -109,6 +122,8 @@ def project_task_status_v4(
             "task_id": request_id,
             "lifecycle": "pending",
             "activity": "waiting",
+            "activity_seq": activity_seq,
+            "activity_at": activity_at,
             "outcome": None,
         }
 
@@ -127,6 +142,8 @@ def project_task_status_v4(
             "task_id": request_id,
             "lifecycle": "active",
             "activity": activity,
+            "activity_seq": activity_seq,
+            "activity_at": activity_at,
             "outcome": None,
         }
 

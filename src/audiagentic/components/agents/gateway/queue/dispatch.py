@@ -25,6 +25,7 @@ from audiagentic.components.agents.gateway.session.dispatch import (
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
+from audiagentic.foundation.transports.agent_session import is_meaningful_activity
 
 logger = logging.getLogger(__name__)
 
@@ -258,20 +259,28 @@ def _renew_activity(
     *,
     activity_lease_seconds: float = 300.0,
 ) -> None:
-    """Forward only authenticated worker activity to durable renewal."""
+    """Forward only authenticated, meaningful worker activity to renewal.
+
+    Heartbeat frames are retained as ownership evidence but do not advance the
+    provider activity lease.
+    """
     from audiagentic.components.agents.contracts.worker_protocol import WorkerActivityEnvelope
     if not isinstance(activity, WorkerActivityEnvelope):
         return
     if activity.identity.worker_id != record.get("worker-id") or activity.identity.attempt_epoch != record.get("attempt-epoch"):
         return
     try:
+        meaningful = is_meaningful_activity(
+            activity.activity_source,
+            activity.activity_source,
+        )
         store.record_owned_activity(
             project_root,
             record["request-id"],
             owner_epoch=record["dispatch-owner-epoch"],
             worker_id=activity.identity.worker_id,
             attempt_epoch=activity.identity.attempt_epoch,
-            kind="owner-heartbeat",
+            kind="provider" if meaningful else "owner-heartbeat",
             source=activity.activity_source,
             source_instance=activity.identity.worker_id,
             source_sequence=activity.activity_seq,
@@ -331,7 +340,9 @@ def _try_profile_with_retries(
             details={"request-id": record.get("request-id")},
         )
     else:
-        from audiagentic.components.agents.models.execution_profile_api import resolve_execution_profile
+        from audiagentic.components.agents.models.execution_profile_api import (
+            resolve_execution_profile,
+        )
 
         profile = resolve_execution_profile(project_root, execution_profile_id)
     retry_count = resolve_retry_count(profile.get("params", {}))

@@ -115,10 +115,10 @@ defaulting) — resolved via `agents_gateway_queue.resolve_*` / `agents_gateway_
   one in-flight turn per durable session for correctness, while
   `project-capacity` limits active provider tasks for the canonical project.
 - `retry-count` (int, default 1) — additional attempts after a transient failure, per profile.
-- `session-turn-timeout-seconds` (number, default 3600, 0 disables) — hard
-  deadline for one session turn (RV680). On expiry the session is failed with
-  close-reason `turn-timeout` and the request fails with `TO-AGW-090` — a
-  wedged harness can no longer hold a profile compute slot forever.
+- `session-turn-timeout-seconds` (number, default 0 = disabled) — optional
+  explicit absolute deadline for one session turn. Activity observations do
+  not extend an enabled absolute ceiling; GPT-auto uses its provider-owned
+  response ceiling instead of a competing Gateway turn timer.
 - `session-turn-silence-timeout-seconds` (number, default 0 = disabled) —
   opt-in in-turn liveness watchdog: if a running turn produces no transport
   events for this long, the reaper fails the session with close-reason

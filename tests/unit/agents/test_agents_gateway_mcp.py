@@ -215,6 +215,8 @@ def test_agent_task_status_can_negotiate_slim_v4():
             "task_id": "req_x",
             "lifecycle": "active",
             "activity": "running",
+            "activity_seq": 3,
+            "activity_at": "2026-08-24T07:12:31Z",
             "outcome": None,
         }
         result = agents_gateway_mcp.agent_task_status("req_x", response_version=4)

@@ -44,7 +44,7 @@ Run deterministic coverage with `pytest tests/gpt_auto`. The opt-in live gateway
 acceptance is `python tests/gpt_auto/test_session_transport_live.py`.
 
 The `gpt-auto` execution profile disables Gateway session idle/max-lifetime
-caps so a durable conversation can remain open for days. It gives a turn 3900
-seconds at the Gateway layer, leaving shutdown margin around the provider's
-configured 3600-second response policy. Session lifetime and turn lifetime are
-separate policies.
+caps so a durable conversation can remain open for days. It does not add a
+competing Gateway turn wall-clock timer; the provider's configured response
+absolute ceiling is the authoritative safety boundary. Session lifetime and
+turn lifetime remain separate policies.

@@ -55,7 +55,6 @@ def resolve_capacity_limits(params: dict[str, Any]) -> dict[str, int | None | bo
     """
     global_keys = ("global-capacity", "global_capacity", "global-concurrency", "global_concurrency")
     project_keys = ("project-capacity", "project_capacity", "project-concurrency", "project_concurrency")
-    global_value = first_present(params, *global_keys)
     # Key presence, rather than value truthiness, distinguishes an explicit
     # YAML null (which is an intentional unlimited setting) from omission.
     global_explicit = any(key in params for key in global_keys)

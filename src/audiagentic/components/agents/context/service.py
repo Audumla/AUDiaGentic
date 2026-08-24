@@ -9,14 +9,14 @@ from audiagentic.components.agents.context.store import AgentContextStore
 
 
 def open_context(project_root: Path, agent_id: str, title: str | None = None) -> AgentContextRecord:
-    # A hosted gateway installs the shared profile registry and therefore
-    # resolves composition from the machine-global catalog. Embedded callers
-    # (including isolated project tests) retain the context library's local
-    # resolver; this seam is never used by the shared gateway process.
-    from audiagentic.components.agents.gateway.profiles import get_gateway_registry
-
-    repository = global_agents_repository() if get_gateway_registry() is not None else None
-    composition = resolve_agent_composition(project_root, agent_id, repository=repository)
+    # Context composition is always resolved from the machine-global Agents
+    # catalog.  The project root owns only the context/work runtime records;
+    # it cannot shadow the hosted agent definitions.
+    composition = resolve_agent_composition(
+        project_root,
+        agent_id,
+        repository=global_agents_repository(),
+    )
     return AgentContextStore().create(project_root, composition.identity, title)
 
 

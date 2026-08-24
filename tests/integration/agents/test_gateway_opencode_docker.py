@@ -25,7 +25,7 @@ Provisioning goes through gateway_docker_harness.py for the execution-profile an
 provider-CLI-install pieces. The harness runtime config
 (.audiagentic/config/harness/ag.yaml) and the rig HTTP handler stay local to
 this file: the harness config format is genuine project-authored config (no
-creation API exists for it, same status as gateway-profiles.yaml), and this
+    creation API exists for it), and this
 suite's rig needs SSE streaming support that the crash-matrix suite's
 HoldableRigHandler doesn't — a different real requirement, not a shortcut.
 """

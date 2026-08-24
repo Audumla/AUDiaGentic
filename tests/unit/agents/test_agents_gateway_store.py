@@ -726,12 +726,13 @@ def test_owned_activity_renewal_persists_gateway_receipt_and_rejects_replay(tmp_
         activity_source="worker-heartbeat",
         activity_lease_seconds=30,
     )
-    assert renewed["activity-sequence"] == 1
-    assert renewed["activity-source"] == "worker-heartbeat"
-    assert renewed["last-activity-at"] is not None
-    assert renewed["activity-lease-expires-at"] is not None
-    assert renewed["watchdog-state"] == "active"
-    assert renewed["watchdog-reason"] == "verified-activity-renewed"
+    assert renewed["activity-sequence"] == 0
+    assert renewed["activity-source"] is None
+    assert renewed["last-activity-at"] is None
+    assert renewed["activity-lease-expires-at"] is None
+    assert renewed["watchdog-state"] == "not-started"
+    assert renewed["watchdog-reason"] is None
+    assert renewed["activity"]["owner"]["last-at"] is not None
     replay = store.renew_owned_activity(
         tmp_path,
         record["request-id"],
@@ -743,7 +744,7 @@ def test_owned_activity_renewal_persists_gateway_receipt_and_rejects_replay(tmp_
         activity_lease_seconds=30,
     )
     assert replay["revision"] == renewed["revision"]
-    assert replay["last-activity-at"] == renewed["last-activity-at"]
+    assert replay["activity"]["owner"]["last-at"] == renewed["activity"]["owner"]["last-at"]
 
 
 @pytest.mark.parametrize("activity_source", ["provider-progress", "acp-progress", "mcp-a2a-progress"])

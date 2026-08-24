@@ -5,9 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.components.agents.agents_paths import agents_config_path
+from audiagentic.components.agents.agents_paths import global_agents_config_path
 from audiagentic.components.agents.configuration.contracts import AgentsConfigDocument
-from audiagentic.components.agents.configuration.migration import build_legacy_document
+from audiagentic.components.agents.configuration.migration import (
+    build_legacy_document,
+    migrate_legacy_config,
+)
 from audiagentic.components.agents.configuration.repository import (
     AgentsConfigConflictError,
     AgentsConfigRepository,
@@ -27,20 +30,16 @@ def _document() -> AgentsConfigDocument:
     )
 
 
-def test_agents_config_path_is_canonical(tmp_path: Path) -> None:
-    assert agents_config_path(tmp_path) == tmp_path / ".audiagentic" / "config" / "agents.yaml"
-
-
-def test_legacy_prompt_profiles_are_not_republished() -> None:
-    document = AgentsConfigDocument.from_mapping(
-        {
-            "contract-version": "v2",
-            "prompt_profiles": {
-                "coder": {"template_with_body": "agent-templates/coder.md"}
-            },
-        }
-    )
-    assert "prompt_profiles" not in document.to_mapping()
+def test_legacy_prompt_profiles_are_rejected_at_canonical_boundary() -> None:
+    with pytest.raises(ValueError, match="unknown agents config keys"):
+        AgentsConfigDocument.from_mapping(
+            {
+                "contract-version": "v2",
+                "prompt_profiles": {
+                    "coder": {"template_with_body": "agent-templates/coder.md"}
+                },
+            }
+        )
 
 
 def test_agents_component_does_not_depend_on_legacy_agent_jobs() -> None:
@@ -81,7 +80,7 @@ def test_agents_public_surfaces_have_no_legacy_agent_jobs_imports() -> None:
 
 
 def test_agents_config_repository_round_trip_and_digest(tmp_path: Path) -> None:
-    repo = AgentsConfigRepository()
+    repo = AgentsConfigRepository(tmp_path / "agents.yaml")
     written = repo.replace(tmp_path, _document(), expected_digest=None)
     read = repo.read(tmp_path)
     assert read.document == written.document
@@ -94,15 +93,22 @@ def test_required_agents_config_fails_closed_when_missing(tmp_path: Path) -> Non
         repo.read(tmp_path)
 
 
+def test_agents_config_requires_explicit_supported_contract_version() -> None:
+    with pytest.raises(ValueError, match="contract-version is required"):
+        AgentsConfigDocument.from_mapping({})
+    with pytest.raises(ValueError, match="unsupported agents config contract-version"):
+        AgentsConfigDocument.from_mapping({"contract-version": "v99"})
+
+
 def test_agents_config_repository_compare_and_swap_rejects_stale_digest(tmp_path: Path) -> None:
-    repo = AgentsConfigRepository()
+    repo = AgentsConfigRepository(tmp_path / "agents.yaml")
     repo.replace(tmp_path, _document(), expected_digest=None)
     with pytest.raises(AgentsConfigConflictError):
         repo.replace(tmp_path, AgentsConfigDocument("v2", (), (), (), ()), expected_digest="stale")
 
 
 def test_agents_config_repository_supports_trigger_records(tmp_path: Path) -> None:
-    repo = AgentsConfigRepository()
+    repo = AgentsConfigRepository(tmp_path / "agents.yaml")
     document = AgentsConfigDocument(
         "v2", (), (), (), (),
         ({"trigger_id": "orders-created", "event_pattern": "orders.created", "enabled": True},),
@@ -128,14 +134,14 @@ def test_agents_config_repository_supports_trigger_records(tmp_path: Path) -> No
     ],
 )
 def test_repository_rejects_missing_references(tmp_path: Path, agent: dict[str, object], needle: str) -> None:
-    repo = AgentsConfigRepository()
+    repo = AgentsConfigRepository(tmp_path / "agents.yaml")
     document = AgentsConfigDocument("v2", _document().prompts, _document().roles, _document().execution_profiles, (agent,))
     with pytest.raises(AgentsConfigValidationError, match=needle):
         repo.replace(tmp_path, document, expected_digest=None)
 
 
 def test_repository_rejects_duplicate_entity_ids(tmp_path: Path) -> None:
-    repo = AgentsConfigRepository()
+    repo = AgentsConfigRepository(tmp_path / "agents.yaml")
     base = _document()
     duplicate = AgentsConfigDocument("v2", base.prompts + base.prompts, base.roles, base.execution_profiles, base.agents)
     with pytest.raises(AgentsConfigValidationError, match="duplicate"):
@@ -143,7 +149,7 @@ def test_repository_rejects_duplicate_entity_ids(tmp_path: Path) -> None:
 
 
 def test_plain_model_instance_is_allowed(tmp_path: Path) -> None:
-    repo = AgentsConfigRepository()
+    repo = AgentsConfigRepository(tmp_path / "agents.yaml")
     document = AgentsConfigDocument(
         "v2", _document().prompts, _document().roles,
         ({"profile_id": "x", "provider_id": "local-openai", "instances": ["plain-model"]},),
@@ -153,7 +159,7 @@ def test_plain_model_instance_is_allowed(tmp_path: Path) -> None:
 
 
 def test_snapshot_nested_profile_params_cannot_be_mutated(tmp_path: Path) -> None:
-    repo = AgentsConfigRepository()
+    repo = AgentsConfigRepository(tmp_path / "agents.yaml")
     document = AgentsConfigDocument(
         "v2", _document().prompts, _document().roles,
         ({"profile_id": "x", "provider_id": "local-openai", "instances": ["plain-model"], "params": {"temperature": 0.1}},),
@@ -177,6 +183,23 @@ def test_legacy_role_behavior_becomes_shared_prompt(tmp_path: Path) -> None:
     assert len(document.prompts) == 1
     assert document.prompts[0].to_dict()["content"] == [{"kind": "text", "text": "preserve me"}]
     assert document.agents[0]["prompt_id"] == document.agents[1]["prompt_id"]
+
+
+def test_legacy_migration_writes_global_catalog_not_project_catalog(tmp_path: Path) -> None:
+    config = tmp_path / ".audiagentic" / "config"
+    config.mkdir(parents=True)
+    save_yaml_file(config / "roles.yaml", {"roles": []})
+    save_yaml_file(config / "execution-profiles.yaml", {"profiles": []})
+    save_yaml_file(config / "agent-definitions.yaml", {"agent-definitions": []})
+
+    global_path = global_agents_config_path()
+    global_path.unlink()
+    first_digest = migrate_legacy_config(tmp_path)
+    second_digest = migrate_legacy_config(tmp_path)
+
+    assert global_path.is_file()
+    assert not (config / "agents.yaml").exists()
+    assert second_digest == first_digest
 
 
 def test_canonical_mapping_key_rejects_conflicting_embedded_identity() -> None:
