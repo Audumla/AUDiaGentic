@@ -707,13 +707,6 @@ class GatewayQueueManager:
             keys.append(("global", int(limits["global"])))
         if limits["project"] is not None:
             keys.append((f"project:{entry.project_key}", int(limits["project"])))
-        if limits["session"] is not None and entry.session_key is not None:
-            # Session IDs are only unique within a project root. Include the
-            # canonical project key so imported/deterministic IDs in separate
-            # projects do not contend for one another's turn budget.
-            keys.append(
-                (f"session:{entry.project_key}:{entry.session_key}", int(limits["session"]))
-            )
         return limits, keys
 
     def _try_reserve_specific_source(
@@ -1056,14 +1049,18 @@ class GatewayQueueManager:
         """
         removed = self._pending_authority.remove(request_id)
         if removed is not None:
-            return store.cancel_queued_or_mark_requested(project_root, request_id)
+            return store.cancel_queued_or_mark_requested(
+                project_root, request_id, source="api", actor_type="client", reason="client-request"
+            )
 
         pq = self._find_profile_for_request(execution_profile_id, request_id)
         if pq is None:
             # A remote service/process can own the in-memory queue.  Durable
             # cancellation still has to reach the record even when this local
             # manager has no profile queue.
-            return store.cancel_queued_or_mark_requested(project_root, request_id)
+            return store.cancel_queued_or_mark_requested(
+                project_root, request_id, source="api", actor_type="client", reason="client-request"
+            )
 
         with pq.lock:
             removed_from_queue = False
@@ -1076,7 +1073,9 @@ class GatewayQueueManager:
             # already have left ``pending`` but not yet claimed dispatch; the
             # store then cancels its still-queued record atomically instead of
             # leaving queued+cancel-requested without a queue entry.
-            updated = store.cancel_queued_or_mark_requested(project_root, request_id)
+            updated = store.cancel_queued_or_mark_requested(
+                project_root, request_id, source="api", actor_type="client", reason="client-request"
+            )
             if updated["state"] == "cancelled":
                 logger.info(
                     "gateway request cancelled before running", extra={"request-id": request_id}

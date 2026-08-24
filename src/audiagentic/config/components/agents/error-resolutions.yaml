@@ -12,7 +12,7 @@ VAL-AGW-008: "timeout_seconds must be a positive number. Use 0 or null for no ti
 RES-AGW-001: "The gateway request record was not found. The request may have been deleted or the ID is incorrect."
 IO-AGW-001: "Failed to read or parse the gateway request record file. Check that the file exists and contains valid JSON."
 CON-AGW-001: "The requested state transition is illegal for the current workflow. Review valid transitions in workflows.yaml."
-VAL-AGW-020: "Gateway capacity params (virtual-capacity, global-capacity, project-capacity, or session-capacity) must be a positive integer or 'unlimited'. Check the named profile parameter."
+VAL-AGW-020: "Gateway capacity params (virtual-capacity, global-capacity, or project-capacity) must be a positive integer or 'unlimited'. Check the named profile parameter."
 VAL-AGW-021: "A gateway capacity limit must be at least 1, or explicitly 'unlimited'. Zero and negative values are invalid."
 VAL-AGW-022: "execution profile params.pending-capacity must be an integer (not bool or float). Check the profile configuration."
 VAL-AGW-023: "execution profile params.pending-capacity must be at least 1. A value of 0 or negative is not valid."
@@ -135,6 +135,9 @@ CFG-APT-001: "The configured prompt profile is unknown. Use a registered prompt 
 IO-APT-001: "The packaged prompt-profile template is missing or unreadable."
 CON-APT-001: "The admitted prompt-profile template changed before dispatch; resubmit the request."
 CON-AGW-140: "The gateway response artifact failed its integrity check."
+CON-AGW-143: "The diagnostic recovery request used a stale record revision; reload status and retry with the current revision."
+CON-AGW-145: "The request has no durable diagnostic evidence that can support recovery."
+CON-AGW-146: "Clear-not-submitted is allowed only when the gateway has proven that no provider side effect occurred."
 RES-AGW-141: "The gateway response artifact is unavailable for this request."
 # Test-only error codes for classify_failure unit tests
 VAL-X-001: "Test validation error code"

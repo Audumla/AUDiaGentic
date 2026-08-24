@@ -311,7 +311,7 @@ def test_session_workers_share_one_profile_compute_slot(tmp_path: Path):
     assert max_active == 1
 
 
-def test_session_capacity_serializes_same_session_but_not_other_sessions(tmp_path: Path):
+def test_legacy_session_capacity_is_ignored_while_project_capacity_applies(tmp_path: Path):
     manager = queue_mod.GatewayQueueManager()
     entered = threading.Semaphore(0)
     allow_turn_start = threading.Event()
@@ -363,12 +363,12 @@ def test_session_capacity_serializes_same_session_but_not_other_sessions(tmp_pat
     deadline = time.monotonic() + 2
     while time.monotonic() < deadline:
         with active_lock:
-            if active == 1:
+            if active == 2:
                 break
         time.sleep(0.01)
     with active_lock:
-        assert active == 1
-        assert max_active == 1
+        assert active == 2
+        assert max_active == 2
     release_compute.set()
     for record in records:
         assert manager.wait(project, record["request-id"], timeout_seconds=5)["state"] == "completed"

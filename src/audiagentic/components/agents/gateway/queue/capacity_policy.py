@@ -46,16 +46,15 @@ def resolve_virtual_capacity(params: dict[str, Any]) -> int | None:
 
 
 def resolve_capacity_limits(params: dict[str, Any]) -> dict[str, int | None | bool]:
-    """Return independent global/project/session concurrency limits.
+    """Return global/project active-task concurrency limits.
 
     ``virtual-capacity`` remains the backwards-compatible global default. The
-    three explicit dimensions are optional and may be set to ``unlimited``.
-    A missing project/session limit is unbounded; a missing global limit keeps
+    the two execution dimensions are optional and may be set to ``unlimited``.
+    A missing project limit is unbounded; a missing global limit keeps
     the historic ``virtual-capacity`` behaviour.
     """
     global_keys = ("global-capacity", "global_capacity", "global-concurrency", "global_concurrency")
     project_keys = ("project-capacity", "project_capacity", "project-concurrency", "project_concurrency")
-    session_keys = ("session-capacity", "session_capacity", "session-concurrency", "session_concurrency")
     global_value = first_present(params, *global_keys)
     # Key presence, rather than value truthiness, distinguishes an explicit
     # YAML null (which is an intentional unlimited setting) from omission.
@@ -65,7 +64,11 @@ def resolve_capacity_limits(params: dict[str, Any]) -> dict[str, int | None | bo
         "global": global_limit,
         "global-explicit": global_explicit,
         "project": _optional_capacity(params, *project_keys),
-        "session": _optional_capacity(params, *session_keys),
+        # Retained as a null compatibility field so older callers can inspect
+        # the mapping without accidentally applying a legacy per-session
+        # capacity. Persistent sessions are capacity-neutral; the queue still
+        # enforces one active turn per session through its turn lock.
+        "session": None,
     }
 
 def resolve_pending_capacity(params: dict[str, Any], virtual_capacity: int | None) -> int:

@@ -111,9 +111,9 @@ defaulting) — resolved via `agents_gateway_queue.resolve_*` / `agents_gateway_
   when omitted, legacy `virtual-capacity`/`max-concurrency` behavior remains.
 - `project-capacity` (int or `unlimited`, optional) — active turns allowed per
   canonical project root. Missing means unlimited.
-- `session-capacity` (int or `unlimited`, optional) — active turns allowed per
-  durable session id. Missing means unlimited; session turn locks still serialize
-  turns within one provider session.
+- Persistent sessions have no configurable capacity dimension. The queue keeps
+  one in-flight turn per durable session for correctness, while
+  `project-capacity` limits active provider tasks for the canonical project.
 - `retry-count` (int, default 1) — additional attempts after a transient failure, per profile.
 - `session-turn-timeout-seconds` (number, default 3600, 0 disables) — hard
   deadline for one session turn (RV680). On expiry the session is failed with

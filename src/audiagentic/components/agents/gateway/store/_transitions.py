@@ -22,6 +22,10 @@ from audiagentic.components.agents.gateway.queue.work_index import (
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.system.managed_service_contracts import add_seconds
 from audiagentic.foundation.time import now_iso_z
+from audiagentic.components.agents.gateway.diagnostics import (
+    classify_error,
+    evidence_from_activity,
+)
 
 from . import _shared
 from ._admission import (
@@ -133,6 +137,11 @@ def transition_record(
                     updated[key.replace("_", "-")] = _redact_error(value)
                 else:
                     updated[key.replace("_", "-")] = value
+            if "error" in updates and updates.get("error") is not None:
+                # Keep semantic diagnostics alongside the redacted public
+                # error.  The provider code is evidence; this classification
+                # is the gateway-owned recovery contract.
+                updated["diagnostics"] = classify_error(updates.get("error"))
         write_record(project_root, updated)
         record_gateway_timeline(
             project_root,
@@ -148,7 +157,52 @@ def transition_record(
         return updated
 
 
-def mark_cancel_requested(project_root: Path, request_id: str) -> dict[str, Any]:
+def update_diagnostics(
+    project_root: Path,
+    request_id: str,
+    diagnostics: dict[str, Any],
+    *,
+    evidence: dict[str, Any] | None = None,
+    expected_revision: int | None = None,
+) -> dict[str, Any]:
+    """CAS-update the diagnostic rollup without changing lifecycle state."""
+    with _request_lock(project_root, request_id):
+        record = _read_record_locked(project_root, request_id)
+        if expected_revision is not None and record.get("revision") != expected_revision:
+            raise AudiaGenticError(
+                code="CON-AGW-143",
+                kind="agents",
+                message="diagnostic recovery revision is stale",
+                details={"request-id": request_id},
+            )
+        updated = dict(record)
+        updated["diagnostics"] = dict(diagnostics)
+        if evidence is not None:
+            updated["diagnostic-evidence"] = (
+                list(record.get("diagnostic-evidence") or []) + [dict(evidence)]
+            )[-8:]
+        updated["updated-at"] = now_iso_z()
+        updated["revision"] = record["revision"] + 1
+        write_record(project_root, updated)
+        record_gateway_timeline(
+            project_root,
+            request_id,
+            "diagnostics.updated",
+            state=record.get("state"),
+            attributes={"classification": diagnostics.get("classification"), "phase": diagnostics.get("phase")},
+        )
+        return updated
+
+
+def mark_cancel_requested(
+    project_root: Path,
+    request_id: str,
+    *,
+    source: str = "api",
+    actor_type: str = "client",
+    actor_id: str | None = None,
+    reason: str | None = None,
+) -> dict[str, Any]:
     """Persist cancel-requested=true without changing state.
 
     Observable via read_record/wait/get_execution_request regardless of whether the
@@ -162,6 +216,20 @@ def mark_cancel_requested(project_root: Path, request_id: str) -> dict[str, Any]
             return record
         updated = dict(record)
         updated["cancel-requested"] = True
+        updated["diagnostics"] = classify_error(
+            {"code": "CON-AGW-CANCELLED"},
+            phase="cancellation",
+            side_effect_state=(record.get("diagnostics") or {}).get("side-effect-state")
+            if isinstance(record.get("diagnostics"), dict)
+            else None,
+        )
+        updated["cancel-provenance"] = {
+            "source": source if source in {"api", "operator", "watchdog", "worker-shutdown", "system", "unknown-legacy"} else "unknown-legacy",
+            "actor-type": actor_type if actor_type in {"client", "operator", "worker", "system", "unknown"} else "unknown",
+            "actor-id": actor_id[:128] if isinstance(actor_id, str) else None,
+            "reason": reason[:256] if isinstance(reason, str) else None,
+            "requested-at": now_iso_z(),
+        }
         updated["updated-at"] = now_iso_z()
         updated["revision"] = record["revision"] + 1
         write_record(project_root, updated)
@@ -282,7 +350,15 @@ def append_attempt(
         return updated
 
 
-def cancel_queued_or_mark_requested(project_root: Path, request_id: str) -> dict[str, Any]:
+def cancel_queued_or_mark_requested(
+    project_root: Path,
+    request_id: str,
+    *,
+    source: str = "queue-worker",
+    actor_type: str = "worker",
+    actor_id: str | None = None,
+    reason: str | None = None,
+) -> dict[str, Any]:
     """Linearize cancellation with the queued-to-running dispatch boundary.
 
     A queue thread can remove an item from its in-memory pending deque before
@@ -297,6 +373,18 @@ def cancel_queued_or_mark_requested(project_root: Path, request_id: str) -> dict
             if record["state"] == "running" and not record["cancel-requested"]:
                 updated = dict(record)
                 updated["cancel-requested"] = True
+                updated["diagnostics"] = classify_error(
+                    {"code": "CON-AGW-CANCELLED"}, phase="cancellation",
+                    side_effect_state=(record.get("diagnostics") or {}).get("side-effect-state")
+                    if isinstance(record.get("diagnostics"), dict) else None,
+                )
+                updated["cancel-provenance"] = {
+                    "source": source if source in {"api", "operator", "watchdog", "worker-shutdown", "system", "unknown-legacy"} else "unknown-legacy",
+                    "actor-type": actor_type if actor_type in {"client", "operator", "worker", "system", "unknown"} else "unknown",
+                    "actor-id": actor_id[:128] if isinstance(actor_id, str) else None,
+                    "reason": reason[:256] if isinstance(reason, str) else None,
+                    "requested-at": now_iso_z(),
+                }
                 updated["updated-at"] = now_iso_z()
                 updated["revision"] = record["revision"] + 1
                 write_record(project_root, updated)
@@ -314,6 +402,18 @@ def cancel_queued_or_mark_requested(project_root: Path, request_id: str) -> dict
             {
                 "state": "cancelled",
                 "cancel-requested": True,
+                "diagnostics": classify_error(
+                    {"code": "CON-AGW-CANCELLED"}, phase="cancellation",
+                    side_effect_state=(record.get("diagnostics") or {}).get("side-effect-state")
+                    if isinstance(record.get("diagnostics"), dict) else None,
+                ),
+                "cancel-provenance": {
+                    "source": source if source in {"api", "operator", "watchdog", "worker-shutdown", "system", "unknown-legacy"} else "unknown-legacy",
+                    "actor-type": actor_type if actor_type in {"client", "operator", "worker", "system", "unknown"} else "unknown",
+                    "actor-id": actor_id[:128] if isinstance(actor_id, str) else None,
+                    "reason": reason[:256] if isinstance(reason, str) else None,
+                    "requested-at": now_iso_z(),
+                },
                 "cancel-acknowledged-at": now_iso_z(),
                 "cancel-acknowledged-by": "queue-worker",
                 "updated-at": now_iso_z(),
@@ -766,6 +866,27 @@ def record_owned_activity(
                 bucket["capability"] = provider_capability
         activity.update({"sequence": aggregate, "last-at": received_at, "last-source": source, bucket_name: bucket})
         updated = dict(record)
+        evidence_items = list(record.get("diagnostic-evidence") or [])
+        evidence_items.append(
+            evidence_from_activity(
+                request_id=request_id,
+                session_id=record.get("session-id"),
+                attempt_epoch=attempt_epoch,
+                phase=phase,
+                source=source,
+                source_sequence=source_sequence,
+                activity_sequence=aggregate,
+            )
+        )
+        updated["diagnostic-evidence"] = evidence_items[-8:]
+        diagnostics = record.get("diagnostics")
+        if isinstance(diagnostics, dict):
+            diagnostics = dict(diagnostics)
+            diagnostics["coalesced-observation-count"] = int(
+                diagnostics.get("coalesced-observation-count") or 0
+            ) + 1
+            diagnostics["evidence-count"] = int(diagnostics.get("evidence-count") or 0) + 1
+            updated["diagnostics"] = diagnostics
         updated.update(
             {
                 "last-activity-at": received_at,
@@ -837,6 +958,34 @@ def mark_watchdog_intervention_if_expired(
             return record
         timestamp = now_iso_z()
         updated = dict(record)
+        diagnostics = classify_error(
+            {"code": "TO-AGW-076", "details": {"failure-reason": "activity-lease-expired"}},
+            phase="reconciliation",
+            side_effect_state="may-have-started",
+        )
+        prior = record.get("diagnostics")
+        if isinstance(prior, dict):
+            diagnostics["evidence-count"] = int(prior.get("evidence-count") or 0) + 1
+            diagnostics["coalesced-observation-count"] = int(
+                prior.get("coalesced-observation-count") or 0
+            )
+        updated["diagnostics"] = diagnostics
+        updated["diagnostic-evidence"] = (
+            list(record.get("diagnostic-evidence") or [])
+            + [{
+                "evidence-id": f"ev_watchdog_{attempt_epoch}",
+                "sequence": int(record.get("activity-sequence") or 0),
+                "request-id": request_id,
+                "session-id": record.get("session-id"),
+                "attempt-epoch": attempt_epoch,
+                "phase": "reconciliation",
+                "kind": "activity-lease-expired",
+                "certainty": "weak",
+                "side-effect-state": "may-have-started",
+                "source": "gateway-watchdog",
+                "source-sequence": None,
+            }]
+        )[-8:]
         updated.update({
             "watchdog-state": "intervention",
             "watchdog-reason": "activity-lease-expired-diagnostic",

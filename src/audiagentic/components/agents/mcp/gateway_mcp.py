@@ -195,6 +195,48 @@ def agent_task_status(request_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 @tool_boundary
+def agent_task_diagnostics(request_id: str, limit: int = 25) -> dict[str, Any]:
+    """Return bounded semantic failure/activity evidence for one request.
+
+    Unlike ``agent_task_status`` this is an operator diagnostic surface.  It
+    is still bounded and redacted: no prompt, full response, DOM, CDP handle,
+    cookie, or traceback crosses the MCP boundary.
+    """
+    project_root = project_root_from_env()
+    return _sparse(
+        call_gateway_method(
+            "get_execution_diagnostics", project_root, request_id=request_id, limit=limit
+        )
+    )
+
+
+@mcp.tool()
+@tool_boundary
+def agent_task_recover(
+    request_id: str,
+    action: str,
+    expected_revision: int | None = None,
+) -> dict[str, Any]:
+    """Request a safe diagnostic recovery action.
+
+    Supported actions are ``reconcile``, ``abandon`` and
+    ``clear-not-submitted``. Recovery never resends a provider prompt; callers
+    continue polling status/diagnostics for the resulting lifecycle evidence.
+    """
+    project_root = project_root_from_env()
+    return _sparse(
+        call_gateway_method(
+            "recover_execution_request",
+            project_root,
+            request_id=request_id,
+            action=action,
+            expected_revision=expected_revision,
+        )
+    )
+
+
+@mcp.tool()
+@tool_boundary
 def agent_task_response(request_id: str) -> dict[str, Any]:
     """Return a bounded inline response or a durable artifact reference.
 
