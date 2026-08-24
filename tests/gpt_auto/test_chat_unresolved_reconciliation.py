@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 
@@ -123,5 +124,55 @@ async def test_reconcile_treats_empty_any_of_groups_as_no_completion_requirement
     chat.snapshot = fake_snapshot  # type: ignore[method-assign]
 
     await chat._reconcile_unresolved_turn()
-    await asyncio.sleep(0.01)
-    assert await chat._reconcile_unresolved_turn() is True
+    await asyncio.sleep(1.0)
+    result = await chat._reconcile_unresolved_turn()
+    assert result is True, chat._unresolved_recovery_diagnostics()
+
+
+@pytest.mark.asyncio
+async def test_reconcile_refreshes_stale_cdp_page_once_before_failure():
+    chat = _chat(response_stability_seconds=0.001)
+    chat.chat_url = "https://chatgpt.com/c/abc"
+    stale = ChatSnapshot(
+        url=chat.chat_url,
+        composer_present=True,
+        composer_editable=True,
+        user_count=1,
+        assistant_count=0,
+        latest_assistant_id=None,
+        latest_user_text="hi",
+        latest_assistant_text=None,
+        dom_signals=frozenset({"completion-control", "more-actions-menu"}),
+        error_present=False,
+        generating=False,
+        latest_user_id="u1",
+        user_message_ids=("u1",),
+        user_message_texts=("hi",),
+    )
+    terminal = _terminal_snapshot(dom_signals=frozenset({"completion-control", "more-actions-menu"}))
+    snapshots = iter([stale, terminal, terminal])
+    navigations: list[str] = []
+
+    class FakeBrowser:
+        async def page_by_handle(self, handle: str):
+            return object()
+
+        async def navigate(self, page, url: str):
+            navigations.append(url)
+
+    chat.runtime = SimpleNamespace(gpt_browser=FakeBrowser())
+
+    async def fake_snapshot(*, allow_recovering: bool = False) -> ChatSnapshot:
+        return next(snapshots)
+
+    chat.snapshot = fake_snapshot  # type: ignore[method-assign]
+
+    assert await chat._reconcile_unresolved_turn() is False
+    result = False
+    for _ in range(4):
+        await asyncio.sleep(0.01)
+        if await chat._reconcile_unresolved_turn():
+            result = True
+            break
+    assert result is True, chat._unresolved_recovery_diagnostics()
+    assert navigations == [chat.chat_url]
