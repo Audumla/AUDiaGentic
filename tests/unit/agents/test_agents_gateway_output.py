@@ -1,11 +1,12 @@
 """AS31 OutputRelay capability authorization tests."""
 from __future__ import annotations
 
-from pathlib import Path
 import hashlib
+from pathlib import Path
 
 import pytest
 
+from audiagentic.components.agents.agents_paths import gateway_final_response_path
 from audiagentic.components.agents.gateway.output import (
     OutputPolicy,
     create_relay,
@@ -13,7 +14,6 @@ from audiagentic.components.agents.gateway.output import (
     read_final_response,
     read_request_output,
 )
-from audiagentic.components.agents.agents_paths import gateway_final_response_path
 from audiagentic.foundation.transports.agent_output import (
     AgentOutputEvent,
     AgentOutputKind,
