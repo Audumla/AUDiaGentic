@@ -41,9 +41,6 @@ class AgentDefinition:
     internal: bool = True
     acp: bool = False
     a2a: bool = False
-    # Stable prompt-profile identity.  This is deliberately distinct from
-    # execution_profile_id, which binds provider/model execution.
-    profile_id: str = "default"
 
     def __init__(
         self,
@@ -59,7 +56,7 @@ class AgentDefinition:
         internal: bool = True,
         acp: bool = False,
         a2a: bool = False,
-        profile_id: str = "default",
+        profile_id: str | None = None,
     ) -> None:
         selected_roles = tuple(role_ids or ((role_id,) if role_id else ()))
         self.agent_id = agent_id
@@ -72,7 +69,9 @@ class AgentDefinition:
         self.internal = internal
         self.acp = acp
         self.a2a = a2a
-        self.profile_id = profile_id
+        # ``profile_id`` was the old provider prompt-profile selector.  Keep
+        # accepting it at this compatibility boundary, but do not retain or
+        # serialize it: ``prompt_id`` is the sole agent-facing prompt axis.
 
     @property
     def role_id(self) -> str:
@@ -109,10 +108,6 @@ def validate_agent_definition(definition: dict[str, Any]) -> list[str]:
     for flag in ("internal", "acp", "a2a"):
         if flag in definition and not isinstance(definition[flag], bool):
             issues.append(f"{flag} must be a boolean")
-    if "profile_id" in definition and (
-        not isinstance(definition["profile_id"], str) or not definition["profile_id"].strip()
-    ):
-        issues.append("profile_id must be a non-empty string")
     if "description" in definition and definition["description"] is not None:
         if not isinstance(definition["description"], str):
             issues.append("description must be a string or null")
@@ -157,7 +152,6 @@ def agent_definition_from_dict(data: dict[str, Any]) -> AgentDefinition:
         internal=bool(normalized.get("internal", True)),
         acp=bool(normalized.get("acp", False)),
         a2a=bool(normalized.get("a2a", False)),
-        profile_id=str(normalized.get("profile_id") or "default").strip(),
     )
 
 
