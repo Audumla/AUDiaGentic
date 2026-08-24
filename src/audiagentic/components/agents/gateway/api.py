@@ -753,11 +753,11 @@ def recover_execution_request(
     recovery = dict(updated_diagnostics.get("recovery") or {})
     if action == "reconcile":
         recovery["disposition"] = "reconcile-required"
-        recovery["allowed-actions"] = ["reconcile", "adopt", "abandon", "retire"]
+        recovery["allowed-actions"] = ["reconcile", "abandon"]
         updated_diagnostics["resolution-state"] = "reconciliation-requested"
     elif action == "abandon":
         recovery["disposition"] = "retire-conversation-required"
-        recovery["allowed-actions"] = ["retire"]
+        recovery["allowed-actions"] = []
         updated_diagnostics["resolution-state"] = "abandon-requested"
         store.cancel_queued_or_mark_requested(
             project_root,
@@ -775,7 +775,11 @@ def recover_execution_request(
         project_root,
         request_id,
         updated_diagnostics,
-        expected_revision=(record.get("revision") if action != "abandon" else None),
+        # Every recovery intent is a compare-and-swap mutation.  Abandon is
+        # not exempt: allowing a stale operator action to overwrite newer
+        # reconciliation evidence can reopen the very TOCTOU window this
+        # surface is meant to close.
+        expected_revision=record.get("revision"),
     )
     return {
         "request-id": request_id,
