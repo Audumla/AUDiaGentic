@@ -61,6 +61,7 @@ from audiagentic.components.agents.gateway.store._transitions import (
     transition_owned_terminal,
     transition_record,
     transition_recovered_terminal,
+    update_diagnostics,
     update_owned_running_session,
 )
 
@@ -105,5 +106,7 @@ __all__ = [
     "transition_owned_terminal",
     "transition_record",
     "transition_recovered_terminal",
+    "update_diagnostics",
     "update_owned_running_session",
 ]
+

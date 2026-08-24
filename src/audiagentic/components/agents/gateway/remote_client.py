@@ -157,6 +157,18 @@ class StandaloneGatewayClient:
             self._call("get_execution_request", project_root, {"request_id": request_id}),
         )
 
+    def get_execution_diagnostics(self, project_root: Path, request_id: str, *, limit: int = 25) -> dict[str, Any]:
+        return cast(
+            dict[str, Any],
+            self._call("get_execution_diagnostics", project_root, {"request_id": request_id, "limit": limit}),
+        )
+
+    def recover_execution_request(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]:
+        return cast(
+            dict[str, Any],
+            self._call("recover_execution_request", project_root, {"request_id": request_id, **kwargs}),
+        )
+
     def get_execution_response(self, project_root: Path, request_id: str) -> str:
         return cast(
             str,
@@ -526,3 +538,4 @@ def _remote_error(payload: Any) -> AudiaGenticError:
 
 
 __all__ = ["StandaloneGatewayClient", "load_auth_token"]
+

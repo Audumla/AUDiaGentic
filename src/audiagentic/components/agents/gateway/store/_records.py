@@ -304,6 +304,8 @@ def build_record(
         "watchdog-reason": None,
         "watchdog-policy": dict(watchdog_policy) if watchdog_policy is not None else None,
         "terminal-classification": None,
+        "diagnostics": None,
+        "diagnostic-evidence": [],
         "resolved-instance-ids": resolved_instance_ids,
         "mode": mode,
         "timeout-seconds": timeout_seconds,
@@ -318,6 +320,7 @@ def build_record(
         "cancel-requested": False,
         "cancel-acknowledged-at": None,
         "cancel-acknowledged-by": None,
+        "cancel-provenance": None,
         "revision": 0,
         "worker-id": None,
         "attempt-epoch": 0,
@@ -441,6 +444,7 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
         migrated.pop(retired_key, None)
     migrated.setdefault("cancel-acknowledged-at", None)
     migrated.setdefault("cancel-acknowledged-by", None)
+    migrated.setdefault("cancel-provenance", None)
     migrated.setdefault("dispatch-service-root", None)
     migrated.setdefault("response-artifact", None)
     migrated.setdefault("output-preview", migrated.get("output"))
@@ -510,6 +514,9 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     migrated.setdefault("watchdog-reason", None)
     migrated.setdefault("watchdog-policy", None)
     migrated.setdefault("terminal-classification", None)
+    migrated.setdefault("diagnostics", None)
+    evidence = migrated.get("diagnostic-evidence")
+    migrated["diagnostic-evidence"] = evidence if isinstance(evidence, list) else []
     return _validate(migrated, code="VAL-AGW-005")
 
 
@@ -594,6 +601,7 @@ def project_public_status(
         "response-artifact", "output-preview", "output-truncated",
         "cancel-requested", "revision", "dispatch-owner-epoch", "dispatch-claimed-at",
         "cancel-acknowledged-at", "cancel-acknowledged-by",
+        "cancel-provenance",
         "recovery", "worker-id", "attempt-epoch", "provider-id", "model-id",
         "session-id", "session-keep-alive", "completion", "usage", "error", "attempts", "created-at",
         "updated-at", "started-at", "finished-at",
@@ -607,6 +615,7 @@ def project_public_status(
         "activity",
         "watchdog-state", "watchdog-reason",
         "watchdog-policy", "terminal-classification",
+        "diagnostics", "diagnostic-evidence",
         "resolved-instance-ids", "resolved-queue-limits", "admission-policy-digest",
     )
     status = {field: record.get(field) for field in visible}
@@ -668,3 +677,4 @@ def list_records(project_root: Path) -> list[dict[str, Any]]:
         except AudiaGenticError:
             logger.warning("skipping unreadable gateway request", extra={"request-id": entry.name}, exc_info=True)
     return records
+
