@@ -191,6 +191,25 @@ class GatewayServiceApplication:
             )
         if operation == "get_execution_request":
             return self._application.get_execution_request(root, _required(arguments, "request_id"))
+        if operation == "get_execution_diagnostics":
+            _reject_unknown(arguments, {"request_id", "limit"})
+            limit = arguments.get("limit", 25)
+            if isinstance(limit, bool) or not isinstance(limit, int):
+                raise service_validation_error(32, "diagnostic limit must be an integer")
+            return self._application.get_execution_diagnostics(
+                root, _required(arguments, "request_id"), limit=limit
+            )
+        if operation == "recover_execution_request":
+            _reject_unknown(arguments, {"request_id", "action", "expected_revision"})
+            expected = arguments.get("expected_revision")
+            if expected is not None and (isinstance(expected, bool) or not isinstance(expected, int)):
+                raise service_validation_error(33, "expected_revision must be an integer")
+            return self._application.recover_execution_request(
+                root,
+                _required(arguments, "request_id"),
+                action=_required(arguments, "action"),
+                expected_revision=expected,
+            )
         if operation == "get_execution_response":
             _reject_unknown(arguments, {"request_id"})
             return self._application.get_execution_response(root, _required(arguments, "request_id"))
