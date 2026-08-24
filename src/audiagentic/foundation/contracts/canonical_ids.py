@@ -41,6 +41,7 @@ CANONICAL_SCHEMA_IDS = (
     "review-report",
     "stage-result",
     "status-evidence",
+    "task-status-v4",
     "validation-report",
 )
 
