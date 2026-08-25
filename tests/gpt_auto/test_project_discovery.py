@@ -5,10 +5,10 @@ from types import SimpleNamespace
 
 import pytest
 
+from audiagentic.components.project.project_api import resolve_project_name
+from audiagentic.components.providers.adapters.gpt_auto import session_transport
 from audiagentic.components.providers.adapters.gpt_auto.chat import ChatState, PersistentChat
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
-from audiagentic.components.providers.adapters.gpt_auto import session_transport
-from audiagentic.components.project.project_api import resolve_project_name
 
 from .test_greenfield_config_urls import valid_config
 
@@ -186,3 +186,39 @@ async def test_page_lost_reconciles_immediately_when_turn_active():
     methods = [method for method, _ in runtime.bridge.calls]
     assert "list_pages" in methods
     assert chat.state is ChatState.BUSY
+
+
+@pytest.mark.asyncio
+async def test_deleted_provider_conversation_is_not_reopened_from_project_redirect(monkeypatch):
+    """A deleted chat URL may redirect to its project workspace.
+
+    The workspace is not the durable conversation. Recovery must close the
+    temporary tab, terminalize the chat, and surface the explicit missing-chat
+    error rather than reopening the same project tab indefinitely.
+    """
+    runtime = _Runtime()
+    chat = PersistentChat(
+        ag_session_id="session-deleted-chat",
+        project_name="bigcherry",
+        project_url="https://chatgpt.com/g/g-p-bigcherry/project",
+        runtime=runtime,
+        config=GptAutoConfig.from_dict(valid_config()),
+        binding_sink=lambda update: None,
+        provider_session_id="deleted-conversation",
+        chat_url="https://chatgpt.com/g/g-p-bigcherry/c/deleted-conversation",
+    )
+    chat.state = ChatState.RECOVERING
+
+    async def wait_ready():
+        return SimpleNamespace(url=chat.project_url)
+
+    monkeypatch.setattr(chat, "_wait_ready", wait_ready)
+    await chat.reconcile([])
+
+    assert chat.state is ChatState.FAILED
+    assert chat.page_handle is None
+    assert [method for method, _ in runtime.bridge.calls] == ["create_page", "navigate", "close_page"]
+
+    with pytest.raises(Exception) as exc_info:
+        await chat.ensure_ready()
+    assert getattr(exc_info.value, "code", None) == "EXT-GPTAUTO-005"
