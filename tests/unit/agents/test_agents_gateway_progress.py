@@ -524,8 +524,8 @@ def test_wait_timeout_marker_on_non_terminal(tmp_path: Path, monkeypatch) -> Non
     submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
     result = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=0.2)
 
-    assert result["wait-timeout"] is True
-    assert "progress" in result
+    assert result["wait-outcome"] == "timeout"
+    assert result["status"]["lifecycle"] == "active"
 
     hold.set()
     gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=5)
@@ -962,12 +962,8 @@ def test_wait_timeout_includes_progress_summary(tmp_path: Path, monkeypatch) -> 
     submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
     result = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=0.2)
 
-    assert result["wait-timeout"] is True
-    assert "progress" in result
-
-    # The progress projection should be present; it may not have summary fields
-    # if the session timeline was empty, but the call should not fail.
-    assert "phase" in result["progress"]
+    assert result["wait-outcome"] == "timeout"
+    assert result["status"]["lifecycle"] == "active"
 
     hold.set()
     gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=5)

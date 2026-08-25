@@ -67,8 +67,6 @@ def test_submit_returns_immediately_for_long_running_request(tmp_path: Path, mon
     result = gateway.submit_execution_request(tmp_path, prompt_body="hi")
     assert result["request-id"].startswith("req_")
     assert result["state"] in ("queued", "running")  # returned without waiting for completion
-    assert result["response-version"] == 3
-    assert result["agent-status"]["scope"] == "execution-request"
 
     hold.set()
     gateway.wait_execution_request(tmp_path, result["request-id"], timeout_seconds=5)
@@ -94,7 +92,7 @@ def test_run_blocks_until_completion_and_returns_output(tmp_path: Path, monkeypa
 
     result = gateway.run_execution_request(tmp_path, prompt_body="hi")
     assert result["state"] == "completed"
-    assert result["output"] == "the answer"
+    assert gateway.get_execution_response(tmp_path, result["request-id"]) == "the answer"
 
 
 def test_admission_freezes_component_template_context(tmp_path: Path, monkeypatch):
@@ -161,13 +159,14 @@ def test_public_status_contains_canonical_agent_status(tmp_path: Path, monkeypat
     result = gateway.run_execution_request(tmp_path, prompt_body="hi")
     status = gateway.get_execution_request(tmp_path, result["request-id"])
 
-    assert status["response-version"] == 3
-    assert status["agent-status"]["scope"] == "execution-request"
-    assert status["agent-status"]["lifecycle"] == "terminal"
-    assert status["agent-status"]["outcome"] == "success"
+    assert status["lifecycle"] == "terminal"
+    assert status["outcome"] == "success"
+    assert set(status) == {
+        "task_id", "lifecycle", "activity", "activity_seq", "activity_at", "outcome"
+    }
 
 
-def test_public_status_v4_is_explicit_slim_four_key_projection(tmp_path: Path, monkeypatch):
+def test_public_status_is_slim_v4_projection(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
 
     def fake_execute_provider(*, identity, execution_request, timeout_seconds):
@@ -186,9 +185,7 @@ def test_public_status_v4_is_explicit_slim_four_key_projection(tmp_path: Path, m
     )
     result = gateway.run_execution_request(tmp_path, prompt_body="hi")
 
-    status = gateway.get_execution_request(
-        tmp_path, result["request-id"], response_version=4
-    )
+    status = gateway.get_execution_request(tmp_path, result["request-id"])
     assert status == {
         "task_id": result["request-id"],
         "lifecycle": "terminal",
@@ -199,12 +196,11 @@ def test_public_status_v4_is_explicit_slim_four_key_projection(tmp_path: Path, m
     }
 
 
-def test_public_status_rejects_unknown_response_version(tmp_path: Path):
+def test_public_status_has_no_legacy_response_version_argument(tmp_path: Path):
     record = store.build_record(execution_profile_id="default", prompt_body="hi")
     store.write_record(tmp_path, record)
-    with pytest.raises(AudiaGenticError) as exc_info:
-        gateway.get_execution_request(tmp_path, record["request-id"], response_version=99)
-    assert exc_info.value.code == "VAL-AGW-147"
+    with pytest.raises(TypeError):
+        gateway.get_execution_request(tmp_path, record["request-id"], response_version=3)
 
 
 def test_active_component_profile_changes_execution_fingerprint(tmp_path: Path, monkeypatch):
@@ -318,7 +314,8 @@ def test_wait_returns_timeout_status_for_still_running_request(tmp_path: Path, m
 
     submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
     result = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=0.2)
-    assert result["state"] == "running"
+    assert result["wait-outcome"] == "timeout"
+    assert result["status"]["lifecycle"] == "active"
 
     hold.set()
     gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=5)
@@ -330,7 +327,7 @@ class _RecordingManager:
 
     def wait(self, project_root, request_id, timeout_seconds):
         self.calls["timeout"] = timeout_seconds
-        return {"state": "running"}
+        return {"request-id": request_id, "state": "running"}
 
 
 def test_core_wait_honours_the_callers_timeout(tmp_path: Path, monkeypatch):
@@ -378,12 +375,8 @@ def test_wait_timeout_progress_reflects_live_session_turn_evidence(tmp_path: Pat
 
     result = gateway.wait_execution_request(tmp_path, "req_x", timeout_seconds=0.1)
 
-    assert result["wait-timeout"] is True
-    assert result["progress"]["phase"] == "tool-active"
-    assert result["progress"]["latest-session-event"] == {
-        "kind": "tool-call",
-        "timestamp": "2026-07-19T00:00:00+00:00",
-    }
+    assert result["wait-outcome"] == "timeout"
+    assert result["status"]["lifecycle"] == "active"
 
 
 def test_cancel_queued_request_reaches_cancelled_state(tmp_path: Path, monkeypatch):
@@ -453,18 +446,19 @@ def test_list_execution_requests_most_recent_first_and_filterable(tmp_path: Path
     second = gateway.run_execution_request(tmp_path, prompt_body="second")
 
     all_requests = gateway.list_execution_requests(tmp_path)
-    assert [r["request-id"] for r in all_requests] == [second["request-id"], first["request-id"]]
-    assert all(r["response-version"] == 3 for r in all_requests)
-    assert all(r["agent-status"]["scope"] == "execution-request" for r in all_requests)
-    assert all_requests[0]["agent-status"]["outcome"] == "failed"
-    assert all_requests[1]["agent-status"]["outcome"] == "success"
+    assert [r["task_id"] for r in all_requests] == [second["request-id"], first["request-id"]]
+    assert all(set(r) == {
+        "task_id", "lifecycle", "activity", "activity_seq", "activity_at", "outcome"
+    } for r in all_requests)
+    assert all_requests[0]["outcome"] == "failed"
+    assert all_requests[1]["outcome"] == "success"
 
     failed_only = gateway.list_execution_requests(tmp_path, state="failed")
-    assert [r["request-id"] for r in failed_only] == [second["request-id"]]
+    assert [r["task_id"] for r in failed_only] == [second["request-id"]]
 
     limited = gateway.list_execution_requests(tmp_path, limit=1)
     assert len(limited) == 1
-    assert limited[0]["request-id"] == second["request-id"]
+    assert limited[0]["task_id"] == second["request-id"]
 
 
 def test_terminal_status_is_equivalent_across_get_wait_and_list(
@@ -490,14 +484,13 @@ def test_terminal_status_is_equivalent_across_get_wait_and_list(
 
     submitted = gateway.submit_execution_request(tmp_path, prompt_body="terminal")
     request_id = submitted["request-id"]
-    waited = gateway.wait_execution_request(tmp_path, request_id, timeout_seconds=5)
+    gateway.wait_execution_request(tmp_path, request_id, timeout_seconds=5)
     fetched = gateway.get_execution_request(tmp_path, request_id)
     listed = next(
-        row for row in gateway.list_execution_requests(tmp_path) if row["request-id"] == request_id
+        row for row in gateway.list_execution_requests(tmp_path) if row["task_id"] == request_id
     )
 
-    assert waited["agent-status"] == fetched["agent-status"] == listed["agent-status"]
-    assert fetched["response-version"] == listed["response-version"] == 3
+    assert fetched == listed
 
 
 def test_gateway_overview_reflects_persisted_state_across_restart(tmp_path: Path, monkeypatch):

@@ -94,18 +94,18 @@ def test_agent_task_status_delegates():
         patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
     ):
         mock_call.return_value = {
-            "request-id": "req_x",
-            "state": "completed",
-            "output-preview": "must not cross MCP status",
-            "output-truncated": True,
-            "response-artifact": {"bytes": 1234, "sha256": "digest"},
+            "task_id": "req_x",
+            "lifecycle": "terminal",
+            "activity": None,
+            "activity_seq": 3,
+            "activity_at": "2026-08-24T07:12:31Z",
+            "outcome": "success",
         }
         result = agents_gateway_mcp.agent_task_status("req_x")
-    assert result["state"] == "completed"
-    assert result["response-artifact"]["bytes"] == 1234
-    assert "output-preview" not in result
-    assert "output-truncated" not in result
-    mock_call.assert_called_once_with("get_execution_request", _ROOT, "req_x")
+    assert result == mock_call.return_value
+    mock_call.assert_called_once_with(
+        "get_execution_request", _ROOT, "req_x"
+    )
 
 
 def test_agent_task_response_returns_small_verified_response_inline():
@@ -204,27 +204,6 @@ def test_agent_task_list_requests_delegates():
         result = agents_gateway_mcp.agent_task_list_requests(state="completed", limit=5)
     assert result == [{"request-id": "req_x", "state": "completed"}]
     mock_call.assert_called_once_with("list_execution_requests", _ROOT, state="completed", limit=5)
-
-
-def test_agent_task_status_can_negotiate_slim_v4():
-    with (
-        _patch_root(),
-        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
-    ):
-        mock_call.return_value = {
-            "task_id": "req_x",
-            "lifecycle": "active",
-            "activity": "running",
-            "activity_seq": 3,
-            "activity_at": "2026-08-24T07:12:31Z",
-            "outcome": None,
-        }
-        result = agents_gateway_mcp.agent_task_status("req_x", response_version=4)
-
-    assert result == mock_call.return_value
-    mock_call.assert_called_once_with(
-        "get_execution_request", _ROOT, "req_x", response_version=4
-    )
 
 
 def test_agent_task_gateway_overview_delegates():
