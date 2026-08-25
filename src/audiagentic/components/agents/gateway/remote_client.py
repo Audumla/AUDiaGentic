@@ -151,12 +151,8 @@ class StandaloneGatewayClient:
             kwargs["component_profile"] = get_active_profile()
         return cast(dict[str, Any], self._call("submit_execution_request", project_root, kwargs))
 
-    def get_execution_request(
-        self, project_root: Path, request_id: str, *, response_version: int | None = None
-    ) -> dict[str, Any]:
+    def get_execution_request(self, project_root: Path, request_id: str) -> dict[str, Any]:
         params: dict[str, Any] = {"request_id": request_id}
-        if response_version is not None:
-            params["response_version"] = response_version
         return cast(
             dict[str, Any],
             self._call("get_execution_request", project_root, params),
@@ -185,16 +181,12 @@ class StandaloneGatewayClient:
         project_root: Path,
         request_id: str,
         timeout_seconds: float | None = None,
-        *,
-        response_version: int | None = None,
     ) -> dict[str, Any]:
         timeout = None if timeout_seconds is None else timeout_seconds + 5
         params: dict[str, Any] = {
             "request_id": request_id,
             "timeout_seconds": timeout_seconds,
         }
-        if response_version is not None:
-            params["response_version"] = response_version
         return cast(
             dict[str, Any],
             self._call(

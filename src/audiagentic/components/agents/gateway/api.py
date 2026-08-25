@@ -221,13 +221,17 @@ def _runtime_fingerprint() -> dict[str, str]:
 def _attach_agent_status(
     result: dict[str, Any],
     project_root: Path,
-    *,
-    response_version: int | None = None,
 ) -> dict[str, Any]:
-    """Attach the requested public status projection to a result."""
+    """Attach the sole public V4 task-status projection to a result.
+
+    Public status is intentionally not negotiable: V3 was a transitional
+    rich envelope that leaked durable/provider fields and is no longer a
+    supported contract.  Diagnostics and the full response have dedicated
+    operations, so every request-returning status path uses the same compact
+    V4 projection.
+    """
     from audiagentic.components.agents.status.status_projection import (
         snapshot_for_request,
-        snapshot_to_mapping,
     )
 
     decision = None
@@ -240,35 +244,32 @@ def _attach_agent_status(
             decision = runtime.latest_lifecycle_decision(session_id, result["request-id"])
 
     snapshot = snapshot_for_request(result, decision=decision)
-    version = _resolve_public_response_version(response_version)
-    if version == 4:
-        from audiagentic.components.agents.status.task_status_v4 import (
-            TaskStatusContractError,
-            project_task_status_v4,
-        )
+    from audiagentic.components.agents.status.task_status_v4 import (
+        TaskStatusContractError,
+        project_task_status_v4,
+    )
 
-        try:
-            return project_task_status_v4(result, snapshot)
-        except TaskStatusContractError as exc:
-            raise AudiaGenticError(
-                code="CON-AGW-147",
-                kind="agents",
-                message="request state cannot be represented by status response version 4",
-                details={"request-id": result.get("request-id"), "reason": str(exc)},
-            ) from exc
-    enriched = dict(result)
-    enriched["response-version"] = _PUBLIC_RESPONSE_VERSION
-    enriched["agent-status"] = snapshot_to_mapping(snapshot)
-    return enriched
+    try:
+        return project_task_status_v4(result, snapshot)
+    except TaskStatusContractError as exc:
+        raise AudiaGenticError(
+            code="CON-AGW-147",
+            kind="agents",
+            message="request state cannot be represented by status response version 4",
+            details={"request-id": result.get("request-id"), "reason": str(exc)},
+        ) from exc
 
 
 def _enrich_terminal_result(
     result: dict[str, Any],
     project_root: Path,
-    *,
-    response_version: int | None = None,
 ) -> dict[str, Any]:
-    """Add terminal quality and canonical status to terminal results."""
+    """Return the blocking terminal result with internal quality evidence.
+
+    The compact V4 status contract is used by get/list/status polling. Blocking
+    Python callers retain the terminal record for existing in-process control
+    flows; MCP callers use agent_task_response for the full response.
+    """
     if result["state"] in store.TERMINAL_STATES:
         enriched = dict(result)
         if enriched.get("output") is None and isinstance(enriched.get("response-artifact"), dict):
@@ -280,7 +281,7 @@ def _enrich_terminal_result(
         tq = _classify_terminal_quality(project_root, enriched)
         if tq is not None:
             enriched["terminal-quality"] = tq
-        return _attach_agent_status(enriched, project_root, response_version=response_version)
+        return enriched
     return result
 
 
@@ -688,51 +689,19 @@ def submit_execution_request(
         wait_timeout = timeout_seconds or DEFAULT_BLOCKING_TIMEOUT_SECONDS
         raw = get_queue_manager().wait(project_root, record["request-id"], wait_timeout)
         return _enrich_terminal_result(raw, project_root)
-    # Keep the async admission response on the same canonical status surface
-    # as get/wait/list.  The request may race from queued to running here, so
-    # the projector owns the transient lifecycle value.
-    return _attach_agent_status(record, project_root)
-
-
-# AS56 — public response schema version.  Version 3 makes the explicit
-# progress-disposition/interruptibility vocabulary part of the contract.
-_PUBLIC_RESPONSE_VERSION: int = 3
-_SUPPORTED_PUBLIC_RESPONSE_VERSIONS = frozenset({3, 4})
-
-
-def _resolve_public_response_version(response_version: int | None) -> int:
-    """Validate public response negotiation without silently falling back."""
-    if response_version is None:
-        return _PUBLIC_RESPONSE_VERSION
-    if isinstance(response_version, bool) or not isinstance(response_version, int):
-        raise AudiaGenticError(
-            code="VAL-AGW-147",
-            kind="agents",
-            message="response version must be an integer",
-            details={"response-version": response_version},
-        )
-    if response_version not in _SUPPORTED_PUBLIC_RESPONSE_VERSIONS:
-        raise AudiaGenticError(
-            code="VAL-AGW-147",
-            kind="agents",
-            message="unsupported gateway response version",
-            details={
-                "response-version": response_version,
-                "supported": sorted(_SUPPORTED_PUBLIC_RESPONSE_VERSIONS),
-            },
-        )
-    return response_version
+    # Admission returns the durable request envelope so callers retain the
+    # request-id and immutable execution metadata. Polling status is exposed
+    # separately through the compact V4-only get/status operation.
+    return dict(record)
 
 
 def get_execution_request(
     project_root: Path,
     request_id: str,
-    *,
-    response_version: int | None = None,
 ) -> dict[str, Any]:
-    """Return the public durable status plus the canonical agent-status snapshot."""
+    """Return the compact public V4 task status."""
     record = store.read_public_status(project_root, request_id)
-    return _attach_agent_status(record, project_root, response_version=response_version)
+    return _attach_agent_status(record, project_root)
 
 
 def get_execution_diagnostics(
@@ -927,30 +896,23 @@ def wait_execution_request(
     project_root: Path,
     request_id: str,
     timeout_seconds: float | None = None,
-    *,
-    response_version: int | None = None,
 ) -> dict[str, Any]:
     """Block until a request reaches a terminal state or the timeout elapses.
 
     The caller's timeout is honoured; the MCP boundary applies its own transport
     cap. The MCP adapter applies its own transport-specific bound.
-    Terminal results are enriched with ``terminal-quality``; timeout responses
-    carry ``wait-timeout: True`` and omit it.
+    Terminal results are enriched with internal ``terminal-quality``; timeout
+    responses carry only ``wait-outcome`` plus the compact V4 status.
     """
-    version = _resolve_public_response_version(response_version)
     raw = get_queue_manager().wait(
         project_root, request_id, timeout_seconds or DEFAULT_BLOCKING_TIMEOUT_SECONDS
     )
     if raw["state"] in store.TERMINAL_STATES:
-        return _enrich_terminal_result(raw, project_root, response_version=version)
-    if version == 4:
-        status = _attach_agent_status(raw, project_root, response_version=version)
-        return {"wait-outcome": "timeout", "status": status}
-    # Non-terminal: timeout — signal it and omit terminal-quality
-    result = dict(raw)
-    result["wait-timeout"] = True
-    result["progress"] = _request_progress(project_root, raw)
-    return _attach_agent_status(result, project_root, response_version=version)
+        return _enrich_terminal_result(raw, project_root)
+    return {
+        "wait-outcome": "timeout",
+        "status": _attach_agent_status(raw, project_root),
+    }
 
 
 def cancel_execution_request(project_root: Path, request_id: str) -> dict[str, Any]:
@@ -1017,7 +979,6 @@ def list_execution_requests(
     *,
     state: str | None = None,
     limit: int | None = None,
-    response_version: int | None = None,
 ) -> list[dict[str, Any]]:
     """List persisted gateway requests, most recently created first.
 
@@ -1025,7 +986,6 @@ def list_execution_requests(
     requests from any process — including ones orphaned by a restart, unlike
     unlike the removed in-memory-only status projections.
     """
-    version = _resolve_public_response_version(response_version)
     records = store.list_records(project_root)
     if state is not None:
         records = [r for r in records if r["state"] == state]
@@ -1041,7 +1001,6 @@ def list_execution_requests(
                 ),
             ),
             project_root,
-            response_version=version,
         )
         for record in records
     ]

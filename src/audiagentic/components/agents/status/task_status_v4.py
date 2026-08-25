@@ -73,7 +73,8 @@ def project_task_status_v4(
     The inactive axis is represented by ``None`` so clients never need to
     infer whether a missing key means an unsupported state.  Durable terminal
     state wins; recognized durable ``queued``/``dispatching``/``running``
-    states refine an ``unknown`` AS92 snapshot without changing V3 semantics.
+    states refine an ``unknown`` AS92 snapshot without exposing the richer
+    internal snapshot contract.
 
     ``activity_seq`` and ``activity_at`` are durable progress markers.  The
     sequence advances only when verified provider/owner activity is accepted;
