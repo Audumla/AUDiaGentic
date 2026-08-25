@@ -378,6 +378,21 @@ class PersistentChat:
                     if await self._reconcile_unresolved_turn():
                         self._move(ChatState.READY)
         if self.state is not ChatState.READY:
+            if self._unresolved_recovery_reason == "provider-conversation-not-found":
+                raise AudiaGenticError(
+                    code="EXT-GPTAUTO-005",
+                    kind="providers",
+                    message=(
+                        "gpt-auto could not find the durable ChatGPT conversation; "
+                        "it may have been deleted. The session is closed and will "
+                        "not reopen that conversation automatically."
+                    ),
+                    details={
+                        "failure-reason": "provider-conversation-not-found",
+                        "provider-session-id": self.provider_session_id,
+                        **self._unresolved_recovery_diagnostics(),
+                    },
+                )
             if self.state is ChatState.RECOVERING and self.unresolved_turn_pending:
                 raise AudiaGenticError(
                     code="EXT-GPTAUTO-004",
@@ -983,18 +998,37 @@ class PersistentChat:
                     await self.wait_quiescent(allow_recovering=True)
                     self._move(ChatState.READY)
                 return
+            if not self.chat_url:
+                self._set_unresolved_recovery(
+                    "provider-conversation-not-found",
+                    provider_session_id=self.provider_session_id,
+                    reason="durable-chat-url-missing",
+                )
+                if self.state is ChatState.RECOVERING:
+                    self._move(ChatState.FAILED)
+                return
             self.page_handle = await self._create_recovery_page()
             if not self.runtime.claim_page(self, self.page_handle):
                 raise RuntimeError("gpt-auto created a page already owned by another session")
-            await self.runtime.bridge.call(
-                "navigate",
-                {
-                    "pageHandle": self.page_handle,
-                    "url": self.chat_url,
-                    "timeoutMs": int(self.config.chat.navigation_timeout_seconds * 1000),
-                },
-            )
-            await self._wait_ready()
+            try:
+                await self.runtime.bridge.call(
+                    "navigate",
+                    {
+                        "pageHandle": self.page_handle,
+                        "url": self.chat_url,
+                        "timeoutMs": int(self.config.chat.navigation_timeout_seconds * 1000),
+                    },
+                )
+                snapshot = await self._wait_ready()
+            except Exception:
+                handle, self.page_handle = self.page_handle, None
+                self.runtime.release_page(self, handle)
+                raise
+            if snapshot is not None and not url_matches_provider_session(
+                snapshot.url, self.provider_session_id
+            ):
+                await self._retire_missing_provider_conversation(snapshot.url)
+                return
             if self.active_turn_id:
                 self._move(ChatState.BUSY)
             else:
@@ -1040,6 +1074,28 @@ class PersistentChat:
         )
         await self._wait_ready()
         self._move(ChatState.READY)
+
+    async def _retire_missing_provider_conversation(self, observed_url: str) -> None:
+        """Fail and remove a recovery tab when its durable chat was deleted.
+
+        ChatGPT commonly redirects a deleted conversation URL to the owning
+        project workspace. That workspace is not an equivalent conversation;
+        accepting it would make every recovery cycle reopen a misleading tab.
+        """
+        handle, self.page_handle = self.page_handle, None
+        self.runtime.release_page(self, handle)
+        self._set_unresolved_recovery(
+            "provider-conversation-not-found",
+            provider_session_id=self.provider_session_id,
+            observed_url=observed_url,
+        )
+        if handle:
+            try:
+                await self.runtime.bridge.call("close_page", {"pageHandle": handle})
+            except Exception:
+                logger.debug("failed to close deleted gpt-auto recovery tab", exc_info=True)
+        if self.state is ChatState.RECOVERING:
+            self._move(ChatState.FAILED)
 
     async def _create_recovery_page(self) -> str:
         create_page = getattr(self.runtime, "create_chat_page", None)
