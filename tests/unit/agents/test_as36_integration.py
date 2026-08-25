@@ -415,8 +415,8 @@ class TestTerminalQualityInWait:
         submitted = gateway.submit_execution_request(tmp_path, prompt_body="hi")
         result = gateway.wait_execution_request(tmp_path, submitted["request-id"], timeout_seconds=0.2)
 
-        assert result.get("wait-timeout") is True
-        assert "terminal-quality" not in result, (
+        assert result.get("wait-outcome") == "timeout"
+        assert "terminal-quality" not in result["status"], (
             "terminal-quality should NOT appear for non-terminal wait timeouts"
         )
 

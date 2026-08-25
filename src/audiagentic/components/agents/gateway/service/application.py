@@ -192,14 +192,8 @@ class GatewayServiceApplication:
                 _dispatch_service_root=str(self._service_store.root),
             )
         if operation == "get_execution_request":
-            _reject_unknown(arguments, {"request_id", "response_version"})
-            request_id = _required(arguments, "request_id")
-            response_version = _optional_response_version(arguments)
-            if response_version is None:
-                return self._application.get_execution_request(root, request_id)
-            return self._application.get_execution_request(
-                root, request_id, response_version=response_version
-            )
+            _reject_unknown(arguments, {"request_id"})
+            return self._application.get_execution_request(root, _required(arguments, "request_id"))
         if operation == "get_execution_diagnostics":
             _reject_unknown(arguments, {"request_id", "limit"})
             limit = arguments.get("limit", 25)
@@ -223,18 +217,9 @@ class GatewayServiceApplication:
             _reject_unknown(arguments, {"request_id"})
             return self._application.get_execution_response(root, _required(arguments, "request_id"))
         if operation == "wait_execution_request":
-            _reject_unknown(arguments, {"request_id", "timeout_seconds", "response_version"})
-            request_id = _required(arguments, "request_id")
-            response_version = _optional_response_version(arguments)
-            if response_version is None:
-                return self._application.wait_execution_request(
-                    root, request_id, arguments.get("timeout_seconds")
-                )
+            _reject_unknown(arguments, {"request_id", "timeout_seconds"})
             return self._application.wait_execution_request(
-                root,
-                request_id,
-                arguments.get("timeout_seconds"),
-                response_version=response_version,
+                root, _required(arguments, "request_id"), arguments.get("timeout_seconds")
             )
         if operation == "cancel_execution_request":
             return self._application.cancel_execution_request(
@@ -253,15 +238,12 @@ class GatewayServiceApplication:
                 _dispatch_service_root=str(self._service_store.root),
             )
         if operation == "list_execution_requests":
-            _reject_unknown(arguments, {"state", "limit", "response_version"})
-            kwargs: dict[str, Any] = {
-                "state": _optional_string(arguments, "state"),
-                "limit": _optional_positive_int(arguments, "limit"),
-            }
-            response_version = _optional_response_version(arguments)
-            if response_version is not None:
-                kwargs["response_version"] = response_version
-            return self._application.list_execution_requests(root, **kwargs)
+            _reject_unknown(arguments, {"state", "limit"})
+            return self._application.list_execution_requests(
+                root,
+                state=_optional_string(arguments, "state"),
+                limit=_optional_positive_int(arguments, "limit"),
+            )
         if operation == "gateway_overview":
             return self._application.gateway_overview(root)
         if operation == "list_execution_sessions":
@@ -531,20 +513,6 @@ def _optional_positive_int(arguments: dict[str, Any], name: str) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise service_validation_error(
             24, "gateway service parameter must be a positive integer", field=name
-        )
-    return value
-
-
-def _optional_response_version(arguments: dict[str, Any]) -> int | None:
-    value = arguments.get("response_version")
-    if value is None:
-        return None
-    if isinstance(value, bool) or not isinstance(value, int) or value not in {3, 4}:
-        raise service_validation_error(
-            34,
-            "gateway response version must be one of the supported versions",
-            field="response_version",
-            supported=[3, 4],
         )
     return value
 

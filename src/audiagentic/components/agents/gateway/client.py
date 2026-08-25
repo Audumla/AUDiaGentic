@@ -33,9 +33,7 @@ class GatewayClient(Protocol):
     """Requester-facing gateway operations, independent of inbound transport."""
 
     def submit_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]: ...
-    def get_execution_request(
-        self, project_root: Path, request_id: str, *, response_version: int | None = None
-    ) -> dict[str, Any]: ...
+    def get_execution_request(self, project_root: Path, request_id: str) -> dict[str, Any]: ...
     def get_execution_diagnostics(self, project_root: Path, request_id: str, *, limit: int = 25) -> dict[str, Any]: ...
     def recover_execution_request(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]: ...
     def get_execution_response(self, project_root: Path, request_id: str) -> str: ...
@@ -44,8 +42,6 @@ class GatewayClient(Protocol):
         project_root: Path,
         request_id: str,
         timeout_seconds: float | None = None,
-        *,
-        response_version: int | None = None,
     ) -> dict[str, Any]: ...
     def cancel_execution_request(self, project_root: Path, request_id: str) -> dict[str, Any]: ...
     def run_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]: ...
@@ -88,14 +84,8 @@ class EmbeddedGatewayClient:
     def submit_execution_request(self, project_root: Path, **kwargs: Any) -> dict[str, Any]:
         return self._application.submit_execution_request(project_root, **kwargs)
 
-    def get_execution_request(
-        self, project_root: Path, request_id: str, *, response_version: int | None = None
-    ) -> dict[str, Any]:
-        if response_version is None:
-            return self._application.get_execution_request(project_root, request_id)
-        return self._application.get_execution_request(
-            project_root, request_id, response_version=response_version
-        )
+    def get_execution_request(self, project_root: Path, request_id: str) -> dict[str, Any]:
+        return self._application.get_execution_request(project_root, request_id)
 
     def get_execution_diagnostics(self, project_root: Path, request_id: str, *, limit: int = 25) -> dict[str, Any]:
         return self._application.get_execution_diagnostics(project_root, request_id, limit=limit)
@@ -111,16 +101,8 @@ class EmbeddedGatewayClient:
         project_root: Path,
         request_id: str,
         timeout_seconds: float | None = None,
-        *,
-        response_version: int | None = None,
     ) -> dict[str, Any]:
-        if response_version is None:
-            return self._application.wait_execution_request(
-                project_root, request_id, timeout_seconds
-            )
-        return self._application.wait_execution_request(
-            project_root, request_id, timeout_seconds, response_version=response_version
-        )
+        return self._application.wait_execution_request(project_root, request_id, timeout_seconds)
 
     def cancel_execution_request(self, project_root: Path, request_id: str) -> dict[str, Any]:
         return self._application.cancel_execution_request(project_root, request_id)
