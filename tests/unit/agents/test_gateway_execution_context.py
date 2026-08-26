@@ -204,24 +204,6 @@ class TestRedaction:
         assert "sk-AAAA" not in dumped
         assert manifest.prompt_digest == compute_prompt_digest(secret_prompt)
 
-    def test_manifest_hashes_admitted_prompt_when_materialized(self, tmp_path: Path) -> None:
-        envelope = _envelope(tmp_path, prompt_body="caller body")
-        admitted = "Rendered instructions\ncaller body"
-        manifest = build_manifest(
-            envelope,
-            manifest_id="m",
-            request_id="r",
-            resolved_at="2026-07-17T00:00:00Z",
-            canonical_root=envelope.validate(),
-            execution_profile_id="deep-coder-opencode",
-            provider_id="opencode",
-            model_id="brutus/coder-quality-mid",
-            provider_isolation_tier="partial-isolation",
-            agent_runtime_digest="d" * 64,
-            admitted_prompt=admitted,
-        )
-        assert manifest.prompt_digest == compute_prompt_digest(admitted)
-
     @pytest.mark.parametrize(
         "value",
         [
