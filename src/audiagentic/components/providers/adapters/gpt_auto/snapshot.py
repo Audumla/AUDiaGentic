@@ -51,6 +51,12 @@ class ChatMessageRef:
     message_id: str | None
     text: str | None
     sequence: int
+    # Provider-private correlation representation.  ChatGPT can render
+    # structural Markdown (for example a thematic break) as an element that
+    # contributes no innerText.  Keep that reconstruction separate from the
+    # visible text used for diagnostics and display.
+    correlation_text: str | None = None
+    structural_hr_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -132,6 +138,13 @@ class ChatSnapshot:
                     message_id=_text(item.get("messageId")),
                     text=_text(item.get("text")),
                     sequence=int(item.get("sequence") or 0),
+                    correlation_text=_text(item.get("correlationText")),
+                    structural_hr_count=(
+                        int(item.get("structuralHrCount") or 0)
+                        if isinstance(item.get("structuralHrCount"), int)
+                        and not isinstance(item.get("structuralHrCount"), bool)
+                        else 0
+                    ),
                 )
                 for item in (value.get("messageRefs") or ())
                 if isinstance(item, dict)
@@ -150,6 +163,24 @@ class ChatSnapshot:
                 )
             ),
         )
+
+    def latest_user_ref(self) -> ChatMessageRef | None:
+        """Return the latest user ref in the ordered DOM projection."""
+        return next(
+            (ref for ref in reversed(self.message_refs) if ref.role == "user"),
+            None,
+        )
+
+    def latest_user_correlation_text(self) -> str | None:
+        """Return structural correlation text, falling back to visible text."""
+        ref = self.latest_user_ref()
+        if ref is not None:
+            return ref.correlation_text or ref.text
+        return self.latest_user_text
+
+    def user_prompt_refs(self) -> tuple[ChatMessageRef, ...]:
+        """Return user refs with their provider-private correlation fallback."""
+        return tuple(ref for ref in self.message_refs if ref.role == "user")
 
     def observe(
         self,

@@ -788,7 +788,9 @@ class PersistentChat:
                 snapshot.latest_user_id
                 and snapshot.latest_user_id not in set(baseline.user_message_ids)
             ) or snapshot.user_count > baseline.user_count
-            if fresh and match_prompt(expected_text, snapshot.latest_user_text or ""):
+            if fresh and match_prompt(
+                expected_text, snapshot.latest_user_correlation_text() or ""
+            ):
                 if old_handle and old_handle != handle:
                     self.runtime.release_page(self, old_handle)
                 self._bind_page(record)
@@ -1207,12 +1209,40 @@ def _unresolved_prompt_match_diagnostics(
     digest = chat.unresolved_prompt_text_digest
     if not digest:
         return None, "prompt-correlation-evidence-missing", id_details
-    observed_texts = snapshot.user_message_texts or (
-        (snapshot.latest_user_text,) if snapshot.latest_user_text else ()
+    user_refs = snapshot.user_prompt_refs()
+    observed_candidates = tuple(
+        (ref.correlation_text or ref.text or "", ref)
+        for ref in user_refs
+        if ref.correlation_text or ref.text
     )
-    matches = [text for text in observed_texts if PromptFingerprint.from_text(text).digest == digest]
+    if not observed_candidates:
+        observed_candidates = tuple(
+            (text, None)
+            for text in (
+                snapshot.user_message_texts
+                or ((snapshot.latest_user_text,) if snapshot.latest_user_text else ())
+            )
+        )
+    matches = [
+        (text, ref)
+        for text, ref in observed_candidates
+        if PromptFingerprint.from_text(text).digest == digest
+    ]
     if len(matches) == 1:
-        details = {"prompt-text-digest": digest, "matched-user-count": len(matches)}
+        text, ref = matches[0]
+        details = {
+            "prompt-text-digest": digest,
+            "matched-user-count": len(matches),
+        }
+        if ref is not None and ref.correlation_text:
+            details.update(
+                {
+                    "prompt-correlation-match": True,
+                    "prompt-proof-source": "gpt-auto-dom-structural-v1",
+                    "observed-correlation-text-length": len(ref.correlation_text),
+                    "structural-hr-count": ref.structural_hr_count,
+                }
+            )
         if id_details:
             details.update(id_details)
             return f"text:{digest}", "prompt-id-mismatch-text-digest-match", details
@@ -1221,7 +1251,7 @@ def _unresolved_prompt_match_diagnostics(
         details = {
             **id_details,
             "expected-prompt-text-digest": digest,
-            "observed-user-count": len(observed_texts),
+            "observed-user-count": len(observed_candidates),
         }
         return None, "prompt-text-digest-not-found", details
     return None, "prompt-text-digest-ambiguous", {

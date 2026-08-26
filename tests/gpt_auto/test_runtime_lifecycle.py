@@ -15,11 +15,14 @@ from audiagentic.components.providers.adapters.gpt_auto.chat import (
     _unresolved_prompt_match_diagnostics,
 )
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
+from audiagentic.components.providers.adapters.gpt_auto.prompt_fingerprint import (
+    PromptFingerprint,
+)
 from audiagentic.components.providers.adapters.gpt_auto.runtime import (
     GptAutoProviderRuntime,
     ProviderState,
 )
-from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatSnapshot
+from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatMessageRef, ChatSnapshot
 from audiagentic.components.providers.adapters.gpt_auto.window_anchor import (
     gateway_dashboard_anchor_url,
     gateway_dashboard_url,
@@ -101,6 +104,90 @@ def test_unresolved_prompt_diagnostics_distinguish_id_mismatch_and_digest_fallba
     assert details["expected-prompt-id"] == "missing-id"
     assert details["observed-latest-user-id"] == "other-id"
     assert details["observed-user-count"] == 1
+
+
+def test_unresolved_recovery_accepts_renderer_structural_hr_correlation() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    source = "before\n---\nafter"
+    chat = PersistentChat(
+        ag_session_id="session-structural-correlation",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+    )
+    chat.mark_submission_unresolved(source)
+    snapshot = ChatSnapshot(
+        url="https://chatgpt.com/g/g-p-project/c/provider-session",
+        composer_present=True,
+        composer_editable=True,
+        user_count=1,
+        assistant_count=1,
+        latest_assistant_id="assistant-1",
+        latest_user_text="before\nafter",
+        latest_assistant_text="done",
+        dom_signals=frozenset(),
+        error_present=False,
+        message_refs=(
+            ChatMessageRef(
+                role="user",
+                message_id="user-1",
+                text="before\nafter",
+                correlation_text=source,
+                structural_hr_count=1,
+                sequence=0,
+            ),
+        ),
+    )
+
+    match, reason, details = _unresolved_prompt_match_diagnostics(chat, snapshot)
+
+    assert match == f"text:{PromptFingerprint.from_text(source).digest}"
+    assert reason == "prompt-text-digest-match"
+    assert details["prompt-correlation-match"] is True
+    assert details["prompt-proof-source"] == "gpt-auto-dom-structural-v1"
+    assert details["structural-hr-count"] == 1
+
+
+def test_unresolved_recovery_rejects_substantive_structural_candidate_mismatch() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    chat = PersistentChat(
+        ag_session_id="session-structural-mismatch",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda _update: None,
+    )
+    chat.mark_submission_unresolved("before\n---\nafter")
+    snapshot = ChatSnapshot(
+        url="https://chatgpt.com/g/g-p-project/c/provider-session",
+        composer_present=True,
+        composer_editable=True,
+        user_count=1,
+        assistant_count=1,
+        latest_assistant_id="assistant-1",
+        latest_user_text="before\nafter",
+        latest_assistant_text="done",
+        dom_signals=frozenset(),
+        error_present=False,
+        message_refs=(
+            ChatMessageRef(
+                role="user",
+                message_id="user-1",
+                text="before\nafter",
+                correlation_text="before\n---\nchanged",
+                structural_hr_count=1,
+                sequence=0,
+            ),
+        ),
+    )
+
+    match, reason, _details = _unresolved_prompt_match_diagnostics(chat, snapshot)
+
+    assert match is None
+    assert reason == "prompt-text-digest-not-found"
 
 
 def test_completed_resume_message_ids_do_not_imply_unresolved_turn() -> None:

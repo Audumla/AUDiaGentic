@@ -140,6 +140,22 @@ _SNAPSHOT_FN = r"""
   const userText = (element) => boundedText(
     element?.querySelector('[data-testid="collapsible-user-message-content"]') || element
   );
+  // ChatGPT renders a standalone Markdown thematic break as an <hr>.  The
+  // element is visible but contributes no characters to innerText, so retain
+  // a second, user-only correlation representation when one is actually
+  // present.  Visible text remains untouched for diagnostics and display;
+  // correlationText is used only with the existing prompt fingerprint and
+  // freshness/order/terminal proof gates.
+  const userCorrelation = (element) => {
+    const source = element?.querySelector('[data-testid="collapsible-user-message-content"]') || element;
+    if (!source) return {text: null, hrCount: 0};
+    const clone = source.cloneNode(true);
+    const hrs = Array.from(clone.querySelectorAll('hr'));
+    if (!hrs.length) return {text: null, hrCount: 0};
+    for (const hr of hrs) hr.replaceWith(document.createTextNode("\n---\n"));
+    const text = ((clone.innerText || clone.textContent || "").trim()).slice(0, 200000) || null;
+    return {text, hrCount: hrs.length};
+  };
   // generating mirrors the same per-signal-scoped evidence the domSignals
   // walk above already computes -- stop-control stays document-scoped (the
   // stop button lives outside the assistant-turn subtree, per
@@ -168,6 +184,13 @@ _SNAPSHOT_FN = r"""
     role: m.role,
     messageId: m.messageId,
     text: m.role === "user" ? userText(m.el) : boundedText(m.el),
+    ...(m.role === "user" ? (() => {
+      const correlation = userCorrelation(m.el);
+      return correlation.text ? {
+        correlationText: correlation.text,
+        structuralHrCount: correlation.hrCount
+      } : {};
+    })() : {}),
     sequence
   }));
   const userRefs = messageRefs.filter(m => m.role === "user");

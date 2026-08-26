@@ -204,6 +204,32 @@ def test_bridge_snapshot_preserves_true_dom_order_across_roles() -> None:
     assert boundary_index == 2
 
 
+def test_bridge_snapshot_keeps_structural_user_correlation_separate_from_visible_text() -> None:
+    snapshot = ChatSnapshot.from_bridge(
+        {
+            "url": "https://chatgpt.com/g/g-p-test/c/c1",
+            "userCount": 1,
+            "latestUserId": "user-1",
+            "latestUserText": "before\nafter",
+            "messageRefs": [
+                {
+                    "role": "user",
+                    "messageId": "user-1",
+                    "text": "before\nafter",
+                    "correlationText": "before\n---\nafter",
+                    "structuralHrCount": 1,
+                    "sequence": 0,
+                }
+            ],
+        }
+    )
+
+    assert snapshot.latest_user_text == "before\nafter"
+    assert snapshot.latest_user_correlation_text() == "before\n---\nafter"
+    assert snapshot.latest_user_ref() is not None
+    assert snapshot.latest_user_ref().structural_hr_count == 1  # type: ignore[union-attr]
+
+
 def test_bridge_snapshot_defaults_assistant_sequence_to_empty_when_absent() -> None:
     """Older/minimal bridge payloads (e.g. hand-built test fixtures) that
     don't supply the new arrays must not error -- backward compatible."""
