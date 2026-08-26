@@ -1,0 +1,56 @@
+name: ci-rust-bootstrap
+
+on:
+  push:
+    branches:
+      - 'stage9/audiacore-application-bootstrap-rebased'
+  pull_request:
+    paths:
+      - 'apps/audiagentic-bootstrap/**'
+      - '.github/workflows/ci-rust-bootstrap.yml'
+
+concurrency:
+  group: ci-rust-bootstrap-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-15
+          - windows-2025
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Install pinned Rust toolchain
+        shell: bash
+        run: rustup toolchain install 1.95.0 --profile minimal --component rustfmt --component clippy --no-self-update
+      - name: Verify pinned AudiaCore source
+        shell: bash
+        run: |
+          expected='c3b0ee87a965e522c00874611e6e947689c8584a'
+          grep -Fq "rev = \"$expected\"" apps/audiagentic-bootstrap/Cargo.toml
+          grep -Fq "git+https://github.com/Audumla/AudiaCore.git?rev=$expected#$expected" apps/audiagentic-bootstrap/Cargo.lock
+          if grep -R -n -E 'github\.com|git\+|rev[[:space:]]*=' apps/audiagentic-bootstrap/src; then
+            echo 'runtime source contains package/source selection semantics' >&2
+            exit 1
+          fi
+      - name: Check formatting
+        shell: bash
+        run: cargo +1.95.0 fmt --manifest-path apps/audiagentic-bootstrap/Cargo.toml -- --check
+      - name: Lint
+        shell: bash
+        run: cargo +1.95.0 clippy --locked --manifest-path apps/audiagentic-bootstrap/Cargo.toml --all-targets -- -D warnings
+      - name: Test
+        shell: bash
+        run: cargo +1.95.0 test --locked --manifest-path apps/audiagentic-bootstrap/Cargo.toml
+      - name: Run concrete bootstrap
+        shell: bash
+        run: cargo +1.95.0 run --locked --manifest-path apps/audiagentic-bootstrap/Cargo.toml
