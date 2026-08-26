@@ -13,10 +13,16 @@
   "additionalProperties": false,
   "properties": {
     "contract-version": {
-      "enum": ["v1", "v2", "v3"]
+      "enum": ["v1", "v2", "v3", "v4"]
     },
     "session-id": {
       "type": "string"
+    },
+    "created-by-request-id": {
+      "type": ["string", "null"]
+    },
+    "provider-transport-kind": {
+      "enum": ["worker", "provider-session"]
     },
     "execution-profile-id": {
       "type": "string"

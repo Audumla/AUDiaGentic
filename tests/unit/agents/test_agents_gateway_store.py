@@ -767,6 +767,33 @@ def test_provider_neutral_activity_source_renews_fenced_lease(tmp_path: Path, ac
     assert renewed["watchdog-state"] == "active"
 
 
+def test_provider_activity_records_its_normalized_work_phase(tmp_path: Path) -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="hello")
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(tmp_path, record["request-id"], owner_epoch="service-a", expected_revision=0)
+    running = store.start_owned_attempt(
+        tmp_path, record["request-id"], owner_epoch="service-a", worker_id="worker-a",
+        expected_revision=claimed["revision"],
+    )
+
+    renewed = store.record_owned_activity(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service-a",
+        worker_id="worker-a",
+        attempt_epoch=running["attempt-epoch"],
+        kind="provider",
+        source="session-transport",
+        source_instance="session:ses-1:turn:req-1",
+        source_sequence=4,
+        phase="tool-progress",
+    )
+
+    assert renewed["activity-sequence"] == 1
+    assert renewed["activity"]["provider"]["phase"] == "tool-progress"
+    assert renewed["activity"]["provider"]["source"] == "session-transport"
+
+
 def test_activity_watchdog_state_survives_store_reload_nonterminal(tmp_path: Path) -> None:
     record = store.build_record(execution_profile_id="default", prompt_body="hello")
     store.write_record(tmp_path, record)

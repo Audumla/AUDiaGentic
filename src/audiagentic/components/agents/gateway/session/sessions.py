@@ -109,6 +109,7 @@ def _default_prepare_fn(
     binding_sink: Any,
     surface_hint: Any,
     model_id: str | None = None,
+    model_selector: str | None = None,
     request_runtime_root: Path | None = None,
     mcp_entries=None,
     resume_provider_ref: str | None = None,
@@ -140,6 +141,7 @@ def _default_prepare_fn(
         binding_sink=binding_sink,
         surface_hint=surface_hint,
         model_id=model_id,
+        model_selector=model_selector,
         request_runtime_root=request_runtime_root,
         mcp_entries=None if mcp_entries is None else tuple(mcp_entries),
         require_isolated_mcp=mcp_entries is not None,
@@ -155,11 +157,12 @@ def _default_prepare_fn(
     )
 
 
-# Gateway defaults — overridable per session at open time (config over code:
-# dispatch resolves per-profile params session-idle-timeout-seconds /
-# session-max-lifetime-seconds before calling open_session).
-DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS = 900.0  # 15 min without a turn
-DEFAULT_SESSION_MAX_LIFETIME_SECONDS = 14_400.0  # 4 h; 0 disables the cap
+# Persistent provider conversations are retained until explicitly closed.
+# A session may be configured with an inactivity-only cleanup policy by a
+# trusted internal composition seam, but a wall-clock maximum lifetime is not
+# an execution failure signal and therefore defaults to disabled.
+DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS = 0.0
+DEFAULT_SESSION_MAX_LIFETIME_SECONDS = 0.0
 # A session turn can legitimately pause while a provider runs tools or awaits
 # a remote service. Elapsed time is observation policy, not terminal evidence;
 # explicit cancellation, provider terminal state, or positively correlated
@@ -173,7 +176,6 @@ DEFAULT_REAP_INTERVAL_SECONDS = 30.0
 # Max turns waiting on one session's FIFO before new prompts are rejected —
 # keeps back-pressure visible instead of building an unbounded backlog (RV513).
 DEFAULT_SESSION_QUEUE_MAX = 8
-_OPEN_TIMEOUT_SECONDS = 120.0
 _CLOSE_TIMEOUT_SECONDS = 60.0
 
 
@@ -479,6 +481,7 @@ class SessionRuntime:
         execution_profile_id: str,
         provider_id: str,
         model_id: str | None = None,
+        model_selector: str | None = None,
         session_id: str | None = None,
         surface_hint: Any = None,
         idle_timeout_seconds: float | None = None,
@@ -510,11 +513,10 @@ class SessionRuntime:
         raises CON-AGW-095 — no child starts, no live session exposed.
         """
         logger.info(
-            "gateway open requested provider=%s model=%s execution-profile=%s open-timeout=%.1fs correlation-id=%s",
+            "gateway open requested provider=%s model=%s execution-profile=%s activity-governed correlation-id=%s",
             provider_id,
             model_id,
             execution_profile_id,
-            _OPEN_TIMEOUT_SECONDS,
             correlation_id,
             extra={"session-runtime-phase": "open.request"},
         )
@@ -524,6 +526,7 @@ class SessionRuntime:
                 execution_profile_id=execution_profile_id,
                 provider_id=provider_id,
                 model_id=model_id,
+                model_selector=model_selector,
                 session_id=session_id,
                 surface_hint=surface_hint,
                 # None → gateway default; an explicit 0 DISABLES the bound
@@ -563,7 +566,10 @@ class SessionRuntime:
                 capacity_source_id=capacity_source_id,
                 project_name=project_name,
             ),
-            timeout=_OPEN_TIMEOUT_SECONDS,
+            # Opening a provider session is provider work. Do not convert a
+            # slow but alive handshake into a terminal request solely because
+            # an arbitrary wall clock elapsed.
+            timeout=None,
         )
 
     def prompt_in_session(
@@ -663,7 +669,7 @@ class SessionRuntime:
                 request_runtime_root=request_runtime_root,
                 project_name=project_name,
             ),
-            timeout=_OPEN_TIMEOUT_SECONDS,
+            timeout=None,
         )
 
     def close_session(
@@ -813,7 +819,7 @@ class SessionRuntime:
                 mcp_entries=tuple(mcp_entries),
                 project_name=project_name,
             ),
-            timeout=_OPEN_TIMEOUT_SECONDS,
+            timeout=None,
         )
 
     def session_is_quiescent(self, session_id: str) -> bool:
@@ -1331,6 +1337,7 @@ class SessionRuntime:
         correlation_id: str | None,
         request_runtime_root: Path | None,
         mcp_entries,
+        model_selector: str | None = None,
         identity_context_fingerprint: str | None = None,
         execution_context_fingerprint: str | None = None,
         context_id: str | None = None,
@@ -1405,6 +1412,7 @@ class SessionRuntime:
             "binding_sink": binding_sink,
             "surface_hint": surface_hint,
             "model_id": model_id,
+            "model_selector": model_selector,
             "checkpoint_sink": checkpoint_sink,
             "project_name": project_name,
         }
@@ -1493,8 +1501,41 @@ class SessionRuntime:
             # source as the transport they reuse.
             provider_metadata["gateway-capacity-source-id"] = capacity_source_id
 
+        # Admission creates the durable gateway session before queueing.  The
+        # provider open phase may fill its binding, but must retain the
+        # request-owned identity and original creation time rather than
+        # replacing that record with an unrelated session.
+        try:
+            admitted_record = session_store.read_session_record(project_root, session_id)
+        except AudiaGenticError as exc:
+            if exc.code != "RES-AGW-002":
+                raise
+            # Direct SessionRuntime users are an explicit low-level test and
+            # management seam. Gateway request admission always creates this
+            # record first; retain this narrow fallback so runtime ownership
+            # itself does not manufacture a different record shape.
+            admitted_record = session_store.build_session_record(
+                session_id=session_id,
+                provider_transport_kind="provider-session",
+                execution_profile_id=execution_profile_id,
+                provider_id=provider_id,
+                model_id=model_id,
+                idle_timeout_seconds=idle_timeout_seconds,
+                max_lifetime_seconds=max_lifetime_seconds,
+            )
+            session_store.write_session_record(project_root, admitted_record)
+        if admitted_record.get("provider-transport-kind") != "provider-session":
+            await _close_failed_transport(transport)
+            raise AudiaGenticError(
+                code="CON-AGW-122",
+                kind="agents",
+                message="worker-backed gateway session cannot open a provider transport",
+                details={"session-id": session_id},
+            )
         record = session_store.build_session_record(
             session_id=session_id,
+            created_by_request_id=admitted_record.get("created-by-request-id"),
+            provider_transport_kind="provider-session",
             execution_profile_id=execution_profile_id,
             provider_id=provider_id,
             model_id=model_id,
@@ -1505,6 +1546,7 @@ class SessionRuntime:
             max_lifetime_seconds=max_lifetime_seconds,
             identity_context_fingerprint=identity_context_fingerprint,
             execution_context_fingerprint=execution_context_fingerprint,
+            created_at=(admitted_record.get("timing") or {}).get("created-at"),
         )
         session_id = str(record["session-id"])
         try:

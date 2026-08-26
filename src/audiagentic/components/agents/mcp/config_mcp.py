@@ -180,7 +180,7 @@ def agent_delete_definition(agent_id: str) -> dict:
 
 
 def main() -> None:
-    run_mcp_server(mcp)
+    run_mcp_server(mcp, "agents-config")
 
 
 if __name__ == "__main__":

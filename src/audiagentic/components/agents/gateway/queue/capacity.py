@@ -26,6 +26,7 @@ class CapacityReservation:
     declared: bool
     concurrency: int | None
     token: str = ""
+    model_selector: str | None = None
 
 
 @dataclass(frozen=True)
@@ -171,6 +172,7 @@ class SourceCapacityAuthority:
         resource_id: str | None,
         concurrency: int | None,
         model_id: str | None,
+        model_selector: str | None = None,
         capacity_source_id: str | None = None,
         declared: bool = True,
     ) -> CapacityReservation | None:
@@ -181,7 +183,8 @@ class SourceCapacityAuthority:
         # contract rather than a legacy semaphore branch.
         if resource_id is None and concurrency is None:
             return CapacityReservation(
-                source_id, None, model_id, source_id, False, None, uuid.uuid4().hex
+                source_id, None, model_id, source_id, False, None, uuid.uuid4().hex,
+                model_selector,
             )
         if not resource_id or concurrency is None or concurrency < 1:
             raise ValueError("declared source capacity is invalid")
@@ -196,6 +199,7 @@ class SourceCapacityAuthority:
             return None
         return CapacityReservation(
             source_id, resource_id, model_id, capacity_key, declared, concurrency, token,
+            model_selector,
         )
 
     def reserve_when_available(self, template: CapacityReservation) -> CapacityReservation:
@@ -206,6 +210,7 @@ class SourceCapacityAuthority:
                 resource_id=template.resource_id,
                 concurrency=template.concurrency,
                 model_id=template.model_id,
+                model_selector=template.model_selector,
                 capacity_source_id=template.capacity_source_id,
                 declared=template.declared,
             )

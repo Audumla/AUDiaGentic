@@ -24,6 +24,7 @@ from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.queue import dispatch as dispatch
 from audiagentic.components.agents.gateway.session import dispatch as session_dispatch
 from audiagentic.components.agents.gateway.session import sessions as sessions_module
+from audiagentic.components.agents.gateway.session import sessions_store
 from audiagentic.components.agents.gateway.session.sessions import SessionRuntime
 
 PROFILE = {
@@ -138,8 +139,36 @@ def _running_record(tmp_path, **kwargs):
     # AS105/AS101: dispatch.py reads the bound model from resolved-model-id,
     # normally injected by queue.py's _run_one at dispatch time. Tests here
     # call dispatch.dispatch_request directly, bypassing the queue.
+    admit_session = kwargs.pop("admit_session", True)
     kwargs.setdefault("resolved_model_id", "m1")
+    provider_session = bool(
+        kwargs.get("provider_transport_kind") == "provider-session"
+        or kwargs.get("session_keep_alive")
+        or kwargs.get("session_id")
+    )
+    create_admitted_session = False
+    if provider_session:
+        session_id = kwargs.setdefault("session_id", sessions_store.generate_session_id())
+        kwargs.setdefault("provider_transport_kind", "provider-session")
+        try:
+            sessions_store.read_session_record(tmp_path, session_id)
+        except Exception:  # a test fixture is creating this admitted session
+            create_admitted_session = admit_session
+    else:
+        kwargs.setdefault("provider_transport_kind", "worker")
     record = store.build_record(execution_profile_id="profile-1", prompt_body="hello", **kwargs)
+    if create_admitted_session:
+        sessions_store.write_session_record(
+            tmp_path,
+            sessions_store.build_session_record(
+                session_id=session_id,
+                created_by_request_id=record["request-id"],
+                provider_transport_kind="provider-session",
+                execution_profile_id="profile-1",
+                provider_id="opencode",
+                model_id="m1",
+            ),
+        )
     store.write_record(tmp_path, record)
     claimed = store.claim_dispatch(
         tmp_path, record["request-id"], owner_epoch="service-test", expected_revision=0
@@ -193,6 +222,31 @@ def test_keep_alive_opens_session_and_completes(rig):
         tmp_path / ".audiagentic" / "runtime" / "agent-execution-gateway" / record["request-id"]
     )
     assert (request_dir / "runtime").is_dir()
+
+
+def test_profile_turn_deadline_never_cancels_a_session_turn(rig, monkeypatch):
+    """A profile's legacy elapsed-time setting cannot override activity policy."""
+    runtime, _transports, tmp_path = rig
+    seen: dict[str, object] = {}
+    original = runtime.prompt_in_session
+
+    def capture_timeout(*args, **kwargs):
+        seen["timeout"] = kwargs.get("timeout_seconds")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(runtime, "prompt_in_session", capture_timeout)
+    import audiagentic.components.agents.configuration.global_catalog as agents_catalog
+
+    profile = dict(PROFILE, params={"session-turn-timeout-seconds": 0.001})
+    monkeypatch.setattr(
+        agents_catalog, "resolve_global_execution_profile", lambda root, pid: dict(profile)
+    )
+    record = _running_record(tmp_path, session_keep_alive=True)
+
+    result = _dispatch(tmp_path, record, dispatch_prompt="respond")
+
+    assert result["state"] == "completed"
+    assert seen["timeout"] is None
 
 
 def test_preallocated_session_id_opens_new_session(rig):
@@ -303,7 +357,10 @@ def test_profile_mismatch_terminal(rig, monkeypatch):
     other = dict(PROFILE, profile_id="profile-2")
     monkeypatch.setattr(agents_catalog, "resolve_global_execution_profile", lambda root, pid: other)
     record = store.build_record(
-        execution_profile_id="profile-2", prompt_body="hi", session_id=session_id
+        execution_profile_id="profile-2",
+        prompt_body="hi",
+        session_id=session_id,
+        provider_transport_kind="provider-session",
     )
     store.write_record(tmp_path, record)
     claimed = store.claim_dispatch(
@@ -325,7 +382,9 @@ def test_profile_mismatch_terminal(rig, monkeypatch):
 def test_unknown_session_terminal(rig):
     runtime, transports, tmp_path = rig
     result = _dispatch(
-        tmp_path, _running_record(tmp_path, session_id="ses_nope"), dispatch_prompt="hi"
+        tmp_path,
+        _running_record(tmp_path, session_id="ses_nope", admit_session=False),
+        dispatch_prompt="hi",
     )
     assert result["state"] == "failed"
     assert result["error"]["code"] == "RES-AGW-002"
@@ -340,6 +399,34 @@ def test_session_output_concatenates_stream_chunks():
         final_summary="TOKEN STORED.",
     )
     assert session_dispatch._session_output_from_result(result) == "TOKEN STORED."
+
+
+def test_completed_session_without_assistant_text_fails_without_fake_artifact(rig, monkeypatch):
+    """A transport acknowledgement is not a successful agent response.
+
+    Regression for Pi ACP turns that previously persisted literal ``None`` as
+    a completed response artifact.
+    """
+    from audiagentic.foundation.transports.agent_session import SessionTurnResult
+
+    runtime, _transports, tmp_path = rig
+
+    def no_summary(*_args, **kwargs):
+        return SessionTurnResult(
+            turn_id=kwargs["request_id"],
+            stop_reason="end_turn",
+            observations_delivered=0,
+            dropped_observations=0,
+        )
+
+    monkeypatch.setattr(runtime, "prompt_in_session", no_summary)
+    record = _running_record(tmp_path, session_keep_alive=True)
+    result = _dispatch(tmp_path, record, dispatch_prompt="reply")
+
+    assert result["state"] == "failed"
+    assert result["error"]["code"] == "EXT-AGW-119"
+    assert result.get("response-artifact") is None
+    assert result.get("output-preview") is None
 
 
 def test_plain_record_does_not_touch_session_path(rig, monkeypatch):
@@ -390,6 +477,29 @@ def test_closed_by_shutdown_session_transparently_resumes(resumable_rig):
     successor = session_store.read_session_record(tmp_path, second["session-id"])
     assert successor["binding"]["relation"] == "resumed-from"
     assert successor["binding"]["predecessor-binding-id"] is not None
+
+
+def test_idle_closed_session_transparently_resumes(resumable_rig):
+    """An idle reaper releases the live harness resource, but the durable
+    provider conversation remains eligible for the next session turn."""
+    runtime, transports, tmp_path = resumable_rig
+    first = _dispatch(
+        tmp_path,
+        _running_record(tmp_path, session_keep_alive=True),
+        dispatch_prompt="hello",
+    )
+    session_id = first["session-id"]
+    runtime.close_session(tmp_path, session_id, reason="idle-timeout")
+
+    second = _dispatch(
+        tmp_path, _running_record(tmp_path, session_id=session_id), dispatch_prompt="continue"
+    )
+
+    assert second["state"] == "completed", second
+    assert second["session-id"] != session_id
+    assert transports[1].turns == ["continue"]
+    successor = sessions_store.read_session_record(tmp_path, second["session-id"])
+    assert successor["binding"]["relation"] == "resumed-from"
 
 
 def test_closed_by_non_shutdown_reason_still_raises_res_agw_003(rig):
@@ -527,7 +637,7 @@ def test_no_isolation_plain_record_routes_through_ephemeral_session(rig, monkeyp
 
     result = _dispatch(
         tmp_path,
-        _running_record(tmp_path),
+        _running_record(tmp_path, provider_transport_kind="provider-session"),
         dispatch_prompt="do the thing",
         provider_isolation_tier="no-isolation",
     )

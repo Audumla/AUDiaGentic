@@ -194,6 +194,11 @@ class ProviderLaunch:
     executable: str
     args: tuple[str, ...] = ()
     environment: Mapping[str, str] = field(default_factory=dict)
+    # Standard ACP session configuration selected by the provider adapter.
+    # These options are applied immediately after ``new_session`` and before
+    # the session is exposed to a caller, so a provider cannot silently use
+    # its default model instead of the admitted model.
+    initial_config_options: tuple[tuple[str, str | bool], ...] = ()
 
 
 # ``AcpLaunch`` is the historical name for this shape within the ACP subsystem
@@ -729,6 +734,12 @@ class AcpSessionTransport:
         stack, connection, proc = await self._spawn_and_initialize()
         try:
             session = await connection.new_session(cwd=str(self._cwd.resolve()), mcp_servers=[])
+            for config_id, value in self._launch.initial_config_options:
+                await connection.set_config_option(
+                    config_id=config_id,
+                    session_id=str(session.session_id),
+                    value=value,
+                )
         except (Exception, asyncio.CancelledError) as exc:
             with suppress(Exception, asyncio.CancelledError):
                 await stack.aclose()
@@ -1663,6 +1674,13 @@ class AcpAgentSessionTransport:
 
         async def _wrapped_sink(acp_event: AcpEvent) -> None:
             nonlocal delivered_count, _model_started
+            # The final response is an output concern, not an observation
+            # delivery concern.  Preserve assistant text before projecting or
+            # forwarding the event so a consumer-side mapping/sink failure
+            # cannot silently turn a successful provider reply into an empty
+            # terminal result.
+            if acp_event.kind == "assistant-message" and acp_event.text:
+                _final_summary_parts.append(acp_event.text)
             try:
                 obs = _map_acp_event_to_observation(acp_event, ag_sid, turn_id)
                 # Map subsequent assistant-messages to IN_PROGRESS after first ACTIVITY
@@ -1688,10 +1706,6 @@ class AcpAgentSessionTransport:
                 if asyncio.iscoroutine(result):
                     await result
                 delivered_count += 1
-                # Collect assistant-text fragments for the bounded final summary.
-                # Only "assistant-message" kind; no thought, tool args, or provider refs.
-                if acp_event.kind == "assistant-message" and acp_event.text:
-                    _final_summary_parts.append(acp_event.text)
             except Exception:
                 # Sink callback exception isolation: never let a single
                 # observation delivery failure kill the turn.

@@ -29,7 +29,13 @@ def _materialize_launch_config(request: McpLaunchSurfaceRequest) -> Path | None:
         "settings": {
             "toolPrefix": "mcp",
             "idleTimeout": 10,
-            "directTools": True,
+            # Pi's adapter is intentionally proxy-first. Registering every
+            # projected management tool directly consumes several thousand
+            # prompt tokens before a Brutus model can generate, which can
+            # exhaust short-output models without an assistant reply. The
+            # single ``mcp`` discovery/call tool preserves the same access
+            # while loading schemas only when the model needs one.
+            "directTools": False,
         },
         "mcpServers": {
             entry.name: {

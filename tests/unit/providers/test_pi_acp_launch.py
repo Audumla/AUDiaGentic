@@ -16,22 +16,27 @@ def test_pi_exposes_acp_launch_builder():
     assert load_acp_launch_builder("pi") is not None
 
 
-def test_pi_launch_uses_system_bridge_and_model(monkeypatch, tmp_path):
+def test_pi_launch_uses_system_bridge_and_admitted_model(monkeypatch, tmp_path):
     import audiagentic.components.providers.adapters.pi.acp as pi_acp
 
     monkeypatch.setattr(_RESOLVER, lambda version=None: ["/usr/bin/pi-acp"])
 
     request_root = tmp_path / "request-a"
+    project = tmp_path / "project"
+    project.mkdir()
     launch = pi_acp.build_acp_launch(
-        tmp_path / "project", model_id="local/model", request_runtime_root=request_root
+        project,
+        model_id="model",
+        model_selector="local/model",
+        request_runtime_root=request_root,
     )
 
     assert launch.executable == "/usr/bin/pi-acp"
     assert launch.args == (
         "--cwd", str((tmp_path / "project").resolve()),
         "--session-dir", str((request_root / "pi" / "sessions").resolve()),
-        "--model", "local/model",
     )
+    assert launch.initial_config_options == (("model", "local/model"),)
     assert launch.environment["PI_CODING_AGENT_DIR"] == str((request_root / "pi" / "agent").resolve())
     assert "HOME" not in launch.environment or os.name == "nt"
 

@@ -144,6 +144,7 @@ def build_acp_launch(
     project_root: Path,
     *,
     model_id: str | None = None,
+    model_selector: str | None = None,
     provider_config: dict | None = None,
     request_runtime_root: Path | None = None,
     mcp_surface=None,
@@ -211,6 +212,35 @@ def build_acp_launch(
 
             environment[TAP_ADDRESS_ENV] = tap_address(request_runtime_root)
             environment[TAP_AUTHKEY_ENV] = os.urandom(32).hex()
+    initial_config_options: dict[str, str | bool] = {}
     if model_id:
-        args.extend(["--model", model_id])
-    return AcpLaunch(executable=argv[0], args=tuple(args), environment=environment)
+        # pi-acp does not support a ``--model`` command-line argument.  Its
+        # standard ACP model selector is session/set_config_option, which is
+        # applied by AcpSessionTransport before the first prompt. The gateway
+        # supplies the already-admitted provider-qualified selector, so no
+        # mutable config is read at provider-session open time.
+        if not model_selector:
+            raise make_error(
+                prefix="VAL",
+                component="PIACP",
+                number=5,
+                kind="pi-harness",
+                message="Pi ACP requires an admitted provider-qualified model selector",
+                model_id=model_id,
+            )
+        if model_selector.rsplit("/", 1)[-1] != model_id:
+            raise make_error(
+                prefix="VAL",
+                component="PIACP",
+                number=6,
+                kind="pi-harness",
+                message="admitted Pi selector does not match its admitted model",
+                model_id=model_id,
+            )
+        initial_config_options["model"] = model_selector
+    return AcpLaunch(
+        executable=argv[0],
+        args=tuple(args),
+        environment=environment,
+        initial_config_options=tuple(initial_config_options.items()),
+    )

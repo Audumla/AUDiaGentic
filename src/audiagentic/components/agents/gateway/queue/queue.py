@@ -671,6 +671,7 @@ class GatewayQueueManager:
                 resource_id=facts.resource_id if declared else (virtual_resource if virtual_bound else None),
                 concurrency=facts.concurrency if declared else (int(global_limit) if global_limit is not None else None),
                 model_id=facts.model_id,
+                model_selector=facts.model_selector,
                 capacity_source_id=facts.source_id if declared else (virtual_resource if virtual_bound else facts.source_id),
                 declared=declared,
             )
@@ -728,6 +729,7 @@ class GatewayQueueManager:
             resource_id=source.resource_id,
             concurrency=source.concurrency,
             model_id=source.model_id,
+            model_selector=source.model_selector,
             capacity_source_id=source.capacity_source_id,
             declared=source.declared,
         )
@@ -868,6 +870,7 @@ class GatewayQueueManager:
                     expected_revision=claimed["revision"],
                     resolved_source_id=bound.source_id,
                     resolved_model_id=bound.model_id or bound.source_id,
+                    resolved_model_selector=bound.source.model_selector,
                     resolved_capacity_generation=bound.capacity_source_id,
                 )
             else:
@@ -897,7 +900,7 @@ class GatewayQueueManager:
 
             # AS15: two-phase concurrency for session requests.
             # Detect session request early to set up callbacks.
-            is_session = bool(record.get("session-id") or record.get("session-keep-alive"))
+            is_session = record.get("provider-transport-kind") == "provider-session"
             if is_session:
                 # Admission only proves the session can start. Capacity is
                 # held by the request-specific callbacks around actual turns,

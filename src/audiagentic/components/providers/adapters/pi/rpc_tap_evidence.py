@@ -14,20 +14,13 @@ real, source-documented Pi RPC event type (``tool_execution_*``,
 until it has its own transcript proof — mirrors
 ``_map_acp_event_to_observation``'s own closed-vocabulary discipline.
 
-Sequence-numbering caveat (not yet resolved, flagged not hidden): this
-source's ``poll()`` assigns sequence numbers from its own independent
-counter, starting at 1 each turn — a separate number space from whatever
-sequence ACP's own ``_map_acp_event_to_observation`` assigns for the same
-turn. ``StatusEvidenceSink.accept()``'s monotonic-sequence dedup operates per
-(session, request) with a single counter, so ACP and tap observations
-sharing a sequence value will collide there (first arrival wins, second is
-rejected as a duplicate) rather than following an explicit "ACP always wins"
-rule. Fine for now because the only kind this source currently produces that
-survives ``normalize_harness_status_observation`` at all is ``ACTIVITY``
-(TERMINAL frames are already dropped by that normalizer for every source,
-by design — terminal authority is SH07's job, never status observation's).
-A real source-precedence tag on ``TransportObservation`` is still the
-correct fix before this ships beyond ACTIVITY-only enrichment.
+Tap frames intentionally carry no source sequence. Pi's RPC tap and ACP
+stream are independent event namespaces, so inventing a counter here can
+collide with native ACP sequence numbers at the common gateway activity sink.
+The sink assigns its own aggregate sequence under the request lock; ``None``
+therefore means "auxiliary evidence, no comparable native sequence", rather
+than a false ordering assertion. Terminal tap frames remain observational:
+only the ACP request result can terminalize a gateway turn.
 """
 from __future__ import annotations
 
@@ -66,7 +59,7 @@ def map_pi_rpc_frame_to_observation(
     *,
     ag_session_id: str,
     turn_id: str | None,
-    sequence: int,
+    sequence: int | None,
 ) -> TransportObservation:
     """Map one decoded Pi RPC tap frame to a bounded TransportObservation.
 
@@ -102,7 +95,6 @@ class PiRpcTapObservationSource:
     def __init__(self, listener: Any) -> None:
         self._listener = listener
         self._queue: queue.Queue[JsonlTapFrame] = queue.Queue()
-        self._sequence = 0
         self._closed = False
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
@@ -125,9 +117,8 @@ class PiRpcTapObservationSource:
             frame = self._queue.get_nowait()
         except queue.Empty:
             return None
-        self._sequence += 1
         return map_pi_rpc_frame_to_observation(
-            frame, ag_session_id=ag_session_id, turn_id=turn_id, sequence=self._sequence,
+            frame, ag_session_id=ag_session_id, turn_id=turn_id, sequence=None,
         )
 
     def close(self) -> None:

@@ -240,13 +240,10 @@ def test_agent_task_submit_resolves_agent_and_delegates():
         _ROOT,
         agent_id="reviewer-agent",
         prompt_body="hi",
-        timeout_seconds=None,
         source=None,
         metadata=None,
         session_id=None,
         session_keep_alive=False,
-        session_idle_timeout_seconds=None,
-        session_max_lifetime_seconds=None,
     )
 
 

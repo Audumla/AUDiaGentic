@@ -196,6 +196,8 @@ def _redact_error(error: BaseException | dict[str, Any] | None) -> dict[str, Any
 def build_session_record(
     *,
     session_id: str | None = None,
+    created_by_request_id: str | None = None,
+    provider_transport_kind: str = "provider-session",
     execution_profile_id: str,
     provider_id: str | None = None,
     model_id: str | None = None,
@@ -213,6 +215,7 @@ def build_session_record(
     role_set_digest: str | None = None,
     execution_profile_digest: str | None = None,
     effective_capability_digest: str | None = None,
+    created_at: str | None = None,
 ) -> dict[str, Any]:
     """Build a new session record in the initial 'active' state."""
     # 0 is a valid value for both bounds: it DISABLES that bound (RV513 —
@@ -232,28 +235,35 @@ def build_session_record(
             details={"max_lifetime_seconds": max_lifetime_seconds},
         )
     timestamp = now_iso_z()
-    binding = bindings.build_binding(
-        provider_id=provider_id,
-        provider_session_ref=provider_session_ref,
-        surface_id=surface_id,
-        identity_context_fingerprint=identity_context_fingerprint,
-        execution_context_fingerprint=execution_context_fingerprint,
-        context_id=context_id,
-        agent_definition_id=agent_definition_id,
-        agent_definition_digest=agent_definition_digest,
-        role_ids=role_ids,
-        role_set_digest=role_set_digest,
-        execution_profile_digest=execution_profile_digest,
-        effective_capability_digest=effective_capability_digest,
-    )
+    created_timestamp = created_at or timestamp
+    if provider_transport_kind not in {"worker", "provider-session"}:
+        raise ValueError("unknown provider transport kind")
+    binding = None
+    if provider_session_ref is not None:
+        binding = bindings.build_binding(
+            provider_id=provider_id,
+            provider_session_ref=provider_session_ref,
+            surface_id=surface_id,
+            identity_context_fingerprint=identity_context_fingerprint,
+            execution_context_fingerprint=execution_context_fingerprint,
+            context_id=context_id,
+            agent_definition_id=agent_definition_id,
+            agent_definition_digest=agent_definition_digest,
+            role_ids=role_ids,
+            role_set_digest=role_set_digest,
+            execution_profile_digest=execution_profile_digest,
+            effective_capability_digest=effective_capability_digest,
+        )
     payload: dict[str, Any] = {
-        "contract-version": "v3",
+        "contract-version": "v4",
         "session-id": session_id or generate_session_id(),
+        "created-by-request-id": created_by_request_id,
+        "provider-transport-kind": provider_transport_kind,
         "execution-profile-id": execution_profile_id,
         "binding": binding,
         "state": "active",
         "timing": {
-            "created-at": timestamp,
+            "created-at": created_timestamp,
             "updated-at": timestamp,
             "last-activity-at": timestamp,
         },

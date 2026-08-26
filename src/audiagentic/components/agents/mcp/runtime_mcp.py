@@ -149,7 +149,7 @@ def agent_work_submit_child(parent_work_id: str, message_id: str, text: str, inp
 
 
 def main() -> None:
-    run_mcp_server(mcp)
+    run_mcp_server(mcp, "agents-runtime")
 
 
 if __name__ == "__main__":
