@@ -20,6 +20,7 @@ VAL-AGW-025: "The gateway request queue is full for this profile. Wait for in-fl
 VAL-AGW-024: "An execution profile's instances must be either all gated (resource-id+concurrency declared on their model-sources.yaml source) or all ungated -- mixed sets are not supported. Check the profile's instances against model-sources.yaml."
 VAL-AGW-030: "execution profile params.retry-count must be a non-negative integer (not bool, float, or negative). Check the profile configuration."
 VAL-AGW-031: "The provider referenced by this execution profile is not enabled in provider config. Enable the provider or use a different profile."
+VAL-AGW-032: "execution profile params.turn-transport must be either 'worker' or 'session'. Correct the global execution profile and resubmit."
 INT-AGW-001: "The dispatch retry loop exited unexpectedly without a result or error. This indicates an internal logic defect — check server logs."
 INT-AGW-098: "The gateway caught an unexpected provider boundary failure. Read the preserved error message and provider diagnostics; retry only after confirming whether the provider prompt was submitted."
 VAL-AGW-050: "Session idle_timeout_seconds must be positive, or 0 to disable the idle timeout. Omit it to use the gateway default."
@@ -227,3 +228,4 @@ CON-AGSV-029: "The gateway implementation option value does not match the declar
 CON-AGSV-030: "The gateway implementation option conflicts with another declared option."
 CFG-AGW-110: "Select a queue backend that has passed the gateway conformance suite; unavailable broker backends fail closed."
 
+VAL-AGSV-018: "Set the gateway dashboard path to an absolute URL path such as /dashboard."
