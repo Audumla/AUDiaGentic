@@ -370,6 +370,10 @@ def submit_execution_request(
     }
     envelope = SubmissionEnvelope.from_mapping(envelope_mapping)
     canonical_root = envelope.validate()
+    # Preserve the caller's explicit continuation separately from the
+    # request-owned durable session allocated below.  The latter must never
+    # participate in idempotency or context-override identity.
+    continuation_session_id = session_id
 
     # Capture component-owned template facts once at admission.  Dispatch,
     # retries, and recovery use the durable snapshot rather than re-reading
@@ -449,17 +453,6 @@ def submit_execution_request(
     prompt_template_name = f"prompt-definition:{prompt_profile_id}"
     prompt_template_digest = hashlib.sha256(dispatch_prompt.encode("utf-8")).hexdigest()
 
-    # --- 1b. Pre-generate session ID if keep-alive without continuation ---
-    # The runtime owns session ID generation; the caller never invents one.
-    # We pre-generate here so the submit response includes it immediately —
-    # dispatch will use this same ID instead of generating a new one.
-    if session_keep_alive and not session_id:
-        from audiagentic.components.agents.gateway.session import (
-            sessions_store as _session_store,
-        )
-
-        session_id = _session_store.generate_session_id()
-
     # --- 2. Resolve profile ------------------------------------------------
     # `profile` is resolved from the machine-global Agents catalog.  It keeps
     # fields such as model_alias that are not part of the gateway snapshot and
@@ -524,6 +517,22 @@ def submit_execution_request(
 
     # --- 4. Build the execution manifest -----------------------------------
     request_id = store.generate_request_id()
+    from audiagentic.components.agents.gateway.session import sessions_store as _session_store
+
+    # Every admitted request owns a durable gateway session.  Provider
+    # transport is intentionally independent: ordinary isolated work remains
+    # on the healthy worker path, while explicit continuations, keep-alive
+    # work, and no-isolation providers use the provider-session runtime.
+    if continuation_session_id:
+        session_id = continuation_session_id
+        provider_transport_kind = "provider-session"
+    else:
+        session_id = _session_store.generate_session_id()
+        provider_transport_kind = (
+            "provider-session"
+            if session_keep_alive or isolation_tier == "no-isolation"
+            else "worker"
+        )
     manifest_id = f"mf_{uuid.uuid4().hex[:16]}"
     resolved_at = now_iso_z()
     manifest = build_manifest(
@@ -559,7 +568,7 @@ def submit_execution_request(
     # drifted context.  New sessions must always use the fresh manifest value.
     request_context_fingerprint = manifest.context_fingerprint
     if execution_context_fingerprint is not None:
-        if session_id is None:
+        if continuation_session_id is None:
             raise AudiaGenticError(
                 code="VAL-AGW-104",
                 kind="agents",
@@ -575,12 +584,29 @@ def submit_execution_request(
             )
         request_context_fingerprint = execution_context_fingerprint
 
+    # A continuation is part of the already admitted provider conversation.
+    # Unless the caller deliberately supplies the compatibility override
+    # above, retain its frozen execution context rather than deriving a new
+    # request fingerprint and rejecting an ordinary second turn.
+    existing_session: dict[str, Any] | None = None
+    if continuation_session_id:
+        existing_session = _session_store.read_session_record(project_root, continuation_session_id)
+        # A continuation is necessarily cache/context preserving. The caller
+        # has selected an existing provider conversation, so do not let the
+        # request-level default close that conversation after this turn.
+        session_keep_alive = True
+        binding = existing_session.get("binding")
+        if execution_context_fingerprint is None and isinstance(binding, dict):
+            frozen_context = binding.get("execution-context-fingerprint")
+            if isinstance(frozen_context, str) and frozen_context:
+                request_context_fingerprint = frozen_context
+
     # Derive idempotency key (client-supplied wins, else deterministic)
     idempotency_key = derive_idempotency_key(
         envelope.idempotency_key,
         context_fingerprint=request_context_fingerprint,
         prompt_digest=manifest.prompt_digest,
-        session_id=session_id,
+        session_id=continuation_session_id,
     )
 
     # --- 5. Build and atomically admit the record ---------------------------
@@ -616,6 +642,8 @@ def submit_execution_request(
         metadata=persisted_metadata,
         template_context=template_context,
         session_id=session_id,
+        continuation_session_id=continuation_session_id,
+        provider_transport_kind=provider_transport_kind,
         session_keep_alive=session_keep_alive,
         session_idle_timeout_seconds=session_idle_timeout_seconds,
         session_max_lifetime_seconds=session_max_lifetime_seconds,
@@ -655,6 +683,40 @@ def submit_execution_request(
         admission_policy_digest=None,
         watchdog_policy=load_watchdog_policy().snapshot,
     )
+
+    # Continuations refer to an already durable provider-session.  New
+    # requests install their own pending gateway session under the same
+    # admission critical section as the request record, so no observable
+    # request can be sessionless.
+    pending_session: dict[str, Any] | None = None
+    if continuation_session_id:
+        if existing_session is None:
+            existing_session = _session_store.read_session_record(project_root, continuation_session_id)
+        if existing_session.get("provider-transport-kind") != "provider-session":
+            raise AudiaGenticError(
+                code="VAL-AGW-148",
+                kind="agents",
+                message="a worker-backed gateway session cannot be continued as a provider session",
+                details={"session-id": continuation_session_id},
+            )
+        if existing_session.get("execution-profile-id") != resolved_profile_id:
+            raise AudiaGenticError(
+                code="VAL-AGW-060",
+                kind="agents",
+                message="request execution profile does not match the session's profile",
+                details={"session-id": continuation_session_id},
+            )
+    else:
+        pending_session = _session_store.build_session_record(
+            session_id=session_id,
+            created_by_request_id=request_id,
+            provider_transport_kind=provider_transport_kind,
+            execution_profile_id=resolved_profile_id,
+            provider_id=resolved_provider_id,
+            model_id=resolved_model_id,
+            idle_timeout_seconds=session_idle_timeout_seconds,
+            max_lifetime_seconds=session_max_lifetime_seconds,
+        )
     record, created = store.admit_record(
         project_root,
         record,
@@ -664,6 +726,11 @@ def submit_execution_request(
         # after a crash) is never written — service_root defaults to None
         # inside admit_record and the write is silently skipped.
         service_root=Path(_dispatch_service_root) if _dispatch_service_root else None,
+        before_write=(
+            (lambda: _session_store.write_session_record(project_root, pending_session))
+            if pending_session is not None
+            else None
+        ),
     )
 
     if created:
@@ -688,7 +755,9 @@ def submit_execution_request(
             dispatch.dispatch_request,
             dispatch_prompt=dispatch_prompt,
             preallocated_session_id=(
-                session_id if session_keep_alive and not envelope.session.session_id else None
+                session_id
+                if provider_transport_kind == "provider-session" and continuation_session_id is None
+                else None
             ),
             manifest_id=manifest.manifest_id,
             context_fingerprint=request_context_fingerprint,

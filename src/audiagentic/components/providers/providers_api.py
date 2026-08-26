@@ -1301,8 +1301,10 @@ def resolve_instance_capacity(
     Naming a model-sources.yaml source-id is opportunistic, not required --
     not every provider has (or can have) a catalog entry there (e.g. a
     browser-driven CDP session has no HTTP endpoint or vendor account to
-    declare). Returns ``{instance_id: {"model-id":..., "resource-id":
-    str|None, "concurrency": int|None}}``:
+    declare). Returns ``{instance_id: {"model-id":..., "model-selector":...,
+    "resource-id": str|None, "concurrency": int|None}}``. The optional
+    selector is derived while the source is resolved, then frozen into the
+    dispatch placement rather than re-read when a provider session opens:
 
     - If ``instance_id`` matches a declared source in the resolved
       (user-global + project-local) view, its resource-id/concurrency
@@ -1322,10 +1324,25 @@ def resolve_instance_capacity(
     for source_id in source_ids:
         source = sources.get(source_id)
         if source is None:
-            result[source_id] = {"model-id": source_id, "resource-id": None, "concurrency": None}
+            result[source_id] = {
+                "model-id": source_id,
+                "model-selector": None,
+                "resource-id": None,
+                "concurrency": None,
+            }
             continue
+        model_id = source.get("model-id")
+        overrides = source.get("provider-overrides") or {}
+        provider_namespace = overrides.get("provider-id") if isinstance(overrides, dict) else None
+        selector = (
+            f"{provider_namespace}/{model_id}"
+            if isinstance(provider_namespace, str) and provider_namespace
+            and isinstance(model_id, str) and model_id
+            else None
+        )
         result[source_id] = {
-            "model-id": source.get("model-id"),
+            "model-id": model_id,
+            "model-selector": selector,
             "resource-id": source.get("resource-id"),
             "concurrency": source.get("concurrency"),
         }

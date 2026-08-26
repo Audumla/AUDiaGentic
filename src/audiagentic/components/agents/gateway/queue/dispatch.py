@@ -20,7 +20,6 @@ from audiagentic.components.agents.gateway.mapping import first_present
 from audiagentic.components.agents.gateway.session.dispatch import (
     _CancelledDuringDispatch,
     _dispatch_session_request,
-    _is_session_request,
     _transition_owned_attempt,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -50,6 +49,56 @@ class _TerminalFailure(Exception):
     def __init__(self, original: AudiaGenticError) -> None:
         super().__init__(str(original))
         self.original = original
+
+
+def _close_worker_gateway_session(
+    project_root: Path,
+    record: dict[str, Any],
+    *,
+    reason: str,
+) -> None:
+    """Complete the request-owned durable session for worker transport.
+
+    Worker sessions provide the canonical request/session relationship and
+    dashboard grouping, but own no live provider transport.  They are closed
+    immediately once their sole request is terminal.  Terminal request state
+    remains authoritative if this best-effort lifecycle bookkeeping fails.
+    """
+    session_id = record.get("session-id")
+    if not session_id:
+        return
+    try:
+        from audiagentic.components.agents.gateway.session import sessions_store
+
+        session = sessions_store.record_session_turn(project_root, str(session_id), record["request-id"])
+        if session.get("state") == "active":
+            sessions_store.transition_session_record(
+                project_root,
+                str(session_id),
+                "closed",
+                updates={"close-reason": reason, "closed-at": now_iso_z()},
+            )
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "failed to close worker-backed gateway session",
+            extra={"request-id": record.get("request-id"), "session-id": session_id},
+        )
+
+
+def _terminal_worker_result(
+    project_root: Path,
+    record: dict[str, Any],
+    state: str,
+    *,
+    updates: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    terminal = _transition_owned_attempt(project_root, record, state, updates=updates)
+    _close_worker_gateway_session(
+        project_root,
+        record,
+        reason=("cancelled-turn" if state == "cancelled" else "post-turn-close" if state == "completed" else "failed"),
+    )
+    return terminal
 
 
 def classify_failure(exc: AudiaGenticError) -> str:
@@ -511,7 +560,7 @@ def dispatch_request(
                 details={"request-id": record.get("request-id")},
             )
 
-    if _is_session_request(record) or provider_isolation_tier == "no-isolation":
+    if record.get("provider-transport-kind") == "provider-session":
         return _dispatch_session_request(
             project_root,
             record,
@@ -534,7 +583,7 @@ def dispatch_request(
             worker_timeout_seconds=worker_timeout_seconds,
         )
     except _CancelledDuringDispatch:
-        return _transition_owned_attempt(project_root, record, "cancelled")
+        return _terminal_worker_result(project_root, record, "cancelled")
     except _TerminalFailure as exc:
         error = exc.original
     except AudiaGenticError as exc:
@@ -543,13 +592,13 @@ def dispatch_request(
         from audiagentic.components.agents.gateway.output import persist_final_response
         artifact = persist_final_response(project_root, record["request-id"], str(outcome.get("output") or ""))
         artifact_ref = {key: artifact[key] for key in ("artifact-id", "request-id", "media-type", "bytes", "sha256")}
-        return _transition_owned_attempt(
+        return _terminal_worker_result(
             project_root,
             record,
             "completed",
             updates={**outcome, "response-artifact": artifact_ref, "output-preview": artifact["output-preview"], "output-truncated": artifact["output-truncated"], "finished-at": now_iso_z()},
         )
-    return _transition_owned_attempt(
+    return _terminal_worker_result(
         project_root,
         record,
         "failed",

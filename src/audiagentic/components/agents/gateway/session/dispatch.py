@@ -23,8 +23,6 @@ from audiagentic.foundation.time import now_iso_z
 
 logger = logging.getLogger(__name__)
 
-_TURN_CALL_GRACE_SECONDS = 15.0
-
 
 def _terminal_session_diagnostics(session_id: str, record: dict[str, Any]) -> dict[str, Any]:
     """Return sparse facts needed to repair a continuation rejection.
@@ -86,7 +84,10 @@ _AUTO_RESUME_EXPECTED_REFUSAL_CODES = frozenset(
 )
 
 
-def _auto_resume_shutdown_closed_session(
+_AUTO_RESUMABLE_CLOSE_REASONS = frozenset({"shutdown", "idle-timeout"})
+
+
+def _auto_resume_reopenable_closed_session(
     project_root: Path,
     runtime: Any,
     *,
@@ -96,7 +97,7 @@ def _auto_resume_shutdown_closed_session(
     request_runtime_root: Path,
     project_name: str | None = None,
 ) -> tuple[str, dict[str, Any], dict[str, Any]]:
-    """Transparently reattach a session closed by a gateway shutdown.
+    """Transparently resume a session closed by a resumable gateway policy.
 
     Reproduced live 2026-08-17: a force gateway restart (loading unrelated
     fixes) explicitly closed every live session machine-wide
@@ -104,13 +105,12 @@ def _auto_resume_shutdown_closed_session(
     caller's next continuation against one of those sessions got a hard
     RES-AGW-003 even though the closed record still carried everything
     needed to resume the same live provider conversation. Deliberately
-    narrow in scope (see the caller's own state==closed and
-    close-reason==shutdown guard): this function is never reached for a
-    genuinely failed session (that must still require the caller's own
-    explicit session_resume, never be silently papered over) or any other
-    close reason (a policy/lifecycle boundary this tactical patch does not
-    attempt to reinterpret -- see plan item GP13's own notes for the full
-    unified-activation design this is deliberately NOT building).
+    narrow in scope: a gateway shutdown and its configured ``idle-timeout``
+    are resource-lifetime policies, not evidence that the provider
+    conversation is invalid. A later turn may therefore resume the durable
+    provider binding. This function is never reached for a genuinely failed
+    session or an intentional client/post-turn close: those still require an
+    explicit session_resume, never a silent reopen.
 
     Reuses AS49's existing resume_session() machinery as-is -- no new
     concurrency primitive. A control id deterministic in the source
@@ -162,7 +162,7 @@ def _auto_resume_shutdown_closed_session(
 
     new_session_id = str(new_session_record["session-id"])
     logger.info(
-        "gpt-auto session transparently resumed after shutdown closure",
+        "gateway session transparently resumed after resumable closure",
         extra={
             "source-session-id": source_session_id,
             "resumed-session-id": new_session_id,
@@ -280,10 +280,7 @@ def _dispatch_session_request(
     from audiagentic.components.agents.gateway import profiles as profiles_mod
     from audiagentic.components.agents.gateway.session import bindings as binding_store
     from audiagentic.components.agents.gateway.session import sessions_store as session_store
-    from audiagentic.components.agents.gateway.session.sessions import (
-        DEFAULT_TURN_TIMEOUT_SECONDS,
-        get_session_runtime,
-    )
+    from audiagentic.components.agents.gateway.session.sessions import get_session_runtime
     from audiagentic.components.providers import providers_api
 
     request_id = record["request-id"]
@@ -327,9 +324,23 @@ def _dispatch_session_request(
     request_runtime = None
     request_runtime_root = gateway_request_dir(project_root, request_id) / "runtime"
     try:
-        is_new_session = session_id is None or (
-            preallocated_session_id is not None and session_id == preallocated_session_id
-        )
+        if session_id is None:
+            raise AudiaGenticError(
+                code="RES-AGW-002",
+                kind="agents",
+                message="admitted request is missing its durable gateway session",
+                details={"request-id": request_id},
+            )
+        session_id = str(session_id)
+        admitted_session = session_store.read_session_record(project_root, session_id)
+        if admitted_session.get("provider-transport-kind") != "provider-session":
+            raise AudiaGenticError(
+                code="CON-AGW-122",
+                kind="agents",
+                message="worker-backed request was routed to provider-session dispatch",
+                details={"request-id": request_id, "session-id": session_id},
+            )
+        is_new_session = admitted_session.get("created-by-request-id") == request_id
         if is_new_session:
             # keep-alive: open a new session bound to this profile
             request_runtime_root.mkdir(parents=True, exist_ok=True)
@@ -374,6 +385,7 @@ def _dispatch_session_request(
                 execution_profile_digest=execution_profile_digest,
                 effective_capability_digest=effective_capability_digest,
                 capacity_source_id=record.get("resolved-source-id"),
+                model_selector=record.get("resolved-model-selector"),
                 project_name=project_name,
                 # Request value wins over profile params; 0 disables the bound
                 # (RV513) — use explicit None checks so 0 survives resolution.
@@ -421,7 +433,6 @@ def _dispatch_session_request(
                     message="gateway session id is missing",
                     details={"request-id": request_id},
                 )
-            session_id = str(session_id)
             session_record = session_store.read_session_record(project_root, session_id)
             if session_record["execution-profile-id"] != execution_profile_id:
                 raise AudiaGenticError(
@@ -479,18 +490,15 @@ def _dispatch_session_request(
             # the exact provider binding before applying continuation policy.
             if not runtime.session_runtime_status(session_id).get("available"):
                 if (
-                    session_record.get("state") == "closed"
-                    and session_record.get("close-reason") == "shutdown"
+                    session_record.get("state") in {"closed", "expired"}
+                    and session_record.get("close-reason") in _AUTO_RESUMABLE_CLOSE_REASONS
                 ):
-                    # GP13 (scoped): transparently reattach rather than
-                    # forcing the caller to detect RES-AGW-003 and
-                    # separately call session_resume -- see
-                    # _auto_resume_shutdown_closed_session's own docstring
-                    # for why this is deliberately narrow. The resumed
-                    # successor already has a live runtime handle (resume
-                    # opens a real transport), so unlike the active-state
-                    # branch below, no rehydrate_session() call follows.
-                    session_id, session_record, record = _auto_resume_shutdown_closed_session(
+                    # A gateway resource-policy close retains the durable
+                    # provider binding. Resume creates one linked successor
+                    # with a live transport, so no active-state rehydrate is
+                    # needed here. Intentional close and failure reasons are
+                    # deliberately excluded from this automatic path.
+                    session_id, session_record, record = _auto_resume_reopenable_closed_session(
                         project_root,
                         runtime,
                         source_session_id=session_id,
@@ -581,20 +589,6 @@ def _dispatch_session_request(
                 "max-attempts": 1,
             },
         )
-        # The synchronous caller backstop derives from the session's durable
-        # turn policy. A fixed ceiling can pre-empt a provider whose configured
-        # response policy deliberately permits longer work. Zero disables both
-        # the runtime deadline and this outer backstop.
-        configured_turn_timeout = first_present(
-            params, "session-turn-timeout-seconds", "session_turn_timeout_seconds"
-        )
-        if configured_turn_timeout is None:
-            configured_turn_timeout = DEFAULT_TURN_TIMEOUT_SECONDS
-        call_timeout = (
-            float(configured_turn_timeout) + _TURN_CALL_GRACE_SECONDS
-            if configured_turn_timeout
-            else None
-        )
         from audiagentic.components.agents.gateway.activity import RequestActivityRelay
         activity_relay = RequestActivityRelay(
             project_root,
@@ -610,7 +604,10 @@ def _dispatch_session_request(
             dispatch_prompt,
             request_id=request_id,
             correlation_id=record.get("correlation-id"),
-            timeout_seconds=call_timeout,
+            # Provider activity renews the durable request lease. An outer
+            # elapsed-time deadline here would cancel an otherwise healthy
+            # turn immediately before its terminal event reaches us.
+            timeout_seconds=None,
             activity_relay=activity_relay,
         )
     except _CancelledDuringDispatch:
@@ -756,6 +753,45 @@ def _dispatch_session_request(
     session_record = session_store.read_session_record(project_root, session_id)
     model_id = session_store.session_model_id(session_record) or record.get("resolved-model-id")
     output_text = _session_output_from_result(result)
+    if not isinstance(output_text, str) or not output_text.strip():
+        # A terminal transport acknowledgement is not an agent response.
+        # Never stringify a missing summary (which used to persist the literal
+        # text ``None`` and report a false completed task).  Keep the durable
+        # provider session open so the caller can explicitly retry/reconcile
+        # its conversation, but make this request's missing output visible as
+        # a provider failure.
+        error = AudiaGenticError(
+            code="EXT-AGW-119",
+            kind="agents",
+            message="provider session completed without an assistant response",
+            details={"stop-reason": result.stop_reason or "unknown"},
+        )
+        store.append_owned_attempt(
+            project_root,
+            request_id,
+            owner_epoch=record["dispatch-owner-epoch"],
+            worker_id=record["worker-id"],
+            attempt_epoch=record["attempt-epoch"],
+            execution_profile_id=execution_profile_id,
+            provider_id=provider_id,
+            model_id=model_id,
+            state="failed",
+            error=error,
+            started_at=started_at,
+            finished_at=now_iso_z(),
+        )
+        return _transition_owned_attempt(
+            project_root,
+            record,
+            "failed",
+            updates={
+                "error": error,
+                "provider-id": provider_id,
+                "model-id": model_id,
+                "session-id": session_id,
+                "finished-at": now_iso_z(),
+            },
+        )
     from audiagentic.components.agents.gateway.output import persist_final_response
     artifact = persist_final_response(project_root, request_id, output_text)
     artifact_ref = {key: artifact[key] for key in ("artifact-id", "request-id", "media-type", "bytes", "sha256")}

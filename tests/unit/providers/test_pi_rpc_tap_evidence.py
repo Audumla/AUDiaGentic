@@ -153,7 +153,10 @@ class TestPiRpcTapObservationSource:
             TransportObservationKind.IN_PROGRESS,
             TransportObservationKind.TERMINAL,
         ]
-        assert [first.sequence, second.sequence, third.sequence] == [1, 2, 3]
+        # The RPC tap is an auxiliary stream. It has no truthful ordering
+        # relation with the native ACP stream, so the gateway allocates the
+        # aggregate activity sequence rather than accepting a fake local one.
+        assert [first.sequence, second.sequence, third.sequence] == [None, None, None]
         assert fourth is None
 
     @pytest.mark.asyncio

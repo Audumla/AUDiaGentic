@@ -85,7 +85,7 @@ def agent_gateway_list_operations(limit: int = 100) -> list[dict]:
 
 
 def main() -> None:
-    run_mcp_server(mcp)
+    run_mcp_server(mcp, "agents-admin")
 
 
 if __name__ == "__main__":

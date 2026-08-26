@@ -161,7 +161,53 @@ def transition_record(
                 "updated-keys": sorted((updates or {}).keys()),
             },
         )
-        return updated
+    _finalize_worker_session_if_terminal(project_root, updated)
+    return updated
+
+
+def _finalize_worker_session_if_terminal(
+    project_root: Path, record: dict[str, Any]
+) -> None:
+    """Close a request-owned worker session on *every* terminal path.
+
+    Queue rejection/cancellation may terminalize without calling provider
+    dispatch. Keeping this beside the durable request transition prevents
+    those paths from leaking an active gateway session. Provider sessions are
+    deliberately excluded: their runtime owns their lifetime.
+    """
+    if (
+        record.get("provider-transport-kind") != "worker"
+        or record.get("state") not in _shared.TERMINAL_STATES
+        or not record.get("session-id")
+    ):
+        return
+    try:
+        from audiagentic.components.agents.gateway.session import sessions_store
+
+        session_id = str(record["session-id"])
+        session = sessions_store.read_session_record(project_root, session_id)
+        if session.get("state") != "active":
+            return
+        if record.get("started-at"):
+            sessions_store.record_session_turn(project_root, session_id, record["request-id"])
+        reason = (
+            "post-turn-close"
+            if record.get("state") == "completed"
+            else "cancelled-turn"
+            if record.get("state") == "cancelled"
+            else "failed"
+        )
+        sessions_store.transition_session_record(
+            project_root,
+            session_id,
+            "closed",
+            updates={"close-reason": reason, "closed-at": now_iso_z()},
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "failed to finalize worker-backed gateway session",
+            extra={"request-id": record.get("request-id"), "session-id": record.get("session-id")},
+        )
 
 
 def update_diagnostics(
@@ -1170,6 +1216,7 @@ def bind_and_start_owned_attempt(
     expected_revision: int,
     resolved_source_id: str,
     resolved_model_id: str,
+    resolved_model_selector: str | None = None,
     resolved_capacity_generation: str | None = None,
 ) -> dict[str, Any]:
     """Atomically bind an owned queued request to a source and start it.
@@ -1211,6 +1258,7 @@ def bind_and_start_owned_attempt(
                 "attempt-epoch": record["attempt-epoch"] + 1,
                 "resolved-source-id": resolved_source_id,
                 "resolved-model-id": resolved_model_id,
+                "resolved-model-selector": resolved_model_selector,
                 "resolved-capacity-generation": resolved_capacity_generation,
                 "watchdog-state": "active",
                 "watchdog-reason": "awaiting-verified-activity",
@@ -1231,6 +1279,7 @@ def bind_and_start_owned_attempt(
                 "attempt-epoch": updated["attempt-epoch"],
                 "resolved-source-id": resolved_source_id,
                 "resolved-model-id": resolved_model_id,
+                "resolved-model-selector": resolved_model_selector,
                 "resolved-capacity-generation": resolved_capacity_generation,
             },
         )

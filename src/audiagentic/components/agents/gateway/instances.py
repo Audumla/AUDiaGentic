@@ -24,6 +24,10 @@ class InstanceFacts:
     model_id: str | None
     resource_id: str | None
     concurrency: int | None
+    # Provider-native model selector frozen alongside the source/model
+    # placement. The gateway never interprets it; an adapter may translate
+    # it without re-reading mutable configuration.
+    model_selector: str | None = None
 
 
 def resolve_instance_facts(project_root: Path, instance_ids: tuple[str, ...]) -> tuple[InstanceFacts, ...]:
@@ -43,6 +47,7 @@ def resolve_instance_facts(project_root: Path, instance_ids: tuple[str, ...]) ->
             model_id=capacity[source_id].get("model-id"),
             resource_id=capacity[source_id].get("resource-id"),
             concurrency=capacity[source_id].get("concurrency"),
+            model_selector=capacity[source_id].get("model-selector"),
         )
         for source_id in instance_ids
     )

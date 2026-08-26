@@ -80,6 +80,7 @@ def _install_sdk(monkeypatch, *, prompt_side_effect=None):
     conn = MagicMock()
     conn.initialize = AsyncMock()
     conn.new_session = AsyncMock(return_value=SimpleNamespace(session_id="acp-s-1"))
+    conn.set_config_option = AsyncMock()
     turn_counter = {"n": 0}
 
     async def default_prompt(session_id, prompt):
@@ -384,6 +385,35 @@ class TestAcpAgentSessionTransportOpenClose:
         assert result.ag_session_id == "ag-gateway-1"
         assert result.provider_session_ref == ProviderSessionRef("acp-s-1")
         assert transport.is_alive()
+
+    @pytest.mark.asyncio
+    async def test_open_applies_initial_configuration_before_exposure(self, tmp_path, monkeypatch):
+        conn, _ = _install_sdk(monkeypatch)
+        transport = AcpAgentSessionTransport(
+            AcpLaunch("agent", initial_config_options=(("model", "brutus/qwen"),)),
+            cwd=tmp_path,
+        )
+
+        result = await transport.open()
+
+        assert result.provider_session_ref == ProviderSessionRef("acp-s-1")
+        conn.set_config_option.assert_awaited_once_with(
+            config_id="model", session_id="acp-s-1", value="brutus/qwen"
+        )
+
+    @pytest.mark.asyncio
+    async def test_open_fails_closed_when_initial_configuration_is_rejected(self, tmp_path, monkeypatch):
+        conn, _ = _install_sdk(monkeypatch)
+        conn.set_config_option.side_effect = RuntimeError("unknown selected model")
+        transport = AcpAgentSessionTransport(
+            AcpLaunch("agent", initial_config_options=(("model", "brutus/missing"),)),
+            cwd=tmp_path,
+        )
+
+        with pytest.raises(AudiaGenticError, match="ACP agent execution failed"):
+            await transport.open()
+
+        assert not transport.is_alive()
 
     @pytest.mark.asyncio
     async def test_close_is_idempotent(self, tmp_path, monkeypatch):
@@ -705,6 +735,9 @@ class TestSinkCallbackExceptionIsolation:
         # Turn completes despite sink failures
         assert result.stop_reason == "end_turn"
         assert sink_called[0] >= 1
+        # Output is captured before observation delivery.  A caller's broken
+        # activity sink must never erase the provider's terminal reply.
+        assert result.final_summary == "turn-1"
 
         await transport.close()
 

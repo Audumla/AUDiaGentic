@@ -546,6 +546,7 @@ def prepare_provider_session_transport(
     binding_sink: Any,
     surface_hint: SurfaceHint,
     model_id: str | None = None,
+    model_selector: str | None = None,
     model_alias: str | None = None,
     request_runtime_root: Path | None = None,
     mcp_entries=None,
@@ -701,6 +702,8 @@ def prepare_provider_session_transport(
 
     if "provider_config" in inspect.signature(builder).parameters:
         launch_kwargs["provider_config"] = provider_config
+    if model_selector is not None and "model_selector" in inspect.signature(builder).parameters:
+        launch_kwargs["model_selector"] = model_selector
     if request_runtime_root is not None:
         launch_kwargs["request_runtime_root"] = request_runtime_root
     # AS41: only Pi's build_acp_launch declares enable_rpc_tap today — no

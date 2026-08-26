@@ -220,6 +220,39 @@ def test_activity_progress_markers_are_projected_from_durable_record() -> None:
     }
 
 
+def test_activity_type_is_a_bounded_provider_work_description() -> None:
+    record = _record(
+        "running",
+        **{
+            "activity-sequence": 12,
+            "activity": {"provider": {"phase": "searching the web"}},
+        },
+    )
+
+    assert project_task_status_v4(record, _snapshot(record, AgentLifecycle.ACTIVE)) == {
+        "task_id": "req-1",
+        "lifecycle": "active",
+        "activity": "running",
+        "activity_type": "searching-web",
+        "activity_seq": 12,
+    }
+
+
+def test_unreviewed_activity_type_is_not_exposed() -> None:
+    record = _record(
+        "running",
+        **{
+            "activity-sequence": 1,
+            "activity": {"provider": {"phase": "provider-private-event"}},
+        },
+    )
+
+    result = project_task_status_v4(record, _snapshot(record, AgentLifecycle.ACTIVE))
+
+    assert result["activity_seq"] == 1
+    assert "activity_type" not in result
+
+
 @pytest.mark.parametrize(
     "record",
     [
@@ -237,6 +270,17 @@ def test_v4_projection_validates_against_canonical_schema() -> None:
     payload = project_task_status_v4(_record("queued"))
     assert validate_with_schema("task-status-v4", payload) == []
     assert validate_with_schema("task-status-v4", {**payload, "diagnostics": {}})
+
+    active = project_task_status_v4(
+        _record(
+            "running",
+            **{
+                "activity-sequence": 1,
+                "activity": {"provider": {"phase": "thinking"}},
+            },
+        )
+    )
+    assert validate_with_schema("task-status-v4", active) == []
 
 
 def test_v4_projection_never_emits_null_values() -> None:

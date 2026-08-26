@@ -427,13 +427,10 @@ _SUBMISSION_ARGUMENTS = {
     "execution_profile_id",
     "prompt_body",
     "mode",
-    "timeout_seconds",
     "source",
     "metadata",
     "session_id",
     "session_keep_alive",
-    "session_idle_timeout_seconds",
-    "session_max_lifetime_seconds",
     "workspace_name",
     "execution_context_fingerprint",
     "component_profile",
@@ -463,12 +460,15 @@ def _validated_submission_arguments(
             "model_id": metadata.get("model_id"),
             "component_profile": arguments.get("component_profile"),
             "mode": arguments.get("mode", "async"),
-            "timeout_seconds": arguments.get("timeout_seconds"),
+            # Submission execution is activity/watchdog governed. The RPC
+            # boundary deliberately has no caller-controlled wall-clock
+            # deadline; passive wait operations remain independent.
+            "timeout_seconds": None,
             "session": {
                 "session_id": arguments.get("session_id"),
                 "keep_alive": arguments.get("session_keep_alive"),
-                "idle_timeout_seconds": arguments.get("session_idle_timeout_seconds"),
-                "max_lifetime_seconds": arguments.get("session_max_lifetime_seconds"),
+                "idle_timeout_seconds": None,
+                "max_lifetime_seconds": None,
             },
             "prompt_body": arguments.get("prompt_body"),
             "metadata": metadata,

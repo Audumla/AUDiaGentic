@@ -154,6 +154,7 @@ class FakeAgentSessionTransport:
             observations_delivered=1,
             dropped_observations=0,
             correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+            final_summary="fake provider response",
         )
 
     async def control(self, request):
@@ -529,7 +530,7 @@ def test_open_prompt_close_lifecycle(rig):
     record = _open(runtime, tmp_path)
     session_id = record["session-id"]
     assert record["state"] == "active"
-    assert record["contract-version"] == "v3"
+    assert record["contract-version"] == "v4"
     assert record["binding"]["provider-session-ref"] == "prov-ses-1"
     public_binding = binding_store.public_binding_projection(record["binding"])
     assert public_binding is not None

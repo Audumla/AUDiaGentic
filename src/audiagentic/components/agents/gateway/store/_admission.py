@@ -11,6 +11,7 @@ import json
 import logging
 import uuid
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 from audiagentic.components.agents.agents_paths import (
@@ -79,7 +80,11 @@ def _intent_digest(record: dict[str, Any]) -> str:
         "prompt-digest": record.get("prompt-digest"),
         "mode": record["mode"],
         "timeout-seconds": record.get("timeout-seconds"),
-        "session-id": record.get("session-id"),
+        # Automatically allocated gateway-session IDs group a request but do
+        # not alter its execution intent. Only an explicit continuation ID is
+        # semantically significant for an idempotency replay.
+        "continuation-session-id": record.get("continuation-session-id"),
+        "provider-transport-kind": record.get("provider-transport-kind"),
         "session-keep-alive": record.get("session-keep-alive"),
         "session-idle-timeout-seconds": record.get("session-idle-timeout-seconds"),
         "session-max-lifetime-seconds": record.get("session-max-lifetime-seconds"),
@@ -132,6 +137,7 @@ def admit_record(
     *,
     idempotency_key: str,
     service_root: Path | None = None,
+    before_write: Callable[[], None] | None = None,
 ) -> tuple[dict[str, Any], bool]:
     """Atomically reserve an idempotency key and persist its request record.
 
@@ -209,6 +215,8 @@ def admit_record(
             })
             return recovered, False
 
+        if before_write is not None:
+            before_write()
         _records.write_record(project_root, candidate)
         atomic_write_json(index_path, {
             "key-digest": key_digest,

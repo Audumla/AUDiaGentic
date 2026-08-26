@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -370,6 +371,10 @@ def make_cli_runner(
     build_prompt=None,
     parse_completion=None,
     extractor_cls: type[BaseEventExtractor] | None = None,
+    prepare_launch: Callable[
+        [dict[str, Any], dict[str, Any], list[str]], tuple[list[str], dict[str, str]]
+    ]
+    | None = None,
 ):
     """Build the generic CLI run() previously copy-pasted per adapter."""
     title = execution.get("prompt-title", provider_id)
@@ -423,6 +428,9 @@ def make_cli_runner(
             },
         )
         command = [spec.executable, *spec.args]
+        launch_environment: dict[str, str] | None = None
+        if prepare_launch is not None:
+            command, launch_environment = prepare_launch(packet_ctx, provider_cfg, command)
 
         stream_controls = packet_ctx.get("stream-controls", {})
         stdout_sinks, stderr_sinks = build_extractor_stream_sinks(
@@ -437,6 +445,7 @@ def make_cli_runner(
             input_text=None if prompt_in_argv else prompt,
             stdout_sinks=stdout_sinks,
             stderr_sinks=stderr_sinks,
+            environment=launch_environment,
         )
         stdout_text = completed.stdout.strip()
         stderr_text = completed.stderr.strip()

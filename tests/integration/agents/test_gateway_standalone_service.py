@@ -12,6 +12,9 @@ from urllib.request import Request, urlopen
 
 import pytest
 
+from audiagentic.components.agents.configuration.management import (
+    create_execution_profile,
+)
 from audiagentic.components.agents.gateway.application import InProcessGatewayApplication
 from audiagentic.components.agents.gateway.client import (
     get_gateway_client,
@@ -24,9 +27,6 @@ from audiagentic.components.agents.gateway.remote_client import (
 from audiagentic.components.agents.gateway.service.contract import PROTOCOL_VERSION
 from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
 from audiagentic.components.agents.gateway.service.known_projects import record_known_project
-from audiagentic.components.agents.configuration.management import (
-    create_execution_profile,
-)
 from audiagentic.components.providers.providers_api import ProviderExecutionResult
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.features.base import ImplementationState
@@ -217,7 +217,7 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b'id="show-empty"' in page
         assert b'id="recent-window"' in page
         assert b"recent-seconds" in page
-        assert b"Requests without a session" not in page
+        assert b"One-shot requests" in page
         assert b"newest first" in page
         assert b"Watchdog monitoring guide" in page
         assert b"stale monitoring marker" in page
@@ -265,6 +265,14 @@ def test_dashboard_recent_window_filters_history_and_supports_query_override(
             "execution-profile-id": "default",
             "resolved-provider-id": "local-openai",
             "resolved-model-id": "model",
+            "updated-at": fresh,
+        },
+        "req-one-shot": {
+            "request-id": "req-one-shot",
+            "state": "completed",
+            "execution-profile-id": "qwen-mid",
+            "resolved-provider-id": "pi",
+            "resolved-model-id": "brutus/qwen3.6-27b-0",
             "updated-at": fresh,
         },
         "req-old": {
@@ -323,12 +331,17 @@ def test_dashboard_recent_window_filters_history_and_supports_query_override(
         _content_type, response = _raw_get(host.endpoint, "/dashboard/snapshot")
         payload = json.loads(response)
         assert payload["dashboard"]["recent-window-seconds"] == 60
-        assert {row["request-id"] for row in payload["requests"]} == {"req-running", "req-fresh"}
+        assert {row["request-id"] for row in payload["requests"]} == {"req-running", "req-fresh", "req-one-shot"}
         running = next(row for row in payload["requests"] if row["request-id"] == "req-running")
         assert running["state"] == "running"
         assert running["activity"]["phase"] == "tool-progress"
+        assert running["activity-type"] == "tool-progress"
         assert running["activity-sequence"] == 42
         assert {row["session-id"] for row in payload["projects"][0]["sessions"]} == {"ses-running", "ses-fresh"}
+        assert any(
+            row["request-id"] == "req-one-shot" and "session-id" not in row
+            for row in payload["projects"][0]["requests"]
+        )
         assert payload["failures"] == []
 
         _content_type, response = _raw_get(
@@ -336,7 +349,7 @@ def test_dashboard_recent_window_filters_history_and_supports_query_override(
         )
         override = json.loads(response)
         assert override["dashboard"]["recent-window-seconds"] == 240
-        assert {row["request-id"] for row in override["requests"]} == {"req-running", "req-fresh", "req-old"}
+        assert {row["request-id"] for row in override["requests"]} == {"req-running", "req-fresh", "req-one-shot", "req-old"}
         assert override["dashboard"]["recent-window-source"] == "dashboard"
     finally:
         _stop_host(host, thread)
