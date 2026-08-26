@@ -110,7 +110,6 @@ def build_admitted_agent_prompt(
         provider_cfg,
         provider_id=provider_id,
         title=title,
-        prompt_profile_id=str(packet_ctx.get("prompt-profile-id") or ""),
         context_overrides=context_overrides,
         include_prompt_body=include_prompt_body,
     )
