@@ -8,12 +8,14 @@ import pytest
 
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.queue import dispatch as dispatch
+from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
 from audiagentic.components.agents.models.execution_profile_api import (
     create_execution_profile,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state
+from audiagentic.foundation.io import atomic_write_bytes
 
 
 def _enable_provider(project_root: Path, provider_id: str) -> None:
@@ -107,6 +109,41 @@ def test_dispatch_success_builds_expected_packet_ctx(tmp_path: Path, monkeypatch
     assert captured["prompt-body"] == "do the thing"
     assert captured["working-root"] == str(tmp_path.resolve())
     assert captured["stream-controls"] == {}
+
+
+def test_dispatch_reloads_admitted_prompt_snapshot_when_fast_path_is_lost(
+    tmp_path: Path, monkeypatch
+):
+    _make_profile(tmp_path, "default", "local-openai", model_id="gpt-4o")
+    record = _record(tmp_path, "default")
+    atomic_write_bytes(
+        gateway_admitted_prompt_path(tmp_path, record["request-id"]),
+        "frozen admitted prompt\r\nwith café".encode("utf-8"),
+    )
+    captured: dict[str, object] = {}
+
+    def fake_execute_provider(*, identity, execution_request, timeout_seconds):
+        captured.update(execution_request["packet-data"])
+        return _worker_result({"provider-id": "local-openai", "model": "gpt-4o", "output": "ok"})
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
+        fake_execute_provider,
+    )
+
+    result = dispatch.dispatch_request(
+        tmp_path,
+        record,
+        dispatch_prompt=None,  # type: ignore[arg-type]
+        manifest_id="mf_test",
+        context_fingerprint="0" * 64,
+        component_profile="",
+        provider_isolation_tier="full-isolation",
+        worker_timeout_seconds=10,
+    )
+
+    assert result["state"] == "completed"
+    assert captured["prompt-body"] == "frozen admitted prompt\r\nwith café"
 
 
 def test_dispatch_uses_profile_stream_controls_and_ignores_metadata_working_root(

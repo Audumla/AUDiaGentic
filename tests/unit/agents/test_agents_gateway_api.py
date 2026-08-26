@@ -10,7 +10,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from audiagentic.components.agents.agents_paths import gateway_idempotency_index_path
+from audiagentic.components.agents.agents_paths import (
+    gateway_admitted_prompt_path,
+    gateway_idempotency_index_path,
+)
 from audiagentic.components.agents.gateway import api as gateway
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.application import InProcessGatewayApplication
@@ -93,6 +96,8 @@ def test_run_blocks_until_completion_and_returns_output(tmp_path: Path, monkeypa
     result = gateway.run_execution_request(tmp_path, prompt_body="hi")
     assert result["state"] == "completed"
     assert gateway.get_execution_response(tmp_path, result["request-id"]) == "the answer"
+    snapshot = gateway_admitted_prompt_path(tmp_path, result["request-id"])
+    assert snapshot.read_bytes() == b"hi"
 
 
 def test_admission_freezes_component_template_context(tmp_path: Path, monkeypatch):
@@ -162,7 +167,7 @@ def test_public_status_contains_canonical_agent_status(tmp_path: Path, monkeypat
     assert status["lifecycle"] == "terminal"
     assert status["outcome"] == "success"
     assert set(status) == {
-        "task_id", "lifecycle", "activity", "activity_seq", "activity_at", "outcome"
+        "task_id", "lifecycle", "activity_seq", "outcome"
     }
 
 
@@ -189,9 +194,7 @@ def test_public_status_is_slim_v4_projection(tmp_path: Path, monkeypatch):
     assert status == {
         "task_id": result["request-id"],
         "lifecycle": "terminal",
-        "activity": None,
         "activity_seq": 0,
-        "activity_at": None,
         "outcome": "success",
     }
 
@@ -448,7 +451,7 @@ def test_list_execution_requests_most_recent_first_and_filterable(tmp_path: Path
     all_requests = gateway.list_execution_requests(tmp_path)
     assert [r["task_id"] for r in all_requests] == [second["request-id"], first["request-id"]]
     assert all(set(r) == {
-        "task_id", "lifecycle", "activity", "activity_seq", "activity_at", "outcome"
+        "task_id", "lifecycle", "activity_seq", "outcome"
     } for r in all_requests)
     assert all_requests[0]["outcome"] == "failed"
     assert all_requests[1]["outcome"] == "success"

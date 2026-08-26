@@ -225,3 +225,36 @@ class TestSignatureGuardWithFakeBuilders:
         assert prepared.transport is None
         assert prepared.unavailable_code == "EXT-PROVEXEC-902"
         assert "str" in prepared.unavailable_message
+
+
+def test_gateway_session_default_preparation_enables_provider_observability_tap(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """The live SessionRuntime seam must request Pi's auxiliary activity tap.
+
+    ``prepare_provider_session_transport`` already has the provider-local
+    capability and is a no-op for tap-blind providers.  This regression test
+    prevents the gateway's default wrapper from silently dropping that flag,
+    which otherwise leaves Pi requests with only owner heartbeats and no
+    provider activity sequence.
+    """
+    from audiagentic.components.agents.gateway.session import sessions
+    from audiagentic.components.providers import providers_api
+
+    captured: dict[str, object] = {}
+
+    def fake_prepare(project_root, **kwargs):
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(providers_api, "prepare_provider_session_transport", fake_prepare)
+    result = sessions._default_prepare_fn(
+        Path("."),
+        provider_id="pi",
+        ag_session_id="ses-test",
+        binding_sink=lambda _update: None,
+        surface_hint=SurfaceHint(surface_id="pi-community-acp"),
+    )
+
+    assert result is not None
+    assert captured["enable_observability_tap"] is True

@@ -139,6 +139,18 @@ class GptAutoSessionTransport:
     def turn_failure_disposition(self) -> SessionFailureDisposition:
         return self._turn_failure_disposition
 
+    async def reconcile_activity_gap(self) -> dict[str, Any]:
+        """Revalidate the existing CDP binding without sending a prompt."""
+        if self._closed:
+            return {"status": "unavailable", "reason": "transport-closed"}
+        # _validate_page_binding() is deliberately the only operation here:
+        # it can rebind a closed/recycled page through the existing
+        # PersistentChat recovery path, but it never submits or retries a
+        # turn. Any resulting activity is still observed by the normal turn
+        # relay and must renew the gateway lease independently.
+        await self.chat._validate_page_binding()
+        return {"status": "reconciled", "state": self.chat.state.value}
+
 
 def build_session_transport(
     project_root: Path,

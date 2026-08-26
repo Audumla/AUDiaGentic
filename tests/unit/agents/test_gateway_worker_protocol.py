@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -15,6 +18,10 @@ from audiagentic.components.agents.contracts.worker_protocol import (
     WorkerResultEnvelope,
     decode_worker_message,
     encode_worker_message,
+)
+from audiagentic.components.agents.gateway.queue.worker_host import (
+    _provider_activity_path,
+    _watch_provider_activity,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
@@ -131,6 +138,27 @@ def test_handshake_carries_complete_process_and_context_evidence(tmp_path: Path)
         "process-creation-identity": "proc-start:8675309",
         "working-directory": str(Path.cwd().resolve()),
     }
+
+
+def test_worker_relays_normalized_provider_events_as_bounded_activity(tmp_path: Path) -> None:
+    request = _execution_request(tmp_path)
+    request["packet-data"] = {"request-id": "req_activity", "job-id": "req_activity"}
+    path = _provider_activity_path(request)
+    assert path == (tmp_path / ".audiagentic" / "runtime" / "jobs" / "req_activity" / "events.ndjson").resolve()
+
+    path.parent.mkdir(parents=True)
+    stop = threading.Event()
+    observed: list[str] = []
+    thread = threading.Thread(target=_watch_provider_activity, args=(path, stop, observed.append), daemon=True)
+    thread.start()
+    path.write_text(json.dumps({"event-kind": "task-progress", "message": "redacted"}) + "\n", encoding="utf-8")
+    deadline = time.monotonic() + 2
+    while not observed and time.monotonic() < deadline:
+        time.sleep(0.02)
+    stop.set()
+    thread.join(timeout=1)
+
+    assert observed == ["provider-progress"]
 
 
 def test_runtime_payloads_are_excluded_from_repr(tmp_path: Path) -> None:

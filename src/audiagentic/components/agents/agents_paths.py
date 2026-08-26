@@ -63,6 +63,16 @@ def gateway_request_path(project_root: Path, request_id: str) -> Path:
     return gateway_request_dir(project_root, request_id) / "record.json"
 
 
+def gateway_admitted_prompt_path(project_root: Path, request_id: str) -> Path:
+    """Return the private, request-owned admitted prompt snapshot path.
+
+    The rendered prompt is admission state needed for retry/recovery.  It is
+    deliberately kept outside the public record and response-artifact
+    surface; callers receive no filesystem path for it.
+    """
+    return gateway_request_dir(project_root, request_id) / "runtime" / "admitted-prompt.txt"
+
+
 def gateway_final_response_path(project_root: Path, request_id: str) -> Path:
     """Return the gateway-owned immutable terminal response artifact path."""
     return gateway_request_dir(project_root, request_id) / "output" / "final-response.txt"

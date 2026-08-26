@@ -289,11 +289,55 @@ class GatewayServiceHost:
         self._operations_thread.start()
 
     def run_watchdog_pass(self) -> tuple[dict[str, Any], ...]:
-        """Diagnose only currently registered, project-scoped running work."""
+        """Diagnose running work and revalidate stale live transports safely.
+
+        Revalidation is intentionally limited to an already-owned active turn
+        and an optional provider transport seam. It never resubmits a prompt;
+        the ordinary activity relay must still prove that the turn resumed.
+        """
         from audiagentic.components.agents.gateway.queue.dispatch import diagnose_activity_lease
         from audiagentic.components.agents.gateway.queue.watchdog_registry import watchdog_registry
+        from audiagentic.components.agents.gateway import store
+        from audiagentic.components.agents.gateway.api import recover_execution_request
+        from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
 
-        return watchdog_registry().diagnose(diagnose_activity_lease)
+        registry = watchdog_registry()
+        runtime = peek_session_runtime()
+        results: list[dict[str, Any]] = []
+        for project_root, record in registry.snapshot():
+            updated = diagnose_activity_lease(project_root, record)
+            registry.update(project_root, updated)
+            diagnostics = updated.get("diagnostics")
+            if (
+                runtime is not None
+                and updated.get("watchdog-state") == "intervention"
+                and isinstance(updated.get("session-id"), str)
+                and isinstance(diagnostics, dict)
+                and diagnostics.get("resolution-state") == "unresolved"
+            ):
+                outcome = runtime.reconcile_active_transport(
+                    updated["session-id"], updated["request-id"]
+                )
+                if outcome.get("status") == "reconciled":
+                    try:
+                        recover_execution_request(
+                            project_root,
+                            updated["request-id"],
+                            action="reconcile",
+                            expected_revision=updated.get("revision"),
+                        )
+                        updated = store.read_record(project_root, updated["request-id"])
+                        registry.update(project_root, updated)
+                    except Exception:  # noqa: BLE001 - watchdog recovery is advisory
+                        logger.warning(
+                            "automatic transport reconciliation could not persist intent",
+                            extra={"request-id": updated.get("request-id")},
+                            exc_info=True,
+                        )
+            results.append(updated)
+            if updated.get("state") in {"completed", "failed", "cancelled", "interrupted"}:
+                registry.unregister(project_root, str(updated.get("request-id", "")))
+        return tuple(results)
 
     def close(self) -> None:
         if self._closed:

@@ -215,6 +215,18 @@ def test_execution_profile_to_dict_includes_all_fields():
     }
 
 
+def test_execution_profile_is_deeply_immutable():
+    profile = execution_profile_from_dict(
+        _make_profile(params={"nested": {"temperature": 0.5}, "flags": ["safe"]})
+    )
+    with pytest.raises(TypeError):
+        profile.params["nested"]["temperature"] = 0.9  # type: ignore[index]
+    with pytest.raises(TypeError):
+        profile.params["flags"] += ("unsafe",)  # type: ignore[index]
+    with pytest.raises((AttributeError, TypeError)):
+        profile.is_default = True  # type: ignore[misc]
+
+
 # ---------------------------------------------------------------------------
 # ExecutionProfileStore
 # ---------------------------------------------------------------------------

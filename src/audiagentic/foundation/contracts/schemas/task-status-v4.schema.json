@@ -6,10 +6,7 @@
   "required": [
     "task_id",
     "lifecycle",
-    "activity",
-    "activity_seq",
-    "activity_at",
-    "outcome"
+    "activity_seq"
   ],
   "properties": {
     "task_id": {
@@ -21,19 +18,19 @@
       "enum": ["pending", "active", "terminal"]
     },
     "activity": {
-      "type": ["string", "null"],
-      "enum": ["waiting", "running", "cancelling", "completing", null]
+      "type": "string",
+      "enum": ["waiting", "running", "cancelling", "completing"]
     },
     "activity_seq": {
       "type": "integer",
       "minimum": 0
     },
     "activity_at": {
-      "type": ["string", "null"],
+      "type": "string",
       "format": "date-time"
     },
     "outcome": {
-      "type": ["string", "null"],
+      "type": "string",
       "enum": [
         "success",
         "failed",
@@ -43,8 +40,7 @@
         "timed-out",
         "expired",
         "abandoned",
-        "superseded",
-        null
+        "superseded"
       ]
     }
   }

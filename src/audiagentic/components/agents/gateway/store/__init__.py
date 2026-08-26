@@ -8,9 +8,10 @@ same "<stem>.schema.json" convention as job-record), and the workflow transition
 engine (foundation.workflow) driven by this component's own workflows.yaml.
 
 SH02: records now carry ExecutionManifest fields (manifest_id, context_fingerprint,
-prompt_digest). The raw prompt_body is NEVER persisted — only its digest survives.
-The in-memory record dict may temporarily carry prompt-body for dispatch use, but
-write_record redacts it before persistence.
+prompt_digest). The public record remains redacted; admission freezes the exact
+rendered dispatch prompt in a private request-owned snapshot for restart-safe
+dispatch. The in-memory record dict may temporarily carry prompt-body for the
+fast path, but write_record redacts it before public persistence.
 
 This is a package split (SH18): _shared (constants), _admission (idempotency + admit),
 _records (CRUD + validation), _transitions (state-change operations). All symbols

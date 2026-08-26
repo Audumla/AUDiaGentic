@@ -196,9 +196,10 @@ def build_record(
     than only in agents_gateway_api) catches malformed requests from every
     caller, including any future direct callers of this module (RV30).
 
-    SH02: prompt_body is carried in the returned dict ONLY for dispatch use
-    and is redacted before persistence (write_record strips it, keeping only
-    prompt_digest). The manifest fields are persisted alongside the record.
+    The caller prompt is carried in the returned dict for dispatch and is
+    redacted from the public record. Admission separately freezes the exact
+    rendered dispatch payload in the request-owned private snapshot; the
+    manifest fields remain persisted alongside the record.
     """
     if mode not in ("async", "blocking"):
         raise AudiaGenticError(
@@ -275,8 +276,8 @@ def build_record(
         "response-artifact": response_artifact,
         "output-preview": output_preview,
         "output-truncated": output_truncated,
-        # SH02: prompt_body carried in-memory for dispatch; redacted before
-        # persistence (write_record strips it). Only digest is persisted.
+        # Prompt-body is carried in-memory for dispatch and redacted before
+        # public record persistence. Admission owns the private snapshot.
         "prompt-body": prompt_body,
         "prompt-digest": prompt_digest,
         "manifest-id": manifest_id,
@@ -369,8 +370,9 @@ def _validate(payload: dict[str, Any], *, code: str) -> dict[str, Any]:
 def _redact_for_persistence(payload: dict[str, Any]) -> dict[str, Any]:
     """Remove raw prompt-body before persistence.
 
-    SH02: the raw prompt is used for dispatch only and never persisted (design doc §5.2).
-    The prompt_digest field survives; prompt-body is set to None in the persisted record.
+    The raw caller prompt remains redacted from the public record. The exact
+    admitted dispatch payload is stored separately in the private request
+    snapshot by the admission boundary; prompt_digest survives here.
     """
     redacted = dict(payload)
     redacted["prompt-body"] = None
@@ -391,8 +393,8 @@ def write_record(project_root: Path, payload: dict[str, Any]) -> Path:
         )
     _validate(payload, code="VAL-AGW-004")
     target = gateway_request_path(project_root, request_id)
-    # SH02: redact raw prompt-body before persistence; dispatch gets it from the
-    # in-memory copy passed through the queue manager.
+    # Redact raw prompt-body before public persistence; dispatch gets the
+    # in-memory value or the admission-owned snapshot during recovery.
     redacted = _redact_for_persistence(payload)
     atomic_write_json(target, redacted)
     return target

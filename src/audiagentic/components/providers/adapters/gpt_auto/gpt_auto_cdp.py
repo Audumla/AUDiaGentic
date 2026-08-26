@@ -36,6 +36,16 @@ _SNAPSHOT_FN = r"""
   const users = messageEntries.filter(m => m.role === "user").map(m => m.el);
   const assistants = messageEntries.filter(m => m.role === "assistant").map(m => m.el);
   const latestAssistant = assistants.length ? assistants[assistants.length - 1] : null;
+  // During a streamed response ChatGPT can render connector/tool rows inside
+  // the current `.agent-turn` before it materializes the assistant message
+  // node (`data-message-author-role="assistant"`).  The old implementation
+  // made the assistant node the only anchor, which reduced tool activity to
+  // an empty set for the whole early streaming phase.  Prefer the assistant
+  // anchor when it exists, but retain the latest semantic turn as a
+  // streaming-safe fallback so activity can renew the gateway lease from the
+  // first visible tool row.
+  const agentTurns = Array.from(document.querySelectorAll('.agent-turn'));
+  const latestAgentTurn = agentTurns.length ? agentTurns[agentTurns.length - 1] : null;
   // GP41 (2026-08-17): .agent-turn is a semantically meaningful, real
   // wrapper class confirmed present (via closest()) on two independent
   // live conversations tonight -- prefer it over the old fixed-depth
@@ -43,9 +53,9 @@ _SNAPSHOT_FN = r"""
   // for the specific DOM depths tested and has no structural guarantee
   // for a differently-nested turn. <article> has never been observed to
   // exist in current ChatGPT markup; kept as a legacy fallback only.
-  const assistantTurn = latestAssistant && (
+  const assistantTurn = latestAssistant ? (
     latestAssistant.closest(".agent-turn") || latestAssistant.closest("article") || latestAssistant.parentElement?.parentElement
-  );
+  ) : latestAgentTurn;
   // ChatGPT renders connector/tool work as bounded affordances such as
   // "Called tool", "Talked to App", "Searching the web", "Read resource",
   // and "Thinking" inside the current .agent-turn. These nodes often appear

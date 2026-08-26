@@ -115,6 +115,7 @@ def _default_prepare_fn(
     resume_provider_metadata: dict[str, Any] | None = None,
     checkpoint_sink: Any | None = None,
     project_name: str | None = None,
+    enable_observability_tap: bool = True,
 ) -> PreparedSessionTransport:
     """Default provider preparation via the public providers_api seam.
 
@@ -146,6 +147,11 @@ def _default_prepare_fn(
         resume_provider_metadata=resume_provider_metadata,
         checkpoint_sink=checkpoint_sink,
         project_name=project_name,
+        # Provider-specific enrichment is opt-in at the provider seam.  The
+        # public preparation function no-ops for providers without a concrete
+        # tap (currently Pi), while Pi needs this enabled to relay ACP/RPC
+        # progress before the final response arrives.
+        enable_observability_tap=enable_observability_tap,
     )
 
 
@@ -695,6 +701,19 @@ class SessionRuntime:
             return {"available": False}
         return self._call(self._session_runtime_status(session_id), timeout=10)
 
+    def reconcile_active_transport(self, session_id: str, request_id: str) -> dict[str, Any]:
+        """Ask a live transport to revalidate an active turn's binding.
+
+        This is a narrow recovery seam for watchdog transport-stale evidence.
+        It never submits a prompt, creates a session, or changes lifecycle
+        state; providers may only reattach/reconcile their existing turn.
+        """
+        if self._loop is None:
+            return {"status": "unavailable", "reason": "session-runtime-inactive"}
+        return self._call(
+            self._reconcile_active_transport(session_id, request_id), timeout=10
+        )
+
     def latest_lifecycle_decision(
         self, session_id: str, request_id: str
     ) -> SessionLifecycleDecision | None:
@@ -1038,6 +1057,28 @@ class SessionRuntime:
             "lifecycle-decision": status_snapshot["lifecycle-decision"],
             "coarse-state": status_snapshot["coarse-state"],
         }
+
+    async def _reconcile_active_transport(
+        self, session_id: str, request_id: str
+    ) -> dict[str, Any]:
+        handle = self._handles.get(session_id)
+        if handle is None:
+            return {"status": "unavailable", "reason": "session-not-live"}
+        if handle.current_request_id != request_id:
+            return {"status": "not-owner", "reason": "request-is-not-active-turn"}
+        reconcile = getattr(handle.transport, "reconcile_activity_gap", None)
+        if not callable(reconcile):
+            return {"status": "unsupported", "reason": "transport-no-reconcile-seam"}
+        try:
+            result = await reconcile()
+        except Exception as exc:  # noqa: BLE001 - diagnostic recovery is advisory
+            logger.warning(
+                "active transport reconciliation failed",
+                extra={"session-id": session_id, "request-id": request_id},
+                exc_info=True,
+            )
+            return {"status": "failed", "reason": type(exc).__name__}
+        return result if isinstance(result, dict) else {"status": "reconciled"}
 
     async def _rehydrate_session(
         self,

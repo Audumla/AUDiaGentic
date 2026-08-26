@@ -107,6 +107,18 @@ def test_agent_definition_from_dict_accepts_hyphen_keys():
     assert d.advertised_skills == ["a"]
 
 
+def test_agent_definition_is_immutable_at_nested_boundaries():
+    d = agent_definition_from_dict(
+        _make_definition(advertised_skills=["review"], role_ids=["r"])
+    )
+    with pytest.raises((AttributeError, TypeError)):
+        d.name = "changed"  # type: ignore[misc]
+    with pytest.raises((AttributeError, TypeError)):
+        d.role_ids += ("second",)  # type: ignore[misc]
+    with pytest.raises((AttributeError, TypeError)):
+        d.advertised_skills += ("other",)  # type: ignore[misc]
+
+
 def test_agent_definition_to_dict_uses_one_prompt_authority():
     d = AgentDefinition(
         agent_id="x", name="X", execution_profile_id="p", role_ids=["r"]

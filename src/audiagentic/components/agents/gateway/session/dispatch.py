@@ -272,8 +272,9 @@ def _dispatch_session_request(
     No retry on this path — retrying inside a stateful conversation is not
     idempotent. Any turn failure is terminal for the request.
 
-    SH02: dispatch_prompt is the raw prompt body, passed separately from the
-    persisted record (which only carries prompt_digest).
+    The admitted prompt is passed separately from the public record. Session
+    dispatch receives the frozen semantic payload and never re-reads mutable
+    prompt/config sources.
     """
     from audiagentic.components.agents.agents_paths import gateway_request_dir
     from audiagentic.components.agents.gateway import profiles as profiles_mod

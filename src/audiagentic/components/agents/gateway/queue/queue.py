@@ -225,9 +225,9 @@ queue can be tested with a deterministic fake, independent of AG10's real
 provider dispatch."""
 
 RequestRunnerWithContext = Callable[[Path, dict[str, Any], str | None], dict[str, Any]]
-"""SH02: runner that also receives the dispatch_prompt (raw prompt body)
-separately from the persisted record. The persisted record only carries
-prompt_digest; dispatch needs the raw prompt for provider execution."""
+"""Runner that receives the admission-rendered prompt separately from the
+public record. The queue fast path uses the in-memory value; recovery can
+reload the private request-owned snapshot."""
 
 
 @dataclass(frozen=True)
