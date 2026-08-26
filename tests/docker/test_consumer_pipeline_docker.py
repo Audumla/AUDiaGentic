@@ -472,7 +472,7 @@ class TestAS31OutputRelayDocker:
                 session_id="ses_out_001",
                 turn_id="turn_001",
                 sequence=seq,
-                kind=(AgentOutputKind.ASSISTANT_FINAL if seq == 2 else AgentOutputKind.ASSISTANT_TEXT_DELTA),
+                kind=AgentOutputKind.ASSISTANT_TEXT_DELTA,
                 text=f"chunk {seq} ",
                 observed_at="2025-01-01T00:00:00Z",
                 is_final=False,
