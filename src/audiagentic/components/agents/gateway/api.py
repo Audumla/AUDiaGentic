@@ -290,7 +290,6 @@ def submit_execution_request(
     *,
     agent_id: str | None = None,
     execution_profile_id: str | None = None,
-    prompt_profile_id: str = "default",
     prompt_body: str | None = None,
     mode: str = "async",
     timeout_seconds: float | None = None,
@@ -387,6 +386,7 @@ def submit_execution_request(
     # Resolve the machine-global agent definition at gateway admission. MCP
     # transports pass only agent_id so execution and prompt identity come from
     # one authoritative catalog snapshot.
+    prompt_profile_id = "default"
     prompt_definition_fingerprint: str | None = None
     composition_fingerprint: str | None = None
     if agent_id is not None:
