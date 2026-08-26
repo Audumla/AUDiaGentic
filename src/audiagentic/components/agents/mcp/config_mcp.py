@@ -77,105 +77,105 @@ def agent_resolve(agent_id: str) -> dict[str, Any]:
 @mcp.tool()
 @tool_boundary
 def agent_list_execution_profiles() -> list:
-    from audiagentic.components.agents.models.execution_profile_api import list_execution_profiles
+    from audiagentic.components.agents.configuration.management import list_execution_profiles
     return list_execution_profiles(project_root_from_env())
 
 
 @mcp.tool()
 @tool_boundary
 def agent_get_execution_profile(profile_id: str) -> dict:
-    from audiagentic.components.agents.models.execution_profile_api import get_execution_profile
+    from audiagentic.components.agents.configuration.management import get_execution_profile
     return get_execution_profile(project_root_from_env(), profile_id)
 
 
 @mcp.tool()
 @tool_boundary
 def agent_create_execution_profile(profile: dict) -> dict:
-    from audiagentic.components.agents.models.execution_profile_api import create_execution_profile
+    from audiagentic.components.agents.configuration.management import create_execution_profile
     return create_execution_profile(project_root_from_env(), profile)
 
 
 @mcp.tool()
 @tool_boundary
 def agent_update_execution_profile(profile_id: str, updates: dict) -> dict:
-    from audiagentic.components.agents.models.execution_profile_api import update_execution_profile
+    from audiagentic.components.agents.configuration.management import update_execution_profile
     return update_execution_profile(project_root_from_env(), profile_id, updates)
 
 
 @mcp.tool()
 @tool_boundary
 def agent_delete_execution_profile(profile_id: str) -> dict:
-    from audiagentic.components.agents.models.execution_profile_api import delete_execution_profile
+    from audiagentic.components.agents.configuration.management import delete_execution_profile
     return delete_execution_profile(project_root_from_env(), profile_id)
 
 
 @mcp.tool()
 @tool_boundary
 def agent_list_roles() -> list:
-    from audiagentic.components.agents.models.role_api import list_roles
+    from audiagentic.components.agents.configuration.management import list_roles
     return list_roles(project_root_from_env())
 
 
 @mcp.tool()
 @tool_boundary
 def agent_get_role(role_id: str) -> dict:
-    from audiagentic.components.agents.models.role_api import get_role
+    from audiagentic.components.agents.configuration.management import get_role
     return get_role(project_root_from_env(), role_id)
 
 
 @mcp.tool()
 @tool_boundary
 def agent_create_role(role: dict) -> dict:
-    from audiagentic.components.agents.models.role_api import create_role
+    from audiagentic.components.agents.configuration.management import create_role
     return create_role(project_root_from_env(), role)
 
 
 @mcp.tool()
 @tool_boundary
 def agent_update_role(role_id: str, updates: dict) -> dict:
-    from audiagentic.components.agents.models.role_api import update_role
+    from audiagentic.components.agents.configuration.management import update_role
     return update_role(project_root_from_env(), role_id, updates)
 
 
 @mcp.tool()
 @tool_boundary
 def agent_delete_role(role_id: str) -> dict:
-    from audiagentic.components.agents.models.role_api import delete_role
+    from audiagentic.components.agents.configuration.management import delete_role
     return delete_role(project_root_from_env(), role_id)
 
 
 @mcp.tool()
 @tool_boundary
 def agent_list_definitions() -> list:
-    from audiagentic.components.agents.models.agent_definition_api import list_agent_definitions
+    from audiagentic.components.agents.configuration.management import list_agent_definitions
     return list_agent_definitions(project_root_from_env())
 
 
 @mcp.tool()
 @tool_boundary
 def agent_get_definition(agent_id: str) -> dict:
-    from audiagentic.components.agents.models.agent_definition_api import get_agent_definition
+    from audiagentic.components.agents.configuration.management import get_agent_definition
     return get_agent_definition(project_root_from_env(), agent_id)
 
 
 @mcp.tool()
 @tool_boundary
 def agent_create_definition(definition: dict) -> dict:
-    from audiagentic.components.agents.models.agent_definition_api import create_agent_definition
+    from audiagentic.components.agents.configuration.management import create_agent_definition
     return create_agent_definition(project_root_from_env(), definition)
 
 
 @mcp.tool()
 @tool_boundary
 def agent_update_definition(agent_id: str, updates: dict) -> dict:
-    from audiagentic.components.agents.models.agent_definition_api import update_agent_definition
+    from audiagentic.components.agents.configuration.management import update_agent_definition
     return update_agent_definition(project_root_from_env(), agent_id, updates)
 
 
 @mcp.tool()
 @tool_boundary
 def agent_delete_definition(agent_id: str) -> dict:
-    from audiagentic.components.agents.models.agent_definition_api import delete_agent_definition
+    from audiagentic.components.agents.configuration.management import delete_agent_definition
     return delete_agent_definition(project_root_from_env(), agent_id)
 
 

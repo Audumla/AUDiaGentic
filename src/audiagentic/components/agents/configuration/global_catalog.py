@@ -49,6 +49,12 @@ def get_global_agent_definition(project_root: Path, agent_id: str) -> dict[str, 
     return agent_definition_to_dict(store.get(agent_id))
 
 
+def get_global_role(project_root: Path, role_id: str) -> dict[str, Any]:
+    from audiagentic.components.agents.models.role import RoleStore, role_to_dict
+    store = RoleStore.from_dicts(list(read_global_agents_config(project_root).document.roles))
+    return role_to_dict(store.get(role_id))
+
+
 def resolve_global_execution_profile(project_root: Path, profile_id: str) -> dict[str, Any]:
     snapshot = read_global_agents_config(project_root)
     raw = next(
@@ -118,6 +124,7 @@ def global_agent_status(project_root: Path):
 
 __all__ = [
     "get_global_agent_definition",
+    "get_global_role",
     "global_agents_repository",
     "list_global_agent_definitions",
     "read_global_agents_config",

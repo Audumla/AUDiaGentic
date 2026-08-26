@@ -181,13 +181,13 @@ def resolve_agent_definition(
     Raises AudiaGenticError(RES-ROL-001) if its role is not found.
     """
     if execution_profile_lookup is None:
-        from audiagentic.components.agents.models.execution_profile_api import (
+        from audiagentic.components.agents.configuration.management import (
             get_execution_profile,
         )
 
         execution_profile_lookup = get_execution_profile
     if role_lookup is None:
-        from audiagentic.components.agents.models.role_api import get_role
+        from audiagentic.components.agents.configuration.management import get_role
 
         role_lookup = get_role
 
