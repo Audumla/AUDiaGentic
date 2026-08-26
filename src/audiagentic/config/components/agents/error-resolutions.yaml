@@ -227,3 +227,5 @@ CON-AGSV-029: "The gateway implementation option value does not match the declar
 CON-AGSV-030: "The gateway implementation option conflicts with another declared option."
 CFG-AGW-110: "Select a queue backend that has passed the gateway conformance suite; unavailable broker backends fail closed."
 
+VAL-AGSV-018: "Set the gateway dashboard path to an absolute URL path such as /dashboard."
+
