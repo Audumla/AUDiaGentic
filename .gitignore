@@ -73,6 +73,9 @@ build/
 venv/
 env/
 
+# --- Rust application build artifacts ---
+/apps/audiagentic-bootstrap/target/
+
 # --- Docker test logs ---
 /docker-build-test*.log
 
