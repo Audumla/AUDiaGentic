@@ -282,12 +282,12 @@ mcp-servers:
         also includes provider-metadata when available. Raises RES-AGD-001
         if agent_id is not a configured agent definition.
       agent_task_status: >
-        Return lifecycle/activity status for request-id (state,
-        response-artifact, activity, completion, usage, error, attempts).
-        Pass response_version=4 to negotiate the exact four-field status
-        contract {task_id, lifecycle, activity, outcome}; the default remains
-        the frozen V3 projection.
-        Response content and previews are never included in status; use
+        Return the compact lifecycle/activity status for request-id. The
+        response contains task_id, lifecycle, activity_seq, plus only
+        applicable activity/activity_at/outcome fields; it never contains
+        JSON null values. Response content, previews, diagnostics, attempts,
+        watchdog policy, and provider internals are never included. Use
+        agent_task_diagnostics for bounded failure evidence and
         agent_task_response for the exact terminal response. Raises
         RES-AGW-001 if not found.
       agent_task_diagnostics: >

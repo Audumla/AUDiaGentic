@@ -28,8 +28,12 @@ _RESPONSE_PREVIEW_FIELDS = frozenset({"output-preview", "output-truncated"})
 
 
 def _status_without_response_preview(status: dict[str, Any]) -> dict[str, Any]:
-    """Keep MCP status lifecycle/artifact-only; never spend tokens on a preview."""
-    return {key: value for key, value in status.items() if key not in _RESPONSE_PREVIEW_FIELDS}
+    """Keep MCP status compact and null-free; never spend tokens on a preview."""
+    return {
+        key: value
+        for key, value in status.items()
+        if key not in _RESPONSE_PREVIEW_FIELDS and value is not None
+    }
 
 
 def _sparse(value: Any) -> Any:

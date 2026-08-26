@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field, replace
+from types import MappingProxyType
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -11,7 +12,7 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 logger = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class ExecutionProfile:
     """A named configuration that binds a provider to a set of acceptable
     model instances (AS105/AS101 v2 -- replaces the single model_id).
@@ -24,13 +25,17 @@ class ExecutionProfile:
     provider_id: str
     instances: tuple[str, ...]
     model_alias: str | None = None
-    params: dict[str, Any] = field(default_factory=dict)
+    params: Mapping[str, Any] = field(default_factory=dict)
     is_default: bool = False
     description: str = ""
     # AS82: optional AS29 session surface this profile launches through.
     # Absent means provider default -- not an error. AS29 remains the sole
     # surface-capability authority; this field selects, it does not describe.
     surface_id: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "instances", tuple(self.instances))
+        object.__setattr__(self, "params", _freeze(self.params))
 
 
 def validate_execution_profile(profile: dict[str, Any]) -> list[str]:
@@ -104,9 +109,32 @@ def execution_profile_from_dict(data: dict[str, Any]) -> ExecutionProfile:
 
 def execution_profile_to_dict(profile: ExecutionProfile) -> dict[str, Any]:
     """Serialize an ExecutionProfile to a dict for YAML round-trip."""
-    data = asdict(profile)
-    data["instances"] = list(profile.instances)
-    return data
+    return {
+        "profile_id": profile.profile_id,
+        "provider_id": profile.provider_id,
+        "instances": list(profile.instances),
+        "model_alias": profile.model_alias,
+        "params": _thaw(profile.params),
+        "is_default": profile.is_default,
+        "description": profile.description,
+        "surface_id": profile.surface_id,
+    }
+
+
+def _freeze(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return MappingProxyType({key: _freeze(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze(item) for item in value)
+    return value
+
+
+def _thaw(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _thaw(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_thaw(item) for item in value]
+    return value
 
 
 class ExecutionProfileStore:
@@ -147,8 +175,10 @@ class ExecutionProfileStore:
                 details={"profile_id": profile.profile_id},
             )
         if profile.is_default:
-            for existing in self._profiles.values():
-                existing.is_default = False
+            self._profiles = {
+                key: replace(existing, is_default=False)
+                for key, existing in self._profiles.items()
+            }
         self._profiles[profile.profile_id] = profile
 
     def remove(self, profile_id: str) -> ExecutionProfile:

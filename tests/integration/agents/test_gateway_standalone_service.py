@@ -244,6 +244,20 @@ def test_dashboard_recent_window_filters_history_and_supports_query_override(
     old = (now - timedelta(seconds=180)).isoformat().replace("+00:00", "Z")
     application = SharedApplication()
     application.requests = {
+        "req-running": {
+            "request-id": "req-running",
+            "state": "running",
+            "session-id": "ses-running",
+            "execution-profile-id": "default",
+            "resolved-provider-id": "gpt-auto-t2",
+            "resolved-model-id": "chatgpt",
+            "updated-at": fresh,
+            "last-activity-at": fresh,
+            "activity": {"phase": "tool-progress"},
+            "activity-sequence": 42,
+            "activity-source": "session-transport",
+            "watchdog-state": "active",
+        },
         "req-fresh": {
             "request-id": "req-fresh",
             "state": "completed",
@@ -266,6 +280,14 @@ def test_dashboard_recent_window_filters_history_and_supports_query_override(
     }
     application.session_records[str(project_root)] = [
         {
+            "session-id": "ses-running",
+            "execution-profile-id": "default",
+            "state": "active",
+            "live": True,
+            "timing": {"updated-at": fresh},
+            "activity": {"turn-count": 1},
+        },
+        {
             "session-id": "ses-fresh",
             "execution-profile-id": "default",
             "state": "closed",
@@ -284,7 +306,7 @@ def test_dashboard_recent_window_filters_history_and_supports_query_override(
 
     monkeypatch.setattr(
         gateway_api,
-        "list_execution_requests",
+        "list_dashboard_requests",
         lambda _root: list(application.requests.values()),
     )
     monkeypatch.setattr(
@@ -301,8 +323,12 @@ def test_dashboard_recent_window_filters_history_and_supports_query_override(
         _content_type, response = _raw_get(host.endpoint, "/dashboard/snapshot")
         payload = json.loads(response)
         assert payload["dashboard"]["recent-window-seconds"] == 60
-        assert [row["request-id"] for row in payload["requests"]] == ["req-fresh"]
-        assert [row["session-id"] for row in payload["projects"][0]["sessions"]] == ["ses-fresh"]
+        assert {row["request-id"] for row in payload["requests"]} == {"req-running", "req-fresh"}
+        running = next(row for row in payload["requests"] if row["request-id"] == "req-running")
+        assert running["state"] == "running"
+        assert running["activity"]["phase"] == "tool-progress"
+        assert running["activity-sequence"] == 42
+        assert {row["session-id"] for row in payload["projects"][0]["sessions"]} == {"ses-running", "ses-fresh"}
         assert payload["failures"] == []
 
         _content_type, response = _raw_get(
@@ -310,7 +336,7 @@ def test_dashboard_recent_window_filters_history_and_supports_query_override(
         )
         override = json.loads(response)
         assert override["dashboard"]["recent-window-seconds"] == 240
-        assert {row["request-id"] for row in override["requests"]} == {"req-fresh", "req-old"}
+        assert {row["request-id"] for row in override["requests"]} == {"req-running", "req-fresh", "req-old"}
         assert override["dashboard"]["recent-window-source"] == "dashboard"
     finally:
         _stop_host(host, thread)

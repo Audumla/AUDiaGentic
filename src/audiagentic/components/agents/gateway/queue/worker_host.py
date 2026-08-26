@@ -1,10 +1,13 @@
 """Disposable process entry point for one isolated provider turn."""
 from __future__ import annotations
 
+import json
 import os
 import sys
 import threading
+import time
 import traceback
+from collections.abc import Callable
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -29,6 +32,75 @@ _PROTOCOL_OUT = sys.stdout
 
 
 _WRITE_LOCK = threading.Lock()
+
+
+def _provider_activity_path(execution_request: dict[str, object]) -> Path | None:
+    """Resolve the private normalized-event file for one worker attempt.
+
+    Provider stream sinks write bounded, redacted event records under the
+    request-owned runtime directory.  The worker relays only the existence of
+    a new event (never its text or path) as ``provider-progress`` activity.
+    Invalid or escaping job ids simply disable this optional observation seam.
+    """
+    packet = execution_request.get("packet-data")
+    if not isinstance(packet, dict):
+        return None
+    job_id = packet.get("job-id") or packet.get("request-id")
+    root_value = execution_request.get("project-root")
+    if not isinstance(job_id, str) or not job_id or not isinstance(root_value, str):
+        return None
+    try:
+        root = Path(root_value).resolve()
+        candidate = (root / ".audiagentic" / "runtime" / "jobs" / job_id / "events.ndjson").resolve()
+        if not candidate.is_relative_to(root):
+            return None
+    except (OSError, RuntimeError, ValueError):
+        return None
+    return candidate
+
+
+def _watch_provider_activity(
+    path: Path | None,
+    stop: threading.Event,
+    emit: Callable[[str], None],
+) -> None:
+    """Relay newly appended normalized stream events without payloads."""
+    if path is None:
+        return
+    try:
+        # Retries reuse the request id and therefore the runtime directory;
+        # do not replay a prior attempt's events as fresh activity.
+        offset = path.stat().st_size
+    except (FileNotFoundError, OSError):
+        offset = 0
+    last_emit = 0.0
+    while not stop.wait(0.1):
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                handle.seek(offset)
+                lines = handle.readlines()
+                offset = handle.tell()
+        except (FileNotFoundError, OSError):
+            continue
+        saw_event = False
+        for line in lines:
+            if stop.is_set():
+                return
+            if not line.strip():
+                continue
+            try:
+                event = json.loads(line)
+            except (TypeError, ValueError):
+                continue
+            if isinstance(event, dict) and event.get("event-kind"):
+                saw_event = True
+        # Match the gateway's normal activity relay cadence.  Provider output
+        # can be extremely chatty; one bounded renewal per second is enough to
+        # prove liveness without turning every output line into a durable write.
+        now = time.monotonic()
+        if saw_event and now - last_emit >= 1.0:
+            emit("provider-progress")
+            last_emit = now
 
 
 def _write(message: object) -> None:
@@ -130,7 +202,9 @@ def main() -> int:
 
         heartbeat_stop = threading.Event()
         heartbeat_thread: threading.Thread | None = None
+        activity_thread: threading.Thread | None = None
         sequence = 0
+        sequence_lock = threading.Lock()
         # A provider may opt into richer progress vocabulary through the
         # authenticated worker boundary.  The default remains heartbeat;
         # test rigs can deterministically exercise provider/tool progress by
@@ -151,17 +225,29 @@ def main() -> int:
         except ValueError:
             stall_after = 0
 
-        def emit_activity() -> None:
+        def emit_frame(source: str) -> None:
             nonlocal sequence
-            while not heartbeat_stop.wait(activity_interval):
+            with sequence_lock:
                 sequence += 1
-                if stall_after > 0 and sequence > stall_after:
-                    continue
-                source = activity_sources[(sequence - 1) % len(activity_sources)]
-                _write(WorkerActivityEnvelope(identity, evidence, sequence, source))
+                current = sequence
+            if stall_after > 0 and current > stall_after:
+                return
+            _write(WorkerActivityEnvelope(identity, evidence, current, source))
 
-        heartbeat_thread = threading.Thread(target=emit_activity, name="worker-activity", daemon=True)
+        def emit_heartbeat() -> None:
+            while not heartbeat_stop.wait(activity_interval):
+                source = activity_sources[(sequence % len(activity_sources))]
+                emit_frame(source)
+
+        heartbeat_thread = threading.Thread(target=emit_heartbeat, name="worker-activity", daemon=True)
         heartbeat_thread.start()
+        activity_thread = threading.Thread(
+            target=_watch_provider_activity,
+            args=(_provider_activity_path(request.execution_request), heartbeat_stop, lambda source: emit_frame(source)),
+            name="provider-activity",
+            daemon=True,
+        )
+        activity_thread.start()
         # The pipe is a protocol-only channel. Provider libraries occasionally
         # print progress directly. Import and execute them with stdout pointed
         # at the discarded stderr channel so ConsoleSink's import-time default
@@ -177,6 +263,15 @@ def main() -> int:
                     request.execution_request
                 )
                 result = providers_api.execute_provider_turn(provider_request)
+            # Freeze the activity stream before publishing the terminal frame.
+            # Otherwise a watcher tick racing with this write can append an
+            # activity frame after the result and make the parent reject the
+            # otherwise valid worker response ordering.
+            heartbeat_stop.set()
+            if heartbeat_thread is not None:
+                heartbeat_thread.join()
+            if activity_thread is not None:
+                activity_thread.join()
             _write(
                 WorkerResultEnvelope(
                     identity=identity,
@@ -188,6 +283,8 @@ def main() -> int:
             heartbeat_stop.set()
             if heartbeat_thread is not None:
                 heartbeat_thread.join(timeout=1)
+            if activity_thread is not None:
+                activity_thread.join(timeout=1)
         return 0
     except AudiaGenticError as exc:
         if request is not None and evidence is not None:

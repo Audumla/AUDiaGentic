@@ -55,6 +55,18 @@ def read_text_with_retry(path: Path, *, encoding: str = "utf-8") -> str:
     raise AssertionError("bounded read retry loop exhausted")
 
 
+def read_bytes_with_retry(path: Path) -> bytes:
+    """Read exact bytes through short Windows sharing violations."""
+    for attempt in range(_REPLACE_RETRY_ATTEMPTS):
+        try:
+            return path.read_bytes()
+        except PermissionError:
+            if attempt == _REPLACE_RETRY_ATTEMPTS - 1:
+                raise
+            time.sleep(_REPLACE_RETRY_DELAY_SECONDS)
+    raise AssertionError("bounded byte read retry loop exhausted")
+
+
 def read_json_with_retry(path: Path, *, encoding: str = "utf-8") -> Any:
     """Read a JSON document through transient cross-process replacement races.
 

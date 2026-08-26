@@ -170,10 +170,15 @@ def update_execution_profile(
         if key in allowed_keys:
             merged[key] = value
     merged["profile_id"] = profile_id
-    if merged.get("is_default"):
-        for p in store.list_all():
-            p.is_default = False
     new_profile = execution_profile_from_dict(merged)
+    if merged.get("is_default"):
+        # ExecutionProfile is immutable; replace the store entries rather
+        # than mutating an existing value in place.
+        from dataclasses import replace
+
+        for existing in store.list_all():
+            if existing.profile_id != profile_id and existing.is_default:
+                store._profiles[existing.profile_id] = replace(existing, is_default=False)
     store._profiles[profile_id] = new_profile
     save_execution_profiles(project_root, store)
     return execution_profile_to_dict(new_profile)

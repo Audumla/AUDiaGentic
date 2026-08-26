@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import inspect
 from pathlib import Path
 
 from audiagentic.foundation.io import load_yaml_file
@@ -61,6 +62,18 @@ def test_agents_mcp_tool_names_are_unique_across_surfaces() -> None:
             if previous != server["name"]:
                 duplicates.append(f"{tool_name}: {previous}, {server['name']}")
     assert not duplicates, "Agents MCP tools must have one owning surface: " + ", ".join(duplicates)
+
+
+def test_gateway_status_metadata_matches_fixed_status_signature() -> None:
+    config = load_yaml_file(_CONFIG)
+    gateway = next(server for server in config["mcp-servers"] if server["name"] == "ag-agents-gateway")
+    module = importlib.import_module(gateway["module"])
+    signature = inspect.signature(module.agent_task_status)
+
+    assert tuple(signature.parameters) == ("request_id",)
+    description = gateway["tool-descriptions"]["agent_task_status"]
+    assert "response_version" not in description
+    assert "compact lifecycle/activity status" in description
 
 
 def test_new_gateway_mcp_tools_are_provisioned_on_the_correct_surfaces() -> None:

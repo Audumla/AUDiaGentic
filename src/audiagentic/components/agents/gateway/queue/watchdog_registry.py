@@ -24,6 +24,10 @@ class WatchdogRequestRegistry:
         with self._lock:
             self._items.pop((project_root.resolve(), request_id), None)
 
+    def update(self, project_root: Path, record: dict[str, Any]) -> None:
+        """Refresh one registry entry from a fenced durable record."""
+        self.register(project_root, record)
+
     def snapshot(self) -> tuple[tuple[Path, dict[str, Any]], ...]:
         with self._lock:
             return tuple((root, dict(record)) for (root, _), record in self._items.items())
@@ -36,6 +40,8 @@ class WatchdogRequestRegistry:
             results.append(updated)
             if updated.get("state") in {"completed", "failed", "cancelled", "interrupted"}:
                 self.unregister(project_root, str(updated.get("request-id", "")))
+            else:
+                self.update(project_root, updated)
         return tuple(results)
 
 

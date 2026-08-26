@@ -113,11 +113,17 @@ def _build_packet_ctx(
     The gateway's project root is authoritative. Request metadata is correlation
     data only and cannot redirect provider execution into another directory.
 
-    SH02: dispatch_prompt is the raw prompt body passed separately — it never
-    lives in the persisted record (only prompt_digest does).
+    The dispatch prompt is the admission-rendered semantic payload. It is
+    passed in-memory on the fast path and frozen in a private request-owned
+    snapshot for restart/recovery.
     """
     return {
         "request-id": record["request-id"],
+        # Streaming provider adapters use this bounded request-owned job key
+        # for their normalized event log.  The disposable worker watches that
+        # log and relays provider progress as authenticated activity frames;
+        # it is never exposed as a filesystem path to callers.
+        "job-id": record["request-id"],
         "execution-profile-id": profile["profile_id"],
         "prompt-profile-id": record.get("prompt-profile-id", "default"),
         "prompt-template-name": record.get("prompt-template-name"),
@@ -154,8 +160,8 @@ def _dispatch_one_attempt(
     classifies and decides retry). Returns the normalized provider
     result dict on success.
 
-    SH02: dispatch_prompt is the raw prompt body, passed separately from the
-    persisted record (which only carries prompt_digest).
+    The admitted prompt is passed separately from the public record; retries
+    never re-resolve mutable prompt or configuration sources.
     """
     from audiagentic.components.agents.contracts.worker_protocol import WorkerExecutionIdentity
     from audiagentic.components.agents.gateway.queue.worker import (
@@ -326,7 +332,8 @@ def _try_profile_with_retries(
     retry). Raises the last AudiaGenticError if all attempts are transient
     failures.
 
-    SH02: dispatch_prompt is passed through to each attempt for provider dispatch.
+    The admitted prompt is passed through to each attempt for provider
+    dispatch; retries never re-resolve mutable prompt/config sources.
     """
     from audiagentic.components.agents.gateway import profiles as profiles_mod
 
@@ -478,9 +485,31 @@ def dispatch_request(
     mid-flight. A cancel recorded while an attempt is running takes effect
     only once that attempt returns (RV34 finding).
 
-    SH02: dispatch_prompt is the raw prompt body, passed separately from the
-    persisted record (which only carries prompt_digest).
+    The admitted prompt is the frozen semantic payload, reloaded from the
+    private request snapshot when the in-memory value is unavailable.
     """
+    if not isinstance(dispatch_prompt, str) or not dispatch_prompt:
+        from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
+        from audiagentic.foundation.io import read_bytes_with_retry
+
+        snapshot_path = gateway_admitted_prompt_path(project_root, record["request-id"])
+        try:
+            dispatch_prompt = read_bytes_with_retry(snapshot_path).decode("utf-8")
+        except OSError as exc:
+            raise AudiaGenticError(
+                code="RES-AGW-112",
+                kind="agents",
+                message="admitted prompt snapshot is unavailable",
+                details={"request-id": record.get("request-id")},
+            ) from exc
+        if not dispatch_prompt:
+            raise AudiaGenticError(
+                code="VAL-AGW-112",
+                kind="agents",
+                message="admitted prompt snapshot is empty",
+                details={"request-id": record.get("request-id")},
+            )
+
     if _is_session_request(record) or provider_isolation_tier == "no-isolation":
         return _dispatch_session_request(
             project_root,

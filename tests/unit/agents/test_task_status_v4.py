@@ -42,7 +42,7 @@ def _snapshot(
     )
 
 
-def test_queued_is_pending_waiting_with_null_outcome() -> None:
+def test_queued_is_pending_waiting_without_nulls() -> None:
     result = project_task_status_v4(_record("queued"))
 
     assert result == {
@@ -50,8 +50,6 @@ def test_queued_is_pending_waiting_with_null_outcome() -> None:
         "lifecycle": "pending",
         "activity": "waiting",
         "activity_seq": 0,
-        "activity_at": None,
-        "outcome": None,
     }
 
 
@@ -65,8 +63,6 @@ def test_running_is_active_running_without_provider_details() -> None:
         "lifecycle": "active",
         "activity": "running",
         "activity_seq": 0,
-        "activity_at": None,
-        "outcome": None,
     }
 
 
@@ -77,8 +73,8 @@ def test_running_cancel_request_is_active_cancelling() -> None:
     assert result["lifecycle"] == "active"
     assert result["activity"] == "cancelling"
     assert result["activity_seq"] == 0
-    assert result["activity_at"] is None
-    assert result["outcome"] is None
+    assert "activity_at" not in result
+    assert "outcome" not in result
 
 
 @pytest.mark.parametrize(
@@ -95,7 +91,7 @@ def test_running_uses_canonical_agent_status_activity(
 
     assert result["lifecycle"] == "active"
     assert result["activity"] == expected_activity
-    assert result["outcome"] is None
+    assert "outcome" not in result
 
 
 @pytest.mark.parametrize(
@@ -124,9 +120,7 @@ def test_terminal_states_have_one_outcome_and_no_activity(
     assert result == {
         "task_id": "req-1",
         "lifecycle": "terminal",
-        "activity": None,
         "activity_seq": 0,
-        "activity_at": None,
         "outcome": outcome,
     }
 
@@ -148,8 +142,6 @@ def test_v4_has_only_contract_keys_and_no_internal_fields() -> None:
         "lifecycle",
         "activity",
         "activity_seq",
-        "activity_at",
-        "outcome",
     }
 
 
@@ -207,8 +199,6 @@ def test_dispatching_is_active_running_even_when_v3_snapshot_is_unknown() -> Non
         "lifecycle": "active",
         "activity": "running",
         "activity_seq": 0,
-        "activity_at": None,
-        "outcome": None,
     }
 
 
@@ -227,7 +217,6 @@ def test_activity_progress_markers_are_projected_from_durable_record() -> None:
         "activity": "running",
         "activity_seq": 12,
         "activity_at": "2026-08-24T07:12:31Z",
-        "outcome": None,
     }
 
 
@@ -248,3 +237,9 @@ def test_v4_projection_validates_against_canonical_schema() -> None:
     payload = project_task_status_v4(_record("queued"))
     assert validate_with_schema("task-status-v4", payload) == []
     assert validate_with_schema("task-status-v4", {**payload, "diagnostics": {}})
+
+
+def test_v4_projection_never_emits_null_values() -> None:
+    for state in ("queued", "running", "completed"):
+        result = project_task_status_v4(_record(state))
+        assert all(value is not None for value in result.values())
