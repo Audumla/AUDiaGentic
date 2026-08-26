@@ -64,26 +64,17 @@ class AgentOutputKind(StrEnum):
 def _validate_id(value: str | None, name: str) -> None:
     """Validate an ID string is non-empty and bounded, or None where allowed."""
     if value is None:
-        raise make_error(
-            prefix="VAL", component="OUTPUT", number=3 if name == "session_id" else 4,
-            kind="agent-output-validation",
-            message=f"{name} must not be null",
-            details={"field": name},
-        )
+        if name == "session_id":
+            raise make_error(prefix="VAL", component="OUTPUT", number=3, kind="agent-output-validation", message=f"{name} must not be null", details={"field": name})
+        raise make_error(prefix="VAL", component="OUTPUT", number=4, kind="agent-output-validation", message=f"{name} must not be null", details={"field": name})
     if not isinstance(value, str):
-        raise make_error(
-            prefix="VAL", component="OUTPUT", number=3 if name == "session_id" else 4,
-            kind="agent-output-validation",
-            message=f"{name} must be a string",
-            details={"field": name},
-        )
+        if name == "session_id":
+            raise make_error(prefix="VAL", component="OUTPUT", number=3, kind="agent-output-validation", message=f"{name} must be a string", details={"field": name})
+        raise make_error(prefix="VAL", component="OUTPUT", number=4, kind="agent-output-validation", message=f"{name} must be a string", details={"field": name})
     if not value:
-        raise make_error(
-            prefix="VAL", component="OUTPUT", number=3 if name == "session_id" else 4,
-            kind="agent-output-validation",
-            message=f"{name} must not be empty",
-            details={"field": name},
-        )
+        if name == "session_id":
+            raise make_error(prefix="VAL", component="OUTPUT", number=3, kind="agent-output-validation", message=f"{name} must not be empty", details={"field": name})
+        raise make_error(prefix="VAL", component="OUTPUT", number=4, kind="agent-output-validation", message=f"{name} must not be empty", details={"field": name})
     if len(value) > _MAX_ID_LENGTH:
         raise make_error(
             prefix="VAL", component="OUTPUT", number=5,
