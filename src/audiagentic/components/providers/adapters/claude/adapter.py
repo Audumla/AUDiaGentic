@@ -93,7 +93,6 @@ def _build_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> s
     packet_doc = _packet_doc_excerpt(
         packet_ctx.get("working-root"), packet_ctx.get("packet-id")
     )
-    prompt_body = packet_ctx.get("prompt-body")
     envelope = {
         "job-id": packet_ctx.get("job-id"),
         "provider-id": packet_ctx.get("provider-id", "claude"),
@@ -108,12 +107,24 @@ def _build_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> s
     }
     if packet_doc is not None:
         envelope["packet-doc-path"] = str(packet_doc)
-    lines = [build_admitted_agent_prompt(packet_ctx, provider_cfg, provider_id="claude", title="Claude")]
-    lines.extend(["Provider packet context:", json.dumps(envelope, indent=2, sort_keys=True)])
+    lines = ["Provider packet context:", json.dumps(envelope, indent=2, sort_keys=True)]
     if packet_doc is not None:
         lines.extend(["", "Packet document excerpt:", packet_doc])
-    if prompt_body:
-        lines.extend(["", "Prompt body:", str(prompt_body).strip()])
+    # Keep Claude's packet-document enrichment, then append the complete
+    # admission-owned prompt exactly once using Claude's established multiline
+    # body framing.
+    lines.extend([
+        "",
+        build_admitted_agent_prompt(
+            packet_ctx,
+            provider_cfg,
+            provider_id="claude",
+            title="Claude",
+            include_prompt_body=False,
+        ),
+    ])
+    if isinstance(packet_ctx.get("prompt-body"), str) and packet_ctx["prompt-body"].strip():
+        lines.extend(["Prompt body:", packet_ctx["prompt-body"].strip()])
     return "\n".join(lines).strip()
 
 

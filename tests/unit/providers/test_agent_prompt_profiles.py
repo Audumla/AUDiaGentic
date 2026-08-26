@@ -31,6 +31,35 @@ def test_provider_uses_exact_admitted_prompt_bytes():
     assert actual.encode("utf-8") == expected.encode("utf-8")
 
 
+def test_provider_prompt_uses_packet_model_over_provider_default():
+    ctx = {
+        "request-id": "req-1",
+        "provider-id": "pi",
+        "model-id": "packet-model",
+        "prompt-body": "Review this",
+    }
+    actual = default_build_prompt(
+        ctx,
+        {"default-model": "stale-provider-default"},
+        provider_id="pi",
+        title="Pi",
+    )
+    assert "model=packet-model" in actual
+    assert "stale-provider-default" not in actual
+
+
+def test_context_override_is_provider_local_projection():
+    actual = default_build_prompt(
+        {"request-id": "req-1", "prompt-body": "admitted"},
+        {"default-model": "model"},
+        provider_id="pi",
+        title="Pi",
+        context_overrides={"prompt-body": "normalized"},
+    )
+    assert actual.endswith("Prompt body: normalized")
+    assert "admitted" not in actual
+
+
 @pytest.mark.parametrize("body", [None, "", " ", "\n"])
 def test_empty_prompt_body_is_rejected(body):
     with pytest.raises(AudiaGenticError, match="non-empty prompt body"):

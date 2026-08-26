@@ -77,7 +77,6 @@ def _packet_doc_excerpt(path: Path, *, max_lines: int = 80) -> str:
 
 def _build_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> str:
     from audiagentic.components.providers.providers_api import build_admitted_agent_prompt
-    prompt_body = packet_ctx.get("prompt-body")
     packet_doc = _find_packet_doc(
         packet_ctx.get("working-root"), packet_ctx.get("packet-id")
     )
@@ -95,12 +94,23 @@ def _build_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any]) -> s
     }
     if packet_doc is not None:
         envelope["packet-doc-path"] = str(packet_doc)
-    lines = [build_admitted_agent_prompt(packet_ctx, provider_cfg, provider_id="codex", title="Codex")]
-    lines.extend(["Provider packet context:", json.dumps(envelope, indent=2, sort_keys=True)])
+    # Keep Codex's packet enrichment ahead of the admitted instruction block;
+    # the latter remains the final, exact task payload delivered on stdin.
+    lines = ["Provider packet context:", json.dumps(envelope, indent=2, sort_keys=True)]
     if packet_doc is not None:
         lines.extend(["", "Packet document excerpt:", _packet_doc_excerpt(packet_doc)])
-    if prompt_body:
-        lines.extend(["", "Prompt body:", str(prompt_body).strip()])
+    lines.extend([
+        "",
+        build_admitted_agent_prompt(
+            packet_ctx,
+            provider_cfg,
+            provider_id="codex",
+            title="Codex",
+            include_prompt_body=False,
+        ),
+    ])
+    if isinstance(packet_ctx.get("prompt-body"), str) and packet_ctx["prompt-body"].strip():
+        lines.extend(["Prompt body:", packet_ctx["prompt-body"].strip()])
     return "\n".join(lines).strip()
 
 
