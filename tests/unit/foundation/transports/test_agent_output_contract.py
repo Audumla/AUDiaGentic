@@ -188,7 +188,15 @@ class TestAgentOutputEventValidation:
     def test_observed_at_empty_rejected(self):
         with pytest.raises(AudiaGenticError) as exc_info:
             _make_event(observed_at="")
-        _assert_val_error(exc_info, "observed_at must be a non-empty string")
+        _assert_val_error(exc_info, "observed_at must be a valid UTC timestamp string")
+
+    @pytest.mark.parametrize("observed_at", [
+        "2025-01-01T00:00:00", "not-a-timestamp", "2025-01-01T00:00:00+10:00",
+    ])
+    def test_observed_at_must_be_utc_iso_timestamp(self, observed_at):
+        with pytest.raises(AudiaGenticError) as exc_info:
+            _make_event(observed_at=observed_at)
+        assert exc_info.value.code == "VAL-OUTPUT-007"
 
     def test_sequence_negative_rejected(self):
         with pytest.raises(AudiaGenticError) as exc_info:
@@ -204,6 +212,21 @@ class TestAgentOutputEventValidation:
         with pytest.raises(AudiaGenticError) as exc_info:
             _make_event(is_final=1)  # type: ignore
         _assert_val_error(exc_info, "is_final must be a boolean")
+
+    def test_is_final_must_match_kind(self):
+        with pytest.raises(AudiaGenticError) as exc_info:
+            _make_event(is_final=True)
+        assert exc_info.value.code == "VAL-OUTPUT-008"
+
+    def test_delta_cannot_be_marked_final(self):
+        with pytest.raises(AudiaGenticError) as exc_info:
+            _make_event(kind=AgentOutputKind.ASSISTANT_TEXT_DELTA, is_final=True)
+        assert exc_info.value.code == "VAL-OUTPUT-008"
+
+    def test_oversized_id_has_distinct_code(self):
+        with pytest.raises(AudiaGenticError) as exc_info:
+            _make_event(session_id="s" * 257)
+        assert exc_info.value.code == "VAL-OUTPUT-009"
 
 
 # ── Validation: text bounds ────────────────────────────────────────────────
