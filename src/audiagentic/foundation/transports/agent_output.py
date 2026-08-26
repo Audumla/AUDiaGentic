@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Protocol
 
@@ -32,6 +33,7 @@ ERR_OUTPUT_NON_MONOTONIC_SEQUENCE = "VAL-OUTPUT-005"
 ERR_OUTPUT_UNKNOWN_KIND = "VAL-OUTPUT-006"
 ERR_OUTPUT_INVALID_OBSERVED_AT = "VAL-OUTPUT-007"
 ERR_OUTPUT_INVALID_IS_FINAL = "VAL-OUTPUT-008"
+ERR_OUTPUT_OVERSIZED_ID = "VAL-OUTPUT-009"
 
 # ---------------------------------------------------------------------------
 # Bounded constants
@@ -77,7 +79,7 @@ def _validate_id(value: str | None, name: str) -> None:
         raise make_error(prefix="VAL", component="OUTPUT", number=4, kind="agent-output-validation", message=f"{name} must not be empty", details={"field": name})
     if len(value) > _MAX_ID_LENGTH:
         raise make_error(
-            prefix="VAL", component="OUTPUT", number=5,
+            prefix="VAL", component="OUTPUT", number=9,
             kind="agent-output-validation",
             message=f"{name} exceeds maximum length of {_MAX_ID_LENGTH}",
             details={"field": name, "length": len(value)},
@@ -159,12 +161,24 @@ class AgentOutputEvent:
                 details={"byte-length": text_bytes},
             )
 
-        # Validate observed_at: non-empty ISO-8601 string
-        if not isinstance(self.observed_at, str) or not self.observed_at:
+        # Validate observed_at as an explicit UTC ISO-8601 timestamp.  A
+        # timezone-less value is ambiguous and cannot be used for ordering.
+        observed_at = self.observed_at
+        try:
+            parsed_observed_at = datetime.fromisoformat(
+                observed_at.replace("Z", "+00:00")
+            ) if isinstance(observed_at, str) else None
+        except ValueError:
+            parsed_observed_at = None
+        if (
+            parsed_observed_at is None
+            or parsed_observed_at.tzinfo is None
+            or parsed_observed_at.utcoffset() != timedelta(0)
+        ):
             raise make_error(
                 prefix="VAL", component="OUTPUT", number=7,
                 kind="agent-output-validation",
-                message="observed_at must be a non-empty string (ISO-8601)",
+                message="observed_at must be a valid UTC timestamp string (ISO-8601)",
             )
 
         # Validate is_final: boolean
@@ -173,6 +187,13 @@ class AgentOutputEvent:
                 prefix="VAL", component="OUTPUT", number=8,
                 kind="agent-output-validation",
                 message="is_final must be a boolean",
+            )
+        if self.is_final != (self.kind is AgentOutputKind.ASSISTANT_FINAL):
+            raise make_error(
+                prefix="VAL", component="OUTPUT", number=8,
+                kind="agent-output-validation",
+                message="is_final must be consistent with the selected agent output kind",
+                details={"kind": self.kind.value, "is_final": self.is_final},
             )
 
 
