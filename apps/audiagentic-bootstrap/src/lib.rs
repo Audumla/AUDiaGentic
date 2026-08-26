@@ -99,3 +99,50 @@ pub fn run_bootstrap(
         event_sequence,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use super::*;
+
+    #[test]
+    fn bootstrap_is_idempotent_and_records_exact_events() -> Result<(), Box<dyn Error>> {
+        let root = std::env::temp_dir().join(format!(
+            "audiagentic-bootstrap-test-{}",
+            std::process::id()
+        ));
+        if root.exists() {
+            fs::remove_dir_all(&root)?;
+        }
+        fs::create_dir_all(&root)?;
+
+        let result = (|| -> Result<(), Box<dyn Error>> {
+            let mut application = build_application(root.clone())?;
+            let first = run_bootstrap(&mut application, b"ready", 1)?;
+            let second = run_bootstrap(&mut application, b"ready", 2)?;
+
+            assert_eq!(first.apply_result, ManagedContentApplyResult::Created);
+            assert_eq!(first.event_sequence.get(), 1);
+            assert_eq!(second.apply_result, ManagedContentApplyResult::Noop);
+            assert_eq!(second.event_sequence.get(), 2);
+
+            let events: Vec<_> = application.composition().events().iter().collect();
+            assert_eq!(events.len(), 2);
+            assert_eq!(
+                events[0].payload(),
+                &BootstrapEvent::ContentApplied(ManagedContentApplyResult::Created)
+            );
+            assert_eq!(
+                events[1].payload(),
+                &BootstrapEvent::ContentApplied(ManagedContentApplyResult::Noop)
+            );
+            Ok(())
+        })();
+
+        let cleanup = fs::remove_dir_all(&root);
+        result?;
+        cleanup?;
+        Ok(())
+    }
+}
