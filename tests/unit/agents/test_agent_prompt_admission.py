@@ -1,5 +1,8 @@
 from pathlib import Path
 
+from audiagentic.components.agents.configuration.contracts import AgentsConfigDocument
+from audiagentic.components.agents.configuration.repository import AgentsConfigSnapshot
+from audiagentic.components.agents.configuration.resolution import resolve_agent_composition
 from audiagentic.components.agents.gateway.admission.context import baseline_agent_template_context
 from audiagentic.components.agents.gateway.admission.instructions import materialize_agent_prompt
 from audiagentic.components.agents.models.prompt_definition import PromptDefinition
@@ -130,3 +133,31 @@ def test_missing_template_placeholder_fails_at_admission(tmp_path: Path) -> None
         assert exc.code == "VAL-TPL-001"
     else:
         raise AssertionError("missing template placeholder must fail closed")
+
+
+def test_prompt_semantic_change_changes_composition_identity(tmp_path: Path) -> None:
+    def snapshot(text: str) -> AgentsConfigSnapshot:
+        document = AgentsConfigDocument.from_mapping(
+            {
+                "contract-version": "v2",
+                "prompts": {"p": {"content": [{"kind": "text", "text": text}]}},
+                "roles": {"r": {"instructions": "Read only"}},
+                "execution_profiles": {
+                    "ep": {"provider_id": "pi", "instances": ["pi"], "is_default": True}
+                },
+                "agents": {
+                    "a": {
+                        "name": "A",
+                        "prompt_id": "p",
+                        "role_ids": ["r"],
+                        "execution_profile_id": "ep",
+                    }
+                },
+            }
+        )
+        return AgentsConfigSnapshot(document=document, digest="digest")
+
+    first = resolve_agent_composition(tmp_path, "a", snapshot=snapshot("Initial"))
+    second = resolve_agent_composition(tmp_path, "a", snapshot=snapshot("Changed"))
+    assert first.identity.prompt_definition_fingerprint != second.identity.prompt_definition_fingerprint
+    assert first.identity.fingerprint != second.identity.fingerprint
