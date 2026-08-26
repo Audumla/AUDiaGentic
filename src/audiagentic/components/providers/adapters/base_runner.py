@@ -230,7 +230,6 @@ def default_build_prompt(
     *,
     provider_id: str,
     title: str,
-    prompt_profile_id: str = "default",
     context_overrides: dict[str, Any] | None = None,
     include_prompt_body: bool = True,
 ) -> str:
@@ -239,8 +238,7 @@ def default_build_prompt(
     Prompt definitions are now the sole public prompt authority.  The gateway
     materializes their complete text (including context and user body) before
     dispatch, so provider adapters must not consult a second prompt-template
-    catalog or re-render mutable configuration here.  ``prompt_profile_id``
-    remains an ignored compatibility parameter for direct adapter callers.
+    catalog or re-render mutable configuration here.
     """
     # Adapters may provide a normalized view (for example a provider-specific
     # prompt body or packet model) without changing the admitted packet.  The
@@ -392,7 +390,6 @@ def make_cli_runner(
                 provider_cfg,
                 provider_id=provider_id,
                 title=title,
-                prompt_profile_id=str(packet_ctx.get("prompt-profile-id") or "default"),
             )
         default_model = resolve_execution_model(packet_ctx, provider_cfg)
         working_root = packet_ctx.get("working-root")
