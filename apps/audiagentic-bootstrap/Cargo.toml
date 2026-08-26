@@ -1,0 +1,15 @@
+[package]
+name = "audiagentic-bootstrap"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+
+[dependencies]
+audiacore-core = { git = "https://github.com/Audumla/AudiaCore.git", rev = "c3b0ee87a965e522c00874611e6e947689c8584a", package = "audiacore-core" }
+audiacore-events = { git = "https://github.com/Audumla/AudiaCore.git", rev = "c3b0ee87a965e522c00874611e6e947689c8584a", package = "audiacore-events" }
+audiacore-host = { git = "https://github.com/Audumla/AudiaCore.git", rev = "c3b0ee87a965e522c00874611e6e947689c8584a", package = "audiacore-host" }
+audiacore-host-native = { git = "https://github.com/Audumla/AudiaCore.git", rev = "c3b0ee87a965e522c00874611e6e947689c8584a", package = "audiacore-host-native" }
+audiacore-managed-content = { git = "https://github.com/Audumla/AudiaCore.git", rev = "c3b0ee87a965e522c00874611e6e947689c8584a", package = "audiacore-managed-content" }
+
+[workspace]
