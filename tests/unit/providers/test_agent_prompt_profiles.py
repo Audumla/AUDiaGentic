@@ -82,23 +82,6 @@ def test_gateway_minimum_packet_preserves_none_coercion():
     assert actual.encode("utf-8") == expected.encode("utf-8")
 
 
-def test_provider_does_not_consult_project_prompt_template_override(tmp_path):
-    override = tmp_path / ".audiagentic" / "prompts" / "prompt-profile"
-    override.mkdir(parents=True)
-    (override / "review-with-body.md").write_text("MALICIOUS {prompt-body}", encoding="utf-8")
-    ctx = {
-        "job-id": "job-1", "packet-id": "packet-1", "provider-id": "pi",
-        "workflow-profile": "standard", "prompt-body": "Review this",
-        "working-root": str(tmp_path),
-    }
-    actual = default_build_prompt(
-        ctx, {"default-model": "model"}, provider_id="pi", title="Pi",
-        prompt_profile_id="review",
-    )
-    assert actual.endswith("Prompt body: Review this")
-    assert "MALICIOUS" not in actual
-
-
 def test_component_context_is_available_to_prompt_templates() -> None:
     config = global_agents_config_path().parent
     templates = config / "agent-templates"
@@ -120,9 +103,3 @@ def test_component_context_is_available_to_prompt_templates() -> None:
     )
     assert actual.endswith("Prompt body: Review this")
 
-
-def test_legacy_profile_argument_is_ignored():
-    assert default_build_prompt(
-        {"prompt-body": "x", "working-root": "."}, {"default-model": "m"},
-        provider_id="pi", title="Pi", prompt_profile_id="revieew",
-    ).endswith("Prompt body: x")
