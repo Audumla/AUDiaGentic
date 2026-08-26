@@ -29,14 +29,16 @@ _REGISTRY: Registry[LanguageSpec]
 
 
 def _lsp_error(code_number: int, message: str, **details: Any) -> AudiaGenticError:
-    return make_error(
-        prefix="VAL",
-        component="LSP",
-        number=code_number,
-        kind="coding-lsp",
-        message=message,
-        details=details,
-    )
+    """Build one of the two declared language-descriptor errors.
+
+    The number is intentionally closed over explicit branches rather than
+    interpolated into a public identity.
+    """
+    if code_number == 1:
+        return make_error(prefix="VAL", component="LSP", number=1, kind="coding-lsp", message=message, details=details)
+    if code_number == 2:
+        return make_error(prefix="VAL", component="LSP", number=2, kind="coding-lsp", message=message, details=details)
+    raise ValueError(f"unsupported language registry error number: {code_number}")
 
 
 @dataclass(frozen=True)

@@ -41,15 +41,31 @@ _CRLF = b"\r\n"
 def _lsp_error(
     code: str, message: str, *, details: dict[str, Any] | None = None
 ) -> AudiaGenticError:
-    """Construct a validated LSP error using the canonical make_error factory."""
-    return make_error(
-        prefix="EXT",
-        component="LSP",
-        number=int(code.split("-")[-1]),
-        kind="coding-lsp",
-        message=message,
-        details=details,
-    )
+    """Construct a validated LSP error from the closed code vocabulary.
+
+    Do not derive the public number by parsing caller input.  Each supported
+    identity is declared as a literal construction so the conformance scan can
+    prove that it is registered and unknown identities fail closed.
+    """
+    if code == "EXT-LSP-001":
+        return make_error(prefix="EXT", component="LSP", number=1, kind="coding-lsp", message=message, details=details)
+    if code == "EXT-LSP-002":
+        return make_error(prefix="EXT", component="LSP", number=2, kind="coding-lsp", message=message, details=details)
+    if code == "EXT-LSP-003":
+        return make_error(prefix="EXT", component="LSP", number=3, kind="coding-lsp", message=message, details=details)
+    if code == "EXT-LSP-004":
+        return make_error(prefix="EXT", component="LSP", number=4, kind="coding-lsp", message=message, details=details)
+    if code == "EXT-LSP-005":
+        return make_error(prefix="EXT", component="LSP", number=5, kind="coding-lsp", message=message, details=details)
+    if code == "EXT-LSP-006":
+        return make_error(prefix="EXT", component="LSP", number=6, kind="coding-lsp", message=message, details=details)
+    if code == "EXT-LSP-007":
+        return make_error(prefix="EXT", component="LSP", number=7, kind="coding-lsp", message=message, details=details)
+    if code == "EXT-LSP-008":
+        return make_error(prefix="EXT", component="LSP", number=8, kind="coding-lsp", message=message, details=details)
+    if code == "EXT-LSP-009":
+        return make_error(prefix="EXT", component="LSP", number=9, kind="coding-lsp", message=message, details=details)
+    raise ValueError(f"unsupported LSP error identity: {code!r}")
 
 
 class LspJsonRpc:
@@ -114,8 +130,6 @@ class LspJsonRpc:
 
         max_retries = 3
         attempt = 0
-        first_response = None
-
         while True:
             attempt += 1
             event = threading.Event()
@@ -267,7 +281,6 @@ class LspJsonRpc:
     def _reader_loop(self) -> None:
         if self._supervised is None:
             return
-        proc = self._supervised.process
         try:
             while self._running:
                 msg = self._read_message()

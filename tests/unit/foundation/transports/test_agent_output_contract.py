@@ -167,6 +167,14 @@ class TestAgentOutputEventValidation:
             _make_event(session_id=42)  # type: ignore
         _assert_val_error(exc_info, "session_id must be a string")
 
+    def test_session_and_turn_id_errors_keep_distinct_declared_codes(self):
+        with pytest.raises(AudiaGenticError) as session_exc:
+            _make_event(session_id=None)  # type: ignore
+        with pytest.raises(AudiaGenticError) as turn_exc:
+            _make_event(turn_id=None)  # type: ignore
+        assert session_exc.value.code == "VAL-OUTPUT-003"
+        assert turn_exc.value.code == "VAL-OUTPUT-004"
+
     def test_null_turn_id_rejected(self):
         with pytest.raises(AudiaGenticError) as exc_info:
             _make_event(turn_id=None)  # type: ignore

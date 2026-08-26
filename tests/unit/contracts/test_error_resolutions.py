@@ -234,9 +234,12 @@ def test_every_statically_resolvable_make_error_code_has_a_resolution() -> None:
                     dynamic_count += 1
 
     assert resolvable, "AST scan found no make_error()/factory call sites — check the walk logic"
-    assert dynamic_count >= 20, (
-        f"only {dynamic_count} dynamically-numbered call sites found; expected roughly "
-        "the ~22 AS72 previously counted — check whether the walk logic regressed"
+    # Five formerly dynamic sites now use closed literal branches (LSP and
+    # output validation). Keep a non-vacuous lower bound while the remaining
+    # dynamic helper inventory is migrated in AS72.
+    assert dynamic_count >= 15, (
+        f"only {dynamic_count} dynamically-numbered call sites found; the scanner "
+        "may have regressed"
     )
 
     missing = sorted(
