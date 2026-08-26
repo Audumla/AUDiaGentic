@@ -539,6 +539,7 @@ def submit_execution_request(
         agent_config_fingerprint=envelope.agent_config_fingerprint,
         role_manifest_fingerprint=envelope.role_manifest_fingerprint,
         eligible_instance_ids=envelope.eligible_instance_ids,
+        admitted_prompt=dispatch_prompt,
     )
 
     # Continuations may intentionally run after a gateway process restart or
