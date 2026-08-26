@@ -46,8 +46,14 @@ def test_pi_materializes_distinct_request_owned_configs(tmp_path, monkeypatch) -
     first_path = Path(first.extra_args[first.extra_args.index("--mcp-config") + 1])
     second_path = Path(second.extra_args[second.extra_args.index("--mcp-config") + 1])
     assert first_path != second_path
-    assert set(json.loads(first_path.read_text())["mcpServers"]) == {"a"}
-    assert set(json.loads(second_path.read_text())["mcpServers"]) == {"b"}
+    first_document = json.loads(first_path.read_text())
+    second_document = json.loads(second_path.read_text())
+    assert set(first_document["mcpServers"]) == {"a"}
+    assert set(second_document["mcpServers"]) == {"b"}
+    # Pi starts with one proxy/discovery tool. Do not preload every projected
+    # MCP schema into the model context; it can leave no output budget.
+    assert first_document["settings"]["directTools"] is False
+    assert second_document["settings"]["directTools"] is False
 
 
 def test_pi_acp_uses_request_owned_wrapper(tmp_path, monkeypatch) -> None:

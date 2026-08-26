@@ -1,16 +1,14 @@
-"""MA35: Pi provider execution through the recipe path (stdin-fallback).
+"""Pi one-shot execution keeps ``--print`` stdin semantics plus real activity.
 
-After retiring adapters/pi/adapter.py, Pi's one-shot execution goes through
-make_runner_from_execution("pi", descriptor.execution) — the same pipeline as
-qwen and copilot. The stdin-fallback rule (MA35) pipes the prompt via
-run_streaming_command's input_text when {prompt} is absent from args-template,
-preserving embedded newlines that Pi's --print mode would otherwise drop (SH21).
-
-Mock only the subprocess/stream boundary — prove production code paths."""
+Pi owns a narrow adapter solely to attach a request-private lifecycle extension.
+The shared CLI runner still owns stdin delivery, parsing, and terminal result
+normalization.  Mock only the subprocess/stream boundary.
+"""
 
 from __future__ import annotations
 
 import shutil
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -34,15 +32,13 @@ MULTILINE_PROMPT = (
 )
 
 
-# ── _load_runner resolves the descriptor runner (no adapter) ─────────────
+# ── _load_runner resolves Pi's narrow adapter ────────────────────────────
 
 
 class TestPiRunnerResolution:
-    """_load_runner('pi') must resolve the descriptor-driven recipe runner,
-    not a hand-written adapter module (adapter.py deleted MA35)."""
+    """The Pi adapter preserves the descriptor recipe and adds observation."""
 
-    def test_load_runner_resolves_pi_descriptor_runner(self) -> None:
-        """Prove _load_runner('pi') resolves make_runner_from_execution."""
+    def test_load_runner_resolves_pi_adapter(self) -> None:
         from audiagentic.components.providers.services.execution.execution import (
             _load_runner,
         )
@@ -50,27 +46,21 @@ class TestPiRunnerResolution:
         runner = _load_runner("pi")
         assert runner is not None
 
-    def test_describe_execution_support_reports_descriptor_mode(self) -> None:
-        """describe_execution_support('pi') must report 'descriptor' mode
-        after adapter.py deletion (MA35)."""
+    def test_describe_execution_support_reports_adapter_mode(self) -> None:
         from audiagentic.components.providers.services.execution.execution import (
             describe_execution_support,
         )
 
         info = describe_execution_support("pi")
-        # No longer 'adapter' — now descriptor-driven via execution: recipe
-        assert info["mode"] in ("descriptor", "cli")
-        # The adapter module is gone — no 'module' key expected
-        assert "module" not in info or "adapter" not in info.get("module", "")
+        assert info["mode"] == "adapter"
+        assert info["module"].endswith(".pi.adapter")
 
 
 # ── Recipe path delivers multiline prompt via stdin (MA35) ────────────────
 
 
 class TestPiRecipeStdinDelivery:
-    """Verify that Pi's recipe-driven run() pipes the full prompt through
-    input_text and the command contains no prompt body — same contract as
-    the deleted adapter.py, proven through the generic pipeline."""
+    """Verify that Pi's adapter retains the shared CLI stdin contract."""
 
     @pytest.fixture
     def mock_streaming_command(self, monkeypatch) -> list[dict[str, Any]]:
@@ -85,6 +75,7 @@ class TestPiRecipeStdinDelivery:
                 {
                     "command": list(command),
                     "input_text": input_text,
+                    "environment": kwargs.get("environment"),
                 }
             )
 
@@ -116,18 +107,9 @@ class TestPiRecipeStdinDelivery:
         )
 
     def _get_runner(self) -> Any:
-        """Build Pi's runner through the recipe path."""
-        from audiagentic.components.providers.adapters.base_runner import (
-            make_runner_from_execution,
-        )
-        from audiagentic.components.providers.descriptors.registry import (
-            all_descriptors,
-        )
+        from audiagentic.components.providers.services.execution.execution import _load_runner
 
-        descriptor = all_descriptors()["pi"]
-        execution = getattr(descriptor, "execution", None)
-        assert execution is not None
-        return make_runner_from_execution("pi", execution)
+        return _load_runner("pi")
 
     def test_run_passes_multiline_prompt_as_input_text(
         self,
@@ -249,10 +231,8 @@ class TestPiRecipeStdinDelivery:
             f"First newline was lost (SH21 regression): {repr(input_text)}"
         )
 
-    def test_execute_provider_uses_pi_recipe(self, monkeypatch) -> None:
-        """Prove the full execution dispatch path uses Pi's recipe runner.
-
-        execute_provider('pi', ...) → _load_runner('pi') → descriptor runner."""
+    def test_execute_provider_uses_pi_adapter(self, monkeypatch) -> None:
+        """Full provider dispatch retains the shared CLI runner beneath Pi."""
         from audiagentic.components.providers.services.execution.execution import (
             execute_provider,
         )
@@ -292,3 +272,37 @@ class TestPiRecipeStdinDelivery:
         assert run_called["seen"], "execute_provider('pi') did not invoke the recipe runner"
         assert result["provider-id"] == "pi"
         assert result["status"] == "ok"
+
+    def test_request_owned_activity_extension_is_explicit_and_private(
+        self,
+        tmp_path,
+        mock_streaming_command: list[dict[str, Any]],
+        mock_require_executable: None,
+    ) -> None:
+        runner = self._get_runner()
+        runner(
+            {
+                "provider-id": "pi",
+                "model-id": "test-model",
+                "request-id": "req_activity",
+                "job-id": "req_activity",
+                "working-root": str(tmp_path),
+                "prompt-body": "Say hello.",
+            },
+            {},
+        )
+
+        call = mock_streaming_command[0]
+        command = call["command"]
+        assert "--print" in command
+        assert "--no-extensions" in command
+        extension = command[command.index("--extension") + 1]
+        extension_path = Path(extension)
+        assert extension_path.is_file()
+        assert extension_path.is_relative_to(tmp_path)
+        assert "pi.on(type" in extension_path.read_text(encoding="utf-8")
+        assert call["environment"] == {
+            "AUDIAGENTIC_PI_ACTIVITY_PATH": str(
+                tmp_path / ".audiagentic" / "runtime" / "jobs" / "req_activity" / "events.ndjson"
+            )
+        }

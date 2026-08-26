@@ -166,6 +166,8 @@ def build_record(
     metadata: dict[str, Any] | None = None,
     template_context: dict[str, Any] | None = None,
     session_id: str | None = None,
+    provider_transport_kind: str = "worker",
+    continuation_session_id: str | None = None,
     session_keep_alive: bool | None = None,
     session_idle_timeout_seconds: float | None = None,
     session_max_lifetime_seconds: float | None = None,
@@ -184,6 +186,7 @@ def build_record(
     gateway_execution_lane_key: str | None = None,
     resolved_provider_id: str | None = None,
     resolved_model_id: str | None = None,
+    resolved_model_selector: str | None = None,
     resolved_source_id: str | None = None,
     resolved_capacity_generation: str | None = None,
     resolved_instance_ids: list[str] | None = None,
@@ -223,6 +226,9 @@ def build_record(
             message="timeout_seconds must be positive",
             details={"timeout_seconds": timeout_seconds},
         )
+    # Durable-session ownership is enforced by submit_execution_request(),
+    # the public admission boundary. This low-level constructor remains able
+    # to model historical records for migration and isolated storage tests.
     # Session bounds (idle/max lifetime) are only meaningful when
     # session_keep_alive is explicitly True — that's when a lifetime policy
     # is being set. session_keep_alive=None means preserve existing behavior
@@ -293,6 +299,7 @@ def build_record(
         "gateway-profile-runtime": gateway_profile_runtime,
         "resolved-provider-id": resolved_provider_id,
         "resolved-model-id": resolved_model_id,
+        "resolved-model-selector": resolved_model_selector,
         # AS101: admission identifies compatible instances only. The concrete
         # source/model binding is written atomically by
         # bind_and_start_owned_attempt immediately before provider invocation.
@@ -314,6 +321,8 @@ def build_record(
         "timeout-seconds": timeout_seconds,
         "source": source,
         "session-id": session_id,
+        "provider-transport-kind": provider_transport_kind,
+        "continuation-session-id": continuation_session_id,
         "session-keep-alive": session_keep_alive,
         "session-idle-timeout-seconds": session_idle_timeout_seconds,
         "session-max-lifetime-seconds": session_max_lifetime_seconds,
@@ -457,17 +466,27 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
     # A briefly deployed v4 writer could have persisted the version before
     # adding all activity fields. Treat that shape as migratable too; never
     # strand a durable request merely because a process restarted mid-cutover.
-    if contract_version not in {"v1", "v2", "v3", "v4", "v5", "v6", _shared._CONTRACT_VERSION}:
+    if contract_version not in {"v1", "v2", "v3", "v4", "v5", "v6", "v7", _shared._CONTRACT_VERSION}:
         return _validate(migrated, code="VAL-AGW-005")
     # v7 is the first record contract with nested provider/owner activity.
     # Keep the historical v5 migration target for pre-v6 records, while
     # explicitly upgrading v6 records that already carry the flat activity
     # fields to v7 under the same request lock.
+    # v8 introduces durable request sessions.  Existing v7 records remain
+    # readable as v7: a historic sessionless record cannot honestly be
+    # re-labelled v8 without first creating its companion session record.
+    # New admissions are always v8; dispatch never relies on this migration
+    # to invent a session for an in-flight legacy request.
     migrated["contract-version"] = (
         _shared._CONTRACT_VERSION
         if contract_version in {"v6", _shared._CONTRACT_VERSION}
-        else "v5"
+        else ("v7" if contract_version == "v7" else "v5")
     )
+    migrated.setdefault(
+        "provider-transport-kind",
+        "provider-session" if migrated.get("session-id") else "worker",
+    )
+    migrated.setdefault("continuation-session-id", migrated.get("session-id"))
     if contract_version != _shared._CONTRACT_VERSION:
         migrated.update({
             "dispatch-owner-epoch": None,
@@ -487,6 +506,7 @@ def _migrate_v1_payload(payload: dict[str, Any]) -> dict[str, Any]:
         migrated.setdefault("replayed-by-request-id", None)
         migrated.setdefault("resumed-from-request-id", None)
     migrated.setdefault("resolved-source-id", None)
+    migrated.setdefault("resolved-model-selector", None)
     migrated.setdefault("resolved-capacity-generation", None)
     migrated.setdefault("last-activity-at", None)
     migrated.setdefault("activity-sequence", 0)

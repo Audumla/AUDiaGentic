@@ -21,6 +21,29 @@
       "type": "string",
       "enum": ["waiting", "running", "cancelling", "completing"]
     },
+    "activity_type": {
+      "type": "string",
+      "enum": [
+        "thinking",
+        "searching-web",
+        "read-resource",
+        "talked-to-app",
+        "called-tool",
+        "tool-call",
+        "tool-requested",
+        "tool-result",
+        "tool-finished",
+        "tool-progress",
+        "response-progress",
+        "response-observed",
+        "response-started",
+        "assistant-message",
+        "thought",
+        "in-progress",
+        "submission-proof",
+        "response-complete"
+      ]
+    },
     "activity_seq": {
       "type": "integer",
       "minimum": 0

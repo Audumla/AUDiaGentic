@@ -42,6 +42,57 @@ _ACTIVE_SNAPSHOT_LIFECYCLES = {
     AgentLifecycle.UNKNOWN,
 }
 
+# Public activity types are deliberately a small, provider-neutral vocabulary.
+# The durable activity envelope may retain a provider's normalized phase for
+# diagnostics, but normal polling must not turn that into an unbounded
+# provider-event channel.  These values describe work a caller can act on or
+# present to a human; lifecycle still answers whether the request is running.
+_PUBLIC_ACTIVITY_TYPES = frozenset({
+    "thinking",
+    "searching-web",
+    "read-resource",
+    "talked-to-app",
+    "called-tool",
+    "tool-call",
+    "tool-requested",
+    "tool-result",
+    "tool-finished",
+    "tool-progress",
+    "response-progress",
+    "response-observed",
+    "response-started",
+    "assistant-message",
+    "thought",
+    "in-progress",
+    "submission-proof",
+    "response-complete",
+})
+
+_ACTIVITY_TYPE_ALIASES = {
+    "searching-the-web": "searching-web",
+}
+
+
+def project_activity_type(record: Mapping[str, Any]) -> str | None:
+    """Return the latest bounded provider-work type, if one was recorded.
+
+    This is intentionally derived from the durable provider activity bucket,
+    never from source names.  A source describes gateway plumbing (for
+    example ``session-transport``); it is not useful work progress for a
+    caller.  The direct ``phase`` fallback only reads old dashboard records
+    written before provider buckets were introduced.
+    """
+    activity = record.get("activity")
+    if not isinstance(activity, Mapping):
+        return None
+    provider = activity.get("provider")
+    phase = provider.get("phase") if isinstance(provider, Mapping) else activity.get("phase")
+    if not isinstance(phase, str):
+        return None
+    normalized = phase.strip().lower().replace("_", "-").replace(" ", "-")
+    normalized = _ACTIVITY_TYPE_ALIASES.get(normalized, normalized)
+    return normalized if normalized in _PUBLIC_ACTIVITY_TYPES else None
+
 
 def _validate_snapshot(
     record: Mapping[str, Any],
@@ -138,10 +189,15 @@ def project_task_status_v4(
             activity = "completing"
         else:
             activity = "running"
+        # A sequence without a recognized activity type is still useful: it
+        # proves verified work occurred, while an unfamiliar provider phase is
+        # deliberately withheld until it has a reviewed public meaning.
+        activity_type = project_activity_type(record) if activity_seq else None
         return _compact({
             "task_id": request_id,
             "lifecycle": "active",
             "activity": activity,
+            "activity_type": activity_type,
             "activity_seq": activity_seq,
             "activity_at": activity_at,
             "outcome": None,
@@ -155,4 +211,4 @@ def _compact(payload: dict[str, object]) -> dict[str, object]:
     return {key: value for key, value in payload.items() if value is not None}
 
 
-__all__ = ["TaskStatusContractError", "project_task_status_v4"]
+__all__ = ["TaskStatusContractError", "project_activity_type", "project_task_status_v4"]

@@ -14,13 +14,14 @@ from audiagentic.components.agents.agents_paths import (
     gateway_admitted_prompt_path,
     gateway_idempotency_index_path,
 )
+from audiagentic.components.agents.configuration.management import (
+    create_execution_profile,
+)
 from audiagentic.components.agents.gateway import api as gateway
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.application import InProcessGatewayApplication
 from audiagentic.components.agents.gateway.queue import queue as agents_gateway_queue
-from audiagentic.components.agents.configuration.management import (
-    create_execution_profile,
-)
+from audiagentic.components.agents.gateway.session import sessions_store
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state
@@ -98,6 +99,31 @@ def test_run_blocks_until_completion_and_returns_output(tmp_path: Path, monkeypa
     assert gateway.get_execution_response(tmp_path, result["request-id"]) == "the answer"
     snapshot = gateway_admitted_prompt_path(tmp_path, result["request-id"])
     assert snapshot.read_bytes() == b"hi"
+
+
+def test_worker_request_gets_and_completes_a_durable_gateway_session(
+    tmp_path: Path, monkeypatch
+):
+    _make_profile(tmp_path, "default", "local-openai")
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
+        lambda **kwargs: _result(
+            {
+                "provider-id": "local-openai",
+                "model": "gpt-4o",
+                "output": "done",
+            }
+        ),
+    )
+
+    result = gateway.run_execution_request(tmp_path, prompt_body="hi")
+    assert result["session-id"].startswith("ses_")
+    session = sessions_store.read_session_record(tmp_path, result["session-id"])
+    assert session["contract-version"] == "v4"
+    assert session["created-by-request-id"] == result["request-id"]
+    assert session["provider-transport-kind"] == "worker"
+    assert session["state"] == "closed"
+    assert session["activity"]["request-ids"] == [result["request-id"]]
 
 
 def test_admission_freezes_component_template_context(tmp_path: Path, monkeypatch):

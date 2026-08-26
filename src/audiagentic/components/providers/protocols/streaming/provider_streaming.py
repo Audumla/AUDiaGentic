@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 import sys
 import threading
@@ -241,10 +242,12 @@ def run_streaming_command(
     timeout_warning_seconds: float | None = None,
     timeout_seconds: float | None = None,
     termination_policy: str = "warn-only",
+    environment: dict[str, str] | None = None,
 ) -> StreamedCommandResult:
     supervised = spawn_supervised(
         command,
         cwd=str(cwd) if cwd is not None else None,
+        env=({**os.environ, **environment} if environment else None),
         stdin=subprocess.PIPE if input_text is not None else None,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

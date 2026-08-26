@@ -105,8 +105,8 @@ def agent_task_list_definitions() -> list[dict[str, Any]]:
 def agent_task_status(request_id: str) -> dict[str, Any]:
     """Return the compact task status used for normal MCP polling.
 
-    V4 is the only public projection: lifecycle, activity, progress
-    sequence/timestamp, and terminal outcome only. Response content,
+    V4 is the only public projection: lifecycle, activity, bounded latest
+    activity type, progress sequence/timestamp, and terminal outcome only. Response content,
     diagnostics, attempts, watchdog policy, and provider internals belong to
     their separate operations and never cross the normal status boundary.
     """
@@ -296,13 +296,10 @@ def agent_task_session_resume(
 def agent_task_submit(
     agent_id: str,
     prompt_body: str | None = None,
-    timeout_seconds: float | None = None,
     source: str | None = None,
     metadata: dict[str, Any] | None = None,
     session_id: str | None = None,
     session_keep_alive: bool = False,
-    session_idle_timeout_seconds: float | None = None,
-    session_max_lifetime_seconds: float | None = None,
     workspace_name: str | None = None,
     execution_context_fingerprint: str | None = None,
 ) -> dict[str, Any]:
@@ -328,13 +325,10 @@ def agent_task_submit(
     submit_kwargs: dict[str, Any] = {
         "agent_id": agent_id,
         "prompt_body": prompt_body,
-        "timeout_seconds": timeout_seconds,
         "source": source,
         "metadata": metadata,
         "session_id": session_id,
         "session_keep_alive": session_keep_alive,
-        "session_idle_timeout_seconds": session_idle_timeout_seconds,
-        "session_max_lifetime_seconds": session_max_lifetime_seconds,
     }
     if workspace_name is not None:
         submit_kwargs["workspace_name"] = workspace_name

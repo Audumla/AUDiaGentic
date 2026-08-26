@@ -31,7 +31,7 @@
   "additionalProperties": false,
   "properties": {
     "contract-version": {
-      "enum": ["v5", "v6", "v7"]
+      "enum": ["v5", "v6", "v7", "v8"]
     },
     "request-id": {
       "type": "string"
@@ -106,6 +106,10 @@
       "type": ["string", "null"]
     },
     "resolved-model-id": {
+      "type": ["string", "null"]
+    },
+    "resolved-model-selector": {
+      "description": "Provider-native model selector frozen with the scheduler placement; adapters may encode it into their transport without re-reading model configuration.",
       "type": ["string", "null"]
     },
     "resolved-source-id": {
@@ -257,6 +261,14 @@
     },
     "session-id": {
       "type": ["string", "null"]
+    },
+    "continuation-session-id": {
+      "description": "The caller-supplied provider-session continuation identity, if any. It is deliberately distinct from the request-owned durable gateway session-id.",
+      "type": ["string", "null"]
+    },
+    "provider-transport-kind": {
+      "description": "Immutable dispatch transport selected at admission. Every v8 request has a durable gateway session, but only provider-session requests use SessionRuntime.",
+      "enum": ["worker", "provider-session"]
     },
     "provider-metadata": {
       "type": ["object", "null"],
