@@ -473,7 +473,9 @@ class GptAutoTurn:
             is_new = _new_user_message(self._baseline_snapshot, current) if self._baseline_snapshot else True
             if (
                 is_new
-                and match_prompt(self.request.body, current.latest_user_text or "")
+                and match_prompt(
+                    self.request.body, current.latest_user_correlation_text() or ""
+                )
                 and current.latest_user_id
             ):
                 self._prompt_message_id = current.latest_user_id
@@ -665,7 +667,9 @@ class GptAutoTurn:
             last_observation_error = None
             self._remember_snapshot(snap)
             new_msg = _new_user_message(baseline, snap)
-            text_matches = new_msg and expected_fingerprint.matches_text(snap.latest_user_text or "")
+            text_matches = new_msg and expected_fingerprint.matches_text(
+                snap.latest_user_correlation_text() or ""
+            )
             user_id_changed = snap.latest_user_id != previous_user_id
             soft_changed = (
                 snap.generating != previous_generating or snap.dom_signals != previous_dom_signals
@@ -1485,4 +1489,14 @@ def _snapshot_diagnostics(
         result["prompt-text-match"] = match_prompt(
             expected_prompt, snapshot.latest_user_text or ""
         )
+        correlation_text = snapshot.latest_user_correlation_text()
+        if correlation_text and correlation_text != snapshot.latest_user_text:
+            result["prompt-correlation-match"] = PromptFingerprint.from_text(
+                expected_prompt
+            ).matches_text(correlation_text)
+            result["prompt-proof-source"] = "gpt-auto-dom-structural-v1"
+            result["observed-correlation-text-length"] = len(correlation_text)
+            ref = snapshot.latest_user_ref()
+            if ref is not None and ref.structural_hr_count:
+                result["structural-hr-count"] = ref.structural_hr_count
     return result
