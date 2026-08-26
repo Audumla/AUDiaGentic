@@ -161,7 +161,7 @@ def gateway_pi_environment(
 @pytest.fixture
 def pi_profile_setup(project_root: Path) -> None:
     """Create a default agent profile for the pi provider and enable it."""
-    from audiagentic.components.agents.models.execution_profile_api import (
+    from audiagentic.components.agents.configuration.management import (
         create_execution_profile,
     )
     from audiagentic.foundation.features.base import ImplementationState

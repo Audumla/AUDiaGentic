@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 
 from audiagentic.components.agents.agents_paths import global_agents_config_path
-from audiagentic.components.agents.models import execution_profile_api as agents_api
+from audiagentic.components.agents.configuration import management as agents_api
 from audiagentic.components.agents.models.execution_profile import (
     ExecutionProfileStore,
     execution_profile_from_dict,

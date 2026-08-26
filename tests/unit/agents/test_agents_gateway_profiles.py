@@ -145,7 +145,7 @@ class TestResolveForAdmissionSurface:
     """AS82: surface_id resolution at the admission boundary."""
 
     def _profile(self, project_root, *, surface_id=None):
-        from audiagentic.components.agents.models.execution_profile_api import (
+        from audiagentic.components.agents.configuration.management import (
             create_execution_profile,
         )
         create_execution_profile(
@@ -159,7 +159,7 @@ class TestResolveForAdmissionSurface:
         )
 
     def test_missing_shared_registry_fails_closed(self, tmp_path):
-        from audiagentic.components.agents.models.execution_profile_api import (
+        from audiagentic.components.agents.configuration.management import (
             create_execution_profile,
         )
 
@@ -242,7 +242,7 @@ class TestResolveForAdmissionSurface:
 
     def test_project_local_agents_catalog_is_ignored(self, tmp_path):
         """Agent admission must not be shadowed by a project-local catalog."""
-        from audiagentic.components.agents.models.execution_profile_api import (
+        from audiagentic.components.agents.configuration.management import (
             create_execution_profile,
         )
 

@@ -24,7 +24,7 @@ from audiagentic.components.agents.gateway.remote_client import (
 from audiagentic.components.agents.gateway.service.contract import PROTOCOL_VERSION
 from audiagentic.components.agents.gateway.service.host import GatewayServiceHost
 from audiagentic.components.agents.gateway.service.known_projects import record_known_project
-from audiagentic.components.agents.models.execution_profile_api import (
+from audiagentic.components.agents.configuration.management import (
     create_execution_profile,
 )
 from audiagentic.components.providers.providers_api import ProviderExecutionResult

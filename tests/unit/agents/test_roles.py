@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from audiagentic.components.agents.capabilities.contracts import CapabilityRequirementId
-from audiagentic.components.agents.models.execution_profile_api import (
+from audiagentic.components.agents.configuration.management import (
     create_execution_profile,
 )
 from audiagentic.components.agents.models.role import (
@@ -22,7 +22,7 @@ from audiagentic.components.agents.models.role import (
     role_to_dict,
     validate_role,
 )
-from audiagentic.components.agents.models.role_api import (
+from audiagentic.components.agents.configuration.management import (
     create_role,
     delete_role,
     get_role,
