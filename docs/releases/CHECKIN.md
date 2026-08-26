@@ -1,31 +1,552 @@
 # Check-In Summary
 
-Total changes: 27
+Total changes: 548
 
-- Removed unused, unreferenced llama.cpp binaries from the source tree; rig binaries are provisioned at runtime via the LlamaCppRecipe, not checked into git.
-- Removed the deprecated agent_execution_submit MCP tool; agent_task_submit (agent-definition-based) is now the only way to submit agent work over MCP.
-- Investigated whether agent capability checks (AS64) are needed yet; found no real Role or Execution Profile currently requires one, so closed the item without building unused infrastructure.
-- Documented how Role selection will interact with Execution Profile/workflow-profile/component-profile precedence once a standalone role-selection field exists.
-- Added a public API to query whether a provider supports exact MCP launch isolation (currently pi and opencode only), first increment toward the Role capability resolver.
-- Audited AS52 (interactive-session child-process supervision) and found most of it already built; shrunk the plan item down to the one real remaining bug (a Windows close() race that orphans a child process).
-- Completed the harness-observation capability matrix by adding the last two missing provider surface entries (Cline SDK/hooks candidates).
-- Corrected AS55's scope: OpenCode ACP's basic transport already works and is proven, but permission/tool/cancel/binding-rollback/content-channel behavior still needs real test proof.
-- Fixed 13 error codes that were silently unreachable due to a casing bug, and registered 33 more codes that a new automated scan found were missing from the error catalogue.
-- Fixed provider MCP refresh: agent, gateway, Git, and GitHub servers now complete startup handshakes from the rendered OpenCode config. OpenCode refreshes no longer modify hand-managed model configs.
-- Restored automatic OpenCode model projection without sacrificing user models: AUDiaGentic now manages only its own marked model entry in the real OpenCode config file.
-- Added comprehensive protection tests so OpenCode model refreshes retain every user-owned configuration section, not only user-defined models.
-- Fixed the OpenCode Hindsight recipe so it installs and configures the real Hindsight plugin without removing your existing OpenCode settings or plugins.
-- Provider installation now preserves first-run provider choices instead of automatically enabling detected tools before you choose.
-- gpt-auto: CDP connect to existing browser avoids ChatGPT bot detection
-- gpt-auto: full conversation flow works - inject prompt via DOM, read response from DOM
-- gpt-auto now manages puppeteer-core through the provider lifecycle and stores it in the AUDiaGentic runtime instead of the project root.
-- GPT Auto's npm dependency is now stored under the provider runtime namespace, with no harness ownership implied.
-- Fixed ChatGPT project navigation — can now find a named project from /projects and start a scoped chat within that project
-- Prevented repeated planning ledger events from creating duplicate ledger sections or links.
-- gpt-auto ChatGPT automation now rotates realistic prompts, types/pastes with human-like variable timing to avoid bot detection, and can resume the same conversation via its conversation-id.
-- Fixed ChatGPT response detection so a follow-up answer is captured even when it is shorter than the previous response.
-- gpt-auto now reuses an already-open ChatGPT tab for the same project instead of opening a fresh one each run, tracking the tab-to-conversation mapping in a runtime state file.
-- New ChatGPT conversations now start with a random plan item review request instead of reusing the same prompt, so each run asks ChatGPT to review something different.
-- Plan-item review prompts now embed the full plan item text so ChatGPT can review it without needing repo access via the GitHub plugin.
-- ChatGPT conversations can now be managed as first-class sessions through the AgentSessionTransport seam: open resumes the project's existing chat, prompts stream progress observations to the gateway, and CANCEL stops generation without ever closing your browser tab.
-- Fixed truncated ChatGPT responses in the gpt-auto provider by bringing the browser tab to the foreground during generation (ChatGPT pauses streaming for backgrounded tabs) and using a stability window to detect completion.
+- gpt-auto completion detection is now backed by repeatable multi-turn live DOM traces and a localization-safe latest-response completion marker.
+- gpt-auto now advances from identifiable per-turn DOM evidence, safely detects sustained abandoned empty responses, and avoids false completion from mutations to older responses.
+- gpt-auto no longer fails long-paused responses based only on two minutes without recognized activity; only positive terminal evidence or the overall backstop ends the turn.
+- Gateway callers now use the managed shared gateway, persistent gpt-auto chats can be resumed and continued through it after tabs disappear, and operator recovery targets the correct machine service state. A workflow-driven plan now covers safe reconcile/archive/purge and future broker replacement.
+- The clean host and Docker suites now pass; remaining isolated LSP and provider lifecycle failures are environment/lifecycle-image issues, not the original hang.
+- Redesigned the gateway management roadmap around workflow-driven durable operations, safe provider-neutral reconciliation, clean MCP boundaries, configurable retention, and a future replaceable broker queue.
+- Clarified that long agent responses survive reconnectable observer timeouts and are not failed by a fixed 60-minute boundary.
+- Clarified the architecture so providers back configured agents rather than being described as agents themselves.
+- Added the first isolated new-gateway maintenance slice without touching the live gateway or creating a second scheduler.
+- Locked in a real gateway replacement rather than a permanent legacy fallback.
+- Removed legacy and maintenance-mode terminology from the new gateway design.
+- Fixed the remaining provider/LSP lifecycle test defects and updated stale provider capability tests and planning metadata.
+- Built a safe gateway operation service and closed the drain bypass without changing the live gateway process.
+- Fixed the final Docker-only architecture, packaging, and MCP smoke issues found by the full run.
+- Updated the gateway replacement plan with the code now built and the work still required before cutover.
+- Started the prerequisite lifecycle work and corrected the gateway replacement plan terminology.
+- Packaging validation now passes all checks.
+- Gateway execution now waits for real provider/cancellation evidence rather than timing out long-running work, and the standalone host runs durable reconcile operations while protecting session continuation lineage from unsafe retention.
+- Gateway operations now recover safely after service ownership changes and no longer depend on a stale runner claim.
+- Removed the stale hanging timeout test and registered the missing gateway error resolutions.
+- Cut over the machine gateway to the tested automatic service, preserving its request history and verifying durable reconcile operations on the new host.
+- Gateway operator work and durable session continuation are now reachable through their intended MCP surfaces, with tested service/client/MCP delegation.
+- Expanded gateway tests to cover valid and invalid operator operations plus clean forced cutover shutdown, and fixed the lease cleanup defect they revealed.
+- The new gateway MCP capabilities are now provisioned through configuration and protected against catalog drift by tests.
+- Gateway sessions now have an initial generic control path through the public gateway and MCP surfaces.
+- Reviewed deferred and skipped tests, promoted valid coverage, removed stale skips, fixed parallel test isolation, and got the host test suites passing.
+- Gateway dispatch now durably records the exact source and model atomically before an agent starts.
+- Gateway lifecycle now has deterministic proofs for crashed clients, reconnect races, drain fencing, and long-running work.
+- Generic session controls now have durable retry safety and conflict detection.
+- Orphan recovery now has a conservative evidence predicate that cannot mistake silence or age for process death.
+- Proven-dead owned turns now recover exactly once without treating silence, age, or missing handles as death.
+- Gateway reconciliation now refuses to treat stale or silent work as dead without matching owner evidence.
+- Gateway archive and purge now have explicit machine policy and integrity/race safety; no purge occurs without an enabled policy snapshot.
+- The gateway now has a replaceable broker seam with tested claim, redelivery, DLQ and drain behavior, without changing request lifecycle authority.
+- Long-running isolated provider work now renews a gateway-owned activity lease while it runs; stale or malformed activity remains advisory and cannot terminate work.
+- Purge now waits for the configured retention age and refuses altered or corrupted archives.
+- Schema cutover now repairs incomplete v4 records without clobbering active ownership.
+- Worker heartbeats remain visible to the gateway even while provider libraries redirect their own stdout.
+- Invalid retention values such as NaN are rejected instead of weakening purge safety.
+- Gateway reconciliation now distinguishes known-live work from unavailable evidence and never treats either as dead.
+- The resumed gpt-auto review completed successfully after the outage; its actionable reconciliation finding was implemented and retested.
+- Gateway purge now fails closed when retention policy, archived request evidence, or session lineage changes before deletion.
+- Hardened gateway queue claim fencing so an old worker incarnation cannot alter work redelivered to a newer owner.
+- Operators can inspect the machine-owned gateway retention policy safely through the management MCP surface.
+- Created a dedicated gateway source-capacity authority as the first AS101 scheduler de-hybridization slice, with deterministic tests.
+- Added deterministic project-fair pending-work management to the gateway scheduler foundation.
+- Worker activity lease duration is now controlled by machine-owned policy instead of a fixed dispatch literal, with fail-closed handling for invalid configuration.
+- Unified gateway pending-work selection under project-fair scheduling while preserving existing public queue APIs.
+- Gateway reconcile can now safely terminalize positively proven-dead work through the existing durable transition authority, without treating silence or timeout as death.
+- Unified bounded and plain gateway instance placement behind one capacity-reservation model.
+- Gateway status now shows whether execution is active under watchdog supervision and why, without exposing provider payloads.
+- Gateway sessions now hold capacity only while actively executing a turn, not while idle.
+- Gateway retention now protects durable provider/session runtime state even when the live process or browser handle is gone.
+- All gateway placements now persist the exact selected source before execution, including unbounded/plain instances.
+- Retention purge now serializes pin creation with the final fence and deletion, eliminating the identified session-pin race.
+- Queue operations now have explicit operator controls for drain and dead-letter recovery, behind a provider-neutral admin contract.
+- Queue backend selection is now configuration-bound and fails closed instead of silently falling back.
+- Unavailable queue backends now produce a registered, actionable configuration error.
+- Gateway overview now reports queue activity scoped to the requested project instead of lane-oriented global internals.
+- Watchdog policy is now fixed at request admission, preventing policy changes from altering a running request's lease semantics.
+- Added the SH25 durable admission-to-publication outbox seam with crash-safe replay tests.
+- The updated gpt-auto review completed successfully after polling for about 14 minutes; its findings are now reflected in the plans and the review is closed.
+- Separated legacy queue policy adapters from AS101 source-capacity scheduling and added a source-capacity diagnostics API.
+- Added a deterministic service-level gateway-operation restart/race proof using the real executor and request lifecycle authority.
+- SH24 A-D now has a passing restart-and-fence acceptance proof; only real host/Docker timing evidence remains.
+- Fixed CON-MSVC-026 after a dead embedded-rig left an empty draining record; future launches now recover that safe stale state automatically.
+- Fixed managed-service restart recovery for stale draining records while preserving active-lease and live-process safety fences.
+- Client reconnect now cleans up expired leases and automatically recovers a stale draining embedded rig without manual state repair.
+- Added a regression test proving plain and resource-backed gateway instances use the same durable placement contract.
+- Verified and protected concurrent multi-client embedded-rig attachment.
+- Optimized the test architecture around safe parallelism and reusable Docker layers, verified all installable provider CLI workflows in isolated containers, and documented coverage as the code-to-test traceability mechanism.
+- Gateway purge/restart completed and current-code live validation passed, including durable source binding and non-destructive long-wait behavior.
+- Added a safe operator inventory for gateway maintenance operations so stale work can be inspected before reconcile/archive/purge actions.
+- Added queue publication crash-recovery tests so an admission is not lost if the process fails after broker publish but before outbox acknowledgement.
+- Added safe watchdog lease-expiry diagnostics that flag intervention without failing or terminating long-running work.
+- Gateway records now preserve whether a terminal worker outcome was a verified stall or an explicit safety-ceiling policy stop.
+- Legacy lane-oriented gateway status calls now warn and point callers to the provider-neutral capacity APIs.
+- Added coverage for the replacement capacity status API so it cannot regress to lane-oriented policy reporting.
+- Removed the old lane-oriented queue status path and migrated lifecycle/reporting tests to project-scoped provider-neutral queue depths.
+- Removed another internal lane-oriented compatibility path and migrated coverage to the provider-neutral project-scoped scheduler surfaces.
+- The scheduler’s internal capacity bookkeeping now uses provider-neutral capacity terminology instead of legacy concurrency/queue-limit names.
+- Removed the legacy queue compatibility module and moved fallback capacity policy behind an explicit provider-neutral capacity seam.
+- Added the new provider-neutral capacity configuration names and tests as the next migration step away from legacy queue parameters.
+- Migrated gateway integration and end-to-end capacity configuration to the new provider-neutral virtual/pending capacity names with no legacy fallback.
+- Removed another internal lane-oriented naming dependency while preserving immutable profile identity and scheduler behavior.
+- Removed remaining lane terminology from scheduler request lookup and lifecycle diagnostics.
+- Added retention coverage distinguishing an empty runtime directory from actual durable provider continuation state.
+- Added generic resume coverage proving provider and surface identity remain intact across session continuation.
+- Added coverage showing provider progress is accepted as generic validated activity without provider-specific gateway logic.
+- Repaired the shared Docker failures across LSP, MCP, gateway recovery, Opencode, and ACP resume tests; the remaining failures are isolated to Pi RPC transcript behavior and gateway concurrency scheduling.
+- Added the gateway monitor invocation seam for watchdog lease diagnostics without terminalizing quiet work.
+- Added a safe host-owned registry seam for watchdog polling, preventing cross-project lease diagnosis and cleaning entries when work terminates.
+- Added the safe periodic watchdog polling seam: it diagnoses only registered project/request pairs and removes terminal results without affecting other projects.
+- The standalone host now periodically diagnoses registered running requests without crossing project boundaries or terminalizing quiet work.
+- Validated the host-poller changes against standalone integration; Docker crash evidence remains environment-gated rather than inferred.
+- Kept soak evidence honest by removing a timing-sensitive test that was not deterministic under the scheduler.
+- Added generic ACP/MCP-A2A resume contract tests without provider-specific gateway branches or timing assumptions.
+- Cleaned the intentional unsupported-transport test fixture so static validation is now clean.
+- Expanded watchdog activity coverage across generic provider, ACP, and MCP-A2A progress signals.
+- Cleaned the remaining gateway store test typing diagnostics; static validation is now clean.
+- Added recovery coverage proving watchdog activity facts survive restart and remain non-terminal.
+- Added crash-recovery coverage ensuring watchdog activity evidence survives restart reconciliation without being lost or misclassified.
+- Added coverage ensuring archiving preserves durable provider continuation state needed for later resume.
+- Cleaned static typing in maintenance fixtures and added durable-history visibility coverage across a simulated gateway restart.
+- Added a deterministic gateway implementation rollback rehearsal proving configuration selection can return to the prior boundary.
+- Archive maintenance can be safely retried without duplicate mutations while retaining the request manifest.
+- Purge operations can be retried safely after completion without reporting duplicate deletion.
+- A resumable session pin blocks purge without losing either the archived request manifest or the durable continuation record.
+- Purge now has deterministic coverage against archive tampering during the final deletion race.
+- Progress threshold behavior is consistent across configured execution profiles without provider-specific production branches.
+- Retention pins release only through explicit durable lineage changes, never by timeout or missing runtime handles.
+- Durable provider-session state keeps retention pinned across restart-like reloads until explicitly cleaned up.
+- Purge fails closed when machine retention policy is withdrawn during execution.
+- Purge fails closed when a request attempt changes during maintenance, preventing stale archive deletion.
+- Purge fails closed when session lineage appears during maintenance, protecting resumable state.
+- Gateway progress thresholds classify each project/request independently without cross-project contamination.
+- Cancellation clears active progress consistently across execution profiles without timeout-based ambiguity.
+- Cancelled progress remains stable across restart-style persistence reloads.
+- Completed and failed gateway outcomes remain stable across restart-style reloads for every configured execution surface.
+- Retention release behavior is consistent across provider surfaces after terminal session reload.
+- Archive behavior is consistent across configured execution profiles.
+- Purge behavior is consistent across configured execution profiles.
+- Linked resumable sessions block purge consistently across provider surfaces.
+- Retention pin transitions are consistent across provider surfaces when session lineage changes.
+- Explicit lineage release restores purge eligibility consistently across provider surfaces.
+- Explicit lineage release restores safe purge eligibility.
+- The retention contract now clearly states when pins may be released and what evidence is insufficient.
+- A deterministic multi-project soak fixture checks repeated progress classification without wall-clock sleeps or cross-record state.
+- The deterministic soak now exercises all generic provider surfaces and cancellation/restart-like terminal mix without timing sleeps.
+- Cancellation/restart behavior is covered together in the deterministic provider-neutral soak.
+- Missing progress evidence is recoverable when a fresh activity event arrives; silence alone does not fail the request.
+- Source silence does not fail work; explicit durable failure evidence is required for terminal failure classification.
+- Watchdog records now have explicit test evidence distinguishing an absolute safety ceiling from a verified stall.
+- Gateway MCP tooling now documents provider-versus-agent boundaries, long-running behavior, watchdog observations, and durable session resume accurately.
+- Updated MCP tooling and AUDiaGentic gateway instructions so they accurately describe the current provider-neutral gateway and session behavior.
+- SH10 deterministic lifecycle proofs pass; real container hard-kill/restart evidence remains an explicit external gate.
+- SH10 lifecycle and Docker crash/restart acceptance evidence now passes end to end.
+- SH11 conformance, deterministic soak, operations parity, and standalone integration evidence are green.
+- SH24 durable operations and public-surface validation is green across unit and standalone integration suites.
+- The real host timing proof is blocked by application wiring in the current integration harness; no false completion claim was made.
+- Scheduler internals now describe profile generations and provider-neutral aggregation without legacy lane compatibility language.
+- Scheduler runtime generations now use an explicit immutable identity contract instead of opaque tuple keys.
+- AS101 migration safety is covered: new records require durable source identity and old shared-gateway shapes fail closed.
+- Docker-backed concurrency, fairness, crash/restart, automatic startup, and client conformance evidence is green for SH11.
+- Rollback and durable request-history preservation are now tested across a real host restart.
+- The gateway selector is still required for safe cutover and rollback; it is intentionally retained until prerequisites are complete.
+- Execution records now use v5 without retired scheduler compatibility fields, while legacy records migrate safely and retain source/model identity.
+- SH24 now has real host timing coverage for background operation polling and startup recovery.
+- Project-scoped production gateway resolution now defaults toward automatic authority; embedded remains explicit for internal/test boundaries.
+- SH11 cutover and rollback validation is green with automatic as the project-scoped production authority.
+- SH22 watchdog and activity classification evidence is green across provider-neutral unit and host integration tests.
+- AS91 orphan recovery behavior is verified conservatively and exactly once; Docker-specific orphan descendant proof remains outstanding.
+- AS91 now has a real subprocess orphan-reaper proof; Docker-container-specific external non-interference remains separately gated.
+- Completed a broad test sweep: repaired real gateway concurrency and Pi transcript failures, removed redundant deferred/CLI tests, and made parallel host execution reliable on Windows.
+- AS91 now proves both real owned-child orphan recovery and real external-child non-interference in process-boundary tests.
+- The worker protocol now supports deterministic provider/tool progress activity categories for controlled fixtures while preserving heartbeat default.
+- Controlled provider fixtures can now exercise rapid pause/progress and deliberate post-progress stalls through the real worker protocol without synthetic frames.
+- Added the repository-owned controllable activity-rig fixture scaffold; descriptor schema integration is the remaining blocker before Docker dispatch.
+- Activity-rig is now registered through the standard provider adapter boundary and can run under disposable worker isolation with pause/stall controls.
+- SH22 now has a real worker integration test for authenticated provider/tool progress; Docker execution remains required for acceptance.
+- Integrated previously skipped consumer and gateway Docker coverage into the standard matrix, removed redundant wrappers, and repaired the newly exposed consumer pipeline failures.
+- Disposable workers now receive the controlled activity-rig fixture controls, enabling real progress/stall Docker acceptance without leaking arbitrary environment state.
+- SH22 now includes a real worker stall-after activity assertion; Docker execution is required to collect acceptance evidence.
+- Removed useless skipped and duplicate tests while retaining the synthetic activity-rig provider needed for deterministic gateway coverage. The full host suite now passes: 4782 passed, 307 skipped.
+- SH27 now proves diagnostic intervention precedes and survives a verified-stall terminal outcome under owner fencing.
+- AS107 now has an atomic relocation primitive and generic preservation regression; integration into archive/purge and provider resume remains outstanding.
+- AS107 relocation now has restart-safe journal recovery coverage; archive/purge wiring and provider resume scenarios remain.
+- AS107 relocation preserves resumable session lineage across all configured provider surfaces in a shared contract test.
+- AS91 now has Docker evidence for proven owned-child orphan cleanup and external-process non-interference.
+- AS107 now has a restart-readable ownership registry so relocated sessions remain protected from purge until explicit durable release.
+- AS107 relocation now publishes a durable request/session ownership fence atomically after move, so SH24 retention protects the relocated state.
+- AS107 relocation and retention tests are clean after final lint pass.
+- Repaired Docker-only gateway event attribution and fixed the active planning item that caused the clean Docker integrity test to fail.
+- Provider lifecycle tests now install each component once instead of repeating setup for every state transition; Goose is removed from this redundant matrix. The refactored Docker module passes all 8 tests.
+- Reduced duplicated provider setup and installation work while retaining per-provider install coverage and broad surface/MCP assertions. The optimized provider Docker suite now runs 99 passing tests with 9 explicit credential/fixture skips in about 3 minutes.
+- Completed the first migration safety step: YAML configuration now rejects duplicate keys, and the existing duplicate Agents error-resolution entries were corrected. Focused Foundation I/O validation passes.
+- Started the unified Agents configuration migration: the project now has a canonical agents.yaml repository contract with validation and CAS safety, and Context/Work workflow states are defined through Foundation rather than a parallel Agents state machine.
+- Fixed the gateway dispatch error path exposed by baseline static analysis; targeted gateway dispatch tests pass.
+- Continued Slice 2 toward one canonical agents.yaml authority and added validation and immutable prompt configuration coverage.
+- GPT-auto once again finds the matching ChatGPT project by the active AUDiaGentic project name when no project or conversation ID is already known, while retaining explicit-URL and resumed-session behavior.
+- Advanced the migration through capability resolution and the initial logical Context/Work gateway seams with focused tests.
+- Repaired the canonical cutover regressions and aligned gateway contracts, tests, and service routing with the migration model.
+- Started the MCP consolidation slice with separated config, runtime, delegation, and admin surfaces.
+- Automatic gateway startup now recovers a stale dead v2 service record and launches the current v3 gateway.
+- Finished the remaining Agents unit-test migration and repaired the Windows cross-process lock race; the full agents suite is green.
+- Cleaned the remaining lint findings in the Agents component.
+- GPT-auto now preserves the ChatGPT conversation URL after an ambiguous keep-alive submission so the session can be restored instead of losing the provider conversation.
+- Completed the remaining Context/Work gateway surface so embedded and standalone clients expose message, cancel, and output operations without duplicating output storage.
+- Added the first Work recovery projection and verified gateway crash/recovery, Work, and embedded/standalone parity tests.
+- Moved MCP agent submission onto the canonical GatewayClient path, removing one remaining runtime AgentTask dependency.
+- Removed the last stale AgentTask reference from the MCP submission surface.
+- Retired the legacy AgentTask API and established the agent-jobs migration checklist; canonical GatewayClient and configuration service boundaries are now used.
+- Repaired the test and documentation fallout from retiring AgentTask; the targeted migration suite is green again.
+- Cleaned stale legacy terminology from the canonical Agents and Gateway modules.
+- Started the agent-jobs trigger migration by adding deterministic, replay-safe event-to-Work submission.
+- Connected canonical Work submission to one gateway execution while preserving the rule that Work stores no provider output.
+- Work cancellation now controls the linked gateway execution first, then closes the Work lifecycle.
+- Moved Work approval/input waits onto the Foundation interaction store without creating a Work-local approval store.
+- BigCherry now carries the same canonical GPT-auto profile settings as the working AUDiaGentic project and explicitly identifies itself as BigCherry for project discovery.
+- Reviews and delegated work can now use child Work records linked to a parent Work instead of a separate job/review identity.
+- Review/delegation can now create linked child Work through the canonical runtime surface.
+- Canonical trigger evaluation now exists independently of the legacy event observer and is covered by focused tests.
+- Review orchestration now has a canonical deterministic child Work identity and replay behavior.
+- Parent cancellation now propagates through child Work and its linked gateway execution.
+- Routed child Work MCP operations through the public Work API boundary; focused architecture and lifecycle tests are green.
+- The canonical Context/Work runtime surface is now provisioned and tested, including trigger ingress and gateway reconciliation.
+- Added the canonical event-to-Work ingress so event triggers can submit deterministic, replay-safe Agent Work without creating legacy job records or owning gateway/provider lifecycle.
+- Validated and fixed event-ingress lifecycle cleanup; focused Agents Work tests and Ruff checks pass.
+- Moved event trigger configuration into the canonical Agents configuration and connected it to the new Work ingress.
+- Protocol adapters can now submit trigger events through the public Work API instead of importing internal ingress implementation details.
+- Trigger definitions are now fully manageable through the canonical Agents configuration API and MCP surface.
+- Review launches now use deterministic canonical child Work, with the old review launcher reduced to a compatibility adapter.
+- Added the public Work status, message, and cancellation API needed for the next agent_jobs control migration.
+- Deleted the legacy review launcher and routed review-tagged launches directly into deterministic canonical child Work.
+- Added a canonical Work control CLI for status and cancellation, leaving legacy job control isolated until its callers are migrated.
+- Canonical event ingress now records safe redacted failures without creating legacy job records.
+- Canonical event failure diagnostics are now available through the Agents runtime MCP surface without legacy agent_jobs access.
+- Canonical Work status and event diagnostics now have a runtime overview surface for migrating read-only callers.
+- Approval and input responses can now resume waiting Work through the canonical Agents runtime surface.
+- Packet submissions now have a canonical deterministic Work path, ready to replace the legacy packet runner.
+- Session bindings now have the AS88 composition identity fields needed for frozen continuation validation.
+- Gateway sessions now preserve and carry frozen AS88 composition identity across open, continuation, and explicit provider-session successor generations.
+- Read-only monitoring and session input now use canonical Work state instead of legacy agent-jobs persistence.
+- Agents MCP configuration and privileged administration are now exposed through separate role-specific surfaces.
+- ACP is now a thin tested projection over canonical Context and Work APIs.
+- A2A now projects canonical Context/Work state with bounded local delegation and no second task store.
+- Standard Agents export is now a deterministic projection that fails explicitly when canonical configuration is not faithfully portable.
+- Provider-session continuation now preserves and verifies composition identity across successor generations.
+- The core migration stop-gate issues are repaired and covered by targeted tests, including deterministic crash-window replay.
+- All migrated Work submission paths now converge on one Gateway admission authority.
+- The review blockers around lifecycle authority, replay-safe Work admission, trigger preservation, evidence checks, and Gateway ownership are repaired and covered by targeted tests.
+- Docker’s clean suite now runs with a safe parallelism cap, obsolete legacy CLI tests are removed, and the focused Docker image passes end to end.
+- The refactor now has explicit protection against legacy lifecycle coupling, and Docker parallel execution is tuned to avoid worker crashes and hangs.
+- Legacy job cancellation now hands lifecycle ownership to canonical Work for migrated records without changing unmigrated compatibility behavior.
+- Audited Agent/agent_jobs skips, removed one obsolete deferred-test compatibility stub, and verified the remaining skips are justified environment gates.
+- Optimized the Docker Pi Gateway smoke test by caching stable Python and local rig assets in the image while preserving real Pi installation and Gateway coverage.
+- Delegated review work completed the next lifecycle migration, removed a dead test skip, and reduced the Pi Docker smoke from repeated cold setup to a cached verified run.
+- Event observer trigger matches now create deterministic canonical Work through the Gateway, with no duplicate legacy job lifecycle ownership.
+- Fixed the Docker Pi RPC tap transcript failure by completing the duplex ACP permission exchange; real tool-call transcript coverage remains intact.
+- Migrated Context-backed prompt launches to canonical Agents Work/Gateway with deterministic replay identity and focused coverage.
+- Packet execution can now enter canonical Work/Gateway without creating a duplicate legacy job lifecycle, while existing packet stage semantics remain covered during migration.
+- Removed stale agent_jobs MCP/API/overview compatibility surfaces and the duplicate job-control CLI, leaving canonical Work control as the supported interface.
+- Migrated approval and session-input compatibility paths onto Foundation interactions and canonical Work, with legacy fallback preserved only when no Work ID exists.
+- Closed the approval replay crash window so persisted interactions cannot leave Work stuck outside its approval wait.
+- GPT-auto sessions now have exclusive browser tabs, and packet canonical-path validation has a complete registered error definition.
+- Reduced Docker validation time by safely running the clean suite and packaging checks in parallel while preserving serial provider-install isolation.
+- Prevented migrated job-control calls from maintaining a second legacy lifecycle alongside canonical Work.
+- Removed unreachable duplicate Agents MCP modules and verified the registered config/admin surfaces directly.
+- Docker test timeouts no longer leave orphaned provider containers running; the next run cleans up only containers owned by these test harnesses.
+- The clean Docker suite is green again, including gateway interrupted-event compatibility; Work remains the sole lifecycle owner.
+- Consolidated stage persistence path handling onto the canonical helper; remaining legacy persistence files are still required by compatibility callers.
+- Removed the session-input path's eager dependency on legacy job storage while preserving its compatibility fallback.
+- Completed the session-generation composition wiring: resume callers can now provide the Agent Definition, roles, execution-profile and capability digests required for exact continuation checks.
+- Isolated canonical packet Work admission from legacy packet persistence imports while retaining the compatibility runner.
+- Cleaned up the Agents MCP boundary: the catalog now cannot silently drift from actual tools, each tool has one owning surface, and stale module names are gone.
+- Agents runtime MCP Work controls now use the public canonical Work API, with a test guard preventing legacy agent-jobs dependencies from returning.
+- Approval handling now cuts over cleanly to Foundation interactions and canonical Work whenever a Work ID is supplied, while preserving legacy behavior only for jobs without Work.
+- Canonical Work now owns migrated approval, input, packet, and MCP control paths while legacy stores remain limited to no-Work compatibility callers.
+- The clean Docker validation remains green after the latest canonical Work and MCP refactors.
+- Isolated migrated Work control from eager legacy agent_jobs lifecycle imports while preserving compatibility behavior.
+- ACP and A2A retries now reuse the same canonical Work identity, with tests proving protocol ownership remains separate from legacy jobs.
+- Canonical prompt and approval Work paths no longer eagerly load legacy agent_jobs lifecycle code; no-Work compatibility remains covered.
+- Canonical Work paths no longer load legacy job persistence or lifecycle modules; the remaining legacy subsystem is isolated behind explicit compatibility callers.
+- Removed an obsolete duplicate event-to-job path so event triggers have one canonical Work entry point while preserving genuine no-Work compatibility.
+- A2A now refuses messages sent to closed Agent Contexts, preserving canonical Context/Work lifecycle ownership.
+- Removed the last obsolete event-job builder test while retaining valid no-Work compatibility coverage; focused jobs tests and Ruff pass.
+- Approval and session input handling now use canonical Work/ Foundation interactions without legacy job lifecycle or input-file fallbacks.
+- Prompt launches and packet submissions now use canonical Work only; obsolete local job/stage compatibility paths and tests were removed.
+- GPT-auto now has a Python CDP bridge foundation validated against the live Brave CDP browser for connection, target discovery, page creation, native window creation, same-window tab creation, navigation, snapshots, focus, atomic input, stop handling, and cleanup. No GPT prompt was sent during live validation.
+- Removed the legacy agent-jobs lifecycle and moved the remaining launch, approval, input, and control paths onto canonical Agents Work APIs.
+- The CDP layer now exposes both low-level browser APIs and GPT-auto composites, so session code can stay focused on state while the bridge owns window/page/DOM mechanics. Live Brave validation covers the composite readiness and verified-input path without sending a GPT request.
+- The GPT-auto CDP API is now a complete browser-facing surface with both primitives and composites, and the live Brave test validates the safe end-to-end lifecycle without sending a GPT request.
+- Removed the root test-script clutter and kept the repository's real tests in the tests/ hierarchy.
+- GPT-auto now has a code-friendly typed browser API. Provider code can work with PageRef and WindowBounds objects and validated methods instead of raw operation strings and dictionaries.
+- Separated the GPT-auto API layer from the CDP transport layer so cdp contains protocol mechanics and browser_api contains provider-facing typed operations.
+- Common browser patterns are now reusable through a typed generic BrowserApi, while GPT-auto keeps only ChatGPT-specific behavior in its own façade.
+- Moved trigger observation behind the canonical Agents Work surface while preserving a small compatibility import wrapper for existing callers.
+- Renamed the browser layers to descriptive controller names and removed vague api.py/API naming.
+- All browser controller and reference names now clearly identify their CDP implementation.
+- GPT-auto now uses the Python CDP bridge end to end; the legacy Puppeteer/Node runtime path and install metadata have been removed.
+- The agent management MCP can now remotely restart the managed gateway service, with optional forced shutdown and replacement status.
+- GPT-auto now clicks ChatGPT's send control when available, preventing false exact-prompt verification failures after successful composer insertion.
+- GPT-auto now synchronizes the inserted prompt with ChatGPT's controlled composer state before sending.
+- GPT-auto now uses one shared dedicated browser window across projects and sessions, with per-session tabs managed inside it.
+- GPT-auto now serializes all tab and window openings so concurrent sessions cannot race browser target creation.
+- The gateway now exposes a programmatic and management-MCP health check for service state, runtime identity, provider loading, and active work.
+- The shared GPT-auto window now opens with a live status page instead of a blank anchor tab.
+- GPT-auto no longer has implicit global single-concurrency; up to eight project/session turns can run concurrently while tab creation remains serialized.
+- Completed the trigger migration and repaired the Docker validation image and MCP catalog; canonical Work and packaging gates now pass.
+- The shared GPT-auto window now opens a polished operations dashboard showing runtime health, active sessions, jobs, and queue status.
+- Fixed the GPT-auto dashboard/window startup race and verified the gateway can create and complete a live GPT-auto session again.
+- Prevented recoverable GPT-auto turn failures from closing the browser tab and made session recovery state-driven and resumable.
+- GPT-auto now reports clearer page substates and evidence, avoids false completion from stale controls, and trims empty MCP response fields to reduce token overhead.
+- The GPT review is now triaged against the current tree: the major ownership, recovery, shutdown, close-control, rollback, and destructive-browser findings are addressed or contained. Remaining architectural work is the single machine-wide runtime config and resumed-session observer wiring.
+- Added a non-live gateway/GPT-auto/CDP simulation matrix with positive, negative, timeout, protocol-error, lifecycle, concurrency, and cleanup scenarios. All new simulation tests pass.
+- GPT-auto sessions now retain their tabs by default after close/stop so the gateway can resume the existing ChatGPT conversation. Tab closure remains configurable.
+- The deterministic ladder is reflected in the non-live GPT-auto and gateway suites; resume-critical tab retention is documented and tested.
+- The deterministic test ladder is now executable: accidental network/browser launches are rejected, scripted CDP/resume fixtures are available, and the focused GPT-auto/gateway ladder passes.
+- Gateway failures now retain actionable validation/configuration detail with configured resolution guidance instead of only reporting an opaque unexpected error.
+- GPT-auto now preserves and safely resumes the same conversation through cancellation, timeout, CDP disruption, session resume, and gateway teardown without double submission, stale cancellation, manual-window tab capture, or premature next-turn admission.
+- GPT-auto now reuses retained conversation tabs after restart, proves a chat is idle before accepting another prompt, lazily recovers cancelled sessions, reacquires active turns by stable CDP target, and reports actionable post-submit observation failures instead of an opaque generic error.
+- GPT-auto now preserves and reuses an ambiguously submitted first conversation during lazy recovery instead of abandoning it for a fresh project tab.
+- GPT-auto submission no longer waits on a page promise that can be collected during ChatGPT navigation, reducing false ambiguous-submit failures while preserving exactly-once behavior.
+- Gateway resume failures now explain the actual provider rejection cause, including retained browser/session diagnostics, without emitting null placeholders.
+- GPT-auto can now correlate each prompt with its provider message ID across resume, while preventing cancellation races, stale handles, duplicate tabs, premature completion, and opaque observation failures.
+- GPT-auto can now recover the active tab by prompt identity when duplicate conversation tabs diverge, without resubmitting the request.
+- GPT-auto resume now refuses to admit a new prompt while a previously accepted prompt is unresolved, and uses persisted prompt/assistant IDs to recover the exact turn across restart and duplicate tabs.
+- GPT-auto now chooses the active retained conversation tab before sending, rather than relying on arbitrary CDP target order when duplicate tabs exist.
+- GPT-auto now reports why an outcome could not be proven while preserving safe no-resubmit behavior and useful bounded DOM/session evidence for recovery.
+- GPT-auto will not accept another prompt after an uncertain send; it keeps the session recoverable and explains whether the browser action or provider completion could not be proven.
+- Prevent planning ledger links from overwriting older entries or creating duplicate ledger sections during replayed or concurrent ledger-event delivery.
+- GPT-auto can recover a prompt that landed during a resumed session even when proof timed out, without resubmitting or confusing an older identical prompt.
+- GPT-auto gateway errors now say which proof, policy, or persistence boundary failed instead of exposing only a generic EXT-GPTAUTO code.
+- GPT-auto resume no longer mistakes ChatGPT's static completed-message animation class for active generation, so retained sessions can become READY when the composer is actually idle.
+- GPT-auto can resume a durable project/chat session and recover a specific agent-task prompt by message identity or unique prompt text without resubmitting; unresolved or ambiguous turns remain recoverable with meaningful state.
+- GPT-auto can resume a durable project/chat session and recover a specific agent-task prompt by message identity or unique prompt text without resubmitting; unresolved or ambiguous turns remain recoverable with meaningful state.
+- Ledger sync no longer loses release history when a no-op or stale manifest is followed by a new change.
+- GPT-auto can resume a durable project/chat session and recover a specific agent-task prompt by message identity or unique prompt text without resubmitting; unresolved or ambiguous turns remain recoverable with meaningful state.
+- Ledger sync no longer replaces release history after a no-op or stale manifest, and malformed ledgers now fail with a configured repair explanation.
+- Prevent ledger links from being lost during state transitions or missed async delivery, while preserving provenance and removing duplicate legacy event entries.
+- Ensure replayed ledger events complete legacy section cleanup and cannot race with plan-item deletion.
+- Same-session continuation now reattaches the existing provider conversation after a gateway restart instead of failing with RES-AGW-003; global lifetime settings cannot accidentally shorten a live session.
+- Cancelling a running GPT-auto task now targets its exact gateway session and provider turn, improving stop-button delivery and preventing a cancelled response from remaining running.
+- GPT-auto now recovers when an operator closes a tab or a CDP handle is recycled, instead of failing the next request with an opaque closed-page error.
+- GPT-auto resume now tolerates duplicate tab-loss signals and can reclaim a conversation from a failed/closed stale owner instead of reporting that the conversation is already owned.
+- Unexpected GPT-auto gateway failures now retain a registered, actionable error instead of being replaced by an unknown-error configuration failure.
+- GPT-auto can now recover a completed turn by prompt text when no prompt ID exists, and unresolved errors explain the exact observed state instead of only reporting a generic reconciliation failure.
+- GPT-auto and gateway failures now explain the exact recovery edge and preserve recoverable sessions for later prompts or explicit resume instead of leaving users with a generic inactive-session error.
+- Prevented completed GPT-auto sessions from being misclassified as unresolved and made prompt submission resilient to harmless composer read-back differences without creating duplicate requests. Added regression coverage.
+- Fixed false-positive GPT-auto submissions where text was entered but Send was not confirmed. Requests now remain safely recoverable rather than being reported as submitted or retried unsafely.
+- Prevent GPT-auto from reporting a false composer mismatch after ChatGPT accepted a prompt; preserve actionable diagnostics and correct resume state.
+- GPT-auto can now use one shared gateway while running turns concurrently across projects, with independently configurable global, per-project, and per-session limits (each optionally unlimited). Same-project/session work remains serialized and diagnostics explain invalid limits.
+- Hardened shared-gateway concurrency so global/project/session limits cannot be bypassed by provider source declarations, profile reloads, or session turn races; invalid limits now fail visibly and cleanly.
+- Hardened shared gateway accounting and GPT-auto recovery so duplicate cleanup cannot free another live lease, continuation turns stay on the session's physical provider source, and a first browser Send is durably marked as potentially applied before the provider conversation ID exists.
+- Improved restart diagnostics for a first GPT-auto turn whose browser Send may have succeeded before a conversation ID was observed; the gateway now reports the ambiguity and the safe inspection/resume-or-resubmit action.
+- Made gateway status explicit so a quiet GPT turn cannot be mistaken for a stalled turn or treated as safe to interrupt; added live-state regression tests.
+- Added the v4 convergence runsheet and actionable plan items for inventory, destructive legacy cutover, immutable canonical projections, agent_jobs removal, and the pre-CapabilityId equivalence audit. Existing error, capability, and admission plans now carry the correct dependencies and ownership boundaries.
+- The v4 baseline inventory is complete. It identifies the remaining legacy APIs, mutable canonical models, duplicated capability/session seams, and the exact AS72/AS84/AS85/SU02-SU05 ownership boundaries before implementation.
+- Phase 0 inventory is complete and formally closed. The next executable gate is AS72 outcome/error convergence before destructive model cutover.
+- Provider/surface failures are now more explicit: supported, unsupported, unproven, and unavailable are distinct, and malformed provider configuration cannot silently disappear during execution. Diagnostic tools can still inspect the valid subset.
+- GPT-auto resume no longer binds a recycled browser target to the wrong ChatGPT conversation. It validates the durable provider session identity before reusing the preferred tab and has a regression test.
+- GPT-auto checkpointing no longer crashes at session startup because of stale snapshot field names; durable unresolved-turn evidence now records the real user and assistant counts.
+- Expose unresolved GPT-auto turns accurately in gateway status even when session and request persistence update at different times.
+- Provider surface discovery now reports broken probes and adapter resolution failures explicitly as unavailable, with actionable reasons and no false supported result.
+- GPT-auto gateway failures now retain safe reconciliation reasons and next-step evidence instead of collapsing to a generic error.
+- Fixed a bug where resuming a GPT-auto conversation could fail outright if the saved session metadata was missing a chat URL, even when the browser tab or conversation was still recoverable.
+- Fixed a follow-on bug from the previous resume fix: resuming a GPT-auto session with no saved chat URL and no open browser tab could silently leave an orphaned blank browser tab behind before failing.
+- Found that GPT-auto review turns using the @github GitHub-connector tool can silently stall in ChatGPT's own UI with no DOM signal of success or failure; the adapter already handles this safely (fails with diagnostics, retains the tab, never auto-resubmits) but this is a real operational risk worth documenting for anyone relying on @github-augmented automated reviews.
+- Found two more real GPT-auto stall patterns during live testing (one project stuck generating indefinitely on a trivial prompt, another producing multiple internal assistant messages per turn that may confuse response-matching) -- the adapter handled both safely with no stuck state or false completion, but paused further automated live testing since repeated real hour-long stalls suggest an account/project-level issue worth a manual look rather than more automated retries.
+- Found that the gateway leaves abandoned requests and sessions sitting in non-terminal states (running/active) indefinitely once their owning process exits without a clean close -- 5 requests cancelled 5-10 days ago never actually reconciled to a terminal state, plus 6 more sessions marked active despite being long-dead. This needs a proper sweep/reconciliation fix, not a one-off patch.
+- Corrected an earlier misdiagnosis: two of three real GPT-auto timeouts tonight were not stalls. One was genuinely still generating past the 1-hour limit (a config-tuning gap for heavy reviews). The other is a real, now-precisely-located bug: ChatGPT's own composer button can get stuck showing 'stop' state after a response is actually done, and the adapter currently has no way to override that and declare completion even when the text has been stable a while -- proposed fix identified but not yet applied pending review since it touches the core completion-safety gate.
+- Fixed a real bug where resuming a GPT-auto conversation could hang for 30 seconds if the shared browser connection died at exactly the wrong moment during resume, instead of recovering promptly. Closes out the multi-project concurrency isolation work with all three risky timing windows now tested and verified safe.
+- You can now target the dedicated gpt-t1/gpt-t2 test ChatGPT projects through normal agent submission (gpt-auto-t1-agent/gpt-auto-t2-agent) for live GP05 concurrency testing, without touching the real gpt-auto review project. Also fixed a bug where opening a browser DevTools inspector window could silently break ChatGPT automation for every project sharing that browser.
+- Fixed a bug where gpt-auto could hang indefinitely (or fail to recover an interrupted conversation) whenever ChatGPT's own stop/submit button got stuck showing 'stop' after a response was actually done -- that button is no longer trusted alone; text stability plus another corroborating signal is what proves a turn is complete now.
+- Fixed a bug where gpt-auto could falsely report a long prompt submission as failed/ambiguous even though it had genuinely succeeded and was actively generating a response -- the timeout is now based on real activity (is anything still happening) instead of a fixed clock from when the check started.
+- Extended the earlier gpt-auto activity-lease fix to also cover response-completion detection, closing a related bug where a flapping ChatGPT UI widget could have indefinitely delayed the stall-timeout from ever firing even after the completion-detection side was already fixed.
+- Added live stress tests for the GPT-auto ChatGPT integration and fixed a gap where ChatGPT's own rate-limit warning could be mistaken for a failed request.
+- Plan items can now have notes appended instead of overwritten, so update history is no longer lost by accident.
+- Closed out two finished GPT-auto work items and split the remaining open findings into individually trackable items.
+- Fixed: closing an idle ChatGPT tab for a gpt-auto session no longer forces it to immediately reopen -- it now only auto-recovers eagerly when a turn is actually in progress.
+- Restarted the ChatGPT automation gateway to roll out fixes, and confirmed live that closing an idle chat tab no longer forces it to reopen, and that submitting prompts back-to-back no longer intermittently fails.
+- Added a unified, correctly-ordered view of ChatGPT conversation messages that the automation adapter uses internally -- lays the groundwork for correctly handling cases where a human and the automation both post into the same chat.
+- ChatGPT automation config files no longer need to duplicate the full settings schema per project -- shared defaults are now inherited automatically, reducing the risk of one project's config drifting out of sync with another.
+- ChatGPT automation config files that predate a recent schema update no longer break the whole automation service -- they now upgrade automatically with sensible defaults.
+- Fixed the root cause of ChatGPT automation intermittently failing to detect that a prompt was received or a response was complete -- code snippets, links, and bold text in prompts were breaking the match, now handled correctly.
+- Fixed a real correctness bug where the ChatGPT automation could return the wrong response if another message landed in the same conversation while it was waiting -- it now always returns the answer to its own question, never a later unrelated one.
+- Fixed a race condition where a background status-refresh task could interfere with other ChatGPT automation commands -- a real improvement, though the specific hang it was hoped to fix is still under investigation.
+- Fixed a bug introduced earlier tonight where ChatGPT automation could silently ignore a project's configured URL and fall back to searching by name instead -- found and fixed the same night it was introduced.
+- Fixed another real gap in ChatGPT prompt-matching: code blocks with a language tag (like ```python) were being compared incorrectly because the renderer shows that tag as visible text. Also added a new diagnostic signal for detecting when ChatGPT has finished responding.
+- Ruled out one possible cause of a rare data-loss bug in the automation gateway using a safe, isolated reproduction technique, and got a strong new lead on a separate CDP connection-hang bug.
+- Fixed a bug where gpt-auto could never detect that ChatGPT had finished responding, because ChatGPT changed its page markup and silently broke one of the two signals gpt-auto required together to confirm completion.
+- Made gpt-auto's completion-detection logic resilient to future ChatGPT UI changes (it can now have multiple independent ways to confirm a response is done, not just one), and eliminated duplicated config across the three ChatGPT project configs so a future fix only needs to change one file.
+- Confirmed live against the real ChatGPT account that the fix for the intermittent 30-second automation hang is working -- also found and logged a new, separate issue where submitting a second message right after a very long response can fail.
+- Fixed a second variant of the same bug found earlier tonight: gpt-auto could get permanently stuck waiting for a response to finish when ChatGPT renders it in "canvas" mode, since that mode shows different completion buttons than the ones gpt-auto was checking for.
+- Fixed a bug where gpt-auto could type a message into the wrong text box on the page whenever a prior response used ChatGPT's "canvas" writing mode, caught live when the user noticed the wrong box was being typed into.
+- Fixed the reported non-GPT regressions and validated the unit, integration, and e2e gates; GPT-related planning records remain intentionally untouched.
+- Fixed every real bug an independent code review found in tonight's ChatGPT-automation fixes: a rare connection race that could send a doomed request, a canvas-completion detection gap that could report a response as finished before it actually was, and a weaker recovery path that had the same gap with no safety margin at all.
+- Restored a ChatGPT completion signal that was mistakenly thought to be gone -- it turns out to only appear for certain response types, and was needed to detect completion on simple short answers where the usual signals were slow to appear.
+- Made gpt-auto's completion detection more robust: it now uses ChatGPT's own more specific labeling where available, instead of relying entirely on walking a fixed number of levels up the page structure.
+- Fixed gpt-auto polling every single browser tab (not just its own ChatGPT tabs) on every conversation poll, closed a completion-detection false-positive gap in the copy-button selector, and fixed a timing bug where a flickering stop-button could delay completion detection indefinitely.
+- Fixed a bug where a brief network hiccup while checking a browser tab could make gpt-auto think the tab had been closed, even though it hadn't.
+- Fixed a bug where large code-heavy prompts (like full diffs) to the ChatGPT reviewer could be falsely reported as failed, even when ChatGPT had already answered correctly.
+- Fixed a second case of gpt-auto requests getting stuck forever even though ChatGPT had already answered correctly -- this one specifically for prompts containing code blocks.
+- Gateway restarts no longer permanently break other agents' in-progress conversations -- a session closed by a restart now automatically reconnects on its next message instead of requiring a separate manual recovery step.
+- Added comprehensive implementation plan for CC47 that resolves three blocker issues: code-to-message cardinality, Phase 1 message requirement, and bootstrap ordering
+- Repaired the incomplete active planning records and restored the full planning-integrity test module to green.
+- Full detailed implementation plan for CC47 received from gpt-auto-agent
+- Saved CC47 implementation plan document
+- Updated CC47 plan with template support and general bootstrap error domain
+- Gateway startup now scans gpt-auto project configs for drift: an invalid shared machine-level config blocks startup; an invalid project config blocks only that project. Registry is advisory and never affects availability.
+- Closed the two remaining gpt-auto planning umbrellas (GP04, GP06) — all their work is now owned by focused child items, with the client-cache/replay fix verified complete.
+- Generated CC45 implementation plan with advisory-only propagation and parent_ids hierarchy model
+- GP14 assessed by an external gpt-auto reviewer against the AS/A2A/ACP targets; plan revised so GP14 coordinates cleanup while AS92/AS102/AS94 own schemas, redaction, and live-read.
+- Saved full CC45 implementation plan with all code blocks and architecture decisions
+- gpt-auto now logs which evidence (dom signals, policy matches, text length) drove each response-completion decision, so a future truncated-output recurrence can be diagnosed from the log instead of requiring a live browser catch.
+- The gpt-auto operations dashboard tab now groups sessions by real AUDiaGentic project with live per-project status counts, richer per-session detail, and honest state metrics instead of a flat list with a fake queued counter.
+- GP14 updated with the envelope decision: gateway MCP returns the canonical response as a `result` section plus a `metadata` sidecar, so harness/deeper metadata never extends the canonical schema. AS92/AS102 updated to match.
+- The gpt AS92 implementation design was adversarially reviewed; its architecture is approved but its schema draft and rejected-timestamp expectation were corrected (8 findings, now in AS92).
+- Fixed several gpt-auto reliability issues: the CLI no longer crashes when the optional browser-automation dependency isn't installed, the shared browser no longer relaunches unnecessarily when idle, gateway calls now retry through brief restarts, and a bug that could make a completed ChatGPT response time out after an hour is fixed. Also improved diagnostic logging and the status dashboard's clarity.
+- Gateway dashboard is now served over HTTP with complete redacted status data, while GPT-auto browser automation no longer owns or renders a dashboard.
+- GPT-auto now reuses its existing dashboard tab as a link to the gateway HTTP dashboard instead of rendering status through the browser automation layer.
+- GPT startup no longer migrates legacy dashboard tabs; it opens or reuses only the gateway dashboard tab.
+- Gateway dashboard now groups requests by session, filters by state, hides closed sessions by default, and sorts newest first.
+- Empty failed or stale sessions no longer clutter the dashboard by default; they remain available through a toggle.
+- Prevent concurrent planning MCP updates from silently overwriting item or review content.
+- Fixed a gateway bug where failed/completed requests kept showing a stale 'active' watchdog status left over from when they were running.
+- Fixed the gateway dashboard showing wrong/blank session details and garbled queue info, and brought back visual status indicators.
+- Verify planning writes remain safe across both threads and independent MCP processes.
+- The dashboard now explains watchdog states clearly and presents requests only within sessions; legacy sessionless history was purged.
+- Enabled the Rig Tester gateway agent against the local embedded rig and verified both Rig Tester and Pi agent requests complete successfully through the gateway.
+- The gateway dashboard now shows recent tasks and sessions by a configurable time window, while live work stays visible. Use AUDIAGENTIC_GATEWAY_DASHBOARD_RECENT_SECONDS for the gateway default or change the Recent window control in the dashboard.
+- Pi Rig Agent now runs through Brutus at 10.10.100.10 using qwen3.6-27b-0.
+- Cleaned stale agent config duplicates: agents.yaml is now the sole project authoring document, while generated provider registries remain derived runtime state.
+- Codex now has selectable Luna low/medium/high/xhigh/max ACP agents with model and effort passed explicitly; GPT-auto waits slightly longer after injection before clicking Send to reduce the typed-but-not-submitted failure.
+- Codex ACP now works through the managed gateway with selectable Luna effort levels, and GPT-auto waits briefly after prompt injection so the submit control can settle. A live gateway request completed successfully and its test session was closed.
+- Added a new Pi agent for Brutus qwen3.6-27b-0 without duplicating the existing profile or model source. A live gateway request completed successfully and the test session was closed.
+- The gateway now uses a global profile registry and global Brutus model definitions. A live dev-high-agent request admitted under global qwen-high and completed successfully on qwen3.6-27b12.
+- Copied the complete agent metadata into a machine-global agents.yaml catalog and verified it matches the project definitions exactly. The running gateway was not restarted.
+- Removed four unused gateway profiles and their stale execution-profile definitions. All remaining profiles are bound to named agents, and the live gateway registry was reloaded successfully without restarting.
+- Implemented GP45 global gateway catalog authority and fixed the Windows output wrapper so completed GPT/gateway responses cannot fail while printing.
+- Closed the three GP45 authority gaps identified by review: missing global config now fails closed, hosted mode cannot silently become embedded, and dispatch uses the immutable gateway profile snapshot admitted for the request.
+- Implemented the AG19 prerequisite and AG16 prompt-template seam with default byte compatibility and an alternate review profile; pushed as 64455bda2.
+- Completed the gateway service wiring for prompt-profile propagation.
+- Hardened hosted agent admission and prompt execution so agent identity is authoritative, prompt templates are immutable and auditable, and legacy prompt bytes remain compatible.
+- All custom provider adapters now honor the gateway-admitted prompt template and the agent layer uses the sanctioned provider boundary.
+- Large terminal responses are now durable and retrievable without truncating status: completion persists the exact response first, status returns a bounded preview and artifact metadata, and full content is available through the authenticated gateway response operation.
+- Finished prompt templating across the custom providers without changing their existing provider-specific behavior.
+- Fix explicit gateway session close so unresolved GPT recovery cannot reopen tabs or hold queue locks.
+- Prompt profiles and their generic templates are now global configuration, editable beside the global agent definitions, with no project-specific branding in the execution text.
+- Removed stale GPT test profile aliases from the global gateway registry to eliminate duplicate agent configuration.
+- Tasks now require a real prompt body; no-body templates and fallback execution paths are removed, while global agent catalog edits preserve prompt-profile definitions.
+- AG20 now has a single gateway authority: global agents.yaml. The gateway compiles immutable admission profiles from it and no longer uses gateway-profiles.yaml.
+- Enabled components can now expose safe facts to prompt templates, including project, Git branch/commit, and session model details, without hard-coding those capabilities into the gateway.
+- Corrected component context ownership so runtime, not Foundation, invokes component hooks before the gateway freezes prompt context.
+- Stopped gateway prompt-context Git checks from flashing Windows console windows.
+- Gateway prompt context no longer launches git.exe while collecting repository and branch metadata.
+- GPT agents can no longer open or resume a generic ChatGPT conversation outside their configured Project.
+- Fixed GPT session startup regression: test chats now open in their configured ChatGPT Project instead of timing out behind the dashboard window.
+- GPT Test 2 now refuses to send outside its configured ChatGPT Project and correctly injects the agent’s rendered project/repository/branch prompt.
+- Prompt templates now receive the correct AUDiaGentic project name and its GitHub repository URL.
+- Global gateway agents can now render project and repository prompt variables in external projects instead of rejecting submissions.
+- Project management tools remain available even when a component has stale marker data or a status hook fails; the affected component now reports its own diagnostic.
+- GPT-auto now treats active generation as strong temporary contradictory evidence, reducing premature truncated completions while retaining recovery from a sticky Stop control; terminal traces identify lengths and digests for live artifact comparison.
+- Gateway status now records real provider and owner activity separately, terminal response artifact digests match physical bytes, and callers can retrieve the complete response through the gateway API without exposing paths.
+- GPT-auto live activity is now capability-aware, with regression tests proving exact artifact bytes and complete response retrieval.
+- Existing gateway records now upgrade safely to the explicit v7 activity contract without losing historical v5 compatibility.
+- Large gateway responses no longer risk MCP tool-result truncation: the exact response is already on disk, and the MCP tool returns a compact project-relative artifact reference when the configured inline byte limit is exceeded.
+- GPT-auto now treats verified current-turn tool/app work as real activity: Called tool and Talked to App changes renew the gateway lease and response-progress clock even when the assistant text and busy widget do not change.
+- Stopped treating ChatGPT's 'last node'/'only node' DOM markers as end-of-response signals. They can appear while more output is still being generated, so they are now diagnostics-only and cannot prematurely terminate a GPT response.
+- Stopped sending bounded response previews through MCP status polling. The full response is now delivered inline only below the configurable 4 KiB test budget, or as a project-relative artifact reference with integrity metadata above it.
+- GPT-auto monitoring now recognizes the activity labels visible in ChatGPT and continues renewing activity while a tool row remains active, even when its count does not change.
+- GPT sessions now reuse the gateway's managed dashboard window across gateway restarts; only the first session creates an anchor window, and dashboard URL matching survives trailing slashes and marker query parameters.
+- The gateway can now recover the dashboard anchor's actual window id through CDP, so tab reuse and managed-window ownership continue to work after reconnects.
+- Fixed the live GPT browser setup failure caused by an invalid injected snapshot script; the snapshot now parses cleanly and its activity tests pass.
+- Unknown gateway agent submissions now fail with the documented RES-AGD-001 error instead of leaking a raw KeyError.
+- Project names now resolve consistently for templates and GPT Auto. An explicitly supplied workspace name wins, otherwise project.yaml or the folder name is used; new scaffolds no longer claim the placeholder My Project identity.
+- Older sessions remain resumable even when their opening request metadata is unavailable.
+- The live gateway now accepts the workspace name end to end; the t2 GPT test opened the correct session context and completed successfully.
+- GPT session reuse no longer depends on stale gateway fingerprints, while provider-builder contracts fail early and clearly if project_name is not wired.
+- Persistent GPT resume now remains independent of gateway fingerprints without weakening namespace or provider-conversation identity checks.
+- Persistent GPT sessions can now continue after a gateway restart without being rejected by the old gateway execution fingerprint guard; strict session surfaces still require an exact context match.
+- Persistent GPT resume no longer fails while recording message identity; resumed generations preserve the source conversation identity safely.
+- Gateway responses up to 32 KiB can now be returned inline; larger responses still use the full persisted artifact reference.
+- Removed the stale project-local agent catalog. Hosted agent definitions, prompts, roles, profiles, and triggers now resolve from the global catalog only; component response policy remains packaged/global at 32 KiB.
+- Closed completed agent/configuration work and superseded the obsolete sparse-overlay proposal after GPT review; verified project-scoped GPT target guards.
+- Added and tested the canonical provider-neutral status schema so agent status cannot silently grow provider-specific fields.
+- Completed the GPT-requested status-schema test hardening: vocabulary parity and nested decision fields are now enforced in the canonical contracts suite.
+- Status now reports rejected requests explicitly and uses the shared UTC timestamp helper, with deterministic regression coverage.
+- Updated the status contract documentation to match explicit rejected terminal behavior.
+- Unified gateway request status across submit, get, wait, and list, with tests proving the same canonical status is returned.
+- GPT verified the unified request-status projection and found no required corrections.
+- gpt-auto no longer routes every request back to the AUDiaGentic ChatGPT project; the base profile now discovers the caller's admitted project, while dedicated test aliases stay pinned.
+- Gateway/provider failures now retain bounded evidence and semantic recovery state, expose safe diagnostics and recovery controls, and persistent sessions no longer consume a separate session-capacity limit.
+- The post-review live test now leaves a bounded, recoverable diagnostic instead of claiming a GPT failure or fabricated completion; the remaining validation requires refreshing the gateway service schema.
+- Gateway failures now preserve side-effect evidence and attempt a safe one-time browser refresh before giving up, while recovery updates cannot overwrite newer observations.
+- Recovery actions now update atomically, cancellation no longer hides ambiguous provider side effects, and stronger evidence can resolve an earlier ambiguity without advertising unsupported controls.
+- All gateway cancellation writers now preserve unresolved provider-side effects instead of overwriting them.
+- Gateway restart and persistent multi-turn GPT validation now pass; both turns completed in the same session without replacement.
+- Fixed the gateway-wide VAL-GPTAUTO-001 caused by metadata-only project provider files; projects now inherit packaged gpt-auto defaults correctly.
+- Fixed the remaining VAL-GPTAUTO-001 path caused by the injected enabled metadata flag; direct bigcherry gateway execution now completes successfully.
+- Added regression tests proving metadata-only gpt-auto configs work without weakening strict validation of real runtime settings.
+- Gateway status now has an explicit slim V4 contract with stable request-id, lifecycle, activity, and outcome fields; diagnostics and full responses remain separate, and inactive axes stay explicit null without losing contract shape.
+- Agent configuration now has one public prompt authority: agent prompt definitions. Legacy prompt profiles no longer get republished, and provider adapters stop reading mutable prompt-template configuration.
+- Prompt definitions are now the single configured prompt authority; legacy prompt-profile collections are compatibility-only and no longer drive dispatch. Gateway diagnostic/status plumbing and the associated tests remain coherent after conflict resolution.
+- Removed the stale prompt-profile catalog and template loader. Agents now expose one prompt authority through prompt_id; provider adapters retain only internal framing.
+- Gateway status now has an exact negotiated four-field V4 contract, diagnostics are bounded and redacted behind agent_task_diagnostics, and full responses no longer expose artifact paths.
+- Gateway diagnostics now consistently use the bounded redacted projection instead of being silently overridden by a stale duplicate implementation.
+- Fixed Luna/Codex gateway prompts being truncated before execution. Codex now receives the complete admitted prompt through stdin, with model and reasoning-effort selection preserved.
+- Slim V4 status now reports whether verified activity has progressed, so clients can distinguish an active request from a silent/stale one without fetching diagnostics.
+- GPT activity is now treated as active work only when it carries fenced, meaningful progress such as thinking, search, tool, or response progression. A quiet lease is diagnostic/reconciliation evidence rather than an immediate timeout, and resumed activity clears the stale disposition while preserving history.
+- Project-local agent configuration can no longer shadow or create an Agents catalog; the global catalog is now the only runtime authority.
+- Migrated agent configuration to one strict global v2 catalog and removed the legacy gateway/profile authorities and fallback paths.
+- Finished the cleanup pass and removed duplicate/unused gateway code found by the full agents test and lint sweep.
+- Closed the GPT reviewer’s pre-restart gates: hosted admission now requires the shared global registry, migration cannot overwrite an existing global catalog, and the packaged schema is tested against the runtime shape.
+- Completed the validation pass: full agents tests and lint now pass, and the registry fail-closed behavior is correctly separated between hosted and isolated execution.
+- Removed the unused legacy V3 status contract. Polling is now one compact V4 shape with no duplicate diagnostics or previews, and retired version arguments fail closed.
+- Updated the plans so they no longer describe a V3 migration or deprecation window.
+- Fixed the deleted ChatGPT chat loop: a missing conversation now closes its recovery tab and fails clearly without reopening the project tab.
+- The gateway now freezes the admitted prompt for restart-safe dispatch, and SH22 records the automatic CDP stale-transport reconcile/resume fix.
+- Added restart/recovery coverage proving the gateway reuses the frozen admitted prompt instead of rereading mutable configuration.
+- Execution profiles are now immutable snapshots, preventing parameter or default-selection drift during admission and dispatch.
+- Prompt snapshots now preserve the exact UTF-8 bytes admitted to the provider, including multiline and Unicode prompts.
+- A stale GPT CDP activity lease can now trigger safe transport revalidation and reconciliation without replaying the prompt.
+- Agent definitions are now immutable admission-safe values rather than mutable shared dictionaries/lists.
+- Added a regression test for automatic stale-CDP recovery: the watchdog revalidates the live transport and records reconciliation without resubmitting the request.
+- Gateway restarted successfully and a fresh GPT test completed with the exact expected response.
+- Updated gateway MCP metadata so agent_task_status no longer advertises the unsupported response_version argument.
+- Removed JSON nulls from gateway task status: clients now receive only applicable status fields, with no null-valued placeholders.
+- Reloaded the gateway with the null-free status contract; live status now omits all null-valued fields.
+- Fixed the GPT-auto activity regression that let watchdog leases expire while ChatGPT was visibly using tools. Tool rows are now detected during early streaming, with regression coverage.
+- Fixed the dashboard so active requests are shown with their real running state and activity sequence instead of disappearing while the queue/session still reports work.
+- PI requests were only showing owner heartbeats and no model activity. The gateway now enables the existing Pi RPC/ACP activity tap so future PI requests can report progress.
+- One-shot Codex/Luna requests now report live provider activity incrementally in gateway status while they work, with no response text or filesystem path exposed. Live Luna-high validation showed activity_seq advancing from 31 to over 9,000 during a six-minute review before successful completion.
+- Fixed a race where a final Codex progress event could arrive after the terminal result and incorrectly fail an otherwise successful Luna request. Terminal ordering is now deterministic.
+- Validated the terminal-order fix with a live Luna-medium Codex request: activity advanced to 1,987 while running and the request completed successfully with LUNA_MEDIUM_ACTIVITY_OK.
+- The activity monitor now stays live without flooding status writes: a live Luna-medium request advanced activity sequence 1 → 6 over 35 seconds and completed successfully with LUNA_MEDIUM_COALESCED_OK.
+- Closed the remaining prompt-admission identity gap and fixed provider prompt parity while preserving custom adapter behavior.
+- Added regression coverage for immutable prompt admission and fail-closed template errors.
+- Removed the duplicate provider prompt-profile authority while preserving adapter-specific delivery behavior.
+- Started legacy authority cleanup by moving Agents status reporting to the canonical global catalog.
+- Callers can no longer select a separate prompt profile; the gateway derives prompt semantics solely from the agent definition.
+- Moved active configuration callers onto the canonical global catalog management boundary as the first SU02 migration slice.
+- Added fingerprint regression coverage for prompt-definition changes.
+- Added retry/session regression coverage and removed tests’ dependency on the legacy profile resolver seam.
+- Updated tests and prompt launch to use the canonical global catalog APIs.
+- Removed the stale role, agent-definition, and execution-profile API modules. All callers now use the canonical global Agents catalog management boundary, with agents/providers tests passing.
+- AG16 prompt authority, SU02 legacy API removal, and SU03 immutable canonical projections are complete and validated.
+- SU04 is now explicitly staged: remaining agent_jobs prompt, trigger, execution, approval, and event responsibilities have named canonical owners and a zero-reference deletion gate.
+- SU04 is active with its dependencies cleared; the remaining work is the cross-boundary removal of agent_jobs and obsolete trigger authority.
+- The active architecture plan set is reduced to the items that still add capability: AS72, AS84, AS85, AS94, AS102, and SU04. Redundant historical plans are now explicitly superseded.
+- The session plan set is smaller and clearer: AS86 owns the live output relay, AS94 owns the read façade, and AS102 owns sanitization; duplicate AS87 and completed AS98 work are superseded.
+- Reconciled the remaining plans with GPT and narrowed each to an actionable, non-duplicating target state.
+- Pi-backed agents now use their Pi ACP session route for one-shot work, returning durable output and emitting reliable activity without source-sequence collisions.
+- Fixed the agent MCP entry points that were exiting before initialization, so Pi agents can now connect to their runtime, configuration, and admin tools.
+- Pi mid/high agents now return their durable final output and show real observed activity while they run; the fix keeps the normal Pi one-shot route instead of routing jobs through a different session system.
+- Hardened output validation and regression coverage after GPT review; malformed timestamps, final markers, and oversized IDs now fail with precise catalogue codes.
+- Corrected the output-contract fixture regression and added the missing final-marker negative test.
+- Closed the AS72 code-validation review after GPT approval and passing tests.
+- Reconciled AS72 with GPT: the output contract is approved, but the broader exact error-identity migration remains open.
+- The gateway dashboard now displays completed, failed, and active one-shot requests instead of appearing empty when no persistent sessions exist.
+- Every gateway task now has a durable session record without forcing the Pi/Qwen worker path into costly provider sessions.
+- Worker sessions now close cleanly even when a task ends before it starts.
+- Follow-up turns now preserve their existing agent session instead of being rejected or closing it.
+- Fix Pi persistent sessions so they use the requested Brutus model rather than silently falling back to Pi's default model.
+- Harden Pi model selection so a config edit after admission cannot change the model a persistent session uses.
+- Stop the gateway from failing healthy active agent work because an arbitrary timeout elapsed.
+- Gateway status and dashboard rows now tell you the latest kind of verified work—such as thinking, web searching, tool progress, or response progress—without adding diagnostic bulk or raw provider data.
+- Idle agent sessions now release their live browser or harness after 30 minutes without new work, while the next message can automatically reopen the same durable provider conversation when supported.
