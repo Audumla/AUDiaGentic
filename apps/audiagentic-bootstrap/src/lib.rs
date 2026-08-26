@@ -63,7 +63,9 @@ pub struct BootstrapRun {
     pub event_sequence: EventSequence,
 }
 
-pub fn build_application(root: PathBuf) -> Result<Application<AudiagenticComposition>, Box<dyn Error>> {
+pub fn build_application(
+    root: PathBuf,
+) -> Result<Application<AudiagenticComposition>, Box<dyn Error>> {
     let composition = AudiagenticComposition {
         state: BootstrapState::new(root)?,
         events: EventStream::new(
