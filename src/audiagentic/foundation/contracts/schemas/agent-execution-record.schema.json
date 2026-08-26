@@ -48,6 +48,7 @@
     },
     "prompt-template-name": {"type": ["string", "null"]},
     "prompt-template-digest": {"type": ["string", "null"]},
+    "prompt-definition-fingerprint": {"type": ["string", "null"]},
     "response-artifact": {
       "type": ["object", "null"],
       "properties": {

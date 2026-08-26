@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from audiagentic.components.providers.adapters.base_runner import default_build_prompt
-from audiagentic.components.agents.gateway.queue.dispatch import _build_packet_ctx
 from audiagentic.components.agents.agents_paths import global_agents_config_path
+from audiagentic.components.agents.gateway.queue.dispatch import _build_packet_ctx
+from audiagentic.components.providers.adapters.base_runner import default_build_prompt
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 

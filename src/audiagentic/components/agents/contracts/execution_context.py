@@ -582,7 +582,6 @@ def build_manifest(
     agent_config_fingerprint: str | None = None,
     role_manifest_fingerprint: str | None = None,
     eligible_instance_ids: tuple[str, ...] = (),
-    admitted_prompt: str | None = None,
 ) -> ExecutionManifest:
     """Freeze one admission's resolution into an immutable manifest.
 
@@ -608,15 +607,11 @@ def build_manifest(
         session=envelope.session,
         mode=envelope.mode,
         timeout_seconds=envelope.timeout_seconds,
-        # The manifest fingerprints the exact semantic prompt that dispatch
-        # will consume.  Agent submissions may materialize a prompt definition
-        # (including includes/context) at admission, so hashing the raw
-        # envelope body here would describe a different payload and break
-        # retry/resume parity.  Direct callers continue to use the envelope
-        # body when no admission materialization was required.
-        prompt_digest=compute_prompt_digest(
-            admitted_prompt if admitted_prompt is not None else envelope.prompt_body
-        ),
+        # Keep the caller-supplied body digest distinct from the admitted
+        # rendered-instruction digest.  The latter is persisted separately as
+        # prompt-template-digest; conflating them makes provenance and
+        # mutation checks ambiguous.
+        prompt_digest=compute_prompt_digest(envelope.prompt_body),
         work_id=work_id,
         context_id=context_id,
         message_id=message_id,
