@@ -27,7 +27,7 @@ from tests.integration.providers.harness import (
     provider_ids,
 )
 
-from audiagentic.components.agents.models.execution_profile_api import (
+from audiagentic.components.agents.configuration.management import (
     create_execution_profile,
 )
 
