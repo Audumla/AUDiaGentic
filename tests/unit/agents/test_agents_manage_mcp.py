@@ -20,7 +20,7 @@ def _patch_roots():
 
 def test_agent_list_execution_profiles_delegates_to_api():
     with _patch_roots(), patch(
-        "audiagentic.components.agents.models.execution_profile_api.list_execution_profiles",
+        "audiagentic.components.agents.configuration.management.list_execution_profiles",
         return_value=[{"profile_id": "default"}],
     ) as mock:
         result = config_mcp.agent_list_execution_profiles()
@@ -30,7 +30,7 @@ def test_agent_list_execution_profiles_delegates_to_api():
 
 def test_agent_get_execution_profile_delegates_to_api():
     with _patch_roots(), patch(
-        "audiagentic.components.agents.models.execution_profile_api.get_execution_profile",
+        "audiagentic.components.agents.configuration.management.get_execution_profile",
         return_value={"profile_id": "test"},
     ) as mock:
         result = config_mcp.agent_get_execution_profile("test")
@@ -41,7 +41,7 @@ def test_agent_get_execution_profile_delegates_to_api():
 def test_agent_create_execution_profile_delegates_to_api():
     profile = {"profile_id": "new", "provider_id": "openai", "model_id": "gpt-4o"}
     with _patch_roots(), patch(
-        "audiagentic.components.agents.models.execution_profile_api.create_execution_profile",
+        "audiagentic.components.agents.configuration.management.create_execution_profile",
         return_value=profile,
     ) as mock:
         result = config_mcp.agent_create_execution_profile(profile)
@@ -52,7 +52,7 @@ def test_agent_create_execution_profile_delegates_to_api():
 def test_agent_update_execution_profile_delegates_to_api():
     updates = {"model_id": "gpt-4o-mini"}
     with _patch_roots(), patch(
-        "audiagentic.components.agents.models.execution_profile_api.update_execution_profile",
+        "audiagentic.components.agents.configuration.management.update_execution_profile",
         return_value={"profile_id": "test", "model_id": "gpt-4o-mini"},
     ) as mock:
         result = config_mcp.agent_update_execution_profile("test", updates)
@@ -62,7 +62,7 @@ def test_agent_update_execution_profile_delegates_to_api():
 
 def test_agent_delete_execution_profile_delegates_to_api():
     with _patch_roots(), patch(
-        "audiagentic.components.agents.models.execution_profile_api.delete_execution_profile",
+        "audiagentic.components.agents.configuration.management.delete_execution_profile",
         return_value={"profile_id": "test"},
     ) as mock:
         result = config_mcp.agent_delete_execution_profile("test")
@@ -72,7 +72,7 @@ def test_agent_delete_execution_profile_delegates_to_api():
 
 def test_agent_list_roles_delegates_to_api():
     with _patch_roots(), patch(
-        "audiagentic.components.agents.models.role_api.list_roles",
+        "audiagentic.components.agents.configuration.management.list_roles",
         return_value=[{"role_id": "reviewer"}],
     ) as mock:
         result = config_mcp.agent_list_roles()
@@ -82,7 +82,7 @@ def test_agent_list_roles_delegates_to_api():
 
 def test_agent_get_role_delegates_to_api():
     with _patch_roots(), patch(
-        "audiagentic.components.agents.models.role_api.get_role",
+        "audiagentic.components.agents.configuration.management.get_role",
         return_value={"role_id": "reviewer"},
     ) as mock:
         result = config_mcp.agent_get_role("reviewer")
@@ -93,7 +93,7 @@ def test_agent_get_role_delegates_to_api():
 def test_agent_create_role_delegates_to_api():
     role = {"role_id": "reviewer", "instructions": "Review."}
     with _patch_roots(), patch(
-        "audiagentic.components.agents.models.role_api.create_role",
+        "audiagentic.components.agents.configuration.management.create_role",
         return_value=role,
     ) as mock:
         result = config_mcp.agent_create_role(role)
@@ -104,7 +104,7 @@ def test_agent_create_role_delegates_to_api():
 def test_agent_update_role_delegates_to_api():
     updates = {"instructions": "Updated."}
     with _patch_roots(), patch(
-        "audiagentic.components.agents.models.role_api.update_role",
+        "audiagentic.components.agents.configuration.management.update_role",
         return_value={"role_id": "reviewer", "instructions": "Updated."},
     ) as mock:
         result = config_mcp.agent_update_role("reviewer", updates)
@@ -114,7 +114,7 @@ def test_agent_update_role_delegates_to_api():
 
 def test_agent_delete_role_delegates_to_api():
     with _patch_roots(), patch(
-        "audiagentic.components.agents.models.role_api.delete_role",
+        "audiagentic.components.agents.configuration.management.delete_role",
         return_value={"role_id": "reviewer"},
     ) as mock:
         result = config_mcp.agent_delete_role("reviewer")
