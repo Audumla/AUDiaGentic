@@ -348,8 +348,8 @@ def _try_profile_with_retries(
             details={"request-id": record.get("request-id")},
         )
     else:
-        from audiagentic.components.agents.models.execution_profile_api import (
-            resolve_execution_profile,
+        from audiagentic.components.agents.configuration.global_catalog import (
+            resolve_global_execution_profile as resolve_execution_profile,
         )
 
         profile = resolve_execution_profile(project_root, execution_profile_id)

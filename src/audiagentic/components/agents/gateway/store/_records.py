@@ -155,6 +155,7 @@ def build_record(
     prompt_profile_id: str = "default",
     prompt_template_name: str | None = None,
     prompt_template_digest: str | None = None,
+    prompt_definition_fingerprint: str | None = None,
     response_artifact: dict[str, Any] | None = None,
     output_preview: str | None = None,
     output_truncated: bool = False,
@@ -273,6 +274,7 @@ def build_record(
         "prompt-profile-id": prompt_profile_id,
         "prompt-template-name": prompt_template_name,
         "prompt-template-digest": prompt_template_digest,
+        "prompt-definition-fingerprint": prompt_definition_fingerprint,
         "response-artifact": response_artifact,
         "output-preview": output_preview,
         "output-truncated": output_truncated,
@@ -599,7 +601,7 @@ def project_public_status(
 ) -> dict[str, Any]:
     """Return safe durable status without submission secrets or prompt material."""
     visible = (
-        "contract-version", "request-id", "agent-id", "prompt-profile-id", "prompt-template-name", "prompt-template-digest", "execution-profile-id", "mode", "state",
+        "contract-version", "request-id", "agent-id", "prompt-profile-id", "prompt-template-name", "prompt-template-digest", "prompt-definition-fingerprint", "execution-profile-id", "mode", "state",
         "response-artifact", "output-preview", "output-truncated",
         "cancel-requested", "revision", "dispatch-owner-epoch", "dispatch-claimed-at",
         "cancel-acknowledged-at", "cancel-acknowledged-by",

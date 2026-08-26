@@ -154,8 +154,8 @@ def _resolve_agent_provider_model(
 
     execution_profile_id = request.get("execution-profile-id")
     if execution_profile_id:
-        from audiagentic.components.agents.models.execution_profile_api import (
-            resolve_execution_profile,
+        from audiagentic.components.agents.configuration.global_catalog import (
+            resolve_global_execution_profile as resolve_execution_profile,
         )
         resolved = resolve_execution_profile(project_root, execution_profile_id)
         provider_id = resolved["provider_id"]
@@ -175,8 +175,8 @@ def _resolve_agent_provider_model(
         return explicit_provider or "local-openai", explicit_model, explicit_alias
 
     try:
-        from audiagentic.components.agents.models.execution_profile_api import (
-            resolve_default_execution_profile,
+        from audiagentic.components.agents.configuration.global_catalog import (
+            resolve_global_default_execution_profile as resolve_default_execution_profile,
         )
         resolved = resolve_default_execution_profile(project_root)
         provider_id = resolved["provider_id"]
