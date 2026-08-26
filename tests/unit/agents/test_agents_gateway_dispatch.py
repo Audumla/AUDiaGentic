@@ -6,9 +6,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.queue import dispatch as dispatch
-from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
 from audiagentic.components.agents.models.execution_profile_api import (
     create_execution_profile,
 )
@@ -118,7 +118,7 @@ def test_dispatch_reloads_admitted_prompt_snapshot_when_fast_path_is_lost(
     record = _record(tmp_path, "default")
     atomic_write_bytes(
         gateway_admitted_prompt_path(tmp_path, record["request-id"]),
-        "frozen admitted prompt\r\nwith café".encode("utf-8"),
+        "frozen admitted prompt\r\nwith café".encode(),
     )
     captured: dict[str, object] = {}
 
@@ -208,6 +208,45 @@ def test_dispatch_retries_transient_then_succeeds(tmp_path: Path, monkeypatch):
     assert calls["count"] == 3
     assert len(result["attempts"]) == 3
     assert [a["state"] for a in result["attempts"]] == ["failed", "failed", "completed"]
+
+
+def test_retry_attempts_keep_admitted_prompt_after_source_mutation(tmp_path: Path, monkeypatch):
+    _make_profile(tmp_path, "default", "local-openai", **{"retry-count": 1})
+    record = _record(tmp_path, "default")
+    frozen = "admitted café\nsecond line"
+    atomic_write_bytes(gateway_admitted_prompt_path(tmp_path, record["request-id"]), frozen.encode("utf-8"))
+    observed: list[str] = []
+    calls = {"count": 0}
+
+    def flaky_execute_provider(*, identity, execution_request, timeout_seconds):
+        calls["count"] += 1
+        observed.append(execution_request["packet-data"]["prompt-body"])
+        if calls["count"] == 1:
+            # Simulate a source/config mutation between retry attempts.  The
+            # dispatch loop must retain the request-owned admitted bytes.
+            atomic_write_bytes(
+                gateway_admitted_prompt_path(tmp_path, record["request-id"]),
+                b"mutated source",
+            )
+            raise AudiaGenticError(code="NET-FAKE-001", kind="providers", message="retry")
+        return _worker_result({"provider-id": "local-openai", "model": "gpt-4o", "output": "ok"})
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
+        flaky_execute_provider,
+    )
+    result = dispatch.dispatch_request(
+        tmp_path,
+        record,
+        dispatch_prompt=None,  # reload the durable snapshot, not mutable config
+        manifest_id="mf_test",
+        context_fingerprint="0" * 64,
+        component_profile="",
+        provider_isolation_tier="full-isolation",
+        worker_timeout_seconds=10,
+    )
+    assert result["state"] == "completed"
+    assert observed == [frozen, frozen]
 
 
 def test_dispatch_validation_error_is_terminal(tmp_path: Path, monkeypatch):
