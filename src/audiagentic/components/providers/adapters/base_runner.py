@@ -232,6 +232,7 @@ def default_build_prompt(
     title: str,
     prompt_profile_id: str = "default",
     context_overrides: dict[str, Any] | None = None,
+    include_prompt_body: bool = True,
 ) -> str:
     """Return the immutable prompt admitted by the gateway.
 
@@ -241,7 +242,14 @@ def default_build_prompt(
     catalog or re-render mutable configuration here.  ``prompt_profile_id``
     remains an ignored compatibility parameter for direct adapter callers.
     """
-    prompt_body = packet_ctx.get("prompt-body")
+    # Adapters may provide a normalized view (for example a provider-specific
+    # prompt body or packet model) without changing the admitted packet.  The
+    # override is an ephemeral projection only; it never reads configuration
+    # or mutates the caller's mapping.
+    effective_ctx = dict(packet_ctx)
+    if context_overrides:
+        effective_ctx.update(context_overrides)
+    prompt_body = effective_ctx.get("prompt-body")
     if not isinstance(prompt_body, str) or not prompt_body.strip():
         from audiagentic.foundation.contracts.errors import AudiaGenticError
 
@@ -252,15 +260,22 @@ def default_build_prompt(
             details={},
         )
     # This is provider-internal framing, not a configurable prompt authority.
-    # The admitted prompt remains the only mutable/user-owned content.
-    return (
+    # The admitted prompt remains the only mutable/user-owned content.  Model
+    # identity must come from the dispatch packet (the gateway's admitted
+    # binding); provider_cfg is only the direct-call fallback.  Reading the
+    # provider default here would reintroduce a second model authority and
+    # made packet/model parity fail for free-instance dispatch.
+    model = resolve_execution_model(effective_ctx, provider_cfg)
+    framing = (
         f"Execution request for {title}. "
-        f"request={packet_ctx.get('request-id')} "
-        f"provider={packet_ctx.get('provider-id', provider_id)} "
-        f"model={provider_cfg.get('default-model')}. "
+        f"request={effective_ctx.get('request-id')} "
+        f"provider={effective_ctx.get('provider-id', provider_id)} "
+        f"model={model}. "
         "Return a concise execution summary or the blocking reason if execution is impossible. "
-        f"Prompt body: {prompt_body.strip()}"
     ).strip()
+    if include_prompt_body:
+        return f"{framing} Prompt body: {prompt_body.strip()}".strip()
+    return framing
 
 
 def default_parse_completion(

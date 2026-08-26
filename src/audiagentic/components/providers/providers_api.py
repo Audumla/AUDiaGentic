@@ -94,7 +94,15 @@ from audiagentic.foundation.transports.session_surface import PreparedSessionTra
 logger = logging.getLogger(__name__)
 
 
-def build_admitted_agent_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[str, Any], *, provider_id: str, title: str, context_overrides: dict[str, Any] | None = None) -> str:
+def build_admitted_agent_prompt(
+    packet_ctx: dict[str, Any],
+    provider_cfg: dict[str, Any],
+    *,
+    provider_id: str,
+    title: str,
+    context_overrides: dict[str, Any] | None = None,
+    include_prompt_body: bool = True,
+) -> str:
     """Return the gateway-admitted prompt without consulting config."""
     from audiagentic.components.providers.adapters.base_runner import default_build_prompt
     return default_build_prompt(
@@ -104,6 +112,7 @@ def build_admitted_agent_prompt(packet_ctx: dict[str, Any], provider_cfg: dict[s
         title=title,
         prompt_profile_id=str(packet_ctx.get("prompt-profile-id") or ""),
         context_overrides=context_overrides,
+        include_prompt_body=include_prompt_body,
     )
 
 
