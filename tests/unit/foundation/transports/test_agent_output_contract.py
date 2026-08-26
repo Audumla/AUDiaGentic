@@ -218,6 +218,11 @@ class TestAgentOutputEventValidation:
             _make_event(is_final=True)
         assert exc_info.value.code == "VAL-OUTPUT-008"
 
+    def test_final_kind_cannot_be_marked_non_final(self):
+        with pytest.raises(AudiaGenticError) as exc_info:
+            _make_event(kind=AgentOutputKind.ASSISTANT_FINAL, is_final=False)
+        assert exc_info.value.code == "VAL-OUTPUT-008"
+
     def test_delta_cannot_be_marked_final(self):
         with pytest.raises(AudiaGenticError) as exc_info:
             _make_event(kind=AgentOutputKind.ASSISTANT_TEXT_DELTA, is_final=True)
