@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from audiagentic.components.agent_jobs.prompt_launch import _resolve_agent_provider_model
-from audiagentic.components.agents.models import execution_profile_api as agents_api
+from audiagentic.components.agents.configuration import management as agents_api
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
