@@ -87,7 +87,7 @@ def _register_resumable_descriptor() -> None:
 def resumable_rig(rig, monkeypatch):
     """GP13 auto-resume tests: same rig, but resolved against a provider
     whose registered descriptor actually declares resume-by-ref support."""
-    import audiagentic.components.agents.models.execution_profile_api as agents_api
+    import audiagentic.components.agents.configuration.global_catalog as agents_catalog
     from audiagentic.components.providers.descriptors.registry import _registry
     from audiagentic.components.providers.services.config.provider_config import (
         set_provider_enabled,
@@ -97,7 +97,7 @@ def resumable_rig(rig, monkeypatch):
     _registry._items.clear()
     _register_resumable_descriptor()
     set_provider_enabled(tmp_path, _RESUMABLE_PROVIDER_ID, enabled=True)
-    monkeypatch.setattr(agents_api, "resolve_execution_profile", lambda root, pid: dict(_RESUMABLE_PROFILE))
+    monkeypatch.setattr(agents_catalog, "resolve_global_execution_profile", lambda root, pid: dict(_RESUMABLE_PROFILE))
     yield runtime, transports, tmp_path
 
 
@@ -119,9 +119,9 @@ def rig(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(sessions_module, "get_session_runtime", lambda: runtime)
 
-    import audiagentic.components.agents.models.execution_profile_api as agents_api
+    import audiagentic.components.agents.configuration.global_catalog as agents_catalog
 
-    monkeypatch.setattr(agents_api, "resolve_execution_profile", lambda root, pid: dict(PROFILE))
+    monkeypatch.setattr(agents_catalog, "resolve_global_execution_profile", lambda root, pid: dict(PROFILE))
     monkeypatch.setattr(
         "audiagentic.components.providers.providers_api.get_provider_runtime_config_state",
         lambda root, provider_id: {
@@ -298,10 +298,10 @@ def test_profile_mismatch_terminal(rig, monkeypatch):
     )
     session_id = first["session-id"]
 
-    import audiagentic.components.agents.models.execution_profile_api as agents_api
+    import audiagentic.components.agents.configuration.global_catalog as agents_catalog
 
     other = dict(PROFILE, profile_id="profile-2")
-    monkeypatch.setattr(agents_api, "resolve_execution_profile", lambda root, pid: other)
+    monkeypatch.setattr(agents_catalog, "resolve_global_execution_profile", lambda root, pid: other)
     record = store.build_record(
         execution_profile_id="profile-2", prompt_body="hi", session_id=session_id
     )
