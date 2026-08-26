@@ -8,7 +8,7 @@ depends-on:
   - project
 implementation-cardinality: exclusive
 lifecycle-observer: audiagentic.components.agents.gateway.events
-status-hook: audiagentic.components.agents.models.execution_profile_api.agent_status
+status-hook: audiagentic.components.agents.configuration.global_catalog.global_agent_status
 files:
   - path: .audiagentic/runtime/agent-execution-gateway
     lifecycle: runtime-only
