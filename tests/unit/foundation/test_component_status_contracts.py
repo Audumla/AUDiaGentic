@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.agents.models import execution_profile_api as agents_api
+from audiagentic.components.agents.configuration import management as agents_api
 from audiagentic.components.coding_lsp import coding_lsp_bootstrap
 from audiagentic.components.memory import memory_api
 from audiagentic.components.planning import planning_api
@@ -82,4 +82,3 @@ def test_agents_status_contract(tmp_path: Path) -> None:
     assert payload["enabled"] == is_enabled("agents", tmp_path)
     assert "profile_count" in payload["details"]
     assert "gateway" in payload["details"]
-

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.agents.models.execution_profile_api import (
+from audiagentic.components.agents.configuration.management import (
     agent_status,
     create_execution_profile,
 )

@@ -17,7 +17,7 @@ from pathlib import Path
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.event_topics import EXECUTION_INTERRUPTED_TOPIC
 from audiagentic.components.agents.gateway.queue import recovery as recovery
-from audiagentic.components.agents.models.execution_profile_api import (
+from audiagentic.components.agents.configuration.management import (
     create_execution_profile,
 )
 from audiagentic.foundation.event import get_bus

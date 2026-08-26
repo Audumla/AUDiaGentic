@@ -9,7 +9,7 @@ from __future__ import annotations
 from audiagentic.foundation.paths.package import PACKAGE_ROOT
 
 _MODEL_MODULE = PACKAGE_ROOT / "components" / "agents" / "models" / "agent_definition.py"
-_API_MODULE = PACKAGE_ROOT / "components" / "agents" / "models" / "agent_definition_api.py"
+_API_MODULE = PACKAGE_ROOT / "components" / "agents" / "configuration" / "management.py"
 
 
 def test_agent_definition_domain_code_imports_no_concrete_store_or_composition() -> None:

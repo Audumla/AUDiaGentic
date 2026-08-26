@@ -18,7 +18,7 @@ from audiagentic.components.agents.gateway import api as gateway
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.application import InProcessGatewayApplication
 from audiagentic.components.agents.gateway.queue import queue as agents_gateway_queue
-from audiagentic.components.agents.models.execution_profile_api import (
+from audiagentic.components.agents.configuration.management import (
     create_execution_profile,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError

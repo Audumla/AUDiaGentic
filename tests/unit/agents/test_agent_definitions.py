@@ -15,6 +15,16 @@ from pathlib import Path
 
 import pytest
 
+from audiagentic.components.agents.configuration.management import (
+    create_agent_definition,
+    create_execution_profile,
+    create_role,
+    delete_agent_definition,
+    get_agent_definition,
+    list_agent_definitions,
+    resolve_agent_definition,
+    update_agent_definition,
+)
 from audiagentic.components.agents.models.agent_definition import (
     AgentDefinition,
     AgentDefinitionStore,
@@ -22,18 +32,6 @@ from audiagentic.components.agents.models.agent_definition import (
     agent_definition_to_dict,
     validate_agent_definition,
 )
-from audiagentic.components.agents.models.agent_definition_api import (
-    create_agent_definition,
-    delete_agent_definition,
-    get_agent_definition,
-    list_agent_definitions,
-    resolve_agent_definition,
-    update_agent_definition,
-)
-from audiagentic.components.agents.models.execution_profile_api import (
-    create_execution_profile,
-)
-from audiagentic.components.agents.models.role_api import create_role
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 

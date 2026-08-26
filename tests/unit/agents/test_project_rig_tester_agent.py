@@ -4,14 +4,14 @@ from __future__ import annotations
 import pytest
 
 from audiagentic.components.agents.agents_paths import global_agents_config_path
-from audiagentic.components.agents.models.agent_definition_api import (
+from audiagentic.components.agents.configuration.management import (
     get_agent_definition,
     resolve_agent_definition,
 )
-from audiagentic.components.agents.models.execution_profile_api import (
+from audiagentic.components.agents.configuration.management import (
     get_execution_profile,
 )
-from audiagentic.components.agents.models.role_api import get_role
+from audiagentic.components.agents.configuration.management import get_role
 from audiagentic.foundation.paths.package import PACKAGE_ROOT
 
 REPO_ROOT = PACKAGE_ROOT.parent.parent

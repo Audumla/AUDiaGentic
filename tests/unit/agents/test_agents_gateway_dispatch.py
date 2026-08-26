@@ -9,7 +9,7 @@ import pytest
 from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.queue import dispatch as dispatch
-from audiagentic.components.agents.models.execution_profile_api import (
+from audiagentic.components.agents.configuration.management import (
     create_execution_profile,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError

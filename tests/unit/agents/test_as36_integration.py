@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 from audiagentic.components.agents.gateway import api as gateway
 from audiagentic.components.agents.gateway.session import sessions_store as session_store
-from audiagentic.components.agents.models.execution_profile_api import (
+from audiagentic.components.agents.configuration.management import (
     create_execution_profile,
 )
 from audiagentic.components.agents.status.terminal_quality import (
