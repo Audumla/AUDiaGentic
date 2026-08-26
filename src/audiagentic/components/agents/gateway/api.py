@@ -580,6 +580,17 @@ def submit_execution_request(
 
     # Snapshot the machine-owned watchdog policy at admission. Dispatch and
     # renewal therefore cannot change semantics halfway through a request.
+    # Freeze the exact rendered semantic prompt before admission.  Dispatch
+    # receives this value in-memory for the fast path, while restart/recovery
+    # can reload the same immutable bytes without consulting mutable config.
+    from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
+    from audiagentic.foundation.io import atomic_write_bytes
+
+    atomic_write_bytes(
+        gateway_admitted_prompt_path(Path(canonical_root.display), request_id),
+        dispatch_prompt.encode("utf-8"),
+    )
+
     record = store.build_record(
         request_id=request_id,
         agent_id=agent_id,
@@ -1001,6 +1012,29 @@ def list_execution_requests(
                 ),
             ),
             project_root,
+        )
+        for record in records
+    ]
+
+
+def list_dashboard_requests(project_root: Path) -> list[dict[str, Any]]:
+    """Return the bounded operator projection used by the gateway dashboard.
+
+    The MCP request-list operation intentionally exposes the compact V4 task
+    status contract.  The loopback dashboard is a separate operator surface,
+    however, and needs the request identity/lifecycle fields plus live
+    activity evidence in order to group rows by session and show real work.
+    Keep that richer-but-redacted projection behind this explicit seam rather
+    than making the public MCP list operation grow legacy fields again.
+    """
+    records = store.list_records(project_root)
+    records.sort(key=lambda record: record["created-at"], reverse=True)
+    return [
+        store.project_public_status(
+            record,
+            latest_transition=store.latest_transition_projection(
+                project_root, record["request-id"]
+            ),
         )
         for record in records
     ]

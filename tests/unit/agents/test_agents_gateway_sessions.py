@@ -70,6 +70,7 @@ class FakeAgentSessionTransport:
         self.on_event_emitter: Any = None  # callable((on_event, session_id) -> None)
         self.provider_session_ref = "prov-ses-1"
         self.ag_session_id = "ag-s-fake"
+        self.reconcile_calls = 0
         self._turn_failure_disposition = SessionFailureDisposition.TERMINATE
 
     async def open(self) -> SessionOpenResult:
@@ -85,6 +86,10 @@ class FakeAgentSessionTransport:
 
     def turn_failure_disposition(self) -> SessionFailureDisposition:
         return self._turn_failure_disposition
+
+    async def reconcile_activity_gap(self) -> dict[str, Any]:
+        self.reconcile_calls += 1
+        return {"status": "reconciled", "state": "ready"}
 
     async def prompt(self, prompt, sink=None, **kwargs) -> SessionTurnResult:
         """Support both ACP callback and neutral SessionPrompt signatures.
@@ -683,6 +688,33 @@ def test_session_snapshot_all_reports_active_turn(rig):
     gate.set()
     worker.join(timeout=2)
     assert result and result[0].stop_reason == "end_turn"
+
+
+def test_reconcile_active_transport_does_not_replay_prompt(rig):
+    runtime, clock, transports, tmp_path = rig
+    record = _open(runtime, tmp_path)
+    session_id = record["session-id"]
+    gate = threading.Event()
+    transports[0].block_event = gate
+    result: list[Any] = []
+    worker = threading.Thread(
+        target=lambda: result.append(
+            runtime.prompt_in_session(tmp_path, session_id, "one prompt", request_id="req-gap")
+        )
+    )
+    worker.start()
+    assert _wait_for(
+        lambda: runtime.session_runtime_status(session_id).get("current-request-id") == "req-gap"
+    )
+
+    reconciliation = runtime.reconcile_active_transport(session_id, "req-gap")
+    assert reconciliation["status"] == "reconciled"
+    assert transports[0].reconcile_calls == 1
+
+    gate.set()
+    worker.join(timeout=2)
+    assert len(result) == 1
+    assert transports[0].turns == ["one prompt"]
 
 
 def test_turn_queue_full_rejects(rig, tmp_path):

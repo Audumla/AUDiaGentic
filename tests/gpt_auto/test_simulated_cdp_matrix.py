@@ -42,6 +42,22 @@ def test_snapshot_activity_labels_are_case_insensitive_and_cover_tool_rows() -> 
         assert label in _SNAPSHOT_FN
 
 
+def test_snapshot_activity_anchors_to_latest_agent_turn_before_assistant_node() -> None:
+    """Streaming tool rows must be visible before ChatGPT adds an assistant node.
+
+    A live GPT-T2 turn rendered ``group/tool-message`` rows inside the current
+    ``.agent-turn`` while ``[data-message-author-role=assistant]`` was still
+    absent.  The regression made ``assistantTurn`` null in that phase, so the
+    activity scan returned no tool counts and the gateway lease expired while
+    the browser was visibly working.  Keep the semantic-turn fallback wired
+    into the production snapshot script.
+    """
+    assert "const agentTurns = Array.from(document.querySelectorAll('.agent-turn'))" in _SNAPSHOT_FN
+    assert "const latestAgentTurn = agentTurns.length ? agentTurns[agentTurns.length - 1] : null" in _SNAPSHOT_FN
+    assert ") : latestAgentTurn;" in _SNAPSHOT_FN
+    assert "[class~=\"group/tool-message\"]" in _SNAPSHOT_FN
+
+
 class _ScenarioClient:
     def __init__(self) -> None:
         self.events: asyncio.Queue = asyncio.Queue()

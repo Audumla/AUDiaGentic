@@ -446,6 +446,56 @@ async def test_tool_app_activity_emits_progress_when_response_text_is_unchanged(
 
 
 @pytest.mark.asyncio
+async def test_tool_app_activity_emits_before_assistant_message_materializes():
+    """Streaming connector rows renew activity before an assistant node exists.
+
+    ChatGPT can expose ``Talked to App``/``Read resource`` rows in the current
+    ``.agent-turn`` while ``assistantCount`` and assistant text are still zero.
+    The CDP snapshot fallback must preserve those counts so the turn emits
+    provider progress instead of waiting for the final assistant node.
+    """
+    chat = _Chat()
+    observations = []
+    chat._snapshots = iter(
+        [
+            snap(),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01", generating=True),
+            snap(
+                users=1,
+                user="Review AU01",
+                generating=True,
+                tool_activity_counts=(("talked-to-app", 1),),
+            ),
+            snap(
+                users=1,
+                user="Review AU01",
+                generating=True,
+                tool_activity_counts=(("talked-to-app", 1), ("read-resource", 1)),
+            ),
+            snap(users=1, assistants=1, user="Review AU01", assistant="Done", complete=True),
+            snap(users=1, assistants=1, user="Review AU01", assistant="Done", complete=True),
+            snap(users=1, assistants=1, user="Review AU01", assistant="Done", complete=True),
+        ]
+    )
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-tool-before-assistant", body="Review AU01"),
+        observations.append,
+    )
+
+    result = await turn.run()
+
+    assert result.stop_reason == "end-turn"
+    tool_progress = [
+        obs
+        for obs in observations
+        if obs.attributes.get("model_activity") == "tool-progress"
+    ]
+    assert len(tool_progress) >= 2
+
+
+@pytest.mark.asyncio
 async def test_static_tool_activity_renews_with_bounded_heartbeat():
     """A visible tool row need not change its count every poll.
 

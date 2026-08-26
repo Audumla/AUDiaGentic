@@ -70,11 +70,10 @@ def project_task_status_v4(
 ) -> dict[str, object]:
     """Project one request into the fixed V4 polling contract.
 
-    The inactive axis is represented by ``None`` so clients never need to
-    infer whether a missing key means an unsupported state.  Durable terminal
-    state wins; recognized durable ``queued``/``dispatching``/``running``
-    states refine an ``unknown`` AS92 snapshot without exposing the richer
-    internal snapshot contract.
+    Inapplicable axes are omitted rather than represented by JSON ``null``.
+    Durable terminal state wins; recognized durable
+    ``queued``/``dispatching``/``running`` states refine an ``unknown`` AS92
+    snapshot without exposing the richer internal snapshot contract.
 
     ``activity_seq`` and ``activity_at`` are durable progress markers.  The
     sequence advances only when verified provider/owner activity is accepted;
@@ -106,27 +105,27 @@ def project_task_status_v4(
             actual = getattr(snapshot_outcome, "value", snapshot_outcome)
             if actual != expected:
                 raise TaskStatusContractError("durable terminal state contradicts snapshot outcome")
-        return {
+        return _compact({
             "task_id": request_id,
             "lifecycle": "terminal",
             "activity": None,
             "activity_seq": activity_seq,
             "activity_at": activity_at,
             "outcome": expected,
-        }
+        })
 
     if snapshot_lifecycle == AgentLifecycle.TERMINAL:
         raise TaskStatusContractError("non-terminal durable state has terminal snapshot")
 
     if state == "queued":
-        return {
+        return _compact({
             "task_id": request_id,
             "lifecycle": "pending",
             "activity": "waiting",
             "activity_seq": activity_seq,
             "activity_at": activity_at,
             "outcome": None,
-        }
+        })
 
     if state in {"dispatching", "running"}:
         if snapshot_lifecycle is not None and snapshot_lifecycle not in _ACTIVE_SNAPSHOT_LIFECYCLES:
@@ -139,16 +138,21 @@ def project_task_status_v4(
             activity = "completing"
         else:
             activity = "running"
-        return {
+        return _compact({
             "task_id": request_id,
             "lifecycle": "active",
             "activity": activity,
             "activity_seq": activity_seq,
             "activity_at": activity_at,
             "outcome": None,
-        }
+        })
 
     raise TaskStatusContractError(f"unrecognized durable task state: {state}")
+
+
+def _compact(payload: dict[str, object]) -> dict[str, object]:
+    """Remove only inapplicable values; preserve false and zero markers."""
+    return {key: value for key, value in payload.items() if value is not None}
 
 
 __all__ = ["TaskStatusContractError", "project_task_status_v4"]

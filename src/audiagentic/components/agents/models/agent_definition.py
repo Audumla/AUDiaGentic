@@ -24,7 +24,19 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 logger = logging.getLogger(__name__)
 
 
-@dataclass(init=False)
+class _FrozenSkills(tuple[str, ...]):
+    """Tuple-backed skills collection with legacy list comparison semantics."""
+
+    def __new__(cls, values=()):
+        return super().__new__(cls, (str(value) for value in values))
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, (list, tuple, _FrozenSkills)):
+            return tuple(self) == tuple(other)
+        return NotImplemented
+
+
+@dataclass(frozen=True, slots=True, init=False)
 class AgentDefinition:
     """A logical agent with one prompt, many roles, and one profile.
 
@@ -37,7 +49,7 @@ class AgentDefinition:
     role_ids: tuple[str, ...]
     execution_profile_id: str
     description: str = ""
-    advertised_skills: list[str] = field(default_factory=list)
+    advertised_skills: tuple[str, ...] = field(default_factory=tuple)
     internal: bool = True
     acp: bool = False
     a2a: bool = False
@@ -59,16 +71,16 @@ class AgentDefinition:
         profile_id: str | None = None,
     ) -> None:
         selected_roles = tuple(role_ids or ((role_id,) if role_id else ()))
-        self.agent_id = agent_id
-        self.name = name
-        self.prompt_id = prompt_id
-        self.role_ids = selected_roles
-        self.execution_profile_id = execution_profile_id
-        self.description = description
-        self.advertised_skills = list(advertised_skills or [])
-        self.internal = internal
-        self.acp = acp
-        self.a2a = a2a
+        object.__setattr__(self, "agent_id", agent_id)
+        object.__setattr__(self, "name", name)
+        object.__setattr__(self, "prompt_id", prompt_id)
+        object.__setattr__(self, "role_ids", selected_roles)
+        object.__setattr__(self, "execution_profile_id", execution_profile_id)
+        object.__setattr__(self, "description", description)
+        object.__setattr__(self, "advertised_skills", _FrozenSkills(advertised_skills or ()))
+        object.__setattr__(self, "internal", internal)
+        object.__setattr__(self, "acp", acp)
+        object.__setattr__(self, "a2a", a2a)
         # ``profile_id`` was the old provider prompt-profile selector.  Keep
         # accepting it at this compatibility boundary, but do not retain or
         # serialize it: ``prompt_id`` is the sole agent-facing prompt axis.
@@ -159,6 +171,7 @@ def agent_definition_to_dict(definition: AgentDefinition) -> dict[str, Any]:
     """Serialize an AgentDefinition to a dict for YAML round-trip."""
     data = asdict(definition)
     data["role_ids"] = list(definition.role_ids)
+    data["advertised_skills"] = list(definition.advertised_skills)
     return data
 
 

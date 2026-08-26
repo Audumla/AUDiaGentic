@@ -96,7 +96,6 @@ def test_agent_task_status_delegates():
         mock_call.return_value = {
             "task_id": "req_x",
             "lifecycle": "terminal",
-            "activity": None,
             "activity_seq": 3,
             "activity_at": "2026-08-24T07:12:31Z",
             "outcome": "success",
