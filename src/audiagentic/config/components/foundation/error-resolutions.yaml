@@ -125,7 +125,7 @@ VAL-OUTPUT-001: "Agent output text is empty or not a string. Provide non-empty s
 VAL-OUTPUT-002: "Agent output text exceeds 64 KiB (65536 bytes) per fragment. Split large responses into multiple events."
 VAL-OUTPUT-003: "session_id must be a non-empty string for AgentOutputEvent. Provide a valid canonical AG session ID."
 VAL-OUTPUT-004: "turn_id must be a non-empty string for AgentOutputEvent. Provide a valid turn ID within the session."
-VAL-OUTPUT-005: "A transport contract string field exceeds its maximum length, or sequence is not a non-negative integer. Check ID lengths and sequence type."
+VAL-OUTPUT-005: "An agent output sequence must be a non-negative integer or null. Check sequence ordering and type."
 VAL-OUTPUT-006: "Unknown agent output kind provided. Use only values from AgentOutputKind closed set (assistant-text-delta, assistant-final); Stage 1 carries no reasoning, tool details, or metadata."
 VAL-PLAT-001: "Platform detection returned an unrecognized value from platform.system(). This indicates an unsupported or misconfigured runtime environment."
 CON-RCP-001: "The recipe pattern cannot be applied because its declared tool or pattern conflicts with the existing recipe configuration. Review the recipe declaration and remove the conflicting entry."
@@ -148,6 +148,7 @@ VAL-EVT-012: "Publish only a registered event topic with a payload matching that
 INT-EVT-001: "Inspect the event handler traceback and repair the subscriber; an internal event dispatch failed unexpectedly."
 VAL-OUTPUT-007: "Provide observed_at as a valid UTC timestamp string for the agent output event."
 VAL-OUTPUT-008: "Provide is_final as a boolean consistent with the selected agent output kind."
+VAL-OUTPUT-009: "An agent output session or turn ID exceeds the maximum length. Use a bounded canonical identifier."
 VAL-OUTPUT-RELAY-003: "The output relay could not publish the requested assistant output. Check that the session surface authorizes the relay channel and inspect the transport diagnostics for the underlying failure."
 VAL-STATUS-002: "Do not attach a terminal outcome to a non-terminal agent status projection."
 VAL-STATUS-003: "Provide projected_at as a valid UTC timestamp string for the agent status projection."
@@ -188,3 +189,4 @@ VAL-SPOOL-004: "Provide the spool event payload as a mapping (dict), not another
 VAL-SPOOL-005: "Check the event-id; the dead-letter record does not exist or could not be read."
 VAL-STEP-001: "Fix the step definition — check for a duplicate step-type registration, a missing required field (type/key_path/id), or an unrecognized step type against the registered set."
 VAL-STUB-002: "Check the placeholder syntax and available context keys; an unknown or invalid substitution was requested."
+
