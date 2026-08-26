@@ -387,6 +387,8 @@ def submit_execution_request(
     # Resolve the machine-global agent definition at gateway admission. MCP
     # transports pass only agent_id so execution and prompt identity come from
     # one authoritative catalog snapshot.
+    prompt_definition_fingerprint: str | None = None
+    composition_fingerprint: str | None = None
     if agent_id is not None:
         from audiagentic.components.agents.agents_paths import global_agents_config_path
         from audiagentic.components.agents.configuration.global_catalog import (
@@ -429,6 +431,8 @@ def submit_execution_request(
                 details={"agent-id": agent_id},
             ) from exc
         execution_profile_id = composition.execution_profile.profile_id
+        composition_fingerprint = composition.identity.fingerprint
+        prompt_definition_fingerprint = composition.identity.prompt_definition_fingerprint
         # Prompt definitions are the sole public prompt authority.  The old
         # provider prompt-profile collection was a second, mutable authority;
         # retain only the canonical prompt identity in the durable provenance
@@ -536,10 +540,16 @@ def submit_execution_request(
         work_id=envelope.work_id,
         context_id=envelope.context_id,
         message_id=envelope.message_id,
-        agent_config_fingerprint=envelope.agent_config_fingerprint,
+        # Agent admissions are authoritative: never let caller metadata
+        # substitute for the resolved composition identity.  Raw/direct
+        # submissions retain the envelope value for compatibility.
+        agent_config_fingerprint=(
+            composition_fingerprint
+            if composition_fingerprint is not None
+            else envelope.agent_config_fingerprint
+        ),
         role_manifest_fingerprint=envelope.role_manifest_fingerprint,
         eligible_instance_ids=envelope.eligible_instance_ids,
-        admitted_prompt=dispatch_prompt,
     )
 
     # Continuations may intentionally run after a gateway process restart or
@@ -577,14 +587,13 @@ def submit_execution_request(
     # The client key currently arrives through transport metadata. It remains
     # available for envelope validation but must never reach records, queues,
     # events, or provider packets in raw form.
-    from audiagentic.components.agents.gateway.queue.watchdog_policy import load_watchdog_policy
-
     # Snapshot the machine-owned watchdog policy at admission. Dispatch and
     # renewal therefore cannot change semantics halfway through a request.
     # Freeze the exact rendered semantic prompt before admission.  Dispatch
     # receives this value in-memory for the fast path, while restart/recovery
     # can reload the same immutable bytes without consulting mutable config.
     from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
+    from audiagentic.components.agents.gateway.queue.watchdog_policy import load_watchdog_policy
     from audiagentic.foundation.io import atomic_write_bytes
 
     atomic_write_bytes(
@@ -597,6 +606,7 @@ def submit_execution_request(
         agent_id=agent_id,
         prompt_template_name=prompt_template_name,
         prompt_template_digest=prompt_template_digest,
+        prompt_definition_fingerprint=prompt_definition_fingerprint,
         execution_profile_id=resolved_profile_id,
         prompt_profile_id=prompt_profile_id,
         prompt_body=prompt_body,  # carried in-memory; redacted before persistence

@@ -128,6 +128,7 @@ def _build_packet_ctx(
         "prompt-profile-id": record.get("prompt-profile-id", "default"),
         "prompt-template-name": record.get("prompt-template-name"),
         "prompt-template-digest": record.get("prompt-template-digest"),
+        "prompt-definition-fingerprint": record.get("prompt-definition-fingerprint"),
         "provider-id": profile["provider_id"],
         "model-id": model.get("model-id") or model.get("resolved"),
         "model-alias": profile.get("model_alias"),
