@@ -179,6 +179,8 @@ RES-PIACP-001: "The pi-acp bridge was not found. Install pi-acp or npx and ensur
 RES-PIACP-002: "The Pi CLI was not found while preparing the isolated ACP launch. Install Pi and ensure the pi executable is available on PATH."
 UNS-PIACP-003: "Pi ACP MCP isolation requires an exclusive request-owned surface. Use a request-owned surface with exact isolation."
 UNS-PIACP-004: "Pi ACP RPC tap requires a request-owned runtime root. Supply the request runtime root before enabling the tap."
+VAL-PIACP-005: "Pi ACP requires the immutable provider-qualified model selector admitted for the request. Re-admit the request with a resolved selector."
+VAL-PIACP-006: "The immutable Pi model selector does not match the admitted model. Correct the execution profile model and re-admit the request."
 VAL-RELP-001: "The release-please configuration is invalid. Check the release-please manifest and required project settings."
 VAL-RELP-002: "The release-please request is invalid. Check the requested package, release action, and associated configuration."
 VAL-SURF-001: "The provider surface declaration is invalid. Check its identifier, version, and required capability fields."

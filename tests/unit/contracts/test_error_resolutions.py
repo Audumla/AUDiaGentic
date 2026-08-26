@@ -278,3 +278,4 @@ def test_every_foundation_error_code_literal_has_a_resolution() -> None:
         "foundation error codes emitted in code but absent from the error catalogue:\n  "
         + "\n  ".join(missing)
     )
+

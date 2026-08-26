@@ -214,3 +214,4 @@ class OutputSink(Protocol):
     """
 
     def __call__(self, event: AgentOutputEvent) -> Awaitable[None] | None: ...
+
