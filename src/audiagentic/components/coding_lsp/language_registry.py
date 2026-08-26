@@ -258,3 +258,4 @@ def probe_rust_analyzer() -> bool:
     except OSError:
         return False
     return result.returncode == 0
+

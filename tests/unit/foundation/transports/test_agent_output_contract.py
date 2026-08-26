@@ -526,3 +526,4 @@ def _assert_no_callables(obj: Any, path: str = "") -> None:
         if isinstance(obj, enum.Enum):
             return
         raise AssertionError(f"Unexpected callable at {path or 'root'}: {obj!r}")
+

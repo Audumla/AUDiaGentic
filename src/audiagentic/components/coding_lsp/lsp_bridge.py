@@ -388,3 +388,4 @@ class LspJsonRpc:
                     close()
             except (OSError, TypeError):
                 pass
+

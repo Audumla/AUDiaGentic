@@ -189,3 +189,4 @@ VAL-SPOOL-004: "Provide the spool event payload as a mapping (dict), not another
 VAL-SPOOL-005: "Check the event-id; the dead-letter record does not exist or could not be read."
 VAL-STEP-001: "Fix the step definition — check for a duplicate step-type registration, a missing required field (type/key_path/id), or an unrecognized step type against the registered set."
 VAL-STUB-002: "Check the placeholder syntax and available context keys; an unknown or invalid substitution was requested."
+
