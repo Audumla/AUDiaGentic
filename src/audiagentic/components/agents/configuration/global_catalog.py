@@ -86,6 +86,36 @@ def resolve_global_default_execution_profile(project_root: Path) -> dict[str, An
     return execution_profile_to_dict(execution_profile_from_dict(raw))
 
 
+def global_agent_status(project_root: Path):
+    """Return the Agents component status from the canonical global catalog.
+
+    This status hook intentionally lives beside the global catalog rather than
+    in the legacy execution-profile API.  It is a read-only management
+    projection and does not create a second configuration authority.
+    """
+    from audiagentic.components.agents.gateway import api as agents_gateway_api
+    from audiagentic.foundation.components import is_enabled
+    from audiagentic.foundation.components.hooks import ComponentStatusPayload
+
+    try:
+        snapshot = read_global_agents_config(project_root)
+        profiles = [execution_profile_to_dict(execution_profile_from_dict(item)) for item in snapshot.document.execution_profiles]
+    except Exception:
+        profiles = []
+    default_id = next((item["profile_id"] for item in profiles if item.get("is_default")), None)
+    return ComponentStatusPayload(
+        enabled=is_enabled("agents", project_root),
+        configured=default_id is not None,
+        active_implementation=None,
+        missing_required=[],
+        details={
+            "profile_count": len(profiles),
+            "default_profile_id": default_id,
+            "gateway": agents_gateway_api.gateway_overview(project_root),
+        },
+    )
+
+
 __all__ = [
     "get_global_agent_definition",
     "global_agents_repository",
@@ -93,4 +123,5 @@ __all__ = [
     "read_global_agents_config",
     "resolve_global_execution_profile",
     "resolve_global_default_execution_profile",
+    "global_agent_status",
 ]
