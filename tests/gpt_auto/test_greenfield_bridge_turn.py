@@ -41,6 +41,8 @@ def snap(
     extra_signals=(),
     composer_editable=True,
     tool_activity_counts=(),
+    user_correlation=None,
+    structural_hr_count=0,
 ):
     signals = set(extra_signals)
     if generating:
@@ -65,7 +67,16 @@ def snap(
     # foreign/later turn build message_refs explicitly themselves.
     message_refs: list[ChatMessageRef] = []
     if users and resolved_user_id:
-        message_refs.append(ChatMessageRef(role="user", message_id=resolved_user_id, text=user, sequence=0))
+        message_refs.append(
+            ChatMessageRef(
+                role="user",
+                message_id=resolved_user_id,
+                text=user,
+                correlation_text=user_correlation,
+                structural_hr_count=structural_hr_count,
+                sequence=0,
+            )
+        )
     if assistants and resolved_assistant_id:
         message_refs.append(
             ChatMessageRef(role="assistant", message_id=resolved_assistant_id, text=assistant, sequence=1)
@@ -319,6 +330,37 @@ async def test_turn_proves_submission_once_and_completes_from_atomic_snapshots()
     assert result.metadata["assistant-message-id"] == "assistant-1"
     assert chat.checkpoint_updates[0]["recovery-state"] == "side-effect-may-have-started"
     assert chat.checkpoint_updates[-1] == {"unresolved-turn-pending": False}
+
+
+@pytest.mark.asyncio
+async def test_turn_accepts_structural_dom_prompt_when_visible_text_loses_hr() -> None:
+    """A DOM <hr> may remove exactly three source characters from visible text.
+
+    The structural correlation field restores the source representation for
+    submission proof while leaving the visible text projection unchanged.
+    """
+    chat = _Chat()
+    source = "before\n---\nafter"
+    visible = "before\nafter"
+    chat._snapshots = iter(
+        [
+            snap(),
+            snap(users=1, user=visible, user_correlation=source, structural_hr_count=1),
+            snap(users=1, user=visible, user_correlation=source, structural_hr_count=1),
+            snap(users=1, user=visible, user_correlation=source, structural_hr_count=1, generating=True),
+            snap(users=1, assistants=1, user=visible, user_correlation=source, structural_hr_count=1, assistant="Looks"),
+            snap(users=1, assistants=1, user=visible, user_correlation=source, structural_hr_count=1, assistant="Looks"),
+            snap(users=1, assistants=1, user=visible, user_correlation=source, structural_hr_count=1, assistant="Looks sound", complete=True),
+            snap(users=1, assistants=1, user=visible, user_correlation=source, structural_hr_count=1, assistant="Looks sound", complete=True),
+            snap(users=1, assistants=1, user=visible, user_correlation=source, structural_hr_count=1, assistant="Looks sound", complete=True),
+        ]
+    )
+
+    result = await GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-structural", body=source), lambda _obs: None
+    ).run()
+
+    assert result.final_summary == "Looks sound"
 
 
 @pytest.mark.asyncio
