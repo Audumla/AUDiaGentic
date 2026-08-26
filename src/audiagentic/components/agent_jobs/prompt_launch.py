@@ -192,7 +192,7 @@ def _resolve_agent_provider_model(
             )
         return provider_id, _first_instance_model_id(project_root, resolved), resolved.get("model_alias")
     except AudiaGenticError as exc:
-        if exc.code == "RES-EXP-003":
+        if exc.code in {"RES-EXP-002", "RES-EXP-003"}:
             raise AudiaGenticError(
                 code="CON-AGJ-001",
                 kind="agent-jobs",
