@@ -465,6 +465,75 @@ async def test_terminal_verification_conflict_uses_same_refresh_path() -> None:
 
 
 @pytest.mark.asyncio
+async def test_second_response_conflict_fails_without_second_refresh_or_submit() -> None:
+    """A bounded refresh cannot turn correlation ambiguity into a loop."""
+    chat = _Chat()
+    chat._snapshots = iter(
+        [
+            snap(),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01", generating=True),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="partial",
+                assistant_id="assistant-a",
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="final",
+                assistant_id="assistant-b",
+                complete=True,
+            ),
+        ]
+        + [
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="final",
+                assistant_id="assistant-b",
+                complete=True,
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="final",
+                assistant_id="assistant-c",
+                complete=True,
+            )
+        ]
+        * 20
+    )
+    refresh_invocations = 0
+
+    async def refresh_once() -> bool:
+        nonlocal refresh_invocations
+        refresh_invocations += 1
+        return refresh_invocations == 1
+
+    chat._refresh_for_reconciliation = refresh_once
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-refresh-bound", body="Review AU01"),
+        lambda _observation: None,
+    )
+
+    with pytest.raises(AudiaGenticError) as captured:
+        await turn.run()
+
+    assert captured.value.code == "EXT-GPTAUTO-004"
+    assert captured.value.details["failure-reason"] == "frozen-response-correlation-conflict"
+    assert refresh_invocations == 2  # second call is the guard check, not a second refresh
+    assert chat.runtime.bridge.submit_calls == 1
+
+
+@pytest.mark.asyncio
 async def test_turn_accepts_structural_dom_prompt_when_visible_text_loses_hr() -> None:
     """A DOM <hr> may remove exactly three source characters from visible text.
 
