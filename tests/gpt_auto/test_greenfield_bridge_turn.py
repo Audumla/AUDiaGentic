@@ -333,6 +333,70 @@ async def test_turn_proves_submission_once_and_completes_from_atomic_snapshots()
 
 
 @pytest.mark.asyncio
+async def test_stale_dom_response_conflict_refreshes_without_resubmitting() -> None:
+    """A renderer bump must recover the original turn, not fail it.
+
+    The first terminal-looking snapshot exposes a provisional assistant id;
+    refreshing the same retained conversation exposes the final id.  The
+    gateway must perform that read-only recovery exactly once and complete the
+    original request with one provider submission.
+    """
+    chat = _Chat()
+    final_snapshot = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        assistant="final response",
+        assistant_id="assistant-final",
+        complete=True,
+    )
+    chat._snapshots = iter(
+        [
+            snap(),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01", generating=True),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="partial",
+                assistant_id="assistant-provisional",
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="final response",
+                assistant_id="assistant-final",
+                complete=True,
+            ),
+        ]
+        + [final_snapshot] * 20
+    )
+    refresh_calls = 0
+
+    async def refresh_same_conversation() -> bool:
+        nonlocal refresh_calls
+        refresh_calls += 1
+        return True
+
+    chat._refresh_for_reconciliation = refresh_same_conversation
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-stale-dom", body="Review AU01"),
+        lambda _observation: None,
+    )
+
+    result = await turn.run()
+
+    assert result.final_summary == "final response"
+    assert chat.runtime.bridge.submit_calls == 1
+    assert refresh_calls == 1
+    assert turn._response_message_id == "assistant-final"
+
+
+@pytest.mark.asyncio
 async def test_turn_accepts_structural_dom_prompt_when_visible_text_loses_hr() -> None:
     """A DOM <hr> may remove exactly three source characters from visible text.
 

@@ -858,9 +858,29 @@ class GptAutoTurn:
                         mark_assistant(response_ref.message_id)
                     await self._publish_message_ids(strict=True)
                 elif self._response_message_id != response_ref.message_id:
-                    # Never silently "follow latest" once an identity is
-                    # established -- a later, unrelated turn's assistant
-                    # message must never overwrite this request's own.
+                    # A stale ChatGPT DOM can expose a provisional assistant
+                    # node and then expose the final node after the retained
+                    # conversation is refreshed.  Treat that as an
+                    # observation conflict, not proof that the provider turn
+                    # died: perform one bounded same-URL refresh and restart
+                    # correlation without ever submitting the prompt again.
+                    expected_assistant_id = self._response_message_id
+                    if await self._refresh_after_response_correlation_conflict():
+                        self._response_message_id = None
+                        logger.info(
+                            "gpt-auto refreshed retained conversation after response "
+                            "correlation conflict; continuing the original turn",
+                            extra={
+                                "turn-id": self.request.turn_id,
+                                "expected-assistant-id": expected_assistant_id,
+                                "observed-assistant-id": response_ref.message_id,
+                            },
+                        )
+                        continue
+                    # Never silently follow a later, unrelated turn once the
+                    # single refresh allowance is exhausted.  The transport
+                    # retains the binding and reports this as recoverable
+                    # observation uncertainty to the gateway.
                     raise AudiaGenticError(
                         code="EXT-GPTAUTO-004",
                         kind="providers",
@@ -868,7 +888,7 @@ class GptAutoTurn:
                         details={
                             "turn-id": self.request.turn_id,
                             "failure-reason": "frozen-response-correlation-conflict",
-                            "expected-assistant-id": self._response_message_id,
+                            "expected-assistant-id": expected_assistant_id,
                             "observed-assistant-id": response_ref.message_id,
                             **self._diagnostics(),
                         },
@@ -1272,6 +1292,28 @@ class GptAutoTurn:
                 }
             )
         return {key: value for key, value in details.items() if value is not None and value != ""}
+
+    async def _refresh_after_response_correlation_conflict(self) -> bool:
+        """Refresh the retained conversation once after a stale DOM conflict.
+
+        The provider may have completed the turn while the mounted React DOM
+        still exposes a provisional assistant node.  Refreshing the exact
+        durable chat URL is read-only recovery: it never creates a new chat or
+        resubmits the user's prompt.  The chat object owns the one-attempt
+        guard so the same bounded allowance is shared with unresolved-turn
+        reconciliation.
+        """
+        refresh = getattr(self.chat, "_refresh_for_reconciliation", None)
+        if not callable(refresh):
+            return False
+        try:
+            return bool(await refresh())
+        except Exception as exc:  # noqa: BLE001 - preserve original conflict diagnostics
+            logger.info(
+                "gpt-auto retained-conversation refresh after correlation conflict failed",
+                extra={"turn-id": self.request.turn_id, "error": str(exc)},
+            )
+            return False
 
     def _result(self, reason: str) -> SessionTurnResult:
         metadata: dict[str, Any] = {"project-url": self.chat.project_url}
