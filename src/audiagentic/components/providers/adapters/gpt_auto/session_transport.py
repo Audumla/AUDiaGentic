@@ -115,23 +115,31 @@ class GptAutoSessionTransport:
         if self._closed:
             return
         self._closed = True
-        if self._active_turn:
-            turn = self._active_turn
-            turn.cancel()
-            try:
-                await turn.wait_done(
-                    timeout=max(
-                        1.0,
-                        self.chat.config.turn.submission_timeout_seconds
-                        + self.chat.config.chat.ready_timeout_seconds
-                        + 1.0,
+        # Always release the PersistentChat/runtime ownership claim, even when
+        # waiting for an in-flight turn raises a provider error.  Previously a
+        # non-timeout wait failure skipped ``chat.close()`` and left the
+        # conversation owned in the process, so every later BigCherry turn
+        # failed with "conversation is already owned" until gateway restart.
+        try:
+            if self._active_turn:
+                turn = self._active_turn
+                turn.cancel()
+                try:
+                    await turn.wait_done(
+                        timeout=max(
+                            1.0,
+                            self.chat.config.turn.submission_timeout_seconds
+                            + self.chat.config.chat.ready_timeout_seconds
+                            + 1.0,
+                        )
                     )
-                )
-            except TimeoutError:
-                # Detach is still safe because GPT-auto retains physical tabs
-                # by default; do not hold gateway shutdown indefinitely.
-                pass
-        await self.chat.close()
+                except TimeoutError:
+                    # Detach is still safe because GPT-auto retains physical
+                    # tabs by default; do not hold gateway shutdown
+                    # indefinitely.
+                    pass
+        finally:
+            await self.chat.close()
 
     def is_alive(self) -> bool:
         return not self._closed and self.chat.state not in {ChatState.FAILED, ChatState.CLOSED}

@@ -721,6 +721,33 @@ async def test_chat_readiness_requires_two_stable_quiescent_snapshots() -> None:
     assert result.latest_assistant_text == "done"
 
 
+def test_provider_quiescent_ignores_stale_stop_control_after_completion() -> None:
+    """A completed ChatGPT turn may leave its stop button mounted.
+
+    The provider's explicit ``generating`` state and real busy indicators are
+    authoritative.  A stale stop control must not strand a persistent session
+    at readiness and turn every later request into a false quiescence failure.
+    """
+    from audiagentic.components.providers.adapters.gpt_auto.chat import provider_quiescent
+    from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatSnapshot
+
+    snapshot = ChatSnapshot(
+        url="https://chatgpt.com/g/g-p-project/project",
+        composer_present=True,
+        composer_editable=True,
+        generating=False,
+        error_present=False,
+        dom_signals=frozenset({"stop-control", "completion-control", "more-actions-menu"}),
+        user_count=1,
+        assistant_count=1,
+        latest_assistant_id="assistant-1",
+        latest_user_text="request",
+        latest_assistant_text="done",
+    )
+
+    assert provider_quiescent(snapshot) is True
+
+
 @pytest.mark.asyncio
 async def test_chat_close_retains_tab_by_default_for_gateway_resume() -> None:
     config = GptAutoConfig.from_dict(valid_config())

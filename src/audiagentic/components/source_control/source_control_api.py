@@ -5,8 +5,6 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-from dulwich.repo import Repo
-
 from audiagentic.components.source_control.source_control_bootstrap import (
     SOURCE_CONTROL_DEPENDENCY_IDS,
     detect_availability,
@@ -57,6 +55,14 @@ def _origin_url(repository: Repo) -> str | None:
 
 def context(project_root: Path) -> dict[str, Any]:
     """Return bounded, read-only local Git facts for prompt templates."""
+    # Dulwich is an optional component dependency.  The gateway must not make
+    # every provider unavailable merely because this host has not installed
+    # source-control extras; expose the same safe-null projection used for a
+    # non-repository path until the component is provisioned.
+    try:
+        from dulwich.repo import Repo
+    except ImportError:
+        return _empty_context(project_root)
     try:
         repository = Repo.discover(str(project_root))
     except Exception:

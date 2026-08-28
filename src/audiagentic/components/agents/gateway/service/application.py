@@ -436,11 +436,29 @@ _SUBMISSION_ARGUMENTS = {
     "component_profile",
 }
 
+# Older MCP façades may continue to serialize the removed caller-controlled
+# timeout/session-bound fields as explicit ``null`` values until that process
+# is reloaded.  Null carries no authority and is safe to discard at this
+# boundary; a non-null value remains an invalid request rather than silently
+# reintroducing caller-controlled watchdog policy.
+_RETIRED_SUBMISSION_ARGUMENTS = frozenset(
+    {"timeout_seconds", "session_idle_timeout_seconds", "session_max_lifetime_seconds"}
+)
+
 
 def _validated_submission_arguments(
     project_root: Path, arguments: dict[str, Any]
 ) -> dict[str, Any]:
     """Validate the wire submission through SH02's canonical envelope."""
+    for name in _RETIRED_SUBMISSION_ARGUMENTS:
+        if name in arguments:
+            value = arguments.pop(name)
+            if value is not None:
+                raise service_validation_error(
+                    22,
+                    "gateway service operation contains retired parameters",
+                    fields=[name],
+                )
     _reject_unknown(arguments, _SUBMISSION_ARGUMENTS)
     metadata = arguments.get("metadata")
     if metadata is not None and not isinstance(metadata, dict):

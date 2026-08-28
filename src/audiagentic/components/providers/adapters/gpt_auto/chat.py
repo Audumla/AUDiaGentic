@@ -1130,8 +1130,18 @@ def _recoverable_turn_failure(error: BaseException) -> bool:
 
 
 def provider_quiescent(snapshot: ChatSnapshot) -> bool:
-    """One provider-neutral-in-the-adapter definition of safe next-turn admission."""
-    busy_signals = {"stop-control", "streaming-indicator", "thinking-indicator", "busy-indicator"}
+    """Return whether the provider can accept another turn.
+
+    ``stop-control`` is deliberately *not* a blocking signal here.  ChatGPT
+    has been observed to leave the stop button mounted after a response has
+    completed (with ``generating`` already false); treating that stale widget
+    as authoritative strands an otherwise usable persistent conversation and
+    causes every subsequent turn to fail readiness.  The actual generation
+    flag plus streaming/thinking/busy indicators remain blocking evidence.
+    """
+    # The stop button is advisory only: it can stick after completion.  Do not
+    # let a stale renderer control override the provider's generation state.
+    busy_signals = {"streaming-indicator", "thinking-indicator", "busy-indicator"}
     failed_signals = {"auth-required", "error-page", "error-alert"}
     return bool(
         snapshot.composer_present
@@ -1150,8 +1160,8 @@ def _reconciliation_evidence_clear(snapshot: ChatSnapshot) -> bool:
     type a new prompt right now" -- reconciliation never submits anything.
     stop-control is excluded from the busy check here -- proven live
     (2026-08-15/16) to stick indefinitely after real completion, so it
-    must not block reconciliation of an already-finished turn the way it
-    correctly still blocks new-prompt admission in provider_quiescent().
+    must not block reconciliation of an already-finished turn or admission
+    of the next turn when the actual generation state is idle.
     """
     busy_signals = {"streaming-indicator", "thinking-indicator", "busy-indicator"}
     failed_signals = {"auth-required", "error-page", "error-alert"}
