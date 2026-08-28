@@ -2503,8 +2503,19 @@ class SessionRuntime:
             return
         handle.failure_started = True
         self._handles.pop(handle.session_id, None)
-        await handle.transport.close()
-        self._cleanup_handle_runtime(handle)
+        try:
+            await handle.transport.close()
+        except Exception:  # noqa: BLE001 - provider cleanup is best effort
+            # A provider cleanup failure must not strand the durable session
+            # in an owned in-memory state.  Persist the terminal session below
+            # and let the next explicit resume establish a fresh handle.
+            logger.warning(
+                "provider transport close failed while failing session",
+                extra={"session-id": handle.session_id},
+                exc_info=True,
+            )
+        finally:
+            self._cleanup_handle_runtime(handle)
         try:
             record = session_store.read_session_record(handle.project_root, handle.session_id)
             if record["state"] not in session_store.SESSION_TERMINAL_STATES:
