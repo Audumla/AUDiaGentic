@@ -1079,11 +1079,12 @@ class GptAutoTurn:
                     continue
                 self._remember_snapshot(raw_verify)
                 if prompt_message_id:
-                    verify, _verify_ref = _scope_response_snapshot(
+                    verify, verify_ref = _scope_response_snapshot(
                         baseline, raw_verify, prompt_message_id=prompt_message_id
                     )
                 else:
                     verify = raw_verify
+                    verify_ref = None
                 verify_facts = _facts(baseline, current, verify)
                 verified = self.chat.config.workflow.policy("response-complete").evaluate(
                     verify_facts
@@ -1095,10 +1096,54 @@ class GptAutoTurn:
                         sorted(verified.matched),
                         extra={"turn-id": self.request.turn_id},
                     )
+                # The independent verification snapshot must corroborate the
+                # frozen assistant identity as well as the response text. A
+                # stale/duplicate tab can otherwise present identical text
+                # under a different message id and silently overwrite the
+                # request's correlation proof.
+                verify_message_id = verify_ref.message_id if verify_ref is not None else None
+                if (
+                    self._response_message_id
+                    and verify_message_id
+                    and verify_message_id != self._response_message_id
+                ):
+                    expected_assistant_id = self._response_message_id
+                    if await self._refresh_after_response_correlation_conflict():
+                        self._response_message_id = None
+                        tracker = ObservationTracker(policy=policy, now=loop.time())
+                        previous = current
+                        logger.info(
+                            "gpt-auto refreshed retained conversation after terminal "
+                            "verification correlation conflict; restarting verification",
+                            extra={
+                                "turn-id": self.request.turn_id,
+                                "expected-assistant-id": expected_assistant_id,
+                                "observed-assistant-id": verify_message_id,
+                            },
+                        )
+                        continue
+                    raise AudiaGenticError(
+                        code="EXT-GPTAUTO-004",
+                        kind="providers",
+                        message="gpt-auto observed a conflicting response correlation",
+                        details={
+                            "turn-id": self.request.turn_id,
+                            "failure-reason": "frozen-response-correlation-conflict",
+                            "expected-assistant-id": expected_assistant_id,
+                            "observed-assistant-id": verify_message_id,
+                            "verification": True,
+                            **self._diagnostics(),
+                        },
+                    )
                 terminal_verified_ok = (
-                    verified.satisfied and verify.latest_assistant_text == current.latest_assistant_text
+                    verified.satisfied
+                    and verify_message_id is not None
+                    and verify_message_id == self._response_message_id
+                    and verify.latest_assistant_text == current.latest_assistant_text
                 )
-                response_message_id = verify.latest_assistant_id
+                # Keep the frozen candidate id authoritative; never replace
+                # it with an uncorrelated verification snapshot's latest id.
+                response_message_id = self._response_message_id
                 response_text = verify.latest_assistant_text
                 logger.info(
                     "gpt-auto response completion verification result=%s evidence=%s "
