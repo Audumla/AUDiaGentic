@@ -397,6 +397,74 @@ async def test_stale_dom_response_conflict_refreshes_without_resubmitting() -> N
 
 
 @pytest.mark.asyncio
+async def test_terminal_verification_conflict_uses_same_refresh_path() -> None:
+    """The independent verification read must not bypass identity recovery."""
+    chat = _Chat()
+    final_snapshot = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        assistant="final response",
+        assistant_id="assistant-final",
+        complete=True,
+    )
+    chat._snapshots = iter(
+        [
+            snap(),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01", generating=True),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="partial",
+                assistant_id="assistant-candidate",
+            ),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="final response",
+                assistant_id="assistant-candidate",
+                complete=True,
+            ),
+            # The independent verification read sees a different DOM id but
+            # identical text; this must trigger the same bounded refresh.
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="final response",
+                assistant_id="assistant-final",
+                complete=True,
+            ),
+        ]
+        + [final_snapshot] * 20
+    )
+    refresh_calls = 0
+
+    async def refresh_same_conversation() -> bool:
+        nonlocal refresh_calls
+        refresh_calls += 1
+        return True
+
+    chat._refresh_for_reconciliation = refresh_same_conversation
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-verification-conflict", body="Review AU01"),
+        lambda _observation: None,
+    )
+
+    result = await turn.run()
+
+    assert result.final_summary == "final response"
+    assert chat.runtime.bridge.submit_calls == 1
+    assert refresh_calls == 1
+    assert turn._response_message_id == "assistant-final"
+
+
+@pytest.mark.asyncio
 async def test_turn_accepts_structural_dom_prompt_when_visible_text_loses_hr() -> None:
     """A DOM <hr> may remove exactly three source characters from visible text.
 
