@@ -1,0 +1,42 @@
+# AUDiaGentic-managed Codex ACP bridge.  This is intentionally user-global:
+# the install prefix is supplied by the Codex adapter, not derived from a
+# project root, so all projects share one pinned bridge installation.
+recipe-id: codex-acp-bridge
+recipe-version: "1.0.0"
+description: Install the pinned Codex ACP bridge in the shared provider runtime
+parameters:
+  - name: PREFIX
+    required: true
+  - name: PACKAGE
+    required: true
+  - name: VERSION
+    required: true
+lifecycle:
+  probe:
+    type: file-exists
+    path: "{PREFIX}/node_modules/@agentclientprotocol/codex-acp/dist/index.js"
+  install-steps:
+    - type: shell
+      id: npm-install
+      command:
+        - npm
+        - install
+        - --prefix
+        - "{PREFIX}"
+        - --no-package-lock
+        - --no-save
+        - "{PACKAGE}@{VERSION}"
+      timeout: 300
+  verify:
+    type: file-exists
+    path: "{PREFIX}/node_modules/@agentclientprotocol/codex-acp/dist/index.js"
+  uninstall-steps:
+    - type: shell
+      id: npm-uninstall
+      command:
+        - npm
+        - uninstall
+        - --prefix
+        - "{PREFIX}"
+        - "{PACKAGE}"
+      timeout: 120

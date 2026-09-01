@@ -17,9 +17,14 @@ from pathlib import Path
 from audiagentic.components.providers.adapters.cli import require_executable
 from audiagentic.foundation.transports import AcpLaunch
 
+from .acp_install import (
+    CODEX_ACP_PACKAGE,
+    CODEX_ACP_VERSION,
+    shared_codex_acp_node_launch,
+)
 from .model_selection import split_model_selection
 
-_CODEX_ACP_PACKAGE = "@agentclientprotocol/codex-acp@1.6.2"
+_CODEX_ACP_PACKAGE = f"{CODEX_ACP_PACKAGE}@{CODEX_ACP_VERSION}"
 
 
 def _launch_environment(
@@ -37,8 +42,14 @@ def _launch_environment(
     model, effort = split_model_selection(model_id)
     if model:
         config["model"] = model
+    # ``codex-acp`` consumes the Codex app-server session config, whose
+    # reasoning setting is named ``reasoning_effort``.  The CLI adapter uses
+    # ``model_reasoning_effort`` for its TOML ``-c`` override, but that is not
+    # a valid ACP config key.  Keeping this translation here ensures the
+    # profile's ``model[effort]`` selector reaches the ACP harness instead of
+    # silently falling back to Codex's default effort.
     if effort:
-        config["model_reasoning_effort"] = effort
+        config["reasoning_effort"] = effort
 
     environment: dict[str, str] = {}
     if config:
@@ -70,10 +81,14 @@ def build_acp_launch(
         configured_path = shutil.which(configured.strip()) or configured.strip()
         return AcpLaunch(executable=configured_path, args=(), environment=environment)
 
-    # Prefer a locally installed codex-acp binary.  The pinned npx fallback is
-    # intentionally deterministic while the managed auxiliary-install seam
-    # (AS13/AS98) is completed; it is never allowed to select a floating latest
-    # bridge version.
+    # Prefer the explicit shared, version-pinned bridge.  It is installed by
+    # the Codex ACP recipe under ~/.audiagentic/providers/codex and can be
+    # reused by every project.  A PATH binary remains a deliberate operator
+    # override; npx is the last-resort compatibility path only.
+    shared = shared_codex_acp_node_launch()
+    if shared is not None:
+        node, args = shared
+        return AcpLaunch(executable=node, args=args, environment=environment)
     direct = shutil.which("codex-acp")
     if direct:
         return AcpLaunch(executable=direct, args=(), environment=environment)

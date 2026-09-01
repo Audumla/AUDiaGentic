@@ -37,6 +37,7 @@ class GatewayClient(Protocol):
     def get_execution_diagnostics(self, project_root: Path, request_id: str, *, limit: int = 25) -> dict[str, Any]: ...
     def recover_execution_request(self, project_root: Path, request_id: str, **kwargs: Any) -> dict[str, Any]: ...
     def get_execution_response(self, project_root: Path, request_id: str) -> str: ...
+    def focus_execution_chat(self, project_root: Path, request_id: str) -> dict[str, Any]: ...
     def wait_execution_request(
         self,
         project_root: Path,
@@ -95,6 +96,9 @@ class EmbeddedGatewayClient:
 
     def get_execution_response(self, project_root: Path, request_id: str) -> str:
         return self._application.get_execution_response(project_root, request_id)
+
+    def focus_execution_chat(self, project_root: Path, request_id: str) -> dict[str, Any]:
+        return self._application.focus_execution_chat(project_root, request_id)
 
     def wait_execution_request(
         self,
@@ -430,4 +434,3 @@ def call_gateway_method(
                 reset_gateway_client()
                 client = get_gateway_client(project_root)
         raise last_exc
-

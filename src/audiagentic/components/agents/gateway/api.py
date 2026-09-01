@@ -17,6 +17,7 @@ import hashlib
 import uuid
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.admission.context import ComponentContextReader
@@ -923,6 +924,45 @@ def get_execution_response(project_root: Path, request_id: str) -> str:
     return read_final_response(project_root, request_id, artifact)
 
 
+def focus_execution_chat(project_root: Path, request_id: str) -> dict[str, Any]:
+    """Focus the existing provider conversation associated with a request.
+
+    Only the durable request id crosses the gateway boundary.  Provider
+    metadata and project/session identity are read from the request-owned
+    records, then passed through the provider public capability seam.
+    """
+    record = store.read_record(project_root, request_id)
+    provider_id = record.get("resolved-provider-id") or record.get("provider-id")
+    metadata = record.get("provider-metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+    session_id = record.get("session-id")
+    if session_id:
+        from audiagentic.components.agents.gateway.session import sessions_store as session_store
+
+        session_record = session_store.read_session_record(project_root, str(session_id))
+        session_metadata = session_store.session_provider_metadata(session_record)
+        if session_metadata:
+            metadata = {**session_metadata, **metadata}
+        provider_id = provider_id or session_store.session_provider_id(session_record)
+    from audiagentic.components.agents.gateway.session.sessions import get_session_runtime
+    from audiagentic.components.providers.contracts.conversation_focus import (
+        ConversationFocusLocator,
+    )
+
+    locator = ConversationFocusLocator(
+        chat_url=metadata.get("chat-url"),
+        provider_session_id=metadata.get("provider-session-id"),
+        project_url=metadata.get("project-url"),
+    )
+    if not provider_id:
+        return {"request-id": request_id, "outcome": "unavailable", "reason": "provider-identity-missing"}
+    result = get_session_runtime().focus_existing_conversation(
+        project_root, provider_id=str(provider_id), locator=locator
+    )
+    return {"request-id": request_id, **result}
+
+
 def request_runtime_status(project_root: Path, request_id: str) -> dict[str, Any]:
     """Return redacted runtime facts for one request without starting runtimes."""
     record = store.read_public_status(project_root, request_id)
@@ -1109,15 +1149,38 @@ def list_dashboard_requests(project_root: Path) -> list[dict[str, Any]]:
     """
     records = store.list_records(project_root)
     records.sort(key=lambda record: record["created-at"], reverse=True)
-    return [
-        store.project_public_status(
+    rows: list[dict[str, Any]] = []
+    for record in records:
+        row = store.project_public_status(
             record,
             latest_transition=store.latest_transition_projection(
                 project_root, record["request-id"]
             ),
         )
-        for record in records
-    ]
+        # The dashboard may offer a navigation link to the exact GPT chat
+        # tab.  Only expose a validated ChatGPT origin; provider metadata
+        # remains hidden from compact task status and arbitrary URLs never
+        # become clickable dashboard content.
+        provider_metadata = record.get("provider-metadata")
+        chat_url = provider_metadata.get("chat-url") if isinstance(provider_metadata, dict) else None
+        if isinstance(chat_url, str) and _safe_gpt_chat_url(chat_url) is not None:
+            row["provider-chat-url"] = chat_url
+        rows.append(row)
+    return rows
+
+
+def _safe_gpt_chat_url(value: str) -> str | None:
+    """Return a safe browser navigation target for a retained GPT chat URL."""
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return None
+    hostname = (parsed.hostname or "").lower().rstrip(".")
+    if parsed.scheme != "https" or parsed.username or parsed.password:
+        return None
+    if hostname not in {"chatgpt.com", "www.chatgpt.com", "chat.openai.com", "www.chat.openai.com"}:
+        return None
+    return value
 
 
 def _public_session_projection(record: dict[str, Any]) -> dict[str, Any]:

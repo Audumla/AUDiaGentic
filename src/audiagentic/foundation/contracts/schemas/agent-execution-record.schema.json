@@ -186,7 +186,21 @@
       "type": ["object", "null"],
       "properties": {
         "version": {"type": "integer", "minimum": 1},
-        "classification": {"type": "string"},
+        "classification": {
+          "type": "string",
+          "enum": [
+            "provider-rejected",
+            "provider-error",
+            "browser-adapter-error",
+            "gateway-ownership-queue-error",
+            "gateway-restart",
+            "cancelled",
+            "timeout",
+            "stale-progress",
+            "ambiguous-side-effect",
+            "unknown"
+          ]
+        },
         "certainty": {"type": "string"},
         "phase": {"type": "string"},
         "side-effect-state": {"type": "string"},
@@ -271,7 +285,13 @@
       "enum": ["worker", "provider-session"]
     },
     "provider-metadata": {
+      "description": "Opaque provider-owned runtime metadata retained for diagnostics and session restoration. GPT-auto may provide project-url, chat-url, and provider-session-id; compact task status intentionally projects only the safe provider-turn-pending flag.",
       "type": ["object", "null"],
+      "properties": {
+        "project-url": {"type": ["string", "null"], "maxLength": 4096},
+        "chat-url": {"type": ["string", "null"], "maxLength": 4096},
+        "provider-session-id": {"type": ["string", "null"], "maxLength": 1024}
+      },
       "additionalProperties": true
     },
     "session-keep-alive": {

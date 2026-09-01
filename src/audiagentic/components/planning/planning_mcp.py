@@ -100,8 +100,12 @@ def plan_update_item(item_id: str, updates: dict, append: list[str] | None = Non
     silently discards everything written there before unless you fetch the
     item first and concatenate. Pass the key's name in `append` (e.g.
     append=["notes"]) to instead add the new text after the existing
-    content, separated by a blank line. `append` only affects body sections
-    named in `updates`; frontmatter fields always replace.
+    content, separated by a blank line. `append` is a list of section names,
+    not the text to append; every name must also be present in `updates`.
+    For example, use `updates={"notes": "new text"}, append=["notes"]`.
+    Passing text in `append`, or passing `append` without matching `updates`,
+    is rejected instead of being treated as a silent no-op. `append` only
+    affects body sections named in `updates`; frontmatter fields always replace.
 
     `notes` specifically defaults to append even when `append` is omitted
     entirely — accidentally replacing accumulated incident history is a

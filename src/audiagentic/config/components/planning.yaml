@@ -146,7 +146,12 @@ mcp-servers:
         Update frontmatter fields (work, skill, order) or body sections
         (description, steps, detailed_solution [Detailed Solution & Technical Design],
         code_samples [Code Samples & Guidance], files, validation,
-        effort_risk, standards, notes) of an existing item.
+        effort_risk, standards, notes) of an existing item. The optional append
+        parameter is a list of section names, not content; each name must also
+        be present in updates. Use updates={"notes": "new text"}, append=["notes"]
+        to append. Supplying append without matching updates, or putting text
+        rather than a section name in append, returns VAL-PLN-027 or VAL-PLN-028
+        with corrective details.
       plan_delete_item: Permanently delete a plan item by ID.
       plan_create_review: >
         Create a new review linked to a plan item. Required: review-of (parent item ID), title.

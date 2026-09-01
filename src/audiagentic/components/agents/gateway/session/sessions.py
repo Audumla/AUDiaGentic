@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import inspect
 import logging
 import threading
 import time
@@ -53,6 +54,7 @@ from audiagentic.components.agents.gateway.event_topics import (
 from audiagentic.components.agents.gateway.session import bindings as binding_store
 from audiagentic.components.agents.gateway.session import orphan as orphan_lib
 from audiagentic.components.agents.gateway.session import sessions_store as session_store
+from audiagentic.components.agents.gateway.session.console_trace import GatewayConsoleTrace
 from audiagentic.components.agents.gateway.session.turn_events import (
     _make_on_event_callback,
     _publish_session_event,
@@ -71,6 +73,8 @@ from audiagentic.components.agents.status.session_lifecycle_projection import (
     SessionEvidenceProjection,
     SessionLifecycleDecision,
 )
+from audiagentic.components.providers import providers_api
+from audiagentic.components.providers.contracts.conversation_focus import ConversationFocusLocator
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
 from audiagentic.foundation.transports.agent_session import (
@@ -349,6 +353,7 @@ class SessionRuntime:
         # defaults to the real providers_api.prepare_provider_session_transport.
         self._provider_prepare_fn = provider_prepare_fn or _default_prepare_fn
         self._handles: dict[str, _SessionHandle] = {}
+        self._console_trace = GatewayConsoleTrace()
         # request-id → cancel event for the turn currently owning that request
         # (loop-thread only). request_cancel() sets these threadsafe (RV680).
         self._turn_cancels: dict[str, asyncio.Event] = {}
@@ -502,6 +507,7 @@ class SessionRuntime:
         effective_capability_digest: str | None = None,
         capacity_source_id: str | None = None,
         project_name: str | None = None,
+        request_provider_metadata_sink: Any = None,
     ) -> dict[str, Any]:
         """Open a live session; returns the persisted session record.
 
@@ -565,6 +571,7 @@ class SessionRuntime:
                 effective_capability_digest=effective_capability_digest,
                 capacity_source_id=capacity_source_id,
                 project_name=project_name,
+                request_provider_metadata_sink=request_provider_metadata_sink,
             ),
             # Opening a provider session is provider work. Do not convert a
             # slow but alive handshake into a terminal request solely because
@@ -595,6 +602,22 @@ class SessionRuntime:
             ),
             timeout=timeout_seconds,
         )
+
+    def focus_existing_conversation(
+        self,
+        project_root: Path,
+        *,
+        provider_id: str,
+        locator: ConversationFocusLocator,
+        timeout_seconds: float = 15.0,
+    ) -> dict[str, Any]:
+        """Focus a provider conversation without creating or navigating tabs."""
+        return self._call(
+            providers_api.focus_existing_conversation(
+                project_root, provider_id=provider_id, locator=locator
+            ),
+            timeout=timeout_seconds,
+        ).to_mapping()
 
     def resume_session(
         self,
@@ -1296,6 +1319,11 @@ class SessionRuntime:
         )
         handle.child_pid = getattr(transport, "child_pid", None)
         handle.adopted_child = getattr(transport, "_adopted_child", None)
+        self._trace_session_opened(
+            handle,
+            provider_id=provider_id,
+            model_id=model_id or session_store.session_model_id(record),
+        )
         # Rehydration happens in a fresh gateway process, so recreate the
         # process-local observer binding before exposing the handle. Observer
         # failure remains best-effort, matching the normal open path.
@@ -1349,6 +1377,7 @@ class SessionRuntime:
         effective_capability_digest: str | None = None,
         capacity_source_id: str | None = None,
         project_name: str | None = None,
+        request_provider_metadata_sink: Any = None,
     ) -> dict[str, Any]:
         started = time.monotonic()
         logger.info(
@@ -1369,13 +1398,14 @@ class SessionRuntime:
         allocated_session_id = session_id
 
         async def binding_sink(update: Any) -> None:
+            metadata = dict(update.metadata)
             session_store.install_initial_provider_binding(
                 project_root,
                 allocated_session_id,
                 provider_id=provider_id,
                 surface_id=surface_hint.surface_id,
                 provider_session_ref=update.provider_session_ref.value,
-                metadata=dict(update.metadata),
+                metadata=metadata,
                 identity_context_fingerprint=identity_context_fingerprint,
                 execution_context_fingerprint=execution_context_fingerprint,
                 context_id=context_id,
@@ -1386,6 +1416,22 @@ class SessionRuntime:
                 execution_profile_digest=execution_profile_digest,
                 effective_capability_digest=effective_capability_digest,
             )
+            # Provider identity is discovered during the first turn, after
+            # the request has entered ``running``.  Relay that immutable
+            # binding metadata (especially GPT's durable chat URL) to the
+            # request immediately so operator surfaces can locate an active
+            # tab; terminal dispatch will still persist the final snapshot.
+            if request_provider_metadata_sink is not None:
+                try:
+                    relay_result = request_provider_metadata_sink(metadata)
+                    if inspect.isawaitable(relay_result):
+                        await relay_result
+                except Exception:  # noqa: BLE001 - dashboard metadata is best-effort
+                    logger.warning(
+                        "failed to relay provider identity to running request",
+                        extra={"session-id": allocated_session_id},
+                        exc_info=True,
+                    )
 
         async def checkpoint_sink(metadata: dict[str, Any]) -> None:
             pending = bool(metadata.get("unresolved-turn-pending"))
@@ -1647,6 +1693,11 @@ class SessionRuntime:
         handle.child_pid = child_pid
         handle.child_creation_identity = child_creation_identity
         handle.adopted_child = getattr(transport, "_adopted_child", None)
+        self._trace_session_opened(
+            handle,
+            provider_id=provider_id,
+            model_id=model_id,
+        )
         # AS19 Stage-2 Slice A: resolve transport-observation lease from
         # providers_api. The lease normalizes TransportObservation values into
         # canonical StatusEvidence. Best-effort — session still opens if this
@@ -2219,6 +2270,26 @@ class SessionRuntime:
         cap = handle.max_lifetime_seconds
         return bool(cap) and (self._clock() - handle.created_clock) > cap
 
+    def _trace_session_opened(
+        self,
+        handle: _SessionHandle,
+        *,
+        provider_id: str,
+        model_id: str | None,
+    ) -> None:
+        """Emit one bounded launch summary to the gateway service console."""
+        surface = handle.surface_snapshot
+        surface_ref = getattr(surface, "ref", None)
+        surface_id = getattr(surface_ref, "surface_id", None)
+        self._console_trace.session_opened(
+            session_id=handle.session_id,
+            provider_id=provider_id,
+            model_id=model_id,
+            execution_profile_id=handle.execution_profile_id,
+            surface_id=surface_id,
+            child_pid=handle.child_pid,
+        )
+
     async def _prompt(
         self,
         project_root: Path,
@@ -2299,6 +2370,15 @@ class SessionRuntime:
                 "request-id": request_id,
                 "timestamp": now_iso_z(),
             }
+            trace_started = (
+                self._console_trace.turn_started(
+                    request_id=request_id,
+                    session_id=session_id,
+                    prompt=prompt,
+                )
+                if request_id is not None
+                else self._clock()
+            )
 
             # RV680: every turn gets a cancel signal (so agent_task_cancel can
             # reach it via protocol-level session/cancel) and an activity
@@ -2390,6 +2470,15 @@ class SessionRuntime:
                 result = _on_event_cb(obs)
                 if result is not None:
                     await result
+                if request_id is not None:
+                    kind = getattr(getattr(obs, "kind", None), "value", None) or getattr(obs, "kind", "unknown")
+                    self._console_trace.progress(
+                        request_id=request_id,
+                        session_id=session_id,
+                        kind=str(kind),
+                        sequence=getattr(obs, "sequence", None),
+                        started=trace_started,
+                    )
 
             # AS28 slice 4b-A: call transport.prompt() with the neutral contract.
             # Include cancel_token so the transport can check it for cancellation.
@@ -2404,7 +2493,15 @@ class SessionRuntime:
                 # observation setting, but never converted to a local kill.
                 # The neutral transport decides any provider-owned deadline.
                 result = await handle.transport.prompt(session_prompt, _observation_sink)
-            except Exception:
+            except Exception as exc:
+                if request_id is not None:
+                    self._console_trace.failed(
+                        request_id=request_id,
+                        session_id=session_id,
+                        error_code=getattr(exc, "code", None),
+                        error_type=type(exc).__name__,
+                        started=trace_started,
+                    )
                 # A provider may have an explicit recovery state machine.  In
                 # that case retain the live handle and its browser/session
                 # binding; all other transports keep the historical terminal
@@ -2445,6 +2542,17 @@ class SessionRuntime:
                     await notify_turn_done(request_id)
             finally:
                 handle.turn_lock.release()
+        if request_id is not None:
+            final_output = getattr(result, "final_summary", None)
+            result_error_code = getattr(result, "error_code", None)
+            self._console_trace.finished(
+                request_id=request_id,
+                session_id=session_id,
+                outcome=("failed" if result_error_code else result.stop_reason),
+                output=final_output,
+                error_code=result_error_code,
+                started=trace_started,
+            )
         if request_id is not None:
             session_store.record_session_turn(
                 project_root,

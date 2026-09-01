@@ -226,7 +226,7 @@ def build_acp_launch(
                 number=5,
                 kind="pi-harness",
                 message="Pi ACP requires an admitted provider-qualified model selector",
-                model_id=model_id,
+                details={"model-id": model_id},
             )
         if model_selector.rsplit("/", 1)[-1] != model_id:
             raise make_error(
@@ -235,7 +235,7 @@ def build_acp_launch(
                 number=6,
                 kind="pi-harness",
                 message="admitted Pi selector does not match its admitted model",
-                model_id=model_id,
+                details={"model-id": model_id},
             )
         initial_config_options["model"] = model_selector
     return AcpLaunch(

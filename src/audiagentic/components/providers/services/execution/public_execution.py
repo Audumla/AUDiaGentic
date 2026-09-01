@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.providers.contracts.conversation_focus import (
+    ConversationFocusLocator,
+    ConversationFocusOutcome,
+    ConversationFocusResult,
+)
 from audiagentic.components.providers.contracts.mcp_launch_surface import (
     McpLaunchIsolationTier,
 )
@@ -23,6 +30,51 @@ from audiagentic.foundation.transports.session_surface import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def focus_existing_conversation(
+    project_root: Path,
+    *,
+    provider_id: str,
+    locator: ConversationFocusLocator,
+) -> ConversationFocusResult:
+    """Focus an already-existing provider conversation, when supported.
+
+    This is deliberately an optional provider capability.  The public
+    provider boundary accepts durable identities only; provider adapters own
+    CDP/browser discovery and must never receive caller-supplied handles.
+    """
+    from .execution import load_conversation_focus_capability
+
+    hook = load_conversation_focus_capability(provider_id)
+    if hook is None:
+        return ConversationFocusResult(
+            ConversationFocusOutcome.UNSUPPORTED,
+            "provider-capability-unavailable",
+        )
+    try:
+        value = hook(project_root, provider_id=provider_id, locator=locator)
+        if inspect.isawaitable(value):
+            value = await value
+    except Exception:
+        logger.exception("provider conversation focus capability failed", extra={"provider-id": provider_id})
+        return ConversationFocusResult(
+            ConversationFocusOutcome.UNAVAILABLE,
+            "provider-capability-failed",
+        )
+    if isinstance(value, ConversationFocusResult):
+        return value
+    if isinstance(value, Mapping):
+        try:
+            outcome = ConversationFocusOutcome(str(value.get("outcome", "unavailable")))
+        except ValueError:
+            outcome = ConversationFocusOutcome.UNAVAILABLE
+        reason = value.get("reason")
+        return ConversationFocusResult(outcome, str(reason) if reason else None)
+    return ConversationFocusResult(
+        ConversationFocusOutcome.UNAVAILABLE,
+        "invalid-provider-capability-result",
+    )
 
 #: Preparation failed with an exception that was not a classified
 #: :class:`AudiaGenticError` — the builder raised something unmodelled.
