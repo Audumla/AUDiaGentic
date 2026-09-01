@@ -688,6 +688,42 @@ class TestAcpAgentSessionTransportPrompt:
         await transport.close()
 
     @pytest.mark.asyncio
+    async def test_prompt_records_provider_tool_failure_on_cancelled_result(self, tmp_path, monkeypatch):
+        """Provider cancellation after a failed tool is not a clean cancel."""
+        async def prompt_with_failed_tool(session_id, prompt):
+            client = captured["client"]
+            await client.session_update(
+                session_id,
+                {"sessionUpdate": "agent_message_chunk", "text": "partial answer"},
+            )
+            await client.session_update(
+                session_id,
+                {
+                    "sessionUpdate": "tool_call_update",
+                    "toolCallId": "tc-failed",
+                    "status": "failed",
+                },
+            )
+            return SimpleNamespace(stop_reason="cancelled")
+
+        conn, captured = _install_sdk(monkeypatch, prompt_side_effect=prompt_with_failed_tool)
+        transport = AcpAgentSessionTransport(AcpLaunch("agent"), cwd=tmp_path)
+        await transport.open()
+
+        from audiagentic.foundation.transports.agent_session import SessionPrompt
+
+        result = await transport.prompt(SessionPrompt(turn_id="t-provider-cancel", body="run it"), lambda _obs: None)
+
+        assert result.stop_reason == "cancelled"
+        assert result.error_code == "EXT-ACP-TOOL-001"
+        assert result.final_summary == "partial answer"
+        assert result.metadata["cancelled-by-signal"] is False
+        assert result.metadata["failed-tool-call-count"] == 1
+        assert result.metadata["failed-tool-call-ids"] == ("tc-failed",)
+
+        await transport.close()
+
+    @pytest.mark.asyncio
     async def test_prompt_two_turns_share_session(self, tmp_path, monkeypatch):
         """Two prompts on the same session reuse the connection."""
         conn, captured = _install_sdk(monkeypatch)

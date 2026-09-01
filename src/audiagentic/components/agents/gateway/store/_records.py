@@ -48,6 +48,10 @@ def _redact_error(error: BaseException | dict[str, Any] | None) -> dict[str, Any
             details = _project_gpt_auto_error_details(error.details)
             if details:
                 projected["details"] = details
+        elif error.code.startswith("EXT-ACP-") and isinstance(error.details, dict):
+            details = _project_acp_error_details(error.details)
+            if details:
+                projected["details"] = details
         return projected
     if isinstance(error, BaseException):
         # Preserve ordinary validation/configuration detail so operators can
@@ -142,6 +146,30 @@ def _project_gpt_auto_error_details(details: dict[str, Any]) -> dict[str, Any]:
             nested = _project_gpt_auto_error_details(value)
             if nested:
                 projected[key] = nested
+        elif isinstance(value, (str, int, float, bool)) or value is None:
+            projected[key] = value
+    return projected
+
+
+_ACP_DETAIL_KEYS = frozenset(
+    {
+        "stop-reason",
+        "reason-code",
+        "failed-tool-call-count",
+        "failed-tool-call-ids",
+        "assistant-output-available",
+    }
+)
+
+
+def _project_acp_error_details(details: dict[str, Any]) -> dict[str, Any]:
+    """Project bounded ACP provider-failure evidence without tool payloads."""
+    projected: dict[str, Any] = {}
+    for key, value in details.items():
+        if key not in _ACP_DETAIL_KEYS:
+            continue
+        if isinstance(value, (list, tuple)):
+            projected[key] = list(value)[:8]
         elif isinstance(value, (str, int, float, bool)) or value is None:
             projected[key] = value
     return projected
