@@ -600,6 +600,22 @@ def transition_recovered_terminal(
                 "watchdog-reason": None,
             }
         )
+        # A running request recovered after its owning service generation
+        # disappeared is an explicit gateway-restart interruption. Persist a
+        # semantic diagnostic rollup so clients can distinguish this from a
+        # provider failure and choose reconciliation without guessing.
+        error_code = getattr(error, "code", None)
+        if isinstance(error, Mapping):
+            error_code = error.get("code")
+        if new_state == "interrupted" and error_code == "CON-AGW-084":
+            updated["diagnostics"] = merge_diagnostics(
+                record.get("diagnostics"),
+                classify_error(
+                    error,
+                    phase="reconciliation",
+                    side_effect_state="may-have-started",
+                ),
+            )
         if recovered_evidence is not None:
             updated["worker-evidence"] = recovered_evidence
         if replay_required is not None:

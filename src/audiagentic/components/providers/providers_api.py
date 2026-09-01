@@ -25,6 +25,10 @@ from audiagentic.components.providers.contracts.cli_lifecycle import (
     CliLifecycleRequest,
     CliLifecycleResult,
 )
+from audiagentic.components.providers.contracts.conversation_focus import (
+    ConversationFocusLocator,
+    ConversationFocusResult,
+)
 from audiagentic.components.providers.contracts.generated_surface import (
     GeneratedSurfaceMode,
     GeneratedSurfaceRequest,
@@ -1769,6 +1773,23 @@ async def manage_cli_lifecycle(
     return CliLifecycleResult(ok=False, supported=False, state="failed")
 
 
+# --- Existing-conversation focus through the public provider boundary -------
+
+
+async def focus_existing_conversation(
+    project_root: Path,
+    *,
+    provider_id: str,
+    locator: ConversationFocusLocator,
+) -> ConversationFocusResult:
+    """Focus a provider-owned conversation identified by durable metadata."""
+    from audiagentic.components.providers.services.execution.public_execution import (
+        focus_existing_conversation as _focus,
+    )
+
+    return await _focus(project_root, provider_id=provider_id, locator=locator)
+
+
 # --- AS29 slice 5a: resolved session-surface through public boundary --------
 
 
@@ -1999,6 +2020,7 @@ __all__ = [
     "prepare_interactive_provider_launch",
     "ProviderLaunch",
     "prepare_provider_session_transport",
+    "focus_existing_conversation",
     "prepare_provider_execution_environment",
     "McpLaunchServerEntry",
     "McpLaunchSurfaceResult",

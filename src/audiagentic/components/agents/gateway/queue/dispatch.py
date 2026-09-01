@@ -12,11 +12,13 @@ occurrence — never retried.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.mapping import first_present
+from audiagentic.components.agents.gateway.session.console_trace import GatewayConsoleTrace
 from audiagentic.components.agents.gateway.session.dispatch import (
     _CancelledDuringDispatch,
     _dispatch_session_request,
@@ -283,28 +285,92 @@ def _dispatch_one_attempt(
                 )
         except (TypeError, ValueError, KeyError):
             logger.warning("invalid persisted watchdog policy; using machine fallback", extra={"request-id": record.get("request-id")})
+    # Worker-backed sessions do not pass through SessionRuntime, so they need
+    # the same bounded operator trace here.  The worker process is disposable
+    # and its stdout is an ACP/worker protocol stream; writing a summary to the
+    # shared gateway trace is the observable console equivalent without opening
+    # a console window or corrupting that protocol.
+    trace = GatewayConsoleTrace()
+    trace_session_id = str(record.get("session-id") or "worker")
     try:
-        result = execute_isolated_provider_turn(
-            identity=identity,
-            execution_request=provider_request.to_mapping(),
-            timeout_seconds=worker_timeout_seconds,
-            activity_callback=lambda activity: _renew_activity(
-                project_root,
-                record,
-                activity,
-                activity_lease_seconds=watchdog_policy.activity_lease_seconds,
-            ),
+        trace.session_opened(
+            session_id=trace_session_id,
+            provider_id=provider_id,
+            model_id=bound_model_id,
+            execution_profile_id=execution_profile_id,
+            surface_id="worker",
+            child_pid=None,
         )
-    except TypeError as exc:
-        # Preserve compatibility with test/delivery doubles written against
-        # the pre-SH22 worker seam; real provider TypeErrors still propagate.
-        if "activity_callback" not in str(exc):
-            raise
-        result = execute_isolated_provider_turn(
-            identity=identity,
-            execution_request=provider_request.to_mapping(),
-            timeout_seconds=worker_timeout_seconds,
+    except Exception:  # noqa: BLE001 - tracing must never affect dispatch
+        logger.debug("worker console trace start failed", exc_info=True)
+    try:
+        trace_started = trace.turn_started(
+            request_id=record["request-id"],
+            session_id=trace_session_id,
+            prompt=dispatch_prompt,
         )
+    except Exception:  # noqa: BLE001 - tracing must never affect dispatch
+        logger.debug("worker console trace turn start failed", exc_info=True)
+        trace_started = trace.clock()
+
+    def _on_worker_activity(activity: Any) -> None:
+        _renew_activity(
+            project_root,
+            record,
+            activity,
+            activity_lease_seconds=watchdog_policy.activity_lease_seconds,
+        )
+        try:
+            trace.progress(
+                request_id=record["request-id"],
+                session_id=trace_session_id,
+                kind=str(getattr(activity, "activity_source", "provider")),
+                sequence=getattr(activity, "activity_seq", None),
+                started=trace_started,
+            )
+        except Exception:  # noqa: BLE001 - tracing must never affect dispatch
+            logger.debug("worker console trace progress failed", exc_info=True)
+
+    try:
+        try:
+            result = execute_isolated_provider_turn(
+                identity=identity,
+                execution_request=provider_request.to_mapping(),
+                timeout_seconds=worker_timeout_seconds,
+                activity_callback=_on_worker_activity,
+            )
+        except TypeError as exc:
+            # Preserve compatibility with test/delivery doubles written against
+            # the pre-SH22 worker seam; real provider TypeErrors still propagate.
+            if "activity_callback" not in str(exc):
+                raise
+            result = execute_isolated_provider_turn(
+                identity=identity,
+                execution_request=provider_request.to_mapping(),
+                timeout_seconds=worker_timeout_seconds,
+            )
+    except Exception as exc:
+        try:
+            trace.failed(
+                request_id=record["request-id"],
+                session_id=trace_session_id,
+                error_code=getattr(exc, "code", None),
+                error_type=type(exc).__name__,
+                started=trace_started,
+            )
+        except Exception:  # noqa: BLE001 - tracing must never affect dispatch
+            logger.debug("worker console trace failure failed", exc_info=True)
+        raise
+    try:
+        trace.finished(
+            request_id=record["request-id"],
+            session_id=trace_session_id,
+            outcome="success",
+            output=result.result_data.get("output") if hasattr(result, "result_data") else None,
+            started=trace_started,
+        )
+    except Exception:  # noqa: BLE001 - tracing must never affect dispatch
+        logger.debug("worker console trace completion failed", exc_info=True)
     return dict(result.result_data)
 
 
@@ -474,13 +540,23 @@ def _try_profile_with_retries(
                 finished_at=now_iso_z(),
             )
             output_text = result.get("output")
-            return {
+            outcome = {
                 "provider-id": result.get("provider-id", profile.get("provider_id")),
                 "model-id": model_id,
                 "output": output_text,
                 "completion": result.get("completion"),
                 "usage": result.get("usage"),
             }
+            # Provider adapters may return durable runtime identity alongside
+            # the response (for example gpt-auto's project/chat URLs and
+            # provider-session-id).  Preserve that opaque, provider-owned
+            # metadata through the worker seam so the request record remains
+            # sufficient for diagnostics and session restoration.  Do not
+            # manufacture or interpret provider fields in the gateway.
+            provider_metadata = result.get("metadata")
+            if isinstance(provider_metadata, Mapping):
+                outcome["provider-metadata"] = dict(provider_metadata)
+            return outcome
 
     if last_exc is None:
         # Unreachable given max_attempts >= 1, but never trust an assert to
@@ -592,11 +668,24 @@ def dispatch_request(
         from audiagentic.components.agents.gateway.output import persist_final_response
         artifact = persist_final_response(project_root, record["request-id"], str(outcome.get("output") or ""))
         artifact_ref = {key: artifact[key] for key in ("artifact-id", "request-id", "media-type", "bytes", "sha256")}
+        provider_metadata = outcome.get("provider-metadata")
+        metadata_update = (
+            {"provider-metadata": provider_metadata}
+            if isinstance(provider_metadata, Mapping)
+            else {}
+        )
         return _terminal_worker_result(
             project_root,
             record,
             "completed",
-            updates={**outcome, "response-artifact": artifact_ref, "output-preview": artifact["output-preview"], "output-truncated": artifact["output-truncated"], "finished-at": now_iso_z()},
+            updates={
+                **outcome,
+                **metadata_update,
+                "response-artifact": artifact_ref,
+                "output-preview": artifact["output-preview"],
+                "output-truncated": artifact["output-truncated"],
+                "finished-at": now_iso_z(),
+            },
         )
     return _terminal_worker_result(
         project_root,

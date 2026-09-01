@@ -461,6 +461,28 @@ def test_update_item_append_only_applies_to_listed_keys(tmp_path):
     assert item["notes"] == "First note."
 
 
+def test_update_item_rejects_append_without_update_content(tmp_path):
+    planning_api.create_item(tmp_path, _make_item())
+
+    with pytest.raises(AudiaGenticError) as exc_info:
+        planning_api.update_item(tmp_path, "TST01", {}, append=["DIAGNOSTIC PROBE"])
+    assert exc_info.value.code == "VAL-PLN-027"
+    assert "updates" in exc_info.value.details["expected"]
+    assert "DIAGNOSTIC PROBE" not in str(exc_info.value.details)
+
+
+def test_update_item_rejects_append_key_not_present_in_updates(tmp_path):
+    planning_api.create_item(tmp_path, _make_item())
+
+    with pytest.raises(AudiaGenticError) as exc_info:
+        planning_api.update_item(
+            tmp_path, "TST01", {"notes": "New note."}, append=["DIAGNOSTIC PROBE"]
+        )
+    assert exc_info.value.code == "VAL-PLN-028"
+    assert exc_info.value.details["unknown_section_count"] == 1
+    assert "DIAGNOSTIC PROBE" not in str(exc_info.value.details)
+
+
 def test_update_item_notes_appends_by_default_without_explicit_append(tmp_path):
     """Accidentally replacing accumulated notes history is a real,
     previously-hit failure mode -- notes must be hard to destroy by

@@ -232,6 +232,19 @@ def load_session_transport_builder(provider_id: str) -> Callable[..., Any] | Non
     return builder
 
 
+def load_conversation_focus_capability(provider_id: str) -> Callable[..., Any] | None:
+    """Load an optional provider-owned existing-conversation focus hook."""
+    hook = _adapter_hook(provider_id, "conversation_focus", "focus_existing_conversation")
+    if hook is not None:
+        return hook
+    # gpt-auto-t1/t2 are descriptor aliases over the shared implementation;
+    # keep that aliasing explicit at the provider seam rather than duplicating
+    # browser code in each package.
+    if provider_id.startswith("gpt-auto-"):
+        return _adapter_hook("gpt-auto", "conversation_focus", "focus_existing_conversation")
+    return None
+
+
 _EXECUTION_MODE_BY_DECLARATION: dict[str, str] = {
     "cli": "descriptor",
     "stub": "stub",

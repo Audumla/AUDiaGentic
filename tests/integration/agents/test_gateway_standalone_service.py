@@ -218,14 +218,15 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         # Empty sessions are available only when explicitly requested.  A
         # live runtime handle is not evidence that the session has any task
         # records; it must not bypass the default empty-session filter.
-        assert b"showEmpty.checked||rows.length>0" in page
-        assert b"showEmpty.checked||s.live||rows.length>0" not in page
+        assert b"showEmpty.checked||hasRequests" in page
+        assert b"showClosed.checked||!isClosed(s)||hasRequests" in page
         assert b'id="recent-window"' in page
         assert b"recent-seconds" in page
         assert b"One-shot requests" in page
         assert b"newest first" in page
         assert b"Watchdog monitoring guide" in page
         assert b"stale monitoring marker" in page
+        assert b"Open GPT chat" in page
 
         content_type, snapshot = _raw_get(host.endpoint, "/dashboard/snapshot")
         assert content_type.startswith("application/json")

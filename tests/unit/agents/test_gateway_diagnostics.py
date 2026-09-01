@@ -50,6 +50,17 @@ def test_attempted_without_submission_proof_is_ambiguous() -> None:
     assert result["recovery"]["disposition"] == "reconcile-required"
 
 
+def test_gateway_restart_interruption_is_explicitly_classified() -> None:
+    result = classify_error(
+        {"code": "CON-AGW-084", "kind": "agents", "message": "owning service generation is gone"}
+    )
+    assert result["classification"] == "gateway-restart"
+    assert result["failure-code"] == "CON-AGW-084"
+    assert result["reason-code"] == "service-restart"
+    assert result["side-effect-state"] == "may-have-started"
+    assert result["recovery"]["disposition"] == "reconcile-required"
+
+
 def test_diagnostics_side_effect_state_never_regresses() -> None:
     previous = classify_error(
         {

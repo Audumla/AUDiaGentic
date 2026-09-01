@@ -59,6 +59,66 @@ def _terminal_session_diagnostics(session_id: str, record: dict[str, Any]) -> di
     return details
 
 
+def _explain_stale_session_runtime_error(
+    project_root: Path,
+    session_id: str,
+    error: AudiaGenticError,
+) -> AudiaGenticError:
+    """Turn the process-local stale-session error into actionable evidence.
+
+    A durable provider session can survive a gateway restart while its
+    in-memory transport handle does not. The old ``RES-AGW-003`` text made
+    that look like a provider failure and did not tell callers whether their
+    prompt had reached the provider. Keep the stable code, but add a narrow
+    explanation only for the exact process-local handle miss.
+    """
+    if error.code != "RES-AGW-003" or "not active in this gateway process" not in error.message:
+        return error
+
+    details = dict(error.details or {})
+    details.update(
+        {
+            "failure-reason": "stale-session-runtime",
+            "runtime-state": "non-live",
+            "prompt-submission": "not-started",
+            "recovery-action": "retry-continuation-to-rehydrate-session",
+        }
+    )
+    try:
+        from audiagentic.components.agents.gateway.session import sessions_store
+
+        persisted = sessions_store.read_session_record(project_root, session_id)
+        details.update(
+            {
+                "durable-session-state": persisted.get("state"),
+                "durable-session-retained": True,
+                "provider-binding-retained": bool(
+                    isinstance(persisted.get("binding"), dict)
+                    and persisted["binding"].get("provider-session-ref")
+                ),
+            }
+        )
+        details.update(
+            {
+                key: value
+                for key, value in _terminal_session_diagnostics(session_id, persisted).items()
+                if key not in details
+            }
+        )
+    except Exception:  # noqa: BLE001 - diagnostics must never mask the original failure
+        details["durable-session-retained"] = False
+
+    return AudiaGenticError(
+        code=error.code,
+        kind=error.kind,
+        message=(
+            "durable provider session is not attached to this gateway process; "
+            "no prompt was submitted"
+        ),
+        details=details,
+    )
+
+
 # ── AS28 slice 4a helpers ────────────────────────────────────────
 # GP13 (scoped, 2026-08-17): a resume-eligibility refusal from AS49's
 # validate_resume_eligibility() (see resume.py's module docstring for the
@@ -365,6 +425,23 @@ def _dispatch_session_request(
             # (AS49) is the correct, non-speculative behavior until a real
             # need for a finer split shows up.
             manifest_context_fingerprint = context_fingerprint or record.get("context-fingerprint")
+            async def _relay_provider_metadata(metadata: dict[str, Any]) -> None:
+                nonlocal record
+                current_metadata = record.get("provider-metadata")
+                merged_metadata = (
+                    dict(current_metadata) if isinstance(current_metadata, dict) else {}
+                )
+                merged_metadata.update(metadata)
+                record = store.update_owned_running_session(
+                    project_root,
+                    request_id,
+                    owner_epoch=record["dispatch-owner-epoch"],
+                    worker_id=record["worker-id"],
+                    attempt_epoch=record["attempt-epoch"],
+                    session_id=session_id,
+                    provider_metadata=merged_metadata,
+                )
+
             session_record = runtime.open_session(
                 project_root,
                 execution_profile_id=execution_profile_id,
@@ -387,6 +464,7 @@ def _dispatch_session_request(
                 capacity_source_id=record.get("resolved-source-id"),
                 model_selector=record.get("resolved-model-selector"),
                 project_name=project_name,
+                request_provider_metadata_sink=_relay_provider_metadata,
                 # Request value wins over profile params; 0 disables the bound
                 # (RV513) — use explicit None checks so 0 survives resolution.
                 idle_timeout_seconds=(
@@ -615,6 +693,7 @@ def _dispatch_session_request(
             _cleanup_request_runtime(request_runtime)
         return _transition_owned_attempt(project_root, record, "cancelled")
     except AudiaGenticError as exc:
+        exc = _explain_stale_session_runtime_error(project_root, session_id, exc)
         if request_runtime is not None:
             _quarantine_request_runtime(request_runtime, request_runtime_root.parent / "quarantine")
         store.append_owned_attempt(

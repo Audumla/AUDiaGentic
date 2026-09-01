@@ -232,6 +232,9 @@ def test_recovery_stale_running_has_replay_metadata(tmp_path: Path) -> None:
     assert report.interrupted == 1
     assert recovered["state"] == "interrupted"
     assert recovered["error"]["code"] == "CON-AGW-084"
+    assert recovered["diagnostics"]["classification"] == "gateway-restart"
+    assert recovered["diagnostics"]["failure-code"] == "CON-AGW-084"
+    assert recovered["diagnostics"]["reason-code"] == "service-restart"
     assert not store.active_work_path(service_root, record["request-id"]).exists()
 
 
