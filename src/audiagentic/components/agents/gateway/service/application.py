@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,7 @@ CAPABILITIES = (
     "requests.diagnostics",
     "requests.recover",
     "requests.response",
+    "conversations.focus-existing",
     "requests.wait",
     "requests.cancel",
     "sessions.list",
@@ -69,6 +71,7 @@ class GatewayServiceApplication:
         # status/drain/resume/stop surface; absent for bare in-process hosting.
         self._lifecycle = lifecycle
         self._dashboard_recent_seconds = dashboard_recent_seconds
+        self._dashboard_action_token = secrets.token_urlsafe(32)
         # A distinct durable authority for gateway operator operations.  It
         # deliberately does not own request/session state or the work queue.
         self._operations = GatewayOperationsApplication(
@@ -101,6 +104,35 @@ class GatewayServiceApplication:
             recent_seconds=recent_seconds,
             configured_recent_seconds=self._dashboard_recent_seconds,
         )
+
+    @property
+    def dashboard_action_token(self) -> str:
+        """Per-process token used only by the rendered dashboard action."""
+        return self._dashboard_action_token
+
+    def focus_dashboard_request(self, request_id: str) -> dict[str, Any]:
+        """Resolve a dashboard request id across known projects and focus it."""
+        from audiagentic.components.agents.gateway.service.known_projects import load_known_projects
+
+        matches = []
+        registry = load_known_projects(self._service_store.root / "known-projects.json")
+        for known in registry.projects:
+            if not known.project_root.exists():
+                continue
+            try:
+                from audiagentic.components.agents.gateway import store as gateway_store
+
+                gateway_store.read_record(known.project_root, request_id)
+            except Exception:
+                continue
+            matches.append(known.project_root)
+        if len(matches) != 1:
+            return {
+                "request-id": request_id,
+                "outcome": "not-found" if not matches else "ambiguous",
+                "reason": "request-project-not-found" if not matches else "request-id-not-unique",
+            }
+        return self._application.focus_execution_chat(matches[0], request_id)
 
     def acquire_client(
         self,
@@ -216,6 +248,9 @@ class GatewayServiceApplication:
         if operation == "get_execution_response":
             _reject_unknown(arguments, {"request_id"})
             return self._application.get_execution_response(root, _required(arguments, "request_id"))
+        if operation == "focus_execution_chat":
+            _reject_unknown(arguments, {"request_id"})
+            return self._application.focus_execution_chat(root, _required(arguments, "request_id"))
         if operation == "wait_execution_request":
             _reject_unknown(arguments, {"request_id", "timeout_seconds"})
             return self._application.wait_execution_request(
@@ -570,4 +605,3 @@ _WORK_PRODUCING_OPERATIONS = frozenset(
 
 
 __all__ = ["CAPABILITIES", "GatewayServiceApplication", "PROTOCOL_VERSION"]
-

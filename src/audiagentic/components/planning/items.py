@@ -395,6 +395,36 @@ def update_item(
     None) to opt out and force a full replace of `notes` too — e.g. when
     deliberately rewriting notes to fix corruption.
     """
+    # ``append`` is a mode selector, not the content to append.  Historically
+    # an invocation such as ``updates={}, append=["some text"]`` was accepted
+    # and written back unchanged, producing a misleading success response and
+    # a ``Updated (no visible changes)`` log entry.  Reject that shape (and
+    # unknown section names) at the boundary so callers cannot silently lose
+    # an update through a malformed append request.
+    if append:
+        if not updates:
+            raise AudiaGenticError(
+                code="VAL-PLN-027",
+                kind="validation",
+                message="append was provided without update content",
+                details={
+                    "append_entry_count": len(append),
+                    "expected": "updates={<section>: <text>}, append=[<section>]",
+                },
+            )
+        unknown = sorted(set(append) - set(updates))
+        if unknown:
+            raise AudiaGenticError(
+                code="VAL-PLN-028",
+                kind="validation",
+                message="append contains section names that are absent from updates",
+                details={
+                    "unknown_section_count": len(unknown),
+                    "updated_section_count": len(updates),
+                    "expected": "append entries must be keys in updates",
+                },
+            )
+
     path = item_store.require_item(project_root, item_id)
     fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
     item_store.ensure_not_review(fm, item_id, "VAL-PLN-020")

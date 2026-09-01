@@ -52,6 +52,10 @@ def _redact_error(error: BaseException | dict[str, Any] | None) -> dict[str, Any
             details = _project_acp_error_details(error.details)
             if details:
                 projected["details"] = details
+        elif error.code == "RES-AGW-003" and isinstance(error.details, dict):
+            details = _project_session_error_details(error.details)
+            if details:
+                projected["details"] = details
         return projected
     if isinstance(error, BaseException):
         # Preserve ordinary validation/configuration detail so operators can
@@ -160,6 +164,45 @@ _ACP_DETAIL_KEYS = frozenset(
         "assistant-output-available",
     }
 )
+
+
+_SESSION_DETAIL_KEYS = frozenset(
+    {
+        "session-id",
+        "state",
+        "close-reason",
+        "suggestion",
+        "created-at",
+        "last-activity-at",
+        "updated-at",
+        "closed-at",
+        "provider-provider-session-id",
+        "provider-chat-url",
+        "provider-unresolved-turn-pending",
+        "failure-reason",
+        "runtime-state",
+        "prompt-submission",
+        "recovery-action",
+        "durable-session-state",
+        "durable-session-retained",
+        "provider-binding-retained",
+        "auto-resume-attempted",
+        "auto-resume-refusal-code",
+    }
+)
+
+
+def _project_session_error_details(details: dict[str, Any]) -> dict[str, Any]:
+    """Expose bounded lifecycle/recovery facts for stale session errors."""
+    projected: dict[str, Any] = {}
+    for key, value in details.items():
+        if key not in _SESSION_DETAIL_KEYS:
+            continue
+        if isinstance(value, str):
+            projected[key] = value[:512]
+        elif isinstance(value, (bool, int, float)) or value is None:
+            projected[key] = value
+    return projected
 
 
 def _project_acp_error_details(details: dict[str, Any]) -> dict[str, Any]:

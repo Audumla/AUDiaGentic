@@ -49,6 +49,7 @@ class GatewayHTTPServer(ThreadingHTTPServer):
         self.auth_token = auth_token
         self.dashboard_path = _dashboard_path(dashboard_path)
         self.dashboard_snapshot_path = f"{self.dashboard_path}/snapshot"
+        self.dashboard_focus_path = f"{self.dashboard_path}/focus"
         self.dashboard_recent_seconds = dashboard_recent_seconds
         super().__init__(address, GatewayHTTPRequestHandler)
 
@@ -74,7 +75,7 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
                     render_dashboard_html,
                 )
 
-                self._write_bytes(200, "text/html; charset=utf-8", render_dashboard_html(self.server.dashboard_snapshot_path))
+                self._write_bytes(200, "text/html; charset=utf-8", render_dashboard_html(self.server.dashboard_snapshot_path, focus_path=self.server.dashboard_focus_path, focus_token=self.server.application.dashboard_action_token))
                 return
             if method == "GET" and parsed.path == self.server.dashboard_snapshot_path:
                 query = parse_qs(parsed.query, keep_blank_values=True)
@@ -84,6 +85,14 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
                     200,
                     self.server.application.dashboard_snapshot(recent_seconds=recent_seconds),
                 )
+                return
+            if method == "POST" and parsed.path == self.server.dashboard_focus_path:
+                self._authenticate_dashboard_action()
+                body = self._read_body()
+                if set(body) != {"request-id"}:
+                    raise transport_error(22, "dashboard focus body must contain request-id only")
+                result = self.server.application.focus_dashboard_request(_string(body, "request-id"))
+                self._write_json(200, {"contract-version": "v1", "ok": True, "result": result})
                 return
             self._authenticate()
             if method == "GET" and self.path == HEALTH_ROUTE:
@@ -142,6 +151,17 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
         supplied = self.headers.get("Authorization", "")
         if not hmac.compare_digest(supplied, expected):
             raise transport_error(5, "gateway service authentication failed")
+
+    def _authenticate_dashboard_action(self) -> None:
+        supplied = self.headers.get("X-AudiaGentic-Dashboard-Token", "")
+        expected = self.server.application.dashboard_action_token
+        origin = self.headers.get("Origin")
+        if origin:
+            host = self.headers.get("Host", "")
+            if origin not in {f"http://{host}", f"https://{host}"}:
+                raise transport_error(5, "dashboard action origin is invalid")
+        if not supplied or not hmac.compare_digest(supplied, expected):
+            raise transport_error(5, "dashboard action authentication failed")
 
     def _read_body(self) -> dict[str, Any]:
         raw_length = self.headers.get("Content-Length")

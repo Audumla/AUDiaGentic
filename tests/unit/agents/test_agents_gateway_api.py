@@ -490,6 +490,27 @@ def test_list_execution_requests_most_recent_first_and_filterable(tmp_path: Path
     assert limited[0]["task_id"] == second["request-id"]
 
 
+def test_dashboard_request_projection_exposes_only_safe_gpt_chat_link(tmp_path: Path):
+    record = store.build_record(execution_profile_id="gpt-auto", prompt_body="review")
+    record["provider-metadata"] = {
+        "project-url": "https://chatgpt.com/g/g-p-example/project",
+        "chat-url": "https://chatgpt.com/g/g-p-example/c/c-example",
+        "provider-session-id": "opaque-session",
+    }
+    store.write_record(tmp_path, record)
+
+    rows = gateway.list_dashboard_requests(tmp_path)
+
+    assert rows[0]["provider-chat-url"] == record["provider-metadata"]["chat-url"]
+    assert "provider-metadata" not in rows[0]
+
+    record["request-id"] = "req_unsafe_url"
+    record["provider-metadata"] = {"chat-url": "https://evil.example/chat"}
+    store.write_record(tmp_path, record)
+    unsafe = next(row for row in gateway.list_dashboard_requests(tmp_path) if row["request-id"] == "req_unsafe_url")
+    assert "provider-chat-url" not in unsafe
+
+
 def test_terminal_status_is_equivalent_across_get_wait_and_list(
     tmp_path: Path, monkeypatch
 ):

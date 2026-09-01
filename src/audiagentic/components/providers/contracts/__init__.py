@@ -1,6 +1,11 @@
 """Typed provider family contracts."""
 
 from .harness_status_observer import HarnessStatusObserverCapability
+from .conversation_focus import (
+    ConversationFocusLocator,
+    ConversationFocusOutcome,
+    ConversationFocusResult,
+)
 from .language_server_projection import (
     LanguageServerEntry,
     LanguageServerProjectionMode,
@@ -19,6 +24,9 @@ from .session_surface import ResolvedSessionSurface, SurfaceHint
 __all__ = [
     # AS19 harness status observer capability descriptor
     "HarnessStatusObserverCapability",
+    "ConversationFocusLocator",
+    "ConversationFocusOutcome",
+    "ConversationFocusResult",
     "LanguageServerEntry",
     "LanguageServerProjectionMode",
     "LanguageServerProjectionRequest",

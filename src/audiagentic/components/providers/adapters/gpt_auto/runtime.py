@@ -148,6 +148,29 @@ class GptAutoProviderRuntime:
                     self._move(ProviderState.FAILED)
                 raise
 
+    async def connect_existing(self) -> bool:
+        """Attach to an already-running CDP endpoint without launching a browser."""
+        self._owner_loop = asyncio.get_running_loop()
+        async with self._lifecycle_lock:
+            if self.state is ProviderState.AVAILABLE and self._bridge:
+                return True
+            if not await self._cdp_available():
+                return False
+            if self.state in {ProviderState.STOPPED, ProviderState.FAILED, ProviderState.RECOVERING}:
+                self._move(ProviderState.CONNECTING)
+            try:
+                bridge = await self._connect_bridge()
+                self._bridge = bridge
+                self._gpt_browser = GptAutoCdpBrowserController(bridge)
+                self._move(ProviderState.AVAILABLE)
+                self._event_task = asyncio.create_task(self._route_events(bridge))
+                return True
+            except Exception:
+                if self.state is ProviderState.CONNECTING:
+                    self._move(ProviderState.FAILED)
+                logger.exception("gpt-auto existing CDP attach failed")
+                return False
+
     async def _connect_bridge(self) -> PythonCdpBridge:
         """Connect only after the CDP endpoint is actually ready.
 
@@ -228,6 +251,32 @@ class GptAutoProviderRuntime:
         """Return the live dashboard anchor page for a new session tab."""
         handle = await self.ensure_dedicated_window_anchor()
         return await self.gpt_browser.page_by_handle(handle)
+
+    def adopt_existing_dedicated_window(self, pages: list[dict]) -> bool:
+        """Recover the managed window identity from an existing dashboard tab.
+
+        This is a read-only rediscovery path for operations such as focusing a
+        retained conversation after a gateway restart. It never creates or
+        navigates a page; normal session admission continues to use
+        ``ensure_dedicated_window_anchor`` when a new tab is required.
+        """
+        if not self.config.browser.dedicated_window or self._dedicated_window_id is not None:
+            return self._dedicated_window_id is not None
+        dashboard_pages = [
+            page for page in pages if is_gateway_dashboard_url(str(page.get("url") or ""))
+        ]
+        if not dashboard_pages:
+            return False
+        anchor = next(
+            (page for page in dashboard_pages if is_gateway_dashboard_anchor_url(str(page.get("url") or ""))),
+            dashboard_pages[0],
+        )
+        handle = str(anchor.get("pageHandle") or "")
+        if not handle:
+            return False
+        self._dedicated_window_anchor = handle
+        self._dedicated_window_id = _window_id(anchor)
+        return self._dedicated_window_id is not None
 
     async def _route_events(self, bridge: PythonCdpBridge) -> None:
         while self._bridge is bridge:

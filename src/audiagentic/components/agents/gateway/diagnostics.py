@@ -23,6 +23,7 @@ class FailureClass(StrEnum):
     TIMEOUT = "timeout"
     STALE_PROGRESS = "stale-progress"
     AMBIGUOUS_SIDE_EFFECT = "ambiguous-side-effect"
+    GATEWAY_RESTART = "gateway-restart"
     UNKNOWN = "unknown"
 
 
@@ -131,6 +132,11 @@ def classify_error(
             details = raw_details
     code = _text(code, _MAX_ID)
     reason = _text(details.get("failure-reason") or details.get("reason-code"), _MAX_ID)
+    if code == "CON-AGW-084" and reason is None:
+        # Recovery emits this code when the owning gateway generation has
+        # disappeared (normally a service restart). Keep the cause explicit
+        # even though the recovery error has no provider detail payload.
+        reason = "service-restart"
     attempted = bool(
         details.get("submission-attempted")
         or details.get("side-effect-attempted")
@@ -141,7 +147,13 @@ def classify_error(
         "side-effect-attempted",
         "submission-ambiguous",
     }
-    if ambiguous or code == "EXT-GPTAUTO-004":
+    if code == "CON-AGW-084" and reason == "service-restart":
+        classification = FailureClass.GATEWAY_RESTART
+        certainty = EvidenceCertainty.DEFINITIVE
+        recovery = RecoveryDisposition.RECONCILE_REQUIRED
+        default_phase = ObservationPhase.RECONCILIATION
+        default_side_effect = SideEffectState.MAY_HAVE_STARTED
+    elif ambiguous or code == "EXT-GPTAUTO-004":
         classification = FailureClass.AMBIGUOUS_SIDE_EFFECT
         certainty = EvidenceCertainty.STRONG
         recovery = RecoveryDisposition.OPERATOR_ADOPT_AVAILABLE

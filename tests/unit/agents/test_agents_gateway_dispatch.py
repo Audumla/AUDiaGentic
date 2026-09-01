@@ -7,11 +7,11 @@ from types import SimpleNamespace
 import pytest
 
 from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
-from audiagentic.components.agents.gateway import store as store
-from audiagentic.components.agents.gateway.queue import dispatch as dispatch
 from audiagentic.components.agents.configuration.management import (
     create_execution_profile,
 )
+from audiagentic.components.agents.gateway import store as store
+from audiagentic.components.agents.gateway.queue import dispatch as dispatch
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state
@@ -109,6 +109,70 @@ def test_dispatch_success_builds_expected_packet_ctx(tmp_path: Path, monkeypatch
     assert captured["prompt-body"] == "do the thing"
     assert captured["working-root"] == str(tmp_path.resolve())
     assert captured["stream-controls"] == {}
+
+
+def test_worker_dispatch_writes_operator_trace(tmp_path: Path, monkeypatch):
+    """Worker-backed (one-shot) sessions use the shared trace sink too."""
+    _make_profile(tmp_path, "default", "local-openai", model_id="gpt-4o")
+    record = _record(tmp_path, "default")
+    trace_path = tmp_path / "gateway-console-trace.log"
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_CONSOLE_TRACE", "summary")
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_CONSOLE_TRACE_FILE", str(trace_path))
+
+    def fake_execute_provider(*, identity, execution_request, timeout_seconds, activity_callback):
+        del identity, execution_request, timeout_seconds, activity_callback
+        return _worker_result({"provider-id": "local-openai", "model": "gpt-4o", "output": "worker output"})
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
+        fake_execute_provider,
+    )
+
+    result = _dispatch(tmp_path, record)
+
+    assert result["state"] == "completed"
+    rendered = trace_path.read_text(encoding="utf-8")
+    assert "START" in rendered and "harness=worker" in rendered
+    assert "TURN" in rendered and f"request={record['request-id']}" in rendered
+    assert "COMPLETE" in rendered and "output_chars=13" in rendered
+
+
+def test_worker_dispatch_persists_provider_runtime_metadata(tmp_path: Path, monkeypatch):
+    """Opaque provider identity survives the worker-to-record handoff.
+
+    GPT-auto uses these fields to reopen the exact project/chat tab after a
+    gateway restart.  The gateway must carry them without interpreting or
+    exposing the provider-specific metadata in compact status.
+    """
+    _make_profile(tmp_path, "default", "local-openai", model_id="gpt-4o")
+    record = _record(tmp_path, "default")
+    metadata = {
+        "project-url": "https://chatgpt.com/g/g-p-example/project",
+        "chat-url": "https://chatgpt.com/g/g-p-example/c/c-example",
+        "provider-session-id": "session-example",
+    }
+
+    def fake_execute_provider(*, identity, execution_request, timeout_seconds, activity_callback):
+        del identity, execution_request, timeout_seconds, activity_callback
+        return _worker_result(
+            {
+                "provider-id": "local-openai",
+                "model": "gpt-4o",
+                "output": "worker output",
+                "metadata": metadata,
+            }
+        )
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.queue.worker.execute_isolated_provider_turn",
+        fake_execute_provider,
+    )
+
+    result = _dispatch(tmp_path, record)
+
+    assert result["state"] == "completed"
+    persisted = store.read_record(tmp_path, record["request-id"])
+    assert persisted["provider-metadata"] == metadata
 
 
 def test_dispatch_reloads_admitted_prompt_snapshot_when_fast_path_is_lost(

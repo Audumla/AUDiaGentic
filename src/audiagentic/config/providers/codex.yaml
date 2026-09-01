@@ -92,14 +92,15 @@ capabilities:
         feature: stdio-transport
       evidence:
         note: >-
-          @agentclientprotocol/codex-acp bridge (pinned npx or local binary)
-          exposing an ACP stdio server over Codex App Server; launched via
-          adapters/codex/acp.py build_acp_launch. Model ids use
+          @agentclientprotocol/codex-acp bridge (pinned shared install, with
+          PATH/npx compatibility fallbacks) exposing an ACP stdio server over
+          Codex App Server; launched via adapters/codex/acp.py
+          build_acp_launch. Model ids use
           model[reasoning-effort] and are passed through process-local
-          CODEX_CONFIG. Cannot attach to an already-open interactive Codex TUI
-          — the ACP client owns the session. The auxiliary bridge install is
-          still pending AS13; the pinned npx route is the deterministic local
-          fallback until that install seam is available.
+          CODEX_CONFIG. The bridge recipe installs one pinned copy under the
+          shared AUDiaGentic provider runtime, so projects do not each invoke
+          npx or maintain a project-local copy. Cannot attach to an already-
+          open interactive Codex TUI — the ACP client owns the session.
         source: "tests/unit/providers/test_codex_acp_launch.py"
     - mechanism:
         feature: live-session

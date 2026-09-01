@@ -429,6 +429,35 @@ def test_completed_session_without_assistant_text_fails_without_fake_artifact(ri
     assert result.get("output-preview") is None
 
 
+def test_stale_session_runtime_failure_explains_prompt_was_not_submitted(rig, monkeypatch):
+    """A process-local handle miss is actionable, not an opaque RES-AGW-003."""
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+
+    runtime, _transports, tmp_path = rig
+
+    def stale_prompt(*_args, **_kwargs):
+        raise AudiaGenticError(
+            code="RES-AGW-003",
+            kind="agents",
+            message="session is not active in this gateway process",
+            details={"session-id": "stale"},
+        )
+
+    monkeypatch.setattr(runtime, "prompt_in_session", stale_prompt)
+    record = _running_record(tmp_path, session_keep_alive=True)
+    result = _dispatch(tmp_path, record, dispatch_prompt="reply")
+
+    assert result["state"] == "failed"
+    assert result["error"]["code"] == "RES-AGW-003"
+    assert "durable provider session is not attached" in result["error"]["message"]
+    stored_error = store.read_record(tmp_path, record["request-id"])["error"]
+    assert stored_error["details"]["failure-reason"] == "stale-session-runtime"
+    assert stored_error["details"]["prompt-submission"] == "not-started"
+    assert stored_error["details"]["recovery-action"] == (
+        "retry-continuation-to-rehydrate-session"
+    )
+
+
 def test_provider_cancelled_turn_preserves_output_and_error_artifact(rig, monkeypatch):
     """A provider-side cancellation is a failure with retrievable output.
 

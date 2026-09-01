@@ -900,7 +900,13 @@ class GatewayQueueManager:
 
             # AS15: two-phase concurrency for session requests.
             # Detect session request early to set up callbacks.
-            is_session = record.get("provider-transport-kind") == "provider-session"
+            # A durable session id is sufficient to identify the two-phase
+            # session worker.  Older records (and direct queue callers) may
+            # predate ``provider-transport-kind`` but still carry a session;
+            # treating those as ordinary one-phase work deadlocks the second
+            # worker behind the profile reservation before it can register
+            # its turn callback.
+            is_session = bool(record.get("session-id")) or record.get("provider-transport-kind") == "provider-session"
             if is_session:
                 # Admission only proves the session can start. Capacity is
                 # held by the request-specific callbacks around actual turns,
