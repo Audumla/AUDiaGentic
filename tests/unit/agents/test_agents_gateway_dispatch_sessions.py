@@ -429,6 +429,74 @@ def test_completed_session_without_assistant_text_fails_without_fake_artifact(ri
     assert result.get("output-preview") is None
 
 
+def test_provider_cancelled_turn_preserves_output_and_error_artifact(rig, monkeypatch):
+    """A provider-side cancellation is a failure with retrievable output.
+
+    Codex can return ``stop_reason=cancelled`` after one of its own tool
+    calls fails.  That is distinct from an explicit gateway cancellation and
+    must not discard the assistant text emitted before the failed tool.
+    """
+    from audiagentic.foundation.transports.agent_session import SessionTurnResult
+
+    runtime, _transports, tmp_path = rig
+
+    def provider_cancelled(*_args, **kwargs):
+        return SessionTurnResult(
+            turn_id=kwargs["request_id"],
+            stop_reason="cancelled",
+            observations_delivered=3,
+            dropped_observations=0,
+            error_code="EXT-ACP-TOOL-001",
+            final_summary="I completed the local checks before the remote tool failed.",
+            metadata={
+                "cancelled-by-signal": False,
+                "failed-tool-call-count": 1,
+                "failed-tool-call-ids": ("tool-1",),
+            },
+        )
+
+    monkeypatch.setattr(runtime, "prompt_in_session", provider_cancelled)
+    record = _running_record(tmp_path, session_keep_alive=True)
+    result = _dispatch(tmp_path, record, dispatch_prompt="review")
+
+    assert result["state"] == "failed"
+    assert result["error"]["code"] == "EXT-ACP-TOOL-001"
+    assert result["error"]["details"]["reason-code"] == "provider-cancelled-after-tool-failure"
+    assert result["error"]["details"]["failed-tool-call-count"] == 1
+    assert result["error"]["details"]["assistant-output-available"] is True
+    assert result["output"] == "I completed the local checks before the remote tool failed."
+    assert result["response-artifact"]["artifact-id"] == "final-response"
+    assert result["output-truncated"] is False
+
+    from audiagentic.components.agents.gateway.api import get_execution_response
+
+    assert get_execution_response(tmp_path, record["request-id"]) == result["output"]
+
+
+def test_explicit_cancelled_turn_remains_cancelled(rig, monkeypatch):
+    """A caller-requested cancellation keeps cancellation semantics."""
+    from audiagentic.foundation.transports.agent_session import SessionTurnResult
+
+    runtime, _transports, tmp_path = rig
+
+    def caller_cancelled(*_args, **kwargs):
+        return SessionTurnResult(
+            turn_id=kwargs["request_id"],
+            stop_reason="cancelled",
+            observations_delivered=0,
+            dropped_observations=0,
+            metadata={"cancelled-by-signal": True},
+        )
+
+    monkeypatch.setattr(runtime, "prompt_in_session", caller_cancelled)
+    record = _running_record(tmp_path, session_keep_alive=True)
+    record = store.mark_cancel_requested(tmp_path, record["request-id"])
+    result = _dispatch(tmp_path, record, dispatch_prompt="cancel")
+
+    assert result["state"] == "cancelled"
+    assert result.get("error") is None
+
+
 def test_plain_record_does_not_touch_session_path(rig, monkeypatch):
     runtime, transports, tmp_path = rig
 

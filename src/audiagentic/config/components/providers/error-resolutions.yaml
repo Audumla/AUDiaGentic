@@ -7,6 +7,8 @@ VAL-COMPLETE-001: "The provider completion data failed schema validation. Check 
 VAL-COMPLETE-002: "The normalized provider completion failed schema validation. Check the completion fields."
 VAL-COMPLETE-003: "The provider completion cannot be persisted because validation failed. Check the completion fields."
 EXT-CODEX-001: "The codex provider execution failed with a non-zero exit code. Check the stderr and command details."
+EXT-ACP-002: "The ACP provider returned a cancellation without a gateway cancellation request. Treat the turn as a provider failure and inspect the preserved response artifact and diagnostics."
+EXT-ACP-TOOL-001: "The ACP provider cancelled after a tool execution failed. Inspect the bounded failed-tool evidence and preserved response artifact, then correct the provider tool or permissions before retrying."
 RES-CAT-001: "No descriptor found for the specified provider. Check the provider-id against available providers."
 CON-CAT-001: "The specified provider does not support catalog fetch. Use a provider that supports model catalog retrieval."
 TO-CAT-001: "The catalog fetch timed out. Try again later or increase the timeout."
