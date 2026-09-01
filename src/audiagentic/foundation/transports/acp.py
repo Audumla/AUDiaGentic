@@ -1665,6 +1665,13 @@ class AcpAgentSessionTransport:
         delivered_count = 0
         dropped_count = 0
         _final_summary_parts: list[str] = []
+        # Keep bounded provenance for a provider-side cancellation.  A tool
+        # failure can make an ACP agent return ``stop_reason=cancelled`` even
+        # though no gateway cancel was requested; without this distinction
+        # the gateway reports a misleading clean cancellation and loses the
+        # useful assistant text already emitted before the failed tool call.
+        _failed_tool_call_ids: list[str] = []
+        _cancelled_by_signal = False
 
         # Build the neutral observation sink that maps AcpEvent → TransportObservation.
         # Track whether model has started to emit ACTIVITY on first assistant-message,
@@ -1674,6 +1681,12 @@ class AcpAgentSessionTransport:
 
         async def _wrapped_sink(acp_event: AcpEvent) -> None:
             nonlocal delivered_count, _model_started
+            if acp_event.kind == "tool-call":
+                acp_ext = acp_event.ext.get("acp", {})
+                if str(acp_ext.get("status", "")) == "failed":
+                    tool_call_id = acp_ext.get("tool_call_id")
+                    if tool_call_id is not None and len(_failed_tool_call_ids) < 8:
+                        _failed_tool_call_ids.append(str(tool_call_id))
             # The final response is an output concern, not an observation
             # delivery concern.  Preserve assistant text before projecting or
             # forwarding the event so a consumer-side mapping/sink failure
@@ -1750,6 +1763,7 @@ class AcpAgentSessionTransport:
                 cancel_signal=self._current_cancel if request.cancel_token is not None else None,
             )
             stop_reason = acp_result.stop_reason
+            _cancelled_by_signal = self._current_cancel.is_set()
             # Count dropped ACP events (from FIFO eviction / budgeting).
             dropped_count = acp_result.dropped_events
         except AudiaGenticError:
@@ -1773,7 +1787,17 @@ class AcpAgentSessionTransport:
             stop_reason=stop_reason,
             observations_delivered=delivered_count,
             dropped_observations=dropped_count,
+            error_code=(
+                "EXT-ACP-TOOL-001"
+                if stop_reason == "cancelled" and _failed_tool_call_ids
+                else None
+            ),
             final_summary="".join(_final_summary_parts) or None,
+            metadata={
+                "cancelled-by-signal": _cancelled_by_signal,
+                "failed-tool-call-count": len(_failed_tool_call_ids),
+                "failed-tool-call-ids": tuple(_failed_tool_call_ids),
+            },
         )
 
     async def control(

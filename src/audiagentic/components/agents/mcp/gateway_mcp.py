@@ -175,12 +175,36 @@ def agent_task_response(request_id: str) -> dict[str, Any]:
     project_root = project_root_from_env()
     text = call_gateway_method("get_execution_response", project_root, request_id)
     raw_bytes = len(text.encode("utf-8"))
-    return {
+    result: dict[str, Any] = {
         "request-id": request_id,
         "delivery": "inline",
         "text": text,
         "bytes": raw_bytes,
     }
+
+    # A full response may belong to a failed terminal attempt (for example,
+    # an ACP provider cancelling after a failed tool call).  Keep the response
+    # operation self-describing with only the bounded terminal outcome and
+    # failure code; the detailed evidence remains on agent_task_diagnostics.
+    try:
+        diagnostics = call_gateway_method(
+            "get_execution_diagnostics", project_root, request_id, limit=1
+        )
+    except Exception:
+        diagnostics = None
+    if isinstance(diagnostics, dict):
+        state = diagnostics.get("state")
+        if isinstance(state, str) and state:
+            result["state"] = state
+        rollup = diagnostics.get("diagnostics")
+        if isinstance(rollup, dict):
+            failure_code = rollup.get("failure-code")
+            reason_code = rollup.get("reason-code")
+            if isinstance(failure_code, str) and failure_code:
+                result["error-code"] = failure_code
+            if isinstance(reason_code, str) and reason_code:
+                result["error-reason"] = reason_code
+    return result
 
 
 @mcp.tool()

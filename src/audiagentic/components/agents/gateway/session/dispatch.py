@@ -700,12 +700,57 @@ def _dispatch_session_request(
         )
 
     if result.stop_reason == "cancelled":
-        # RV680: a turn interrupted by protocol-level cancel is a cancelled
-        # request, not a completed one. Preserve bounded result diagnostics so
-        # operators can still see that the turn produced terminal evidence.
+        # A protocol-level caller cancel is a cancelled request.  A provider
+        # can also return ``cancelled`` after a tool execution fails, however;
+        # that is a provider-boundary failure, not a clean caller cancel.  The
+        # neutral ACP transport records which case occurred so we can retain
+        # both the canonical error and any assistant text already produced.
         session_record = session_store.read_session_record(project_root, session_id)
         model_id = session_store.session_model_id(session_record) or record.get("resolved-model-id")
         output_text = _session_output_from_result(result)
+        provider_metadata = dict(getattr(result, "metadata", {}) or {})
+        cancelled_by_signal = bool(provider_metadata.get("cancelled-by-signal"))
+        failed_tool_count = provider_metadata.get("failed-tool-call-count", 0)
+        provider_failure = not cancelled_by_signal and not record.get("cancel-requested", False)
+        terminal_state = "failed" if provider_failure else "cancelled"
+        error: AudiaGenticError | None = None
+        if provider_failure:
+            failure_code = (
+                getattr(result, "error_code", None)
+                or ("EXT-ACP-TOOL-001" if failed_tool_count else "EXT-ACP-002")
+            )
+            error = AudiaGenticError(
+                code=failure_code,
+                kind="providers",
+                message=(
+                    "provider returned cancelled without a gateway cancellation"
+                    + (" after a tool execution failed" if failed_tool_count else "")
+                ),
+                details={
+                    "stop-reason": result.stop_reason,
+                    "reason-code": (
+                        "provider-cancelled-after-tool-failure"
+                        if failed_tool_count
+                        else "provider-cancelled-without-gateway-cancel"
+                    ),
+                    "failed-tool-call-count": failed_tool_count,
+                    "failed-tool-call-ids": provider_metadata.get("failed-tool-call-ids", ()),
+                    "assistant-output-available": bool(output_text and output_text.strip()),
+                },
+            )
+        artifact_ref: dict[str, Any] | None = None
+        output_preview: str | None = None
+        output_truncated = False
+        if isinstance(output_text, str) and output_text.strip():
+            from audiagentic.components.agents.gateway.output import persist_final_response
+
+            artifact = persist_final_response(project_root, request_id, output_text)
+            artifact_ref = {
+                key: artifact[key]
+                for key in ("artifact-id", "request-id", "media-type", "bytes", "sha256")
+            }
+            output_preview = artifact["output-preview"]
+            output_truncated = artifact["output-truncated"]
         store.append_owned_attempt(
             project_root,
             request_id,
@@ -715,7 +760,8 @@ def _dispatch_session_request(
             execution_profile_id=execution_profile_id,
             provider_id=provider_id,
             model_id=model_id,
-            state="cancelled",
+            state=terminal_state,
+            error=error,
             started_at=started_at,
             finished_at=now_iso_z(),
         )
@@ -731,11 +777,15 @@ def _dispatch_session_request(
         return _transition_owned_attempt(
             project_root,
             record,
-            "cancelled",
+            terminal_state,
             updates={
                 "provider-id": provider_id,
                 "model-id": model_id,
                 "output": output_text,
+                "response-artifact": artifact_ref,
+                "output-preview": output_preview,
+                "output-truncated": output_truncated,
+                "error": error,
                 "completion": {
                     "stop-reason": result.stop_reason,
                     "binding": binding_store.public_binding_projection(

@@ -112,13 +112,18 @@ def test_agent_task_response_returns_small_verified_response_inline():
         _patch_root(),
         patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
     ):
-        mock_call.return_value = "hello"
+        mock_call.side_effect = [
+            "hello",
+            {"request-id": "req_x", "state": "completed", "diagnostics": {}},
+        ]
         result = agents_gateway_mcp.agent_task_response("req_x")
 
     assert result["delivery"] == "inline"
     assert result["text"] == "hello"
     assert result["bytes"] == 5
-    mock_call.assert_called_once_with("get_execution_response", _ROOT, "req_x")
+    assert mock_call.call_args_list[0].args == ("get_execution_response", _ROOT, "req_x")
+    assert mock_call.call_args_list[1].args == ("get_execution_diagnostics", _ROOT, "req_x")
+    assert mock_call.call_args_list[1].kwargs == {"limit": 1}
 
 
 def test_agent_task_response_returns_large_response_without_a_path():
@@ -126,14 +131,53 @@ def test_agent_task_response_returns_large_response_without_a_path():
         _patch_root(),
         patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
     ):
-        mock_call.return_value = "x" * 100_000
+        mock_call.side_effect = [
+            "x" * 100_000,
+            {
+                "request-id": "req_x",
+                "state": "failed",
+                "diagnostics": {"failure-code": "EXT-ACP-TOOL-001"},
+            },
+        ]
         result = agents_gateway_mcp.agent_task_response("req_x")
 
     assert result["delivery"] == "inline"
     assert result["bytes"] == 100_000
+    assert result["state"] == "failed"
+    assert result["error-code"] == "EXT-ACP-TOOL-001"
     assert "artifact-path" not in result
     assert "response-artifact" not in result
-    mock_call.assert_called_once_with("get_execution_response", _ROOT, "req_x")
+    assert mock_call.call_args_list[0].args == ("get_execution_response", _ROOT, "req_x")
+
+
+def test_agent_task_response_includes_provider_failure_code_with_full_output():
+    with (
+        _patch_root(),
+        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
+    ):
+        mock_call.side_effect = [
+            "partial assistant output",
+            {
+                "request-id": "req_x",
+                "state": "failed",
+                "diagnostics": {
+                    "failure-code": "EXT-ACP-TOOL-001",
+                    "reason-code": "provider-cancelled-after-tool-failure",
+                    "evidence": [{"tool": "not returned"}],
+                },
+            },
+        ]
+        result = agents_gateway_mcp.agent_task_response("req_x")
+
+    assert result == {
+        "request-id": "req_x",
+        "delivery": "inline",
+        "text": "partial assistant output",
+        "bytes": len("partial assistant output".encode("utf-8")),
+        "state": "failed",
+        "error-code": "EXT-ACP-TOOL-001",
+        "error-reason": "provider-cancelled-after-tool-failure",
+    }
 
 
 def test_agent_task_cancel_delegates():
