@@ -151,7 +151,7 @@ def planning_set_config(
         raise AudiaGenticError(
             code="VAL-PLN-015",
             kind="validation",
-            message=f"unknown planning implementation: {implementation_id!r}",
+            message="unknown planning implementation",
         )
 
     if desc.options_schema:
@@ -162,7 +162,7 @@ def planning_set_config(
                     raise AudiaGenticError(
                         code="VAL-PLN-016",
                         kind="validation",
-                        message=f"unknown option: {key!r} for implementation {implementation_id!r}",
+                        message="unknown planning option",
                         details={"valid_options": list(desc.options_schema.keys())},
                     )
             else:
@@ -173,7 +173,7 @@ def planning_set_config(
                     raise AudiaGenticError(
                         code="VAL-PLN-017",
                         kind="validation",
-                        message=f"invalid value for option {key!r}: {exc}",
+                        message="invalid value for planning option",
                     ) from exc
 
     impl_state = get_implementation_state(project_root, _COMPONENT_ID, implementation_id)

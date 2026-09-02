@@ -258,11 +258,7 @@ def list_items_grouped(
     state: str | None = None,
     plan: str | None = None,
 ) -> list[dict[str, Any]]:
-    """List plan items grouped by plan, with counts and items per group.
-
-    Returns a list of plan groups, each containing the plan name, item count,
-    and the list of items in that plan.
-    """
+    """List all matching plan groups; MCP callers apply bounded pagination."""
     items = list_items(project_root, state, plan)
 
     groups: dict[str, list[dict[str, Any]]] = {}

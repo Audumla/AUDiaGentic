@@ -37,9 +37,23 @@ def plan_create_item(item: PlanItemCreate) -> dict[str, Any]:
 
 @mcp.tool()
 @tool_boundary
-def plan_list_groups(state: ItemStateFilter | None = None, plan: str | None = None) -> list[dict[str, Any]]:
-    """List plan items grouped by plan."""
-    return planning_api.list_items_grouped(project_root_from_env(), state, plan)
+def plan_list_groups(
+    state: ItemStateFilter | None = None,
+    plan: str | None = None,
+    limit: PageLimit = 20,
+    offset: Offset = 0,
+) -> dict[str, Any]:
+    """List plan groups with bounded pagination."""
+    groups = planning_api.list_items_grouped(project_root_from_env(), state, plan)
+    page = groups[offset : offset + limit]
+    return {
+        "groups": page,
+        "total": len(groups),
+        "returned": len(page),
+        "offset": offset,
+        "limit": limit,
+        "has_more": offset + limit < len(groups),
+    }
 
 
 @mcp.tool()

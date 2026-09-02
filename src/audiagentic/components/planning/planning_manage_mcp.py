@@ -7,6 +7,7 @@ from typing import Annotated, Any
 
 from pydantic import Field
 
+from audiagentic.components.planning.contracts import ConfigUpdates, ensure_model, model_mapping
 from audiagentic.foundation.features.lifecycle import enable_implementation
 from audiagentic.foundation.features.registry import get_implementations, is_default_implementation
 from audiagentic.foundation.mcp.component_server import (
@@ -75,10 +76,12 @@ def planning_get_config(implementation_id: str | None = None) -> dict[str, Any]:
 
 @mcp.tool()
 @tool_boundary
-def planning_set_config(implementation_id: str, updates: dict[str, Any]) -> dict[str, Any]:
+def planning_set_config(implementation_id: str, updates: ConfigUpdates) -> dict[str, Any]:
     """Validate and persist descriptor-defined config updates."""
     from audiagentic.components.planning.planning_api import planning_set_config as _set_config
-    return _set_config(project_root_from_env(), implementation_id, updates)
+    return _set_config(
+        project_root_from_env(), implementation_id, model_mapping(ensure_model(updates, ConfigUpdates))
+    )
 
 
 def main() -> None:

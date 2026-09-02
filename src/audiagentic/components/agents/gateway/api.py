@@ -1117,7 +1117,10 @@ def list_execution_requests(
     requests from any process — including ones orphaned by a restart, unlike
     unlike the removed in-memory-only status projections.
     """
-    records = store.list_records(project_root)
+    # Dashboard rows never include full response bodies. Avoid reopening
+    # request-owned artifacts while scanning history; the artifact is only
+    # dereferenced by the explicit response operation.
+    records = store.list_records(project_root, include_output=False)
     if state is not None:
         records = [r for r in records if r["state"] == state]
     records.sort(key=lambda r: r["created-at"], reverse=True)
@@ -1151,12 +1154,11 @@ def list_dashboard_requests(project_root: Path) -> list[dict[str, Any]]:
     records.sort(key=lambda record: record["created-at"], reverse=True)
     rows: list[dict[str, Any]] = []
     for record in records:
-        row = store.project_public_status(
-            record,
-            latest_transition=store.latest_transition_projection(
-                project_root, record["request-id"]
-            ),
-        )
+        # The dashboard row does not render latest-transition attributes;
+        # reading every timeline here turned a bounded snapshot into a full
+        # historical file scan. Activity/lifecycle fields are already present
+        # in the request record projection.
+        row = store.project_public_status(record)
         # The dashboard may offer a navigation link to the exact GPT chat
         # tab.  Only expose a validated ChatGPT origin; provider metadata
         # remains hidden from compact task status and arbitrary URLs never
