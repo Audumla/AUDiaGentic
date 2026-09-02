@@ -385,6 +385,26 @@ def retire_binding(project_root: Path, session_record: dict[str, Any], *, state:
             atomic_write_json(index_path, payload)
 
 
+def purge_binding(project_root: Path, session_record: dict[str, Any]) -> None:
+    """Remove a session's binding entries during an explicit data purge."""
+    binding = session_record.get("binding")
+    if not isinstance(binding, dict):
+        return
+    key = binding.get("provider-ref-key")
+    if not key:
+        return
+    session_id = session_record.get("session-id")
+    with StartupLock(gateway_session_binding_lock_path(project_root)):
+        index_path = gateway_session_binding_index_path(project_root)
+        payload = _read_index(index_path)
+        entries = [entry for entry in payload["bindings"].get(key, []) if entry.get("session-id") != session_id]
+        if entries:
+            payload["bindings"][key] = entries
+        else:
+            payload["bindings"].pop(key, None)
+        atomic_write_json(index_path, payload)
+
+
 # ── Convenience entry points (create / attach) ────────────────────
 
 

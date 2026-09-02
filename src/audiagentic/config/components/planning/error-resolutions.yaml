@@ -25,3 +25,6 @@ VAL-PLN-025: "The 'created-by' field is required for plan items. Provide a creat
 VAL-PLN-026: "plan_list_items requires at least one of 'plan' or 'id_prefix'. Use plan='code-cleanup' to filter by plan, or id_prefix='CC' to filter by ID prefix."
 VAL-PLN-027: "The 'append' option requires update content. Put the text in updates (for example updates={'notes': 'new text'}) and list the section name in append (append=['notes'])."
 VAL-PLN-028: "Every value in 'append' must also be a key in 'updates'. Use section names such as 'notes', not the text to append, and include that text in updates."
+VAL-PLN-029: "This field is protected by the operation. Use the canonical transition or create operation for this change."
+VAL-PLN-030: "The updates object must contain at least one field to change."
+VAL-PLN-031: "The append list contains duplicate section names. Provide each section at most once."

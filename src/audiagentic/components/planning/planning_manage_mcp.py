@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
+
+from pydantic import Field
 
 from audiagentic.foundation.features.lifecycle import enable_implementation
 from audiagentic.foundation.features.registry import get_implementations, is_default_implementation
@@ -29,6 +31,7 @@ def _active_implementation(project_root: Path) -> str:
 @mcp.tool()
 @tool_boundary
 def planning_status() -> dict[str, Any]:
+    """Return planning status."""
     from audiagentic.components.planning.planning_api import planning_status as _status
     return _status(project_root_from_env()).to_dict()
 
@@ -36,6 +39,7 @@ def planning_status() -> dict[str, Any]:
 @mcp.tool()
 @tool_boundary
 def planning_list_implementations() -> dict[str, Any]:
+    """List implementations and the active selection."""
     root = project_root_from_env()
     impls = get_implementations(_COMPONENT_ID)
     return {
@@ -53,7 +57,10 @@ def planning_list_implementations() -> dict[str, Any]:
 
 @mcp.tool()
 @tool_boundary
-def planning_select_implementation(implementation: str) -> dict[str, Any]:
+def planning_select_implementation(
+    implementation: Annotated[str, Field(min_length=1)],
+) -> dict[str, Any]:
+    """Select a registered implementation."""
     root = project_root_from_env()
     return enable_implementation(root, _COMPONENT_ID, implementation)
 
@@ -61,14 +68,7 @@ def planning_select_implementation(implementation: str) -> dict[str, Any]:
 @mcp.tool()
 @tool_boundary
 def planning_get_config(implementation_id: str | None = None) -> dict[str, Any]:
-    """Return resolved config plus the settable-option schema for an implementation.
-
-    The ``schema`` field describes every option the implementation accepts
-    (type, description, required, default, allowed values) — use it to
-    discover what can be set, then pass any of those keys to
-    ``planning_set_config``. Planning has no implementation-specific tools;
-    all configuration goes through this generic get/set pair.
-    """
+    """Return resolved config and its descriptor-defined option schema."""
     from audiagentic.components.planning.planning_api import planning_get_config as _get_config
     return _get_config(project_root_from_env(), implementation_id)
 
@@ -76,10 +76,7 @@ def planning_get_config(implementation_id: str | None = None) -> dict[str, Any]:
 @mcp.tool()
 @tool_boundary
 def planning_set_config(implementation_id: str, updates: dict[str, Any]) -> dict[str, Any]:
-    """Validate and persist config updates for a planning implementation.
-
-    See ``planning_get_config`` for the option schema an implementation accepts.
-    """
+    """Validate and persist descriptor-defined config updates."""
     from audiagentic.components.planning.planning_api import planning_set_config as _set_config
     return _set_config(project_root_from_env(), implementation_id, updates)
 

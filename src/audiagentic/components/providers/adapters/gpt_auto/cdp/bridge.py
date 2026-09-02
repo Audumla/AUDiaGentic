@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import urllib.error
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
@@ -404,9 +407,28 @@ class PythonCdpBridge:
                 "Target.getTargetInfo", {"targetId": await self._target(handle)}, timeout=timeout
             )
         if method == "activate_target":
-            return await self.client.command(
-                "Target.activateTarget", {"targetId": await self._target(handle)}, timeout=timeout
-            )
+            target_id = await self._target(handle)
+            # Target.activateTarget is the protocol-level operation, but
+            # Chromium's remote-debugging HTTP surface also exposes an
+            # explicit tab activation endpoint.  On some Windows Chrome
+            # builds the websocket command returns success while the visible
+            # tab remains unchanged (especially when the browser window has
+            # not been foregrounded recently).  Use the HTTP endpoint as a
+            # best-effort foreground/tab-selection assist, then retain the
+            # CDP command as the canonical operation and fallback when the
+            # endpoint is unavailable (e.g. a websocket-only test endpoint).
+            http_activated = await self._activate_target_http(target_id, timeout=timeout)
+            try:
+                result = await self.client.command(
+                    "Target.activateTarget", {"targetId": target_id}, timeout=timeout
+                )
+            except CdpError:
+                if not http_activated:
+                    raise
+                return {"activated": True, "transport": "http"}
+            if http_activated and isinstance(result, dict):
+                return {**result, "activated": True, "transport": "cdp+http"}
+            return result
         if method == "navigate":
             result = await self._session_command(
                 handle, "Page.navigate", {"url": params["url"]}, timeout=timeout
@@ -433,6 +455,28 @@ class PythonCdpBridge:
                 )
             return {"ok": True}
         raise RuntimeError(f"unknown bridge method: {method}")
+
+    async def _activate_target_http(self, target_id: str, *, timeout: float | None) -> bool:
+        """Ask Chromium's debugging HTTP surface to select one target.
+
+        This is deliberately best-effort.  CDP may be configured with a
+        websocket-only endpoint, or a Chromium implementation may omit the
+        legacy ``/json/activate`` route.  Neither condition should turn a
+        successful protocol-level activation into a failure.
+        """
+        endpoint = str(getattr(self.client, "endpoint", "") or "").rstrip("/")
+        if not endpoint.startswith(("http://", "https://")):
+            return False
+        url = f"{endpoint}/json/activate/{urllib.parse.quote(target_id, safe='')}"
+
+        def _activate() -> bool:
+            try:
+                with urllib.request.urlopen(url, timeout=min(timeout or 5.0, 5.0)) as response:
+                    return 200 <= int(response.status) < 300
+            except (OSError, urllib.error.URLError, ValueError):
+                return False
+
+        return await asyncio.to_thread(_activate)
 
     async def stop(self) -> None:
         client, self._client = self._client, None

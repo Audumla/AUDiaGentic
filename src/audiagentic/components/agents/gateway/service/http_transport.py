@@ -50,6 +50,7 @@ class GatewayHTTPServer(ThreadingHTTPServer):
         self.dashboard_path = _dashboard_path(dashboard_path)
         self.dashboard_snapshot_path = f"{self.dashboard_path}/snapshot"
         self.dashboard_focus_path = f"{self.dashboard_path}/focus"
+        self.dashboard_purge_session_path = f"{self.dashboard_path}/purge-session"
         self.dashboard_recent_seconds = dashboard_recent_seconds
         super().__init__(address, GatewayHTTPRequestHandler)
 
@@ -75,7 +76,7 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
                     render_dashboard_html,
                 )
 
-                self._write_bytes(200, "text/html; charset=utf-8", render_dashboard_html(self.server.dashboard_snapshot_path, focus_path=self.server.dashboard_focus_path, focus_token=self.server.application.dashboard_action_token))
+                self._write_bytes(200, "text/html; charset=utf-8", render_dashboard_html(self.server.dashboard_snapshot_path, focus_path=self.server.dashboard_focus_path, purge_session_path=self.server.dashboard_purge_session_path, focus_token=self.server.application.dashboard_action_token))
                 return
             if method == "GET" and parsed.path == self.server.dashboard_snapshot_path:
                 query = parse_qs(parsed.query, keep_blank_values=True)
@@ -92,6 +93,14 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
                 if set(body) != {"request-id"}:
                     raise transport_error(22, "dashboard focus body must contain request-id only")
                 result = self.server.application.focus_dashboard_request(_string(body, "request-id"))
+                self._write_json(200, {"contract-version": "v1", "ok": True, "result": result})
+                return
+            if method == "POST" and parsed.path == self.server.dashboard_purge_session_path:
+                self._authenticate_dashboard_action()
+                body = self._read_body()
+                if set(body) != {"session-id"}:
+                    raise transport_error(23, "dashboard purge body must contain session-id only")
+                result = self.server.application.purge_dashboard_session(_string(body, "session-id"))
                 self._write_json(200, {"contract-version": "v1", "ok": True, "result": result})
                 return
             self._authenticate()
