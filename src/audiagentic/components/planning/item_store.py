@@ -434,7 +434,7 @@ def require_item(project_root: Path, item_id: str) -> Path:
         raise AudiaGenticError(
             code="VAL-PLN-001",
             kind="validation",
-            message=f"plan item not found: {item_id!r}",
+            message="plan item not found",
         )
     return path
 
@@ -457,7 +457,7 @@ def ensure_not_review(fm: dict[str, Any], item_id: str, code: str) -> None:
         raise AudiaGenticError(
             code=code,
             kind="validation",
-            message=f"{item_id!r} is a review, not a plan item — use the review-scoped tool instead",
+            message="the requested record is a review; use the review-scoped tool",
             details={"id": item_id},
         )
 
@@ -469,7 +469,7 @@ def ensure_review(fm: dict[str, Any], review_id: str, code: str) -> None:
         raise AudiaGenticError(
             code=code,
             kind="validation",
-            message=f"{review_id!r} is a plan item, not a review — use the item-scoped tool instead",
+            message="the requested record is a plan item; use the item-scoped tool",
             details={"id": review_id},
         )
 
