@@ -102,6 +102,13 @@ def create_review(project_root: Path, review: dict[str, Any]) -> dict[str, Any]:
         "reviewed-at": review.get("reviewed-at", ""),
     }
     raw_sections = {k: review.get(k, "") for k in item_store.REVIEW_SECTIONS}
+    consumed = {
+        "id", "review-of", "review_of", "title", "reviewed-by", "reviewed_by",
+        "reviewer_id", "reviewed-at", *item_store.REVIEW_SECTIONS,
+    }
+    for key, value in review.items():
+        if key not in consumed:
+            raw_sections[key] = value
     # Serialize non-string values (dicts, lists) into markdown.
     sections = {k: item_store._serialize_section_value(v) for k, v in raw_sections.items()}
     body = build_sectioned_body(title, sections, item_store.REVIEW_SECTIONS)
@@ -152,6 +159,11 @@ def list_reviews(
     review_of: parent item ID to filter by (omit for all).
     id_prefix: case-insensitive review-ID prefix (e.g. 'RV').
     """
+    valid_filters = {"open", "all", "created", "considered", "closed"}
+    if state is not None and state not in valid_filters:
+        raise AudiaGenticError(
+            code="VAL-PLN-006", kind="validation", message="invalid review state filter"
+        )
     if state in ("created", "considered", "open"):
         search_dirs = [planning_paths.plans_active_dir(project_root)]
     elif state == "closed":
@@ -180,6 +192,11 @@ def list_reviews(
                 continue
             fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
             review_id = fm.get("id", path.stem)
+            persisted_state = fm.get("state", "created")
+            if state not in (None, "all", "open") and persisted_state != state:
+                continue
+            if state == "open" and persisted_state not in {"created", "considered"}:
+                continue
             if prefix and not str(review_id).upper().startswith(prefix):
                 continue
             results.append(
@@ -187,7 +204,7 @@ def list_reviews(
                     "id": review_id,
                     "review-of": fm.get("review-of", ""),
                     "plan": fm.get("plan", ""),
-                    "state": fm.get("state", "created"),
+                    "state": persisted_state,
                     "reviewed-by": fm.get("reviewed-by", ""),
                     "reviewed-at": fm.get("reviewed-at", ""),
                     "title": parse_title(body) or "",
@@ -219,6 +236,14 @@ def list_reviews_page(
     returned as ``overflow_items`` with an explanatory note so callers know
     the review exists but is in a different state (e.g., closed instead of open).
     """
+    if not 1 <= limit <= 100:
+        raise AudiaGenticError(
+            code="VAL-PLN-006", kind="validation", message="review list limit must be between 1 and 100"
+        )
+    if offset < 0:
+        raise AudiaGenticError(
+            code="VAL-PLN-006", kind="validation", message="review list offset must be non-negative"
+        )
     effective_state = state if state is not None else "open"
     query_state = None if effective_state == "all" else effective_state
     reviews = list_reviews(project_root, query_state, plan, review_of, id_prefix)
@@ -331,6 +356,22 @@ def update_review(project_root: Path, review_id: str, updates: dict[str, Any]) -
     with their original heading text.
     Returns {id, path}
     """
+    protected = {"id", "plan", "state", "review-of", "review_of", "created-at", "created_at"}
+    forbidden = protected.intersection(updates)
+    if forbidden:
+        raise AudiaGenticError(
+            code="VAL-PLN-029",
+            kind="validation",
+            message="protected fields cannot be written by review update",
+            details={"operation": "plan_update_review", "field_count": len(forbidden)},
+        )
+    if not updates:
+        raise AudiaGenticError(
+            code="VAL-PLN-030",
+            kind="validation",
+            message="review update requires at least one field",
+            details={"operation": "plan_update_review"},
+        )
     path = item_store.require_item(project_root, review_id)
     fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
     item_store.ensure_review(fm, review_id, "VAL-PLN-023")

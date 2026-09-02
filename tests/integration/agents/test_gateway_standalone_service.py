@@ -211,7 +211,8 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         content_type, page = _raw_get(host.endpoint, "/dashboard")
         assert content_type.startswith("text/html")
         assert b"Agent gateway" in page
-        assert b"fetch(endpoint)" in page
+    assert b"fetch(endpoint" in page
+    assert b"AbortController" in page
         assert b'id="state-filter"' in page
         assert b'id="show-closed"' in page
         assert b'id="show-empty"' in page
@@ -226,7 +227,9 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b"newest first" in page
         assert b"Watchdog monitoring guide" in page
         assert b"stale monitoring marker" in page
-        assert b"Open GPT chat" in page
+        assert b"chat-link" in page
+        assert b"Open tab" in page
+        assert b"Purge" in page
 
         content_type, snapshot = _raw_get(host.endpoint, "/dashboard/snapshot")
         assert content_type.startswith("application/json")

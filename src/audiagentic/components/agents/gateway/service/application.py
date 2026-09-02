@@ -134,6 +134,30 @@ class GatewayServiceApplication:
             }
         return self._application.focus_execution_chat(matches[0], request_id)
 
+    def purge_dashboard_session(self, session_id: str) -> dict[str, Any]:
+        """Purge one dashboard session after resolving its owning project."""
+        from audiagentic.components.agents.gateway.service.known_projects import load_known_projects
+
+        matches = []
+        registry = load_known_projects(self._service_store.root / "known-projects.json")
+        for known in registry.projects:
+            if not known.project_root.exists():
+                continue
+            try:
+                from audiagentic.components.agents.gateway.session import sessions_store
+
+                sessions_store.read_session_record(known.project_root, session_id)
+            except Exception:  # noqa: BLE001 - skip projects without this session
+                continue
+            matches.append(known.project_root)
+        if len(matches) != 1:
+            return {
+                "session-id": session_id,
+                "outcome": "not-found" if not matches else "ambiguous",
+                "reason": "session-project-not-found" if not matches else "session-id-not-unique",
+            }
+        return self._application.purge_execution_session(matches[0], session_id)
+
     def acquire_client(
         self,
         client_instance_id: str,
