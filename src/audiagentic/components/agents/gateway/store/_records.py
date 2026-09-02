@@ -635,7 +635,12 @@ def _read_record_locked(project_root: Path, request_id: str) -> dict[str, Any]:
     return migrated
 
 
-def read_record(project_root: Path, request_id: str) -> dict[str, Any]:
+def read_record(
+    project_root: Path,
+    request_id: str,
+    *,
+    include_output: bool = True,
+) -> dict[str, Any]:
     """Read a durable request, upgrading a legacy payload under its mutation lock."""
     payload = _read_record_payload(project_root, request_id)
     if (
@@ -654,7 +659,7 @@ def read_record(project_root: Path, request_id: str) -> dict[str, Any]:
     else:
         with _shared._request_lock(project_root, request_id):
             record = _read_record_locked(project_root, request_id)
-    if record.get("output") is None and isinstance(record.get("response-artifact"), dict):
+    if include_output and record.get("output") is None and isinstance(record.get("response-artifact"), dict):
         try:
             from audiagentic.components.agents.gateway.output import read_final_response
             record["output"] = read_final_response(project_root, request_id, record["response-artifact"])
@@ -759,7 +764,7 @@ def read_public_status(project_root: Path, request_id: str) -> dict[str, Any]:
     return status
 
 
-def list_records(project_root: Path) -> list[dict[str, Any]]:
+def list_records(project_root: Path, *, include_output: bool = True) -> list[dict[str, Any]]:
     root = gateway_root(project_root)
     if not root.exists():
         return []
@@ -768,7 +773,7 @@ def list_records(project_root: Path) -> list[dict[str, Any]]:
         if not entry.is_dir() or entry.name in {"idempotency", "sessions"}:
             continue
         try:
-            records.append(read_record(project_root, entry.name))
+            records.append(read_record(project_root, entry.name, include_output=include_output))
         except AudiaGenticError:
             logger.warning("skipping unreadable gateway request", extra={"request-id": entry.name}, exc_info=True)
     return records

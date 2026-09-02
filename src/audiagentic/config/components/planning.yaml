@@ -62,7 +62,7 @@ mcp-servers:
     description: Planning component management — status and implementation selection
     propagate: audiagentic
     instructions: >
-      Inspect or switch the active planning implementation and check current item counts.
+      Inspect or switch the active planning implementation and check item counts.
     tool-descriptions:
       planning_status: >
         Return planning component status including active implementation, item counts,
@@ -70,13 +70,8 @@ mcp-servers:
       planning_list_implementations: >
         List all registered planning implementations with their display name, description,
         default flag, and current active selection.
-      planning_get_config: >
-        Return resolved config plus the settable-option schema for an implementation.
-        The schema field describes every option the implementation accepts (type,
-        description, required, default, allowed values). Use with planning_set_config.
-      planning_set_config: >
-        Validate and persist config updates for a planning implementation.
-        See planning_get_config for the option schema an implementation accepts.
+      planning_get_config: Return resolved config and its option schema.
+      planning_set_config: Validate and persist descriptor-defined config updates.
       planning_select_implementation: >
         Switch the active planning implementation for this project. Returns success status
         and any rollback information if switching fails.
@@ -101,80 +96,25 @@ mcp-servers:
     description: Plan item management — create, list, update, transition, and remove items; create and manage reviews
     propagate: providers
     instructions: >
-      Discover standards with plan_list_standards before creating items, and reference
-      them in a Standards section. Plan names are kebab-case (e.g. code-cleanup); item
-      IDs are auto-generated (<PLAN-PREFIX><N>, e.g. CC07) — never supply one. Reviews
-      link to a plan item and move through created → considered → closed; completed
-      items and closed reviews move to completed/. Always update state after acting:
-      close reviews after their findings are incorporated or explicitly rejected, mark
-      items completed only when validation is done, and delete stale/superseded items
-      rather than leaving them pending.
+      Use plan_list_standards when standards context is needed. Create items with
+      plan and title; work is optional (S/M/L), and compatible supplied IDs are allowed.
+      Filter lists by plan or ID prefix; item/review defaults are active/open. Transition
+      state explicitly; close handled reviews and complete items only after validation.
     tool-descriptions:
-      plan_list_standards: >
-        List the architecture and design standards for this project. Returns a list
-        of standards with id, title, path, and description. Standards are loaded from
-        the active planning implementation descriptor. Use this to discover which standards apply
-        before creating or updating plan items.
-      plan_create_item: >
-        Create a new plan item. Required: plan, title, work (S/M/L — blast radius of the change).
-        Optional: skill (basic/intermediate/advanced — cognitive difficulty; set later via plan_update_item if unknown),
-        order, description, steps, detailed_solution (Detailed Solution & Technical Design),
-        code_samples (Code Samples & Guidance including config samples and schemas),
-        files, validation, effort_risk, standards, notes.
-        ID is auto-generated — do not supply it.
-        Returns {id, title, plan, path}.
-      plan_list_groups: >
-        List plan items grouped by plan. Returns plan groups with item counts
-        (total, active, terminal) and their items. state: 'active'/'pending'/'in_progress'/'completed'/'superseded'/'deprecated' (omit for all).
-        plan: directory name like 'code-cleanup' (omit for all plans).
-      plan_list_items: >
-        List plan items. state: 'active'/'pending'/'in_progress'/'completed'/'superseded'/'deprecated' (omit for all).
-        plan: directory name like 'code-cleanup' (omit for all plans).
-      plan_get_item: >
-        Read a plan item by ID, returning frontmatter and all body sections.
-        Pass include_history=True to also get change-log entries under 'change_log'.
-      plan_set_state: >
-        Transition item state. Valid states: pending, in_progress, completed.
-        Terminal discard states: superseded (replaced by another item),
-        deprecated (outdated but retained for reference).
-        'in_progress' signals active implementation; 'completed' moves the item
-        to completed/ only when work and validation are done. Do not mark an
-        item completed merely because reviews were incorporated — keep it
-        pending or in_progress if implementation remains. Delete stale items
-        with plan_delete_item instead of leaving them pending.
-      plan_update_item: >
-        Update frontmatter fields (work, skill, order) or body sections
-        (description, steps, detailed_solution [Detailed Solution & Technical Design],
-        code_samples [Code Samples & Guidance], files, validation,
-        effort_risk, standards, notes) of an existing item. The optional append
-        parameter is a list of section names, not content; each name must also
-        be present in updates. Use updates={"notes": "new text"}, append=["notes"]
-        to append. Supplying append without matching updates, or putting text
-        rather than a section name in append, returns VAL-PLN-027 or VAL-PLN-028
-        with corrective details.
+      plan_list_standards: List configured planning standards.
+      plan_create_item: "Create an item. Required: plan, title. Optional: id, work (S/M/L), skill, order, and sections."
+      plan_list_groups: "List plan groups; filter by state/plan and paginate with limit/offset."
+      plan_list_items: "List items; provide plan or id_prefix. Default state is active; paginate with limit/offset."
+      plan_get_item: Read an item; set include_history=true for change history.
+      plan_set_state: Transition to pending, in_progress, completed, superseded, or deprecated.
+      plan_update_item: Update editable fields; append is section names also present in updates.
       plan_delete_item: Permanently delete a plan item by ID.
-      plan_create_review: >
-        Create a new review linked to a plan item. Required: review-of (parent item ID), title.
-        Optional: notes, findings, conclusion, reviewed-by/reviewed_by/reviewer_id.
-        ID is auto-generated (e.g. RV01).
-        Returns {id, title, review-of, plan, path}.
-      plan_list_reviews: >
-        List reviews. state: 'created'/'considered' for active, 'closed' for completed (omit for all).
-        plan: directory name like 'code-cleanup' (omit for all plans).
-        review_of: parent item ID to filter by (omit for all).
+      plan_create_review: "Create a review; required: review-of and title."
+      plan_list_reviews: List reviews; default state is open; paginate with limit/offset.
       plan_get_review: Read a review by ID, returning frontmatter + parsed body sections.
-      plan_set_review_state: >
-        Transition review state. Use immediately after review findings are handled.
-        'closed' moves to completed/ when findings have been incorporated into the
-        parent plan, rejected with rationale, or confirmed no-action. 'created' and
-        'considered' keep a review active while findings still need triage.
-        Returns {id, state, path}.
-      plan_update_review: >
-        Update frontmatter fields (reviewed-by, reviewed-at) or body sections
-        (title, notes, findings, conclusion) of an existing review.
-        Accepts reviewed_by/reviewer_id aliases for reviewer identity.
-        Returns {id, path}.
-      plan_delete_review: Permanently delete a review. Returns {id}.
+      plan_set_review_state: Transition to created, considered, or closed.
+      plan_update_review: Update review content; identity and state are immutable.
+      plan_delete_review: Delete a review.
 
 contributions:
   - id: agent-planning/process
