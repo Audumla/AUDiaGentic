@@ -393,6 +393,46 @@ async def test_python_bridge_exposes_browser_window_and_target_api_operations():
 
 
 @pytest.mark.asyncio
+async def test_python_bridge_uses_chromium_http_activation_assist(monkeypatch):
+    """The browser HTTP activation route is used when available.
+
+    CDP's Target.activateTarget can acknowledge a request without changing
+    the visible tab on some Windows Chromium builds.  Keep the websocket
+    command, but verify the explicit /json/activate route is attempted for an
+    HTTP-configured browser endpoint.
+    """
+    bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
+    fake = _FakeClient()
+    fake.endpoint = "http://127.0.0.1:9222"
+    bridge._client = fake
+    page = await bridge.call("create_page")
+    urls: list[str] = []
+
+    class _Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    def _urlopen(url, *, timeout):
+        urls.append(url)
+        return _Response()
+
+    monkeypatch.setattr(
+        "audiagentic.components.providers.adapters.gpt_auto.cdp.bridge.urllib.request.urlopen",
+        _urlopen,
+    )
+    result = await bridge.call("activate_target", {"pageHandle": page["pageHandle"]})
+
+    assert result["activated"] is True
+    assert result["transport"] == "cdp+http"
+    assert urls == ["http://127.0.0.1:9222/json/activate/target-1"]
+
+
+@pytest.mark.asyncio
 async def test_typed_browser_api_validates_and_wraps_page_operations():
     bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
     fake = _FakeClient()

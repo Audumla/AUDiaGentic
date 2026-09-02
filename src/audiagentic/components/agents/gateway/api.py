@@ -1250,6 +1250,107 @@ def close_execution_session(project_root: Path, session_id: str) -> dict[str, An
     return _public_session_projection(record)
 
 
+def purge_execution_session(project_root: Path, session_id: str) -> dict[str, Any]:
+    """Permanently remove one gateway session and its request-owned data.
+
+    This is intentionally separate from ``close_execution_session``: close
+    stops/terminalizes the provider session but retains durable history, while
+    purge deletes the session record, timelines, request records/artifacts,
+    bindings, and relocated-root lineage.  Non-terminal requests block the
+    destructive operation so a queue worker can never race the deletion.
+    """
+    import shutil
+
+    from audiagentic.components.agents.agents_paths import (
+        gateway_request_dir,
+        gateway_retention_lock_path,
+        gateway_root,
+        gateway_session_dir,
+    )
+    from audiagentic.components.agents.gateway.session import bindings as binding_store
+    from audiagentic.components.agents.gateway.session import root_registry
+    from audiagentic.components.agents.gateway.session import sessions_store as session_store
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    from audiagentic.foundation.system.process import StartupLock
+
+    try:
+        record = session_store.read_session_record(project_root, session_id)
+    except AudiaGenticError:
+        return {"session-id": session_id, "outcome": "not-found"}
+
+    # A live handle is closed first; the resulting terminal record is then
+    # re-read below before deletion.  This also removes provider transports.
+    from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
+
+    runtime = peek_session_runtime()
+    if runtime is not None and session_id in set(runtime.live_session_ids()):
+        close_execution_session(project_root, session_id)
+        record = session_store.read_session_record(project_root, session_id)
+    elif record.get("state") not in session_store.SESSION_TERMINAL_STATES:
+        record = session_store.transition_session_record(
+            project_root, session_id, "failed", updates={"close-reason": "purge"}
+        )
+        binding_store.retire_binding(project_root, record, state="failed")
+
+    request_ids = set(session_store.session_request_ids(record))
+    root = gateway_root(project_root)
+    if root.exists():
+        for entry in root.iterdir():
+            if not entry.is_dir() or not entry.name.startswith("req_"):
+                continue
+            try:
+                request = store.read_record(project_root, entry.name)
+            except Exception:  # noqa: BLE001 - unrelated/corrupt records are skipped
+                continue
+            if request.get("session-id") == session_id:
+                request_ids.add(entry.name)
+
+    requests = []
+    for request_id in sorted(request_ids):
+        try:
+            requests.append(store.read_record(project_root, request_id))
+        except AudiaGenticError:
+            continue
+    non_terminal = [r.get("request-id") for r in requests if r.get("state") not in store.TERMINAL_STATES]
+    if non_terminal:
+        return {
+            "session-id": session_id,
+            "outcome": "blocked",
+            "reason": "session-has-active-requests",
+            "request-count": len(requests),
+        }
+
+    with StartupLock(gateway_retention_lock_path(project_root)):
+        # Re-read the session and all request records immediately before the
+        # destructive boundary; a newly admitted request must win the race.
+        current = session_store.read_session_record(project_root, session_id)
+        current_ids = set(session_store.session_request_ids(current)) | request_ids
+        for request_id in current_ids:
+            try:
+                current_request = store.read_record(project_root, request_id)
+            except AudiaGenticError:
+                continue
+            if current_request.get("state") not in store.TERMINAL_STATES:
+                return {
+                    "session-id": session_id,
+                    "outcome": "blocked",
+                    "reason": "session-has-active-requests",
+                    "request-count": len(current_ids),
+                }
+        for request_id in current_ids:
+            shutil.rmtree(gateway_request_dir(project_root, request_id), ignore_errors=True)
+            shutil.rmtree(root / "archive" / request_id, ignore_errors=True)
+        shutil.rmtree(gateway_session_dir(project_root, session_id), ignore_errors=True)
+        binding_store.purge_binding(project_root, current)
+        root_registry.unregister_session_root(project_root, session_id=session_id)
+
+    return {
+        "session-id": session_id,
+        "outcome": "purged",
+        "request-count": len(request_ids),
+    }
+
+
 def control_execution_session(
     project_root: Path,
     session_id: str,

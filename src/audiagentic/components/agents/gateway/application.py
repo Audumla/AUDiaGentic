@@ -41,6 +41,7 @@ class GatewayApplication(Protocol):
         self, project_root: Path, **kwargs: Any
     ) -> list[dict[str, Any]]: ...
     def close_execution_session(self, project_root: Path, session_id: str) -> dict[str, Any]: ...
+    def purge_execution_session(self, project_root: Path, session_id: str) -> dict[str, Any]: ...
     def control_execution_session(
         self, project_root: Path, session_id: str, **kwargs: Any
     ) -> dict[str, Any]: ...
@@ -129,6 +130,9 @@ class InProcessGatewayApplication:
 
     def close_execution_session(self, project_root: Path, session_id: str) -> dict[str, Any]:
         return self._api().close_execution_session(project_root, session_id)
+
+    def purge_execution_session(self, project_root: Path, session_id: str) -> dict[str, Any]:
+        return self._api().purge_execution_session(project_root, session_id)
 
     def control_execution_session(
         self, project_root: Path, session_id: str, **kwargs: Any

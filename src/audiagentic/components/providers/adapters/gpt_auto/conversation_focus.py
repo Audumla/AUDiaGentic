@@ -113,6 +113,18 @@ async def focus_existing_conversation(
     runtime.adopt_existing_dedicated_window(pages)
     scoped = [p for p in pages if runtime.page_belongs_to_dedicated_window(p)]
     selected, result = select_focus_page(scoped, locator)
+    # A retained conversation may have been moved to another browser window
+    # since admission.  The request-owned URL/session identity is stronger
+    # than the gateway's preferred-window hint, so retry the exact selection
+    # across all CDP pages when the scoped window has no match.  Ambiguous or
+    # conflicting identities remain fail-closed.
+    if (
+        selected is None
+        and result is not None
+        and result.outcome is ConversationFocusOutcome.NOT_FOUND
+        and scoped != pages
+    ):
+        selected, result = select_focus_page(pages, locator)
     if result is not None:
         return result
     if selected is None:

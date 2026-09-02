@@ -138,6 +138,11 @@ def list_items(
         only that plan, same as before.
     id_prefix: case-insensitive item-ID prefix (e.g. 'CC' matches CC01, CC20, ...).
     """
+    valid_filters = {"active", "all", *item_store.VALID_STATES}
+    if state is not None and state not in valid_filters:
+        raise AudiaGenticError(
+            code="VAL-PLN-006", kind="validation", message="invalid item state filter"
+        )
     if state == "active" or state in item_store.active_states("item"):
         search_dirs = [planning_paths.plans_active_dir(project_root)]
     elif state in item_store.terminal_states("item"):
@@ -160,13 +165,18 @@ def list_items(
                 continue
             fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
             item_id = fm.get("id", path.stem)
+            persisted_state = fm.get("state", "pending")
+            if state not in (None, "all", "active") and persisted_state != state:
+                continue
+            if state == "active" and persisted_state not in item_store.active_states("item"):
+                continue
             if prefix and not str(item_id).upper().startswith(prefix):
                 continue
             results.append(
                 {
                     "id": item_id,
                     "plan": fm.get("plan", ""),
-                    "state": fm.get("state", "pending"),
+                    "state": persisted_state,
                     "work": fm.get("work", ""),
                     "skill": fm.get("skill", ""),
                     "created-by": fm.get("created-by", ""),
@@ -203,6 +213,14 @@ def list_items_page(
     ``overflow_items`` with an explanatory note so callers know the item exists
     but is in a different state (e.g., completed instead of active).
     """
+    if not 1 <= limit <= 100:
+        raise AudiaGenticError(
+            code="VAL-PLN-006", kind="validation", message="item list limit must be between 1 and 100"
+        )
+    if offset < 0:
+        raise AudiaGenticError(
+            code="VAL-PLN-006", kind="validation", message="item list offset must be non-negative"
+        )
     effective_state = state if state is not None else "active"
     query_state = None if effective_state == "all" else effective_state
     items = list_items(project_root, query_state, plan, id_prefix)
@@ -395,6 +413,40 @@ def update_item(
     None) to opt out and force a full replace of `notes` too — e.g. when
     deliberately rewriting notes to fix corruption.
     """
+    protected = {"id", "plan", "state", "created-at", "created_at"}
+    protected.update({"review-of", "review_of"})
+    forbidden = protected.intersection(updates)
+    if forbidden:
+        raise AudiaGenticError(
+            code="VAL-PLN-029",
+            kind="validation",
+            message="protected fields cannot be written by item update",
+            details={"operation": "plan_update_item", "field_count": len(forbidden)},
+        )
+    if append and not updates:
+        raise AudiaGenticError(
+            code="VAL-PLN-027",
+            kind="validation",
+            message="append was provided without update content",
+            details={
+                "append_entry_count": len(append),
+                "expected": "updates={<section>: <text>}, append=[<section>]",
+            },
+        )
+    if append and len(append) != len(set(append)):
+        raise AudiaGenticError(
+            code="VAL-PLN-031",
+            kind="validation",
+            message="append contains duplicate section names",
+            details={"duplicate_count": len(append) - len(set(append))},
+        )
+    if not updates:
+        raise AudiaGenticError(
+            code="VAL-PLN-030",
+            kind="validation",
+            message="item update requires at least one field",
+            details={"operation": "plan_update_item"},
+        )
     # ``append`` is a mode selector, not the content to append.  Historically
     # an invocation such as ``updates={}, append=["some text"]`` was accepted
     # and written back unchanged, producing a misleading success response and
