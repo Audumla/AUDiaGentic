@@ -12,6 +12,10 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.agents.gateway.diagnostics import (
+    activity_group,
+    normalize_activity_label,
+)
 from audiagentic.components.agents.gateway.event_topics import (
     TURN_MODEL_COMPLETED_TOPIC,
     TURN_MODEL_IN_PROGRESS_TOPIC,
@@ -134,6 +138,23 @@ def _publish_turn_event(
         )
 
 
+def _activity_timeline_attrs(obs: TransportObservation) -> dict[str, Any]:
+    """Return bounded activity detail for durable session timeline history."""
+    raw = (
+        obs.attributes.get("model_activity")
+        if isinstance(obs.attributes, Mapping)
+        else None
+    )
+    label = normalize_activity_label(raw if isinstance(raw, str) else None)
+    if not label:
+        return {}
+    attrs: dict[str, Any] = {"activity-label": label}
+    group = activity_group(label)
+    if group:
+        attrs["activity-group"] = group
+    return attrs
+
+
 def _record_turn_timeline(
     project_root: Path,
     session_id: str,
@@ -217,6 +238,20 @@ def _make_on_event_callback(
                 pass
         resolved = projector.resolve(obs)
         if resolved is None:
+            # ACTIVITY is intentionally projected to model.started only once,
+            # but every later activity observation remains useful durable
+            # session history. Keep event-bus lifecycle semantics unchanged
+            # while retaining the bounded label/group in the session timeline.
+            if obs.kind == TransportObservationKind.ACTIVITY:
+                _record_turn_timeline(
+                    project_root,
+                    session_id,
+                    request_id,
+                    correlation_id,
+                    obs,
+                    obs.kind.value,
+                    extra_attrs=_activity_timeline_attrs(obs),
+                )
             return
         topic, extra = resolved
 
@@ -238,7 +273,9 @@ def _make_on_event_callback(
             latest_event_recorder(topic, payload)
         # SH15: pass tool-call-id and status into the timeline for richer progress summary
         extra_attrs: dict[str, Any] | None = None
-        if obs.kind == TransportObservationKind.TOOL_REQUESTED or obs.kind == TransportObservationKind.TOOL_FINISHED:
+        if obs.kind == TransportObservationKind.ACTIVITY:
+            extra_attrs = _activity_timeline_attrs(obs)
+        elif obs.kind == TransportObservationKind.TOOL_REQUESTED or obs.kind == TransportObservationKind.TOOL_FINISHED:
             if obs.attributes:
                 extra_attrs = {}
                 tid = obs.attributes.get("tool_call_id")
