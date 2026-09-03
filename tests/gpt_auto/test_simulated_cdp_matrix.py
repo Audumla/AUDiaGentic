@@ -67,6 +67,33 @@ def test_snapshot_preserves_structural_hr_for_user_prompt_correlation() -> None:
     assert "structuralHrCount" in _SNAPSHOT_FN
 
 
+@pytest.mark.asyncio
+async def test_materialize_latest_assistant_turn_scrolls_without_provider_side_effects() -> None:
+    """Virtualized long chats must be brought into view read-only.
+
+    The operation is intentionally separate from ``snapshot``: it may cause
+    ChatGPT to mount the end-of-turn action bar, but it must never submit,
+    click, refresh, or create a target.
+    """
+    class _MaterializeBridge:
+        def __init__(self) -> None:
+            self.functions: list[str] = []
+
+        async def evaluate(self, _page_handle, function, _argument=None, **_kwargs):
+            self.functions.append(function)
+            return "scrollIntoView" in function
+
+    bridge = _MaterializeBridge()
+    browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]
+    page = CdpPageRef("page-1", "target-1")
+
+    assert await browser.materialize_latest_assistant_turn(page)
+    assert len(bridge.functions) == 1
+    assert "scrollIntoView" in bridge.functions[0]
+    assert "click" not in bridge.functions[0]
+    assert "Target.createTarget" not in bridge.functions[0]
+
+
 class _ScenarioClient:
     def __init__(self) -> None:
         self.events: asyncio.Queue = asyncio.Queue()

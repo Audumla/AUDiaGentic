@@ -296,6 +296,12 @@ class GptAutoTurn:
         self._last_observation_error: BaseException | None = None
         self._baseline_snapshot: ChatSnapshot | None = None
         self._terminal_evidence: dict[str, Any] = {}
+        # ChatGPT may virtualize the tail of a long conversation.  Keep one
+        # bounded attempt per turn to mount the latest assistant action bar;
+        # repeated scrolling would be noisy and could fight the operator's
+        # own tab position.
+        self._completion_materialization_attempted = False
+        self._completion_materialization_succeeded = False
 
     def _move(self, target: TurnState) -> None:
         failure = _ENGINE.check(self.state.value, target.value)
@@ -849,6 +855,45 @@ class GptAutoTurn:
                 # its duplicate-tab finder fallback always set this before
                 # _await_response() can be reached.
                 current, response_ref = raw_current, None
+            # A long ChatGPT conversation can keep the latest assistant text
+            # available while virtualizing its end-of-turn action bar until
+            # the turn is scrolled into view.  The completion policy requires
+            # those controls as corroborating evidence.  Give the provider
+            # one read-only opportunity to mount them, then take a fresh
+            # snapshot so all subsequent evidence is from one DOM state.
+            if (
+                not self._completion_materialization_attempted
+                and response_ref is not None
+                and current.latest_assistant_text
+                and not current.generating
+                and not (current.dom_signals & self._TERMINAL_WITNESS_SIGNALS)
+            ):
+                self._completion_materialization_attempted = True
+                materialize = getattr(self.chat, "materialize_latest_assistant_turn", None)
+                if callable(materialize):
+                    try:
+                        self._completion_materialization_succeeded = bool(await materialize())
+                    except Exception as exc:  # noqa: BLE001 - evidence retries normally
+                        logger.info(
+                            "gpt-auto completion-control materialization failed; continuing observation",
+                            extra={"turn-id": self.request.turn_id, "error": str(exc)},
+                        )
+                    if self._completion_materialization_succeeded:
+                        try:
+                            raw_current = await self.chat.snapshot()
+                            self._remember_snapshot(raw_current)
+                            if prompt_message_id:
+                                current, response_ref = _scope_response_snapshot(
+                                    baseline, raw_current, prompt_message_id=prompt_message_id
+                                )
+                            else:
+                                current, response_ref = raw_current, None
+                        except Exception as exc:  # noqa: BLE001 - next poll retries evidence
+                            self._last_observation_error = exc
+                            logger.info(
+                                "gpt-auto snapshot after completion-control materialization failed",
+                                extra={"turn-id": self.request.turn_id, "error": str(exc)},
+                            )
             now = loop.time()
             if response_ref is not None and response_ref.message_id:
                 if self._response_message_id is None:
@@ -1004,7 +1049,7 @@ class GptAutoTurn:
                 # ACTIVITY emissions arriving throughout the turn, not just
                 # at the start.
                 activity_label = (
-                    "tool-progress"
+                    _tool_activity_signal(current, previous)
                     if tool_activity_edge or tool_activity_heartbeat_due
                     else (
                         "response-progress"
@@ -1321,6 +1366,8 @@ class GptAutoTurn:
             "page-handle": self.chat.page_handle,
             "target-id": getattr(self.chat, "target_id", None),
             "provider-session-id": self.chat.provider_session_id,
+            "completion-materialization-attempted": self._completion_materialization_attempted,
+            "completion-materialization-succeeded": self._completion_materialization_succeeded,
             **_message_ids(self),
         }
         if self._composer_verification_mismatch:
@@ -1428,6 +1475,27 @@ class GptAutoTurn:
                 extra={"turn-id": self.request.turn_id},
                 exc_info=True,
             )
+
+
+def _tool_activity_signal(current: ChatSnapshot, previous: ChatSnapshot) -> str:
+    """Return the most specific normalized GPT activity label observed.
+
+    The CDP bridge supplies bounded label counts.  On an edge, prefer the
+    label whose count increased; on a heartbeat, retain a deterministic
+    currently-visible label.  This preserves the provider evidence instead
+    of collapsing every connector operation into ``tool-progress``.
+    """
+    current_counts = dict(current.tool_activity_counts)
+    previous_counts = dict(previous.tool_activity_counts)
+    increased = [
+        (label, count)
+        for label, count in current_counts.items()
+        if count > previous_counts.get(label, 0)
+    ]
+    candidates = increased or list(current_counts.items())
+    if not candidates:
+        return "tool-progress"
+    return sorted(candidates, key=lambda item: (-item[1], item[0]))[0][0]
 
 
 def _new_user_message(baseline: ChatSnapshot, current: ChatSnapshot) -> bool:

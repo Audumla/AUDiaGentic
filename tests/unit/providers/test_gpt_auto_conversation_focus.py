@@ -156,3 +156,40 @@ def test_focus_existing_conversation_falls_back_to_other_window(monkeypatch, tmp
         "activate_target",
         "keep_page_active",
     ]
+
+
+def test_focus_existing_conversation_uses_live_gateway_session_before_url_exists(
+    monkeypatch, tmp_path
+):
+    calls = []
+
+    class FakeRuntime:
+        async def connect_existing(self):
+            calls.append("connect")
+            return True
+
+        async def focus_live_session(self, session_id):
+            calls.append(("live", session_id))
+            return "focused"
+
+        @property
+        def bridge(self):
+            raise AssertionError("URL/page discovery should not be needed")
+
+    monkeypatch.setattr(
+        conversation_focus,
+        "load_provider_config",
+        lambda project_root: {"providers": {"gpt-auto": {}}},
+    )
+    monkeypatch.setattr(conversation_focus, "get_runtime", lambda project_root, config: FakeRuntime())
+
+    result = asyncio.run(
+        conversation_focus.focus_existing_conversation(
+            tmp_path,
+            provider_id="gpt-auto",
+            locator=ConversationFocusLocator(gateway_session_id="ses-live"),
+        )
+    )
+
+    assert result.outcome.value == "focused"
+    assert calls == ["connect", ("live", "ses-live")]

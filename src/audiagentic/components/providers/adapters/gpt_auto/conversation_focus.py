@@ -109,6 +109,12 @@ async def focus_existing_conversation(
     runtime = get_runtime(project_root, GptAutoConfig.from_project_dict(provider_cfg))
     if not await runtime.connect_existing():
         return ConversationFocusResult(ConversationFocusOutcome.UNAVAILABLE, "cdp-unavailable")
+    if locator.gateway_session_id:
+        focus_live = getattr(runtime, "focus_live_session", None)
+        if focus_live is not None:
+            reason = await focus_live(locator.gateway_session_id)
+            if reason == "focused":
+                return ConversationFocusResult(ConversationFocusOutcome.FOCUSED)
     pages = await runtime.bridge.call("list_pages")
     runtime.adopt_existing_dedicated_window(pages)
     scoped = [p for p in pages if runtime.page_belongs_to_dedicated_window(p)]

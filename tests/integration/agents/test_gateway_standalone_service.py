@@ -212,7 +212,14 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert content_type.startswith("text/html")
         assert b"Agent gateway" in page
         assert b"fetch(endpoint" in page
-        assert b"AbortController" in page
+        # Snapshot generation scans durable records synchronously.  Refreshes
+        # must be single-flight; aborting a browser fetch does not cancel the
+        # server-side scan and a one-second interval can otherwise pile up
+        # requests until the dashboard appears hung.
+        assert b"refreshInFlight" in page
+        assert b"if(refreshInFlight)return" in page
+        assert b"setInterval(refresh,3000)" in page
+        assert b"AbortController" not in page
         assert b'id="state-filter"' in page
         assert b'id="show-closed"' in page
         assert b'id="show-empty"' in page

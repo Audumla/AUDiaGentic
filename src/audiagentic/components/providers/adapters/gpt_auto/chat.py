@@ -490,6 +490,24 @@ class PersistentChat:
         self._last_snapshot = snapshot
         return snapshot
 
+    async def materialize_latest_assistant_turn(self) -> bool:
+        """Mount the latest turn's completion controls when ChatGPT virtualizes it.
+
+        This is intentionally a narrow observation aid used by the response
+        watcher.  It does not refresh the page, submit a prompt, or change
+        provider/session ownership.  Small test doubles may not expose the
+        provider-specific method; in that case the safe answer is ``False``
+        and normal evidence/timeout handling remains unchanged.
+        """
+        if not self.page_handle:
+            return False
+        browser = self._gpt_browser()
+        materialize = getattr(browser, "materialize_latest_assistant_turn", None)
+        if not callable(materialize):
+            return False
+        page = await browser.page_by_handle(self.page_handle)
+        return bool(await materialize(page))
+
     async def _reconcile_unresolved_turn(self) -> bool:
         """Prove the retained prompt reached a terminal provider outcome."""
         if not self.unresolved_turn_pending:
