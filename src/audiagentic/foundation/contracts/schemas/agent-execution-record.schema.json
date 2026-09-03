@@ -152,7 +152,9 @@
             "source": {"type": ["string", "null"]},
             "source-instance": {"type": ["string", "null"]},
             "source-sequence": {"type": "integer", "minimum": 0},
-            "phase": {"type": ["string", "null"]}
+            "phase": {"type": ["string", "null"]},
+            "activity-label": {"type": ["string", "null"], "maxLength": 128},
+            "activity-group": {"type": ["string", "null"], "maxLength": 64}
           },
           "additionalProperties": false
         },
@@ -239,7 +241,9 @@
           "certainty": {"type": "string", "maxLength": 32},
           "side-effect-state": {"type": "string", "maxLength": 64},
           "source": {"type": ["string", "null"], "maxLength": 128},
-          "source-sequence": {"type": ["integer", "null"], "minimum": 0}
+          "source-sequence": {"type": ["integer", "null"], "minimum": 0},
+          "activity-label": {"type": "string", "maxLength": 128},
+          "activity-group": {"type": "string", "maxLength": 64}
         },
         "required": ["evidence-id", "sequence", "phase", "kind", "certainty", "side-effect-state"],
         "additionalProperties": false

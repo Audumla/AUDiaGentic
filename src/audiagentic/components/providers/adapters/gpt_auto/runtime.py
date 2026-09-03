@@ -429,6 +429,31 @@ class GptAutoProviderRuntime:
             None,
         )
 
+    async def focus_live_session(self, ag_session_id: str) -> str:
+        """Focus the page currently owned by a live gateway session.
+
+        This is intentionally an in-process fallback for the short interval
+        before ChatGPT changes the page URL to its conversation URL.  It uses
+        the runtime's private ownership map and never persists or returns a
+        CDP handle to the gateway/client.
+        """
+        chat = self._chats.get(ag_session_id)
+        if chat is None:
+            return "active-session-not-registered"
+        handle = chat.page_handle
+        if not handle:
+            return "active-session-page-unbound"
+        page = await self.page_record(handle)
+        if page is None:
+            return "active-session-page-missing"
+        expected_target = str(getattr(chat, "target_id", "") or "")
+        actual_target = str(page.get("targetId") or "")
+        if expected_target and actual_target and expected_target != actual_target:
+            return "active-session-page-recycled"
+        await self.bridge.call("activate_target", {"pageHandle": handle})
+        await self.bridge.call("keep_page_active", {"pageHandle": handle})
+        return "focused"
+
     def page_belongs_to_dedicated_window(self, page: dict) -> bool:
         """Constrain resume/recovery candidates to the managed GPT window."""
         return not self.config.browser.dedicated_window or (

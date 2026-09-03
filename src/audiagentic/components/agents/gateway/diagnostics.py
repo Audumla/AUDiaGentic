@@ -105,6 +105,46 @@ def _signals(details: Mapping[str, Any]) -> list[str]:
     return [s[:_MAX_ID] for s in raw if isinstance(s, str) and s][: _MAX_SIGNALS]
 
 
+# Provider labels are retained as bounded evidence, but watchdog/dashboard
+# consumers also need a stable semantic grouping that does not depend on one
+# provider's UI wording.  Unknown labels deliberately remain ungrouped.
+_ACTIVITY_GROUPS = {
+    "thinking": "thinking",
+    "thought": "thinking",
+    "generating": "generation",
+    "response-progress": "generation",
+    "response-started": "generation",
+    "assistant-message": "generation",
+    "in-progress": "generation",
+    "talked-to-app": "external-app",
+    "read-resource": "resource-read",
+    "searching-web": "web-search",
+    "searching-the-web": "web-search",
+    "called-tool": "tool",
+    "tool-call": "tool",
+    "tool-requested": "tool",
+    "tool-result": "tool",
+    "tool-finished": "tool",
+    "tool-progress": "tool",
+    "response-observed": "completion",
+    "response-complete": "completion",
+    "submission-proof": "submission",
+}
+
+
+def normalize_activity_label(value: str | None) -> str | None:
+    """Normalize a provider activity label without accepting arbitrary text."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return value.strip().lower().replace("_", "-").replace(" ", "-")[:_MAX_ID]
+
+
+def activity_group(value: str | None) -> str | None:
+    """Return the bounded provider-neutral group for one activity label."""
+    normalized = normalize_activity_label(value)
+    return _ACTIVITY_GROUPS.get(normalized) if normalized else None
+
+
 def classify_error(
     error: BaseException | Mapping[str, Any] | None,
     *,
@@ -337,7 +377,8 @@ def evidence_from_activity(
     side_effect_state: str = SideEffectState.MAY_HAVE_STARTED.value,
 ) -> dict[str, Any]:
     """Create a bounded durable evidence item from accepted activity."""
-    return {
+    normalized_label = normalize_activity_label(phase)
+    evidence = {
         "evidence-id": f"ev_{activity_sequence}",
         "sequence": activity_sequence,
         "request-id": _text(request_id, _MAX_ID),
@@ -350,6 +391,12 @@ def evidence_from_activity(
         "source": _text(source, _MAX_ID),
         "source-sequence": source_sequence,
     }
+    if normalized_label:
+        evidence["activity-label"] = normalized_label
+    grouped = activity_group(normalized_label)
+    if grouped:
+        evidence["activity-group"] = grouped
+    return evidence
 
 
 __all__ = [
@@ -361,5 +408,7 @@ __all__ = [
     "classify_error",
     "stale_progress_diagnostic",
     "evidence_from_activity",
+    "normalize_activity_label",
+    "activity_group",
     "merge_diagnostics",
 ]
