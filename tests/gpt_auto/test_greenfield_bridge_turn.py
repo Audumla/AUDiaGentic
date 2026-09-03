@@ -735,6 +735,56 @@ async def test_tool_app_activity_emits_progress_when_response_text_is_unchanged(
 
 
 @pytest.mark.asyncio
+async def test_simultaneous_tool_activity_preserves_every_canonical_label():
+    """One DOM poll may reveal several new activity affordances at once."""
+    chat = _Chat()
+    observations = []
+    all_activity = (
+        ("talked-to-app", 1),
+        ("read-resource", 1),
+        ("called-tool", 1),
+        ("searching-web", 1),
+        ("thinking", 1),
+    )
+    chat._snapshots = iter(
+        [
+            snap(),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01", generating=True),
+            snap(users=1, assistants=1, user="Review AU01", assistant="Working"),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="Working",
+                tool_activity_counts=all_activity,
+            ),
+            snap(users=1, assistants=1, user="Review AU01", assistant="Done", complete=True),
+            snap(users=1, assistants=1, user="Review AU01", assistant="Done", complete=True),
+            snap(users=1, assistants=1, user="Review AU01", assistant="Done", complete=True),
+        ]
+    )
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-multi-activity", body="Review AU01"),
+        observations.append,
+    )
+
+    result = await turn.run()
+
+    assert result.stop_reason == "end-turn"
+    expected = {label for label, _count in all_activity}
+    observed = [
+        obs.attributes.get("model_activity")
+        for obs in observations
+        if obs.attributes.get("model_activity") in expected
+    ]
+    assert len(observed) == len(expected)
+    assert set(observed) == expected
+
+
+@pytest.mark.asyncio
 async def test_tool_app_activity_emits_before_assistant_message_materializes():
     """Streaming connector rows renew activity before an assistant node exists.
 
