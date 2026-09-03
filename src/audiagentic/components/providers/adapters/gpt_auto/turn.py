@@ -1048,19 +1048,20 @@ class GptAutoTurn:
                 # gateway's own watchdog activity lease depends on these
                 # ACTIVITY emissions arriving throughout the turn, not just
                 # at the start.
-                activity_label = (
-                    _tool_activity_signal(current, previous)
+                activity_labels = (
+                    _tool_activity_signals(current, previous)
                     if tool_activity_edge or tool_activity_heartbeat_due
                     else (
-                        "response-progress"
+                        ("response-progress",)
                         if EvidenceCapability.PROGRESS in caps
-                        else "soft-liveness"
+                        else ("soft-liveness",)
                     )
                 )
-                await self._emit(
-                    TransportObservationKind.ACTIVITY,
-                    {"model_activity": activity_label},
-                )
+                for activity_label in activity_labels:
+                    await self._emit(
+                        TransportObservationKind.ACTIVITY,
+                        {"model_activity": activity_label},
+                    )
                 if tool_activity_edge or tool_activity_heartbeat_due:
                     last_tool_activity_emit_at = now
                 emitted = True
@@ -1477,13 +1478,16 @@ class GptAutoTurn:
             )
 
 
-def _tool_activity_signal(current: ChatSnapshot, previous: ChatSnapshot) -> str:
-    """Return the most specific normalized GPT activity label observed.
+def _tool_activity_signals(
+    current: ChatSnapshot,
+    previous: ChatSnapshot,
+) -> tuple[str, ...]:
+    """Return bounded normalized GPT activity labels for one observation.
 
-    The CDP bridge supplies bounded label counts.  On an edge, prefer the
-    label whose count increased; on a heartbeat, retain a deterministic
-    currently-visible label.  This preserves the provider evidence instead
-    of collapsing every connector operation into ``tool-progress``.
+    On a count edge, emit every label whose count increased. On a heartbeat
+    (or a removal-only edge), emit exactly one deterministic currently-visible
+    label. This preserves all real edge evidence without multiplying heartbeat
+    traffic.
     """
     current_counts = dict(current.tool_activity_counts)
     previous_counts = dict(previous.tool_activity_counts)
@@ -1492,10 +1496,19 @@ def _tool_activity_signal(current: ChatSnapshot, previous: ChatSnapshot) -> str:
         for label, count in current_counts.items()
         if count > previous_counts.get(label, 0)
     ]
-    candidates = increased or list(current_counts.items())
+    if increased:
+        return tuple(
+            label
+            for label, _count in sorted(
+                increased,
+                key=lambda item: (-item[1], item[0]),
+            )
+        )
+
+    candidates = list(current_counts.items())
     if not candidates:
-        return "tool-progress"
-    return sorted(candidates, key=lambda item: (-item[1], item[0]))[0][0]
+        return ("tool-progress",)
+    return (sorted(candidates, key=lambda item: (-item[1], item[0]))[0][0],)
 
 
 def _new_user_message(baseline: ChatSnapshot, current: ChatSnapshot) -> bool:

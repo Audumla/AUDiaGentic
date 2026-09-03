@@ -38,8 +38,14 @@ def test_snapshot_does_not_promote_static_streaming_animation_to_busy() -> None:
 def test_snapshot_activity_labels_are_case_insensitive_and_cover_tool_rows() -> None:
     """The bridge recognizes the labels operators see in ChatGPT's UI."""
     assert 'toLowerCase()' in _SNAPSHOT_FN
-    for label in ("talked to app", "called tool", "searching the web", "read resource", "thinking"):
-        assert label in _SNAPSHOT_FN
+    for visible, canonical in (
+        ("talked to app", "talked-to-app"),
+        ("read resource", "read-resource"),
+        ("called tool", "called-tool"),
+        ("searching the web", "searching-web"),
+        ("thinking", "thinking"),
+    ):
+        assert f'["{visible}", "{canonical}"]' in _SNAPSHOT_FN
 
 
 def test_snapshot_activity_anchors_to_latest_agent_turn_before_assistant_node() -> None:
