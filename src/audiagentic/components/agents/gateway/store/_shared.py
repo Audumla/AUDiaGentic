@@ -74,6 +74,8 @@ def default_activity() -> dict:
             "source-instance": None,
             "source-sequence": 0,
             "phase": None,
+            "activity-label": None,
+            "activity-group": None,
         },
         "owner": {
             "last-at": None,

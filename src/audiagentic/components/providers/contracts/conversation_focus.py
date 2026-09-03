@@ -23,13 +23,20 @@ class ConversationFocusLocator:
     chat_url: str | None = None
     provider_session_id: str | None = None
     project_url: str | None = None
+    # The gateway session id is a durable identity for the live runtime
+    # fallback.  It is deliberately not a browser/CDP handle and is only
+    # used when the provider has not published its conversation URL yet.
+    gateway_session_id: str | None = None
 
     def to_mapping(self) -> dict[str, str | None]:
-        return {
+        result = {
             "chat-url": self.chat_url,
             "provider-session-id": self.provider_session_id,
             "project-url": self.project_url,
         }
+        if self.gateway_session_id:
+            result["gateway-session-id"] = self.gateway_session_id
+        return result
 
 
 @dataclass(frozen=True, slots=True)

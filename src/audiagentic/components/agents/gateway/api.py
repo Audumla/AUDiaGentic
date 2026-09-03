@@ -954,6 +954,7 @@ def focus_execution_chat(project_root: Path, request_id: str) -> dict[str, Any]:
         chat_url=metadata.get("chat-url"),
         provider_session_id=metadata.get("provider-session-id"),
         project_url=metadata.get("project-url"),
+        gateway_session_id=str(session_id) if session_id else None,
     )
     if not provider_id:
         return {"request-id": request_id, "outcome": "unavailable", "reason": "provider-identity-missing"}

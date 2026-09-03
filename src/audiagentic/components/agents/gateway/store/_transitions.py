@@ -16,9 +16,11 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agents.gateway.diagnostics import (
+    activity_group,
     classify_error,
     evidence_from_activity,
     merge_diagnostics,
+    normalize_activity_label,
     stale_progress_diagnostic,
 )
 from audiagentic.components.agents.gateway.queue.work_index import (
@@ -970,8 +972,12 @@ def record_owned_activity(
                 attributes={"activity-source": source, "activity-kind": kind},
             )
             return updated
+        normalized_label: str | None = None
         if kind == "provider":
-            bucket["phase"] = phase
+            normalized_label = normalize_activity_label(phase)
+            bucket["phase"] = normalized_label or phase
+            bucket["activity-label"] = normalized_label
+            bucket["activity-group"] = activity_group(normalized_label)
             if provider_capability in {"unsupported", "supported", "unknown"}:
                 bucket["capability"] = provider_capability
         activity.update({"sequence": aggregate, "last-at": received_at, "last-source": source, bucket_name: bucket})
@@ -1022,7 +1028,19 @@ def record_owned_activity(
             request_id,
             "activity.renewed",
             state="running",
-            attributes={"activity-sequence": aggregate, "activity-source": source, "activity-kind": kind},
+            attributes={
+                "activity-sequence": aggregate,
+                "activity-source": source,
+                "activity-kind": kind,
+                **(
+                    {
+                        "activity-label": normalized_label,
+                        "activity-group": activity_group(normalized_label),
+                    }
+                    if kind == "provider" and normalized_label
+                    else {}
+                ),
+            },
         )
         return updated
 

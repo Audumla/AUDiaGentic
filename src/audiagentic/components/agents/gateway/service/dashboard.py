@@ -167,6 +167,15 @@ def _request_row(status: dict[str, Any]) -> dict[str, Any]:
     activity_type = project_activity_type(status)
     if activity_type is not None:
         row["activity-type"] = activity_type
+    provider_id = str(row.get("resolved-provider-id") or row.get("provider-id") or "")
+    # A live GPT request can be focused before ChatGPT has published the
+    # conversation URL.  The gateway-session identity is enough for the
+    # provider's in-process live-page fallback; do not make the dashboard
+    # wait for URL discovery before exposing the action.
+    row["focus-tab-available"] = bool(row.get("provider-chat-url")) or (
+        provider_id.startswith("gpt-auto")
+        and str(row.get("state") or "") in {"dispatching", "running", "active"}
+    )
     return row
 
 
@@ -263,7 +272,7 @@ input[type=number],button,.action-button { background:#0b1529; border:1px solid 
 <script>
 const endpoint=new URL(__SNAPSHOT_PATH__,window.location.href);
 const initialRecent=new URLSearchParams(window.location.search).get('recent-seconds'); if(initialRecent) endpoint.searchParams.set('recent-seconds',initialRecent);
-const stateFilter=document.getElementById('state-filter'); const showClosed=document.getElementById('show-closed'); const showEmpty=document.getElementById('show-empty'); const recentWindow=document.getElementById('recent-window'); let latest=null; let refreshGeneration=0; let refreshController=null;
+const stateFilter=document.getElementById('state-filter'); const showClosed=document.getElementById('show-closed'); const showEmpty=document.getElementById('show-empty'); const recentWindow=document.getElementById('recent-window'); let latest=null; let refreshGeneration=0; let refreshInFlight=false;
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const stamp=x=>x?new Date(x).toLocaleString():''; const isClosed=s=>['closed','expired'].includes(s?.state); const recent=x=>x?.['updated-at']||x?.['last-activity-at']||x?.['closed-at']||x?.['created-at']||'';
 const byNewest=(a,b)=>recent(b).localeCompare(recent(a)); const stateClass=s=>'state-'+String(s||'').replaceAll('_','-');
@@ -272,7 +281,7 @@ function queueSummary(queues) { const entries=Object.entries(queues||{}); if(!en
 function watchdogFlag(r) { const ws=r['watchdog-state']; if(!ws||ws==='not-started') return ''; const title=r['watchdog-reason']?` title="${esc(r['watchdog-reason'])}"`:''; if(['completed','failed','cancelled','rejected','interrupted'].includes(r.state)) return `<span class="flag stale"${title}>stale monitoring marker</span>`; if(ws==='intervention') return `<span class="flag alert"${title}>needs activity proof</span>`; if(ws==='active') return `<span class="flag progress"${title}>watching</span>`; return `<span class="flag"${title}>monitoring: ${esc(ws)}</span>`; }
 function activityLabel(r) { const phase=r['activity-type']||''; const seq=r['activity-sequence']; return `${esc(phase)}${seq!==undefined?` <span class="muted">#${esc(seq)}</span>`:''}`; }
 const focusEndpoint=__FOCUS_PATH__; const purgeEndpoint=__PURGE_PATH__; const focusToken=__FOCUS_TOKEN__;
-function chatLink(r) { const url=r['provider-chat-url']; if(!url) return ''; const target='audiagentic-gpt-'+String(r['request-id']||'').replace(/[^A-Za-z0-9_-]/g,'_'); return ` <a class="action-button chat-link" href="${esc(url)}" target="${esc(target)}" rel="noopener" title="Open the retained GPT chat URL">Open tab ↗</a> <button type="button" class="action-button focus-chat" data-request-id="${esc(r['request-id'])}" title="Focus the existing GPT tab">Focus tab</button>`; }
+function chatLink(r) { const url=r['provider-chat-url']; if(!url&&!r['focus-tab-available']) return ''; const target='audiagentic-gpt-'+String(r['request-id']||'').replace(/[^A-Za-z0-9_-]/g,'_'); const open=url?` <a class="action-button chat-link" href="${esc(url)}" target="${esc(target)}" rel="noopener" title="Open the retained GPT chat URL">Open tab ↗</a>`:''; return `${open} <button type="button" class="action-button focus-chat" data-request-id="${esc(r['request-id'])}" title="Focus the live GPT tab">Focus tab</button>`; }
 async function focusChat(button) { const id=button.dataset.requestId; button.disabled=true; try { const response=await fetch(focusEndpoint,{method:'POST',headers:{'Content-Type':'application/json','X-AudiaGentic-Dashboard-Token':focusToken},body:JSON.stringify({'request-id':id})}); const body=await response.json(); const result=body.result||{}; button.textContent=result.outcome==='focused'?'Focused':(result.reason||result.outcome||'Unavailable'); } catch(error) { button.textContent='Unavailable'; } finally { setTimeout(()=>{button.disabled=false;},1200); } }
 async function purgeSession(button) { const id=button.dataset.sessionId; if(!window.confirm('Purge this session and all gateway request data? This cannot be undone.')) return; button.disabled=true; try { const response=await fetch(purgeEndpoint,{method:'POST',headers:{'Content-Type':'application/json','X-AudiaGentic-Dashboard-Token':focusToken},body:JSON.stringify({'session-id':id})}); const body=await response.json(); const result=body.result||{}; button.textContent=result.outcome==='purged'?'Purged':(result.reason||result.outcome||'Unavailable'); if(result.outcome==='purged') setTimeout(refresh,400); } catch(error) { button.textContent='Unavailable'; } finally { setTimeout(()=>{button.disabled=false;},1200); } }
 function bindFocusButtons() { document.querySelectorAll('.focus-chat').forEach(button=>button.addEventListener('click',()=>focusChat(button))); document.querySelectorAll('.purge-session').forEach(button=>button.addEventListener('click',()=>purgeSession(button))); }
@@ -305,9 +314,9 @@ function draw(snapshot) {
   const visible=document.querySelectorAll('#projects .session').length;
   document.getElementById('visible-summary').textContent=`${visible} sessions visible · newest first · ${dashboard['recent-window-seconds']??''} sec window`;
 }
-async function refresh(){const generation=++refreshGeneration; if(refreshController) refreshController.abort(); const controller=new AbortController(); refreshController=controller; try{const response=await fetch(endpoint,{cache:'no-store',signal:controller.signal}); const snapshot=await response.json(); if(generation===refreshGeneration) draw(snapshot);}catch(error){if(error?.name==='AbortError')return; if(generation===refreshGeneration){document.getElementById('health').classList.add('stale');document.getElementById('updated').textContent='Dashboard refresh failed: '+error}}finally{if(generation===refreshGeneration) refreshController=null;}}
+async function refresh(){if(refreshInFlight)return; const generation=++refreshGeneration; refreshInFlight=true; try{const response=await fetch(endpoint,{cache:'no-store'}); const snapshot=await response.json(); if(generation===refreshGeneration) draw(snapshot);}catch(error){if(generation===refreshGeneration){document.getElementById('health').classList.add('stale');document.getElementById('updated').textContent='Dashboard refresh failed: '+error}}finally{refreshInFlight=false;}}
 function applyWindow(){const value=recentWindow.value.trim(); if(value){const parsed=Number.parseInt(value,10); if(!Number.isInteger(parsed)||parsed<1)return; endpoint.searchParams.set('recent-seconds',String(parsed));}else endpoint.searchParams.delete('recent-seconds'); const pageUrl=new URL(window.location.href); if(endpoint.searchParams.has('recent-seconds')) pageUrl.searchParams.set('recent-seconds',endpoint.searchParams.get('recent-seconds')); else pageUrl.searchParams.delete('recent-seconds'); window.history.replaceState(null,'',pageUrl.pathname+(pageUrl.search?`?${pageUrl.searchParams}`:'')+pageUrl.hash); refresh();}
-stateFilter.addEventListener('change',()=>latest&&draw(latest)); showClosed.addEventListener('change',()=>latest&&draw(latest)); showEmpty.addEventListener('change',()=>latest&&draw(latest)); document.getElementById('apply-window').addEventListener('click',applyWindow); refresh(); setInterval(refresh,1000);
+stateFilter.addEventListener('change',()=>latest&&draw(latest)); showClosed.addEventListener('change',()=>latest&&draw(latest)); showEmpty.addEventListener('change',()=>latest&&draw(latest)); document.getElementById('apply-window').addEventListener('click',applyWindow); refresh(); setInterval(refresh,3000);
 </script></main>""".replace("__SNAPSHOT_PATH__", source).replace("__FOCUS_PATH__", focus_source).replace("__PURGE_PATH__", purge_source).replace("__FOCUS_TOKEN__", token_source)
     return html.encode("utf-8")
 

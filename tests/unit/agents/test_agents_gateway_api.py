@@ -21,6 +21,7 @@ from audiagentic.components.agents.gateway import api as gateway
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.application import InProcessGatewayApplication
 from audiagentic.components.agents.gateway.queue import queue as agents_gateway_queue
+from audiagentic.components.agents.gateway.service.dashboard import _request_row
 from audiagentic.components.agents.gateway.session import sessions_store
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.features.base import ImplementationState
@@ -509,6 +510,22 @@ def test_dashboard_request_projection_exposes_only_safe_gpt_chat_link(tmp_path: 
     store.write_record(tmp_path, record)
     unsafe = next(row for row in gateway.list_dashboard_requests(tmp_path) if row["request-id"] == "req_unsafe_url")
     assert "provider-chat-url" not in unsafe
+
+
+def test_dashboard_request_projection_exposes_focus_for_live_gpt_without_chat_url():
+    row = _request_row(
+        {
+            "request-id": "req_live",
+            "state": "running",
+            "resolved-provider-id": "gpt-auto-t2",
+            "session-id": "ses-live",
+        }
+    )
+
+    assert "provider-chat-url" not in row
+    assert row["focus-tab-available"] is True
+
+
 
 
 def test_terminal_status_is_equivalent_across_get_wait_and_list(

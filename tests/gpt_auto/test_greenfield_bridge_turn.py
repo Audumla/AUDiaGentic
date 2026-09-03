@@ -333,6 +333,49 @@ async def test_turn_proves_submission_once_and_completes_from_atomic_snapshots()
 
 
 @pytest.mark.asyncio
+async def test_response_observer_materializes_virtualized_turn_once_before_completion():
+    """A complete answer whose action bar is initially unmounted is retried
+    after one read-only scroll, rather than waiting for a watchdog timeout."""
+    chat = _Chat()
+    baseline = snap(users=1, user="Review AU01")
+    partial = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        assistant="Complete answer, but action bar is not mounted yet",
+        assistant_id="assistant-1",
+    )
+    complete = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        assistant="Complete answer, but action bar is now mounted",
+        assistant_id="assistant-1",
+        complete=True,
+    )
+    chat._snapshots = iter([partial, complete, complete, complete])
+    materialized: list[bool] = []
+
+    async def materialize_latest_assistant_turn() -> bool:
+        materialized.append(True)
+        return True
+
+    chat.materialize_latest_assistant_turn = materialize_latest_assistant_turn
+    chat.state = ChatState.BUSY
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-materialize", body="Review AU01"), lambda _: None
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+    result = await turn._await_response(baseline, partial)
+
+    assert result == "Complete answer, but action bar is now mounted"
+    assert materialized == [True]
+    assert turn._completion_materialization_attempted
+    assert turn._completion_materialization_succeeded
+
+
+@pytest.mark.asyncio
 async def test_stale_dom_response_conflict_refreshes_without_resubmitting() -> None:
     """A renderer bump must recover the original turn, not fail it.
 
@@ -683,9 +726,12 @@ async def test_tool_app_activity_emits_progress_when_response_text_is_unchanged(
     tool_progress = [
         obs
         for obs in observations
-        if obs.attributes.get("model_activity") == "tool-progress"
+        if obs.attributes.get("model_activity") in {"called-tool", "talked-to-app", "tool-progress"}
     ]
     assert len(tool_progress) >= 2
+    assert {obs.attributes.get("model_activity") for obs in tool_progress} >= {
+        "called-tool", "talked-to-app"
+    }
 
 
 @pytest.mark.asyncio
@@ -733,9 +779,12 @@ async def test_tool_app_activity_emits_before_assistant_message_materializes():
     tool_progress = [
         obs
         for obs in observations
-        if obs.attributes.get("model_activity") == "tool-progress"
+        if obs.attributes.get("model_activity") in {"talked-to-app", "read-resource", "tool-progress"}
     ]
     assert len(tool_progress) >= 2
+    assert {obs.attributes.get("model_activity") for obs in tool_progress} >= {
+        "talked-to-app", "read-resource"
+    }
 
 
 @pytest.mark.asyncio
@@ -794,9 +843,10 @@ async def test_static_tool_activity_renews_with_bounded_heartbeat():
     tool_progress = [
         obs
         for obs in observations
-        if obs.attributes.get("model_activity") == "tool-progress"
+        if obs.attributes.get("model_activity") in {"searching-web", "tool-progress"}
     ]
     assert len(tool_progress) >= 2
+    assert "searching-web" in {obs.attributes.get("model_activity") for obs in tool_progress}
 
 
 @pytest.mark.asyncio

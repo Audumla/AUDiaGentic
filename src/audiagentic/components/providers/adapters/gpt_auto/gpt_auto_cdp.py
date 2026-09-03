@@ -242,6 +242,36 @@ class GptAutoCdpBrowserController(CdpBrowserController):
     ) -> dict[str, Any]:
         return await self.evaluate(page, _SNAPSHOT_FN, signals or [])
 
+    async def materialize_latest_assistant_turn(self, page: CdpPageRef) -> bool:
+        """Bring the current assistant turn into the rendered viewport.
+
+        ChatGPT virtualizes long conversations.  In that mode the latest
+        answer can have text in the DOM while its end-of-turn action bar is
+        not mounted until the turn is scrolled into view.  The completion
+        policy deliberately requires those action-bar witnesses, so a
+        read-only, one-shot scroll is used by the turn observer before it
+        concludes that completion evidence is missing.  The operation never
+        clicks controls, submits text, or creates a tab.
+        """
+        return bool(
+            await self.evaluate(
+                page,
+                r"""() => {
+                  const assistants = Array.from(
+                    document.querySelectorAll('[data-message-author-role="assistant"]')
+                  ).filter(el => !(el.getAttribute('data-message-id') || '')
+                    .startsWith('request-placeholder-request-'));
+                  const latest = assistants.length ? assistants[assistants.length - 1] : null;
+                  if (!latest) return false;
+                  const turn = latest.closest('.agent-turn') || latest.closest('article')
+                    || latest.parentElement?.parentElement || latest;
+                  if (!turn || typeof turn.scrollIntoView !== 'function') return false;
+                  turn.scrollIntoView({block: 'end', inline: 'nearest'});
+                  return true;
+                }""",
+            )
+        )
+
     async def stop_generation(self, page: CdpPageRef) -> dict[str, bool]:
         stopped = await self.evaluate(
             page,
