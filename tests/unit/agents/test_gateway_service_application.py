@@ -68,6 +68,16 @@ def _authorization(service: GatewayServiceApplication) -> dict[str, str]:
     }
 
 
+def test_dashboard_action_token_survives_service_application_restart(tmp_path: Path) -> None:
+    first = _service(tmp_path)
+    token = first.dashboard_action_token
+    assert len(token) >= 32
+    assert (first._service_store.root / "dashboard-action.token").read_text(encoding="utf-8") == token
+
+    second = GatewayServiceApplication(Application(), first._service_store)  # type: ignore[arg-type]
+    assert second.dashboard_action_token == token
+
+
 def test_closed_operation_router_calls_public_application(tmp_path: Path) -> None:
     service = _service(tmp_path)
     authorization = _authorization(service)
