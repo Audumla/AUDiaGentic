@@ -325,6 +325,35 @@ def test_direct_submission_rejects_malformed_wire_values_before_resolution(
     assert exc.value.details["field"] == field
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://chatgpt.com/g/g-p-project/project",
+        "https://chatgpt.com/c/conversation",
+        "https://example.test/g/g-p-project/c/conversation",
+    ],
+)
+def test_provider_chat_url_requires_project_scoped_chatgpt_conversation(
+    tmp_path: Path, url: str
+) -> None:
+    with pytest.raises(AudiaGenticError) as exc:
+        gateway.submit_execution_request(
+            tmp_path, prompt_body="hello", provider_chat_url=url
+        )
+    assert exc.value.code == "VAL-AGW-151"
+
+
+def test_provider_chat_url_rejects_non_gpt_profile(tmp_path: Path) -> None:
+    _make_profile(tmp_path, "default", "local-openai")
+    with pytest.raises(AudiaGenticError) as exc:
+        gateway.submit_execution_request(
+            tmp_path,
+            prompt_body="hello",
+            provider_chat_url="https://chatgpt.com/g/g-p-project/c/conversation",
+        )
+    assert exc.value.code == "VAL-AGW-151"
+
+
 def test_wait_returns_timeout_status_for_still_running_request(tmp_path: Path, monkeypatch):
     _make_profile(tmp_path, "default", "local-openai")
     hold = threading.Event()

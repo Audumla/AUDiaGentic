@@ -300,6 +300,7 @@ def submit_execution_request(
     session_keep_alive: bool = False,
     session_idle_timeout_seconds: float | None = None,
     session_max_lifetime_seconds: float | None = None,
+    provider_chat_url: str | None = None,
     execution_context_fingerprint: str | None = None,
     workspace_name: str | None = None,
     component_profile: str | None = None,
@@ -334,6 +335,30 @@ def submit_execution_request(
     from audiagentic.foundation.paths.names import get_active_profile
     from audiagentic.foundation.time import now_iso_z
 
+    # A caller may seed a GPT-auto provider session from an existing
+    # project-scoped conversation URL.  Keep the URL out of the generic
+    # envelope; it is provider-session metadata consumed only by the
+    # provider adapter after admission.
+    normalized_provider_chat_url: str | None = None
+    if provider_chat_url is not None:
+        if not isinstance(provider_chat_url, str) or not provider_chat_url.strip():
+            raise AudiaGenticError(
+                code="VAL-AGW-151",
+                kind="agents",
+                message="provider_chat_url must be a non-empty HTTPS ChatGPT conversation URL",
+                details={},
+            )
+        from audiagentic.components.providers.adapters.gpt_auto.urls import canonical_chat_url
+
+        normalized_provider_chat_url = canonical_chat_url(provider_chat_url.strip())
+        if normalized_provider_chat_url is None:
+            raise AudiaGenticError(
+                code="VAL-AGW-151",
+                kind="agents",
+                message="provider_chat_url must identify a project-scoped ChatGPT conversation",
+                details={},
+            )
+
     # --- 1. Construct and validate the submission envelope -----------------
     if component_profile is None:
         component_profile = get_active_profile()
@@ -342,6 +367,9 @@ def submit_execution_request(
     # lifecycle events, and provider packets.
     persisted_metadata = sanitize_submission_metadata(metadata)
     raw_metadata = dict(metadata or {})
+    if normalized_provider_chat_url is not None:
+        raw_metadata["provider-chat-url"] = normalized_provider_chat_url
+        persisted_metadata["provider-chat-url"] = normalized_provider_chat_url
     envelope_mapping = {
         "project_root": str(project_root),
         "schema_version": raw_metadata.get("schema_version", 1),
@@ -505,6 +533,13 @@ def submit_execution_request(
         project_root,
         resolved_provider_id,
     )
+    if normalized_provider_chat_url is not None and not resolved_provider_id.startswith("gpt-auto"):
+        raise AudiaGenticError(
+            code="VAL-AGW-151",
+            kind="agents",
+            message="provider_chat_url is supported only by gpt-auto execution profiles",
+            details={"provider-id": resolved_provider_id},
+        )
     agent_runtime_digest = compute_agent_runtime_digest(
         resolved_profile=profile,
         provider_config_state=provider_cfg,
@@ -531,9 +566,11 @@ def submit_execution_request(
         session_id = _session_store.generate_session_id()
         provider_transport_kind = (
             "provider-session"
-            if session_keep_alive or isolation_tier == "no-isolation"
+            if session_keep_alive or isolation_tier == "no-isolation" or normalized_provider_chat_url
             else "worker"
         )
+        if normalized_provider_chat_url is not None:
+            session_keep_alive = True
     manifest_id = f"mf_{uuid.uuid4().hex[:16]}"
     resolved_at = now_iso_z()
     manifest = build_manifest(

@@ -31,6 +31,15 @@ def canonical_project_url(url: str) -> str:
 
 
 def canonical_chat_url(url: str) -> str | None:
+    parts = urlsplit(url)
+    if (
+        parts.scheme != "https"
+        or parts.username
+        or parts.password
+        or (parts.hostname or "").lower().rstrip(".")
+        not in {"chatgpt.com", "www.chatgpt.com", "chat.openai.com", "www.chat.openai.com"}
+    ):
+        return None
     project = parse_project_id(url)
     session_id = parse_provider_session_id(url)
     if not project or not session_id:

@@ -508,6 +508,8 @@ class SessionRuntime:
         capacity_source_id: str | None = None,
         project_name: str | None = None,
         request_provider_metadata_sink: Any = None,
+        resume_provider_ref: str | None = None,
+        resume_provider_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Open a live session; returns the persisted session record.
 
@@ -572,6 +574,8 @@ class SessionRuntime:
                 capacity_source_id=capacity_source_id,
                 project_name=project_name,
                 request_provider_metadata_sink=request_provider_metadata_sink,
+                resume_provider_ref=resume_provider_ref,
+                resume_provider_metadata=resume_provider_metadata,
             ),
             # Opening a provider session is provider work. Do not convert a
             # slow but alive handshake into a terminal request solely because
@@ -1378,6 +1382,8 @@ class SessionRuntime:
         capacity_source_id: str | None = None,
         project_name: str | None = None,
         request_provider_metadata_sink: Any = None,
+        resume_provider_ref: str | None = None,
+        resume_provider_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         started = time.monotonic()
         logger.info(
@@ -1462,6 +1468,10 @@ class SessionRuntime:
             "checkpoint_sink": checkpoint_sink,
             "project_name": project_name,
         }
+        if resume_provider_ref is not None:
+            prepare_kwargs["resume_provider_ref"] = resume_provider_ref
+        if resume_provider_metadata is not None:
+            prepare_kwargs["resume_provider_metadata"] = resume_provider_metadata
         if request_runtime_root is not None:
             prepare_kwargs["request_runtime_root"] = request_runtime_root
             prepare_kwargs["mcp_entries"] = tuple(mcp_entries)

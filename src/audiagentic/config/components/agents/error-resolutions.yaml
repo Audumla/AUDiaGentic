@@ -89,6 +89,7 @@ VAL-AGW-100: "Provider ref is empty; cannot create a resume binding. Supply a no
 VAL-AGW-101: "Provider ref is empty; cannot create a replacement binding. Supply a non-empty opaque provider-session-ref and a valid predecessor-binding-id."
 VAL-AGW-102: "Provider session binding requires a resolved surface id. Pass surface_id when a provider-session-ref is present -- AS29 session surfaces are the binding's identity, not optional."
 VAL-AGW-103: "Legacy (v1) session binding has no resolved surface id; migration refused. A v1 record predates AS29 surface declarations and cannot be safely upgraded without one."
+VAL-AGW-151: "provider_chat_url must be a valid project-scoped ChatGPT conversation URL and is supported only by gpt-auto execution profiles. Use /g/<project>/c/<conversation-id>, not a /project landing URL."
 RES-AGW-103: "The resolved execution profile does not declare a session surface. Set surface_id explicitly on the execution profile -- generic gateway code never guesses one from the provider id."
 CON-AGW-110: "Explicit resume requires a terminal source session; the session referenced by source-session-id is still active or otherwise not in a terminal state."
 CON-AGW-120: "The source session record is missing a valid resolved surface. Reopen the session using a current execution profile with a declared session surface."

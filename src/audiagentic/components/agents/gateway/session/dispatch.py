@@ -416,6 +416,21 @@ def _dispatch_session_request(
             # before calling the runner (never re-derived from the profile,
             # which now only names a compatible instance set).
             profile_model_id = record.get("resolved-model-id")
+            provider_chat_url = None
+            request_metadata = record.get("metadata")
+            if isinstance(request_metadata, dict):
+                candidate_url = request_metadata.get("provider-chat-url")
+                if isinstance(candidate_url, str) and candidate_url:
+                    provider_chat_url = candidate_url
+            resume_provider_ref = None
+            resume_provider_metadata = None
+            if provider_chat_url is not None:
+                from audiagentic.components.providers.adapters.gpt_auto.urls import (
+                    parse_provider_session_id,
+                )
+
+                resume_provider_ref = parse_provider_session_id(provider_chat_url)
+                resume_provider_metadata = {"chat-url": provider_chat_url}
             # AS08/AS49: stamp the session's binding with this request's own
             # SH02 manifest fingerprint (already computed once, correctly, at
             # admission -- see execution_context.py's build_manifest). Reused
@@ -465,6 +480,8 @@ def _dispatch_session_request(
                 model_selector=record.get("resolved-model-selector"),
                 project_name=project_name,
                 request_provider_metadata_sink=_relay_provider_metadata,
+                resume_provider_ref=resume_provider_ref,
+                resume_provider_metadata=resume_provider_metadata,
                 # Request value wins over profile params; 0 disables the bound
                 # (RV513) — use explicit None checks so 0 survives resolution.
                 idle_timeout_seconds=(

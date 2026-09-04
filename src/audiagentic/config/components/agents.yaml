@@ -280,7 +280,10 @@ mcp-servers:
         caller never invents one. Poll with agent_task_status using the
         returned request-id. Once the adapter opens a session, the response
         also includes provider-metadata when available. Raises RES-AGD-001
-        if agent_id is not a configured agent definition.
+        if agent_id is not a configured agent definition. To continue an
+        existing GPT-auto conversation directly, pass provider_chat_url with
+        a full project-scoped /g/<project>/c/<id> ChatGPT URL; a /project
+        landing URL is not sufficient.
       agent_task_status: >
         Return the compact lifecycle/activity status for request-id. The
         response contains task_id, lifecycle, activity_seq, plus only
