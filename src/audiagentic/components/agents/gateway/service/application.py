@@ -524,6 +524,7 @@ _SUBMISSION_ARGUMENTS = {
     "workspace_name",
     "execution_context_fingerprint",
     "component_profile",
+    "provider_chat_url",
 }
 
 # Older MCP façades may continue to serialize the removed caller-controlled
@@ -555,6 +556,8 @@ def _validated_submission_arguments(
         raise service_validation_error(21, "gateway submission metadata must be a mapping")
     if "workspace_name" in arguments:
         arguments["workspace_name"] = _optional_string(arguments, "workspace_name")
+    if "provider_chat_url" in arguments:
+        arguments["provider_chat_url"] = _optional_string(arguments, "provider_chat_url")
     metadata = dict(metadata or {})
     envelope = SubmissionEnvelope.from_mapping(
         {

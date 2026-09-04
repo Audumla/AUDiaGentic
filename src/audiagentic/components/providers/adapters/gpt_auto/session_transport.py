@@ -23,7 +23,12 @@ from .chat import ChatState, PersistentChat
 from .config import GptAutoConfig
 from .runtime_registry import get_runtime
 from .turn import GptAutoTurn
-from .urls import canonical_chat_url, url_matches_provider_session
+from .urls import (
+    canonical_chat_url,
+    parse_project_id,
+    parse_provider_session_id,
+    url_matches_provider_session,
+)
 
 
 class GptAutoSessionTransport:
@@ -179,6 +184,30 @@ def build_session_transport(
     project_url_value = metadata.get("project-url") or parsed.project_url
     project_url = str(project_url_value) if project_url_value else None
     chat_url = metadata.get("chat-url")
+    if isinstance(chat_url, str) and chat_url:
+        chat_url = canonical_chat_url(chat_url)
+        if chat_url is None:
+            raise RuntimeError(
+                "gpt-auto resume requires a project-scoped durable chat-url"
+            )
+        parsed_ref = parse_provider_session_id(chat_url)
+        if parsed_ref is None:
+            raise RuntimeError("gpt-auto resume chat-url has no conversation id")
+        if resume_provider_ref is None:
+            resume_provider_ref = parsed_ref
+        elif resume_provider_ref != parsed_ref:
+            raise RuntimeError(
+                "gpt-auto resume requires a matching project-scoped durable chat-url"
+            )
+        supplied_project = parse_project_id(chat_url)
+        configured_project = parse_project_id(project_url or "")
+        if configured_project and supplied_project != configured_project:
+            raise RuntimeError(
+                "gpt-auto resume chat-url belongs to a different configured project"
+            )
+        from .urls import canonical_project_url
+
+        project_url = canonical_project_url(chat_url) + "/project"
     if resume_provider_ref:
         if isinstance(chat_url, str) and chat_url:
             if not url_matches_provider_session(chat_url, resume_provider_ref):

@@ -1024,6 +1024,59 @@ async def test_submission_proof_finder_fallback_receives_raw_prompt_text():
 
 
 @pytest.mark.asyncio
+async def test_completed_response_rescues_submission_proof_after_dom_mismatch():
+    """A completed answer must not be discarded when proof catches up late.
+
+    The real BigCherry incident (req_e8abb53596d34f6f) had a fresh completed
+    assistant response, but DOM whitespace/presentation differences prevented
+    the user prompt fingerprint from matching before the proof lease expired.
+    The final identity pass should accept the fresh matching user message and
+    let normal response correlation capture that already-rendered answer,
+    with exactly one provider submission.
+    """
+    chat = _Chat()
+    chat.runtime.config.turn.submission_proof_progress_lease_seconds = 0.01
+    chat.runtime.config.turn.submission_proof_absolute_ceiling_seconds = 0.05
+
+    def snapshots():
+        yield snap()
+        mismatched = snap(
+            users=1,
+            assistants=1,
+            user="Review AU01 rendered with presentation spacing",
+            assistant="Complete answer",
+            complete=True,
+        )
+        # Let the proof tracker reach unresolved-stall, then make the final
+        # snapshot the correctly correlated, already-completed response.
+        yield mismatched
+        yield mismatched
+        completed = snap(
+            users=1,
+            assistants=1,
+            user="Review AU01",
+            assistant="Complete answer",
+            complete=True,
+        )
+        while True:
+            yield completed
+
+    chat._snapshots = snapshots()
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-late-proof", body="Review AU01"),
+        lambda _: None,
+    )
+
+    result = await asyncio.wait_for(turn.run(), timeout=5.0)
+
+    assert result.stop_reason == "end-turn"
+    assert result.final_summary == "Complete answer"
+    assert turn.submission_confirmed
+    assert chat.runtime.bridge.submit_calls == 1
+
+
+@pytest.mark.asyncio
 async def test_turn_completes_despite_stuck_stop_control_signal():
     """Live-reproduced 2026-08-16: ChatGPT's own stop/submit button can stay
     in its 'stop' state indefinitely after a response has actually finished
