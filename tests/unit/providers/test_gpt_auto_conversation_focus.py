@@ -193,3 +193,59 @@ def test_focus_existing_conversation_uses_live_gateway_session_before_url_exists
 
     assert result.outcome.value == "focused"
     assert calls == ["connect", ("live", "ses-live")]
+
+
+def test_focus_existing_conversation_opens_retained_url_when_tab_is_missing(monkeypatch, tmp_path):
+    calls = []
+
+    class FakeBridge:
+        async def call(self, method, params=None):
+            calls.append((method, params))
+            if method == "list_pages":
+                return []
+            return {"ok": True}
+
+    class FakeRuntime:
+        bridge = FakeBridge()
+
+        async def connect_existing(self):
+            return True
+
+        def adopt_existing_dedicated_window(self, pages):
+            return None
+
+        def page_belongs_to_dedicated_window(self, page):
+            return True
+
+        async def create_chat_page(self):
+            calls.append(("create_chat_page", None))
+            return "new-page"
+
+    monkeypatch.setattr(
+        conversation_focus,
+        "load_provider_config",
+        lambda project_root: {"providers": {"gpt-auto": {}}},
+    )
+    monkeypatch.setattr(conversation_focus, "get_runtime", lambda project_root, config: FakeRuntime())
+
+    result = asyncio.run(
+        conversation_focus.focus_existing_conversation(
+            tmp_path,
+            provider_id="gpt-auto",
+            locator=_locator("https://chatgpt.com/g/g-p-x/c/s1", "s1"),
+        )
+    )
+
+    assert result.outcome.value == "focused"
+    assert result.reason == "conversation-tab-opened"
+    assert [method for method, _ in calls] == [
+        "list_pages",
+        "create_chat_page",
+        "navigate",
+        "activate_target",
+        "keep_page_active",
+    ]
+    assert calls[2][1] == {
+        "pageHandle": "new-page",
+        "url": "https://chatgpt.com/g/g-p-x/c/s1",
+    }
