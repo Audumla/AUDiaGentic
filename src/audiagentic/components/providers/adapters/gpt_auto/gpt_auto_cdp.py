@@ -182,6 +182,35 @@ _SNAPSHOT_FN = r"""
   // composer's own stable, unique id; confirmed present across every
   // observed page state, canvas or not.
   const composer = document.querySelector("#prompt-textarea");
+  // ChatGPT assigns a short conversation label in the left navigation.  The
+  // label can be generated/renamed while a turn is running, so resolve it by
+  // the active conversation URL on every snapshot rather than relying on the
+  // document title (which describes the whole app).  Only return a bounded
+  // visible anchor label; never expose sidebar markup or arbitrary URLs.
+  const conversationId = (() => {
+    try { return new URL(location.href).pathname.match(/\/c\/([^/?#]+)/)?.[1] || null; }
+    catch (_) { return null; }
+  })();
+  const compactLabel = (value) => {
+    const text = String(value || "").replace(/\s+/g, " ").trim();
+    return text && text.length <= 256 ? text : (text ? text.slice(0, 256) : null);
+  };
+  const conversationTitle = conversationId
+    ? (() => {
+        const anchors = Array.from(document.querySelectorAll("a[href]"));
+        for (const anchor of anchors) {
+          let href;
+          try { href = new URL(anchor.href, location.origin); } catch (_) { continue; }
+          if (href.pathname !== `/c/${conversationId}` &&
+              !href.pathname.endsWith(`/c/${conversationId}`)) continue;
+          if (!shown(anchor)) continue;
+          const label = compactLabel(anchor.getAttribute("aria-label")) ||
+            compactLabel(anchor.innerText || anchor.textContent);
+          if (label) return label;
+        }
+        return null;
+      })()
+    : null;
   // GP08 slice 1: text extraction happens exactly once per node here, so
   // an id and its text can never desync between two independently-filtered
   // arrays the way the old users.map(...)/assistants.map(...) pairs could.
@@ -202,7 +231,7 @@ _SNAPSHOT_FN = r"""
   const assistantRefs = messageRefs.filter(m => m.role === "assistant");
   const lastText = (refs) => refs.length ? refs[refs.length - 1].text : null;
   return {
-    url: location.href, composerPresent: !!composer,
+    url: location.href, conversationTitle, composerPresent: !!composer,
     composerEditable: !!composer && composer.isContentEditable && !composer.hasAttribute("disabled"),
     userCount: userRefs.length, assistantCount: assistantRefs.length,
     // GP08 slice 1: messageRefs is the single true DOM-order sequence this

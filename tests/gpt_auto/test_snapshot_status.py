@@ -99,6 +99,19 @@ def test_bridge_snapshot_preserves_latest_user_message_id() -> None:
     assert snapshot.latest_user_id == "prompt-2"
 
 
+def test_bridge_snapshot_preserves_chatgpt_sidebar_conversation_title() -> None:
+    snapshot = ChatSnapshot.from_bridge(
+        {
+            "url": "https://chatgpt.com/g/g-p-test/c/c1",
+            "conversationTitle": "Repository review",
+            "composerPresent": True,
+            "composerEditable": True,
+        }
+    )
+
+    assert snapshot.conversation_title == "Repository review"
+
+
 def test_bridge_snapshot_preserves_bounded_tool_activity_counts() -> None:
     snapshot = ChatSnapshot.from_bridge(
         {

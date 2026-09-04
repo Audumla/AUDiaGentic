@@ -67,6 +67,30 @@ def test_unresolved_recovery_can_match_prompt_text_without_provider_message_id()
     assert _unresolved_prompt_match(chat, ambiguous) is None
 
 
+@pytest.mark.asyncio
+async def test_conversation_title_is_relayed_once_and_bounded() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    updates = []
+    chat = PersistentChat(
+        ag_session_id="session-title",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=SimpleNamespace(),
+        config=config,
+        binding_sink=lambda update: updates.append(update),
+        provider_session_id="provider-session",
+    )
+
+    await chat.publish_conversation_title("  Repository review  ")
+    await chat.publish_conversation_title("Repository review")
+    await chat.publish_conversation_title("x" * 400)
+
+    assert [update.metadata for update in updates] == [
+        {"chat-title": "Repository review"},
+        {"chat-title": "x" * 256},
+    ]
+
+
 def test_unresolved_prompt_diagnostics_distinguish_id_mismatch_and_digest_fallback() -> None:
     config = GptAutoConfig.from_dict(valid_config())
     chat = PersistentChat(
