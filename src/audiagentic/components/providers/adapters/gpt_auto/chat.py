@@ -94,6 +94,7 @@ class PersistentChat:
         self._last_url: str | None = None
         self._last_snapshot: ChatSnapshot | None = None
         metadata = resume_provider_metadata or {}
+        self.conversation_title = _metadata_text(metadata, "chat-title")
         self.unresolved_prompt_message_id = _metadata_text(metadata, "prompt-message-id")
         self.unresolved_assistant_message_id = _metadata_text(metadata, "assistant-message-id")
         self.unresolved_assistant_before_id = _metadata_text(
@@ -887,6 +888,23 @@ class PersistentChat:
             return {}
         return self._last_snapshot.observe().as_mapping()
 
+    async def publish_conversation_title(self, title: str | None) -> None:
+        """Persist the current left-panel conversation label when it changes."""
+        normalized = title.strip()[:256] if isinstance(title, str) and title.strip() else None
+        if not normalized or normalized == self.conversation_title:
+            return
+        self.conversation_title = normalized
+        if not self.provider_session_id:
+            return
+        result = self.binding_sink(
+            ProviderSessionBindingUpdate(
+                provider_session_ref=ProviderSessionRef(self.provider_session_id),
+                metadata={"chat-title": normalized},
+            )
+        )
+        if asyncio.iscoroutine(result):
+            await result
+
     async def acquire_provider_identity(self, initial: ChatSnapshot | None = None) -> ChatSnapshot:
         self._move(ChatState.ACQUIRING_SESSION_ID)
         deadline = asyncio.get_running_loop().time() + self.config.chat.navigation_timeout_seconds
@@ -905,6 +923,11 @@ class PersistentChat:
                             "project-url": self.project_url,
                             "provider-session-id": provider_id,
                             "chat-url": chat_url,
+                            **(
+                                {"chat-title": snap.conversation_title}
+                                if snap.conversation_title
+                                else {}
+                            ),
                         },
                     )
                 )

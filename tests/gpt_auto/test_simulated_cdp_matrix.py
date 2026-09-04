@@ -64,6 +64,13 @@ def test_snapshot_activity_anchors_to_latest_agent_turn_before_assistant_node() 
     assert "[class~=\"group/tool-message\"]" in _SNAPSHOT_FN
 
 
+def test_snapshot_resolves_sidebar_title_by_active_conversation_url() -> None:
+    assert "const conversationId" in _SNAPSHOT_FN
+    assert "const conversationTitle" in _SNAPSHOT_FN
+    assert 'querySelectorAll("a[href]")' in _SNAPSHOT_FN
+    assert "conversationTitle," in _SNAPSHOT_FN
+
+
 def test_snapshot_preserves_structural_hr_for_user_prompt_correlation() -> None:
     """A rendered thematic break must be recoverable only for correlation."""
     assert "const userCorrelation = (element)" in _SNAPSHOT_FN

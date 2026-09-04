@@ -71,6 +71,10 @@ class ChatSnapshot:
     latest_assistant_text: str | None
     dom_signals: frozenset[str]
     error_present: bool
+    # The bounded conversation label ChatGPT renders in the left navigation.
+    # It is provider metadata, not response content; keeping it on the atomic
+    # snapshot lets the gateway persist changes as soon as the label appears.
+    conversation_title: str | None = None
     generating: bool = False
     latest_user_id: str | None = None
     user_message_ids: tuple[str, ...] = ()
@@ -97,6 +101,7 @@ class ChatSnapshot:
             raw_tool_counts = {}
         return cls(
             url=str(value.get("url") or ""),
+            conversation_title=_bounded_title(value.get("conversationTitle")),
             composer_present=bool(value.get("composerPresent")),
             composer_editable=bool(value.get("composerEditable")),
             user_count=int(value.get("userCount") or 0),
@@ -272,3 +277,8 @@ def _text(value: Any) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
+
+
+def _bounded_title(value: Any) -> str | None:
+    text = _text(value)
+    return text[:256] if text else None

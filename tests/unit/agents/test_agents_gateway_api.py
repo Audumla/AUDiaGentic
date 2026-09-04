@@ -529,6 +529,7 @@ def test_dashboard_request_projection_exposes_only_safe_gpt_chat_link(tmp_path: 
     record["provider-metadata"] = {
         "project-url": "https://chatgpt.com/g/g-p-example/project",
         "chat-url": "https://chatgpt.com/g/g-p-example/c/c-example",
+        "chat-title": "Repository review",
         "provider-session-id": "opaque-session",
     }
     store.write_record(tmp_path, record)
@@ -536,6 +537,7 @@ def test_dashboard_request_projection_exposes_only_safe_gpt_chat_link(tmp_path: 
     rows = gateway.list_dashboard_requests(tmp_path)
 
     assert rows[0]["provider-chat-url"] == record["provider-metadata"]["chat-url"]
+    assert rows[0]["provider-chat-title"] == "Repository review"
     assert "provider-metadata" not in rows[0]
 
     record["request-id"] = "req_unsafe_url"

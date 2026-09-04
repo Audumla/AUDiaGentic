@@ -1208,6 +1208,9 @@ def list_dashboard_requests(project_root: Path) -> list[dict[str, Any]]:
         chat_url = provider_metadata.get("chat-url") if isinstance(provider_metadata, dict) else None
         if isinstance(chat_url, str) and _safe_gpt_chat_url(chat_url) is not None:
             row["provider-chat-url"] = chat_url
+        chat_title = provider_metadata.get("chat-title") if isinstance(provider_metadata, dict) else None
+        if isinstance(chat_title, str) and chat_title.strip():
+            row["provider-chat-title"] = chat_title.strip()[:256]
         rows.append(row)
     return rows
 

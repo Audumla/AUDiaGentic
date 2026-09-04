@@ -242,12 +242,13 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b"function requestGroup(state)" in page
         assert b"section('Active'" in page and b"section('Completed'" in page and b"section('Failed'" in page
         assert b"sessionCard(s,rows,false,allRows)" in page
-        assert b"flex:0 0 30px" in page
+        assert b"flex:0 0 26px" in page
         assert b"request-header" in page
         assert b'<path d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/>' in page
         assert b"function executionSummary(profile, provider, model)" in page
         assert b"names.includes(name)" in page
-        assert b"distinctModel=model&&!names.includes(model)" in page
+        assert b"[profile,provider,model]" in page
+        assert b"request-title" in page
         assert b"session-profile" in page
         assert b"border-bottom:2px solid #3b5278" in page
         assert b"font-size:12px; letter-spacing:.1em" in page
