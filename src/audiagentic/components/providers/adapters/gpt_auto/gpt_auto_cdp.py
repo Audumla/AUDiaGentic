@@ -6,6 +6,7 @@ import asyncio
 from typing import Any
 
 from .cdp.cdp_browser import CdpBrowserController, CdpPageRef, CdpWindowBounds
+from .cdp.client import CdpError
 from .urls import canonical_project_url, parse_project_id
 
 _PROJECTS_URL = "https://chatgpt.com/projects"
@@ -247,30 +248,75 @@ class GptAutoCdpBrowserController(CdpBrowserController):
 
         ChatGPT virtualizes long conversations.  In that mode the latest
         answer can have text in the DOM while its end-of-turn action bar is
-        not mounted until the turn is scrolled into view.  The completion
-        policy deliberately requires those action-bar witnesses, so a
-        read-only, one-shot scroll is used by the turn observer before it
-        concludes that completion evidence is missing.  The operation never
-        clicks controls, submits text, or creates a tab.
+        not mounted while a background tab is renderer-inactive. Temporarily
+        emulate an active/focused page while scrolling and yielding rendering.
+        This does not activate the target or foreground the browser window.
         """
-        return bool(
-            await self.evaluate(
-                page,
-                r"""() => {
-                  const assistants = Array.from(
-                    document.querySelectorAll('[data-message-author-role="assistant"]')
-                  ).filter(el => !(el.getAttribute('data-message-id') || '')
-                    .startsWith('request-placeholder-request-'));
-                  const latest = assistants.length ? assistants[assistants.length - 1] : null;
-                  if (!latest) return false;
-                  const turn = latest.closest('.agent-turn') || latest.closest('article')
-                    || latest.parentElement?.parentElement || latest;
-                  if (!turn || typeof turn.scrollIntoView !== 'function') return false;
-                  turn.scrollIntoView({block: 'end', inline: 'nearest'});
-                  return true;
-                }""",
+        focus_emulated = False
+        try:
+            try:
+                await self.bridge.call(
+                    "set_focus_emulation",
+                    {"pageHandle": page.handle, "enabled": True},
+                )
+                focus_emulated = True
+            except CdpError:
+                # Older Chromium/CDP implementations may not expose this
+                # experimental command. Preserve the existing scroll fallback.
+                pass
+
+            scrolled = bool(
+                await self.evaluate(
+                    page,
+                    r"""() => {
+                      const assistants = Array.from(
+                        document.querySelectorAll('[data-message-author-role="assistant"]')
+                      ).filter(el => !(el.getAttribute('data-message-id') || '')
+                        .startsWith('request-placeholder-request-'));
+                      const latest = assistants.length ? assistants[assistants.length - 1] : null;
+                      if (!latest) return false;
+                      const turn = latest.closest('.agent-turn') || latest.closest('article')
+                        || latest.parentElement?.parentElement || latest;
+                      if (!turn || typeof turn.scrollIntoView !== 'function') return false;
+                      turn.scrollIntoView({block: 'end', inline: 'nearest'});
+                      return true;
+                    }""",
+                )
             )
-        )
+            if not scrolled:
+                return False
+
+            if focus_emulated:
+                try:
+                    await self.evaluate(
+                        page,
+                        r"""() => new Promise(resolve => {
+                          let settled = false;
+                          const done = () => {
+                            if (settled) return;
+                            settled = true;
+                            resolve(true);
+                          };
+                          if (typeof requestAnimationFrame === 'function') {
+                            requestAnimationFrame(() => requestAnimationFrame(done));
+                          }
+                          setTimeout(done, 250);
+                        })""",
+                    )
+                except Exception:
+                    # Rendering synchronization is best-effort; the caller
+                    # still takes a fresh authoritative snapshot.
+                    pass
+            return True
+        finally:
+            if focus_emulated:
+                try:
+                    await self.bridge.call(
+                        "set_focus_emulation",
+                        {"pageHandle": page.handle, "enabled": False},
+                    )
+                except Exception:
+                    pass
 
     async def stop_generation(self, page: CdpPageRef) -> dict[str, bool]:
         stopped = await self.evaluate(

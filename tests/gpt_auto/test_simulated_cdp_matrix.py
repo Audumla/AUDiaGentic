@@ -84,6 +84,11 @@ async def test_materialize_latest_assistant_turn_scrolls_without_provider_side_e
     class _MaterializeBridge:
         def __init__(self) -> None:
             self.functions: list[str] = []
+            self.calls: list[tuple[str, dict]] = []
+
+        async def call(self, method, params=None, **_kwargs):
+            self.calls.append((method, dict(params or {})))
+            return {"ok": True}
 
         async def evaluate(self, _page_handle, function, _argument=None, **_kwargs):
             self.functions.append(function)
@@ -94,10 +99,15 @@ async def test_materialize_latest_assistant_turn_scrolls_without_provider_side_e
     page = CdpPageRef("page-1", "target-1")
 
     assert await browser.materialize_latest_assistant_turn(page)
-    assert len(bridge.functions) == 1
+    assert len(bridge.functions) == 2
     assert "scrollIntoView" in bridge.functions[0]
     assert "click" not in bridge.functions[0]
     assert "Target.createTarget" not in bridge.functions[0]
+    assert [method for method, _params in bridge.calls] == [
+        "set_focus_emulation",
+        "set_focus_emulation",
+    ]
+    assert [params["enabled"] for _method, params in bridge.calls] == [True, False]
 
 
 class _ScenarioClient:

@@ -855,17 +855,32 @@ class GptAutoTurn:
                 # its duplicate-tab finder fallback always set this before
                 # _await_response() can be reached.
                 current, response_ref = raw_current, None
+            response_content_changed = (
+                current.latest_assistant_id != previous.latest_assistant_id
+                or current.latest_assistant_text != previous.latest_assistant_text
+            )
+            response_content_stable = (
+                current.latest_assistant_id == previous.latest_assistant_id
+                and current.latest_assistant_text == previous.latest_assistant_text
+            )
+            # A materialization attempted during a genuine mid-turn pause may
+            # precede later output. Re-arm only after real response progress;
+            # the next attempt still requires a stable observation.
+            if self._completion_materialization_attempted and response_content_changed:
+                self._completion_materialization_attempted = False
+                self._completion_materialization_succeeded = False
+
             # A long ChatGPT conversation can keep the latest assistant text
             # available while virtualizing its end-of-turn action bar until
-            # the turn is scrolled into view.  The completion policy requires
-            # those controls as corroborating evidence.  Give the provider
-            # one read-only opportunity to mount them, then take a fresh
-            # snapshot so all subsequent evidence is from one DOM state.
+            # the background page is made active. `generating` cannot gate
+            # this recovery path because stale stop controls are deliberately
+            # advisory elsewhere. When generating is still reported, require
+            # one unchanged correlated response observation before attempting.
             if (
                 not self._completion_materialization_attempted
                 and response_ref is not None
                 and current.latest_assistant_text
-                and not current.generating
+                and (not current.generating or response_content_stable)
                 and not (current.dom_signals & self._TERMINAL_WITNESS_SIGNALS)
             ):
                 self._completion_materialization_attempted = True

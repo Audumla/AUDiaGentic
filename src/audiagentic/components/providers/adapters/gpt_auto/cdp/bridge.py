@@ -380,6 +380,17 @@ class PythonCdpBridge:
                     "windowId": await self._window_id(target_id),
                 }
         handle = str(params.get("pageHandle") or "")
+        if method == "set_focus_emulation":
+            enabled = params.get("enabled")
+            if not isinstance(enabled, bool):
+                raise ValueError("enabled must be a bool")
+            await self._session_command(
+                handle,
+                "Emulation.setFocusEmulationEnabled",
+                {"enabled": enabled},
+                timeout=timeout,
+            )
+            return {"ok": True}
         if method == "close_page":
             target_id = await self._target(handle)
             await self.client.command(
