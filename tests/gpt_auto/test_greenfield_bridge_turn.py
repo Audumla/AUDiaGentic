@@ -785,6 +785,59 @@ async def test_simultaneous_tool_activity_preserves_every_canonical_label():
 
 
 @pytest.mark.asyncio
+async def test_background_stale_generating_does_not_block_completion_materialization():
+    """A background tab may retain a stale generating signal after completion."""
+    chat = _Chat()
+    baseline = snap(users=1, user="Review AU01", user_id="prompt-1")
+    background = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        user_id="prompt-1",
+        assistant="Final answer",
+        assistant_id="assistant-1",
+        generating=True,
+    )
+    mounted = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        user_id="prompt-1",
+        assistant="Final answer",
+        assistant_id="assistant-1",
+        complete=True,
+    )
+    controls_mounted = False
+    materialized: list[bool] = []
+
+    async def snapshot():
+        return mounted if controls_mounted else background
+
+    async def materialize():
+        nonlocal controls_mounted
+        materialized.append(True)
+        controls_mounted = True
+        return True
+
+    chat.snapshot = snapshot
+    chat.materialize_latest_assistant_turn = materialize
+    chat.state = ChatState.BUSY
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-background-complete", body="Review AU01"),
+        lambda _observation: None,
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+
+    result = await turn._await_response(baseline, background)
+
+    assert result == "Final answer"
+    assert materialized == [True]
+    assert turn._completion_materialization_succeeded
+
+
+@pytest.mark.asyncio
 async def test_tool_app_activity_emits_before_assistant_message_materializes():
     """Streaming connector rows renew activity before an assistant node exists.
 
