@@ -198,12 +198,20 @@ _SNAPSHOT_FN = r"""
   const conversationTitle = conversationId
     ? (() => {
         const anchors = Array.from(document.querySelectorAll("a[href]"));
+        const matches = [];
         for (const anchor of anchors) {
           let href;
           try { href = new URL(anchor.href, location.origin); } catch (_) { continue; }
           if (href.pathname !== `/c/${conversationId}` &&
               !href.pathname.endsWith(`/c/${conversationId}`)) continue;
-          if (!shown(anchor)) continue;
+          matches.push({anchor, visible: shown(anchor)});
+        }
+        // A background tab may keep the matching sidebar anchor mounted but
+        // not painted. Prefer a painted anchor when there are duplicates,
+        // while still accepting the mounted one so title capture does not
+        // require focusing the browser first.
+        matches.sort((left, right) => Number(right.visible) - Number(left.visible));
+        for (const {anchor} of matches) {
           const label = compactLabel(anchor.getAttribute("aria-label")) ||
             compactLabel(anchor.innerText || anchor.textContent);
           if (label) return label;
