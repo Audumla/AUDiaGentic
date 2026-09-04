@@ -62,6 +62,37 @@ def test_purge_session_blocks_non_terminal_request(tmp_path: Path) -> None:
     assert gateway_session_dir(tmp_path, session_id).exists()
 
 
+def test_purge_live_session_does_not_close_before_active_request_check(tmp_path: Path, monkeypatch) -> None:
+    session_id = "ses_purge_live_blocked"
+    request_id = "req_purge_live_blocked"
+    session = sessions_store.build_session_record(session_id=session_id, execution_profile_id="test")
+    session["activity"]["request-ids"] = [request_id]
+    sessions_store.write_session_record(tmp_path, session)
+    store.write_record(tmp_path, store.build_record(
+        request_id=request_id,
+        execution_profile_id="test",
+        prompt_body="test",
+        session_id=session_id,
+    ))
+
+    class LiveRuntime:
+        def live_session_ids(self):
+            return [session_id]
+
+        def control_session(self, *args, **kwargs):  # pragma: no cover - must not be reached
+            raise AssertionError("purge closed a live session before checking requests")
+
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.session.sessions.peek_session_runtime",
+        lambda: LiveRuntime(),
+    )
+    result = api.purge_execution_session(tmp_path, session_id)
+
+    assert result["outcome"] == "blocked"
+    assert result["reason"] == "session-has-active-requests"
+    assert gateway_session_dir(tmp_path, session_id).exists()
+
+
 def test_purge_active_session_with_terminal_requests_completes(tmp_path: Path) -> None:
     """The purge transition itself must use a schema-valid close reason."""
     session_id = "ses_purge_active_terminal"

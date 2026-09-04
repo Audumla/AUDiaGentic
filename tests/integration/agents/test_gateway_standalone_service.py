@@ -226,16 +226,18 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         # Empty sessions are available only when explicitly requested.  A
         # live runtime handle is not evidence that the session has any task
         # records; it must not bypass the default empty-session filter.
-        assert b"showEmpty.checked||hasRequests" in page
-        assert b"showClosed.checked||!isClosed(s)||hasRequests" in page
+        assert b"showEmpty.checked||matching.length>0" in page
+        assert b"showClosed.checked||!isClosed(s)||matching.length>0" in page
+        assert b"id=\"layout-filter\"" in page
         assert b'id="recent-window"' in page
         assert b"recent-seconds" in page
-        assert b"One-shot requests" in page
+        assert b"section('Active'" in page
+        assert b"section('Other'" in page
         assert b"newest first" in page
         assert b"Watchdog monitoring guide" not in page
         assert b"stale monitoring marker" in page
         assert b"chat-link" in page
-        assert b"Open / focus tab" in page
+        assert b"aria-label=\"Open or focus GPT tab\"" in page
         assert b"Open tab" not in page
         assert b"Purge" in page
 
@@ -466,15 +468,15 @@ def test_operator_force_stop_exits_the_host_without_handler_deadlock(tmp_path: P
 
 
 @pytest.mark.parametrize(
-    "params",
+    "params, expected_error_code",
     [
-        {"prompt_body": "hello", "metadata": {"idempotency_key": 7}},
-        {"prompt_body": "hello", "metadata": {"schema_version": "1"}},
-        {"prompt_body": "hello", "timeout_seconds": "later"},
+        ({"prompt_body": "hello", "metadata": {"idempotency_key": 7}}, "VAL-AGW-082"),
+        ({"prompt_body": "hello", "metadata": {"schema_version": "1"}}, "VAL-AGW-082"),
+        ({"prompt_body": "hello", "timeout_seconds": "later"}, "VAL-AGSV-022"),
     ],
 )
 def test_standalone_submission_wire_errors_are_canonical_client_errors(
-    tmp_path: Path, params: dict
+    tmp_path: Path, params: dict, expected_error_code: str
 ) -> None:
     application = SharedApplication()
     host, thread, _service_root, token_path = _start_host(tmp_path, application)
@@ -503,7 +505,7 @@ def test_standalone_submission_wire_errors_are_canonical_client_errors(
                 "params": params,
             },
         )
-        assert response["error-code"] == "VAL-AGW-082"
+        assert response["error-code"] == expected_error_code
         assert application.requests == {}
     finally:
         _stop_host(host, thread)
