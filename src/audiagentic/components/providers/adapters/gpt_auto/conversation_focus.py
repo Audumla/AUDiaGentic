@@ -17,7 +17,7 @@ from audiagentic.components.providers.services.config.provider_config import (
 
 from .config import GptAutoConfig
 from .runtime_registry import get_runtime
-from .urls import parse_project_id, parse_provider_session_id
+from .urls import canonical_chat_url, parse_project_id, parse_provider_session_id
 
 
 def _identity_url(value: str | None) -> str | None:
@@ -99,7 +99,7 @@ async def focus_existing_conversation(
     provider_id: str,
     locator: ConversationFocusLocator,
 ) -> ConversationFocusResult:
-    """Rediscover and activate one existing GPT tab without creating/navigating."""
+    """Focus a retained GPT tab, opening its durable URL when absent."""
     document = load_provider_config(project_root)
     provider_cfg = (document.get("providers") or {}).get(provider_id)
     if not isinstance(provider_cfg, dict) and provider_id.startswith("gpt-auto-"):
@@ -132,7 +132,34 @@ async def focus_existing_conversation(
     ):
         selected, result = select_focus_page(pages, locator)
     if result is not None:
-        return result
+        # The dashboard exposes one action rather than separate open/focus
+        # controls.  If the exact retained conversation is not currently
+        # mounted, open that request-owned URL in the managed GPT window and
+        # focus the new page.  Identity conflicts and ambiguity remain
+        # fail-closed; only a genuine not-found result can use this fallback.
+        chat_url = canonical_chat_url(locator.chat_url or "")
+        if result.outcome is not ConversationFocusOutcome.NOT_FOUND or chat_url is None:
+            return result
+        handle = ""
+        try:
+            handle = await runtime.create_chat_page()
+            await runtime.bridge.call("navigate", {"pageHandle": handle, "url": chat_url})
+            await runtime.bridge.call("activate_target", {"pageHandle": handle})
+            await runtime.bridge.call("keep_page_active", {"pageHandle": handle})
+            return ConversationFocusResult(
+                ConversationFocusOutcome.FOCUSED,
+                "conversation-tab-opened",
+            )
+        except Exception:
+            if handle:
+                try:
+                    await runtime.bridge.call("close_page", {"pageHandle": handle})
+                except Exception:
+                    pass
+            return ConversationFocusResult(
+                ConversationFocusOutcome.UNAVAILABLE,
+                "conversation-tab-open-failed",
+            )
     if selected is None:
         return ConversationFocusResult(ConversationFocusOutcome.NOT_FOUND, "conversation-tab-not-found")
     handle = str(selected.get("pageHandle") or "")
