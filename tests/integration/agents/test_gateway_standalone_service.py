@@ -235,7 +235,8 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b"Watchdog monitoring guide" in page
         assert b"stale monitoring marker" in page
         assert b"chat-link" in page
-        assert b"Open tab" in page
+        assert b"Open / focus tab" in page
+        assert b"Open tab" not in page
         assert b"Purge" in page
 
         content_type, snapshot = _raw_get(host.endpoint, "/dashboard/snapshot")
