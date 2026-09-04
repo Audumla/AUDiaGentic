@@ -10,6 +10,10 @@ related to :func:`audiagentic.foundation.config.refs.resolve_ref`, which resolve
 ``module:object`` config references to live Python objects — those are entirely
 unrelated mechanisms with different error codes and use cases.
 
+Only identifier-shaped dotted paths are interpreted as placeholders. Literal
+JSON and code braces are preserved, so prompt text such as
+``Return exactly {"status": "ok"}`` does not require escaping.
+
 It is also distinct from :func:`audiagentic.foundation.workflow.actions.render`
 (EDJ21 decision): that renderer preserves typed whole-placeholder values and
 uses full ``str.format`` semantics for mixed strings; this one always returns
@@ -28,7 +32,15 @@ from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
-_PLACEHOLDER_RE = re.compile(r"\{([^}]+)\}")
+# Only dotted data paths are placeholders.  Prompt text frequently contains
+# literal JSON/code braces (for example ``{"status": "ok"}``); treating every
+# brace pair as a lookup made otherwise-valid prompts fail admission with a
+# misleading missing-key error.  Keeping the grammar narrow also makes the
+# template language deterministic: a placeholder starts with an identifier,
+# then permits identifier/hyphen segments separated by dots.
+_PLACEHOLDER_RE = re.compile(
+    r"\{([A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z_][A-Za-z0-9_-]*)*)\}"
+)
 
 
 class _Missing:

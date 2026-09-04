@@ -133,7 +133,8 @@
         "failed",
         "orphaned",
         "turn-timeout",
-        "turn-silence-timeout"
+        "turn-silence-timeout",
+        "purge"
       ]
     },
     "error": {

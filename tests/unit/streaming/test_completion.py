@@ -99,7 +99,7 @@ class TestProviderCompletion:
         }
         with pytest.raises(AudiaGenticError) as exc_info:
             ProviderCompletion.from_dict(data)
-            
+
         assert exc_info.value.code == "VAL-COMPLETE-001"
 
 
@@ -256,19 +256,19 @@ class TestPersistCompletion:
             result_source=ResultSource.STDOUT_JSON.value,
             normalization_method=NormalizationMethod.PROVIDER_NATIVE_JSON.value,
         )
-        
+
         path = persist_completion(tmp_path, "job-123", completion)
-        
+
         assert path.exists()
         assert path.name == "completion.opencode.json"
-        
+
         with path.open("r", encoding="utf-8") as f:
             data = json.load(f)
-            
+
         assert data["provider-id"] == "opencode"
         assert data["job-id"] == "job-123"
         assert data["status"] == "ok"
-        
+
         # Test read-back using from_dict to prove roundtrip
         loaded = ProviderCompletion.from_dict(data)
         assert loaded.provider_id == "opencode"
@@ -279,10 +279,10 @@ class TestPersistCompletion:
             provider_id="test",
             status="invalid-status",
         )
-        
+
         with pytest.raises(AudiaGenticError) as exc_info:
             persist_completion(tmp_path, "job-123", completion)
-            
+
         assert exc_info.value.code == "VAL-COMPLETE-003"
         assert "cannot be persisted" in exc_info.value.message
 

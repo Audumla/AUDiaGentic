@@ -12,6 +12,7 @@ from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoCon
 from audiagentic.components.providers.adapters.gpt_auto.runtime_registry import (
     _runtimes,
     get_runtime,
+    shutdown_all_runtimes,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
@@ -113,6 +114,23 @@ def test_delayed_binding_is_idempotent_and_conflict_fails(tmp_path: Path):
             **{**kwargs, "provider_session_ref": "conversation-2"},
         )
     assert raised.value.code == "CON-AGW-120"
+
+
+@pytest.mark.asyncio
+async def test_runtime_shutdown_reports_failures_on_supported_python_versions():
+    """Cleanup failures must not turn into a Python-3.10 ExceptionGroup NameError."""
+
+    class _BrokenRuntime:
+        async def shutdown_from_owner(self):
+            raise OSError("browser still attached")
+
+    _runtimes.clear()
+    _runtimes[("browser", 9222, "http://127.0.0.1:9222")] = _BrokenRuntime()
+    with pytest.raises(RuntimeError, match="runtime shutdown failed .*OSError"):
+        await shutdown_all_runtimes()
+    # Failed entries remain registered for a later retry.
+    assert _runtimes
+    _runtimes.clear()
 
 
 async def _true() -> bool:

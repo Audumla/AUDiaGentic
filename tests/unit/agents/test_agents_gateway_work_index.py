@@ -28,7 +28,7 @@ class TestCrashWindowA_RecordButNoIndex:
 
     def test_admission_crash_after_record_no_index(self, tmp_path: Path) -> None:
         """Service crashes after writing the request record but before index write.
-        
+
         Recovery via active-work path should still discover the request because
         the record is in 'queued' state with no dispatch-owner-epoch set.
         """
@@ -72,7 +72,7 @@ class TestCrashWindowB_AdmittedBeforeClaim:
         self, tmp_path: Path,
     ) -> None:
         """Request admitted and index written, but crash before claim.
-        
+
         Recovery must terminalize as interrupted + CON-AGW-102 + replay-required
         and MUST NOT enqueue the old prompt.
         """

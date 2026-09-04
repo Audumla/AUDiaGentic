@@ -21,7 +21,10 @@ from audiagentic.components.agents.gateway import api as gateway
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.application import InProcessGatewayApplication
 from audiagentic.components.agents.gateway.queue import queue as agents_gateway_queue
-from audiagentic.components.agents.gateway.service.dashboard import _request_row
+from audiagentic.components.agents.gateway.service.dashboard import (
+    _request_row,
+    render_dashboard_html,
+)
 from audiagentic.components.agents.gateway.session import sessions_store
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.features.base import ImplementationState
@@ -524,6 +527,68 @@ def test_dashboard_request_projection_exposes_focus_for_live_gpt_without_chat_ur
 
     assert "provider-chat-url" not in row
     assert row["focus-tab-available"] is True
+
+
+def test_dashboard_session_request_projection_inherits_execution_from_session_header():
+    row = _request_row(
+        {
+            "request-id": "req_session_turn",
+            "state": "running",
+            "session-id": "ses_shared",
+            "execution-profile-id": "gpt-auto",
+            "resolved-provider-id": "gpt-auto",
+            "resolved-model-id": "chatgpt",
+        },
+        include_execution=False,
+    )
+
+    assert row["session-id"] == "ses_shared"
+    assert "execution-profile-id" not in row
+    assert "resolved-provider-id" not in row
+    assert "resolved-model-id" not in row
+
+
+def test_dashboard_session_request_keeps_gpt_focus_eligibility_without_execution_cells():
+    row = _request_row(
+        {
+            "request-id": "req_session_gpt",
+            "state": "running",
+            "session-id": "ses_shared",
+            "resolved-provider-id": "gpt-auto-t2",
+        },
+        include_execution=False,
+    )
+
+    assert row["focus-tab-available"] is True
+
+
+def test_dashboard_terminal_request_does_not_render_historical_unresolved_marker():
+    row = _request_row(
+        {
+            "request-id": "req_cancelled_gpt",
+            "state": "cancelled",
+            "session-id": "ses_shared",
+            "provider-turn-pending": True,
+        },
+        include_execution=False,
+    )
+
+    assert "provider-turn-pending" not in row
+
+
+def test_dashboard_explains_terminal_provider_side_effect_evidence():
+    html = render_dashboard_html("/dashboard/snapshot").decode("utf-8")
+
+    assert "turn uncertain" in html
+    assert "verify the provider session before retrying" in html
+
+
+def test_dashboard_formats_timestamps_using_operator_locale():
+    """Dashboard presentation follows the browser's regional time settings."""
+    html = render_dashboard_html("/dashboard/snapshot").decode("utf-8")
+
+    assert "toLocaleString()" in html
+    assert "toLocaleTimeString()" in html
 
 
 

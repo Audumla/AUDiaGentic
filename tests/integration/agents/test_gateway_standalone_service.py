@@ -232,7 +232,7 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b"recent-seconds" in page
         assert b"One-shot requests" in page
         assert b"newest first" in page
-        assert b"Watchdog monitoring guide" in page
+        assert b"Watchdog monitoring guide" not in page
         assert b"stale monitoring marker" in page
         assert b"chat-link" in page
         assert b"Open / focus tab" in page

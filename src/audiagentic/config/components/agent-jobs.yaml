@@ -26,6 +26,6 @@ contributions:
       - instruction
     content:
       body: |
-        This repository uses AUDiaGentic workflow jobs. The instruction blocks below 
-        are generated from component sources — do not edit them directly; edit the 
+        This repository uses AUDiaGentic workflow jobs. The instruction blocks below
+        are generated from component sources — do not edit them directly; edit the
         owning component config and re-run surface apply.

@@ -176,6 +176,17 @@ class TestMixedStringFormatting:
         result = render_template(template, ctx)
         assert result == "Task:\n  Job: j-1\nEnd."
 
+    def test_literal_json_braces_are_preserved(self) -> None:
+        """Prompt prose/code may contain JSON that is not a template."""
+        template = 'Return exactly {"status": "ok"}.'
+        assert render_template(template, {}) == template
+
+    def test_literal_braces_can_coexist_with_placeholders(self) -> None:
+        template = 'Return {"project": "{project.name}"}.'
+        assert render_template(template, {"project": {"name": "AUDia"}}) == (
+            'Return {"project": "AUDia"}.'
+        )
+
 
 class TestWorkflowActionsRenderCompatibility:
     """Confirm existing workflow.actions.render callers are not affected."""

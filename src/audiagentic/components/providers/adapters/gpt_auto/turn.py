@@ -516,6 +516,54 @@ class GptAutoTurn:
                 exc_info=True,
             )
 
+    async def _final_submission_proof(
+        self, baseline: ChatSnapshot
+    ) -> ChatSnapshot | None:
+        """Perform one last request-identity pass before declaring ambiguity.
+
+        ChatGPT can finish rendering a response while the submission-proof
+        observer is still waiting for an exact DOM representation of the user
+        message.  The normal response observer is deliberately not entered
+        until the request's own user message is proven, but a final snapshot
+        must get that same chance before we terminalise as ambiguous.  A fresh
+        assistant alone is never sufficient: the user-message boundary remains
+        the no-duplicate-submit invariant.
+        """
+        final_snapshot: ChatSnapshot | None = None
+        try:
+            final_snapshot = await self.chat.snapshot()
+        except Exception as exc:  # noqa: BLE001 - retain bounded failure evidence
+            self._last_observation_error = exc
+
+        if final_snapshot is not None:
+            self._remember_snapshot(final_snapshot)
+            if (
+                _new_user_message(baseline, final_snapshot)
+                and match_prompt(
+                    self.request.body,
+                    final_snapshot.latest_user_correlation_text() or "",
+                )
+            ):
+                if final_snapshot.latest_user_id:
+                    self._prompt_message_id = final_snapshot.latest_user_id
+                return final_snapshot
+
+        # A retained duplicate tab may have the accepted prompt mounted even
+        # when the originally-bound page was stale or virtualised.  This is a
+        # read-only correlation lookup; it never resubmits the prompt.
+        finder = getattr(self.chat, "find_prompt_snapshot", None)
+        if finder is not None:
+            try:
+                alternate = await finder(baseline, self.request.body)
+            except Exception as exc:  # noqa: BLE001 - bounded recovery evidence
+                self._last_observation_error = exc
+                alternate = None
+            if alternate is not None:
+                if alternate.latest_user_id:
+                    self._prompt_message_id = alternate.latest_user_id
+                return alternate
+        return None
+
     async def _await_composer_settled(self, current: ChatSnapshot) -> ChatSnapshot:
         """GP11: a turn submitted immediately after the previous one resolves
         can race a composer that has not finished settling (still showing
@@ -743,6 +791,13 @@ class GptAutoTurn:
                     self._prompt_message_id = alternate.latest_user_id
                     return alternate
             await asyncio.sleep(0.2)
+        # The last poll can observe a completed assistant answer while the
+        # tracker expires on a presentation-only mismatch.  Give the bound
+        # page, then retained duplicate tabs, one final identity check before
+        # converting the side effect into an ambiguous terminal failure.
+        final_proof = await self._final_submission_proof(baseline)
+        if final_proof is not None:
+            return final_proof
         if last_observation_error is not None:
             raise AudiaGenticError(
                 code="EXT-GPTAUTO-004",
