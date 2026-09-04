@@ -247,11 +247,12 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b'<path d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/>' in page
         assert b"function executionSummary(profile, provider, model)" in page
         assert b"names.includes(name)" in page
+        assert b"distinctModel=model&&!names.includes(model)" in page
         assert b"session-profile" in page
         assert b"border-bottom:2px solid #3b5278" in page
         assert b"font-size:12px; letter-spacing:.1em" in page
         assert b".request-header > div { display:flex; align-items:center;" in page
-        assert b"minmax(88px,.65fr) minmax(160px,1.3fr)" in page
+        assert b"--request-cols:minmax(0,1.55fr)" in page
         assert b"newest first" in page
         assert b"Watchdog monitoring guide" not in page
         assert b"activity-badge" in page
