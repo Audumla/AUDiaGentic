@@ -508,6 +508,17 @@ class PersistentChat:
         page = await browser.page_by_handle(self.page_handle)
         return bool(await materialize(page))
 
+    async def release_focus_emulation(self) -> None:
+        """Release provider focus emulation after the watcher snapshots."""
+        if not self.page_handle:
+            return
+        browser = self._gpt_browser()
+        release = getattr(browser, "release_focus_emulation", None)
+        if not callable(release):
+            return
+        page = await browser.page_by_handle(self.page_handle)
+        await release(page)
+
     async def _reconcile_unresolved_turn(self) -> bool:
         """Prove the retained prompt reached a terminal provider outcome."""
         if not self.unresolved_turn_pending:

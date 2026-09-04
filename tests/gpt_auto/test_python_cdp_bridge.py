@@ -384,12 +384,20 @@ async def test_completion_materialization_emulates_focus_without_activating_targ
         for method, params, session_id in fake.calls
         if method == "Emulation.setFocusEmulationEnabled"
     ]
-    assert [params["enabled"] for params, _ in focus_calls] == [True, False]
+    assert [params["enabled"] for params, _ in focus_calls] == [True]
     assert all(session_id for _, session_id in focus_calls)
 
     methods = [method for method, _, _ in fake.calls]
     assert "Target.activateTarget" not in methods
     assert "Page.bringToFront" not in methods
+
+    await api.release_focus_emulation(page)
+    focus_calls = [
+        (params, session_id)
+        for method, params, session_id in fake.calls
+        if method == "Emulation.setFocusEmulationEnabled"
+    ]
+    assert [params["enabled"] for params, _ in focus_calls] == [True, False]
 
 
 @pytest.mark.asyncio
