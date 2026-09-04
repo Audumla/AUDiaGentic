@@ -1350,6 +1350,13 @@ async def test_composer_readback_mismatch_does_not_duplicate_when_prompt_is_prov
 @pytest.mark.asyncio
 async def test_unproven_submission_fails_chat_instead_of_returning_empty_success():
     chat = _Chat()
+    materialized = []
+
+    async def materialize_latest_assistant_turn():
+        materialized.append(True)
+        return True
+
+    chat.materialize_latest_assistant_turn = materialize_latest_assistant_turn
 
     async def unchanged_snapshot():
         return snap()
@@ -1364,6 +1371,7 @@ async def test_unproven_submission_fails_chat_instead_of_returning_empty_success
     assert chat.runtime.bridge.submit_calls == 1
     assert chat.provider_session_id == "conversation-1"
     assert chat.chat_url.endswith("/c/conversation-1")
+    assert materialized == [True]
 
 
 @pytest.mark.asyncio
