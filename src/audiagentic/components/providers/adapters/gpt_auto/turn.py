@@ -730,6 +730,16 @@ class GptAutoTurn:
                 continue
             last_observation_error = None
             self._remember_snapshot(snap)
+            publish_title = getattr(self.chat, "publish_conversation_title", None)
+            if callable(publish_title):
+                try:
+                    await publish_title(snap.conversation_title)
+                except Exception:  # noqa: BLE001 - label is best-effort metadata
+                    logger.debug(
+                        "gpt-auto conversation title relay failed during submission proof",
+                        extra={"turn-id": self.request.turn_id},
+                        exc_info=True,
+                    )
             new_msg = _new_user_message(baseline, snap)
             text_matches = new_msg and expected_fingerprint.matches_text(
                 snap.latest_user_correlation_text() or ""
@@ -911,6 +921,21 @@ class GptAutoTurn:
                 await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
                 continue
             self._remember_snapshot(raw_current)
+            # The left navigation label is generated asynchronously by
+            # ChatGPT and may change while the answer is being produced.
+            # Persist it through the existing provider-binding relay so both
+            # the durable session and the active request row see it without
+            # waiting for terminalization.
+            publish_title = getattr(self.chat, "publish_conversation_title", None)
+            if callable(publish_title):
+                try:
+                    await publish_title(raw_current.conversation_title)
+                except Exception:  # noqa: BLE001 - label is best-effort metadata
+                    logger.debug(
+                        "gpt-auto conversation title relay failed",
+                        extra={"turn-id": self.request.turn_id},
+                        exc_info=True,
+                    )
             if prompt_message_id:
                 current, response_ref = _scope_response_snapshot(
                     baseline, raw_current, prompt_message_id=prompt_message_id
@@ -1497,6 +1522,9 @@ class GptAutoTurn:
                     "chat-url": self.chat.chat_url,
                 }
             )
+        conversation_title = getattr(self.chat, "conversation_title", None)
+        if isinstance(conversation_title, str) and conversation_title:
+            metadata["chat-title"] = conversation_title[:256]
         metadata.update(_message_ids(self))
         unresolved_metadata = getattr(self.chat, "unresolved_metadata", None)
         if unresolved_metadata is not None:
