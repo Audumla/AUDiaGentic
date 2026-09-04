@@ -22,6 +22,7 @@ from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.application import InProcessGatewayApplication
 from audiagentic.components.agents.gateway.queue import queue as agents_gateway_queue
 from audiagentic.components.agents.gateway.service.dashboard import (
+    _most_recent,
     _request_row,
     render_dashboard_html,
 )
@@ -542,6 +543,28 @@ def test_dashboard_request_projection_exposes_only_safe_gpt_chat_link(tmp_path: 
     store.write_record(tmp_path, record)
     unsafe = next(row for row in gateway.list_dashboard_requests(tmp_path) if row["request-id"] == "req_unsafe_url")
     assert "provider-chat-url" not in unsafe
+
+
+def test_dashboard_request_listing_does_not_load_full_response_artifacts(tmp_path: Path, monkeypatch):
+    calls = []
+    original = store.list_records
+
+    def bounded_list(root, *, include_output=True):
+        calls.append(include_output)
+        return original(root, include_output=include_output)
+
+    monkeypatch.setattr(store, "list_records", bounded_list)
+    gateway.list_dashboard_requests(tmp_path)
+
+    assert calls == [False]
+
+
+def test_dashboard_newest_timestamp_uses_latest_activity_field():
+    assert _most_recent({
+        "created-at": "2026-09-04T01:00:00Z",
+        "updated-at": "2026-09-04T01:01:00Z",
+        "last-activity-at": "2026-09-04T01:05:00Z",
+    }) == "2026-09-04T01:05:00Z"
 
 
 def test_dashboard_request_projection_exposes_focus_for_live_gpt_without_chat_url():
