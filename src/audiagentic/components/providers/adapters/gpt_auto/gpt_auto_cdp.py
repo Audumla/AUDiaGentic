@@ -252,14 +252,12 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         emulate an active/focused page while scrolling and yielding rendering.
         This does not activate the target or foreground the browser window.
         """
-        focus_emulated = False
         try:
             try:
                 await self.bridge.call(
                     "set_focus_emulation",
                     {"pageHandle": page.handle, "enabled": True},
                 )
-                focus_emulated = True
             except CdpError:
                 # Older Chromium/CDP implementations may not expose this
                 # experimental command. Preserve the existing scroll fallback.
@@ -284,13 +282,13 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                 )
             )
             if not scrolled:
+                await self.release_focus_emulation(page)
                 return False
 
-            if focus_emulated:
-                try:
-                    await self.evaluate(
-                        page,
-                        r"""() => new Promise(resolve => {
+            try:
+                await self.evaluate(
+                    page,
+                    r"""() => new Promise(resolve => {
                           let settled = false;
                           const done = () => {
                             if (settled) return;
@@ -302,21 +300,30 @@ class GptAutoCdpBrowserController(CdpBrowserController):
                           }
                           setTimeout(done, 250);
                         })""",
-                    )
-                except Exception:
-                    # Rendering synchronization is best-effort; the caller
-                    # still takes a fresh authoritative snapshot.
-                    pass
+                )
+            except Exception:
+                # Rendering synchronization is best-effort; the caller still
+                # takes a fresh authoritative snapshot.
+                pass
+            # Keep emulation enabled until the caller has taken its fresh
+            # authoritative snapshot. Disabling it here can immediately
+            # unmount the action bar again in a background renderer.
             return True
-        finally:
-            if focus_emulated:
-                try:
-                    await self.bridge.call(
-                        "set_focus_emulation",
-                        {"pageHandle": page.handle, "enabled": False},
-                    )
-                except Exception:
-                    pass
+        except Exception:
+            await self.release_focus_emulation(page)
+            raise
+
+    async def release_focus_emulation(self, page: CdpPageRef) -> None:
+        """Disable temporary renderer focus emulation after observation."""
+        try:
+            await self.bridge.call(
+                "set_focus_emulation",
+                {"pageHandle": page.handle, "enabled": False},
+            )
+        except Exception:
+            # Focus emulation is an observation aid; cleanup must never turn a
+            # completed provider response into a gateway failure.
+            pass
 
     async def stop_generation(self, page: CdpPageRef) -> dict[str, bool]:
         stopped = await self.evaluate(
