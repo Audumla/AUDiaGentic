@@ -20,10 +20,41 @@ from audiagentic.components.agents.gateway.service.contract import (
     PROTOCOL_VERSION,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError, make_error_factory
+from audiagentic.foundation.io import atomic_write_text
 from audiagentic.foundation.system.managed_service import ManagedServiceStore
 
 service_validation_error = make_error_factory("VAL", "AGSV", "gateway-service")
 service_conflict_error = make_error_factory("CON", "AGSV", "gateway-service")
+
+_DASHBOARD_ACTION_TOKEN_FILE = "dashboard-action.token"
+
+
+def _load_dashboard_action_token(service_root: Path) -> str:
+    """Return the stable token embedded in dashboard operator pages.
+
+    Dashboard HTML can remain open across a gateway process restart.  A
+    per-process token therefore makes an otherwise healthy page's focus and
+    purge controls fail until the user reloads it.  Persist only this narrow
+    action token under the service-owned runtime directory; it is not the
+    gateway bearer token and is never returned by the API.
+    """
+    path = service_root / _DASHBOARD_ACTION_TOKEN_FILE
+    try:
+        token = path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        token = ""
+    except OSError:
+        token = ""
+    if token and 32 <= len(token) <= 128:
+        return token
+    token = secrets.token_urlsafe(32)
+    try:
+        atomic_write_text(path, token)
+    except OSError:
+        # A read-only service runtime should still be able to serve the
+        # dashboard for this process; the next process will retry persistence.
+        pass
+    return token
 
 CAPABILITIES = (
     "requests.submit",
@@ -71,7 +102,7 @@ class GatewayServiceApplication:
         # status/drain/resume/stop surface; absent for bare in-process hosting.
         self._lifecycle = lifecycle
         self._dashboard_recent_seconds = dashboard_recent_seconds
-        self._dashboard_action_token = secrets.token_urlsafe(32)
+        self._dashboard_action_token = _load_dashboard_action_token(service_store.root)
         # A distinct durable authority for gateway operator operations.  It
         # deliberately does not own request/session state or the work queue.
         self._operations = GatewayOperationsApplication(
