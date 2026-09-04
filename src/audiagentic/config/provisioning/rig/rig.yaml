@@ -73,4 +73,3 @@ models:
     model_file: ../../models/Qwen3.5-9B-IQ4_XS.gguf
     server:
       context_size: 1280000
- 

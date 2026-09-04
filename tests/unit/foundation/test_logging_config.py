@@ -96,6 +96,17 @@ def test_json_log_line_schema(tmp_path):
     assert doc["logger"] == "test.schema"
 
 
+def test_json_log_timestamps_are_utc_before_adding_z_suffix():
+    """The regional timezone must not leak into canonical JSON logs."""
+    from audiagentic.foundation.logging.config import _CorrelationJsonFormatter
+
+    record = logging.LogRecord("test.schema", logging.INFO, __file__, 1, "utc", (), None)
+    record.created = 0.0
+    record.msecs = 0.0
+    doc = json.loads(_CorrelationJsonFormatter().format(record))
+    assert doc["ts"] == "1970-01-01T00:00:00.000Z"
+
+
 # ---------------------------------------------------------------------------
 # Correlation ID propagation
 # ---------------------------------------------------------------------------

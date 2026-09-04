@@ -58,7 +58,13 @@ from dataclasses import dataclass
 
 _FENCE_OPEN_RE = re.compile(r"```([^\n]*)\n")
 _LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
-_WS_RUN_RE = re.compile(r"[ \t]{2,}")
+# DOM text extraction can turn a single tab into a non-breaking space (and
+# can otherwise choose any Unicode horizontal whitespace representation).
+# Correlation cares about content and line boundaries, not the exact width or
+# code point used for horizontal spacing, so canonicalise every horizontal
+# run, including a single character.
+_WS_RUN_RE = re.compile(r"[^\S\r\n]+")
+_TRAILING_HWS_RE = re.compile(r"[ \t]+(?=\n|$)")
 _BLANK_LINE_RUN_RE = re.compile(r"\n{2,}")
 
 
@@ -83,15 +89,17 @@ def normalize_prompt_text(text: str) -> str:
     normalized = normalized.replace("`", "")
     # Markdown links: [text](url) -> text.
     normalized = _LINK_RE.sub(r"\1", normalized)
-    # GP43: ChatGPT's renderer re-encodes horizontal whitespace runs (most
+    # GP43/GP49: ChatGPT's renderer re-encodes horizontal whitespace (most
     # visibly leading indentation, but not only there) using a lossy mix of
-    # non-breaking-space substitution and outright collapsing that does not
-    # preserve run length. Normalize \xa0 to a plain space first, then
-    # collapse any run of 2+ horizontal-whitespace characters to one --
-    # this only affects whitespace RUNS; a single space/tab and all
-    # non-whitespace content (including single-space-indented diff context
-    # lines) are untouched.
+    # tabs, non-breaking spaces, and outright collapsing.  Canonicalise every
+    # horizontal run, including a single tab/NBSP, to one plain space.  This
+    # only affects horizontal formatting; line boundaries and all
+    # non-whitespace content remain significant.
     normalized = normalized.replace("\xa0", " ")
+    # ChatGPT's message DOM strips trailing spaces from each rendered line,
+    # while an admitted UTF-8 template can retain them at line endings.
+    # They are presentation-only and must not make submission proof fail.
+    normalized = _TRAILING_HWS_RE.sub("", normalized)
     normalized = _WS_RUN_RE.sub(" ", normalized)
     # GP44: ChatGPT's renderer pads a fenced code block with an extra blank
     # line immediately before and after its rendered content -- collapse

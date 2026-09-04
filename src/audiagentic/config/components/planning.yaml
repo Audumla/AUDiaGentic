@@ -128,7 +128,7 @@ contributions:
         Use the ag-planning MCP tools to manage plan items in docs/planning/.
 
         ## When to use
-        - User asks to create a plan or work items 
+        - User asks to create a plan or work items
         - Tracking multi-step implementation across sessions
         - Reviewing or updating the state of outstanding items
 

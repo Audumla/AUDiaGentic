@@ -38,6 +38,20 @@ def test_normalize_collapses_whitespace_runs_but_keeps_single_spaces_significant
     assert normalize_prompt_text("x y") != normalize_prompt_text("xy")
 
 
+def test_normalize_ignores_trailing_horizontal_whitespace_from_template_files() -> None:
+    """The provider DOM removes line-end padding from submitted templates.
+
+    This exact shape regressed the live gpt-t1 smoke test: the admitted
+    prompt ended in spaces before its newline, while ChatGPT returned the
+    same message without that padding. Submission proof must compare the
+    semantic prompt, not file-formatting whitespace.
+    """
+    submitted = "Reply exactly: GPT live test OK.   \n"
+    rendered = "Reply exactly: GPT live test OK."
+    assert match_prompt(submitted, rendered)
+    assert PromptFingerprint.from_text(submitted) == PromptFingerprint.from_text(rendered)
+
+
 def test_normalize_strips_inline_code_backticks() -> None:
     assert normalize_prompt_text("call `foo()` now") == normalize_prompt_text("call foo() now")
 

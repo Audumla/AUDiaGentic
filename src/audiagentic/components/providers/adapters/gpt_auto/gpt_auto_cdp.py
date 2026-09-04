@@ -151,8 +151,12 @@ _SNAPSHOT_FN = r"""
     const source = element?.querySelector('[data-testid="collapsible-user-message-content"]') || element;
     if (!source) return {text: null, hrCount: 0};
     const clone = source.cloneNode(true);
+    // The visible message node may contain presentation-only controls when a
+    // long prompt is collapsed.  Remove those elements from the clone rather
+    // than stripping their labels from the resulting string: a real prompt is
+    // allowed to contain words such as "Show more".
+    clone.querySelectorAll('button, [role="button"], [aria-label*="show more" i], [aria-label*="show less" i]').forEach(el => el.remove());
     const hrs = Array.from(clone.querySelectorAll('hr'));
-    if (!hrs.length) return {text: null, hrCount: 0};
     for (const hr of hrs) hr.replaceWith(document.createTextNode("\n---\n"));
     const text = ((clone.innerText || clone.textContent || "").trim()).slice(0, 200000) || null;
     return {text, hrCount: hrs.length};

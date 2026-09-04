@@ -60,4 +60,13 @@ async def shutdown_all_runtimes() -> None:
         else:
             _runtimes.pop(key, None)
     if failures:
-        raise ExceptionGroup("gpt-auto runtime shutdown failed", failures)
+        # The package still supports Python 3.10, where ExceptionGroup is not
+        # available.  Preserve every failure in a stable, actionable message
+        # rather than raising a shutdown-time NameError that masks the real
+        # cleanup problems.
+        summary = "; ".join(f"{type(exc).__name__}: {exc}" for exc in failures)
+        error = RuntimeError(f"gpt-auto runtime shutdown failed ({len(failures)}): {summary}")
+        if hasattr(error, "add_note"):
+            for exc in failures:
+                error.add_note(f"shutdown failure: {type(exc).__name__}: {exc}")
+        raise error from failures[0]
