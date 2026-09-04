@@ -1188,7 +1188,10 @@ def list_dashboard_requests(project_root: Path) -> list[dict[str, Any]]:
     Keep that richer-but-redacted projection behind this explicit seam rather
     than making the public MCP list operation grow legacy fields again.
     """
-    records = store.list_records(project_root)
+    # Dashboard rows are deliberately bounded.  Do not load request-owned
+    # response artifacts while refreshing the page; full responses are read
+    # only through the explicit response operation.
+    records = store.list_records(project_root, include_output=False)
     records.sort(key=lambda record: record["created-at"], reverse=True)
     rows: list[dict[str, Any]] = []
     for record in records:
@@ -1318,20 +1321,14 @@ def purge_execution_session(project_root: Path, session_id: str) -> dict[str, An
     except AudiaGenticError:
         return {"session-id": session_id, "outcome": "not-found"}
 
-    # A live handle is closed first; the resulting terminal record is then
-    # re-read below before deletion.  This also removes provider transports.
     from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
 
     runtime = peek_session_runtime()
-    if runtime is not None and session_id in set(runtime.live_session_ids()):
-        close_execution_session(project_root, session_id)
-        record = session_store.read_session_record(project_root, session_id)
-    elif record.get("state") not in session_store.SESSION_TERMINAL_STATES:
-        record = session_store.transition_session_record(
-            project_root, session_id, "failed", updates={"close-reason": "purge"}
-        )
-        binding_store.retire_binding(project_root, record, state="failed")
+    live = runtime is not None and session_id in set(runtime.live_session_ids())
 
+    # Resolve the complete request set before touching a live provider.  A
+    # purge is destructive, so active work must block it without closing the
+    # session or changing its durable state first.
     request_ids = set(session_store.session_request_ids(record))
     root = gateway_root(project_root)
     if root.exists():
@@ -1359,6 +1356,31 @@ def purge_execution_session(project_root: Path, session_id: str) -> dict[str, An
             "reason": "session-has-active-requests",
             "request-count": len(requests),
         }
+
+    if live:
+        # CLOSE_SESSION is quiescent-only in SessionRuntime.  Use that seam so
+        # a provider transport is never torn down underneath a queued turn.
+        from audiagentic.foundation.transports import SessionControlAction
+
+        control = runtime.control_session(
+            session_id,
+            turn_id=None,
+            action=SessionControlAction.CLOSE_SESSION,
+            control_id=f"purge-{session_id}",
+        )
+        if control.get("disposition") not in {"accepted", "already-terminal"}:
+            return {
+                "session-id": session_id,
+                "outcome": "blocked",
+                "reason": "session-not-quiescent",
+                "request-count": len(requests),
+            }
+        record = session_store.read_session_record(project_root, session_id)
+    elif record.get("state") not in session_store.SESSION_TERMINAL_STATES:
+        record = session_store.transition_session_record(
+            project_root, session_id, "failed", updates={"close-reason": "purge"}
+        )
+        binding_store.retire_binding(project_root, record, state="failed")
 
     with StartupLock(gateway_retention_lock_path(project_root)):
         # Re-read the session and all request records immediately before the
