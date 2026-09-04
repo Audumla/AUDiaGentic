@@ -252,7 +252,8 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b".request-header > div { display:flex; align-items:center;" in page
         assert b"newest first" in page
         assert b"Watchdog monitoring guide" not in page
-        assert b"stale monitoring marker" in page
+        assert b"activity-badge" in page
+        assert b"function watchdogFlag" not in page
         assert b"chat-link" in page
         assert b"aria-label=\"Open or focus GPT tab\"" in page
         assert b"Open tab" not in page
