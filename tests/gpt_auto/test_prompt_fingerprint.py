@@ -38,6 +38,17 @@ def test_normalize_collapses_whitespace_runs_but_keeps_single_spaces_significant
     assert normalize_prompt_text("x y") != normalize_prompt_text("xy")
 
 
+def test_normalize_treats_single_tabs_and_unicode_spaces_as_plain_spaces() -> None:
+    """The DOM can serialize one source tab as one NBSP/Unicode space.
+
+    A two-plus-only collapse leaves that single tab intact and caused the
+    live BigCherry submission-proof false failure (req_e8abb53596d34f6f).
+    """
+    submitted = "if ok:\n\treturn\u00a0True\n\u202f# done"
+    rendered = "if ok:\n return True\n # done"
+    assert match_prompt(submitted, rendered)
+
+
 def test_normalize_ignores_trailing_horizontal_whitespace_from_template_files() -> None:
     """The provider DOM removes line-end padding from submitted templates.
 

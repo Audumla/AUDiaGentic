@@ -112,6 +112,17 @@ def test_closed_operation_router_calls_public_application(tmp_path: Path) -> Non
     assert submitted["component_profile"] == "client-profile"
     assert submitted["workspace_name"] == "Workspace Name"
 
+    seeded = service.invoke(
+        "submit_execution_request",
+        str(tmp_path),
+        {
+            "prompt_body": "continue",
+            "provider_chat_url": "https://chatgpt.com/g/g-p-project/c/conversation-1",
+        },
+        **authorization,
+    )
+    assert seeded["provider_chat_url"].endswith("/c/conversation-1")
+
     resumed = service.invoke(
         "resume_execution_session",
         str(tmp_path),

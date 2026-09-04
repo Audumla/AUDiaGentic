@@ -326,6 +326,7 @@ def agent_task_submit(
     session_keep_alive: bool = False,
     workspace_name: str | None = None,
     execution_context_fingerprint: str | None = None,
+    provider_chat_url: str | None = None,
 ) -> dict[str, Any]:
     """Submit async work as `agent_id` (AS62's Agent Definition — an Execution
     Profile plus a Role bundled under one stable ID). Resolves the agent's
@@ -343,6 +344,9 @@ def agent_task_submit(
     Raises RES-AGD-001 if `agent_id` is not a configured
     agent definition.
 
+    `provider_chat_url` may seed a GPT-auto session from a full
+    project-scoped ChatGPT conversation URL (`/g/<project>/c/<id>`).
+
     This is the sole submission surface over MCP (RV891). Direct
     provider/model execution bypassing agent selection is not exposed over MCP."""
     project_root = project_root_from_env()
@@ -358,6 +362,8 @@ def agent_task_submit(
         submit_kwargs["workspace_name"] = workspace_name
     if execution_context_fingerprint is not None:
         submit_kwargs["execution_context_fingerprint"] = execution_context_fingerprint
+    if provider_chat_url is not None:
+        submit_kwargs["provider_chat_url"] = provider_chat_url
     status = call_gateway_method("submit_execution_request", project_root, **submit_kwargs)
     return _sparse({
         "request-id": status.get("request-id"),

@@ -73,6 +73,19 @@ def test_snapshot_preserves_structural_hr_for_user_prompt_correlation() -> None:
     assert "structuralHrCount" in _SNAPSHOT_FN
 
 
+def test_snapshot_user_correlation_removes_presentation_controls_without_text_filtering() -> None:
+    """Correlation must remove UI controls structurally, not words by text.
+
+    This prevents a collapsed long prompt's ``Show more`` button from
+    poisoning the fingerprint while preserving a real prompt containing the
+    same words.
+    """
+    assert 'clone.querySelectorAll(\'button, [role="button"' in _SNAPSHOT_FN
+    assert '[aria-label*="show more" i]' in _SNAPSHOT_FN
+    assert 'if (!hrs.length) return {text: null, hrCount: 0};' not in _SNAPSHOT_FN
+    assert 'return {text, hrCount: hrs.length};' in _SNAPSHOT_FN
+
+
 @pytest.mark.asyncio
 async def test_materialize_latest_assistant_turn_scrolls_without_provider_side_effects() -> None:
     """Virtualized long chats must be brought into view read-only.

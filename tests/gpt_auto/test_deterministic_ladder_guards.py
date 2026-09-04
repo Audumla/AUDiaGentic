@@ -97,7 +97,7 @@ def test_resume_build_forwards_durable_chat_url_without_submitting(monkeypatch: 
     monkeypatch.setattr(session_transport, "get_runtime", lambda _root, _config: runtime)
     transport = session_transport.build_session_transport(
         tmp_path,
-        config=valid_config(),
+        config={**valid_config(), "project-url": None},
         ag_session_id="ses-resumed",
         binding_sink=lambda _update: None,
         project_name="project",
@@ -110,6 +110,29 @@ def test_resume_build_forwards_durable_chat_url_without_submitting(monkeypatch: 
     assert transport.chat.provider_session_id == "conversation-42"
     assert transport.chat.chat_url.endswith("/c/conversation-42")
     assert transport._active_turn is None
+
+
+def test_url_seed_build_derives_provider_ref_from_chat_url(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A caller-supplied URL can seed a new durable GPT-auto session."""
+    runtime = SimpleNamespace()
+    monkeypatch.setattr(session_transport, "get_runtime", lambda _root, _config: runtime)
+    transport = session_transport.build_session_transport(
+        tmp_path,
+        config={**valid_config(), "project-url": None},
+        ag_session_id="ses-seeded",
+        binding_sink=lambda _update: None,
+        project_name="project",
+        resume_metadata_hint={
+            "chat-url": "https://chatgpt.com/g/g-p-project/c/conversation-seeded",
+        },
+    )
+    assert transport.chat.provider_session_id == "conversation-seeded"
+    assert transport.chat.chat_url == (
+        "https://chatgpt.com/g/g-p-project/c/conversation-seeded"
+    )
+    assert transport.chat.project_url.endswith("/g/g-p-project/project")
 
 
 def test_resume_build_tolerates_missing_chat_url(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -169,6 +192,24 @@ def test_resume_build_rejects_unprojected_chat_url(
             resume_metadata_hint={
                 "project-url": "https://chatgpt.com/g/g-p-project/project",
                 "chat-url": "https://chatgpt.com/c/conversation-42",
+            },
+        )
+
+
+def test_url_seed_rejects_different_pinned_project(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    runtime = SimpleNamespace()
+    monkeypatch.setattr(session_transport, "get_runtime", lambda _root, _config: runtime)
+    with pytest.raises(RuntimeError, match="different configured project"):
+        session_transport.build_session_transport(
+            tmp_path,
+            config={**valid_config(), "project-url": "https://chatgpt.com/g/g-p-configured/project"},
+            ag_session_id="ses-seeded",
+            binding_sink=lambda _update: None,
+            project_name="project",
+            resume_metadata_hint={
+                "chat-url": "https://chatgpt.com/g/g-p-other/c/conversation-seeded",
             },
         )
 

@@ -315,3 +315,18 @@ def test_agent_task_submit_unknown_agent_propagates_error():
     assert "RES-AGD-001" in str(excinfo.value)
     assert isinstance(excinfo.value.__cause__, AudiaGenticError)
     assert excinfo.value.__cause__.code == "RES-AGD-001"
+
+
+def test_agent_task_submit_forwards_provider_chat_url():
+    with (
+        _patch_root(),
+        patch("audiagentic.components.agents.mcp.gateway_mcp.call_gateway_method") as mock_call,
+    ):
+        mock_call.return_value = {"request-id": "req_x", "state": "queued"}
+        agents_gateway_mcp.agent_task_submit(
+            "reviewer-agent",
+            prompt_body="continue",
+            provider_chat_url="https://chatgpt.com/g/g-p-project/c/conversation-1",
+        )
+
+    assert mock_call.call_args.kwargs["provider_chat_url"].endswith("/c/conversation-1")
