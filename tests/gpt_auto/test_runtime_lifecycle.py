@@ -611,6 +611,66 @@ async def test_unresolved_recovery_reports_missing_completion_evidence() -> None
 
 
 @pytest.mark.asyncio
+async def test_unresolved_recovery_accepts_fresh_assistant_when_user_node_is_virtualized() -> None:
+    """A completed background tab must not strand the persistent session.
+
+    ChatGPT can unmount the submitted user node after a failed observation
+    pass.  The retained baseline assistant id plus a newer quiescent assistant
+    response is enough to reconcile without guessing or resending the prompt.
+    """
+    config = GptAutoConfig.from_dict(valid_config())
+    config = replace(config, turn=replace(config.turn, response_stability_seconds=0.0))
+
+    class _Browser:
+        async def page_by_handle(self, handle):
+            return SimpleNamespace(handle=handle)
+
+        async def snapshot(self, _page, *, signals=None):
+            return {
+                "url": "https://chatgpt.com/g/g-p-project/c/conversation-1",
+                "composerPresent": True,
+                "composerEditable": True,
+                "userCount": 2,
+                "assistantCount": 2,
+                "latestAssistantId": "assistant-new",
+                "latestAssistantText": "completed response from the background tab",
+                # The submitted user node is not mounted in this snapshot.
+                "latestUserText": "older visible prompt",
+                "userMessageTexts": ["older visible prompt"],
+                "domSignals": {"completion-control": True, "more-actions-menu": True},
+                "generating": False,
+                "errorPresent": False,
+            }
+
+    runtime = SimpleNamespace(
+        gpt_browser=_Browser(),
+        bridge=SimpleNamespace(),
+        claim_page=lambda _chat, _handle: True,
+        release_page=lambda _chat, _handle: None,
+    )
+    chat = PersistentChat(
+        ag_session_id="session-virtualized-user",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project/project",
+        runtime=runtime,
+        config=config,
+        binding_sink=lambda _update: None,
+        provider_session_id="conversation-1",
+    )
+    chat.page_handle = "page-1"
+    chat.state = ChatState.RECOVERING
+    chat.mark_prompt_submitted("prompt-new", "assistant-before", "submitted prompt")
+
+    # The first observation arms the stability fingerprint; the second
+    # observation proves that the response remained unchanged.
+    assert await chat._reconcile_unresolved_turn() is False
+    assert await chat._reconcile_unresolved_turn() is True
+    chat._move(ChatState.READY)
+    assert chat.unresolved_turn_pending is False
+    assert chat.state is ChatState.READY
+
+
+@pytest.mark.asyncio
 async def test_unresolved_recovery_reconciles_despite_stuck_generating_signal() -> None:
     """Live-reproduced 2026-08-16 (GP05 L4 scenario): reconciliation of an
     unresolved turn must not be permanently blocked by a stuck

@@ -572,13 +572,6 @@ class PersistentChat:
                 dom_signals=sorted(snapshot.dom_signals),
             )
             return False
-        prompt_match, prompt_reason, prompt_details = _unresolved_prompt_match_diagnostics(
-            self, snapshot
-        )
-        if prompt_match is None:
-            self._reset_unresolved_match_candidate()
-            self._set_unresolved_recovery(prompt_reason, **prompt_details)
-            return False
         assistant_id = snapshot.latest_assistant_id
         if not assistant_id:
             self._reset_unresolved_match_candidate()
@@ -588,6 +581,31 @@ class PersistentChat:
             self._reset_unresolved_match_candidate()
             self._set_unresolved_recovery("assistant-response-text-not-observed")
             return False
+        prompt_match, prompt_reason, prompt_details = _unresolved_prompt_match_diagnostics(
+            self, snapshot
+        )
+        if prompt_match is None:
+            # Background ChatGPT tabs can virtualize the user-message node
+            # used for submission correlation.  A quiescent page with a
+            # fresh assistant message beyond the durable baseline is enough
+            # to reconcile that prior turn: the provider is no longer
+            # generating, so admitting the next turn cannot duplicate an
+            # in-flight send.  Keep the fallback narrow and subject it to
+            # the same response stability window enforced below.
+            baseline_assistant_id = self.unresolved_assistant_before_id
+            if baseline_assistant_id and assistant_id != baseline_assistant_id:
+                prompt_match = f"fresh-assistant:{assistant_id}"
+                prompt_reason = "fresh-assistant-without-user-correlation"
+                prompt_details = {
+                    **prompt_details,
+                    "observed-assistant-id": assistant_id,
+                    "baseline-assistant-id": baseline_assistant_id,
+                    "correlation-fallback": "fresh-assistant",
+                }
+            else:
+                self._reset_unresolved_match_candidate()
+                self._set_unresolved_recovery(prompt_reason, **prompt_details)
+                return False
         # A stable partial assistant message can look idle while ChatGPT is
         # still stalled in a tool-backed turn.  Require explicit terminal
         # evidence before clearing the unresolved marker; the caller receives
@@ -626,7 +644,9 @@ class PersistentChat:
                 observed_dom_signals=sorted(snapshot.dom_signals),
             )
             return False
-        if self.unresolved_assistant_message_id:
+        if prompt_reason == "fresh-assistant-without-user-correlation":
+            terminal = True
+        elif self.unresolved_assistant_message_id:
             terminal = assistant_id == self.unresolved_assistant_message_id
         else:
             terminal = assistant_id != self.unresolved_assistant_before_id
