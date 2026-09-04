@@ -244,7 +244,7 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b"sessionCard(s,rows,false,allRows)" in page
         assert b"flex:0 0 30px" in page
         assert b"request-header" in page
-        assert b'<circle cx="12" cy="12" r="4.5"/>' in page
+        assert b'<path d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/>' in page
         assert b"newest first" in page
         assert b"Watchdog monitoring guide" not in page
         assert b"stale monitoring marker" in page
