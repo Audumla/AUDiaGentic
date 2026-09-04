@@ -105,8 +105,10 @@ async def test_materialize_latest_assistant_turn_scrolls_without_provider_side_e
     assert "Target.createTarget" not in bridge.functions[0]
     assert [method for method, _params in bridge.calls] == [
         "set_focus_emulation",
-        "set_focus_emulation",
     ]
+    assert [params["enabled"] for _method, params in bridge.calls] == [True]
+
+    await browser.release_focus_emulation(page)
     assert [params["enabled"] for _method, params in bridge.calls] == [True, False]
 
 

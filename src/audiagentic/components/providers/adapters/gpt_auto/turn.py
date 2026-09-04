@@ -372,6 +372,16 @@ class GptAutoTurn:
                 ) from exc
             raise
         finally:
+            release_focus = getattr(self.chat, "release_focus_emulation", None)
+            if callable(release_focus):
+                try:
+                    await release_focus()
+                except Exception:  # noqa: BLE001 - cleanup is best effort
+                    logger.debug(
+                        "gpt-auto focus emulation cleanup failed",
+                        extra={"turn-id": self.request.turn_id},
+                        exc_info=True,
+                    )
             if self._stop_task is not None:
                 await asyncio.gather(self._stop_task, return_exceptions=True)
             self.chat.active_turn_id = None
