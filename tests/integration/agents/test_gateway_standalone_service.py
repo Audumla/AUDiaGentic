@@ -226,13 +226,19 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         # Empty sessions are available only when explicitly requested.  A
         # live runtime handle is not evidence that the session has any task
         # records; it must not bypass the default empty-session filter.
-        assert b"showEmpty.checked||matching.length>0" in page
-        assert b"showClosed.checked||!isClosed(s)||matching.length>0" in page
+        assert b"showEmpty.checked||hasRows" in page
+        assert b"showClosed.checked||!isClosed(s)||hasRows" in page
         assert b"id=\"layout-filter\"" in page
         assert b'id="recent-window"' in page
         assert b"recent-seconds" in page
         assert b"section('Active'" in page
-        assert b"section('Other'" in page
+        assert b"section('Completed'" in page
+        assert b"section('Failed'" in page
+        assert b"section('Other'" not in page
+        assert page.index(b"section('Active'") < page.index(b"section('Completed'") < page.index(b"section('Failed'")
+        assert b"request-identity" in page
+        assert b"focusChat(button)" in page
+        assert b"button.textContent" not in page
         assert b"newest first" in page
         assert b"Watchdog monitoring guide" not in page
         assert b"stale monitoring marker" in page
