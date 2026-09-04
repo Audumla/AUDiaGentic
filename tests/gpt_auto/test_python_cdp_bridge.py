@@ -370,6 +370,29 @@ async def test_python_bridge_uses_page_session_for_navigation_and_evaluation():
 
 
 @pytest.mark.asyncio
+async def test_completion_materialization_emulates_focus_without_activating_target():
+    bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
+    fake = _FakeClient()
+    bridge._client = fake
+    api = GptAutoCdpBrowserController(bridge)
+    page = await api.new_tab()
+
+    assert await api.materialize_latest_assistant_turn(page) is True
+
+    focus_calls = [
+        (params, session_id)
+        for method, params, session_id in fake.calls
+        if method == "Emulation.setFocusEmulationEnabled"
+    ]
+    assert [params["enabled"] for params, _ in focus_calls] == [True, False]
+    assert all(session_id for _, session_id in focus_calls)
+
+    methods = [method for method, _, _ in fake.calls]
+    assert "Target.activateTarget" not in methods
+    assert "Page.bringToFront" not in methods
+
+
+@pytest.mark.asyncio
 async def test_python_bridge_exposes_browser_window_and_target_api_operations():
     bridge = PythonCdpBridge(GptAutoConfig.from_dict(valid_config()))
     fake = _FakeClient()
