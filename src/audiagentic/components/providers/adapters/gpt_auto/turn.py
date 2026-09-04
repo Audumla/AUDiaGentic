@@ -530,6 +530,16 @@ class GptAutoTurn:
         the no-duplicate-submit invariant.
         """
         final_snapshot: ChatSnapshot | None = None
+        materialize = getattr(self.chat, "materialize_latest_assistant_turn", None)
+        if callable(materialize):
+            try:
+                # A background ChatGPT tab can keep the user message and
+                # action bar virtualized.  Mount the latest turn once before
+                # the final proof so a completed chat is not misclassified
+                # merely because the operator had not focused the tab.
+                await materialize()
+            except Exception as exc:  # noqa: BLE001 - preserve proof fallback
+                self._last_observation_error = exc
         try:
             final_snapshot = await self.chat.snapshot()
         except Exception as exc:  # noqa: BLE001 - retain bounded failure evidence
