@@ -251,6 +251,8 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b"chat-link" in page
         assert b"aria-label=\"Open or focus GPT tab\"" in page
         assert b"Open tab" not in page
+        assert b"turn active" in page
+        assert b"unresolved</span>" not in page
         assert b"Purge" in page
 
         content_type, snapshot = _raw_get(host.endpoint, "/dashboard/snapshot")
