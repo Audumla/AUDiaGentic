@@ -243,6 +243,8 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b"section('Active'" in page and b"section('Completed'" in page and b"section('Failed'" in page
         assert b"sessionCard(s,rows,false,allRows)" in page
         assert b"flex:0 0 30px" in page
+        assert b"request-header" in page
+        assert b'<circle cx="12" cy="12" r="4.5"/>' in page
         assert b"newest first" in page
         assert b"Watchdog monitoring guide" not in page
         assert b"stale monitoring marker" in page
