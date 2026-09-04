@@ -227,7 +227,7 @@ def test_every_statically_resolvable_make_error_code_has_a_resolution() -> None:
                     resolvable.setdefault(
                         f"{prefix}-{component.upper()}-{number:03d}", str(path.relative_to(repo_root))
                     )
-                
+
 
     assert resolvable, "AST scan found no make_error()/factory call sites — check the walk logic"
 

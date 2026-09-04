@@ -120,7 +120,7 @@ class ProviderCompletion:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ProviderCompletion:
         """Create from dictionary.
-        
+
         Raises AudiaGenticError if the data fails schema validation.
         """
         issues = validate_provider_completion(data)
@@ -165,7 +165,7 @@ class ProviderCompletion:
 
 def try_extract_json_from_stdout(stdout: str) -> dict[str, Any] | None:
     """Attempt to find and parse a JSON block from provider stdout.
-    
+
     Looks for a block matching ```json ... ``` and parses it.
     Returns None if no block is found or parsing fails.
     """

@@ -21,6 +21,11 @@ _STD_RECORD_ATTRS: frozenset[str] = frozenset({
 class _CorrelationJsonFormatter(logging.Formatter):
     """Emit one JSON object per log record matching the defined schema."""
 
+    # ``Z`` in the serialized value means UTC. logging.Formatter defaults to
+    # ``time.localtime``; use UTC so regional wall time is never emitted with
+    # a false UTC suffix on machines outside UTC.
+    converter = time.gmtime
+
     def format(self, record: logging.LogRecord) -> str:
         record.message = record.getMessage()
         exc_text = None
