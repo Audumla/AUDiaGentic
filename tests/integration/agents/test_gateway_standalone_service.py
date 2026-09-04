@@ -248,6 +248,7 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b"function executionSummary(profile, provider, model)" in page
         assert b"names.includes(name)" in page
         assert b"session-profile" in page
+        assert b"border-bottom:2px solid #3b5278" in page
         assert b".request-header > div { display:flex; align-items:center;" in page
         assert b"newest first" in page
         assert b"Watchdog monitoring guide" not in page
