@@ -60,6 +60,35 @@ def test_status_reports_quiescence_and_policy(claimed_store, monkeypatch):
     assert status["quiescence"]["quiescent"] is True
 
 
+@pytest.mark.parametrize("busy", [False, True])
+def test_dashboard_restart_is_quiescence_gated(claimed_store, monkeypatch, busy):
+    store, record = claimed_store
+    monkeypatch.setattr(lifecycle_mod, "gateway_quiescence_facts", lambda root=None: dict(BUSY if busy else QUIET))
+    controller, shutdowns = _controller(store, record)
+    controller.restart_enabled = True
+    if busy:
+        with pytest.raises(AudiaGenticError, match="active work"):
+            controller.request_restart()
+        assert store.read().state == "running"
+        assert not controller.restart_requested
+        assert not shutdowns
+    else:
+        store.acquire_lease("connected-client", ttl_seconds=60, expected_epoch=record.owner_epoch)
+        assert controller.request_restart() == {"restarting": True}
+        assert controller.restart_requested
+        assert shutdowns == [True]
+        assert controller.request_restart() == {"restarting": True}
+        assert shutdowns == [True]
+
+
+def test_embedded_host_refuses_restart(claimed_store):
+    store, record = claimed_store
+    controller, shutdowns = _controller(store, record)
+    with pytest.raises(AudiaGenticError, match="does not support restart"):
+        controller.request_restart()
+    assert not shutdowns
+
+
 def test_drain_and_resume_transitions(claimed_store, monkeypatch):
     store, record = claimed_store
     monkeypatch.setattr(lifecycle_mod, "gateway_quiescence_facts", lambda root=None: dict(QUIET))
