@@ -242,6 +242,9 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b"function requestGroup(state)" in page
         assert b"section('Active'" in page and b"section('Completed'" in page and b"section('Failed'" in page
         assert b"sessionCard(s,rows,false,allRows)" in page
+        assert b"COLLAPSED_SESSIONS_KEY" in page
+        assert b"bindSessionToggles()" in page
+        assert b"data-session-id=\"${esc(sessionId)}\"" in page
         assert b"flex:0 0 26px" in page
         assert b"request-header" in page
         assert b'<path d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/>' in page
@@ -250,11 +253,14 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b"if(provider&&provider!==profile)identity.push(provider)" in page
         assert b"request-title" in page
         assert b"session-profile" in page
-        assert b"border-bottom:2px solid #3b5278" in page
+        assert b"border-bottom:1px solid #3b5278" in page
         assert b"font-size:12px; letter-spacing:.1em" in page
         assert b".request-header > div { display:flex; align-items:center;" in page
         assert b"--request-cols:minmax(0,1.55fr)" in page
-        assert b"session/request ID order" in page
+        assert b"newest requests first" in page
+        assert b"byRequestNewest" in page
+        assert b"byGroupUpdated" in page
+        assert b"work-section-active" in page
         assert b"Watchdog monitoring guide" not in page
         assert b"activity-badge" in page
         assert b"function watchdogFlag" not in page

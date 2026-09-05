@@ -26,6 +26,7 @@ from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
     _SNAPSHOT_FN,
     GptAutoCdpBrowserController,
 )
+from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatSnapshot
 
 from .test_greenfield_config_urls import valid_config
 
@@ -72,6 +73,14 @@ def test_snapshot_resolves_sidebar_title_by_active_conversation_url() -> None:
     assert "skip to content" in _SNAPSHOT_FN
     assert "anchor.innerText || anchor.textContent" in _SNAPSHOT_FN
     assert "conversationTitle," in _SNAPSHOT_FN
+
+
+def test_snapshot_rejects_navigation_label_as_conversation_title() -> None:
+    snap = ChatSnapshot.from_bridge({
+        "url": "https://chatgpt.com/g/g-p-x/c/c-x",
+        "conversationTitle": "Skip to content",
+    })
+    assert snap.conversation_title is None
 
 
 def test_snapshot_preserves_structural_hr_for_user_prompt_correlation() -> None:

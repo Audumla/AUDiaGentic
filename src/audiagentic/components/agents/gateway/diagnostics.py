@@ -9,6 +9,7 @@ It never accepts raw prompts, DOM, CDP payloads, cookies, or tracebacks.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from collections.abc import Mapping
 from enum import StrEnum
 from typing import Any
@@ -143,6 +144,61 @@ def activity_group(value: str | None) -> str | None:
     """Return the bounded provider-neutral group for one activity label."""
     normalized = normalize_activity_label(value)
     return _ACTIVITY_GROUPS.get(normalized) if normalized else None
+
+
+def activity_monitoring_snapshot(
+    record: Mapping[str, Any],
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Return bounded first-activity timing and watcher-state evidence.
+
+    ``activity-sequence == 0`` is not a failure.  It means the gateway has
+    not accepted meaningful provider activity yet, so expose how long that
+    observation window has been open instead of making callers infer it from
+    unrelated timestamps.  The first provider timestamp is captured by the
+    activity store; no prompt, response, DOM, or CDP data is included.
+    """
+    now = now or datetime.now(timezone.utc)
+
+    def parse(value: Any) -> datetime | None:
+        if not isinstance(value, str) or not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+
+    started = parse(record.get("started-at"))
+    activity = record.get("activity") if isinstance(record.get("activity"), Mapping) else {}
+    provider = activity.get("provider") if isinstance(activity.get("provider"), Mapping) else {}
+    first_activity = parse(provider.get("first-at")) or parse(provider.get("last-at"))
+    sequence = record.get("activity-sequence", 0)
+    if isinstance(sequence, bool) or not isinstance(sequence, int):
+        sequence = 0
+
+    result: dict[str, Any] = {"activity-sequence": max(0, sequence)}
+    if started is not None:
+        result["started-at"] = started.isoformat()
+    if first_activity is not None:
+        result["first-activity-at"] = first_activity.isoformat()
+    if started is not None and first_activity is not None:
+        result["first-activity-latency-seconds"] = round(
+            max(0.0, (first_activity - started).total_seconds()), 3
+        )
+
+    state = str(record.get("state") or "")
+    if first_activity is not None:
+        result["watcher-state"] = "observing"
+    elif state == "running" and started is not None:
+        result["watcher-state"] = "awaiting-first-activity"
+        result["no-activity-seconds"] = round(max(0.0, (now - started).total_seconds()), 3)
+    elif state in {"queued", "dispatching"}:
+        result["watcher-state"] = "not-started"
+    else:
+        result["watcher-state"] = "no-activity-observed"
+    return result
 
 
 def classify_error(
@@ -285,6 +341,7 @@ def stale_progress_diagnostic(
     *,
     phase: str = ObservationPhase.RECONCILIATION.value,
     side_effect_state: str = SideEffectState.MAY_HAVE_STARTED.value,
+    reason_code: str = "activity-lease-expired",
 ) -> dict[str, Any]:
     """Build non-terminal evidence for an expired activity observation.
 
@@ -299,7 +356,7 @@ def stale_progress_diagnostic(
         "side-effect-state": _side_effect(side_effect_state, SideEffectState.MAY_HAVE_STARTED),
         "resolution-state": "unresolved",
         "failure-code": None,
-        "reason-code": "activity-lease-expired",
+        "reason-code": _text(reason_code, _MAX_ID),
         "provider-signals": [],
         "evidence-count": 1,
         "coalesced-observation-count": 0,
@@ -410,5 +467,6 @@ __all__ = [
     "evidence_from_activity",
     "normalize_activity_label",
     "activity_group",
+    "activity_monitoring_snapshot",
     "merge_diagnostics",
 ]
