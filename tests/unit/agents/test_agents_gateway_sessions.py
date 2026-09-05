@@ -900,6 +900,34 @@ def test_api_list_and_close_sessions(rig, monkeypatch):
     assert again["state"] == "closed"
 
 
+def test_api_lists_active_sessions_before_newer_closed_sessions(tmp_path, monkeypatch):
+    from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway.session import sessions as sessions_module
+
+    saved_runtime = getattr(sessions_module, "_SESSION_RUNTIME", None)
+    try:
+        sessions_module._SESSION_RUNTIME = None  # type: ignore[attr-defined]
+        active = session_store.build_session_record(
+            session_id="ses-active",
+            execution_profile_id="profile-1",
+            created_at="2026-09-05T00:00:00Z",
+        )
+        closed = session_store.build_session_record(
+            session_id="ses-closed",
+            execution_profile_id="profile-1",
+            created_at="2026-09-05T01:00:00Z",
+        )
+        session_store.write_session_record(tmp_path, active)
+        session_store.write_session_record(tmp_path, closed)
+        session_store.transition_session_record(tmp_path, closed["session-id"], "closed")
+
+        listed = api.list_execution_sessions(tmp_path)
+
+        assert [row["session-id"] for row in listed] == ["ses-active", "ses-closed"]
+    finally:
+        sessions_module._SESSION_RUNTIME = saved_runtime  # type: ignore[attr-defined]
+
+
 def test_api_close_orphaned_session_marks_failed(rig, monkeypatch):
     from audiagentic.components.agents.gateway import api as api
     from audiagentic.components.agents.gateway.session import sessions as sessions_module

@@ -1261,7 +1261,10 @@ def list_execution_sessions(
     records = session_store.list_session_records(project_root)
     if state is not None:
         records = [r for r in records if r["state"] == state]
+    # Keep non-terminal sessions first, retaining newest-first ordering within
+    # each lifecycle group.
     records.sort(key=lambda r: session_store.session_created_at(r) or "", reverse=True)
+    records.sort(key=lambda r: r.get("state") in session_store.SESSION_TERMINAL_STATES)
     rows = []
     for record in records:
         live = record["session-id"] in live_ids
