@@ -784,6 +784,24 @@ class GptAutoTurn:
             observation = Observation(
                 capabilities=caps, terminal_candidate=text_matches, terminal_verified_ok=text_matches
             )
+            # Submission-proof observations used to stay entirely inside the
+            # GPT watcher. Relay genuine prompt/assistant changes to the
+            # gateway as provider activity so a request does not remain at
+            # activity sequence zero while the browser is demonstrably
+            # processing. Soft UI liveness remains advisory and is not sent
+            # as lease-renewing activity.
+            if EvidenceCapability.PROGRESS in caps:
+                try:
+                    await self._emit(
+                        TransportObservationKind.ACTIVITY,
+                        {"model_activity": "response-progress"},
+                    )
+                except Exception:  # noqa: BLE001 - activity is advisory
+                    logger.debug(
+                        "gpt-auto submission-proof activity relay failed",
+                        extra={"turn-id": self.request.turn_id},
+                        exc_info=True,
+                    )
             previous_user_id = snap.latest_user_id
             previous_generating = snap.generating
             previous_dom_signals = snap.dom_signals

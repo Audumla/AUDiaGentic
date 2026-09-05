@@ -21,6 +21,7 @@ from urllib.parse import urlsplit
 
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.admission.context import ComponentContextReader
+from audiagentic.components.agents.gateway.mapping import normalize_chat_title
 from audiagentic.components.agents.gateway.queue import dispatch as dispatch
 from audiagentic.components.agents.gateway.queue import queue as queue_mod
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -853,11 +854,14 @@ def get_execution_diagnostics(
     evidence = record.get("diagnostic-evidence")
     if not isinstance(evidence, list):
         evidence = []
+    from audiagentic.components.agents.gateway.diagnostics import activity_monitoring_snapshot
+
     raw = {
         "request-id": request_id,
         "session-id": record.get("session-id"),
         "state": record.get("state"),
         "diagnostics": record.get("diagnostics"),
+        "monitoring": activity_monitoring_snapshot(record),
         "evidence": evidence[-limit:],
         "latest-transition": store.latest_transition_projection(project_root, request_id),
     }
@@ -1208,9 +1212,11 @@ def list_dashboard_requests(project_root: Path) -> list[dict[str, Any]]:
         chat_url = provider_metadata.get("chat-url") if isinstance(provider_metadata, dict) else None
         if isinstance(chat_url, str) and _safe_gpt_chat_url(chat_url) is not None:
             row["provider-chat-url"] = chat_url
-        chat_title = provider_metadata.get("chat-title") if isinstance(provider_metadata, dict) else None
-        if isinstance(chat_title, str) and chat_title.strip():
-            row["provider-chat-title"] = chat_title.strip()[:256]
+        chat_title = normalize_chat_title(
+            provider_metadata.get("chat-title") if isinstance(provider_metadata, dict) else None
+        )
+        if chat_title is not None:
+            row["provider-chat-title"] = chat_title
         rows.append(row)
     return rows
 

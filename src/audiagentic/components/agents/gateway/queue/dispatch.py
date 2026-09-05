@@ -279,6 +279,7 @@ def _dispatch_one_attempt(
                     lease,
                     float(persisted_policy.get("absolute-safety-ceiling-seconds", 0.0)),
                     float(persisted_policy.get("diagnostic-grace-seconds", 30.0)),
+                    float(persisted_policy.get("initial-activity-grace-seconds", watchdog_policy.initial_activity_grace_seconds)),
                     str(persisted_policy.get("policy-id", "snapshot")),
                     str(persisted_policy.get("policy-digest", "snapshot")),
                     True,

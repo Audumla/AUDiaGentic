@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from audiagentic.components.agents.gateway import store
 from audiagentic.components.agents.gateway.api import (
     get_execution_diagnostics,
     recover_execution_request,
 )
-from audiagentic.components.agents.gateway.diagnostics import classify_error, merge_diagnostics
+from audiagentic.components.agents.gateway.diagnostics import (
+    activity_monitoring_snapshot,
+    classify_error,
+    merge_diagnostics,
+)
 from audiagentic.components.agents.gateway.queue.dispatch import diagnose_activity_lease
 
 
@@ -120,6 +126,50 @@ def test_lease_expiry_persists_bounded_diagnostics_and_evidence(tmp_path) -> Non
     assert "prompt" not in str(projected).lower()
 
 
+def test_activity_monitoring_reports_first_activity_latency(tmp_path) -> None:
+    record = store.build_record(execution_profile_id="default", prompt_body="inspect")
+    record["state"] = "running"
+    record["started-at"] = "2026-09-05T00:00:00Z"
+    record["activity-sequence"] = 2
+    record["activity"] = {
+        **record["activity"],
+        "provider": {
+            **record["activity"]["provider"],
+            "first-at": "2026-09-05T00:00:04.250000Z",
+            "last-at": "2026-09-05T00:00:06Z",
+        },
+    }
+
+    snapshot = activity_monitoring_snapshot(
+        record, now=datetime.fromisoformat("2026-09-05T00:00:10+00:00")
+    )
+
+    assert snapshot["watcher-state"] == "observing"
+    assert snapshot["activity-sequence"] == 2
+    assert snapshot["first-activity-latency-seconds"] == 4.25
+    store.write_record(tmp_path, record)
+    public = get_execution_diagnostics(tmp_path, record["request-id"], limit=1)
+    assert public["monitoring"]["watcher-state"] == "observing"
+    assert public["monitoring"]["first-activity-latency-seconds"] == 4.25
+
+
+def test_activity_monitoring_reports_zero_activity_wait_without_failure() -> None:
+    record = {
+        "state": "running",
+        "started-at": "2026-09-05T00:00:00Z",
+        "activity-sequence": 0,
+        "activity": {"provider": {"first-at": None, "last-at": None}},
+    }
+
+    snapshot = activity_monitoring_snapshot(
+        record, now=datetime.fromisoformat("2026-09-05T00:00:42+00:00")
+    )
+
+    assert snapshot["watcher-state"] == "awaiting-first-activity"
+    assert snapshot["activity-sequence"] == 0
+    assert snapshot["no-activity-seconds"] == 42.0
+
+
 def test_lease_expiry_then_valid_activity_resolves_stale_observation(tmp_path) -> None:
     record = store.build_record(execution_profile_id="default", prompt_body="inspect")
     store.write_record(tmp_path, record)
@@ -153,6 +203,42 @@ def test_lease_expiry_then_valid_activity_resolves_stale_observation(tmp_path) -
     assert resumed["diagnostics"]["classification"] == "stale-progress"
     assert resumed["diagnostics"]["resolution-state"] == "resolved"
     assert resumed["diagnostics"]["reason-code"] == "activity-resumed"
+
+
+def test_initial_zero_activity_gets_non_terminal_reconciliation_diagnostic(tmp_path) -> None:
+    record = store.build_record(
+        execution_profile_id="gpt-auto",
+        prompt_body="inspect",
+        watchdog_policy={
+            "policy-id": "test",
+            "policy-digest": "test",
+            "activity-lease-seconds": 300.0,
+            "absolute-safety-ceiling-seconds": 0.0,
+            "diagnostic-grace-seconds": 30.0,
+            "initial-activity-grace-seconds": 1.0,
+            "available": True,
+        },
+    )
+    store.write_record(tmp_path, record)
+    claimed = store.claim_dispatch(tmp_path, record["request-id"], owner_epoch="service", expected_revision=0)
+    running = store.start_owned_attempt(
+        tmp_path,
+        record["request-id"],
+        owner_epoch="service",
+        worker_id="worker",
+        expected_revision=claimed["revision"],
+    )
+    expired = dict(running)
+    expired["started-at"] = "2000-01-01T00:00:00Z"
+    store.write_record(tmp_path, expired)
+
+    diagnosed = diagnose_activity_lease(tmp_path, expired)
+
+    assert diagnosed["state"] == "running"
+    assert diagnosed["activity-sequence"] == 0
+    assert diagnosed["watchdog-reason"] == "initial-activity-observation-expired"
+    assert diagnosed["diagnostics"]["reason-code"] == "initial-activity-observation-expired"
+    assert diagnosed["diagnostic-evidence"][-1]["kind"] == "initial-activity-timeout"
 
 
 def test_cancellation_provenance_is_durable(tmp_path) -> None:

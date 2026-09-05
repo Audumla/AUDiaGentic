@@ -147,6 +147,7 @@
           "required": ["capability", "last-at", "lease-expires-at", "source", "source-instance", "source-sequence", "phase"],
           "properties": {
             "capability": {"enum": ["unsupported", "supported", "unknown"]},
+            "first-at": {"type": ["string", "null"]},
             "last-at": {"type": ["string", "null"]},
             "lease-expires-at": {"type": ["string", "null"]},
             "source": {"type": ["string", "null"]},
@@ -257,6 +258,7 @@
         "activity-lease-seconds": {"type": "number", "exclusiveMinimum": 0},
         "absolute-safety-ceiling-seconds": {"type": "number", "minimum": 0},
         "diagnostic-grace-seconds": {"type": "number", "exclusiveMinimum": 0},
+        "initial-activity-grace-seconds": {"type": "number", "exclusiveMinimum": 0},
         "available": {"type": "boolean"}
       },
       "required": ["policy-id", "policy-digest", "activity-lease-seconds", "absolute-safety-ceiling-seconds", "diagnostic-grace-seconds", "available"],

@@ -27,12 +27,16 @@ def test_public_diagnostics_is_closed_and_redacted() -> None:
 
     assert set(result) == {
         "request-id", "session-id", "state", "diagnostics", "evidence",
-        "latest-transition", "truncated",
+        "latest-transition", "monitoring", "truncated",
     }
     assert "command" not in result["diagnostics"]
     assert "token" not in result["evidence"][0]
     assert "path" not in result["evidence"][0]
     assert "attributes" not in result["latest-transition"]
+    assert set(result["monitoring"]) <= {
+        "activity-sequence", "started-at", "first-activity-at",
+        "first-activity-latency-seconds", "no-activity-seconds", "watcher-state",
+    }
 
 
 def test_public_diagnostics_has_deterministic_encoded_bound() -> None:

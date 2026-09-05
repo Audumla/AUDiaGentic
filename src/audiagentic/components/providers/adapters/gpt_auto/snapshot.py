@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
+from audiagentic.components.agents.gateway.mapping import normalize_chat_title
+
 
 class PageObservationState(StrEnum):
     """Derived browser evidence; not a replacement for lifecycle state."""
@@ -280,5 +282,4 @@ def _text(value: Any) -> str | None:
 
 
 def _bounded_title(value: Any) -> str | None:
-    text = _text(value)
-    return text[:256] if text else None
+    return normalize_chat_title(value)

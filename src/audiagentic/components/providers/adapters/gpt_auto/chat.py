@@ -7,6 +7,7 @@ import logging
 import time
 from enum import StrEnum
 
+from audiagentic.components.agents.gateway.mapping import normalize_chat_title
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.session_binding import (
     ProviderSessionBindingSink,
@@ -1247,6 +1248,8 @@ def _reconciliation_evidence_clear(snapshot: ChatSnapshot) -> bool:
 
 def _metadata_text(metadata: dict[str, object], key: str) -> str | None:
     value = metadata.get(key)
+    if key == "chat-title":
+        return normalize_chat_title(value)
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 

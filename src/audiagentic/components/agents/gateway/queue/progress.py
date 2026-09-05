@@ -66,7 +66,10 @@ def _disposition(record: dict[str, Any]) -> tuple[ProgressDisposition, Interrupt
     provider_capability = provider_activity.get("capability", "unknown")
     if (
         record.get("watchdog-state") == "intervention"
-        and record.get("watchdog-reason") == "activity-lease-expired-diagnostic"
+        and record.get("watchdog-reason") in {
+            "activity-lease-expired-diagnostic",
+            "initial-activity-observation-expired",
+        }
         and provider_capability in {"supported", "unknown"}
     ):
         return (
