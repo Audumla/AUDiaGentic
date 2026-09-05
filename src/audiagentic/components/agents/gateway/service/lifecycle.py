@@ -111,6 +111,8 @@ class GatewayLifecycleController:
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._exit_reason: str | None = None
+        self.restart_enabled = False
+        self.restart_requested = False
 
     @property
     def exit_reason(self) -> str | None:
@@ -141,6 +143,8 @@ class GatewayLifecycleController:
         return self._store.status()
 
     def request_resume(self) -> dict[str, Any]:
+        if self.restart_requested:
+            raise lifecycle_conflict_error(1, "gateway restart is already underway")
         record = self._store.read()
         if record.state == "running":
             return self._store.status()
@@ -151,6 +155,25 @@ class GatewayLifecycleController:
         )
         logger.info("gateway drain cancelled; resumed")
         return self._store.status()
+
+    def request_restart(self) -> dict[str, Any]:
+        """Drain admission and refuse a restart that would interrupt work."""
+        if not self.restart_enabled:
+            raise lifecycle_conflict_error(1, "this gateway host does not support restart")
+        if self.restart_requested:
+            return {"restarting": True}
+        was_running = self._store.read().state == "running"
+        self.request_drain()
+        facts = gateway_quiescence_facts(self._store.root)
+        if not facts["quiescent"]:
+            if was_running:
+                self.request_resume()
+            raise lifecycle_conflict_error(1, "gateway has active work or live provider sessions; retry restart when idle")
+        self.restart_requested = True
+        self._exit_reason = "operator-restart"
+        self._stop_event.set()
+        self._shutdown_server()
+        return {"restarting": True}
 
     def request_stop(self, *, force: bool = False) -> dict[str, Any]:
         """Operator stop. Graceful refuses while work or other leases remain;

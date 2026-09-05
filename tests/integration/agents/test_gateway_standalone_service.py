@@ -232,22 +232,22 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b'id="recent-window"' in page
         assert b"recent-seconds" in page
         assert b"section('Active'" in page
-        assert b"section('Completed'" in page
-        assert b"section('Failed'" in page
+        assert b"section('Closed'" in page
+        assert b"section('Expired'" in page
         assert b"section('Other'" not in page
-        assert page.index(b"section('Active'") < page.index(b"section('Completed'") < page.index(b"section('Failed'")
+        assert page.index(b"section('Active'") < page.index(b"section('Closed'") < page.index(b"section('Expired'")
         assert b"request-identity" in page
         assert b"focusChat(button)" in page
         assert b"button.textContent" not in page
         assert b"function requestGroup(state)" in page
-        assert b"section('Active'" in page and b"section('Completed'" in page and b"section('Failed'" in page
-        assert b"sessionCard(s,rows,false,allRows)" in page
+        assert b"section('Active'" in page and b"section('Closed'" in page and b"section('Expired'" in page
+        assert b"sessionCard(s,rows,!rows.length,allRows)" in page
         assert b"COLLAPSED_SESSIONS_KEY" in page
         assert b"bindSessionToggles()" in page
         assert b"data-session-id=\"${esc(sessionId)}\"" in page
         assert b"flex:0 0 26px" in page
         assert b"request-header" in page
-        assert b'<path d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/>' in page
+        assert b'M14 3h7v7M21 3 11 13' in page
         assert b"function executionSummary(profile, provider, model)" in page
         assert b"identity.includes(model)" in page
         assert b"if(provider&&provider!==profile)identity.push(provider)" in page
@@ -256,7 +256,7 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b"border-bottom:1px solid #3b5278" in page
         assert b"font-size:12px; letter-spacing:.1em" in page
         assert b".request-header > div { display:flex; align-items:center;" in page
-        assert b"--request-cols:minmax(0,1.55fr)" in page
+        assert b"--request-cols:minmax(0,1.7fr)" in page
         assert b"newest requests first" in page
         assert b"byRequestNewest" in page
         assert b"byGroupUpdated" in page
@@ -269,7 +269,7 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b"Open tab" not in page
         assert b"&quot;',\"'\":'&#39;'" in page
         assert b"@container (max-width:440px)" in page
-        assert b".request-header > :nth-child(5) { display:none }" in page
+        assert b'role="columnheader"' not in page
         assert b"FAILED_REQUEST_STATES" in page
         assert b"includeExecution&&r['provider-chat-title']" in page
         assert b"work-section-head" in page

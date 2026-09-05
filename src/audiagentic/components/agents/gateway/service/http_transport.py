@@ -51,6 +51,9 @@ class GatewayHTTPServer(ThreadingHTTPServer):
         self.dashboard_snapshot_path = f"{self.dashboard_path}/snapshot"
         self.dashboard_focus_path = f"{self.dashboard_path}/focus"
         self.dashboard_purge_session_path = f"{self.dashboard_path}/purge-session"
+        self.dashboard_restart_path = f"{self.dashboard_path}/restart"
+        self.dashboard_cancel_path = f"{self.dashboard_path}/cancel-request"
+        self.dashboard_image_path = f"{self.dashboard_path}/project-image"
         self.dashboard_recent_seconds = dashboard_recent_seconds
         super().__init__(address, GatewayHTTPRequestHandler)
 
@@ -86,6 +89,39 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
                     200,
                     self.server.application.dashboard_snapshot(recent_seconds=recent_seconds),
                 )
+                return
+            if parsed.path == self.server.dashboard_image_path:
+                if method == "GET":
+                    project_id = parse_qs(parsed.query).get("project-id", [""])[0]
+                    image = self.server.application.dashboard_project_image(project_id)
+                    self._write_bytes(200 if image else 404, "image/png", image)
+                    return
+                self._authenticate_dashboard_action()
+                body = self._read_body()
+                if set(body) != {"project-id", "png"}:
+                    raise transport_error(23, "project image body must contain project-id and png only")
+                self.server.application.dashboard_project_image(_string(body, "project-id"), _string(body, "png"))
+                self._write_json(200, {"ok": True})
+                return
+            if method == "GET" and parsed.path == self.server.dashboard_restart_path:
+                self._authenticate_dashboard_action()
+                health = self.server.application.health()
+                self._write_json(200, {"state": health["state"], "owner-epoch": health["owner-epoch"]})
+                return
+            if method == "POST" and parsed.path == self.server.dashboard_restart_path:
+                self._authenticate_dashboard_action()
+                if self._read_body():
+                    raise transport_error(23, "dashboard restart body must be empty")
+                result = self.server.application.restart_dashboard_gateway()
+                self._write_json(202, {"ok": True, "result": result})
+                return
+            if method == "POST" and parsed.path == self.server.dashboard_cancel_path:
+                self._authenticate_dashboard_action()
+                body = self._read_body()
+                if set(body) != {"request-id"}:
+                    raise transport_error(23, "dashboard cancel body must contain request-id only")
+                result = self.server.application.cancel_dashboard_request(_string(body, "request-id"))
+                self._write_json(200, {"ok": True, "result": result})
                 return
             if method == "POST" and parsed.path == self.server.dashboard_focus_path:
                 self._authenticate_dashboard_action()
@@ -197,6 +233,7 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
             self.send_response(status)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(encoded)))
+            self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
             self.wfile.write(encoded)
         except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
