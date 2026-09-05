@@ -907,23 +907,36 @@ def test_api_lists_active_sessions_before_newer_closed_sessions(tmp_path, monkey
     saved_runtime = getattr(sessions_module, "_SESSION_RUNTIME", None)
     try:
         sessions_module._SESSION_RUNTIME = None  # type: ignore[attr-defined]
-        active = session_store.build_session_record(
-            session_id="ses-active",
+        active_z = session_store.build_session_record(
+            session_id="ses-active-z",
             execution_profile_id="profile-1",
             created_at="2026-09-05T00:00:00Z",
         )
-        closed = session_store.build_session_record(
-            session_id="ses-closed",
+        active_a = session_store.build_session_record(
+            session_id="ses-active-a",
+            execution_profile_id="profile-1",
+            created_at="2026-09-05T02:00:00Z",
+        )
+        closed_z = session_store.build_session_record(
+            session_id="ses-closed-z",
             execution_profile_id="profile-1",
             created_at="2026-09-05T01:00:00Z",
         )
-        session_store.write_session_record(tmp_path, active)
-        session_store.write_session_record(tmp_path, closed)
-        session_store.transition_session_record(tmp_path, closed["session-id"], "closed")
+        closed_a = session_store.build_session_record(
+            session_id="ses-closed-a",
+            execution_profile_id="profile-1",
+            created_at="2026-09-05T03:00:00Z",
+        )
+        for record in (active_z, active_a, closed_z, closed_a):
+            session_store.write_session_record(tmp_path, record)
+        for record in (closed_z, closed_a):
+            session_store.transition_session_record(tmp_path, record["session-id"], "closed")
 
         listed = api.list_execution_sessions(tmp_path)
 
-        assert [row["session-id"] for row in listed] == ["ses-active", "ses-closed"]
+        assert [row["session-id"] for row in listed] == [
+            "ses-active-a", "ses-active-z", "ses-closed-a", "ses-closed-z",
+        ]
     finally:
         sessions_module._SESSION_RUNTIME = saved_runtime  # type: ignore[attr-defined]
 

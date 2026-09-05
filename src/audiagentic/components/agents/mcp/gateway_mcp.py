@@ -250,7 +250,7 @@ def agent_task_gateway_overview() -> dict[str, Any]:
 @mcp.tool()
 @tool_boundary
 def agent_task_session_list(state: str | None = None) -> list[dict[str, Any]]:
-    """List persisted gateway sessions, newest first. Each entry carries a
+    """List persisted gateway sessions in stable lifecycle/ID order. Each entry carries a
     'live' flag: true when the session's agent process is held by this gateway
     process (only live sessions can accept new turns)."""
     project_root = project_root_from_env()

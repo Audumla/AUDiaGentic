@@ -23,7 +23,9 @@ from audiagentic.components.agents.gateway.application import InProcessGatewayAp
 from audiagentic.components.agents.gateway.queue import queue as agents_gateway_queue
 from audiagentic.components.agents.gateway.service.dashboard import (
     _most_recent,
+    _request_sort_key,
     _request_row,
+    _session_sort_key,
     render_dashboard_html,
 )
 from audiagentic.components.agents.gateway.session import sessions_store
@@ -567,6 +569,27 @@ def test_dashboard_newest_timestamp_uses_latest_activity_field():
         "updated-at": "2026-09-04T01:01:00Z",
         "last-activity-at": "2026-09-04T01:05:00Z",
     }) == "2026-09-04T01:05:00Z"
+
+
+def test_dashboard_ordering_uses_lifecycle_then_session_and_request_ids():
+    sessions = [
+        {"session-id": "ses-z", "state": "active", "updated-at": "2026-09-05T02:00:00Z"},
+        {"session-id": "ses-a", "state": "active", "updated-at": "2026-09-05T01:00:00Z"},
+        {"session-id": "ses-z-closed", "state": "closed", "updated-at": "2026-09-05T03:00:00Z"},
+        {"session-id": "ses-a-closed", "state": "closed", "updated-at": "2026-09-05T04:00:00Z"},
+    ]
+    assert [row["session-id"] for row in sorted(sessions, key=_session_sort_key)] == [
+        "ses-a", "ses-z", "ses-a-closed", "ses-z-closed",
+    ]
+
+    requests = [
+        {"session-id": "ses-z", "request-id": "req-z-new", "updated-at": "2026-09-05T05:00:00Z"},
+        {"session-id": "ses-a", "request-id": "req-a-z", "updated-at": "2026-09-05T01:00:00Z"},
+        {"session-id": "ses-a", "request-id": "req-a-a", "updated-at": "2026-09-05T06:00:00Z"},
+    ]
+    assert [(row["session-id"], row["request-id"]) for row in sorted(requests, key=_request_sort_key)] == [
+        ("ses-a", "req-a-a"), ("ses-a", "req-a-z"), ("ses-z", "req-z-new"),
+    ]
 
 
 def test_dashboard_request_projection_exposes_focus_for_live_gpt_without_chat_url():

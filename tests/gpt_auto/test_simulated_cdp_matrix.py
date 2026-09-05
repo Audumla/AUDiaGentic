@@ -68,6 +68,9 @@ def test_snapshot_resolves_sidebar_title_by_active_conversation_url() -> None:
     assert "const conversationId" in _SNAPSHOT_FN
     assert "const conversationTitle" in _SNAPSHOT_FN
     assert 'querySelectorAll("a[href]")' in _SNAPSHOT_FN
+    assert "const genericLabel" in _SNAPSHOT_FN
+    assert "skip to content" in _SNAPSHOT_FN
+    assert "anchor.innerText || anchor.textContent" in _SNAPSHOT_FN
     assert "conversationTitle," in _SNAPSHOT_FN
 
 

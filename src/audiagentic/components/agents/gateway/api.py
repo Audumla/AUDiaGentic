@@ -1245,7 +1245,7 @@ def list_execution_sessions(
     *,
     state: str | None = None,
 ) -> list[dict[str, Any]]:
-    """List persisted gateway sessions, newest first, with a 'live' flag for
+    """List persisted gateway sessions in stable lifecycle/ID order, with a 'live' flag for
     sessions whose transport is held by THIS process's SessionRuntime.
 
     Listing must never start a runtime as a side effect (peek only) — a
@@ -1261,9 +1261,10 @@ def list_execution_sessions(
     records = session_store.list_session_records(project_root)
     if state is not None:
         records = [r for r in records if r["state"] == state]
-    # Keep non-terminal sessions first, retaining newest-first ordering within
-    # each lifecycle group.
-    records.sort(key=lambda r: session_store.session_created_at(r) or "", reverse=True)
+    # Keep non-terminal sessions first, then use the durable session id as a
+    # stable tie-breaker. Updated timestamps are deliberately excluded: live
+    # activity would otherwise make the list jump between polls.
+    records.sort(key=lambda r: str(r.get("session-id") or "").casefold())
     records.sort(key=lambda r: r.get("state") in session_store.SESSION_TERMINAL_STATES)
     rows = []
     for record in records:
