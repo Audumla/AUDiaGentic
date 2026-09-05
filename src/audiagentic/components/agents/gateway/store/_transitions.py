@@ -974,6 +974,7 @@ def record_owned_activity(
             return updated
         normalized_label: str | None = None
         if kind == "provider":
+            bucket["first-at"] = bucket.get("first-at") or received_at
             normalized_label = normalize_activity_label(phase)
             bucket["phase"] = normalized_label or phase
             bucket["activity-label"] = normalized_label
@@ -1060,7 +1061,7 @@ def mark_watchdog_intervention_if_expired(
     terminal recovery. The owner/worker/attempt fence prevents stale monitors
     from annotating a successor attempt.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime, timedelta, timezone
 
     _require_owned_identity(owner_epoch, worker_id, attempt_epoch)
     with _request_lock(project_root, request_id):
@@ -1076,23 +1077,67 @@ def mark_watchdog_intervention_if_expired(
             return record
         activity = record.get("activity") if isinstance(record.get("activity"), dict) else {}
         provider = activity.get("provider") if isinstance(activity.get("provider"), dict) else {}
-        # A provider stall is meaningful only when the provider advertises a
-        # liveness capability and has emitted evidence. Otherwise retain the
-        # legacy owner-lease diagnostic (useful for older records).
-        if provider.get("capability") == "unsupported":
+        # Before the first accepted provider activity there is no activity
+        # lease to expire. Use the admission-frozen initial grace instead so a
+        # watcher that has lost its DOM observation path gets one diagnostic
+        # reconciliation opportunity rather than remaining at sequence zero
+        # forever. This is non-terminal and never proves provider failure.
+        first_activity = provider.get("first-at") or provider.get("last-at")
+        policy = record.get("watchdog-policy")
+        initial_grace = 30.0
+        if isinstance(policy, dict):
+            try:
+                candidate = float(policy.get("initial-activity-grace-seconds", 30.0))
+                if candidate > 0:
+                    initial_grace = candidate
+            except (TypeError, ValueError):
+                pass
+        initial_observation_expired = False
+        if not first_activity:
+            started = record.get("started-at")
+            try:
+                started_at = datetime.fromisoformat(str(started).replace("Z", "+00:00"))
+                if started_at.tzinfo is None:
+                    started_at = started_at.replace(tzinfo=timezone.utc)
+                initial_observation_expired = datetime.now(timezone.utc) >= started_at + timedelta(seconds=initial_grace)
+            except (TypeError, ValueError):
+                initial_observation_expired = False
+        expiry = None if initial_observation_expired else (
+            provider.get("lease-expires-at")
+            if provider.get("capability") == "supported" and provider.get("last-at")
+            else record.get("activity-lease-expires-at")
+        )
+        reason_code = (
+            "initial-activity-observation-expired"
+            if initial_observation_expired
+            else "activity-lease-expired"
+        )
+        evidence_kind = (
+            "initial-activity-timeout"
+            if initial_observation_expired
+            else "activity-lease-expired"
+        )
+        watchdog_reason = (
+            "initial-activity-observation-expired"
+            if initial_observation_expired
+            else "activity-lease-expired-diagnostic"
+        )
+        if provider.get("capability") == "unsupported" and not initial_observation_expired:
             return record
-        expiry = provider.get("lease-expires-at") if provider.get("capability") == "supported" and provider.get("last-at") else record.get("activity-lease-expires-at")
-        if not isinstance(expiry, str) or not expiry:
+        if not initial_observation_expired and (not isinstance(expiry, str) or not expiry):
             return record
-        try:
-            expired = datetime.fromisoformat(expiry.replace("Z", "+00:00")) <= datetime.now(timezone.utc)
-        except ValueError:
-            expired = False
+        if initial_observation_expired:
+            expired = True
+        else:
+            try:
+                expired = datetime.fromisoformat(expiry.replace("Z", "+00:00")) <= datetime.now(timezone.utc)
+            except ValueError:
+                expired = False
         if not expired or record.get("watchdog-state") == "intervention":
             return record
         timestamp = now_iso_z()
         updated = dict(record)
-        diagnostics = stale_progress_diagnostic()
+        diagnostics = stale_progress_diagnostic(reason_code=reason_code)
         prior = record.get("diagnostics")
         if isinstance(prior, dict):
             diagnostics["evidence-count"] = int(prior.get("evidence-count") or 0) + 1
@@ -1109,7 +1154,7 @@ def mark_watchdog_intervention_if_expired(
                 "session-id": record.get("session-id"),
                 "attempt-epoch": attempt_epoch,
                 "phase": "reconciliation",
-                "kind": "activity-lease-expired",
+                "kind": evidence_kind,
                 "certainty": "weak",
                 "side-effect-state": "may-have-started",
                 "source": "gateway-watchdog",
@@ -1118,12 +1163,18 @@ def mark_watchdog_intervention_if_expired(
         )[-8:]
         updated.update({
             "watchdog-state": "intervention",
-            "watchdog-reason": "activity-lease-expired-diagnostic",
+            "watchdog-reason": watchdog_reason,
             "updated-at": timestamp,
             "revision": record["revision"] + 1,
         })
         write_record(project_root, updated)
-        record_gateway_timeline(project_root, request_id, "activity.lease-expired-diagnostic", state="running", attributes={"attempt-epoch": attempt_epoch})
+        record_gateway_timeline(
+            project_root,
+            request_id,
+            "activity.lease-expired-diagnostic",
+            state="running",
+            attributes={"attempt-epoch": attempt_epoch, "reason-code": reason_code},
+        )
         return updated
 
 

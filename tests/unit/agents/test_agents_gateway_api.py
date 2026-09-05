@@ -549,6 +549,16 @@ def test_dashboard_request_projection_exposes_only_safe_gpt_chat_link(tmp_path: 
     assert "provider-chat-url" not in unsafe
 
 
+def test_dashboard_request_projection_omits_navigation_label_title(tmp_path: Path):
+    record = store.build_record(execution_profile_id="gpt-auto", prompt_body="review")
+    record["provider-metadata"] = {"chat-title": "Skip to content"}
+    store.write_record(tmp_path, record)
+
+    row = gateway.list_dashboard_requests(tmp_path)[0]
+
+    assert "provider-chat-title" not in row
+
+
 def test_dashboard_request_listing_does_not_load_full_response_artifacts(tmp_path: Path, monkeypatch):
     calls = []
     original = store.list_records
@@ -658,14 +668,15 @@ def test_dashboard_explains_terminal_provider_side_effect_evidence():
 
     assert "turn uncertain" in html
     assert "verify the provider session before retrying" in html
+    assert "if(r.state==='completed'||" in html
 
 
 def test_dashboard_formats_timestamps_using_operator_locale():
     """Dashboard presentation follows the browser's regional time settings."""
     html = render_dashboard_html("/dashboard/snapshot").decode("utf-8")
 
-    assert "toLocaleString()" in html
-    assert "toLocaleTimeString()" in html
+    assert "new Intl.DateTimeFormat(undefined,{dateStyle:'short',timeStyle:'short'})" in html
+    assert "new Intl.DateTimeFormat(undefined,{timeStyle:'medium'})" in html
 
 
 

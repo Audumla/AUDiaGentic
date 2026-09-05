@@ -75,6 +75,16 @@ def _evidence(value: Any) -> dict[str, Any]:
     return {field: _scalar(value[field]) for field in _EVIDENCE_FIELDS if field in value}
 
 
+def _monitoring(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    fields = (
+        "activity-sequence", "started-at", "first-activity-at",
+        "first-activity-latency-seconds", "no-activity-seconds", "watcher-state",
+    )
+    return {field: _scalar(value[field]) for field in fields if field in value}
+
+
 def project_public_diagnostics(
     payload: Mapping[str, Any],
     *,
@@ -90,6 +100,7 @@ def project_public_diagnostics(
         "session-id": _text(payload.get("session-id")),
         "state": _text(payload.get("state")),
         "diagnostics": _rollup(payload.get("diagnostics")),
+        "monitoring": _monitoring(payload.get("monitoring")),
         "evidence": evidence[-MAX_EVIDENCE_ITEMS:],
         "latest-transition": None,
         "truncated": False,

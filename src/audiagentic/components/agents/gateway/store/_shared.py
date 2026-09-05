@@ -68,6 +68,7 @@ def default_activity() -> dict:
         "last-source": None,
         "provider": {
             "capability": "unknown",
+            "first-at": None,
             "last-at": None,
             "lease-expires-at": None,
             "source": None,
