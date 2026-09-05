@@ -342,7 +342,7 @@ def test_dashboard_recent_window_filters_history_and_supports_query_override(
             "execution-profile-id": "default",
             "state": "active",
             "live": True,
-            "timing": {"updated-at": fresh},
+            "timing": {"updated-at": old},
             "activity": {"turn-count": 1},
         },
         {
@@ -388,6 +388,10 @@ def test_dashboard_recent_window_filters_history_and_supports_query_override(
         assert running["activity-type"] == "tool-progress"
         assert running["activity-sequence"] == 42
         assert {row["session-id"] for row in payload["projects"][0]["sessions"]} == {"ses-running", "ses-fresh"}
+        assert [row["session-id"] for row in payload["projects"][0]["sessions"]] == [
+            "ses-running",
+            "ses-fresh",
+        ]
         assert any(
             row["request-id"] == "req-one-shot" and "session-id" not in row
             for row in payload["projects"][0]["requests"]
