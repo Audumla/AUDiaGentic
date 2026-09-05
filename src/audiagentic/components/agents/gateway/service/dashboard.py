@@ -108,6 +108,9 @@ def dashboard_snapshot(
             key=_most_recent,
             reverse=True,
         )
+        # Keep active/non-terminal sessions ahead of closed history while
+        # preserving newest-first ordering inside each lifecycle group.
+        all_session_rows.sort(key=_session_is_terminal)
         # Session-backed requests inherit their immutable execution identity
         # from the session header.  Keep the request's durable snapshot
         # untouched, but omit the repeated profile/provider/model fields from
@@ -260,6 +263,13 @@ def _most_recent(row: dict[str, Any]) -> str:
     return max(valid, key=lambda item: item[1])[0]
 
 
+def _session_is_terminal(row: dict[str, Any]) -> bool:
+    """Return whether a session is closed, expired, or failed."""
+    from audiagentic.components.agents.gateway.session import sessions_store
+
+    return row.get("state") in sessions_store.SESSION_TERMINAL_STATES
+
+
 def _provider_diagnostics() -> dict[str, Any]:
     from audiagentic.components.providers.providers_api import (
         get_provider_load_errors,
@@ -321,7 +331,7 @@ const initialRecent=new URLSearchParams(window.location.search).get('recent-seco
 const stateFilter=document.getElementById('state-filter'); const showClosed=document.getElementById('show-closed'); const showEmpty=document.getElementById('show-empty'); const layoutFilter=document.getElementById('layout-filter'); const recentWindow=document.getElementById('recent-window'); let latest=null; let refreshGeneration=0; let refreshInFlight=false;
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const stamp=x=>{if(x===undefined||x===null||x===''||(typeof x==='number'&&!Number.isFinite(x)))return ''; const d=new Date(x); return Number.isFinite(d.getTime())?d.toLocaleString():''}; const isClosed=s=>['closed','expired'].includes(s?.state); const timestamp=x=>{const value=Date.parse(x||''); return Number.isFinite(value)?value:-Infinity}; const recent=x=>Math.max(...['updated-at','last-activity-at','closed-at','created-at'].map(key=>timestamp(x?.[key])));
-const byNewest=(a,b)=>recent(b)-recent(a); const stateClass=s=>'state-'+String(s||'').replaceAll('_','-');
+const byNewest=(a,b)=>recent(b)-recent(a); const SESSION_TERMINAL_STATES=new Set(['closed','expired','failed']); const bySessionStateThenNewest=(a,b)=>{const stateOrder=Number(SESSION_TERMINAL_STATES.has(a?.state))-Number(SESSION_TERMINAL_STATES.has(b?.state)); return stateOrder||byNewest(a,b)}; const stateClass=s=>'state-'+String(s||'').replaceAll('_','-');
 const ACTIVE_REQUEST_STATES=new Set(['queued','dispatching','running']); const FAILED_REQUEST_STATES=new Set(['failed','rejected','interrupted','timed-out','expired','abandoned']);
 function badge(state) { return `<span class="badge ${stateClass(state)}">${esc(state||'unknown')}</span>`; }
 function queueSummary(queues) { const entries=Object.entries(queues||{}); if(!entries.length) return 'no queue data'; return entries.map(([profile,depth])=>{const d=depth||{}; const parts=[]; if(d.pending) parts.push(`${d.pending} pending`); if(d.active_running) parts.push(`${d.active_running} running`); if(d.idle) parts.push(`${d.idle} idle`); return `${profile}: ${parts.join(', ')||'idle'}`}).join(' · '); }
@@ -354,7 +364,7 @@ function projectView(project) {
   Object.values(sections).forEach(groups=>groups.sort((a,b)=>groupNewest(b)-groupNewest(a))); if(!sections.active.length&&!sections.completed.length&&!sections.failed.length&&!emptySessions.length)return '';
   const tally={}; requests.forEach(r=>{tally[r.state]=(tally[r.state]||0)+1}); const pills=Object.entries(tally).map(([state,n])=>`<span class="pill ${stateClass(state)}">${n} ${esc(state)}</span>`).join('');
   const section=(title,groups)=>{if(!groups.length)return ''; const requestCount=groups.reduce((count,group)=>count+group[1].length,0); return `<section class="work-section"><div class="work-section-head"><h3>${title}</h3><span class="section-count">${requestCount}</span></div>${requestHeader()}<div class="sessions">${groups.map(([s,rows,allRows])=>s?sessionCard(s,rows,false,allRows):`<div class="orphan"><div class="request-grid">${requestRows(rows)}</div></div>`).join('')}</div></section>`};
-  const empty=emptySessions.length?`<section class="work-section"><div class="work-section-head"><h3>Empty sessions</h3><span class="section-count">${emptySessions.length}</span></div><div class="sessions">${emptySessions.sort(byNewest).map(s=>sessionCard(s,[],true,[])).join('')}</div></section>`:'';
+  const empty=emptySessions.length?`<section class="work-section"><div class="work-section-head"><h3>Empty sessions</h3><span class="section-count">${emptySessions.length}</span></div><div class="sessions">${emptySessions.sort(bySessionStateThenNewest).map(s=>sessionCard(s,[],true,[])).join('')}</div></section>`:'';
   return `<section class="project"><div class="project-head"><div><div class="project-name"><span class="icn">▣</span>${esc(project.name)}</div><div class="queue">${esc(queueSummary(project.queues))}</div></div><div class="pills">${pills}</div></div>${section('Active',sections.active)}${section('Completed',sections.completed)}${section('Failed',sections.failed)}${empty}</section>`;
 }
 function populateStates(snapshot) { const prior=stateFilter.value; const states=new Set(); (snapshot.projects||[]).forEach(p=>{(p.sessions||[]).forEach(s=>states.add(s.state));(p.requests||[]).forEach(r=>states.add(r.state))}); stateFilter.innerHTML='<option value="all">All states</option>'+[...states].filter(Boolean).sort().map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join(''); stateFilter.value=[...stateFilter.options].some(o=>o.value===prior)?prior:'all'; }
