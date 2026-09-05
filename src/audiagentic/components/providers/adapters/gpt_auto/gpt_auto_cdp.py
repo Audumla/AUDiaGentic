@@ -211,10 +211,18 @@ _SNAPSHOT_FN = r"""
         // while still accepting the mounted one so title capture does not
         // require focusing the browser first.
         matches.sort((left, right) => Number(right.visible) - Number(left.visible));
+        const genericLabel = /^(skip to content|chat history|open sidebar|close sidebar)$/i;
         for (const {anchor} of matches) {
-          const label = compactLabel(anchor.getAttribute("aria-label")) ||
-            compactLabel(anchor.innerText || anchor.textContent);
-          if (label) return label;
+          // Prefer the rendered sidebar text. Generic navigation anchors
+          // (notably "Skip to content") can share the conversation URL in
+          // ChatGPT's mounted DOM and are not conversation titles.
+          const candidates = [
+            compactLabel(anchor.innerText || anchor.textContent),
+            compactLabel(anchor.getAttribute("aria-label"))
+          ];
+          for (const label of candidates) {
+            if (label && !genericLabel.test(label)) return label;
+          }
         }
         return null;
       })()

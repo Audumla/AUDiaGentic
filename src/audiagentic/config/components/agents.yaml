@@ -319,7 +319,7 @@ mcp-servers:
         plus active work. Long-running requests remain non-terminal while
         providers work; watchdog diagnostics are observations, not completion.
       agent_task_session_list: >
-        List persisted gateway sessions, newest first. Each entry carries a
+        List persisted gateway sessions in stable lifecycle/ID order. Each entry carries a
         "live" flag: true when this process holds the session's agent process
         (only live sessions can accept new turns).
       agent_task_session_close: >

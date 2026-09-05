@@ -254,7 +254,7 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b"font-size:12px; letter-spacing:.1em" in page
         assert b".request-header > div { display:flex; align-items:center;" in page
         assert b"--request-cols:minmax(0,1.55fr)" in page
-        assert b"newest first" in page
+        assert b"session/request ID order" in page
         assert b"Watchdog monitoring guide" not in page
         assert b"activity-badge" in page
         assert b"function watchdogFlag" not in page

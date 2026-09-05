@@ -105,12 +105,11 @@ def dashboard_snapshot(
         sessions = api.list_execution_sessions(root)
         all_session_rows = sorted(
             (_session_row(session, live.get(session["session-id"])) for session in sessions),
-            key=_most_recent,
-            reverse=True,
+            key=_session_sort_key,
         )
-        # Keep active/non-terminal sessions ahead of closed history while
-        # preserving newest-first ordering inside each lifecycle group.
-        all_session_rows.sort(key=_session_is_terminal)
+        # Keep active/non-terminal sessions ahead of closed history.  The
+        # durable session id is the only secondary key: timestamps change as
+        # work progresses and would make the dashboard jump between polls.
         # Session-backed requests inherit their immutable execution identity
         # from the session header.  Keep the request's durable snapshot
         # untouched, but omit the repeated profile/provider/model fields from
@@ -121,8 +120,7 @@ def dashboard_snapshot(
                 _request_row(record, include_execution=not bool(record.get("session-id")))
                 for record in records
             ),
-            key=_most_recent,
-            reverse=True,
+            key=_request_sort_key,
         )
         request_rows = [row for row in all_request_rows if _is_visible_in_window(row, cutoff)]
         recent_request_ids = {row.get("session-id") for row in request_rows}
@@ -148,8 +146,8 @@ def dashboard_snapshot(
         )
 
     projects.sort(key=lambda project: project["name"].casefold())
-    requests.sort(key=_most_recent, reverse=True)
-    failures.sort(key=_most_recent, reverse=True)
+    requests.sort(key=_request_sort_key)
+    failures.sort(key=_request_sort_key)
     counts = Counter(row["state"] for row in requests)
     return {
         "contract-version": "v1",
@@ -270,6 +268,19 @@ def _session_is_terminal(row: dict[str, Any]) -> bool:
     return row.get("state") in sessions_store.SESSION_TERMINAL_STATES
 
 
+def _session_sort_key(row: dict[str, Any]) -> tuple[bool, str]:
+    """Sort sessions by lifecycle first, then stable session identity."""
+    return (_session_is_terminal(row), str(row.get("session-id") or "").casefold())
+
+
+def _request_sort_key(row: dict[str, Any]) -> tuple[str, str]:
+    """Sort requests by owning session id, then request id."""
+    return (
+        str(row.get("session-id") or "").casefold(),
+        str(row.get("request-id") or "").casefold(),
+    )
+
+
 def _provider_diagnostics() -> dict[str, Any]:
     from audiagentic.components.providers.providers_api import (
         get_provider_load_errors,
@@ -331,7 +342,7 @@ const initialRecent=new URLSearchParams(window.location.search).get('recent-seco
 const stateFilter=document.getElementById('state-filter'); const showClosed=document.getElementById('show-closed'); const showEmpty=document.getElementById('show-empty'); const layoutFilter=document.getElementById('layout-filter'); const recentWindow=document.getElementById('recent-window'); let latest=null; let refreshGeneration=0; let refreshInFlight=false;
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const stamp=x=>{if(x===undefined||x===null||x===''||(typeof x==='number'&&!Number.isFinite(x)))return ''; const d=new Date(x); return Number.isFinite(d.getTime())?d.toLocaleString():''}; const isClosed=s=>['closed','expired'].includes(s?.state); const timestamp=x=>{const value=Date.parse(x||''); return Number.isFinite(value)?value:-Infinity}; const recent=x=>Math.max(...['updated-at','last-activity-at','closed-at','created-at'].map(key=>timestamp(x?.[key])));
-const byNewest=(a,b)=>recent(b)-recent(a); const SESSION_TERMINAL_STATES=new Set(['closed','expired','failed']); const bySessionStateThenNewest=(a,b)=>{const stateOrder=Number(SESSION_TERMINAL_STATES.has(a?.state))-Number(SESSION_TERMINAL_STATES.has(b?.state)); return stateOrder||byNewest(a,b)}; const stateClass=s=>'state-'+String(s||'').replaceAll('_','-');
+const bySessionId=(a,b)=>String(a?.['session-id']||'').localeCompare(String(b?.['session-id']||'')); const byRequestId=(a,b)=>String(a?.['request-id']||'').localeCompare(String(b?.['request-id']||'')); const SESSION_TERMINAL_STATES=new Set(['closed','expired','failed']); const bySessionStateThenId=(a,b)=>{const stateOrder=Number(SESSION_TERMINAL_STATES.has(a?.state))-Number(SESSION_TERMINAL_STATES.has(b?.state)); return stateOrder||bySessionId(a,b)}; const bySessionThenRequest=(a,b)=>{const sessionOrder=bySessionId(a?.[0],b?.[0]); return sessionOrder||byRequestId(a?.[1]?.[0],b?.[1]?.[0])}; const stateClass=s=>'state-'+String(s||'').replaceAll('_','-');
 const ACTIVE_REQUEST_STATES=new Set(['queued','dispatching','running']); const FAILED_REQUEST_STATES=new Set(['failed','rejected','interrupted','timed-out','expired','abandoned']);
 function badge(state) { return `<span class="badge ${stateClass(state)}">${esc(state||'unknown')}</span>`; }
 function queueSummary(queues) { const entries=Object.entries(queues||{}); if(!entries.length) return 'no queue data'; return entries.map(([profile,depth])=>{const d=depth||{}; const parts=[]; if(d.pending) parts.push(`${d.pending} pending`); if(d.active_running) parts.push(`${d.active_running} running`); if(d.idle) parts.push(`${d.idle} idle`); return `${profile}: ${parts.join(', ')||'idle'}`}).join(' · '); }
@@ -347,12 +358,11 @@ async function purgeSession(button) { const id=button.dataset.sessionId; if(!win
 function bindFocusButtons() { document.querySelectorAll('.focus-chat').forEach(button=>button.addEventListener('click',()=>focusChat(button))); document.querySelectorAll('.purge-session').forEach(button=>button.addEventListener('click',()=>purgeSession(button))); }
 function requestHeader() { const labels=['Request','State','Activity','Updated','Error']; return `<div class="request-header" role="row">${labels.map(label=>`<div role="columnheader">${label}</div>`).join('')}</div>`; }
 function executionSummary(profile, provider, model) { const identity=[]; if(profile)identity.push(profile); if(provider&&provider!==profile)identity.push(provider); const left=identity.join(' · '); return model&&!identity.includes(model)?left+(left?' / ':'')+model:left; }
-function requestRows(rows, includeExecution=true) { const ordered=rows.slice().sort(byNewest); if(!ordered.length)return `<div class="muted">No matching requests</div>`; return ordered.map(r=>{const d=r.diagnostics||{}; const execution=includeExecution?executionSummary(esc(r['execution-profile-id']||''),esc(r['resolved-provider-id']||''),esc(r['resolved-model-id']||'')):''; const error=esc(d.classification||r.error?.code||'')+' '+esc(d['recovery']?.disposition||r.error?.message||''); const title=includeExecution&&r['provider-chat-title']?`<span class="request-title" title="${esc(r['provider-chat-title'])}">${esc(r['provider-chat-title'])}</span>`:''; return `<div class="request-row"><div class="request-identity"><code class="request-id">${esc(r['request-id'])}</code>${title}${execution?`<span class="request-execution" title="${execution}">${execution}</span>`:''}${chatLink(r)}</div><div>${badge(r.state)}${sideEffectFlag(r)}</div><div class="request-meta">${activityLabel(r)||'<span class="muted">none</span>'}</div><div class="request-meta">${stamp(recent(r))}</div><div class="request-error">${error||'<span class="muted">none</span>'}</div></div>`}).join(''); }
+function requestRows(rows, includeExecution=true) { const ordered=rows.slice().sort(byRequestId); if(!ordered.length)return `<div class="muted">No matching requests</div>`; return ordered.map(r=>{const d=r.diagnostics||{}; const execution=includeExecution?executionSummary(esc(r['execution-profile-id']||''),esc(r['resolved-provider-id']||''),esc(r['resolved-model-id']||'')):''; const error=esc(d.classification||r.error?.code||'')+' '+esc(d['recovery']?.disposition||r.error?.message||''); const title=includeExecution&&r['provider-chat-title']?`<span class="request-title" title="${esc(r['provider-chat-title'])}">${esc(r['provider-chat-title'])}</span>`:''; return `<div class="request-row"><div class="request-identity"><code class="request-id">${esc(r['request-id'])}</code>${title}${execution?`<span class="request-execution" title="${execution}">${execution}</span>`:''}${chatLink(r)}</div><div>${badge(r.state)}${sideEffectFlag(r)}</div><div class="request-meta">${activityLabel(r)||'<span class="muted">none</span>'}</div><div class="request-meta">${stamp(recent(r))}</div><div class="request-error">${error||'<span class="muted">none</span>'}</div></div>`}).join(''); }
 function matchesState(session, rows) { const wanted=stateFilter.value; return wanted==='all'||session.state===wanted||rows.some(r=>r.state===wanted); }
 function matchesRequest(row) { return stateFilter.value==='all'||row.state===stateFilter.value; }
 function sessionCard(session, rows, empty=false, allRows=rows) { const purgeable=!allRows.some(r=>ACTIVE_REQUEST_STATES.has(r.state))&&!session['turn-active']&&!(session['pending-turns']>0); const purge=purgeable?`<button type="button" class="action-button icon-button purge-session" data-session-id="${esc(session['session-id'])}" aria-label="Purge session" title="Permanently remove this session and all gateway data">${purgeIcon}</button>`:''; const execution=executionSummary(esc(session['execution-profile-id']||''),esc(session['provider-id']||''),esc(session['model-id']||'')); const title=session['provider-chat-title']?`<div class="session-chat-title" title="${esc(session['provider-chat-title'])}">${esc(session['provider-chat-title'])}</div>`:''; return `<details class="session ${stateClass(session.state)}" open><summary><div class="session-head"><div class="session-identity"><h3><code>${esc(session['session-id'])}</code>${execution?` <span class="session-profile">${execution}</span>`:''} ${session.live?'<span class="live">live</span>':''}</h3>${title}</div><div class="session-actions">${badge(session.state)} ${session['turn-active']?'<span class="live">turn active</span>':''}<span class="muted">${session['turn-count']||0} turns · ${session['pending-turns']||0} pending</span>${purge}</div></div></summary><div class="session-body"><div class="request-grid">${empty?'<div class="muted">No matching requests</div>':requestRows(rows,false)}</div></div></details>`; }
 function requestGroup(state) { if(ACTIVE_REQUEST_STATES.has(state)) return 'active'; if(FAILED_REQUEST_STATES.has(state)) return 'failed'; return 'completed'; }
-function groupNewest(group) { const rows=group[1]||[]; return rows.length?Math.max(...rows.map(recent)):recent(group[0]); }
 function projectView(project) {
   const grouped=new Map(); const requests=(project.requests||[]);
   requests.forEach(r=>{const id=r['session-id']; if(id){const existing=grouped.get(id)||[]; existing.push(r); grouped.set(id,existing)}});
@@ -361,10 +371,10 @@ function projectView(project) {
   const sections={active:[],completed:[],failed:[]}; const emptySessions=[];
   sessionGroups.forEach(group=>{const bySection={active:[],completed:[],failed:[]}; group.rows.forEach(r=>bySection[requestGroup(r.state)].push(r)); let placed=false; Object.entries(bySection).forEach(([name,rows])=>{if(rows.length){sections[name].push([group.session,rows,group.allRows]); placed=true}}); if(!placed&&showEmpty.checked) emptySessions.push(group.session);});
   const unbound=requests.filter(r=>(!r['session-id']||!knownSessionIds.has(r['session-id']))&&matchesRequest(r)); unbound.forEach(r=>sections[requestGroup(r.state)].push([null,[r],[]]));
-  Object.values(sections).forEach(groups=>groups.sort((a,b)=>groupNewest(b)-groupNewest(a))); if(!sections.active.length&&!sections.completed.length&&!sections.failed.length&&!emptySessions.length)return '';
+  Object.values(sections).forEach(groups=>groups.sort(bySessionThenRequest)); if(!sections.active.length&&!sections.completed.length&&!sections.failed.length&&!emptySessions.length)return '';
   const tally={}; requests.forEach(r=>{tally[r.state]=(tally[r.state]||0)+1}); const pills=Object.entries(tally).map(([state,n])=>`<span class="pill ${stateClass(state)}">${n} ${esc(state)}</span>`).join('');
   const section=(title,groups)=>{if(!groups.length)return ''; const requestCount=groups.reduce((count,group)=>count+group[1].length,0); return `<section class="work-section"><div class="work-section-head"><h3>${title}</h3><span class="section-count">${requestCount}</span></div>${requestHeader()}<div class="sessions">${groups.map(([s,rows,allRows])=>s?sessionCard(s,rows,false,allRows):`<div class="orphan"><div class="request-grid">${requestRows(rows)}</div></div>`).join('')}</div></section>`};
-  const empty=emptySessions.length?`<section class="work-section"><div class="work-section-head"><h3>Empty sessions</h3><span class="section-count">${emptySessions.length}</span></div><div class="sessions">${emptySessions.sort(bySessionStateThenNewest).map(s=>sessionCard(s,[],true,[])).join('')}</div></section>`:'';
+  const empty=emptySessions.length?`<section class="work-section"><div class="work-section-head"><h3>Empty sessions</h3><span class="section-count">${emptySessions.length}</span></div><div class="sessions">${emptySessions.sort(bySessionStateThenId).map(s=>sessionCard(s,[],true,[])).join('')}</div></section>`:'';
   return `<section class="project"><div class="project-head"><div><div class="project-name"><span class="icn">▣</span>${esc(project.name)}</div><div class="queue">${esc(queueSummary(project.queues))}</div></div><div class="pills">${pills}</div></div>${section('Active',sections.active)}${section('Completed',sections.completed)}${section('Failed',sections.failed)}${empty}</section>`;
 }
 function populateStates(snapshot) { const prior=stateFilter.value; const states=new Set(); (snapshot.projects||[]).forEach(p=>{(p.sessions||[]).forEach(s=>states.add(s.state));(p.requests||[]).forEach(r=>states.add(r.state))}); stateFilter.innerHTML='<option value="all">All states</option>'+[...states].filter(Boolean).sort().map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join(''); stateFilter.value=[...stateFilter.options].some(o=>o.value===prior)?prior:'all'; }
@@ -390,7 +400,7 @@ function draw(snapshot) {
   const projectsElement=document.getElementById('projects'); projectsElement.className='layout-'+chosenLayout; projectsElement.innerHTML=projects||'<div class="empty">No sessions match these filters.</div>';
   bindFocusButtons();
   const visible=document.querySelectorAll('#projects .session').length;
-  document.getElementById('visible-summary').textContent=`${visible} sessions visible · newest first · ${dashboard['recent-window-seconds']??''} sec window`;
+  document.getElementById('visible-summary').textContent=`${visible} sessions visible · active first · session/request ID order · ${dashboard['recent-window-seconds']??''} sec window`;
 }
 async function refresh(){if(refreshInFlight)return; const generation=++refreshGeneration; refreshInFlight=true; try{const response=await fetch(endpoint,{cache:'no-store'}); const snapshot=await response.json(); if(generation===refreshGeneration) draw(snapshot);}catch(error){if(generation===refreshGeneration){document.getElementById('health').classList.add('stale');document.getElementById('updated').textContent='Dashboard refresh failed: '+error}}finally{refreshInFlight=false;}}
 function applyWindow(){const value=recentWindow.value.trim(); if(value){const parsed=Number.parseInt(value,10); if(!Number.isInteger(parsed)||parsed<1)return; endpoint.searchParams.set('recent-seconds',String(parsed));}else endpoint.searchParams.delete('recent-seconds'); const pageUrl=new URL(window.location.href); if(endpoint.searchParams.has('recent-seconds')) pageUrl.searchParams.set('recent-seconds',endpoint.searchParams.get('recent-seconds')); else pageUrl.searchParams.delete('recent-seconds'); window.history.replaceState(null,'',pageUrl.pathname+(pageUrl.search?`?${pageUrl.searchParams}`:'')+pageUrl.hash); refresh();}
