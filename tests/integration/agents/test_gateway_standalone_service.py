@@ -246,8 +246,8 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b"request-header" in page
         assert b'<path d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/>' in page
         assert b"function executionSummary(profile, provider, model)" in page
-        assert b"names.includes(name)" in page
-        assert b"[profile,provider,model]" in page
+        assert b"identity.includes(model)" in page
+        assert b"if(provider&&provider!==profile)identity.push(provider)" in page
         assert b"request-title" in page
         assert b"session-profile" in page
         assert b"border-bottom:2px solid #3b5278" in page
@@ -261,6 +261,13 @@ def test_loopback_dashboard_is_public_but_redacted_and_independent_of_browser(
         assert b"chat-link" in page
         assert b"aria-label=\"Open or focus GPT tab\"" in page
         assert b"Open tab" not in page
+        assert b"&quot;',\"'\":'&#39;'" in page
+        assert b"@container (max-width:440px)" in page
+        assert b".request-header > :nth-child(5) { display:none }" in page
+        assert b"FAILED_REQUEST_STATES" in page
+        assert b"includeExecution&&r['provider-chat-title']" in page
+        assert b"work-section-head" in page
+        assert b"section-count" in page
         assert b"turn active" in page
         assert b"unresolved</span>" not in page
         assert b"Purge" in page
