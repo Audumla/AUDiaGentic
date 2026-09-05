@@ -675,8 +675,19 @@ def test_dashboard_formats_timestamps_using_operator_locale():
     """Dashboard presentation follows the browser's regional time settings."""
     html = render_dashboard_html("/dashboard/snapshot").decode("utf-8")
 
-    assert "new Intl.DateTimeFormat(undefined,{dateStyle:'short',timeStyle:'short'})" in html
+    assert "new Intl.DateTimeFormat(undefined,{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})" in html
     assert "new Intl.DateTimeFormat(undefined,{timeStyle:'medium'})" in html
+
+
+def test_dashboard_compact_layout_keeps_diagnostics_out_of_primary_columns():
+    html = render_dashboard_html("/dashboard/snapshot").decode("utf-8")
+
+    assert 'role="columnheader"' not in html
+    assert "function requestDiagnostic(" in html
+    assert "request-diagnostic" in html
+    assert 'aria-label="Provider turn uncertain"' in html
+    assert ".action-button.icon-button" in html
+    assert ".session-technical" in html
 
 
 

@@ -141,8 +141,39 @@ class GatewayServiceApplication:
         """Per-process token used only by the rendered dashboard action."""
         return self._dashboard_action_token
 
+    def dashboard_project_image(self, project_id: str, encoded: str | None = None) -> bytes:
+        from audiagentic.components.agents.gateway.service.dashboard_images import image_path, project_image_id, save_image
+        from audiagentic.components.agents.gateway.service.known_projects import load_known_projects
+
+        known = load_known_projects(self._service_store.root / "known-projects.json")
+        if not any(project_image_id(p.project_root) == project_id for p in known.projects):
+            raise service_validation_error(23, "dashboard project not found")
+        if encoded is not None:
+            save_image(self._service_store.root, project_id, encoded)
+            return b""
+        path = image_path(self._service_store.root, project_id)
+        return path.read_bytes() if path.is_file() else b""
+
     def focus_dashboard_request(self, request_id: str) -> dict[str, Any]:
         """Resolve a dashboard request id across known projects and focus it."""
+        matches = self._dashboard_request_projects(request_id)
+        if len(matches) != 1:
+            return {
+                "request-id": request_id,
+                "outcome": "not-found" if not matches else "ambiguous",
+                "reason": "request-project-not-found" if not matches else "request-id-not-unique",
+            }
+        return self._application.focus_execution_chat(matches[0], request_id)
+
+    def cancel_dashboard_request(self, request_id: str) -> dict[str, Any]:
+        """Cancel through the canonical API; never accept a client-supplied root."""
+        matches = self._dashboard_request_projects(request_id)
+        if len(matches) != 1:
+            raise service_conflict_error(30, "request not found or request id is ambiguous")
+        self._application.cancel_execution_request(matches[0], request_id)
+        return {"request-id": request_id, "outcome": "cancellation-requested"}
+
+    def _dashboard_request_projects(self, request_id: str) -> list[Path]:
         from audiagentic.components.agents.gateway.service.known_projects import load_known_projects
 
         matches = []
@@ -157,13 +188,7 @@ class GatewayServiceApplication:
             except Exception:
                 continue
             matches.append(known.project_root)
-        if len(matches) != 1:
-            return {
-                "request-id": request_id,
-                "outcome": "not-found" if not matches else "ambiguous",
-                "reason": "request-project-not-found" if not matches else "request-id-not-unique",
-            }
-        return self._application.focus_execution_chat(matches[0], request_id)
+        return matches
 
     def purge_dashboard_session(self, session_id: str) -> dict[str, Any]:
         """Purge one dashboard session after resolving its owning project."""
@@ -449,6 +474,12 @@ class GatewayServiceApplication:
                 raise service_validation_error(26, "service_stop force must be a boolean")
             return self._lifecycle_controller().request_stop(force=force)
         raise service_validation_error(1, "unknown gateway service operation", operation=operation)
+
+    def restart_dashboard_gateway(self) -> dict[str, Any]:
+        if self._operations_active():
+            raise service_conflict_error(30, "gateway has active operator operations; retry when idle")
+        epoch = self._service_store.read().owner_epoch
+        return {**self._lifecycle_controller().request_restart(), "owner-epoch": epoch}
 
     def _lifecycle_controller(self) -> Any:
         if self._lifecycle is None:
