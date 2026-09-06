@@ -150,7 +150,8 @@ class TestAcpKindToTransportMapping:
         )
         obs = _map_acp_event_to_observation(ev_with_text, "ag-s-1", "turn-t-1")
         assert obs.kind == TransportObservationKind.ACTIVITY
-        assert obs.attributes.get("model_activity") == ev_text
+        assert obs.attributes.get("model_activity") == "thinking"
+        assert ev_text not in str(obs.attributes)
 
     def test_status_maps_to_activity(self):
         ev = self._make_acp_event("status")

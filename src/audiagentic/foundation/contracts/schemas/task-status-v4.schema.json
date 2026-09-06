@@ -9,6 +9,11 @@
     "activity_seq"
   ],
   "properties": {
+    "warnings": {"type": "array", "maxItems": 3, "items": {
+      "type": "object", "properties": {
+        "code": {"type": "string", "maxLength": 80}, "message": {"type": "string", "maxLength": 240}, "session-id": {"type": "string"}
+      }, "required": ["code", "message"], "additionalProperties": false
+    }},
     "task_id": {
       "type": "string",
       "minLength": 1

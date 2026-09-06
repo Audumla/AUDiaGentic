@@ -722,21 +722,9 @@ async def test_unresolved_recovery_reconciles_despite_stuck_generating_signal() 
     chat.state = ChatState.RECOVERING
     chat.mark_submission_unresolved("the submitted prompt")
 
-    # First reconciliation attempt: correlation evidence matches but a
-    # second stable observation is required before clearing.
-    with pytest.raises(AudiaGenticError) as first_error:
-        await chat.ensure_ready()
-    assert first_error.value.details["recovery-reason"] == "awaiting-second-stable-observation"
-
-    # GP18 code review: a matching fingerprint alone is not enough -- real
-    # time must also pass (response_stability_seconds), so a caller
-    # retrying immediately can't rush past the stability window. Simulate
-    # that real time elapsed between the two observations.
-    chat._unresolved_match_fingerprint_at -= config.turn.response_stability_seconds + 1
-
-    # Second identical observation, after the stability window: reconciles
-    # successfully despite the stuck generating=True/stop-control the
-    # whole time.
+    # Admission now owns the bounded wait for the required second stable
+    # observation. A queued successor does not fail merely because its first
+    # recovery poll armed the stability window.
     await chat.ensure_ready()
     assert chat.state is ChatState.READY
     assert chat.unresolved_turn_pending is False

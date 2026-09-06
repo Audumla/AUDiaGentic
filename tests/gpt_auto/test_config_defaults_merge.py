@@ -1,6 +1,6 @@
 """GP20: gpt-auto's three-tier-ready config loader (packaged defaults +
 project overlay). Covers deep_merge()'s recursive/replace semantics and
-GptAutoConfig.from_project_dict()'s resolution against defaults.yaml."""
+GptAutoConfig.from_project_dict()'s resolution against gpt-auto-defaults.yaml."""
 
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ def test_from_project_dict_resolves_a_sparse_overlay_specifying_only_project_url
     config = GptAutoConfig.from_project_dict(overlay)
 
     assert config.project_url == "https://chatgpt.com/g/g-p-test-project"
-    # Values not mentioned in the overlay come from defaults.yaml.
+    # Values not mentioned in the overlay come from gpt-auto-defaults.yaml.
     assert config.browser.remote_debugging_port == 9222
     assert config.turn.response_timeout_seconds == 3600
     assert config.workflow.policy("response-complete").all_of
@@ -75,7 +75,7 @@ def test_from_project_dict_tolerates_an_already_unwrapped_settings_dict() -> Non
     harness's _load_live_settings(), which does data.get('settings', data)
     itself before passing the result on) pass an already-unwrapped bare
     settings dict, not the {"settings": {...}} shape every on-disk config
-    file has. Merging a wrapped defaults.yaml against an unwrapped project
+    file has. Merging a wrapped gpt-auto-defaults.yaml against an unwrapped project
     dict without unwrapping both first silently discards every project
     override (project-url included) and falls through to defaults."""
     unwrapped_overlay = {

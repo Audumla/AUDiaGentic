@@ -11,6 +11,15 @@ from .urls import canonical_project_url, parse_project_id
 
 _PROJECTS_URL = "https://chatgpt.com/projects"
 
+
+class ComposerSubmissionTimeout(TimeoutError):
+    """Preserve whether a send-capable operation was dispatched before timeout."""
+
+    def __init__(self, *, send_attempted: bool, stage: str) -> None:
+        super().__init__(f"composer operation timed out during {stage}")
+        self.send_attempted = send_attempted
+        self.stage = stage
+
 _SNAPSHOT_FN = r"""
 (signalSpecs) => {
   const shown = (el) => {
@@ -164,7 +173,7 @@ _SNAPSHOT_FN = r"""
   // generating mirrors the same per-signal-scoped evidence the domSignals
   // walk above already computes -- stop-control stays document-scoped (the
   // stop button lives outside the assistant-turn subtree, per
-  // defaults.yaml), while streaming/thinking/busy-indicator stay scoped to
+  // gpt-auto-defaults.yaml), while streaming/thinking/busy-indicator stay scoped to
   // latest-assistant-turn (so a stale class on an OLDER, already-finished
   // message elsewhere in a long conversation can't pin generating=true for
   // the CURRENT turn). Previously this was a second, always-document-wide
@@ -401,88 +410,62 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         )
         return {"stopped": bool(stopped)}
 
-    _SUBMIT_MAX_ATTEMPTS = 3
-    _SUBMIT_RETRY_DELAY_SECONDS = 0.2
-    # React needs a little time to propagate the synthetic input event into
-    # the Send control.  25 ms was occasionally enough to leave the prompt in
-    # the composer while the button was still disabled; keep this delay
-    # outside page execution so navigation cannot collect the timer promise.
-    _COMPOSER_SETTLE_DELAY_SECONDS = 0.15
+    _SUBMIT_POLL_SECONDS = 0.1
+    _SUBMIT_DEFAULT_TIMEOUT_SECONDS = 15.0
 
     async def submit(
         self, page: CdpPageRef, text: str, *, timeout: float | None = None
     ) -> dict[str, Any]:
         if not isinstance(text, str) or not text.strip():
             raise ValueError("text must be a non-empty string")
-
-        async def _submit_once() -> dict[str, Any]:
-            # select-all + insertText replaces any existing composer content,
-            # so this is safe to call again on a retry -- it always leaves
-            # the composer holding exactly `text`, never a concatenation of
-            # a prior attempt's leftover content (GP11, verified live).
-            typed = await self.evaluate(
-                page,
-                """(text) => {
-              // GP35: see the composer-detection query above -- must match
-              // the real chat composer, never a canvas turn's inline editor.
-              const editor = document.querySelector('#prompt-textarea');
-              if (!editor) throw new Error('composer not found');
-              editor.focus();
-              const selection = window.getSelection(); selection.removeAllRanges();
-              const range = document.createRange(); range.selectNodeContents(editor); selection.addRange(range);
-              if (!document.execCommand('insertText', false, text)) throw new Error('browser rejected atomic composer insertion');
-              editor.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertText', data: text}));
-              return (editor.innerText || editor.textContent || '').trim();
-            }""",
-                text,
-            )
-            # Keep the settling delay outside the page execution context.  A
-            # ChatGPT send click can synchronously replace/navigate the React
-            # tree; awaiting a browser-side timer across that replacement can
-            # make CDP report "Promise was collected" even though the click
-            # side effect was accepted.
-            await asyncio.sleep(self._COMPOSER_SETTLE_DELAY_SECONDS)
-            sent = await self.evaluate(
-                page,
-                """() => {
-              const button = document.querySelector('[data-testid="send-button"], button[aria-label*="Send" i]');
-              if (!button || button.disabled || button.getAttribute('aria-disabled') === 'true') return false;
-              button.click(); return true;
-            }""",
-            )
-            if not sent:
-                await self.bridge.call("dispatch_enter", {"pageHandle": self._handle(page)})
-            # Enter dispatch is only a fallback attempt.  CDP has no proof
-            # that ChatGPT accepted it, so do not report a completed submit
-            # when the Send control was unavailable.
-            return {
-                "actionComplete": bool(sent),
-                "typedText": typed,
-                "sendButtonClicked": bool(sent),
-                "enterDispatched": not bool(sent),
-            }
-
-        async def _submit_with_retry() -> dict[str, Any]:
-            # GP11: neither the send-button click nor the Enter fallback has
-            # any built-in retry -- one attempt, and if the button was
-            # transiently absent/disabled (e.g. right after a prior turn
-            # resolves, before the composer settles) the whole submission
-            # fails immediately with composer-action-not-confirmed, even
-            # though the composer clear-and-retype above makes a retry safe.
-            # Bound this at the DOM-interaction layer instead of pushing the
-            # cost onto every caller.
-            result = await _submit_once()
-            attempt = 1
-            while not result["actionComplete"] and attempt < self._SUBMIT_MAX_ATTEMPTS:
-                await asyncio.sleep(self._SUBMIT_RETRY_DELAY_SECONDS)
-                result = await _submit_once()
-                attempt += 1
-            return result
-
-        if timeout is None:
-            return await _submit_with_retry()
-        async with asyncio.timeout(timeout):
-            return await _submit_with_retry()
+        send_attempted = False
+        stage = "composer-insertion"
+        try:
+            async with asyncio.timeout(timeout if timeout is not None else self._SUBMIT_DEFAULT_TIMEOUT_SECONDS):
+                typed = await self.evaluate(
+                    page,
+                    """(text) => {
+                      const editor = document.querySelector('#prompt-textarea');
+                      if (!editor) throw new Error('composer not found');
+                      editor.focus();
+                      const selection = window.getSelection(); selection.removeAllRanges();
+                      const range = document.createRange(); range.selectNodeContents(editor); selection.addRange(range);
+                      if (!document.execCommand('insertText', false, text)) throw new Error('browser rejected atomic composer insertion');
+                      editor.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertText', data: text}));
+                      return (editor.innerText || editor.textContent || '').trim();
+                    }""",
+                    text,
+                )
+                while True:
+                    # One synchronous DOM operation verifies both readiness
+                    # conditions and clicks once. No browser-side timer survives
+                    # a React navigation, and no Enter bypasses a disabled Send.
+                    stage = "send-button"
+                    send_attempted = True
+                    sent = await self.evaluate(
+                        page,
+                        r"""(text) => {
+                          // innerText includes layout whitespace between rich-editor
+                          // paragraphs. Compare content without that presentation
+                          // whitespace; never rewrite the submitted prompt itself.
+                          const normalize = value => String(value || '').replace(/\s+/g, ' ').trim();
+                          const editor = document.querySelector('#prompt-textarea');
+                          if (!editor || !editor.isContentEditable) return false;
+                          if (normalize(editor.innerText || editor.textContent || '') !== normalize(text)) return false;
+                          const button = document.querySelector('[data-testid="send-button"], button[aria-label*="Send" i]');
+                          if (!button || button.disabled || button.getAttribute('aria-disabled') === 'true' || !button.getClientRects().length) return false;
+                          button.click(); return true;
+                        }""",
+                        text,
+                    )
+                    if sent is True:
+                        return {"actionComplete": True, "typedText": typed,
+                                "sendButtonClicked": True, "enterDispatched": False}
+                    send_attempted = False
+                    stage = "composer-readiness"
+                    await asyncio.sleep(self._SUBMIT_POLL_SECONDS)
+        except TimeoutError as exc:
+            raise ComposerSubmissionTimeout(send_attempted=send_attempted, stage=stage) from exc
 
     async def find_project_url(self, page: CdpPageRef, project_name: str) -> dict[str, str]:
         result = await self.evaluate(

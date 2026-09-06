@@ -326,11 +326,14 @@ def _dispatch_session_request(
     dispatch_prompt: str,
     context_fingerprint: str | None = None,
     preallocated_session_id: str | None = None,
+    _default_recovery_attempt: int = 0,
+    _unsent_retry_used: bool = False,
 ) -> dict[str, Any]:
     """Dispatch a sessionful request through the live SessionRuntime (AS04).
 
-    No retry on this path — retrying inside a stateful conversation is not
-    idempotent. Any turn failure is terminal for the request.
+    Stateful sends are not replayed without proof. A composer timeout with
+    explicit provider proof that Send was never reached gets one same-session
+    retry; exhaustion preserves the default and terminalizes only the request.
 
     The admitted prompt is passed separately from the public record. Session
     dispatch receives the frozen semantic payload and never re-reads mutable
@@ -383,7 +386,14 @@ def _dispatch_session_request(
     started_at = now_iso_z()
     request_runtime = None
     request_runtime_root = gateway_request_dir(project_root, request_id) / "runtime"
+    from audiagentic.components.agents.gateway.session import client_defaults
+    preparation_guard = client_defaults.preparation_guard(record)
+    preparation_guard.acquire()
+    guard_held = True
+    prompt_started = False
     try:
+        record = client_defaults.redirect_if_replaced(project_root, record)
+        session_id = record.get("session-id")
         if session_id is None:
             raise AudiaGenticError(
                 code="RES-AGW-002",
@@ -401,6 +411,8 @@ def _dispatch_session_request(
                 details={"request-id": request_id, "session-id": session_id},
             )
         is_new_session = admitted_session.get("created-by-request-id") == request_id
+        if record.get("client-default-session"):
+            is_new_session = not admitted_session.get("binding") and not runtime.session_runtime_status(session_id).get("available")
         if is_new_session:
             # keep-alive: open a new session bound to this profile
             request_runtime_root.mkdir(parents=True, exist_ok=True)
@@ -456,6 +468,7 @@ def _dispatch_session_request(
                     session_id=session_id,
                     provider_metadata=merged_metadata,
                 )
+                client_defaults.remember(project_root, record)
 
             session_record = runtime.open_session(
                 project_root,
@@ -660,6 +673,7 @@ def _dispatch_session_request(
                     session_id,
                     idle_timeout_seconds=record.get("session-idle-timeout-seconds"),
                     max_lifetime_seconds=record.get("session-max-lifetime-seconds"),
+                    **({"replace_idle_timeout": True} if str(provider_id).startswith("gpt-auto") else {}),
                 )
 
         if session_id is None:
@@ -693,6 +707,10 @@ def _dispatch_session_request(
             attempt_epoch=record["attempt-epoch"],
             provider_capability="supported" if str(provider_id).startswith("gpt-auto") else "unknown",
         )
+        client_defaults.remember(project_root, record)
+        preparation_guard.release()
+        guard_held = False
+        prompt_started = True
         result = runtime.prompt_in_session(
             project_root,
             session_id,
@@ -706,10 +724,41 @@ def _dispatch_session_request(
             activity_relay=activity_relay,
         )
     except _CancelledDuringDispatch:
+        if guard_held:
+            preparation_guard.release()
         if request_runtime is not None:
             _cleanup_request_runtime(request_runtime)
         return _transition_owned_attempt(project_root, record, "cancelled")
     except AudiaGenticError as exc:
+        if guard_held:
+            preparation_guard.release()
+        cancelled = store.read_record(project_root, request_id).get("cancel-requested")
+        if client_defaults.proven_unsent_composer_failure(exc) and not cancelled and not _unsent_retry_used:
+            store.append_owned_attempt(
+                project_root, request_id, owner_epoch=record["dispatch-owner-epoch"],
+                worker_id=record["worker-id"], attempt_epoch=record["attempt-epoch"],
+                execution_profile_id=execution_profile_id, provider_id=provider_id,
+                model_id=record.get("resolved-model-id"), state="failed", error=exc,
+                started_at=started_at, finished_at=now_iso_z(),
+            )
+            # The provider has explicitly proved Send was never reached.
+            # Retry once on the same handle, never rotate the default; all
+            # unknown/post-send failures continue through conservative recovery.
+            return _dispatch_session_request(
+                project_root, record, dispatch_prompt=dispatch_prompt,
+                context_fingerprint=context_fingerprint,
+                _default_recovery_attempt=_default_recovery_attempt, _unsent_retry_used=True,
+            )
+        if not store.read_record(project_root, request_id).get("cancel-requested"):
+            replacement = client_defaults.replace_failed_default(
+                project_root, record, exc,
+                recover_url=not prompt_started and _default_recovery_attempt == 0 and not (record.get("metadata") or {}).get("provider-chat-url"),
+                attach_request=not prompt_started and _default_recovery_attempt < 2,
+            ) if _default_recovery_attempt < 2 or prompt_started else None
+            if replacement is not None:
+                record = replacement
+                if not prompt_started:
+                    return _dispatch_session_request(project_root, record, dispatch_prompt=dispatch_prompt, context_fingerprint=context_fingerprint, _default_recovery_attempt=_default_recovery_attempt + 1)
         exc = _explain_stale_session_runtime_error(project_root, session_id, exc)
         if request_runtime is not None:
             _quarantine_request_runtime(request_runtime, request_runtime_root.parent / "quarantine")
@@ -734,6 +783,8 @@ def _dispatch_session_request(
             updates={"error": exc, "session-id": session_id, "finished-at": now_iso_z()},
         )
     except BaseException as exc:
+        if guard_held:
+            preparation_guard.release()
         # Safety net: wrap any non-AudiaGenticError so _redact_error preserves
         # the message (INT-AGW-098 boundary handler — prevents raw exceptions
         # like provider-specific errors from being silently redacted).
@@ -749,6 +800,16 @@ def _dispatch_session_request(
             message=f"session dispatch failed: {exc}",
             details={"original-type": type(exc).__name__},
         )
+        if isinstance(exc, Exception) and _default_recovery_attempt < 2 and not store.read_record(project_root, request_id).get("cancel-requested"):
+            replacement = client_defaults.replace_failed_default(
+                project_root, record, wrapped,
+                recover_url=not prompt_started and _default_recovery_attempt == 0 and not (record.get("metadata") or {}).get("provider-chat-url"),
+                attach_request=not prompt_started,
+            )
+            if replacement is not None:
+                record = replacement
+                if not prompt_started:
+                    return _dispatch_session_request(project_root, record, dispatch_prompt=dispatch_prompt, context_fingerprint=context_fingerprint, _default_recovery_attempt=_default_recovery_attempt + 1)
         store.append_owned_attempt(
             project_root,
             request_id,
@@ -794,6 +855,7 @@ def _dispatch_session_request(
             session_id=session_id,
             provider_metadata=provider_metadata,
         )
+    client_defaults.remember(project_root, record)
 
     if result.stop_reason == "cancelled":
         # A protocol-level caller cancel is a cancelled request.  A provider
@@ -834,6 +896,10 @@ def _dispatch_session_request(
                     "assistant-output-available": bool(output_text and output_text.strip()),
                 },
             )
+        if error is not None:
+            record = client_defaults.replace_failed_default(
+                project_root, record, error, recover_url=False, attach_request=False,
+            ) or record
         artifact_ref: dict[str, Any] | None = None
         output_preview: str | None = None
         output_truncated = False
@@ -912,6 +978,9 @@ def _dispatch_session_request(
             message="provider session completed without an assistant response",
             details={"stop-reason": result.stop_reason or "unknown"},
         )
+        record = client_defaults.replace_failed_default(
+            project_root, record, error, recover_url=False, attach_request=False,
+        ) or record
         store.append_owned_attempt(
             project_root,
             request_id,

@@ -91,6 +91,8 @@ def test_closed_operation_router_calls_public_application(tmp_path: Path) -> Non
         "operation": "submit", "root": str(tmp_path), "prompt_body": "hello",
         "_dispatch_owner_epoch": "epoch-unit",
         "_dispatch_service_root": str(service._service_store.root),
+        "_client_instance_id": "client-a",
+        "metadata": {"client-icon": 0},
     }
     assert service.invoke(
         "wait_execution_request",

@@ -13,7 +13,13 @@ _CHAT_RE = re.compile(r"/c/([^/?#]+)")
 
 def parse_project_id(url: str) -> str | None:
     match = _PROJECT_RE.search(urlsplit(url).path)
-    return match.group(1) if match else None
+    if not match:
+        return None
+    project = match.group(1)
+    # ChatGPT appends a mutable human-readable title to its stable 32-hex
+    # project ID. Renaming a project must not break saved conversation resume.
+    stable = re.fullmatch(r"(g-p-[0-9a-fA-F]{32})(?:-.*)?", project)
+    return stable.group(1).lower() if stable else project
 
 
 def parse_provider_session_id(url: str) -> str | None:

@@ -106,10 +106,20 @@ def dashboard_snapshot(
         # visible without reopening the public status contract.
         records = api.list_dashboard_requests(root)
         sessions = api.list_execution_sessions(root)
+        # Caller labels remain request-owned durable metadata. The newest
+        # explicit override names the session until another is supplied;
+        # unlabeled follow-ups never erase it or replace it with a native title.
+        caller_titles: dict[str, str] = {}
+        for request in sorted(records, key=lambda r: r.get("created-at", ""), reverse=True):
+            if request.get("session-id") and request.get("title"):
+                caller_titles.setdefault(request["session-id"], request["title"])
         all_session_rows = sorted(
             (_session_row(session, live.get(session["session-id"])) for session in sessions),
             key=_session_sort_key,
         )
+        for session_row in all_session_rows:
+            if session_row["session-id"] in caller_titles:
+                session_row["provider-chat-title"] = caller_titles[session_row["session-id"]]
         # Keep active/non-terminal sessions ahead of closed history.  The
         # durable session id is the only secondary key: timestamps change as
         # work progresses and would make the dashboard jump between polls.
@@ -180,7 +190,7 @@ def _request_row(
     from audiagentic.components.agents.status.task_status_v4 import project_activity_type
 
     visible = (
-        "request-id",
+        "request-id", "title", "client-icon",
         "state", "session-id", "provider-turn-pending", "created-at", "updated-at",
         "started-at", "finished-at", "last-activity-at", "watchdog-state", "watchdog-reason",
         "activity", "activity-sequence", "activity-source", "activity-lease-expires-at",
@@ -369,12 +379,29 @@ body { background:#030e20 }
 .project-avatar img { width:100%; height:100%; object-fit:contain; border-radius:5px }
 .project-avatar:has(img) { padding:2px }
 .project-avatar:focus-visible { outline:2px solid var(--teal); outline-offset:2px }
+/* Hide the text caret on non-editable UI, including browser caret browsing.
+   Preserve keyboard focus outlines and normal caret behavior in editors. */
+body { caret-color:transparent }
+input,textarea,[contenteditable=true] { caret-color:auto }
+.project-avatar { user-select:none }
 .work-section-head { margin:0 0 6px; padding:8px 10px }
 .sessions { margin-inline:5px }
 .session-body .request-grid { position:relative; margin-left:9px; padding-left:9px }
-.session-body .request-grid::before { content:""; position:absolute; top:0; bottom:17px; left:0; width:1px; background:#28415a }
+
 .session-body .request-row { position:relative }
-.session-body .request-row::before { content:""; position:absolute; top:22px; left:-9px; width:9px; height:1px; background:#28415a }
+.session-body .request-row::before { content:"├─"; position:absolute; inset:0 auto 0 -10px; display:flex; align-items:center; font:16px/1 monospace; color:#47627c }
+.session-body .request-row::after { content:"│\\A│\\A│\\A│\\A│\\A│\\A│\\A│\\A│\\A│\\A│\\A│\\A│\\A│\\A│\\A│"; position:absolute; left:-10px; top:0; bottom:-4px; width:1ch; overflow:hidden; white-space:pre; font:16px/8px monospace; color:#47627c; pointer-events:none }
+.session-body .request-row:last-child::before { content:"└─" }
+.session-body .request-row:last-child::after { bottom:50% }
+.session-actions { display:grid; grid-template-columns:minmax(74px,auto) auto auto; align-items:center; gap:12px }
+.session-actions > .badge { justify-self:center; margin:0 }
+.session-identity-with-icon { display:flex; align-items:center; gap:10px }
+.session-identity-with-icon > .session-text { min-width:0 }
+.layout-rows .session .project-avatar { width:30px; height:30px; flex-basis:30px }
+.layout-rows .session-head { grid-template-columns:minmax(0,1fr) 340px }
+.layout-rows .session-actions { width:340px; grid-template-columns:86px minmax(0,1fr) 24px; justify-content:initial }
+.layout-rows .session-actions > .muted { overflow-wrap:anywhere }
+@media (max-width:700px) { .layout-rows .session-head { grid-template-columns:1fr } .layout-rows .session-actions { width:100%; grid-template-columns:86px minmax(0,1fr) 24px } }
 .badge,.pill,.activity-badge,.section-count,.flag { display:inline-flex; align-items:center; justify-content:center; min-height:24px; padding:2px 8px; border:1px solid #22384d; border-radius:999px; font-size:11px; font-weight:500; line-height:18px; background:#142a40; white-space:nowrap; vertical-align:middle }
 .badge.state-completed,.pill.state-completed { background:#0c302f; border-color:#153c38 }
 .badge.state-running,.badge.state-active,.badge.state-queued,.badge.state-dispatching,.pill.state-running,.pill.state-active { background:#303021; border-color:#3b3b2a }
@@ -385,15 +412,50 @@ body { background:#030e20 }
 .request-row .request-diagnostic:focus { white-space:normal; outline:1px solid var(--muted) }
 .project :is(.badge,.pill,.activity-badge,.section-count,.flag) { border-color:#26394b }
 </style>
+<style>
+:root[data-theme=dark] { --bg:#111315; --panel:#1b1e22; --panel2:#252a30; --line:#414952; --text:#f0f2f4; --muted:#aeb8c3; --teal:#73d9e2; --green:#79dca3; --amber:#edc776; --red:#ff929d; --purple:#c5b0f0; --good-bg:#20382c; --warn-bg:#3b3423; --bad-bg:#402930; color-scheme:dark }
+:root[data-theme=mid] { --bg:#454d59; --panel:#535e6d; --panel2:#626e7e; --line:#8994a3; --text:#ffffff; --muted:#e0e6ee; --teal:#adf4ff; --green:#b7f5cb; --amber:#ffe2a4; --red:#ffd0d5; --purple:#e0d4ff; --good-bg:#355744; --warn-bg:#625434; --bad-bg:#68434b; color-scheme:dark }
+:root[data-theme=light] { --bg:#edf1f6; --panel:#ffffff; --panel2:#e2e8f0; --line:#b7c4d2; --text:#192b40; --muted:#4e6074; --teal:#006875; --green:#176538; --amber:#775000; --red:#a52037; --purple:#624390; --good-bg:#dcefe2; --warn-bg:#f5e8c6; --bad-bg:#f9dfe4; color-scheme:light }
+html[data-theme]:not([data-theme=default]) body { background:var(--bg); color:var(--text) }
+html[data-theme]:not([data-theme=default]) :is(.card,.project,.work-section,.session-body,.orphan) { background:var(--panel); border-color:var(--line); box-shadow:none }
+html[data-theme]:not([data-theme=default]) :is(.toolbar,.session,.session summary,.work-section-head,.project-avatar,.summary-icon) { background:var(--panel2); border-color:var(--line) }
+html[data-theme]:not([data-theme=default]) :is(select,input,button,.action-button) { background-color:var(--panel); color:var(--text); border-color:var(--line) }
+html[data-theme]:not([data-theme=default]) :is(.badge,.pill,.activity-badge,.section-count,.flag) { background:var(--panel2); border-color:var(--line); color:var(--text) }
+html[data-theme]:not([data-theme=default]) :is(.badge,.pill):is(.state-active,.state-running,.state-queued,.state-dispatching) { background:var(--warn-bg); color:var(--amber) }
+html[data-theme]:not([data-theme=default]) :is(.badge,.pill).state-completed { background:var(--good-bg); color:var(--green) }
+html[data-theme]:not([data-theme=default]) :is(.badge,.pill):is(.state-failed,.state-rejected,.state-interrupted),html[data-theme]:not([data-theme=default]) .flag.alert { background:var(--bad-bg); color:var(--red) }
+html[data-theme]:not([data-theme=default]) .activity-badge { color:var(--teal) }
+html[data-theme]:not([data-theme=default]) .request-row + .request-row { border-color:var(--line) }
+html[data-theme]:not([data-theme=default]) .request-row::before { color:var(--muted) }
+html[data-theme]:not([data-theme=default]) .request-row::after { color:var(--muted) }
+html[data-theme]:not([data-theme=default]) :is(.cancel-request,.purge-session) { color:var(--red) }
+</style>
 <main><div class="top"><div><div class="eyebrow">AUDiaGentic · shared gateway</div><h1>Agent gateway</h1><div class="muted">Read-only operator view, redacted across all projects on this runtime</div></div><div class="pulse" id="health"><span class="dot"></span><span id="updated">Loading…</span></div></div>
 <section class="cards" id="counts"></section>
 <div><button type="button" id="restart-gateway" class="action-button">Restart gateway</button> <span id="restart-feedback" role="status" aria-live="polite"></span></div>
-<section class="toolbar"><label>Request / session state <select id="state-filter"><option value="all">All states</option></select></label><label><input id="show-closed" type="checkbox"> Show closed</label><label><input id="show-empty" type="checkbox"> Show empty</label><label>Layout <select id="layout-filter"><option value="columns">Columns</option><option value="rows">Rows</option></select></label><label>Recent window <input id="recent-window" type="number" min="1" step="1" aria-label="Recent window in seconds"> sec</label><button id="apply-window" type="button">Apply</button><label>Auto-collapse after <input id="collapse-hours" type="number" min="0" max="8760" step="0.5" aria-label="Auto-collapse inactive sessions after hours"> hours (0 = off)</label><span class="muted" id="visible-summary"></span></section>
+<section class="toolbar"><label>Request / session state <select id="state-filter"><option value="all">All states</option></select></label><label>Layout <select id="layout-filter"><option value="columns">Columns</option><option value="rows">Rows</option></select></label><label>Recent window <input id="recent-window" type="number" min="1" step="1" aria-label="Recent window in seconds"> sec</label><button id="apply-window" type="button">Apply</button><label>Auto-collapse after <input id="collapse-hours" type="number" min="0" max="8760" step="0.5" aria-label="Auto-collapse inactive sessions after hours"> hours (0 = off)</label><span class="muted" id="visible-summary"></span></section>
 <div id="request-action-feedback" role="status" aria-live="polite"></div><section id="projects"></section></main>
 <script>
 const endpoint=new URL(__SNAPSHOT_PATH__,window.location.href);
+function clientIcon(r) {
+  const id=r['client-icon'];
+  if(!Number.isInteger(id)||id<0||id>=24) return '';
+  const url=new URL('client-icon',endpoint); url.searchParams.set('id',String(id));
+  return `<img src="${esc(url.href)}" alt="" title="Client icon ${id+1}" width="18" height="18" style="flex:0 0 18px;object-fit:contain;margin-right:2px;vertical-align:middle">`;
+}
 const initialRecent=new URLSearchParams(window.location.search).get('recent-seconds'); if(initialRecent) endpoint.searchParams.set('recent-seconds',initialRecent);
-const stateFilter=document.getElementById('state-filter'); const showClosed=document.getElementById('show-closed'); const showEmpty=document.getElementById('show-empty'); const layoutFilter=document.getElementById('layout-filter'); const recentWindow=document.getElementById('recent-window'); let latest=null; let refreshGeneration=0; let refreshInFlight=false;
+const stateFilter=document.getElementById('state-filter'); const layoutFilter=document.getElementById('layout-filter'); const recentWindow=document.getElementById('recent-window'); let latest=null; let refreshGeneration=0; let refreshInFlight=false;
+const themeLabel=document.createElement('label');
+themeLabel.innerHTML='Theme <select id="theme-filter" aria-label="Dashboard theme"><option value="default">Default</option><option value="dark">Dark</option><option value="mid">Mid</option><option value="light">Light</option></select>';
+layoutFilter.closest('label').after(themeLabel);
+const themeFilter=document.getElementById('theme-filter');
+function applyTheme(value) {
+  const theme=['default','dark','mid','light'].includes(value)?value:'default';
+  document.documentElement.dataset.theme=theme;
+  themeFilter.value=theme;
+}
+try { applyTheme(localStorage.getItem('gateway-dashboard-theme')); } catch (_) { applyTheme('default'); }
+themeFilter.addEventListener('change',()=>{applyTheme(themeFilter.value);try{localStorage.setItem('gateway-dashboard-theme',themeFilter.value);}catch(_){} });
 const COLLAPSED_SESSIONS_KEY='gateway-dashboard-collapsed-sessions'; let collapsedSessionIds=new Set(); try { const saved=JSON.parse(localStorage.getItem(COLLAPSED_SESSIONS_KEY)||'[]'); if(Array.isArray(saved)) collapsedSessionIds=new Set(saved.filter(id=>typeof id==='string').slice(-500)); } catch (_) {}
 function persistCollapsedSessions() { try { localStorage.setItem(COLLAPSED_SESSIONS_KEY,JSON.stringify([...collapsedSessionIds].slice(-500))); } catch (_) {} }
 const EXPANDED_SESSIONS_KEY='gateway-dashboard-expanded-sessions'; const COLLAPSE_HOURS_KEY='gateway-dashboard-collapse-hours';
@@ -519,9 +581,9 @@ function requestDiagnostic(r) {
 function requestRows(rows, includeExecution=true) {
   return rows.slice().sort(byRequestNewest).map(r=>{
     const execution=includeExecution?executionSummary(r['execution-profile-id'],r['resolved-provider-id'],r['resolved-model-id']):'';
-    const title=includeExecution&&r['provider-chat-title']?r['provider-chat-title']:'';
+    const title=r.title||(includeExecution&&r['provider-chat-title']?r['provider-chat-title']:'');
     const diagnostic=requestDiagnostic(r);
-    return `<div class="request-row"><div class="request-identity"><code class="request-id">${esc(r['request-id'])}</code>${title?`<span class="request-title" title="${esc(title)}">${esc(title)}</span>`:''}${execution?`<span class="request-execution" title="${esc(execution)}">${esc(execution)}</span>`:''}</div><div class="request-state">${badge(r.state)}${sideEffectFlag(r)}</div><div class="request-meta">${activityLabel(r)}</div><div class="request-meta request-updated">${stamp(recent(r))}</div><div class="request-actions">${cancelControl(r)}${chatLink(r)}</div>${diagnostic?`<div class="request-diagnostic" tabindex="0" title="${esc(diagnostic)}" aria-label="${esc(diagnostic)}">${esc(diagnostic)}</div>`:''}</div>`;
+    return `<div class="request-row"><div class="request-identity">${clientIcon(r)}<code class="request-id">${esc(r['request-id'])}</code>${title?`<span class="request-title" title="${esc(title)}">${esc(title)}</span>`:''}${execution?`<span class="request-execution" title="${esc(execution)}">${esc(execution)}</span>`:''}</div><div class="request-state">${badge(r.state)}${sideEffectFlag(r)}</div><div class="request-meta">${activityLabel(r)}</div><div class="request-meta request-updated">${stamp(recent(r))}</div><div class="request-actions">${cancelControl(r)}${chatLink(r)}</div>${diagnostic?`<div class="request-diagnostic" tabindex="0" title="${esc(diagnostic)}" aria-label="${esc(diagnostic)}">${esc(diagnostic)}</div>`:''}</div>`;
   }).join('');
 }
 function sessionActivitySummary(session) {
@@ -530,13 +592,13 @@ function sessionActivitySummary(session) {
 }
 function matchesState(session, rows) { const wanted=stateFilter.value; return wanted==='all'||session.state===wanted||rows.some(r=>r.state===wanted); }
 function matchesRequest(row) { return stateFilter.value==='all'||row.state===stateFilter.value; }
-function sessionCard(session, rows, empty=false, allRows=rows) { const sessionId=String(session['session-id']||''); const open=sessionShouldOpen(session,allRows)?' open':''; const purgeable=!allRows.some(r=>ACTIVE_REQUEST_STATES.has(r.state))&&!session['turn-active']&&!(session['pending-turns']>0); const purge=purgeable?`<button type="button" class="action-button icon-button purge-session" data-session-id="${esc(sessionId)}" aria-label="Purge session" title="Permanently remove this session and all gateway data">${purgeIcon}</button>`:''; const execution=executionSummary(esc(session['execution-profile-id']||''),esc(session['provider-id']||''),esc(session['model-id']||'')); const title=session['provider-chat-title']?`<div class="session-chat-title" title="${esc(session['provider-chat-title'])}">${esc(session['provider-chat-title'])}</div>`:''; return `<details class="session ${stateClass(session.state)}" data-session-id="${esc(sessionId)}"${open}><summary><div class="session-head"><div class="session-identity">${title}<div class="${title?'session-technical':'session-primary'}"><code>${esc(sessionId)}</code>${execution?` <span class="session-profile"> · ${execution}</span>`:''}</div></div><div class="session-actions">${badge(session.state)} <span class="muted">${esc(sessionActivitySummary(session))}</span>${purge}</div></div></summary><div class="session-body"><div class="request-grid">${empty?'<div class="muted">No matching requests</div>':requestRows(rows,false)}</div></div></details>`; }
+function sessionCard(session, rows, empty=false, allRows=rows, project=null) { const sessionId=String(session['session-id']||''); const open=sessionShouldOpen(session,allRows)?' open':''; const purgeable=!allRows.some(r=>ACTIVE_REQUEST_STATES.has(r.state))&&!session['turn-active']&&!(session['pending-turns']>0); const purge=purgeable?`<button type="button" class="action-button icon-button purge-session" data-session-id="${esc(sessionId)}" aria-label="Purge session" title="Permanently remove this session and all gateway data">${purgeIcon}</button>`:''; const execution=executionSummary(esc(session['execution-profile-id']||''),esc(session['provider-id']||''),esc(session['model-id']||'')); const title=session['provider-chat-title']?`<div class="session-chat-title" title="${esc(session['provider-chat-title'])}">${esc(session['provider-chat-title'])}</div>`:''; return `<details class="session ${stateClass(session.state)}" data-session-id="${esc(sessionId)}"${open}><summary><div class="session-head"><div class="session-identity${project?' session-identity-with-icon':''}">${project?projectAvatar(project):''}<div class="session-text">${title}<div class="${title?'session-technical':'session-primary'}"><code>${esc(sessionId)}</code>${execution?` <span class="session-profile"> · ${execution}</span>`:''}</div></div></div><div class="session-actions">${badge(session.state)} <span class="muted">${esc(sessionActivitySummary(session))}</span>${purge}</div></div></summary><div class="session-body"><div class="request-grid">${empty?'<div class="muted">No matching requests</div>':requestRows(rows,false)}</div></div></details>`; }
 function requestGroup(state) { if(ACTIVE_REQUEST_STATES.has(state)) return 'active'; if(FAILED_REQUEST_STATES.has(state)) return 'failed'; return 'completed'; }
 function projectView(project) {
   const grouped=new Map(); const requests=(project.requests||[]);
   requests.forEach(r=>{const id=r['session-id']; if(id){const existing=grouped.get(id)||[]; existing.push(r); grouped.set(id,existing)}});
   const knownSessionIds=new Set((project.sessions||[]).map(s=>s['session-id'])); const wanted=stateFilter.value;
-  const sessionGroups=(project.sessions||[]).map(s=>{const allRows=grouped.get(s['session-id'])||[]; const sessionMatches=wanted==='all'||s.state===wanted; const rows=sessionMatches?allRows:allRows.filter(r=>r.state===wanted); return {session:s,allRows,rows}}).filter(group=>{const s=group.session; const hasRows=group.rows.length>0; return (showClosed.checked||!isClosed(s)||hasRows)&&(showEmpty.checked||hasRows)&& (wanted==='all'||s.state===wanted||hasRows)});
+  const sessionGroups=(project.sessions||[]).map(s=>{const allRows=grouped.get(s['session-id'])||[]; const sessionMatches=wanted==='all'||s.state===wanted; const rows=sessionMatches?allRows:allRows.filter(r=>r.state===wanted); return {session:s,allRows,rows}}).filter(group=>{const s=group.session; const hasRows=group.rows.length>0; return hasRows&& (wanted==='all'||s.state===wanted||hasRows)});
   const sections={active:[],closed:[],expired:[]};
   sessionGroups.forEach(({session,rows,allRows})=>{
     const section=session.state==='expired'?'expired':SESSION_TERMINAL_STATES.has(session.state)?'closed':'active';
@@ -554,6 +616,32 @@ function projectView(project) {
   };
   const unboundSection=unbound.length?collapsibleSection(project,'Unassigned requests','<h3>Unassigned requests</h3>',`<div class="orphan">${requestRows(unbound)}</div>`):'';
   return `<section class="project"><div class="project-head"><div><div class="project-name">${projectAvatar(project)}${esc(project.name)}</div>${queueSummary(project.queues)?`<div class="queue">${esc(queueSummary(project.queues))}</div>`:''}</div><div class="pills">${pills}</div></div>${section('Active',sections.active)}${section('Closed',sections.closed)}${section('Expired',sections.expired)}${unboundSection}</section>`;
+}
+function rowView(projects) {
+  const sections={Active:[],Closed:[],Expired:[]};
+  const unassigned=[];
+  projects.forEach(project=>{
+    const grouped=new Map();
+    (project.requests||[]).forEach(row=>{const id=row['session-id'];if(!grouped.has(id))grouped.set(id,[]);grouped.get(id).push(row)});
+    (project.sessions||[]).forEach(session=>{
+      const allRows=grouped.get(session['session-id'])||[];
+      grouped.delete(session['session-id']);
+      const rows=stateFilter.value==='all'||session.state===stateFilter.value?allRows:allRows.filter(matchesRequest);
+      if(!rows.length)return;
+      const section=session.state==='expired'?'Expired':SESSION_TERMINAL_STATES.has(session.state)?'Closed':'Active';
+      sections[section].push([session,rows,allRows,project]);
+    });
+    grouped.forEach(rows=>unassigned.push(...rows.filter(matchesRequest)));
+  });
+  const scope={'project-id':'all-projects-row-view'};
+  const body=Object.entries(sections).map(([title,groups])=>{
+    if(!groups.length)return '';
+    groups.sort(title==='Active'?byGroupNewest:byGroupUpdated);
+    return collapsibleSection(scope,title,`<h3>${title}</h3><span class="section-count">${groups.length} sessions</span>`,
+      `<div class="sessions">${groups.map(([s,rows,allRows,project])=>sessionCard(s,rows,false,allRows,project)).join('')}</div>`);
+  }).join('');
+  const orphan=unassigned.length?collapsibleSection(scope,'Unassigned requests','<h3>Unassigned requests</h3>',`<div class="orphan">${requestRows(unassigned)}</div>`):'';
+  return body||orphan?`<section class="project row-session-list">${body}${orphan}</section>`:'';
 }
 function populateStates(snapshot) { const prior=stateFilter.value; const states=new Set(); (snapshot.projects||[]).forEach(p=>{(p.sessions||[]).forEach(s=>states.add(s.state));(p.requests||[]).forEach(r=>states.add(r.state))}); stateFilter.innerHTML='<option value="all">All states</option>'+[...states].filter(Boolean).sort().map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join(''); stateFilter.value=[...stateFilter.options].some(o=>o.value===prior)?prior:'all'; }
 function draw(snapshot) {
@@ -574,7 +662,7 @@ function draw(snapshot) {
     `<div class="card">${summaryIcon('Providers loaded')}<div class="label">Providers loaded</div><div class="value good">${diag['providers-loaded']??0}</div></div>`,
     `<div class="card">${summaryIcon('Provider errors')}<div class="label">Provider errors</div><div class="value ${errorCount?'bad':'good'}">${errorCount}</div></div>`,
   ].join('');
-  const projects=(snapshot.projects||[]).map(projectView).join('');
+  const projects=chosenLayout==='rows'?rowView(snapshot.projects||[]):(snapshot.projects||[]).map(projectView).join('');
   const projectsElement=document.getElementById('projects'); projectsElement.className='layout-'+chosenLayout; projectsElement.innerHTML=projects||'<div class="empty">No sessions match these filters.</div>';
   bindFocusButtons(); bindSessionToggles(); bindSectionToggles();
   const visible=document.querySelectorAll('#projects .session').length;
@@ -582,7 +670,7 @@ function draw(snapshot) {
 }
 async function refresh(){if(refreshInFlight)return; const generation=++refreshGeneration; refreshInFlight=true; try{const response=await fetch(endpoint,{cache:'no-store'}); const snapshot=await response.json(); if(generation===refreshGeneration) draw(snapshot);}catch(error){if(generation===refreshGeneration){document.getElementById('health').classList.add('stale');document.getElementById('updated').textContent='Dashboard refresh failed: '+error}}finally{refreshInFlight=false;}}
 function applyWindow(){const value=recentWindow.value.trim(); if(value){const parsed=Number.parseInt(value,10); if(!Number.isInteger(parsed)||parsed<1)return; endpoint.searchParams.set('recent-seconds',String(parsed));}else endpoint.searchParams.delete('recent-seconds'); const pageUrl=new URL(window.location.href); if(endpoint.searchParams.has('recent-seconds')) pageUrl.searchParams.set('recent-seconds',endpoint.searchParams.get('recent-seconds')); else pageUrl.searchParams.delete('recent-seconds'); window.history.replaceState(null,'',pageUrl.pathname+(pageUrl.search?`?${pageUrl.searchParams}`:'')+pageUrl.hash); refresh();}
-stateFilter.addEventListener('change',()=>latest&&draw(latest)); showClosed.addEventListener('change',()=>latest&&draw(latest)); showEmpty.addEventListener('change',()=>latest&&draw(latest)); layoutFilter.addEventListener('change',()=>{localStorage.setItem('gateway-dashboard-layout',layoutFilter.value); latest&&draw(latest)}); document.getElementById('apply-window').addEventListener('click',applyWindow); refresh(); setInterval(refresh,3000);
+stateFilter.addEventListener('change',()=>latest&&draw(latest)); layoutFilter.addEventListener('change',()=>{localStorage.setItem('gateway-dashboard-layout',layoutFilter.value); latest&&draw(latest)}); document.getElementById('apply-window').addEventListener('click',applyWindow); refresh(); setInterval(refresh,3000);
 </script></main>""".replace("__SNAPSHOT_PATH__", source).replace("__FOCUS_PATH__", focus_source).replace("__PURGE_PATH__", purge_source).replace("__FOCUS_TOKEN__", token_source)
     return html.encode("utf-8")
 

@@ -159,6 +159,7 @@ def project_task_status_v4(
         return _compact({
             "task_id": request_id,
             "lifecycle": "terminal",
+            "warnings": record.get("warnings") or None,
             "activity": None,
             "activity_seq": activity_seq,
             "activity_at": activity_at,
@@ -172,6 +173,7 @@ def project_task_status_v4(
         return _compact({
             "task_id": request_id,
             "lifecycle": "pending",
+            "warnings": record.get("warnings") or None,
             "activity": "waiting",
             "activity_seq": activity_seq,
             "activity_at": activity_at,
@@ -196,6 +198,7 @@ def project_task_status_v4(
         return _compact({
             "task_id": request_id,
             "lifecycle": "active",
+            "warnings": record.get("warnings") or None,
             "activity": activity,
             "activity_type": activity_type,
             "activity_seq": activity_seq,

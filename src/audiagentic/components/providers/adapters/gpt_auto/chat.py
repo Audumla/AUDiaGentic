@@ -96,6 +96,8 @@ class PersistentChat:
         self._last_snapshot: ChatSnapshot | None = None
         metadata = resume_provider_metadata or {}
         self.conversation_title = _metadata_text(metadata, "chat-title")
+        self._pending_conversation_title: str | None = None
+        self._title_publish_lock = asyncio.Lock()
         self.unresolved_prompt_message_id = _metadata_text(metadata, "prompt-message-id")
         self.unresolved_assistant_message_id = _metadata_text(metadata, "assistant-message-id")
         self.unresolved_assistant_before_id = _metadata_text(
@@ -348,7 +350,7 @@ class PersistentChat:
             # READY.  Keep admission closed until the exact prompt/response
             # outcome is reconciled (or leave it RECOVERING for lazy retry).
             self._move(ChatState.RECOVERING)
-            await self._reconcile_unresolved_turn()
+            await self._await_unresolved_reconciliation()
             if self.unresolved_turn_pending:
                 return
         self._move(ChatState.READY)
@@ -371,13 +373,13 @@ class PersistentChat:
         await self._validate_page_binding()
         if self.state is ChatState.RECOVERING:
             if self.page_handle and self.unresolved_turn_pending:
-                if await self._reconcile_unresolved_turn():
+                if await self._await_unresolved_reconciliation():
                     self._move(ChatState.READY)
             else:
                 pages = await self.runtime.bridge.call("list_pages")
                 await self.reconcile(pages)
                 if self.state is ChatState.RECOVERING and self.unresolved_turn_pending:
-                    if await self._reconcile_unresolved_turn():
+                    if await self._await_unresolved_reconciliation():
                         self._move(ChatState.READY)
         if self.state is not ChatState.READY:
             if self._unresolved_recovery_reason == "provider-conversation-not-found":
@@ -416,6 +418,33 @@ class PersistentChat:
                     },
                 )
             raise RuntimeError(f"gpt-auto chat is not ready (state={self.state.value})")
+
+    async def _await_unresolved_reconciliation(self) -> bool:
+        """Observe one unresolved turn through the configured readiness bound.
+
+        Reconciliation requires a stability interval by design.  Calling the
+        single-observation primitive once and immediately rejecting admission
+        makes that interval impossible to satisfy in one queued successor.
+        Keep the prompt admission closed, but continue read-only observations
+        until the previous turn is proven terminal or the existing bounded
+        readiness window expires.  This never submits or resubmits a prompt.
+        """
+        deadline = asyncio.get_running_loop().time() + self.config.chat.ready_timeout_seconds
+        while self.unresolved_turn_pending:
+            if await self._reconcile_unresolved_turn():
+                return True
+            # Most reconciliation failures are conclusive for the current
+            # admission attempt (missing correlation, missing terminal
+            # evidence, provider error).  Only the deliberately armed
+            # stability candidate needs another observation in this call.
+            # Keeping this narrow preserves fast, useful failures while
+            # making the configured stability requirement reachable.
+            if self._unresolved_recovery_reason != "awaiting-second-stable-observation":
+                return False
+            if asyncio.get_running_loop().time() >= deadline:
+                return False
+            await asyncio.sleep(self.config.turn.poll_interval_seconds)
+        return True
 
     async def _validate_page_binding(self) -> None:
         """Detect an externally closed or recycled page handle and recover it."""
@@ -490,6 +519,16 @@ class PersistentChat:
         )
         self._last_url = snapshot.url
         self._last_snapshot = snapshot
+        # Capture labels during recovery/baseline observations too, not only
+        # the normal response loop. Never relay a label from a different tab.
+        if snapshot.conversation_title and (
+            not self.provider_session_id
+            or url_matches_provider_session(snapshot.url, self.provider_session_id)
+        ):
+            try:
+                await self.publish_conversation_title(snapshot.conversation_title)
+            except Exception:
+                logger.debug("gpt-auto title persistence failed; will retry on next observation", exc_info=True)
         return snapshot
 
     async def materialize_latest_assistant_turn(self) -> bool:
@@ -579,9 +618,44 @@ class PersistentChat:
             self._set_unresolved_recovery("assistant-response-id-not-observed")
             return False
         if not snapshot.latest_assistant_text:
-            self._reset_unresolved_match_candidate()
-            self._set_unresolved_recovery("assistant-response-text-not-observed")
-            return False
+            # Background ChatGPT tabs can retain the terminal message identity
+            # and controls while virtualizing the response body.  The normal
+            # response watcher already materializes that final turn before it
+            # decides text is unavailable; unresolved-turn recovery must use
+            # the same observation seam.  Otherwise a cancelled/lost watcher
+            # poisons an otherwise healthy persistent conversation and every
+            # queued successor is rejected even though ChatGPT completed.
+            materialized = False
+            try:
+                materialized = await self.materialize_latest_assistant_turn()
+                if materialized:
+                    snapshot = await self.snapshot(allow_recovering=True)
+                    assistant_id = snapshot.latest_assistant_id
+            except Exception as exc:  # noqa: BLE001 - retain recovery evidence
+                self._set_unresolved_recovery(
+                    "assistant-response-materialization-failed",
+                    exception_type=type(exc).__name__,
+                    exception=str(exc),
+                )
+                return False
+            finally:
+                if materialized:
+                    try:
+                        await self.release_focus_emulation()
+                    except Exception:  # noqa: BLE001 - focus release is best-effort
+                        logger.debug(
+                            "gpt-auto unresolved reconciliation focus release failed",
+                            exc_info=True,
+                        )
+            if not assistant_id:
+                self._reset_unresolved_match_candidate()
+                self._set_unresolved_recovery("assistant-response-id-not-observed")
+                return False
+            # Text recovery and admission safety are separate decisions.  A
+            # stable, quiescent, newer assistant identity proves the provider
+            # turn ended even when ChatGPT keeps its body virtualized.  Carry
+            # on to correlation/terminal proof; the missing body is recorded
+            # when that proof succeeds rather than poisoning the session.
         prompt_match, prompt_reason, prompt_details = _unresolved_prompt_match_diagnostics(
             self, snapshot
         )
@@ -660,7 +734,12 @@ class PersistentChat:
                 assistant_before_id=self.unresolved_assistant_before_id,
             )
             return False
-        match_fingerprint = (prompt_match, assistant_id, snapshot.latest_assistant_text)
+        response_text_available = bool(snapshot.latest_assistant_text)
+        match_fingerprint = (
+            prompt_match,
+            assistant_id,
+            snapshot.latest_assistant_text if response_text_available else "<unavailable>",
+        )
         now = time.monotonic()
         if self._unresolved_match_fingerprint != match_fingerprint:
             self._unresolved_match_fingerprint = match_fingerprint
@@ -686,6 +765,21 @@ class PersistentChat:
                 elapsed_seconds=round(elapsed, 3),
             )
             return False
+        if not response_text_available and self.provider_session_id:
+            # Preserve the loss of the cancelled predecessor's body as
+            # provider metadata while releasing the conversation for future
+            # turns.  This warning is not a reason to reject the successor.
+            result = self.binding_sink(
+                ProviderSessionBindingUpdate(
+                    provider_session_ref=ProviderSessionRef(self.provider_session_id),
+                    metadata={
+                        "reconciliation-warning": "prior-response-text-unavailable",
+                        "reconciled-assistant-message-id": assistant_id,
+                    },
+                )
+            )
+            if asyncio.iscoroutine(result):
+                await result
         self.clear_unresolved_turn()
         return True
 
@@ -911,20 +1005,24 @@ class PersistentChat:
 
     async def publish_conversation_title(self, title: str | None) -> None:
         """Persist the current left-panel conversation label when it changes."""
-        normalized = title.strip()[:256] if isinstance(title, str) and title.strip() else None
-        if not normalized or normalized == self.conversation_title:
+        normalized = normalize_chat_title(title)
+        if not normalized:
             return
-        self.conversation_title = normalized
-        if not self.provider_session_id:
-            return
-        result = self.binding_sink(
-            ProviderSessionBindingUpdate(
-                provider_session_ref=ProviderSessionRef(self.provider_session_id),
-                metadata={"chat-title": normalized},
+        async with self._title_publish_lock:
+            self._pending_conversation_title = normalized
+            if not self.provider_session_id or normalized == self.conversation_title:
+                return
+            result = self.binding_sink(
+                ProviderSessionBindingUpdate(
+                    provider_session_ref=ProviderSessionRef(self.provider_session_id),
+                    metadata={"chat-title": normalized},
+                )
             )
-        )
-        if asyncio.iscoroutine(result):
-            await result
+            if asyncio.iscoroutine(result):
+                await result
+            # This is the last successfully persisted value, not last seen.
+            self.conversation_title = normalized
+            self._pending_conversation_title = None
 
     async def acquire_provider_identity(self, initial: ChatSnapshot | None = None) -> ChatSnapshot:
         self._move(ChatState.ACQUIRING_SESSION_ID)
@@ -956,6 +1054,12 @@ class PersistentChat:
                     await result
                 self.provider_session_id = provider_id
                 self.chat_url = chat_url
+                title = snap.conversation_title or self._pending_conversation_title
+                if title:
+                    try:
+                        await self.publish_conversation_title(title)
+                    except Exception:
+                        logger.debug("gpt-auto deferred title persistence failed; will retry", exc_info=True)
                 claim_conversation = getattr(self.runtime, "claim_conversation", None)
                 if claim_conversation is not None and not claim_conversation(self, provider_id):
                     self._move(ChatState.FAILED)

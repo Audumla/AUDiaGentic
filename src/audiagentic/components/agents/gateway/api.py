@@ -299,18 +299,26 @@ def submit_execution_request(
     metadata: dict[str, Any] | None = None,
     session_id: str | None = None,
     session_keep_alive: bool = False,
+    new_session: bool = False,
     session_idle_timeout_seconds: float | None = None,
     session_max_lifetime_seconds: float | None = None,
     provider_chat_url: str | None = None,
     execution_context_fingerprint: str | None = None,
     workspace_name: str | None = None,
+    title: str | None = None,
     component_profile: str | None = None,
     _dispatch_owner_epoch: str | None = None,
+    _client_instance_id: str | None = None,
     _dispatch_service_root: str | None = None,
     component_context_reader: ComponentContextReader | None = None,
 ) -> dict[str, Any]:
     """Submit a gateway request. Returns immediately with request-id and initial state
     unless mode='blocking', in which case it waits for a terminal result (see run_execution_request).
+
+    GPT requests always retain session identity, even with keep-alive false.
+    False selects finite profile-driven idle grace, not immediate closure.
+    Idle-closed GPT conversations can resume from their durable binding.
+    ``source`` is optional caller provenance; it never selects a default chat.
 
     Sessions (plan agent-sessions): ``session_keep_alive=True`` opens a live
     agent session that survives this request — the response's ``session-id``
@@ -340,6 +348,8 @@ def submit_execution_request(
     # project-scoped conversation URL.  Keep the URL out of the generic
     # envelope; it is provider-session metadata consumed only by the
     # provider adapter after admission.
+    if not isinstance(new_session, bool) or (new_session and (session_id or provider_chat_url)):
+        raise AudiaGenticError("VAL-AGW-151", "agents", "new_session must be boolean and cannot be combined with session_id or provider_chat_url", {})
     normalized_provider_chat_url: str | None = None
     if provider_chat_url is not None:
         if not isinstance(provider_chat_url, str) or not provider_chat_url.strip():
@@ -366,6 +376,10 @@ def submit_execution_request(
     # Validate the caller-owned mapping before reading its control fields.
     # The sanitized form is the only metadata allowed into durable records,
     # lifecycle events, and provider packets.
+    if title is not None:
+        if not isinstance(title, str) or not title.strip() or len(title) > 120 or any(ord(c) < 32 for c in title):
+            raise AudiaGenticError("VAL-AGW-151", "agents", "title must be a non-empty single-line string of at most 120 characters", {})
+        metadata = {**(metadata or {}), "caller-title": title.strip()}
     persisted_metadata = sanitize_submission_metadata(metadata)
     raw_metadata = dict(metadata or {})
     if normalized_provider_chat_url is not None:
@@ -508,6 +522,14 @@ def submit_execution_request(
     resolved_provider_id = resolved.provider_id
     resolved_instance_ids = list(resolved.instances)
     params = dict(resolved.execution_params)
+    if resolved_provider_id.startswith("gpt-auto"):
+        if not session_keep_alive:
+            from audiagentic.components.agents.gateway.session.idle_grace import gpt_idle_grace
+
+            session_idle_timeout_seconds = gpt_idle_grace(params)
+        # GPT identity/default binding outlives its live browser handle. Never
+        # close on turn completion: the idle reaper waits for quiescent work.
+        session_keep_alive = True
     gateway_snapshot = resolved if profiles_mod.get_gateway_registry() is not None else None
 
     # AS105/AS101: free-instance dispatch binds a concrete model only at
@@ -552,268 +574,290 @@ def submit_execution_request(
         },
     )
 
-    # --- 4. Build the execution manifest -----------------------------------
-    request_id = store.generate_request_id()
-    from audiagentic.components.agents.gateway.session import sessions_store as _session_store
-
-    # Every admitted request owns a durable gateway session.  Provider
-    # transport is intentionally independent: ordinary isolated work remains
-    # on the healthy worker path, while explicit continuations, keep-alive
-    # work, and no-isolation providers use the provider-session runtime.
-    if continuation_session_id:
-        session_id = continuation_session_id
-        provider_transport_kind = "provider-session"
-    else:
-        session_id = _session_store.generate_session_id()
-        provider_transport_kind = (
-            "provider-session"
-            if session_keep_alive or isolation_tier == "no-isolation" or normalized_provider_chat_url
-            else "worker"
-        )
-        if normalized_provider_chat_url is not None:
+    from audiagentic.components.agents.gateway.session.client_defaults import select as select_default_session
+    with select_default_session(
+        project_root, service_root=_dispatch_service_root, client_id=_client_instance_id,
+        agent_id=agent_id, provider_id=resolved_provider_id, session_id=continuation_session_id,
+        provider_chat_url=normalized_provider_chat_url, new_session=new_session,
+    ) as default_selection:
+        continuation_session_id = default_selection.session_id
+        normalized_provider_chat_url = default_selection.provider_chat_url
+        if normalized_provider_chat_url:
+            from audiagentic.components.agents.gateway.session.conversation_owner import resolve_conversation_owner
+            continuation_session_id = resolve_conversation_owner(
+                project_root, normalized_provider_chat_url, continuation_session_id,
+            )
             session_keep_alive = True
-    manifest_id = f"mf_{uuid.uuid4().hex[:16]}"
-    resolved_at = now_iso_z()
-    manifest = build_manifest(
-        envelope,
-        manifest_id=manifest_id,
-        request_id=request_id,
-        resolved_at=resolved_at,
-        canonical_root=canonical_root,
-        execution_profile_id=resolved_profile_id,
-        provider_id=resolved_provider_id,
-        model_id=resolved_model_id,  # type: ignore[arg-type]
-        provider_isolation_tier=isolation_tier,
-        agent_runtime_digest=agent_runtime_digest,
-        work_id=envelope.work_id,
-        context_id=envelope.context_id,
-        message_id=envelope.message_id,
-        # Agent admissions are authoritative: never let caller metadata
-        # substitute for the resolved composition identity.  Raw/direct
-        # submissions retain the envelope value for compatibility.
-        agent_config_fingerprint=(
-            composition_fingerprint
-            if composition_fingerprint is not None
-            else envelope.agent_config_fingerprint
-        ),
-        role_manifest_fingerprint=envelope.role_manifest_fingerprint,
-        eligible_instance_ids=envelope.eligible_instance_ids,
-    )
+        if default_selection.identity is not None:
+            session_keep_alive = True
+        if normalized_provider_chat_url:
+            persisted_metadata["provider-chat-url"] = normalized_provider_chat_url
+        # --- 4. Build the execution manifest -----------------------------------
+        request_id = store.generate_request_id()
+        from audiagentic.components.agents.gateway.session import sessions_store as _session_store
 
-    # Continuations may intentionally run after a gateway process restart or
-    # code/config reload.  The session binding remains the authority for its
-    # execution context; expose an explicit fingerprint override so a caller
-    # can continue that same durable session without silently accepting a
-    # drifted context.  New sessions must always use the fresh manifest value.
-    request_context_fingerprint = manifest.context_fingerprint
-    if execution_context_fingerprint is not None:
-        if continuation_session_id is None:
-            raise AudiaGenticError(
-                code="VAL-AGW-104",
-                kind="agents",
-                message="execution context fingerprint override requires session_id",
-                details={},
+        # Every admitted request owns a durable gateway session.  Provider
+        # transport is intentionally independent: ordinary isolated work remains
+        # on the healthy worker path, while explicit continuations, keep-alive
+        # work, and no-isolation providers use the provider-session runtime.
+        if continuation_session_id:
+            session_id = continuation_session_id
+            provider_transport_kind = "provider-session"
+        else:
+            session_id = _session_store.generate_session_id()
+            provider_transport_kind = (
+                "provider-session"
+                if session_keep_alive or isolation_tier == "no-isolation" or normalized_provider_chat_url
+                else "worker"
             )
-        if not isinstance(execution_context_fingerprint, str) or not execution_context_fingerprint:
-            raise AudiaGenticError(
-                code="VAL-AGW-105",
-                kind="agents",
-                message="execution context fingerprint override must be non-empty",
-                details={},
-            )
-        request_context_fingerprint = execution_context_fingerprint
-
-    # A continuation is part of the already admitted provider conversation.
-    # Unless the caller deliberately supplies the compatibility override
-    # above, retain its frozen execution context rather than deriving a new
-    # request fingerprint and rejecting an ordinary second turn.
-    existing_session: dict[str, Any] | None = None
-    if continuation_session_id:
-        existing_session = _session_store.read_session_record(project_root, continuation_session_id)
-        # A continuation is necessarily cache/context preserving. The caller
-        # has selected an existing provider conversation, so do not let the
-        # request-level default close that conversation after this turn.
-        session_keep_alive = True
-        binding = existing_session.get("binding")
-        if execution_context_fingerprint is None and isinstance(binding, dict):
-            frozen_context = binding.get("execution-context-fingerprint")
-            if isinstance(frozen_context, str) and frozen_context:
-                request_context_fingerprint = frozen_context
-
-    # Derive idempotency key (client-supplied wins, else deterministic)
-    idempotency_key = derive_idempotency_key(
-        envelope.idempotency_key,
-        context_fingerprint=request_context_fingerprint,
-        prompt_digest=manifest.prompt_digest,
-        session_id=continuation_session_id,
-    )
-
-    # --- 5. Build and atomically admit the record ---------------------------
-    # The client key currently arrives through transport metadata. It remains
-    # available for envelope validation but must never reach records, queues,
-    # events, or provider packets in raw form.
-    # Snapshot the machine-owned watchdog policy at admission. Dispatch and
-    # renewal therefore cannot change semantics halfway through a request.
-    # Freeze the exact rendered semantic prompt before admission.  Dispatch
-    # receives this value in-memory for the fast path, while restart/recovery
-    # can reload the same immutable bytes without consulting mutable config.
-    from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
-    from audiagentic.components.agents.gateway.queue.watchdog_policy import load_watchdog_policy
-    from audiagentic.foundation.io import atomic_write_bytes
-
-    atomic_write_bytes(
-        gateway_admitted_prompt_path(Path(canonical_root.display), request_id),
-        dispatch_prompt.encode("utf-8"),
-    )
-
-    record = store.build_record(
-        request_id=request_id,
-        agent_id=agent_id,
-        prompt_template_name=prompt_template_name,
-        prompt_template_digest=prompt_template_digest,
-        prompt_definition_fingerprint=prompt_definition_fingerprint,
-        execution_profile_id=resolved_profile_id,
-        prompt_profile_id=prompt_profile_id,
-        prompt_body=prompt_body,  # carried in-memory; redacted before persistence
-        mode=mode,
-        timeout_seconds=timeout_seconds,
-        source=source,
-        metadata=persisted_metadata,
-        template_context=template_context,
-        session_id=session_id,
-        continuation_session_id=continuation_session_id,
-        provider_transport_kind=provider_transport_kind,
-        session_keep_alive=session_keep_alive,
-        session_idle_timeout_seconds=session_idle_timeout_seconds,
-        session_max_lifetime_seconds=session_max_lifetime_seconds,
-        # Manifest fields (persisted)
-        manifest_id=manifest_id,
-        context_fingerprint=request_context_fingerprint,
-        prompt_digest=manifest.prompt_digest,
-        idempotency_key=None,
-        correlation_id=envelope.correlation_id,
-        # SH07 C2: gateway profile snapshot identity, resolved above.
-        gateway_profile_id=gateway_snapshot.profile_id if gateway_snapshot else None,
-        gateway_profile_generation=gateway_snapshot.generation if gateway_snapshot else None,
-        gateway_profile_config_digest=gateway_snapshot.config_digest if gateway_snapshot else None,
-        gateway_profile_runtime=(
-            {
-                "provider-id": gateway_snapshot.provider_id,
-                "instances": list(gateway_snapshot.instances),
-                "params": dict(gateway_snapshot.execution_params),
-                "model-alias": profile.get("model_alias"),
-                "surface-id": gateway_snapshot.resolved_surface_id,
-                "surface-version": gateway_snapshot.resolved_surface_version,
-            }
-            if gateway_snapshot
-            else None
-        ),
-        # AS105/AS101: GatewayExecutionLaneKey is retired -- capacity is
-        # instance-scoped, not lane-scoped. Kept in the schema (always None
-        # going forward) purely so a pre-pivot value on an old record stays
-        # readable rather than becoming a validation failure.
-        gateway_execution_lane_key=None,
-        resolved_provider_id=resolved_provider_id,
-        resolved_model_id=resolved_model_id,
-        resolved_instance_ids=resolved_instance_ids,
-        # AS105/AS101: capacity is per-instance (model-sources.yaml), not a
-        # profile-level queue limit -- retired, always None going forward.
-        resolved_queue_limits=None,
-        admission_policy_digest=None,
-        watchdog_policy=load_watchdog_policy().snapshot,
-    )
-
-    # Continuations refer to an already durable provider-session.  New
-    # requests install their own pending gateway session under the same
-    # admission critical section as the request record, so no observable
-    # request can be sessionless.
-    pending_session: dict[str, Any] | None = None
-    if continuation_session_id:
-        if existing_session is None:
-            existing_session = _session_store.read_session_record(project_root, continuation_session_id)
-        if existing_session.get("provider-transport-kind") != "provider-session":
-            raise AudiaGenticError(
-                code="VAL-AGW-148",
-                kind="agents",
-                message="a worker-backed gateway session cannot be continued as a provider session",
-                details={"session-id": continuation_session_id},
-            )
-        if existing_session.get("execution-profile-id") != resolved_profile_id:
-            raise AudiaGenticError(
-                code="VAL-AGW-060",
-                kind="agents",
-                message="request execution profile does not match the session's profile",
-                details={"session-id": continuation_session_id},
-            )
-    else:
-        pending_session = _session_store.build_session_record(
-            session_id=session_id,
-            created_by_request_id=request_id,
-            provider_transport_kind=provider_transport_kind,
+            if normalized_provider_chat_url is not None:
+                session_keep_alive = True
+        manifest_id = f"mf_{uuid.uuid4().hex[:16]}"
+        resolved_at = now_iso_z()
+        manifest = build_manifest(
+            envelope,
+            manifest_id=manifest_id,
+            request_id=request_id,
+            resolved_at=resolved_at,
+            canonical_root=canonical_root,
             execution_profile_id=resolved_profile_id,
             provider_id=resolved_provider_id,
-            model_id=resolved_model_id,
-            idle_timeout_seconds=session_idle_timeout_seconds,
-            max_lifetime_seconds=session_max_lifetime_seconds,
-        )
-    record, created = store.admit_record(
-        project_root,
-        record,
-        idempotency_key=idempotency_key,
-        # C7: without this, the admission-phase work-index entry (which
-        # recovery relies on to discover admitted-but-unclaimed requests
-        # after a crash) is never written — service_root defaults to None
-        # inside admit_record and the write is silently skipped.
-        service_root=Path(_dispatch_service_root) if _dispatch_service_root else None,
-        before_write=(
-            (lambda: _session_store.write_session_record(project_root, pending_session))
-            if pending_session is not None
-            else None
-        ),
-    )
-
-    if created:
-        store.record_gateway_timeline(
-            project_root,
-            request_id,
-            "request.created",
-            state=record["state"],
-            attributes={
-                "execution-profile-id": resolved_profile_id,
-                "mode": mode,
-                "source": source,
-                "correlation_id": envelope.correlation_id,
-                "subject": persisted_metadata.get("subject"),
-                "manifest-id": manifest_id,
-                "context-fingerprint": request_context_fingerprint,
-            },
+            model_id=resolved_model_id,  # type: ignore[arg-type]
+            provider_isolation_tier=isolation_tier,
+            agent_runtime_digest=agent_runtime_digest,
+            work_id=envelope.work_id,
+            context_id=envelope.context_id,
+            message_id=envelope.message_id,
+            # Agent admissions are authoritative: never let caller metadata
+            # substitute for the resolved composition identity.  Raw/direct
+            # submissions retain the envelope value for compatibility.
+            agent_config_fingerprint=(
+                composition_fingerprint
+                if composition_fingerprint is not None
+                else envelope.agent_config_fingerprint
+            ),
+            role_manifest_fingerprint=envelope.role_manifest_fingerprint,
+            eligible_instance_ids=envelope.eligible_instance_ids,
         )
 
-        # --- 6. Enqueue with dispatch_prompt threaded via functools.partial -
-        runner = functools.partial(
-            dispatch.dispatch_request,
-            dispatch_prompt=dispatch_prompt,
-            preallocated_session_id=(
-                session_id
-                if provider_transport_kind == "provider-session" and continuation_session_id is None
+        # Continuations may intentionally run after a gateway process restart or
+        # code/config reload.  The session binding remains the authority for its
+        # execution context; expose an explicit fingerprint override so a caller
+        # can continue that same durable session without silently accepting a
+        # drifted context.  New sessions must always use the fresh manifest value.
+        request_context_fingerprint = manifest.context_fingerprint
+        if execution_context_fingerprint is not None:
+            if continuation_session_id is None:
+                raise AudiaGenticError(
+                    code="VAL-AGW-104",
+                    kind="agents",
+                    message="execution context fingerprint override requires session_id",
+                    details={},
+                )
+            if not isinstance(execution_context_fingerprint, str) or not execution_context_fingerprint:
+                raise AudiaGenticError(
+                    code="VAL-AGW-105",
+                    kind="agents",
+                    message="execution context fingerprint override must be non-empty",
+                    details={},
+                )
+            request_context_fingerprint = execution_context_fingerprint
+
+        # A continuation is part of the already admitted provider conversation.
+        # Unless the caller deliberately supplies the compatibility override
+        # above, retain its frozen execution context rather than deriving a new
+        # request fingerprint and rejecting an ordinary second turn.
+        existing_session: dict[str, Any] | None = None
+        if continuation_session_id:
+            existing_session = _session_store.read_session_record(project_root, continuation_session_id)
+            # A continuation is necessarily cache/context preserving. The caller
+            # has selected an existing provider conversation, so do not let the
+            # request-level default close that conversation after this turn.
+            session_keep_alive = True
+            binding = existing_session.get("binding")
+            if execution_context_fingerprint is None and isinstance(binding, dict):
+                frozen_context = binding.get("execution-context-fingerprint")
+                if isinstance(frozen_context, str) and frozen_context:
+                    request_context_fingerprint = frozen_context
+
+        # Derive idempotency key (client-supplied wins, else deterministic)
+        idempotency_key = derive_idempotency_key(
+            envelope.idempotency_key,
+            context_fingerprint=request_context_fingerprint,
+            prompt_digest=manifest.prompt_digest,
+            session_id=continuation_session_id,
+        )
+
+        # --- 5. Build and atomically admit the record ---------------------------
+        # The client key currently arrives through transport metadata. It remains
+        # available for envelope validation but must never reach records, queues,
+        # events, or provider packets in raw form.
+        # Snapshot the machine-owned watchdog policy at admission. Dispatch and
+        # renewal therefore cannot change semantics halfway through a request.
+        # Freeze the exact rendered semantic prompt before admission.  Dispatch
+        # receives this value in-memory for the fast path, while restart/recovery
+        # can reload the same immutable bytes without consulting mutable config.
+        from audiagentic.components.agents.agents_paths import gateway_admitted_prompt_path
+        from audiagentic.components.agents.gateway.queue.watchdog_policy import load_watchdog_policy
+        from audiagentic.foundation.io import atomic_write_bytes
+
+        atomic_write_bytes(
+            gateway_admitted_prompt_path(Path(canonical_root.display), request_id),
+            dispatch_prompt.encode("utf-8"),
+        )
+
+        record = store.build_record(
+            request_id=request_id,
+            agent_id=agent_id,
+            prompt_template_name=prompt_template_name,
+            prompt_template_digest=prompt_template_digest,
+            prompt_definition_fingerprint=prompt_definition_fingerprint,
+            execution_profile_id=resolved_profile_id,
+            prompt_profile_id=prompt_profile_id,
+            prompt_body=prompt_body,  # carried in-memory; redacted before persistence
+            mode=mode,
+            timeout_seconds=timeout_seconds,
+            source=source,
+            metadata=persisted_metadata,
+            client_default_session=default_selection.identity,
+            warnings=default_selection.warnings,
+            template_context=template_context,
+            session_id=session_id,
+            continuation_session_id=continuation_session_id,
+            provider_transport_kind=provider_transport_kind,
+            session_keep_alive=session_keep_alive,
+            session_idle_timeout_seconds=session_idle_timeout_seconds,
+            session_max_lifetime_seconds=session_max_lifetime_seconds,
+            # Manifest fields (persisted)
+            manifest_id=manifest_id,
+            context_fingerprint=request_context_fingerprint,
+            prompt_digest=manifest.prompt_digest,
+            idempotency_key=None,
+            correlation_id=envelope.correlation_id,
+            # SH07 C2: gateway profile snapshot identity, resolved above.
+            gateway_profile_id=gateway_snapshot.profile_id if gateway_snapshot else None,
+            gateway_profile_generation=gateway_snapshot.generation if gateway_snapshot else None,
+            gateway_profile_config_digest=gateway_snapshot.config_digest if gateway_snapshot else None,
+            gateway_profile_runtime=(
+                {
+                    "provider-id": gateway_snapshot.provider_id,
+                    "instances": list(gateway_snapshot.instances),
+                    "params": dict(gateway_snapshot.execution_params),
+                    "model-alias": profile.get("model_alias"),
+                    "surface-id": gateway_snapshot.resolved_surface_id,
+                    "surface-version": gateway_snapshot.resolved_surface_version,
+                }
+                if gateway_snapshot
                 else None
             ),
-            manifest_id=manifest.manifest_id,
-            context_fingerprint=request_context_fingerprint,
-            component_profile=manifest.identity.component_profile,
-            provider_isolation_tier=manifest.identity.provider_isolation_tier,
-            worker_timeout_seconds=manifest.timeout_seconds or DEFAULT_BLOCKING_TIMEOUT_SECONDS,
+            # AS105/AS101: GatewayExecutionLaneKey is retired -- capacity is
+            # instance-scoped, not lane-scoped. Kept in the schema (always None
+            # going forward) purely so a pre-pivot value on an old record stays
+            # readable rather than becoming a validation failure.
+            gateway_execution_lane_key=None,
+            resolved_provider_id=resolved_provider_id,
+            resolved_model_id=resolved_model_id,
+            resolved_instance_ids=resolved_instance_ids,
+            # AS105/AS101: capacity is per-instance (model-sources.yaml), not a
+            # profile-level queue limit -- retired, always None going forward.
+            resolved_queue_limits=None,
+            admission_policy_digest=None,
+            watchdog_policy=load_watchdog_policy().snapshot,
         )
-        record = get_queue_manager().enqueue(
+
+        # Continuations refer to an already durable provider-session.  New
+        # requests install their own pending gateway session under the same
+        # admission critical section as the request record, so no observable
+        # request can be sessionless.
+        pending_session: dict[str, Any] | None = None
+        if continuation_session_id:
+            if existing_session is None:
+                existing_session = _session_store.read_session_record(project_root, continuation_session_id)
+            if existing_session.get("provider-transport-kind") != "provider-session":
+                raise AudiaGenticError(
+                    code="VAL-AGW-148",
+                    kind="agents",
+                    message="a worker-backed gateway session cannot be continued as a provider session",
+                    details={"session-id": continuation_session_id},
+                )
+            if existing_session.get("execution-profile-id") != resolved_profile_id:
+                raise AudiaGenticError(
+                    code="VAL-AGW-060",
+                    kind="agents",
+                    message="request execution profile does not match the session's profile",
+                    details={"session-id": continuation_session_id},
+                )
+        else:
+            pending_session = _session_store.build_session_record(
+                session_id=session_id,
+                created_by_request_id=request_id,
+                provider_transport_kind=provider_transport_kind,
+                execution_profile_id=resolved_profile_id,
+                provider_id=resolved_provider_id,
+                model_id=resolved_model_id,
+                idle_timeout_seconds=session_idle_timeout_seconds,
+                max_lifetime_seconds=session_max_lifetime_seconds,
+            )
+        record, created = store.admit_record(
             project_root,
             record,
-            params,
-            runner,
-            dispatch_owner_epoch=_dispatch_owner_epoch,
-            dispatch_service_root=(
-                Path(_dispatch_service_root) if _dispatch_service_root else None
+            idempotency_key=idempotency_key,
+            # C7: without this, the admission-phase work-index entry (which
+            # recovery relies on to discover admitted-but-unclaimed requests
+            # after a crash) is never written — service_root defaults to None
+            # inside admit_record and the write is silently skipped.
+            service_root=Path(_dispatch_service_root) if _dispatch_service_root else None,
+            before_write=(
+                (lambda: _session_store.write_session_record(project_root, pending_session))
+                if pending_session is not None
+                else None
             ),
         )
+
+        default_selection.commit(record)
+
+        if created:
+            store.record_gateway_timeline(
+                project_root,
+                request_id,
+                "request.created",
+                state=record["state"],
+                attributes={
+                    "execution-profile-id": resolved_profile_id,
+                    "mode": mode,
+                    "source": source,
+                    "correlation_id": envelope.correlation_id,
+                    "subject": persisted_metadata.get("subject"),
+                    "manifest-id": manifest_id,
+                    "context-fingerprint": request_context_fingerprint,
+                },
+            )
+
+            # --- 6. Enqueue with dispatch_prompt threaded via functools.partial -
+            runner = functools.partial(
+                dispatch.dispatch_request,
+                dispatch_prompt=dispatch_prompt,
+                preallocated_session_id=(
+                    session_id
+                    if provider_transport_kind == "provider-session" and continuation_session_id is None
+                    else None
+                ),
+                manifest_id=manifest.manifest_id,
+                context_fingerprint=request_context_fingerprint,
+                component_profile=manifest.identity.component_profile,
+                provider_isolation_tier=manifest.identity.provider_isolation_tier,
+                worker_timeout_seconds=manifest.timeout_seconds or DEFAULT_BLOCKING_TIMEOUT_SECONDS,
+            )
+            record = get_queue_manager().enqueue(
+                project_root,
+                record,
+                params,
+                runner,
+                dispatch_owner_epoch=_dispatch_owner_epoch,
+                dispatch_service_root=(
+                    Path(_dispatch_service_root) if _dispatch_service_root else None
+                ),
+            )
 
     if mode == "blocking":
         wait_timeout = timeout_seconds or DEFAULT_BLOCKING_TIMEOUT_SECONDS
@@ -1204,6 +1248,12 @@ def list_dashboard_requests(project_root: Path) -> list[dict[str, Any]]:
         # historical file scan. Activity/lifecycle fields are already present
         # in the request record projection.
         row = store.project_public_status(record)
+        client_icon = (record.get("metadata") or {}).get("client-icon")
+        if type(client_icon) is int and 0 <= client_icon < 24:
+            row["client-icon"] = client_icon
+        caller_title = (record.get("metadata") or {}).get("caller-title")
+        if isinstance(caller_title, str) and caller_title.strip():
+            row["title"] = caller_title[:120]
         # The dashboard may offer a navigation link to the exact GPT chat
         # tab.  Only expose a validated ChatGPT origin; provider metadata
         # remains hidden from compact task status and arbitrary URLs never

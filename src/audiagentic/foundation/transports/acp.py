@@ -1529,9 +1529,11 @@ def _map_acp_event_to_observation(
             else:
                 attrs["reason"] = acp_event.text or ""
         elif transport_kind == TransportObservationKind.ACTIVITY:
-            # Extract model_activity from text for thought events
-            if acp_kind == "thought" and acp_event.text:
-                attrs["model_activity"] = acp_event.text
+            # Labels are bounded evidence, never provider text/reasoning.
+            if acp_event.text:
+                attrs["model_activity"] = (
+                    "thinking" if acp_kind == "thought" else "response-progress"
+                )
 
         return TransportObservation(
             ag_session_id=ag_session_id,
@@ -1694,6 +1696,8 @@ class AcpAgentSessionTransport:
             # terminal result.
             if acp_event.kind == "assistant-message" and acp_event.text:
                 _final_summary_parts.append(acp_event.text)
+            if acp_event.kind in {"assistant-message", "thought"} and not acp_event.text:
+                return
             try:
                 obs = _map_acp_event_to_observation(acp_event, ag_sid, turn_id)
                 # Map subsequent assistant-messages to IN_PROGRESS after first ACTIVITY
@@ -1713,7 +1717,7 @@ class AcpAgentSessionTransport:
                             kind=TransportObservationKind.IN_PROGRESS,
                             observed_at=obs.observed_at,
                             correlation_quality=obs.correlation_quality,
-                            attributes={"model_activity": "generating"},
+                            attributes={"model_activity": "response-progress"} if acp_event.text else {},
                         )
                 result = sink(obs)
                 if asyncio.iscoroutine(result):

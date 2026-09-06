@@ -24,7 +24,7 @@ from audiagentic.foundation.system.managed_service_owner import ManagedServiceOw
 
 QUIET = {
     "pending-requests": 0, "running-requests": 0, "live-sessions": 0,
-    "ingress-pending": 0, "quiescent": True,
+    "ingress-pending": 0, "active-gateway-operations": 0, "quiescent": True,
 }
 BUSY = {**QUIET, "running-requests": 1, "quiescent": False}
 
@@ -67,7 +67,7 @@ def test_dashboard_restart_is_quiescence_gated(claimed_store, monkeypatch, busy)
     controller, shutdowns = _controller(store, record)
     controller.restart_enabled = True
     if busy:
-        with pytest.raises(AudiaGenticError, match="active work"):
+        with pytest.raises(AudiaGenticError, match="queued or running work"):
             controller.request_restart()
         assert store.read().state == "running"
         assert not controller.restart_requested
@@ -87,6 +87,26 @@ def test_embedded_host_refuses_restart(claimed_store):
     with pytest.raises(AudiaGenticError, match="does not support restart"):
         controller.request_restart()
     assert not shutdowns
+
+
+@pytest.mark.parametrize("turn_active,pending,allowed", [(False,0,True),(True,0,False),(False,1,False)])
+def test_restart_distinguishes_idle_handles_from_session_work(claimed_store, monkeypatch, turn_active, pending, allowed):
+    from types import SimpleNamespace
+    from audiagentic.components.agents.gateway.session import sessions
+    store, record = claimed_store
+    monkeypatch.setattr(lifecycle_mod, "gateway_quiescence_facts", lambda root=None: {**QUIET,"live-sessions":1,"quiescent":False})
+    runtime = SimpleNamespace(session_snapshot_all=lambda: {"ses_idle":{"turn-active":turn_active,"pending-turns":pending}})
+    monkeypatch.setattr(sessions, "peek_session_runtime", lambda: runtime)
+    controller, shutdowns = _controller(store, record)
+    controller.restart_enabled = True
+    if allowed:
+        assert controller.request_restart() == {"restarting":True}
+        assert shutdowns == [True]
+    else:
+        with pytest.raises(AudiaGenticError):
+            controller.request_restart()
+        assert not shutdowns
+        assert store.read().state == "running"
 
 
 def test_drain_and_resume_transitions(claimed_store, monkeypatch):

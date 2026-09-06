@@ -43,8 +43,23 @@ def test_dashboard_actions_activity_and_card_icons(tmp_path):
             page.goto("http://dashboard.test/dashboard")
             page.locator(".request-row").first.wait_for()
             assert page.locator('.request-header').count() == 0
+            backgrounds = []
+            for theme in ['default', 'dark', 'mid', 'light']:
+                page.locator('#theme-filter').select_option(theme)
+                assert page.locator('html').get_attribute('data-theme') == theme
+                backgrounds.append(page.locator('body').evaluate('e=>getComputedStyle(e).backgroundColor'))
+                page.screenshot(path=str(tmp_path / f'theme-{theme}.png'), full_page=True)
+            assert len(set(backgrounds)) == 4
+            page.reload()
+            page.locator('.request-row').first.wait_for()
+            assert page.locator('#theme-filter').input_value() == 'light'
+            page.evaluate('s=>draw(s)', snapshot)
+            assert page.locator('html').get_attribute('data-theme') == 'light'
+            page.locator('#theme-filter').select_option('default')
             assert page.locator("#counts .summary-icon").count() == 6
             assert page.locator(".project-avatar").count() == 2
+            assert page.locator('.project-avatar').first.evaluate('e=>getComputedStyle(e).caretColor') == 'rgba(0, 0, 0, 0)'
+            assert page.locator('#recent-window').evaluate('e=>getComputedStyle(e).caretColor') != 'rgba(0, 0, 0, 0)'
             assert page.locator(".request-row:has(.badge.state-completed) .activity-badge").first.inner_text() == "Activity Count #13"
             assert page.locator(".request-row:has(.badge.state-completed) .cancel-request").count() == 0
             assert page.locator('.session').count() == 2
@@ -65,6 +80,21 @@ def test_dashboard_actions_activity_and_card_icons(tmp_path):
             panel = page.locator('.session').first.bounding_box()
             assert header['width'] >= panel['width']
             assert page.locator('.session-actions').first.inner_text().endswith('2 Requests')
+            assert page.locator('#show-closed, #show-empty').count() == 0
+            page.locator('#layout-filter').select_option('rows')
+            assert page.locator('.project-head').count() == 0
+            assert page.locator('.row-session-list').count() == 1
+            assert page.locator('.session-identity .project-avatar').count() == 2
+            assert page.locator('.work-section-active').count() == 1
+            varied = json.loads(json.dumps(snapshot))
+            varied['projects'][1]['sessions'][0]['turn-count'] = 12345
+            varied['projects'][1]['sessions'][0]['pending-turns'] = 12
+            page.evaluate('s=>draw(s)', varied)
+            centers = page.locator('.session-actions > .badge').evaluate_all('els=>els.map(e=>{const r=e.getBoundingClientRect();return r.x+r.width/2})')
+            assert max(centers) - min(centers) < 1
+            assert page.locator('.request-row').last.evaluate("e=>getComputedStyle(e,'::before').content") == '"└─"'
+            assert '│' in page.locator('.request-row').first.evaluate("e=>getComputedStyle(e,'::after').content")
+            page.locator('#layout-filter').select_option('columns')
             heights = page.locator('.request-row').first.evaluate("e=>[...e.querySelectorAll('.badge,.activity-badge')].map(x=>x.getBoundingClientRect().height)")
             assert len(set(heights)) == 1
             screenshot = tmp_path / "dashboard.png"

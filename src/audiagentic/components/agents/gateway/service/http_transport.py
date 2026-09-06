@@ -74,6 +74,12 @@ class GatewayHTTPRequestHandler(BaseHTTPRequestHandler):
             # the service bearer token.  Every mutable/control route remains
             # authenticated below.
             parsed = urlsplit(self.path)
+            if method == "GET" and parsed.path == f"{self.server.dashboard_path}/client-icon":
+                from .client_icons import read_client_icon
+
+                icon = read_client_icon(parse_qs(parsed.query).get("id", [""])[0])
+                self._write_bytes(200 if icon else 404, "image/png", icon)
+                return
             if method == "GET" and parsed.path == self.server.dashboard_path:
                 from audiagentic.components.agents.gateway.service.dashboard import (
                     render_dashboard_html,

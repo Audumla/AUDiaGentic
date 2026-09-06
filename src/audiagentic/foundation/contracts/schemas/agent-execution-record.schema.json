@@ -30,6 +30,17 @@
   ],
   "additionalProperties": false,
   "properties": {
+    "client-default-session": {
+      "type": ["object", "null"],
+      "properties": {"key": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "automatic": {"type": "boolean"}},
+      "required": ["key", "automatic"], "additionalProperties": false
+    },
+    "warnings": {"type": "array", "maxItems": 3, "items": {
+      "type": "object", "properties": {
+        "code": {"type": "string", "maxLength": 80}, "message": {"type": "string", "maxLength": 240},
+        "session-id": {"type": "string"}
+      }, "required": ["code", "message"], "additionalProperties": false
+    }},
     "contract-version": {
       "enum": ["v5", "v6", "v7", "v8"]
     },

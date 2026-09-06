@@ -1,5 +1,15 @@
 from __future__ import annotations
 
+
+def test_project_title_suffix_is_not_project_identity():
+    from audiagentic.components.providers.adapters.gpt_auto.urls import parse_project_id, canonical_chat_url
+    project = "g-p-6a7bbf85d06c8191835b0d64958b4d7a"
+    base = f"https://chatgpt.com/g/{project}"
+    assert parse_project_id(base + "-bigcherry/c/chat") == parse_project_id(base + "/project")
+    assert parse_project_id(base + "-renamed/c/chat") == project
+    assert canonical_chat_url(base + "-bigcherry/c/chat") == base + "/c/chat"
+    assert parse_project_id(base + "/project") != parse_project_id("https://chatgpt.com/g/g-p-00000000000000000000000000000000/project")
+
 import sys
 from pathlib import Path
 

@@ -106,7 +106,10 @@ def normalize_prompt_text(text: str) -> str:
     # any run of 2+ newlines (blank lines) to one, the vertical analogue of
     # the horizontal-whitespace-run collapse above.
     normalized = _BLANK_LINE_RUN_RE.sub("\n", normalized)
-    return normalized
+    # The renderer drops all trailing blank lines, not just one newline.
+    # Apply after whitespace normalization so whitespace-only final lines
+    # cannot leave a residual newline and strand submission proof.
+    return normalized.rstrip("\n")
 
 
 @dataclass(frozen=True)

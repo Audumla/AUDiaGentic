@@ -1187,6 +1187,8 @@ def update_owned_running_session(
     attempt_epoch: int,
     session_id: str,
     provider_metadata: dict[str, Any] | None = None,
+    warnings: list[dict[str, Any]] | None = None,
+    recovery_chat_url: str | None = None,
 ) -> dict[str, Any]:
     """Attach the live session id while the current attempt is still running.
 
@@ -1218,10 +1220,17 @@ def update_owned_running_session(
                 "gateway request is not running",
                 {"request-id": request_id, "state": record["state"]},
             )
-        if record.get("session-id") == session_id and provider_metadata is None:
+        if record.get("session-id") == session_id and provider_metadata is None and warnings is None:
             return record
         updated = dict(record)
         updated["session-id"] = session_id
+        if warnings is not None:
+            updated["warnings"] = list(warnings)[-3:]
+            metadata = dict(updated.get("metadata") or {})
+            metadata.pop("provider-chat-url", None)
+            if recovery_chat_url:
+                metadata["provider-chat-url"] = recovery_chat_url
+            updated["metadata"] = metadata
         if provider_metadata is not None:
             updated["provider-metadata"] = dict(provider_metadata)
         updated["updated-at"] = now_iso_z()

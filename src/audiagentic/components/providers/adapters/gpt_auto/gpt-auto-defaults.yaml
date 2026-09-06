@@ -1,4 +1,4 @@
-# GP09/GP20: packaged defaults for the gpt-auto provider's settings.
+# GP09/GP20: shared packaged defaults exclusively for the gpt-auto provider.
 #
 # Project config files under .audiagentic/config/providers/gpt-auto*.yaml
 # become sparse overlays -- they may specify project-url when a provider

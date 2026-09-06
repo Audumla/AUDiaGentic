@@ -454,7 +454,7 @@ class _NavigationOnClickBridge(_GptOperationBridge):
 
 
 @pytest.mark.asyncio
-async def test_gpt_provider_send_click_is_synchronous_after_python_settle_delay():
+async def test_gpt_provider_send_click_is_synchronous():
     bridge = _NavigationOnClickBridge()
     browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]
     result = await browser.submit(CdpPageRef("page-1", "target-1"), "stable send")
@@ -468,7 +468,7 @@ async def test_gpt_provider_send_click_is_synchronous_after_python_settle_delay(
 
 @pytest.mark.asyncio
 async def test_gpt_provider_waits_for_composer_state_before_click(monkeypatch):
-    """The input event gets a bounded React settle window before Send."""
+    """Readiness polling continues beyond the old three-attempt limit."""
     import audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp as cdp
 
     delays: list[float] = []
@@ -477,10 +477,9 @@ async def test_gpt_provider_waits_for_composer_state_before_click(monkeypatch):
         delays.append(delay)
 
     monkeypatch.setattr(cdp.asyncio, "sleep", record_sleep)
-    browser = GptAutoCdpBrowserController(_GptOperationBridge())  # type: ignore[arg-type]
+    browser = GptAutoCdpBrowserController(_TransientSendFailureBridge(fail_attempts=5))  # type: ignore[arg-type]
     await browser.submit(CdpPageRef("page-1", "target-1"), "settle first")
-    assert delays[0] == GptAutoCdpBrowserController._COMPOSER_SETTLE_DELAY_SECONDS
-    assert delays[0] >= 0.1
+    assert delays == [GptAutoCdpBrowserController._SUBMIT_POLL_SECONDS] * 5
 
 
 @pytest.mark.asyncio
@@ -499,15 +498,16 @@ async def test_gpt_provider_submit_and_stop_use_fake_dom_responses():
 
 
 @pytest.mark.asyncio
-async def test_gpt_provider_submit_falls_back_to_enter_when_send_is_disabled():
+async def test_gpt_provider_never_bypasses_disabled_send_with_enter():
     bridge = _GptOperationBridge(send_enabled=False)
     browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]
     page = CdpPageRef("page-1", "target-1")
-    result = await browser.submit(page, "fallback")
-    assert result["actionComplete"] is False
-    assert result["sendButtonClicked"] is False
-    assert result["enterDispatched"] is True
-    assert any(method == "dispatch_enter" for method, _ in bridge.calls)
+    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import ComposerSubmissionTimeout
+    with pytest.raises(ComposerSubmissionTimeout) as raised:
+        await browser.submit(page, "fallback", timeout=0.02)
+    assert raised.value.send_attempted is False
+    assert raised.value.stage == "composer-readiness"
+    assert not any(method == "dispatch_enter" for method, _ in bridge.calls)
 
 
 class _TransientSendFailureBridge(_GptOperationBridge):
@@ -528,6 +528,28 @@ class _TransientSendFailureBridge(_GptOperationBridge):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("fail_at,ambiguous", [(1, False), (2, True)])
+async def test_composer_timeout_preserves_send_boundary(monkeypatch, fail_at, ambiguous):
+    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import ComposerSubmissionTimeout
+
+    browser = GptAutoCdpBrowserController(_GptOperationBridge())
+    calls = 0
+
+    async def evaluate(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == fail_at:
+            raise TimeoutError("simulated CDP timeout")
+        return "prompt"
+
+    monkeypatch.setattr(browser, "evaluate", evaluate)
+    with pytest.raises(ComposerSubmissionTimeout) as raised:
+        await browser.submit(CdpPageRef("page-1", "target-1"), "prompt")
+    assert raised.value.send_attempted is ambiguous
+    assert raised.value.stage == ("send-button" if ambiguous else "composer-insertion")
+
+
+@pytest.mark.asyncio
 async def test_gpt_provider_submit_retries_and_recovers_from_transient_send_failure():
     """GP11: a transiently-disabled/absent send button (e.g. right after a
     prior turn resolves, before the composer settles) must not fail the
@@ -539,22 +561,22 @@ async def test_gpt_provider_submit_retries_and_recovers_from_transient_send_fail
     result = await browser.submit(page, "retry recovers")
     assert result["actionComplete"] is True
     assert result["sendButtonClicked"] is True
-    # One dispatch_enter fallback from the failed first attempt, no more.
-    assert sum(1 for method, _ in bridge.calls if method == "dispatch_enter") == 1
+    # Retry only before sending; Enter is reserved for the final attempt.
+    assert sum(1 for method, _ in bridge.calls if method == "dispatch_enter") == 0
 
 
 @pytest.mark.asyncio
 async def test_gpt_provider_submit_gives_up_after_bounded_retries():
-    """A send button that never becomes available exhausts the retry bound
-    and still reports actionComplete=False -- never silently succeeds."""
+    """A permanently disabled Send times out without a submission attempt."""
     bridge = _TransientSendFailureBridge(fail_attempts=999)
     browser = GptAutoCdpBrowserController(bridge)  # type: ignore[arg-type]
     page = CdpPageRef("page-1", "target-1")
-    result = await browser.submit(page, "never recovers")
-    assert result["actionComplete"] is False
+    from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import ComposerSubmissionTimeout
+    with pytest.raises(ComposerSubmissionTimeout):
+        await browser.submit(page, "never recovers", timeout=0.02)
     assert (
         sum(1 for method, _ in bridge.calls if method == "dispatch_enter")
-        == GptAutoCdpBrowserController._SUBMIT_MAX_ATTEMPTS
+        == 0
     )
 
 
