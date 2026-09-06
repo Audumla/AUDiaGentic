@@ -295,6 +295,7 @@ class GptAutoTurn:
         self._last_snapshot: ChatSnapshot | None = None
         self._last_observation_error: BaseException | None = None
         self._baseline_snapshot: ChatSnapshot | None = None
+        self._submission_recovery_proof: ChatSnapshot | None = None
         self._terminal_evidence: dict[str, Any] = {}
         # ChatGPT may virtualize the tail of a long conversation.  Keep one
         # bounded attempt per turn to mount the latest assistant action bar;
@@ -344,7 +345,12 @@ class GptAutoTurn:
             if not _ENGINE.is_terminal(self.state.value):
                 self._move(TurnState.FAILED)
             if self.chat.state not in {ChatState.FAILED, ChatState.CLOSED}:
-                self._set_chat_state(ChatState.FAILED)
+                proven_unsent = (
+                    isinstance(exc, AudiaGenticError)
+                    and exc.code == "EXT-GPTAUTO-003"
+                    and exc.details.get("submission-ambiguous") is False
+                )
+                self._set_chat_state(ChatState.READY if proven_unsent else ChatState.FAILED)
             if self.side_effect_attempted and not isinstance(exc, AudiaGenticError):
                 cause = str(exc).strip() or "no exception message"
                 observation_failure = self._phase in {
@@ -418,7 +424,7 @@ class GptAutoTurn:
         if self.state is TurnState.CANCELLED:
             return self._result("cancelled")
         self._phase = "submission-proof"
-        proof = await self._await_submission_proof(baseline)
+        proof = self._submission_recovery_proof or await self._await_submission_proof(baseline)
         if proof is None:
             if self.state is TurnState.CANCELLED:
                 if self.side_effect_attempted:
@@ -622,6 +628,36 @@ class GptAutoTurn:
                     timeout=self.chat.config.turn.submission_timeout_seconds,
                 )
         except TimeoutError as exc:
+            from .gpt_auto_cdp import ComposerSubmissionTimeout
+
+            proven_unsent = isinstance(exc, ComposerSubmissionTimeout) and not exc.send_attempted
+            # An operation deadline is not a provider outcome. Reconcile the
+            # same conversation before allowing failure/retry, even when the
+            # controller reports no click (an operator may have sent it).
+            if self._baseline_snapshot is not None:
+                self._submission_recovery_proof = await self._final_submission_proof(self._baseline_snapshot)
+                if self._submission_recovery_proof is not None:
+                    self.side_effect_attempted = True
+                    return
+                if self._last_observation_error is not None:
+                    # Failed observation cannot establish that the chat was
+                    # unchanged. Retain the fence instead of permitting retry.
+                    proven_unsent = False
+            if not proven_unsent:
+                # Keep the unresolved checkpoint and enter the existing
+                # activity-aware proof loop. Never retype or resend here.
+                logger.warning("gpt-auto submit acknowledgement lost; observing same turn",
+                               extra={"turn-id": self.request.turn_id})
+                return
+            if proven_unsent:
+                self.side_effect_attempted = False
+                clear_unresolved = getattr(self.chat, "clear_unresolved_turn", None)
+                if clear_unresolved is not None:
+                    clear_unresolved()
+                persist_clear = getattr(self.chat, "persist_unresolved_clear", None)
+                if persist_clear is not None:
+                    await persist_clear()
+                await self._publish_message_ids(strict=True)
             raise AudiaGenticError(
                 code="EXT-GPTAUTO-003",
                 kind="providers",
@@ -629,7 +665,8 @@ class GptAutoTurn:
                 details={
                     "turn-id": self.request.turn_id,
                     "failure-reason": "composer-operation-timeout",
-                    "submission-ambiguous": True,
+                    "submission-ambiguous": not proven_unsent,
+                    "submission-stage": exc.stage if isinstance(exc, ComposerSubmissionTimeout) else "unknown",
                     **self._diagnostics(expected_prompt=self.request.body),
                 },
             ) from exc
@@ -883,7 +920,6 @@ class GptAutoTurn:
     # A tool/app row can remain visible with the same count for a long time
     # while the provider is still working. Edge-only detection then stops
     # renewing the gateway lease even though the browser is visibly busy.
-    _TOOL_ACTIVITY_HEARTBEAT_INTERVAL_SECONDS = 5.0
 
     async def _await_response(self, baseline: ChatSnapshot, current: ChatSnapshot) -> str | None:
         """GP07: re-expresses the previously-bespoke start/stall/total timer
@@ -918,9 +954,6 @@ class GptAutoTurn:
         # A coarse heartbeat, independent of transitions, makes a future
         # stall's timeline reconstructable from the gateway process log.
         last_heartbeat_at = loop.time()
-        last_tool_activity_emit_at = (
-            loop.time() - self._TOOL_ACTIVITY_HEARTBEAT_INTERVAL_SECONDS
-        )
         while True:
             if self.cancel_event.is_set():
                 if self._stop_task is None:
@@ -1136,16 +1169,6 @@ class GptAutoTurn:
                 )
 
             tool_activity_edge = current.tool_activity_counts != previous.tool_activity_counts
-            # Tool rows remain in the completed assistant turn's DOM. Treat
-            # their presence as liveness only until the completion policy is
-            # satisfied, then stop heartbeating so terminal stability can
-            # still be proven.
-            active_tool_activity = bool(current.tool_activity_counts) and not complete.satisfied
-            tool_activity_heartbeat_due = (
-                active_tool_activity
-                and now - last_tool_activity_emit_at
-                >= self._TOOL_ACTIVITY_HEARTBEAT_INTERVAL_SECONDS
-            )
             progress_edge = (
                 current.latest_assistant_id != previous.latest_assistant_id
                 or current.latest_assistant_text != previous.latest_assistant_text
@@ -1162,12 +1185,10 @@ class GptAutoTurn:
             caps = EvidenceCapability.NONE
             if response_started and progress_edge:
                 caps |= EvidenceCapability.PROGRESS
-            elif tool_activity_edge or tool_activity_heartbeat_due:
-                # A verified current-turn tool/app affordance is strong
-                # provider progress even before assistant text begins. Once
-                # the row's count stops changing, the bounded heartbeat keeps
-                # the provider lease alive without treating DOM leftovers as
-                # terminal evidence.
+            elif tool_activity_edge:
+                # A changed current-turn tool/app affordance is strong
+                # provider progress even before assistant text begins. Static
+                # rows are retained DOM state, not repeated activity.
                 caps |= EvidenceCapability.PROGRESS
             if response_started and soft_edge and soft_present:
                 caps |= EvidenceCapability.SOFT_LIVENESS
@@ -1183,7 +1204,7 @@ class GptAutoTurn:
                 # at the start.
                 activity_labels = (
                     _tool_activity_signals(current, previous)
-                    if tool_activity_edge or tool_activity_heartbeat_due
+                    if tool_activity_edge
                     else (
                         ("response-progress",)
                         if EvidenceCapability.PROGRESS in caps
@@ -1195,8 +1216,6 @@ class GptAutoTurn:
                         TransportObservationKind.ACTIVITY,
                         {"model_activity": activity_label},
                     )
-                if tool_activity_edge or tool_activity_heartbeat_due:
-                    last_tool_activity_emit_at = now
                 emitted = True
 
             terminal_candidate = complete.satisfied and bool(current.latest_assistant_text)
@@ -1620,10 +1639,9 @@ def _tool_activity_signals(
 ) -> tuple[str, ...]:
     """Return bounded normalized GPT activity labels for one observation.
 
-    On a count edge, emit every label whose count increased. On a heartbeat
-    (or a removal-only edge), emit exactly one deterministic currently-visible
-    label. This preserves all real edge evidence without multiplying heartbeat
-    traffic.
+    On a count edge, emit every label whose count increased. On a removal-only
+    edge, emit one generic progress label. Static rows emit nothing: presence
+    is retained DOM state and must not inflate the durable activity sequence.
     """
     current_counts = dict(current.tool_activity_counts)
     previous_counts = dict(previous.tool_activity_counts)

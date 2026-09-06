@@ -308,6 +308,7 @@ class _SessionHandle:
         *,
         idle_timeout_seconds: float | None = None,
         max_lifetime_seconds: float | None = None,
+        replace_idle_timeout: bool = False,
     ) -> None:
         """Update lifetime bounds on an existing handle.
 
@@ -321,7 +322,7 @@ class _SessionHandle:
         # must never shorten an already-live session; the most permissive
         # bound wins (and zero means unbounded).
         if idle_timeout_seconds is not None:
-            self.idle_timeout_seconds = _more_open_bound(
+            self.idle_timeout_seconds = idle_timeout_seconds if replace_idle_timeout else _more_open_bound(
                 self.idle_timeout_seconds, idle_timeout_seconds
             )
         if max_lifetime_seconds is not None:
@@ -759,6 +760,7 @@ class SessionRuntime:
         *,
         idle_timeout_seconds: float | None = None,
         max_lifetime_seconds: float | None = None,
+        replace_idle_timeout: bool = False,
     ) -> None:
         """Update lifetime bounds on a live session handle.
 
@@ -782,6 +784,7 @@ class SessionRuntime:
             handle.update_bounds(
                 idle_timeout_seconds=idle_timeout_seconds,
                 max_lifetime_seconds=max_lifetime_seconds,
+                replace_idle_timeout=replace_idle_timeout,
             )
 
         self._call(_update(), timeout=10)

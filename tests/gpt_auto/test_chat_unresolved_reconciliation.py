@@ -176,3 +176,145 @@ async def test_reconcile_refreshes_stale_cdp_page_once_before_failure():
             break
     assert result is True, chat._unresolved_recovery_diagnostics()
     assert navigations == [chat.chat_url]
+
+
+@pytest.mark.asyncio
+async def test_reconcile_materializes_virtualized_completed_response_before_blocking_successor():
+    """A completed background turn must not poison its persistent session.
+
+    Live incident req_634f7c5c595c496f retained a fresh assistant id and
+    terminal controls, but no assistant text.  The queued successor was then
+    rejected as unresolved even though materializing the background tab would
+    expose the completed response.
+    """
+    chat = _chat(response_stability_seconds=0.001)
+    chat.unresolved_assistant_before_id = "a0"
+    virtualized = ChatSnapshot(
+        url="https://chatgpt.com/c/abc",
+        composer_present=True,
+        composer_editable=True,
+        user_count=1,
+        assistant_count=2,
+        latest_assistant_id="a1",
+        latest_user_text="hi",
+        latest_assistant_text=None,
+        dom_signals=frozenset({"completion-control", "more-actions-menu"}),
+        error_present=False,
+        generating=False,
+        latest_user_id="u1",
+        user_message_ids=("u1",),
+        user_message_texts=("hi",),
+    )
+    terminal = _terminal_snapshot(
+        dom_signals=frozenset({"completion-control", "more-actions-menu"})
+    )
+    terminal = ChatSnapshot(
+        **{
+            **terminal.__dict__,
+            "assistant_count": 2,
+        }
+    )
+    snapshots = iter([virtualized, virtualized, terminal, terminal])
+    materializations: list[bool] = []
+    releases: list[bool] = []
+
+    async def fake_snapshot(*, allow_recovering: bool = False) -> ChatSnapshot:
+        return next(snapshots)
+
+    async def fake_materialize() -> bool:
+        materializations.append(True)
+        return True
+
+    async def fake_release() -> None:
+        releases.append(True)
+
+    async def fake_refresh() -> bool:
+        return True
+
+    chat.snapshot = fake_snapshot  # type: ignore[method-assign]
+    chat.materialize_latest_assistant_turn = fake_materialize  # type: ignore[method-assign]
+    chat.release_focus_emulation = fake_release  # type: ignore[method-assign]
+    chat._refresh_for_reconciliation = fake_refresh  # type: ignore[method-assign]
+
+    assert await chat._reconcile_unresolved_turn() is False
+    await asyncio.sleep(0.01)
+    assert await chat._reconcile_unresolved_turn() is True
+    assert materializations == [True]
+    assert releases == [True]
+    assert chat.unresolved_turn_pending is False
+
+
+@pytest.mark.asyncio
+async def test_ensure_ready_waits_for_stable_reconciliation_instead_of_failing_first_pass():
+    chat = _chat(response_stability_seconds=0.001)
+    chat.state = chat.state.RECOVERING
+    observations = iter([False, True])
+    calls: list[bool] = []
+
+    async def fake_validate() -> None:
+        return None
+
+    async def fake_reconcile() -> bool:
+        calls.append(True)
+        reconciled = next(observations)
+        if reconciled:
+            chat.clear_unresolved_turn()
+        else:
+            chat._set_unresolved_recovery("awaiting-second-stable-observation")
+        return reconciled
+
+    chat._validate_page_binding = fake_validate  # type: ignore[method-assign]
+    chat._reconcile_unresolved_turn = fake_reconcile  # type: ignore[method-assign]
+
+    await chat.ensure_ready()
+
+    assert len(calls) == 2
+    assert chat.state.value == "ready"
+    assert chat.unresolved_turn_pending is False
+
+
+@pytest.mark.asyncio
+async def test_quiescent_fresh_assistant_releases_session_when_response_body_stays_virtualized():
+    updates = []
+    chat = _chat(response_stability_seconds=0.001)
+    chat.provider_session_id = "conversation-1"
+    chat.unresolved_assistant_before_id = "a0"
+    chat.binding_sink = updates.append
+    virtualized = ChatSnapshot(
+        url="https://chatgpt.com/c/conversation-1",
+        composer_present=True,
+        composer_editable=True,
+        user_count=1,
+        assistant_count=2,
+        latest_assistant_id="a1",
+        latest_user_text="hi",
+        latest_assistant_text=None,
+        dom_signals=frozenset({"completion-control", "more-actions-menu"}),
+        error_present=False,
+        generating=False,
+        latest_user_id="u1",
+        user_message_ids=("u1",),
+        user_message_texts=("hi",),
+    )
+
+    async def fake_snapshot(*, allow_recovering: bool = False) -> ChatSnapshot:
+        return virtualized
+
+    async def no_materialization() -> bool:
+        return False
+
+    async def no_refresh() -> bool:
+        return False
+
+    chat.snapshot = fake_snapshot  # type: ignore[method-assign]
+    chat.materialize_latest_assistant_turn = no_materialization  # type: ignore[method-assign]
+    chat._refresh_for_reconciliation = no_refresh  # type: ignore[method-assign]
+
+    assert await chat._reconcile_unresolved_turn() is False
+    await asyncio.sleep(0.01)
+    assert await chat._reconcile_unresolved_turn() is True
+    assert chat.unresolved_turn_pending is False
+    assert updates[-1].metadata == {
+        "reconciliation-warning": "prior-response-text-unavailable",
+        "reconciled-assistant-message-id": "a1",
+    }

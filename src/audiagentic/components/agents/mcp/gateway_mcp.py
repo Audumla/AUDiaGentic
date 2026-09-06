@@ -324,7 +324,9 @@ def agent_task_submit(
     metadata: dict[str, Any] | None = None,
     session_id: str | None = None,
     session_keep_alive: bool = False,
+    new_session: bool = False,
     workspace_name: str | None = None,
+    title: str | None = None,
     execution_context_fingerprint: str | None = None,
     provider_chat_url: str | None = None,
 ) -> dict[str, Any]:
@@ -336,7 +338,7 @@ def agent_task_submit(
       request-id:       unique identifier for this request
       state:            current state ("queued")
       session-id:       session identifier — auto-generated when session_keep_alive
-                        is true and no session_id is provided; omitted when absent
+                        or provider policy requires it; GPT always retains one
       metadata:         sanitized metadata supplied on submit; omitted when empty
       provider-metadata: adapter-owned session metadata; omitted when unavailable
 
@@ -346,6 +348,23 @@ def agent_task_submit(
 
     `provider_chat_url` may seed a GPT-auto session from a full
     project-scoped ChatGPT conversation URL (`/g/<project>/c/<id>`).
+
+    `title` supplies a dashboard request label (1–120 single-line characters),
+    overriding the provider label without modifying the prompt or remote chat.
+
+    GPT requests without a session reuse this client's default per project/agent.
+    Use new_session=true for a separate chat; it does not replace an established
+    default. Explicit session_id or provider_chat_url also leaves that default
+    unchanged. The first admitted session establishes the default. Recovery
+    fallback warnings are returned on submission or subsequent task status.
+
+    For GPT, session_keep_alive=false does NOT disable default-session reuse
+    or close the chat immediately. It releases the live handle after the
+    execution profile's idle timeout (30 minutes if unset/disabled), only
+    when no turn is active or queued. Results and chat references are retained;
+    a later request can auto-resume the idle-closed conversation.
+    source is optional provenance text, not a client/session identifier.
+    workspace_name supplies the GPT project name, not a session reuse key.
 
     This is the sole submission surface over MCP (RV891). Direct
     provider/model execution bypassing agent selection is not exposed over MCP."""
@@ -358,8 +377,12 @@ def agent_task_submit(
         "session_id": session_id,
         "session_keep_alive": session_keep_alive,
     }
+    if new_session:
+        submit_kwargs["new_session"] = new_session
     if workspace_name is not None:
         submit_kwargs["workspace_name"] = workspace_name
+    if title is not None:
+        submit_kwargs["title"] = title
     if execution_context_fingerprint is not None:
         submit_kwargs["execution_context_fingerprint"] = execution_context_fingerprint
     if provider_chat_url is not None:
@@ -371,6 +394,7 @@ def agent_task_submit(
         "session-id": status.get("session-id"),
         "metadata": status.get("metadata") or {},
         "provider-metadata": status.get("provider-metadata") or {},
+        "warnings": status.get("warnings") or [],
     })
 
 

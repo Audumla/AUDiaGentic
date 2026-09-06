@@ -72,9 +72,10 @@ def start_or_attach_gateway() -> StandaloneGatewayClient:
             request_stop=lambda _record: None,
         ),
     )
+    client_instance_id = f"gateway-client-{uuid.uuid4().hex[:16]}"
     result = lifecycle.start_or_attach(
         declaration,
-        client_instance_id=f"gateway-client-{uuid.uuid4().hex[:16]}",
+        client_instance_id=client_instance_id,
         lease_ttl_seconds=_LEASE_TTL_SECONDS,
         lease_facts={"client": "audiagentic"},
     )
@@ -82,6 +83,7 @@ def start_or_attach_gateway() -> StandaloneGatewayClient:
         endpoint,
         load_auth_token(token_path),
         lease_ttl_seconds=_LEASE_TTL_SECONDS,
+        client_instance_id=client_instance_id,
     )
     if result.record.process is None:
         raise _config_error(4, "managed gateway has no process lifetime evidence")
