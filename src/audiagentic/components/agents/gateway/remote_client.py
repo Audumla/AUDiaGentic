@@ -38,6 +38,7 @@ class StandaloneGatewayClient:
         *,
         request_timeout: float = 30.0,
         lease_ttl_seconds: float = 120.0,
+        client_instance_id: str | None = None,
     ) -> None:
         self._endpoint = _validate_endpoint(endpoint)
         if not auth_token or any(character.isspace() for character in auth_token):
@@ -53,7 +54,7 @@ class StandaloneGatewayClient:
         self._auth_token = auth_token
         self._request_timeout = request_timeout
         self._lease_ttl_seconds = lease_ttl_seconds
-        self._client_instance_id = f"client_{uuid.uuid4().hex[:16]}"
+        self._client_instance_id = client_instance_id or f"client_{uuid.uuid4().hex[:16]}"
         self._lease_id: str | None = None
         self._owner_epoch: str | None = None
         self._renew_at = 0.0

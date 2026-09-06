@@ -165,10 +165,28 @@ class GatewayLifecycleController:
         was_running = self._store.read().state == "running"
         self.request_drain()
         facts = gateway_quiescence_facts(self._store.root)
-        if not facts["quiescent"]:
+        from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
+
+        runtime = peek_session_runtime()
+        sessions = runtime.session_snapshot_all() if runtime is not None else {}
+        busy_sessions = [
+            session_id for session_id, state in sessions.items()
+            if state.get("turn-active") or state.get("pending-turns", 0)
+        ]
+        # Automatic idle shutdown still treats an open provider handle as
+        # non-quiescent. An explicit restart may release idle handles through
+        # normal host cleanup: durable conversation bindings survive it.
+        blocking_work = any(facts[key] for key in (
+            "pending-requests", "running-requests", "ingress-pending",
+            "active-gateway-operations",
+        )) or bool(busy_sessions)
+        if blocking_work:
             if was_running:
                 self.request_resume()
-            raise lifecycle_conflict_error(1, "gateway has active work or live provider sessions; retry restart when idle")
+            raise lifecycle_conflict_error(
+                1, "gateway has queued or running work; retry restart when idle",
+                quiescence=facts, busy_sessions=busy_sessions,
+            )
         self.restart_requested = True
         self._exit_reason = "operator-restart"
         self._stop_event.set()

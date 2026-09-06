@@ -7,6 +7,9 @@ import pytest
 
 from audiagentic.components.providers.adapters.gpt_auto.chat import ChatState
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
+from audiagentic.components.providers.adapters.gpt_auto.gpt_auto_cdp import (
+    ComposerSubmissionTimeout,
+)
 from audiagentic.components.providers.adapters.gpt_auto.session_transport import (
     GptAutoSessionTransport,
 )
@@ -891,15 +894,8 @@ async def test_tool_app_activity_emits_before_assistant_message_materializes():
 
 
 @pytest.mark.asyncio
-async def test_static_tool_activity_renews_with_bounded_heartbeat():
-    """A visible tool row need not change its count every poll.
-
-    The browser can display one ``Searching the web``/``Read resource`` row
-    for minutes while that operation is still executing.  The gateway must
-    receive periodic activity rather than treating the unchanged row as
-    silence.  The production cadence is five seconds; this test forces it to
-    zero so the deterministic fixture can exercise multiple heartbeats.
-    """
+async def test_static_tool_activity_emits_only_one_real_count_edge():
+    """A retained tool row is DOM state, not a fresh event on every poll."""
     chat = _Chat()
     observations = []
     chat._snapshots = iter(
@@ -938,8 +934,6 @@ async def test_static_tool_activity_renews_with_bounded_heartbeat():
     turn = GptAutoTurn(
         chat, SessionPrompt(turn_id="turn-tool-heartbeat", body="Review AU01"), observations.append
     )
-    turn._TOOL_ACTIVITY_HEARTBEAT_INTERVAL_SECONDS = 0.0
-
     result = await turn.run()
 
     assert result.stop_reason == "end-turn"
@@ -948,8 +942,9 @@ async def test_static_tool_activity_renews_with_bounded_heartbeat():
         for obs in observations
         if obs.attributes.get("model_activity") in {"searching-web", "tool-progress"}
     ]
-    assert len(tool_progress) >= 2
-    assert "searching-web" in {obs.attributes.get("model_activity") for obs in tool_progress}
+    labels = [obs.attributes.get("model_activity") for obs in tool_progress]
+    assert labels.count("searching-web") == 1
+    assert labels.count("tool-progress") == 1  # the later removal edge
 
 
 @pytest.mark.asyncio
@@ -1422,9 +1417,9 @@ async def test_inner_submission_timeout_is_not_mislabeled_as_absolute_timeout():
     chat = _Chat()
     chat.runtime.bridge = _TimeoutBridge()
     turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-1", body="Review SH10"), lambda _: None)
-    with pytest.raises(Exception, match="composer operation timed out"):
+    with pytest.raises(Exception, match="submission-proof-not-observed-before-deadline"):
         await turn.run()
-    assert turn.state is TurnState.FAILED
+    assert turn.state is TurnState.TIMED_OUT
     assert chat.state is ChatState.FAILED
 
 
@@ -1442,6 +1437,62 @@ async def test_unconfirmed_composer_action_fails_with_action_reason():
 
     assert captured.value.details["failure-reason"] == "composer-action-not-confirmed"
     assert captured.value.details["action-complete"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("send_attempted", [False, True])
+async def test_staged_timeout_only_clears_proven_unsent_turn(send_attempted):
+    class Browser:
+        async def page_by_handle(self, handle):
+            return handle
+
+        async def submit(self, *args, **kwargs):
+            raise ComposerSubmissionTimeout(send_attempted=send_attempted, stage="send-button" if send_attempted else "composer-insertion")
+
+    chat = _Chat()
+    chat.runtime.gpt_browser = Browser()
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-stage", body="Review"), lambda _: None)
+    with pytest.raises(AudiaGenticError) as captured:
+        await turn.run()
+    assert captured.value.details["submission-ambiguous"] is send_attempted
+    assert chat.unresolved_turn_pending is send_attempted
+    assert chat.state is (ChatState.FAILED if send_attempted else ChatState.READY)
+    if not send_attempted:
+        assert chat.checkpoint_updates[-1] == {"unresolved-turn-pending": False}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reported_unsent", [False, True])
+async def test_composer_timeout_with_accepted_prompt_recovers_without_resend(reported_unsent):
+    class Browser:
+        calls = 0
+        async def page_by_handle(self, handle):
+            return handle
+        async def submit(self, *args, **kwargs):
+            self.calls += 1
+            raise ComposerSubmissionTimeout(send_attempted=not reported_unsent, stage="send-button")
+
+    chat = _Chat()
+    browser = Browser()
+    chat.runtime.gpt_browser = browser
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="recovered", body="Review AU01"), lambda _: None)
+    result = await turn.run()
+    assert result.final_summary == "Looks sound"
+    assert result.stop_reason == "end-turn"
+    assert browser.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_lost_ack_enters_activity_aware_proof_when_acceptance_is_delayed(monkeypatch):
+    chat = _Chat()
+    chat.runtime.bridge = _TimeoutBridge()
+    turn = GptAutoTurn(chat, SessionPrompt(turn_id="late-proof", body="Review AU01"), lambda _: None)
+    async def no_immediate_proof(baseline):
+        return None
+    monkeypatch.setattr(turn, "_final_submission_proof", no_immediate_proof)
+    result = await turn.run()
+    assert result.final_summary == "Looks sound"
+    assert chat.runtime.bridge.submit_calls == 1
 
 
 @pytest.mark.asyncio

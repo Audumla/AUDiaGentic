@@ -224,6 +224,28 @@ def test_keep_alive_opens_session_and_completes(rig):
     assert (request_dir / "runtime").is_dir()
 
 
+@pytest.mark.parametrize("ambiguous,always_fail,expected_calls", [(False,False,2),(False,True,2),(True,True,1)])
+def test_composer_retry_preserves_session_and_is_bounded(rig, monkeypatch, ambiguous, always_fail, expected_calls):
+    from audiagentic.foundation.contracts.errors import AudiaGenticError
+    runtime, transports, root = rig
+    first = _dispatch(root, _running_record(root, session_keep_alive=True), dispatch_prompt="first")
+    session_id = first["session-id"]
+    original = runtime.prompt_in_session
+    calls = []
+    def prompt(*args, **kwargs):
+        calls.append(args[1])
+        if always_fail or len(calls) == 1:
+            raise AudiaGenticError(code="EXT-GPTAUTO-003", kind="providers", message="composer timeout", details={"failure-reason":"composer-operation-timeout","submission-ambiguous":ambiguous})
+        return original(*args, **kwargs)
+    monkeypatch.setattr(runtime, "prompt_in_session", prompt)
+    record = _running_record(root, session_id=session_id, session_keep_alive=True)
+    result = _dispatch(root, record, dispatch_prompt="followup")
+    assert calls == [session_id] * expected_calls
+    assert result["session-id"] == session_id
+    assert result["state"] == ("failed" if always_fail else "completed")
+    assert len(transports) == 1
+
+
 def test_profile_turn_deadline_never_cancels_a_session_turn(rig, monkeypatch):
     """A profile's legacy elapsed-time setting cannot override activity policy."""
     runtime, _transports, tmp_path = rig

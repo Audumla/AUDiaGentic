@@ -17,7 +17,7 @@ from audiagentic.foundation.workflow import EvidencePolicy
 
 from .urls import parse_project_id
 
-_DEFAULTS_PATH = Path(__file__).with_name("defaults.yaml")
+_DEFAULTS_PATH = Path(__file__).with_name("gpt-auto-defaults.yaml")
 
 # gpt-auto only connects to an already-running browser via CDP -- it never
 # launches one -- so there is nothing to "install" here. These are just the
@@ -362,14 +362,14 @@ class GptAutoConfig:
         the schema-drift incident GP09 was raised about. A project overlay may
         specify project-url when the profile is intentionally pinned to a
         known ChatGPT project; when it is absent, the admitted project name
-        drives discovery. Everything else is inherited from defaults.yaml.
+        drives discovery. Everything else is inherited from gpt-auto-defaults.yaml.
 
         Tolerant of both a full ``{"settings": {...}}``-wrapped payload
         (the on-disk shape of every provider config file) and an
         already-unwrapped bare settings dict (what some callers, e.g. the
         live stress test harness, pass directly) -- mirrors from_dict()'s
         own ``data.get("settings", data)`` tolerance. Merging a wrapped
-        defaults.yaml against an unwrapped project dict without unwrapping
+        gpt-auto-defaults.yaml against an unwrapped project dict without unwrapping
         both first would silently discard every project override (found
         live, 2026-08-17: project-url disappeared, falling back to a
         generic project-name search instead of the configured URL).

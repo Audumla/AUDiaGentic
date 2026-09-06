@@ -231,6 +231,9 @@ class GatewayServiceApplication:
             expected_epoch=record.owner_epoch,
             correlation_id=correlation_id,
         )
+        from .client_icons import assign_client_icon
+
+        assign_client_icon(self._service_store.root, client_instance_id)
         return {
             "lease-id": lease.lease_id,
             "owner-epoch": lease.owner_epoch,
@@ -297,10 +300,15 @@ class GatewayServiceApplication:
             self._record_project_encounter(root)
         if operation == "submit_execution_request":
             submitted = _validated_submission_arguments(root, arguments)
+            from .client_icons import assign_client_icon
+
+            icon = assign_client_icon(self._service_store.root, self._service_store.get_lease(lease_id).client_instance_id)
+            submitted["metadata"] = {**(submitted.get("metadata") or {}), "client-icon": icon}
             return self._application.submit_execution_request(
                 root,
                 **submitted,
                 _dispatch_owner_epoch=owner_epoch,
+                _client_instance_id=self._service_store.get_lease(lease_id).client_instance_id,
                 _dispatch_service_root=str(self._service_store.root),
             )
         if operation == "get_execution_request":
@@ -552,7 +560,9 @@ _SUBMISSION_ARGUMENTS = {
     "metadata",
     "session_id",
     "session_keep_alive",
+    "new_session",
     "workspace_name",
+    "title",
     "execution_context_fingerprint",
     "component_profile",
     "provider_chat_url",
@@ -582,6 +592,8 @@ def _validated_submission_arguments(
                     fields=[name],
                 )
     _reject_unknown(arguments, _SUBMISSION_ARGUMENTS)
+    if not isinstance(arguments.get("new_session", False), bool) or (arguments.get("new_session") and (arguments.get("session_id") or arguments.get("provider_chat_url"))):
+        raise service_validation_error(22, "new_session must be boolean and cannot be combined with session_id or provider_chat_url")
     metadata = arguments.get("metadata")
     if metadata is not None and not isinstance(metadata, dict):
         raise service_validation_error(21, "gateway submission metadata must be a mapping")
