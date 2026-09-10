@@ -97,6 +97,7 @@ def snap(
         latest_assistant_text=assistant,
         dom_signals=frozenset(signals),
         error_present=False,
+        terminal_witness_assistant_id=resolved_assistant_id if complete else None,
         latest_user_id=resolved_user_id,
         # A real bridge observation derives both from the same underlying
         # DOM check (gpt_auto_cdp.py's raw `generating` query mirrors the
@@ -312,8 +313,8 @@ async def test_await_response_never_returns_a_later_foreign_turns_answer():
 
     chat._snapshots = _snapshots_gen()
     turn = GptAutoTurn(chat, SessionPrompt(turn_id="turn-1", body="Review AU01"), lambda _: None)
-    result = await turn.run()
-    assert result.final_summary == "Looks sound"
+    with pytest.raises(AudiaGenticError, match="response policy timed out"):
+        await turn.run()
     assert turn._response_message_id == "assistant-own"
 
 
