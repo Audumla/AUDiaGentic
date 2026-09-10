@@ -681,11 +681,25 @@ class PersistentChat:
             and not self._reconciliation_delivery_retry_attempted
         ):
             _, prompt_reason, _ = _unresolved_prompt_match_diagnostics(self, snapshot)
-            retry_is_request_owned = prompt_reason in {
-                "prompt-id-match",
-                "prompt-text-digest-match",
-                "prompt-id-mismatch-text-digest-match",
-            }
+            # Retry is a page-global side effect.  A digest match in an older
+            # user turn is sufficient to correlate a read-only terminal
+            # witness, but it is not sufficient to click Retry: only the
+            # latest visible user turn may own that control.
+            latest_digest = (
+                PromptFingerprint.from_text(snapshot.latest_user_text).digest
+                if snapshot.latest_user_text
+                else None
+            )
+            retry_is_request_owned = (
+                prompt_reason == "prompt-id-match"
+                or (
+                    prompt_reason in {
+                        "prompt-text-digest-match",
+                        "prompt-id-mismatch-text-digest-match",
+                    }
+                    and latest_digest == self.unresolved_prompt_text_digest
+                )
+            )
             if retry_is_request_owned:
                 self._reconciliation_delivery_retry_attempted = True
                 try:
