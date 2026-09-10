@@ -305,6 +305,8 @@ class GptAutoTurn:
         self._completion_materialization_succeeded = False
         self._delivery_timeout_retry_attempted = False
         self._timing_events: set[str] = set()
+        self._initial_refresh_attempted = False
+        self._initial_refresh_succeeded: bool | None = None
 
     def _move(self, target: TurnState) -> None:
         failure = _ENGINE.check(self.state.value, target.value)
@@ -1001,6 +1003,7 @@ class GptAutoTurn:
         response_started = False
         emitted = False
         final_outcome: ObservationOutcome | None = None
+        observation_started_at = loop.time()
         # GP47 (2026-08-19): _advance_with_trace only logs on a tracker STATE
         # TRANSITION. A turn that stalls for the full response-total-timeout
         # (observed live: completion evidence present but never promoted past
@@ -1106,9 +1109,15 @@ class GptAutoTurn:
                         try:
                             raw_current = await self.chat.snapshot()
                             self._remember_snapshot(raw_current)
+                            # Re-scope the materialized observation immediately;
+                            # otherwise this poll would continue evaluating the
+                            # pre-materialization snapshot and consume an extra
+                            # browser observation before seeing completion.
                             if prompt_message_id:
                                 current, response_ref = _scope_response_snapshot(
-                                    baseline, raw_current, prompt_message_id=prompt_message_id
+                                    baseline,
+                                    raw_current,
+                                    prompt_message_id=prompt_message_id,
                                 )
                             else:
                                 current, response_ref = raw_current, None
@@ -1118,6 +1127,45 @@ class GptAutoTurn:
                                 "gpt-auto snapshot after completion-control materialization failed",
                                 extra={"turn-id": self.request.turn_id, "error": str(exc)},
                             )
+            refresh_cfg = self.chat.config.turn
+            refresh_enabled = bool(
+                getattr(refresh_cfg, "initial_response_refresh_enabled", False)
+            )
+            refresh_attempts = int(
+                getattr(refresh_cfg, "initial_response_refresh_attempts", 0)
+            )
+            observation_grace = float(
+                getattr(refresh_cfg, "initial_response_observation_grace_seconds", 15.0)
+            )
+            page_needs_probe = (
+                not current.url
+                or current.url.startswith("about:blank")
+                or not current.composer_present
+            )
+            credible_response = response_ref is not None or response_started or current.generating
+            if (
+                refresh_enabled
+                and refresh_attempts > 0
+                and not self._initial_refresh_attempted
+                and not credible_response
+                and not current.tool_activity_counts
+                and page_needs_probe
+                and loop.time() - observation_started_at
+                >= observation_grace
+            ):
+                self._initial_refresh_attempted = True
+                refresh = getattr(self.chat, "_refresh_for_reconciliation", None)
+                if callable(refresh):
+                    try:
+                        self._initial_refresh_succeeded = bool(await refresh())
+                    except Exception:  # noqa: BLE001 - probe is diagnostic-only
+                        self._initial_refresh_succeeded = False
+                else:
+                    self._initial_refresh_succeeded = False
+                await self._emit_timing("initial-refresh-attempted")
+                if self._initial_refresh_succeeded:
+                    await asyncio.sleep(getattr(refresh_cfg, "poll_interval_seconds", 1.0))
+                    continue
             now = loop.time()
             if response_ref is not None and response_ref.message_id:
                 if self._response_message_id is None:
@@ -1126,8 +1174,6 @@ class GptAutoTurn:
                     if mark_assistant is not None:
                         mark_assistant(response_ref.message_id)
                     await self._publish_message_ids(strict=True)
-                if response_ref.text:
-                    await self._emit_timing("first-assistant-text")
                 elif self._response_message_id != response_ref.message_id:
                     # A stale ChatGPT DOM can expose a provisional assistant
                     # node and then expose the final node after the retained
@@ -1164,6 +1210,8 @@ class GptAutoTurn:
                             **self._diagnostics(),
                         },
                     )
+                if response_ref.text:
+                    await self._emit_timing("first-assistant-text")
             facts = _facts(baseline, previous, current)
             if (
                 "delivery-timeout-retry" in current.dom_signals
@@ -1638,6 +1686,8 @@ class GptAutoTurn:
             "completion-materialization-attempted": self._completion_materialization_attempted,
             "completion-materialization-succeeded": self._completion_materialization_succeeded,
             "delivery-timeout-retry-attempted": self._delivery_timeout_retry_attempted,
+            "initial-refresh-attempted": self._initial_refresh_attempted,
+            "initial-refresh-succeeded": self._initial_refresh_succeeded,
             **_message_ids(self),
         }
         if self._composer_verification_mismatch:
