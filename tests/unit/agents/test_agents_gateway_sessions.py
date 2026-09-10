@@ -2021,6 +2021,9 @@ def test_gateway_overview_active_count_excludes_stale(rig, monkeypatch):
 
     # One live session from the runtime
     live_record = _open(runtime, tmp_path)
+    other_root = tmp_path / "other-project"
+    other_root.mkdir()
+    other_live_record = _open(runtime, other_root)
 
     # One stale persisted active session (no live handle)
     stale_record = session_store.build_session_record(execution_profile_id="profile-1")
@@ -2028,6 +2031,7 @@ def test_gateway_overview_active_count_excludes_stale(rig, monkeypatch):
 
     overview = api.gateway_overview(tmp_path)
     assert overview["sessions"]["active-count"] == 1  # only the live one
+    assert overview["sessions"]["machine-live-count"] == 2
     # The stale session should appear in the detail list but not count as active
     session_ids = [s["session-id"] for s in overview["sessions"]["sessions"]]
     assert live_record["session-id"] in session_ids
@@ -2035,6 +2039,7 @@ def test_gateway_overview_active_count_excludes_stale(rig, monkeypatch):
 
     # Clean up
     runtime.close_session(tmp_path, live_record["session-id"])
+    runtime.close_session(other_root, other_live_record["session-id"])
 
 
 def test_list_sessions_no_provider_ref_leak(rig, monkeypatch):
