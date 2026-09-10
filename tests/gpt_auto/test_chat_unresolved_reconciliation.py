@@ -51,6 +51,55 @@ def _terminal_snapshot(*, dom_signals: frozenset[str]) -> ChatSnapshot:
 
 
 @pytest.mark.asyncio
+async def test_reconcile_retries_delivery_timeout_without_resubmitting() -> None:
+    chat = _chat(response_stability_seconds=0.001)
+    retry_page = _terminal_snapshot(
+        dom_signals=frozenset({"delivery-timeout-retry", "error-alert"})
+    )
+    terminal = _terminal_snapshot(
+        dom_signals=frozenset({"completion-control", "more-actions-menu"})
+    )
+    snapshots = iter([retry_page, terminal, terminal])
+    calls = 0
+
+    async def fake_snapshot(*, allow_recovering: bool = False) -> ChatSnapshot:
+        return next(snapshots)
+
+    async def fake_retry() -> bool:
+        nonlocal calls
+        calls += 1
+        return True
+
+    chat.snapshot = fake_snapshot  # type: ignore[method-assign]
+    chat.retry_delivery_timeout = fake_retry  # type: ignore[method-assign]
+
+    assert await chat._reconcile_unresolved_turn() is False
+    await asyncio.sleep(0.01)
+    assert await chat._reconcile_unresolved_turn() is True
+    assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_reconcile_accepts_retried_assistant_id_for_exact_prompt() -> None:
+    chat = _chat(response_stability_seconds=0.001)
+    chat.unresolved_assistant_message_id = "a-old"
+    chat.unresolved_assistant_before_id = "a-before"
+    chat._checkpoint_metadata["unresolved-baseline-user-count"] = 1
+    snapshot = _terminal_snapshot(
+        dom_signals=frozenset({"completion-control", "more-actions-menu"})
+    )
+    snapshots = iter([snapshot, snapshot, snapshot])
+
+    async def fake_snapshot(*, allow_recovering: bool = False) -> ChatSnapshot:
+        return next(snapshots)
+
+    chat.snapshot = fake_snapshot  # type: ignore[method-assign]
+    assert await chat._reconcile_unresolved_turn() is False
+    await asyncio.sleep(0.01)
+    assert await chat._reconcile_unresolved_turn() is True
+
+
+@pytest.mark.asyncio
 async def test_reconcile_requires_response_stability_seconds_between_matching_observations():
     """GP38: a single matching fingerprint must not clear the unresolved
     marker immediately -- the same response_stability_seconds gap the main

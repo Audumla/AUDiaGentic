@@ -303,6 +303,7 @@ class GptAutoTurn:
         # own tab position.
         self._completion_materialization_attempted = False
         self._completion_materialization_succeeded = False
+        self._delivery_timeout_retry_attempted = False
 
     def _move(self, target: TurnState) -> None:
         failure = _ENGINE.check(self.state.value, target.value)
@@ -1149,6 +1150,30 @@ class GptAutoTurn:
                         },
                     )
             facts = _facts(baseline, previous, current)
+            if (
+                "delivery-timeout-retry" in current.dom_signals
+                and not self._delivery_timeout_retry_attempted
+                and response_ref is None
+            ):
+                self._delivery_timeout_retry_attempted = True
+                retry = getattr(self.chat, "retry_delivery_timeout", None)
+                retried = bool(await retry()) if callable(retry) else False
+                logger.info(
+                    "gpt-auto delivery-timeout recovery attempted=%s",
+                    retried,
+                    extra={"turn-id": self.request.turn_id},
+                )
+                await self._emit(
+                    TransportObservationKind.IN_PROGRESS,
+                    {
+                        "model_activity": "delivery-timeout-retry",
+                        "recovery": "provider-retry",
+                        "succeeded": retried,
+                    },
+                )
+                if retried:
+                    await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
+                    continue
             failed = self.chat.config.workflow.policy("response-failed").evaluate(facts)
             if failed.satisfied:
                 logger.warning(
@@ -1565,6 +1590,7 @@ class GptAutoTurn:
             "provider-session-id": self.chat.provider_session_id,
             "completion-materialization-attempted": self._completion_materialization_attempted,
             "completion-materialization-succeeded": self._completion_materialization_succeeded,
+            "delivery-timeout-retry-attempted": self._delivery_timeout_retry_attempted,
             **_message_ids(self),
         }
         if self._composer_verification_mismatch:
