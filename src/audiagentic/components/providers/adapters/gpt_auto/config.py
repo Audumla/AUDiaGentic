@@ -156,6 +156,12 @@ class TurnConfig:
     initial_response_refresh_enabled: bool
     initial_response_refresh_attempts: int
     initial_response_refresh_cooldown_seconds: float
+    # Bounded observation aid for a background/virtualized tab whose DOM has
+    # stopped advancing.  This only focuses/materializes the existing page;
+    # it never submits or retries a prompt.
+    stale_progress_focus_enabled: bool
+    stale_progress_focus_after_seconds: float
+    stale_progress_focus_attempts: int
 
 
 class DomSignalScope(StrEnum):
@@ -333,6 +339,9 @@ class GptAutoConfig:
                 "initial-response-refresh-enabled",
                 "initial-response-refresh-attempts",
                 "initial-response-refresh-cooldown-seconds",
+                "stale-progress-focus-enabled",
+                "stale-progress-focus-after-seconds",
+                "stale-progress-focus-attempts",
             },
             "turn",
         )
@@ -367,6 +376,15 @@ class GptAutoConfig:
             ),
             initial_response_refresh_cooldown_seconds=_optional_non_negative(
                 turn_data, "initial-response-refresh-cooldown-seconds", default=30.0
+            ),
+            stale_progress_focus_enabled=_optional_boolean(
+                turn_data, "stale-progress-focus-enabled", default=True
+            ),
+            stale_progress_focus_after_seconds=_optional_non_negative(
+                turn_data, "stale-progress-focus-after-seconds", default=30.0
+            ),
+            stale_progress_focus_attempts=_optional_non_negative_int(
+                turn_data, "stale-progress-focus-attempts", default=1
             ),
         )
         workflow = _workflow_config(_mapping(settings, "workflow"))

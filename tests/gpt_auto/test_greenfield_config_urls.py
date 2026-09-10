@@ -67,6 +67,9 @@ def valid_config() -> dict:
             "initial-response-refresh-enabled": False,
             "initial-response-refresh-attempts": 1,
             "initial-response-refresh-cooldown-seconds": 30,
+            "stale-progress-focus-enabled": True,
+            "stale-progress-focus-after-seconds": 30,
+            "stale-progress-focus-attempts": 1,
         },
         "workflow": {
             "dom-signals": {
