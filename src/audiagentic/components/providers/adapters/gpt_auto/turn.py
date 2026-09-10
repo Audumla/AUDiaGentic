@@ -304,6 +304,7 @@ class GptAutoTurn:
         self._completion_materialization_attempted = False
         self._completion_materialization_succeeded = False
         self._delivery_timeout_retry_attempted = False
+        self._timing_events: set[str] = set()
 
     def _move(self, target: TurnState) -> None:
         failure = _ENGINE.check(self.state.value, target.value)
@@ -327,8 +328,19 @@ class GptAutoTurn:
             await result
         self._delivered += 1
 
+    async def _emit_timing(self, event: str) -> None:
+        """Record a one-shot timing milestone without liveness semantics."""
+        if event in self._timing_events:
+            return
+        self._timing_events.add(event)
+        try:
+            await self._emit(TransportObservationKind.TIMING, {"timing-event": event})
+        except Exception:  # noqa: BLE001 - diagnostics must never alter turn outcome
+            logger.debug("gpt-auto timing milestone sink failed", extra={"event": event}, exc_info=True)
+
     async def run(self) -> SessionTurnResult:
         self.chat.active_turn_id = self.request.turn_id
+        await self._emit_timing("attempt-start")
         self._set_chat_state(ChatState.BUSY)
         try:
             return await self._run()
@@ -455,6 +467,7 @@ class GptAutoTurn:
                 },
             )
         self.submission_confirmed = True
+        await self._emit_timing("submit-confirmed")
         if proof.latest_user_id:
             mark_prompt = getattr(self.chat, "mark_prompt_submitted", None)
             if mark_prompt is not None:
@@ -1113,6 +1126,8 @@ class GptAutoTurn:
                     if mark_assistant is not None:
                         mark_assistant(response_ref.message_id)
                     await self._publish_message_ids(strict=True)
+                if response_ref.text:
+                    await self._emit_timing("first-assistant-text")
                 elif self._response_message_id != response_ref.message_id:
                     # A stale ChatGPT DOM can expose a provisional assistant
                     # node and then expose the final node after the retained

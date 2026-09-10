@@ -58,6 +58,7 @@ class TestTransportObservationKind:
             "transport-closed",
             "transport-unknown",  # bounded unknown / drop-safe
             "in-progress",  # intermediate in-progress marker (AS19)
+            "timing",  # diagnostic milestone; never liveness activity
         }
         assert {k.value for k in TransportObservationKind} == expected
 
@@ -76,6 +77,7 @@ class TestTransportObservationKind:
                 or kind.value.startswith("terminal")
                 or kind.value.startswith("transport-")
                 or kind.value == "in-progress"
+                or kind.value == "timing"
             ), f"unexpected kind value: {kind.value}"
 
 

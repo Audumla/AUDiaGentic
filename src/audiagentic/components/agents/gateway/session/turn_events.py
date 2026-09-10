@@ -221,9 +221,9 @@ def _make_on_event_callback(
     projector = _TurnEventProjector()
 
     async def _on_event(obs: TransportObservation) -> None:
-        if activity_marker is not None:
+        if activity_marker is not None and obs.kind != TransportObservationKind.TIMING:
             activity_marker()
-        if activity_relay is not None:
+        if activity_relay is not None and obs.kind != TransportObservationKind.TIMING:
             try:
                 activity_phase = obs.attributes.get("model_activity") if isinstance(obs.attributes, Mapping) else None
                 if not isinstance(activity_phase, str) or not activity_phase:
@@ -242,7 +242,7 @@ def _make_on_event_callback(
             # but every later activity observation remains useful durable
             # session history. Keep event-bus lifecycle semantics unchanged
             # while retaining the bounded label/group in the session timeline.
-            if obs.kind == TransportObservationKind.ACTIVITY:
+            if obs.kind in {TransportObservationKind.ACTIVITY, TransportObservationKind.TIMING}:
                 _record_turn_timeline(
                     project_root,
                     session_id,
@@ -250,7 +250,9 @@ def _make_on_event_callback(
                     correlation_id,
                     obs,
                     obs.kind.value,
-                    extra_attrs=_activity_timeline_attrs(obs),
+                    extra_attrs=_activity_timeline_attrs(obs)
+                    if obs.kind == TransportObservationKind.ACTIVITY
+                    else dict(obs.attributes),
                 )
             return
         topic, extra = resolved

@@ -28,6 +28,7 @@ from audiagentic.foundation.transports.agent_session import (
     SessionControlRequest,
     SessionFailureDisposition,
     SessionPrompt,
+    TransportObservationKind,
 )
 
 from .test_greenfield_config_urls import valid_config
@@ -336,6 +337,17 @@ async def test_turn_proves_submission_once_and_completes_from_atomic_snapshots()
     assert result.metadata["assistant-message-id"] == "assistant-1"
     assert chat.checkpoint_updates[0]["recovery-state"] == "side-effect-may-have-started"
     assert chat.checkpoint_updates[-1] == {"unresolved-turn-pending": False}
+    timing = [
+        observation
+        for observation in observations
+        if observation.kind is TransportObservationKind.TIMING
+    ]
+    assert [observation.attributes["timing-event"] for observation in timing] == [
+        "attempt-start",
+        "submit-confirmed",
+        "first-assistant-text",
+    ]
+    assert all(set(observation.attributes) == {"timing-event"} for observation in timing)
 
 
 @pytest.mark.asyncio
