@@ -161,7 +161,6 @@ class TurnConfig:
     # it never submits or retries a prompt.
     stale_progress_focus_enabled: bool
     stale_progress_focus_after_seconds: float
-    stale_progress_focus_attempts: int
 
 
 class DomSignalScope(StrEnum):
@@ -341,7 +340,6 @@ class GptAutoConfig:
                 "initial-response-refresh-cooldown-seconds",
                 "stale-progress-focus-enabled",
                 "stale-progress-focus-after-seconds",
-                "stale-progress-focus-attempts",
             },
             "turn",
         )
@@ -382,9 +380,6 @@ class GptAutoConfig:
             ),
             stale_progress_focus_after_seconds=_optional_non_negative(
                 turn_data, "stale-progress-focus-after-seconds", default=30.0
-            ),
-            stale_progress_focus_attempts=_optional_non_negative_int(
-                turn_data, "stale-progress-focus-attempts", default=1
             ),
         )
         workflow = _workflow_config(_mapping(settings, "workflow"))

@@ -676,9 +676,16 @@ class PersistentChat:
         # unresolved even though the conversation is still recoverable. Use
         # the exact Retry control once, without resubmitting the prompt, then
         # re-read the same conversation before applying failure evidence.
+        completion_candidate = _reconciliation_completion_candidate(self, snapshot)
+        # Authentication is a hard veto and must never be followed by a
+        # provider-side click, even when a stale Retry control is visible.
+        if "auth-required" in snapshot.dom_signals:
+            self._set_unresolved_recovery("authentication-required")
+            return False
         if (
             "delivery-timeout-retry" in snapshot.dom_signals
             and not self._reconciliation_delivery_retry_attempted
+            and not completion_candidate
         ):
             _, prompt_reason, _ = _unresolved_prompt_match_diagnostics(self, snapshot)
             # Retry is a page-global side effect.  A digest match in an older
@@ -747,7 +754,9 @@ class PersistentChat:
                 "evidence during unresolved-turn recovery, dom_signals=%s",
                 sorted(snapshot.dom_signals),
             )
-        if not _reconciliation_evidence_clear(snapshot):
+        if not _reconciliation_evidence_clear(
+            snapshot, allow_terminal_errors=completion_candidate
+        ):
             self._reset_unresolved_match_candidate()
             self._set_unresolved_recovery(
                 "provider-not-quiescent",
@@ -929,7 +938,14 @@ class PersistentChat:
         # reconcile against a canvas turn's premature witnesses (GP34)
         # almost immediately. Require the same response_stability_seconds
         # gap _await_response()'s own candidate window enforces.
-        elapsed = now - (self._unresolved_match_fingerprint_at or now)
+        # Do not use ``or now`` here: deterministic clocks and some test/live
+        # harnesses legitimately start at monotonic time 0.0.  ``None`` is
+        # the only value that means the stability clock was never armed.
+        elapsed = (
+            0.0
+            if self._unresolved_match_fingerprint_at is None
+            else now - self._unresolved_match_fingerprint_at
+        )
         required_stability = (
             self.config.turn.response_generating_override_stability_seconds
             if snapshot.generating
@@ -1552,7 +1568,48 @@ def provider_quiescent(snapshot: ChatSnapshot) -> bool:
     )
 
 
-def _reconciliation_evidence_clear(snapshot: ChatSnapshot) -> bool:
+def _reconciliation_completion_candidate(chat: PersistentChat, snapshot: ChatSnapshot) -> bool:
+    """Return whether a snapshot is an initial request-owned terminal witness.
+
+    This is deliberately a read-only preflight used before provider-side
+    recovery controls.  It mirrors the correlation and completion gates below
+    so a stale Retry/error panel cannot regenerate an already-complete turn.
+    """
+    if "auth-required" in snapshot.dom_signals:
+        return False
+    assistant_id = snapshot.latest_assistant_id
+    if not assistant_id or not snapshot.latest_assistant_text:
+        return False
+    groups = chat.config.workflow.policy("response-complete").any_of_groups
+    true_facts = snapshot.dom_signals | (
+        {"not-generating"} if not snapshot.generating else set()
+    )
+    if groups and not any(group <= true_facts for group in groups):
+        return False
+    prompt_match, prompt_reason, _ = _unresolved_prompt_match_diagnostics(chat, snapshot)
+    if prompt_match is None:
+        expected = chat.unresolved_assistant_message_id
+        return bool(expected and assistant_id == expected)
+    if not chat.unresolved_assistant_message_id:
+        return assistant_id != chat.unresolved_assistant_before_id
+    if assistant_id == chat.unresolved_assistant_message_id:
+        return True
+    return bool(
+        prompt_reason == "prompt-id-match"
+        and snapshot.latest_user_id == chat.unresolved_prompt_message_id
+        and snapshot.user_count
+        == int(
+            chat._checkpoint_metadata.get(
+                "unresolved-baseline-user-count", snapshot.user_count
+            )
+        )
+        and assistant_id != chat.unresolved_assistant_before_id
+    )
+
+
+def _reconciliation_evidence_clear(
+    snapshot: ChatSnapshot, *, allow_terminal_errors: bool = False
+) -> bool:
     """Whether a snapshot's own evidence proves a PRIOR turn is done.
 
     Deliberately narrower-scoped than provider_quiescent(): this answers
@@ -1564,7 +1621,9 @@ def _reconciliation_evidence_clear(snapshot: ChatSnapshot) -> bool:
     of the next turn when the actual generation state is idle.
     """
     busy_signals = {"streaming-indicator", "thinking-indicator", "busy-indicator"}
-    failed_signals = {"auth-required", "error-page", "error-alert"}
+    failed_signals = {"auth-required"}
+    if not allow_terminal_errors:
+        failed_signals.update({"error-page", "error-alert"})
     return bool(
         snapshot.composer_present
         and snapshot.composer_editable

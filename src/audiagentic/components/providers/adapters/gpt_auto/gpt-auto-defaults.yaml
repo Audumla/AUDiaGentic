@@ -52,7 +52,6 @@ settings:
     # read-only focus/materialization probe.  This is not a submission retry.
     stale-progress-focus-enabled: true
     stale-progress-focus-after-seconds: 30
-    stale-progress-focus-attempts: 1
   workflow:
     dom-signals:
       stop-control:

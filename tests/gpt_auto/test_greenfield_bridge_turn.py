@@ -549,17 +549,21 @@ async def test_stale_progress_focus_probe_materializes_once_without_resubmitting
     chat = _Chat()
     chat.config.turn.stale_progress_focus_enabled = True
     chat.config.turn.stale_progress_focus_after_seconds = 0
-    chat.config.turn.stale_progress_focus_attempts = 1
     stale = snap(users=1, user="Review AU01")
     complete = snap(users=1, assistants=1, user="Review AU01", assistant="Done", complete=True)
     chat._snapshots = iter([stale, complete, complete, complete, complete])
     focused: list[bool] = []
+    released: list[bool] = []
 
     async def materialize() -> bool:
         focused.append(True)
         return True
 
+    async def release_focus() -> None:
+        released.append(True)
+
     chat.materialize_latest_assistant_turn = materialize
+    chat.release_focus_emulation = release_focus
     turn = GptAutoTurn(
         chat, SessionPrompt(turn_id="turn-stale-focus", body="Review AU01"), lambda _: None
     )
@@ -568,6 +572,7 @@ async def test_stale_progress_focus_probe_materializes_once_without_resubmitting
     result = await turn._await_response(stale, stale)
     assert result == "Done"
     assert focused == [True]
+    assert released == [True]
     assert turn._stale_progress_focus_attempted is True
 
 
