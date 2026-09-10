@@ -139,3 +139,49 @@ async def test_session_timeline_retains_every_later_activity_label(
         for entry in activity_entries
     ] == list(ACTIVITY_LABELS)
     assert published == [turn_events.TURN_MODEL_STARTED_TOPIC]
+
+
+@pytest.mark.asyncio
+async def test_timing_milestones_are_timeline_only_not_activity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorded: list[dict] = []
+    marker_calls: list[bool] = []
+    relay_calls: list[bool] = []
+
+    monkeypatch.setattr(
+        turn_events.session_store,
+        "record_session_timeline",
+        lambda project_root, session_id, event, *, state, attributes: recorded.append(
+            {"event": event, "attributes": dict(attributes)}
+        ) or {},
+    )
+    callback = turn_events._make_on_event_callback(
+        "ses-1",
+        tmp_path,
+        "req-1",
+        "profile-1",
+        "corr-1",
+        activity_marker=lambda: marker_calls.append(True),
+        activity_relay=type(
+            "Relay",
+            (),
+            {"observe_provider": lambda self, **kwargs: relay_calls.append(True)},
+        )(),
+    )
+    await callback(
+        TransportObservation(
+            ag_session_id="ag-s-1",
+            turn_id="req-1",
+            sequence=0,
+            kind=TransportObservationKind.TIMING,
+            observed_at="2026-09-04T00:00:00Z",
+            correlation_quality=CorrelationQuality.REQUEST_SCOPED,
+            attributes={"timing-event": "attempt-start"},
+        )
+    )
+    assert marker_calls == []
+    assert relay_calls == []
+    assert recorded[0]["event"] == "session.turn.timing"
+    assert recorded[0]["attributes"]["timing-event"] == "attempt-start"

@@ -65,6 +65,7 @@ class TransportObservationKind(StrEnum):
     TOOL_FINISHED = "tool-finished"
     PERMISSION_REQUESTED = "permission-requested"
     IN_PROGRESS = "in-progress"
+    TIMING = "timing"
     TERMINAL = "terminal"
     TRANSPORT_ERROR = "transport-error"
     TRANSPORT_CLOSED = "transport-closed"
@@ -166,6 +167,7 @@ _ALLOWED_ATTRIBUTE_KEYS: Mapping[TransportObservationKind, frozenset[str]] = {
             "model_activity",  # e.g. "generating", "thinking" — proven only
         }
     ),
+    TransportObservationKind.TIMING: frozenset({"timing-event"}),
     TransportObservationKind.TERMINAL: frozenset({"stop_reason", "error_code"}),
     TransportObservationKind.TRANSPORT_ERROR: frozenset({"error_code", "reason"}),
     TransportObservationKind.TRANSPORT_CLOSED: frozenset({}),
