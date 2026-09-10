@@ -129,6 +129,7 @@ class PersistentChat:
         self._unresolved_recovery_reason: str | None = None
         self._unresolved_recovery_details: dict[str, object] = {}
         self._reconciliation_refresh_attempted = False
+        self._reconciliation_delivery_retry_attempted = False
         self._checkpoint_metadata: dict[str, object] = {
             key: metadata[key]
             for key in (
@@ -151,6 +152,7 @@ class PersistentChat:
         baseline: ChatSnapshot | None,
     ) -> None:
         """Write the side-effect checkpoint before browser Send is invoked."""
+        self._reconciliation_delivery_retry_attempted = False
         self._checkpoint_metadata = {
             "recovery-state": "side-effect-may-have-started",
             "unresolved-turn-id": turn_id,
@@ -633,6 +635,17 @@ class PersistentChat:
         page = await browser.page_by_handle(self.page_handle)
         return bool(await materialize(page))
 
+    async def retry_delivery_timeout(self) -> bool:
+        """Activate one provider-owned delivery Retry control; never resubmit."""
+        if not self.page_handle:
+            return False
+        browser = self._gpt_browser()
+        retry = getattr(browser, "retry_delivery_timeout", None)
+        if not callable(retry):
+            return False
+        page = await browser.page_by_handle(self.page_handle)
+        return bool(await retry(page))
+
     async def release_focus_emulation(self) -> None:
         """Release provider focus emulation after the watcher snapshots."""
         if not self.page_handle:
@@ -659,6 +672,26 @@ class PersistentChat:
                 exception=str(exc),
             )
             return False
+        # A provider-side delivery timeout can leave the durable turn marked
+        # unresolved even though the conversation is still recoverable. Use
+        # the exact Retry control once, without resubmitting the prompt, then
+        # re-read the same conversation before applying failure evidence.
+        if (
+            "delivery-timeout-retry" in snapshot.dom_signals
+            and not self._reconciliation_delivery_retry_attempted
+        ):
+            self._reconciliation_delivery_retry_attempted = True
+            try:
+                if await self.retry_delivery_timeout():
+                    await asyncio.sleep(self.config.turn.poll_interval_seconds)
+                    snapshot = await self.snapshot(allow_recovering=True)
+            except Exception as exc:  # noqa: BLE001 - preserve recovery evidence
+                self._set_unresolved_recovery(
+                    "delivery-timeout-retry-failed",
+                    exception_type=type(exc).__name__,
+                    exception=str(exc),
+                )
+                return False
         # A retained CDP page can have a stale React/DOM snapshot even though
         # the provider conversation has already completed. One same-URL
         # refresh is a read-only reconciliation attempt; it never resends the
@@ -804,6 +837,25 @@ class PersistentChat:
             terminal = True
         elif self.unresolved_assistant_message_id:
             terminal = assistant_id == self.unresolved_assistant_message_id
+            # A provider-side Retry can replace the assistant node with a
+            # fresh ID while keeping the original user prompt as the latest
+            # turn. If prompt ID correlation is exact, user count is
+            # unchanged, and the new assistant is newer than the durable
+            # pre-turn node, this is the same turn—not an intervening chat.
+            if (
+                not terminal
+                and prompt_reason == "prompt-id-match"
+                and snapshot.latest_user_id == self.unresolved_prompt_message_id
+                and snapshot.user_count
+                == int(
+                    self._checkpoint_metadata.get(
+                        "unresolved-baseline-user-count", snapshot.user_count
+                    )
+                )
+                and assistant_id != self.unresolved_assistant_before_id
+            ):
+                terminal = True
+                prompt_reason = "prompt-id-match-retried-assistant"
         else:
             terminal = assistant_id != self.unresolved_assistant_before_id
         if not terminal:

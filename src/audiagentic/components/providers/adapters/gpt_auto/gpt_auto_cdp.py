@@ -322,6 +322,26 @@ class GptAutoCdpBrowserController(CdpBrowserController):
     ) -> dict[str, Any]:
         return await self.evaluate(page, _SNAPSHOT_FN, signals or [])
 
+    async def retry_delivery_timeout(self, page: CdpPageRef) -> bool:
+        """Click the known conversation delivery Retry control once.
+
+        This action never types or submits a prompt; it only activates the
+        provider-owned recovery control for a visible delivery timeout.
+        """
+        result = await self.evaluate(
+            page,
+            r"""() => {
+              const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+              const button = document.querySelector('button[data-testid="regenerate-thread-error-button"]');
+              if (!button || button.disabled || !button.getClientRects().length) return false;
+              const text = normalize(button.innerText || button.textContent || button.getAttribute('aria-label'));
+              if (text !== 'retry') return false;
+              button.click();
+              return true;
+            }""",
+        )
+        return bool(result)
+
     async def materialize_latest_assistant_turn(self, page: CdpPageRef) -> bool:
         """Bring the current assistant turn into the rendered viewport.
 
