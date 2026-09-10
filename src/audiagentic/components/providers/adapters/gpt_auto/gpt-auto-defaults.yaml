@@ -96,6 +96,12 @@ settings:
         selectors: ['[role="alert"]']
         visible: true
         text-contains-any: ['error', 'failed', 'went wrong', 'try again', 'retry', 'rate limit', 'too many requests']
+      delivery-timeout-retry:
+        # Conversation-scoped delivery timeout; never a generic error click.
+        scope: document
+        selectors: ['button[data-testid="regenerate-thread-error-button"]']
+        visible: true
+        text-contains-any: ['retry']
       auth-required:
         scope: document
         selectors: ['[data-testid="login-button"]', '[data-testid="signup-button"]', 'input[type="email"]']

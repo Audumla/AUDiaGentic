@@ -276,6 +276,19 @@ def test_live_workflow_does_not_treat_static_streaming_animation_as_busy() -> No
     assert ".streaming-animation" not in signals["streaming-indicator"]["selectors"]
 
 
+def test_live_workflow_declares_delivery_timeout_retry_signal() -> None:
+    root = Path(__file__).resolve().parents[2]
+    config = GptAutoConfig.from_project_dict(
+        yaml.safe_load(
+            (root / ".audiagentic/config/providers/gpt-auto.yaml").read_text(encoding="utf-8")
+        )
+    )
+    signals = {item["name"]: item for item in config.workflow.bridge_signals()}
+    assert signals["delivery-timeout-retry"]["selectors"] == [
+        'button[data-testid="regenerate-thread-error-button"]'
+    ]
+
+
 def _synthetic_snapshot(
     dom_signals: list[str], *, assistant_id: str | None = "a1", generating: bool = False
 ) -> ChatSnapshot:

@@ -144,6 +144,20 @@ async def test_materialize_latest_assistant_turn_scrolls_without_provider_side_e
     assert [params["enabled"] for _method, params in bridge.calls] == [True, False]
 
 
+@pytest.mark.asyncio
+async def test_delivery_timeout_retry_targets_only_provider_retry_control() -> None:
+    class _RetryBridge:
+        async def evaluate(self, _page_handle, function, _argument=None, **_kwargs):
+            assert 'regenerate-thread-error-button' in function
+            assert "text !== 'retry'" in function
+            assert '.click()' in function
+            return True
+
+    browser = GptAutoCdpBrowserController(_RetryBridge())  # type: ignore[arg-type]
+    page = CdpPageRef("page-1", "target-1")
+    assert await browser.retry_delivery_timeout(page)
+
+
 class _ScenarioClient:
     def __init__(self) -> None:
         self.events: asyncio.Queue = asyncio.Queue()

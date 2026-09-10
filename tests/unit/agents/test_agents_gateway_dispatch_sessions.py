@@ -621,6 +621,38 @@ def test_idle_closed_session_transparently_resumes(resumable_rig):
     assert successor["binding"]["relation"] == "resumed-from"
 
 
+def test_auto_resume_skips_terminal_idempotent_successor(resumable_rig, monkeypatch):
+    """A shutdown can close the idempotent successor before its first use.
+
+    The next continuation must advance one bounded generation instead of
+    returning that same terminal successor forever.
+    """
+    runtime, transports, tmp_path = resumable_rig
+    first = _dispatch(
+        tmp_path, _running_record(tmp_path, session_keep_alive=True), dispatch_prompt="hello"
+    )
+    source_id = first["session-id"]
+    runtime.close_session(tmp_path, source_id, reason="shutdown")
+    original_resume = runtime.resume_session
+    calls = []
+
+    def resume_then_shutdown(*args, **kwargs):
+        result = original_resume(*args, **kwargs)
+        calls.append(result["session-id"])
+        if len(calls) == 1:
+            runtime.close_session(tmp_path, result["session-id"], reason="shutdown")
+        return result
+
+    monkeypatch.setattr(runtime, "resume_session", resume_then_shutdown)
+    second = _dispatch(
+        tmp_path, _running_record(tmp_path, session_id=source_id), dispatch_prompt="continue"
+    )
+    assert second["state"] == "completed", second
+    assert len(calls) == 2
+    assert second["session-id"] == calls[-1]
+    assert second["session-id"] != calls[0]
+
+
 def test_closed_by_non_shutdown_reason_still_raises_res_agw_003(rig):
     """A session closed for any reason OTHER than a gateway shutdown (client
     request, post-turn auto-close, etc.) must NOT be transparently resumed

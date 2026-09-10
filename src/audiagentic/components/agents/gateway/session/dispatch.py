@@ -191,18 +191,47 @@ def _auto_resume_reopenable_closed_session(
     from audiagentic.components.agents.gateway.session import sessions_store as session_store
 
     try:
+        resume_source_id = source_session_id
         new_session_record = runtime.resume_session(
             project_root,
-            source_session_id,
+            resume_source_id,
             # Deterministic, not request-scoped: two concurrent
             # continuations against the SAME closed source must resolve to
             # the same idempotency lookup, which a request-id-derived key
             # would not give them.
-            control_id=f"auto-resume:{source_session_id}",
+            control_id=f"auto-resume:{resume_source_id}",
             execution_context_fingerprint=context_fingerprint or record.get("context-fingerprint"),
             request_runtime_root=request_runtime_root,
             project_name=project_name,
         )
+        # A later gateway shutdown can close the idempotent successor before
+        # the next caller arrives. Replaying the original control then
+        # returns that same terminal successor forever. Walk a bounded chain
+        # of resumable shutdown generations, preserving idempotency per
+        # generation and never opening an unrelated fresh conversation.
+        for _ in range(3):
+            # The provider/runtime may close the returned successor during
+            # shutdown immediately after resume_session returns; refresh the
+            # durable record before deciding whether it is usable.
+            try:
+                new_session_record = session_store.read_session_record(
+                    project_root, str(new_session_record["session-id"])
+                )
+            except Exception:
+                pass
+            if new_session_record.get("state") not in {"closed", "expired"}:
+                break
+            if new_session_record.get("close-reason") not in _AUTO_RESUMABLE_CLOSE_REASONS:
+                break
+            resume_source_id = str(new_session_record["session-id"])
+            new_session_record = runtime.resume_session(
+                project_root,
+                resume_source_id,
+                control_id=f"auto-resume:{resume_source_id}",
+                execution_context_fingerprint=context_fingerprint or record.get("context-fingerprint"),
+                request_runtime_root=request_runtime_root,
+                project_name=project_name,
+            )
     except AudiaGenticError as exc:
         if exc.code in _AUTO_RESUME_EXPECTED_REFUSAL_CODES:
             raise AudiaGenticError(
