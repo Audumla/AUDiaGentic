@@ -307,6 +307,9 @@ class GptAutoTurn:
         self._timing_events: set[str] = set()
         self._initial_refresh_attempted = False
         self._initial_refresh_succeeded: bool | None = None
+        # Once provider activity is observed, never let a later stale/blank
+        # page qualify for the initial refresh experiment.
+        self._response_activity_observed = False
 
     def _move(self, target: TurnState) -> None:
         failure = _ENGINE.check(self.state.value, target.value)
@@ -1067,6 +1070,13 @@ class GptAutoTurn:
                 # its duplicate-tab finder fallback always set this before
                 # _await_response() can be reached.
                 current, response_ref = raw_current, None
+            if (
+                current.generating
+                or bool(current.tool_activity_counts)
+                or bool(response_ref is not None and response_ref.text)
+                or response_started
+            ):
+                self._response_activity_observed = True
             response_content_changed = (
                 current.latest_assistant_id != previous.latest_assistant_id
                 or current.latest_assistant_text != previous.latest_assistant_text
@@ -1147,6 +1157,7 @@ class GptAutoTurn:
                 refresh_enabled
                 and refresh_attempts > 0
                 and not self._initial_refresh_attempted
+                and not self._response_activity_observed
                 and not credible_response
                 and not current.tool_activity_counts
                 and page_needs_probe
