@@ -1372,6 +1372,19 @@ class GptAutoTurn:
                     verify = raw_verify
                     verify_ref = None
                 verify_facts = _facts(baseline, current, verify)
+                if verify_facts.get("auth-required"):
+                    raise AudiaGenticError(
+                        code="EXT-GPTAUTO-003",
+                        kind="providers",
+                        message="gpt-auto authentication is required",
+                        details={
+                            "turn-id": self.request.turn_id,
+                            "failure-reason": "authentication-required",
+                            "evidence": ["auth-required"],
+                            "verification": True,
+                            **self._diagnostics(),
+                        },
+                    )
                 verified = self.chat.config.workflow.policy("response-complete").evaluate(
                     verify_facts
                 )
@@ -1815,10 +1828,7 @@ def _scope_response_snapshot(
             None,
         )
     dom_signals = snapshot.dom_signals
-    if (
-        snapshot.terminal_witness_assistant_id
-        and snapshot.terminal_witness_assistant_id != response_ref.message_id
-    ):
+    if snapshot.terminal_witness_assistant_id != response_ref.message_id:
         dom_signals = frozenset(
             signal
             for signal in dom_signals
