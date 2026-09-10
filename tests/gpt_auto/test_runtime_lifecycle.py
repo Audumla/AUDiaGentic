@@ -611,12 +611,13 @@ async def test_unresolved_recovery_reports_missing_completion_evidence() -> None
 
 
 @pytest.mark.asyncio
-async def test_unresolved_recovery_accepts_fresh_assistant_when_user_node_is_virtualized() -> None:
-    """A completed background tab must not strand the persistent session.
+async def test_unresolved_recovery_requires_owned_assistant_when_user_node_is_virtualized() -> None:
+    """A completed background tab must retain request-owned correlation.
 
     ChatGPT can unmount the submitted user node after a failed observation
     pass.  The retained baseline assistant id plus a newer quiescent assistant
-    response is enough to reconcile without guessing or resending the prompt.
+    response alone is ambiguous because another actor may have inserted it.
+    A previously captured request-owned assistant id is sufficient.
     """
     config = GptAutoConfig.from_dict(valid_config())
     config = replace(config, turn=replace(config.turn, response_stability_seconds=0.0))
@@ -661,8 +662,13 @@ async def test_unresolved_recovery_accepts_fresh_assistant_when_user_node_is_vir
     chat.state = ChatState.RECOVERING
     chat.mark_prompt_submitted("prompt-new", "assistant-before", "submitted prompt")
 
-    # The first observation arms the stability fingerprint; the second
-    # observation proves that the response remained unchanged.
+    assert await chat._reconcile_unresolved_turn() is False
+    assert chat._unresolved_recovery_reason == "prompt-text-digest-not-found"
+    assert chat.unresolved_turn_pending is True
+
+    chat.unresolved_assistant_message_id = "assistant-new"
+    # The first correlated observation arms the stability fingerprint; the
+    # second proves that the response remained unchanged.
     assert await chat._reconcile_unresolved_turn() is False
     assert await chat._reconcile_unresolved_turn() is True
     chat._move(ChatState.READY)
@@ -679,6 +685,7 @@ async def test_unresolved_recovery_reconciles_despite_stuck_generating_signal() 
     matches the composer-editable=True + stop-control-stuck combination
     observed live, which is itself evidence the button state is stale."""
     config = GptAutoConfig.from_dict(valid_config())
+    object.__setattr__(config.turn, "response_generating_override_stability_seconds", 0.01)
 
     class _Browser:
         async def page_by_handle(self, handle):

@@ -115,6 +115,21 @@ def test_baseline_context_exists_for_an_unmanaged_project(tmp_path: Path) -> Non
     assert context["source_control"]["repository"] is None
 
 
+def test_configured_project_name_is_not_replaced_by_client_workspace_label(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / ".audiagentic" / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "project.yaml").write_text(
+        "project-name: BigCherry\n",
+        encoding="utf-8",
+    )
+
+    context = baseline_agent_template_context(tmp_path, workspace_name="bigcherry")
+
+    assert context["project"]["name"] == "BigCherry"
+
+
 def test_missing_template_placeholder_fails_at_admission(tmp_path: Path) -> None:
     prompt = PromptDefinition.from_dict(
         {

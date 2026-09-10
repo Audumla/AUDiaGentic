@@ -20,13 +20,11 @@ def resolve_project_name(
 ) -> str:
     """Resolve one canonical display name for project-owned consumers.
 
-    Host callers may provide the active workspace name.  CLI and gateway
-    callers that do not have one use the project configuration, then the
-    resolved project-directory name.
+    Project configuration is authoritative when present.  A host-provided
+    workspace name is only a fallback for unmanaged repositories, because
+    client workspace labels are not necessarily the name of the corresponding
+    provider project.
     """
-    if isinstance(workspace_name, str) and workspace_name.strip():
-        return workspace_name.strip()
-
     config_path = project_root / ".audiagentic" / "config" / "project.yaml"
     data = load_yaml_file(config_path) if config_path.is_file() else {}
     if not isinstance(data, dict):
@@ -34,6 +32,8 @@ def resolve_project_name(
     configured_name = data.get("project-name") or data.get("project_name")
     if isinstance(configured_name, str) and configured_name.strip():
         return configured_name.strip()
+    if isinstance(workspace_name, str) and workspace_name.strip():
+        return workspace_name.strip()
     return project_root.resolve().name
 
 

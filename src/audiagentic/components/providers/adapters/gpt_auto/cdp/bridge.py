@@ -345,13 +345,15 @@ class PythonCdpBridge:
             async with self._tab_open_lock:
                 anchor = str(params["anchorPageHandle"])
                 anchor_target = await self._target(anchor)
+                initial_url = str(params.get("url") or "about:blank")
                 before = {
                     str(i["targetId"])
                     for i in (await self.client.command("Target.getTargets")).get("targetInfos", [])
                 }
                 await self.evaluate(
                     anchor,
-                    "() => { window.open('about:blank', '_blank'); return true; }",
+                    "url => { window.open(url, '_blank'); return true; }",
+                    initial_url,
                     user_gesture=True,
                 )
                 deadline = asyncio.get_running_loop().time() + (timeout or 5.0)
@@ -390,6 +392,21 @@ class PythonCdpBridge:
                 {"enabled": enabled},
                 timeout=timeout,
             )
+            return {"ok": True}
+        if method == "press_enter":
+            for event_type in ("keyDown", "keyUp"):
+                await self._session_command(
+                    handle,
+                    "Input.dispatchKeyEvent",
+                    {
+                        "type": event_type,
+                        "key": "Enter",
+                        "code": "Enter",
+                        "windowsVirtualKeyCode": 13,
+                        "nativeVirtualKeyCode": 13,
+                    },
+                    timeout=timeout,
+                )
             return {"ok": True}
         if method == "close_page":
             target_id = await self._target(handle)

@@ -34,7 +34,7 @@ from .observation_engine import (
 )
 from .prompt_fingerprint import PromptFingerprint, match_prompt
 from .snapshot import ChatMessageRef, ChatSnapshot
-from .urls import parse_provider_session_id
+from .urls import canonical_project_url, parse_project_id, parse_provider_session_id
 
 logger = logging.getLogger(__name__)
 
@@ -404,8 +404,10 @@ class GptAutoTurn:
             return self._result("cancelled")
         self._phase = "baseline-observation"
         baseline = await self.chat.snapshot()
+        baseline = await self._ensure_admitted_project(baseline)
         if baseline.generating or not baseline.composer_editable:
             baseline = await self._await_composer_settled(baseline)
+        self._require_admitted_project(baseline, phase="pre-submission")
         self._baseline_snapshot = baseline
         self._remember_snapshot(baseline)
         self._move(TurnState.SUBMITTING)
@@ -464,6 +466,7 @@ class GptAutoTurn:
         await self._emit(TransportObservationKind.TURN_ACCEPTED, {"reason": "provider-accepted"})
         if self.chat.provider_session_id is None:
             proof = await self.chat.acquire_provider_identity(proof)
+        self._require_admitted_project(proof, phase="post-submission")
         await self._publish_message_ids(strict=True)
         if self.state is TurnState.CANCELLED:
             return self._result("cancelled")
@@ -486,6 +489,47 @@ class GptAutoTurn:
         await self._emit(TransportObservationKind.TERMINAL, {"stop_reason": "end-turn"})
         result = self._result("end-turn")
         return SessionTurnResult(**{**result.__dict__, "final_summary": final})
+
+    def _require_admitted_project(self, snapshot: ChatSnapshot, *, phase: str) -> None:
+        """Fence every browser side effect to the admitted ChatGPT Project."""
+        expected = parse_project_id(self.chat.project_url or "")
+        observed = parse_project_id(snapshot.url)
+        if expected and observed == expected:
+            return
+        raise AudiaGenticError(
+            code="RES-GPTAUTO-006",
+            kind="providers",
+            message="gpt-auto tab is not inside the admitted ChatGPT Project",
+            details={
+                "phase": phase,
+                "expected-project-id": expected,
+                "observed-project-id": observed,
+                "submission-attempted": self.side_effect_attempted,
+            },
+        )
+
+    async def _ensure_admitted_project(self, snapshot: ChatSnapshot) -> ChatSnapshot:
+        """Repair a stale new-chat SPA route before inserting prompt text."""
+        expected = parse_project_id(self.chat.project_url or "")
+        if expected and parse_project_id(snapshot.url) == expected:
+            return snapshot
+        # A retained conversation has immutable identity. Never navigate it
+        # elsewhere or silently replace it with a new conversation.
+        if self.chat.provider_session_id or not expected:
+            self._require_admitted_project(snapshot, phase="pre-submission")
+        browser = getattr(self.chat.runtime, "gpt_browser", None)
+        if browser is None or not self.chat.page_handle:
+            self._require_admitted_project(snapshot, phase="pre-submission")
+        page = await browser.page_by_handle(self.chat.page_handle)
+        target = canonical_project_url(self.chat.project_url or "") + "/project"
+        page = await browser.navigate(page, target)
+        await browser.wait_for_composer(
+            page,
+            timeout=self.chat.config.chat.ready_timeout_seconds,
+        )
+        repaired = await self.chat.snapshot()
+        self._require_admitted_project(repaired, phase="pre-submission-recovery")
+        return repaired
 
     async def _capture_provider_identity_after_ambiguous_submission(self) -> None:
         """Persist a conversation URL observed after an ambiguous submit."""
