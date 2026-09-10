@@ -63,6 +63,10 @@ def valid_config() -> dict:
             "response-generating-override-stability-seconds": 30,
             "submission-proof-progress-lease-seconds": 300,
             "submission-proof-absolute-ceiling-seconds": 900,
+            "initial-response-observation-grace-seconds": 15,
+            "initial-response-refresh-enabled": False,
+            "initial-response-refresh-attempts": 1,
+            "initial-response-refresh-cooldown-seconds": 30,
         },
         "workflow": {
             "dom-signals": {

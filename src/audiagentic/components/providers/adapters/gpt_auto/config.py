@@ -150,6 +150,12 @@ class TurnConfig:
     # (did we see ANY sign of it at all); these two govern everything after.
     submission_proof_progress_lease_seconds: float
     submission_proof_absolute_ceiling_seconds: float
+    # Diagnostic-only blank/stale page recovery experiment. Disabled by
+    # default and bounded to one same-conversation reread.
+    initial_response_observation_grace_seconds: float
+    initial_response_refresh_enabled: bool
+    initial_response_refresh_attempts: int
+    initial_response_refresh_cooldown_seconds: float
 
 
 class DomSignalScope(StrEnum):
@@ -323,6 +329,10 @@ class GptAutoConfig:
                 "response-generating-override-stability-seconds",
                 "submission-proof-progress-lease-seconds",
                 "submission-proof-absolute-ceiling-seconds",
+                "initial-response-observation-grace-seconds",
+                "initial-response-refresh-enabled",
+                "initial-response-refresh-attempts",
+                "initial-response-refresh-cooldown-seconds",
             },
             "turn",
         )
@@ -345,6 +355,18 @@ class GptAutoConfig:
             ),
             submission_proof_absolute_ceiling_seconds=_positive(
                 turn_data, "submission-proof-absolute-ceiling-seconds"
+            ),
+            initial_response_observation_grace_seconds=_optional_non_negative(
+                turn_data, "initial-response-observation-grace-seconds", default=15.0
+            ),
+            initial_response_refresh_enabled=_optional_boolean(
+                turn_data, "initial-response-refresh-enabled", default=False
+            ),
+            initial_response_refresh_attempts=_optional_non_negative_int(
+                turn_data, "initial-response-refresh-attempts", default=1
+            ),
+            initial_response_refresh_cooldown_seconds=_optional_non_negative(
+                turn_data, "initial-response-refresh-cooldown-seconds", default=30.0
             ),
         )
         workflow = _workflow_config(_mapping(settings, "workflow"))
@@ -585,6 +607,20 @@ def _optional_boolean(data: dict[str, Any], key: str, *, default: bool) -> bool:
     value = data.get(key, default)
     if not isinstance(value, bool):
         _invalid(f"{key} must be a boolean")
+    return value
+
+
+def _optional_non_negative(data: dict[str, Any], key: str, *, default: float) -> float:
+    value = data.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        _invalid(f"{key} must be non-negative")
+    return float(value)
+
+
+def _optional_non_negative_int(data: dict[str, Any], key: str, *, default: int) -> int:
+    value = data.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        _invalid(f"{key} must be a non-negative integer")
     return value
 
 

@@ -394,6 +394,88 @@ async def test_response_observer_materializes_virtualized_turn_once_before_compl
 
 
 @pytest.mark.asyncio
+async def test_initial_blank_page_probe_refreshes_once_when_enabled():
+    chat = _Chat()
+    chat.config.turn.initial_response_refresh_enabled = True
+    chat.config.turn.initial_response_refresh_attempts = 1
+    chat.config.turn.initial_response_observation_grace_seconds = 0
+    chat._snapshots = iter(
+        [
+            replace(snap(users=1, user="Review AU01"), url="about:blank", composer_present=False),
+            *[
+                snap(
+                    users=1,
+                    assistants=1,
+                    user="Review AU01",
+                    assistant="Recovered after refresh",
+                    complete=True,
+                )
+                for _ in range(6)
+            ],
+        ]
+    )
+    refreshes: list[bool] = []
+
+    async def refresh() -> bool:
+        refreshes.append(True)
+        return True
+
+    chat._refresh_for_reconciliation = refresh
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-initial-refresh", body="Review AU01"), lambda _: None
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+    result = await turn._await_response(snap(users=1, user="Review AU01"), replace(
+        snap(users=1, user="Review AU01"), url="about:blank", composer_present=False
+    ))
+
+    assert result == "Recovered after refresh"
+    assert refreshes == [True]
+    assert turn._initial_refresh_attempted is True
+    assert turn._initial_refresh_succeeded is True
+
+
+@pytest.mark.asyncio
+async def test_initial_blank_page_probe_is_disabled_and_activity_vetoes_refresh():
+    chat = _Chat()
+    chat.config.turn.initial_response_refresh_enabled = False
+    chat.config.turn.initial_response_observation_grace_seconds = 0
+    blank = replace(snap(users=1, user="Review AU01"), url="about:blank", composer_present=False)
+    chat._snapshots = iter([blank, blank])
+    refreshes: list[bool] = []
+
+    async def refresh() -> bool:
+        refreshes.append(True)
+        return True
+
+    chat._refresh_for_reconciliation = refresh
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-refresh-disabled", body="Review AU01"), lambda _: None
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+    with pytest.raises(AudiaGenticError):
+        await turn._await_response(snap(users=1, user="Review AU01"), blank)
+    assert refreshes == []
+
+    chat = _Chat()
+    chat.config.turn.initial_response_refresh_enabled = True
+    chat.config.turn.initial_response_observation_grace_seconds = 0
+    active_blank = replace(blank, generating=True)
+    chat._snapshots = iter([active_blank, active_blank])
+    chat._refresh_for_reconciliation = refresh
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-refresh-veto", body="Review AU01"), lambda _: None
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+    with pytest.raises(AudiaGenticError):
+        await turn._await_response(snap(users=1, user="Review AU01"), active_blank)
+    assert refreshes == []
+
+
+@pytest.mark.asyncio
 async def test_stale_dom_response_conflict_refreshes_without_resubmitting() -> None:
     """A renderer bump must recover the original turn, not fail it.
 

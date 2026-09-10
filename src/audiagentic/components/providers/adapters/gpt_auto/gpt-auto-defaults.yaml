@@ -43,6 +43,11 @@ settings:
     response-generating-override-stability-seconds: 30
     submission-proof-progress-lease-seconds: 300
     submission-proof-absolute-ceiling-seconds: 900
+    # Experimental blank/stale-page probe. Never refresh by default.
+    initial-response-observation-grace-seconds: 15
+    initial-response-refresh-enabled: false
+    initial-response-refresh-attempts: 1
+    initial-response-refresh-cooldown-seconds: 30
   workflow:
     dom-signals:
       stop-control:
