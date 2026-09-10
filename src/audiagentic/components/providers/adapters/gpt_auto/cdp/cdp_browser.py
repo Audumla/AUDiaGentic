@@ -92,15 +92,31 @@ class CdpBrowserController:
     async def new_window(self) -> CdpPageRef:
         return await self._page(await self.bridge.call("create_window_page"))
 
-    async def new_tab(self, *, in_window: CdpPageRef | None = None) -> CdpPageRef:
+    async def new_tab(
+        self,
+        *,
+        in_window: CdpPageRef | None = None,
+        url: str | None = None,
+    ) -> CdpPageRef:
+        if url is not None:
+            url = _required(url, "url")
+            if not urlparse(url).scheme:
+                raise ValueError("url must include a scheme")
         result = (
             await self.bridge.call("create_page")
             if in_window is None
             else await self.bridge.call(
-                "create_page_in_window", {"anchorPageHandle": self._handle(in_window)}
+                "create_page_in_window",
+                {
+                    "anchorPageHandle": self._handle(in_window),
+                    **({"url": url} if url is not None else {}),
+                },
             )
         )
-        return await self._page(result)
+        page = await self._page(result)
+        if url is not None and in_window is None:
+            return await self.navigate(page, url)
+        return page
 
     async def close(self, page: CdpPageRef) -> None:
         await self.bridge.call("close_page", {"pageHandle": self._handle(page)})
@@ -117,6 +133,9 @@ class CdpBrowserController:
 
     async def activate(self, page: CdpPageRef) -> None:
         await self.bridge.call("activate_target", {"pageHandle": self._handle(page)})
+
+    async def press_enter(self, page: CdpPageRef) -> None:
+        await self.bridge.call("press_enter", {"pageHandle": self._handle(page)})
 
     async def bounds(self, page: CdpPageRef) -> CdpWindowBounds:
         raw = await self.bridge.call("window_bounds", {"pageHandle": self._handle(page)})

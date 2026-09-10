@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
+from urllib.parse import urlsplit
 
 from .cdp.cdp_browser import CdpBrowserController, CdpPageRef, CdpWindowBounds
 from .cdp.client import CdpError
-from .urls import canonical_project_url, parse_project_id
+from .urls import parse_project_id
 
 _PROJECTS_URL = "https://chatgpt.com/projects"
 
@@ -289,10 +290,30 @@ class GptAutoCdpBrowserController(CdpBrowserController):
 
     async def wait_for_composer(self, page: CdpPageRef, *, timeout: float) -> dict[str, Any]:
         deadline = asyncio.get_running_loop().time() + timeout
+        next_retry_probe = asyncio.get_running_loop().time() + 1.0
         while asyncio.get_running_loop().time() < deadline:
             snapshot = await self.snapshot(page)
             if snapshot.get("composerPresent") and snapshot.get("composerEditable"):
                 return snapshot
+            now = asyncio.get_running_loop().time()
+            if now >= next_retry_probe:
+                retry_focused = await self.evaluate(
+                    page,
+                    r"""() => {
+                      const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                      const button = Array.from(document.querySelectorAll('button')).find(
+                        candidate => normalize(candidate.innerText || candidate.textContent || candidate.getAttribute('aria-label')) === 'try again'
+                          && !candidate.disabled && candidate.getClientRects().length
+                      );
+                      if (!button) return false;
+                      button.focus();
+                      return true;
+                    }""",
+                )
+                if retry_focused:
+                    await self.activate(page)
+                    await self.press_enter(page)
+                next_retry_probe = deadline if retry_focused else now + 1.0
             await asyncio.sleep(0.25)
         raise TimeoutError("ChatGPT composer did not become ready")
 
@@ -473,12 +494,30 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             r"""async (name) => {
               const normalize = value => String(value || '').replace(/\s+/g, ' ').trim();
               const wanted = normalize(name).toLowerCase();
+              const matchingProjectLink = () => Array.from(document.querySelectorAll('a[href]')).find(anchor => {
+                const label = normalize(anchor.innerText || anchor.textContent || anchor.getAttribute('aria-label'));
+                if (label.toLowerCase() !== wanted) return false;
+                try { return /\/g\/g-p-[^/]+\/project\/?$/.test(new URL(anchor.href, location.origin).pathname); }
+                catch (_) { return false; }
+              });
               for (let i = 0; i < 120; i++) {
+                const projectLink = matchingProjectLink();
+                if (projectLink) return {url: new URL(projectLink.href, location.origin).href, name};
                 const row = Array.from(document.querySelectorAll('[role=row]')).find(row => {
                   const values = [...Array.from(row.querySelectorAll('[role=cell], [role=gridcell]')).map(c => c.innerText || c.textContent), ...(row.innerText || '').split(/\r?\n/)].map(normalize);
                   return values.some(value => value.toLowerCase() === wanted);
                 });
-                if (row) { row.click(); for (let j = 0; j < 120; j++) { if (/\/g\/g-p-[^/]+/.test(location.pathname)) return {url: location.href, name}; await new Promise(r => setTimeout(r, 100)); } }
+                if (row) {
+                  row.click();
+                  let projectLocation = null;
+                  for (let j = 0; j < 120; j++) {
+                    const hydratedLink = matchingProjectLink();
+                    if (hydratedLink) return {url: new URL(hydratedLink.href, location.origin).href, name};
+                    if (/\/g\/g-p-[^/]+/.test(location.pathname)) projectLocation = location.href;
+                    await new Promise(r => setTimeout(r, 100));
+                  }
+                  if (projectLocation) return {url: projectLocation, name};
+                }
                 await new Promise(r => setTimeout(r, 100));
               }
               throw new Error(`ChatGPT project not found: ${name}`);
@@ -496,36 +535,88 @@ class GptAutoCdpBrowserController(CdpBrowserController):
         navigation_timeout: float,
         ready_timeout: float,
     ) -> dict[str, Any]:
+        """Open a genuinely new chat through ChatGPT's Projects UI.
+
+        A configured URL is validation data only. New sessions always select
+        the exact visible project name from /projects; existing sessions use
+        their persisted /c/ URL and never enter this method.
+        """
+        expected_project_id = parse_project_id(project_url or "")
         page = await self.new_tab(in_window=anchor_page) if anchor_page else await self.new_window()
-        # A configured URL identifies the project, not necessarily its chat
-        # workspace.  The bare ``/g/<project-id>`` route can redirect a new
-        # conversation to a global ``/c/<id>`` URL, outside the project.
-        # Always enter the project workspace explicitly, just as the
-        # discovery path below does.
-        target = (
-            canonical_project_url(project_url) + "/project"
-            if project_url and parse_project_id(project_url)
-            else None
-        )
         try:
-            if not target or not parse_project_id(target):
-                async with asyncio.timeout(navigation_timeout):
-                    await self.navigate(page, _PROJECTS_URL)
-                match = await self.find_project_url(page, project_name)
-                target = canonical_project_url(match["url"]) + "/project"
-            if not target:
-                raise RuntimeError("gpt-auto could not resolve a ChatGPT project URL")
             async with asyncio.timeout(navigation_timeout):
-                page = await self.navigate(page, target)
-            expected_project_id = parse_project_id(target)
-            observed_url = str((await self.snapshot(page)).get("url") or "")
-            if expected_project_id and parse_project_id(observed_url) != expected_project_id:
-                raise RuntimeError(
-                    "configured ChatGPT Project is unavailable to the connected browser "
-                    "profile or no longer exists; refusing to send outside that Project"
+                page = await self.navigate(page, _PROJECTS_URL)
+            known_targets = {candidate.target_id for candidate in await self.pages()}
+            deadline = asyncio.get_running_loop().time() + navigation_timeout
+            clicked = False
+            while asyncio.get_running_loop().time() < deadline:
+                clicked = await self.evaluate(
+                    page,
+                    r"""(name) => {
+                      const normalize = value => String(value || '').replace(/\s+/g, ' ').trim();
+                      const wanted = normalize(name).toLowerCase();
+                      const exact = value => normalize(value).toLowerCase() === wanted;
+                      const anchor = Array.from(document.querySelectorAll('a[href]')).find(item =>
+                        exact(item.innerText || item.textContent || item.getAttribute('aria-label'))
+                      );
+                      if (anchor) { anchor.click(); return true; }
+                      const row = Array.from(document.querySelectorAll('[role="row"]')).find(item =>
+                        (item.innerText || item.textContent || '').split(/\r?\n/).some(exact)
+                      );
+                      if (row) { row.click(); return true; }
+                      return false;
+                    }""",
+                    project_name,
                 )
+                if clicked is True:
+                    break
+                await asyncio.sleep(0.1)
+            if not clicked:
+                raise RuntimeError(f"ChatGPT project not found: {project_name}")
+
+            # ChatGPT may navigate the Projects target or open the selected
+            # project in a new target. Adopt whichever target the UI created;
+            # never leave the session watcher attached to stale /projects.
+            source_page = page
+            deadline = asyncio.get_running_loop().time() + navigation_timeout
+            selected_url = ""
+            observed_wrong_project = False
+            while asyncio.get_running_loop().time() < deadline:
+                candidates: list[CdpPageRef] = []
+                try:
+                    candidates.append(await self.page_by_handle(source_page.handle))
+                except Exception:
+                    pass
+                candidates.extend(
+                    candidate
+                    for candidate in await self.pages()
+                    if candidate.target_id not in known_targets
+                )
+                for candidate in candidates:
+                    candidate_project_id = parse_project_id(candidate.url)
+                    if candidate_project_id is None:
+                        continue
+                    if expected_project_id and candidate_project_id != expected_project_id:
+                        observed_wrong_project = True
+                        continue
+                    page = candidate
+                    selected_url = candidate.url
+                    break
+                if selected_url:
+                    break
+                await asyncio.sleep(0.1)
+            if not selected_url:
+                if observed_wrong_project:
+                    raise RuntimeError(
+                        "selected ChatGPT Project does not match configured project identity"
+                    )
+                raise TimeoutError("ChatGPT project selection did not open a project page")
+            if page.target_id != source_page.target_id:
+                await self.close(source_page)
             await self.wait_for_composer(page, timeout=ready_timeout)
-            return {"page": page, "projectUrl": target}
+            parts = urlsplit(selected_url)
+            project_landing_url = f"https://chatgpt.com{parts.path.rstrip('/')}"
+            return {"page": page, "projectUrl": project_landing_url}
         except Exception as exc:
             await self.close(page)
             raise RuntimeError(

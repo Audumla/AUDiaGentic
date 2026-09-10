@@ -364,7 +364,9 @@ def agent_task_submit(
     when no turn is active or queued. Results and chat references are retained;
     a later request can auto-resume the idle-closed conversation.
     source is optional provenance text, not a client/session identifier.
-    workspace_name supplies the GPT project name, not a session reuse key.
+    workspace_name identifies the caller workspace and is only used as the GPT
+    project-name fallback when project.yaml has no configured project-name. It
+    is not a session reuse key.
 
     This is the sole submission surface over MCP (RV891). Direct
     provider/model execution bypassing agent selection is not exposed over MCP."""

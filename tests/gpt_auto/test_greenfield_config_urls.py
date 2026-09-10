@@ -7,7 +7,8 @@ def test_project_title_suffix_is_not_project_identity():
     base = f"https://chatgpt.com/g/{project}"
     assert parse_project_id(base + "-bigcherry/c/chat") == parse_project_id(base + "/project")
     assert parse_project_id(base + "-renamed/c/chat") == project
-    assert canonical_chat_url(base + "-bigcherry/c/chat") == base + "/c/chat"
+    assert canonical_chat_url(base + "-bigcherry/c/chat") == base + "-bigcherry/c/chat"
+    assert canonical_project_url(base + "-bigcherry/c/chat") == base
     assert parse_project_id(base + "/project") != parse_project_id("https://chatgpt.com/g/g-p-00000000000000000000000000000000/project")
 
 import sys

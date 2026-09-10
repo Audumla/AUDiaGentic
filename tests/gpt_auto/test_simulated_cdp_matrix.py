@@ -250,75 +250,171 @@ async def test_bridge_positive_lifecycle_sequence_is_typed_and_reusable():
 
 
 @pytest.mark.asyncio
-async def test_configured_project_opens_its_workspace_route(monkeypatch) -> None:
-    """A bare project URL must not create a global ChatGPT conversation."""
+async def test_new_session_selects_exact_project_from_projects_page(monkeypatch) -> None:
     browser = GptAutoCdpBrowserController(SimpleNamespace())
-    page = CdpPageRef("page-1", "target-1", 1, "about:blank", "")
-    navigated: list[str] = []
+    anchor = CdpPageRef("anchor", "anchor-target", 7, "http://127.0.0.1:8765/dashboard", "")
+    page = CdpPageRef("page-1", "target-1", 7, "about:blank", "")
+    project_id = "g-p-6a7bbf85d06c8191835b0d64958b4d7a"
+    selected_url = f"https://chatgpt.com/g/{project_id}-bigcherry/project"
+    calls: list[tuple[str, object]] = []
 
-    async def new_window() -> CdpPageRef:
+    async def new_tab(*, in_window=None, url=None):
+        calls.append(("new-tab", (in_window, url)))
         return page
 
-    async def navigate(_page: CdpPageRef, url: str) -> CdpPageRef:
-        navigated.append(url)
+    async def navigate(_page, url):
+        calls.append(("navigate", url))
         return page
 
-    async def composer_ready(_page: CdpPageRef, *, timeout: float) -> None:
-        assert timeout == 4
+    async def evaluate(_page, _function, name=None):
+        calls.append(("find-project", name))
+        return True
 
-    async def snapshot(_page: CdpPageRef) -> dict[str, str]:
-        return {"url": "https://chatgpt.com/g/g-p-test-project/project"}
+    page_after_click = CdpPageRef(page.handle, page.target_id, page.window_id, selected_url, "")
+
+    async def pages():
+        return (page,)
+
+    async def page_by_handle(_handle):
+        return page_after_click
+
+    async def snapshot(_page):
+        return {"url": selected_url, "composerPresent": True, "composerEditable": True}
+
+    async def wait_for_composer(_page, *, timeout):
+        calls.append(("composer", timeout))
+        return await snapshot(_page)
+
+    monkeypatch.setattr(browser, "new_tab", new_tab)
+    monkeypatch.setattr(browser, "navigate", navigate)
+    monkeypatch.setattr(browser, "evaluate", evaluate)
+    monkeypatch.setattr(browser, "pages", pages)
+    monkeypatch.setattr(browser, "page_by_handle", page_by_handle)
+    monkeypatch.setattr(browser, "snapshot", snapshot)
+    monkeypatch.setattr(browser, "wait_for_composer", wait_for_composer)
+
+    opened = await browser.open_project_page(
+        project_name="BigCherry",
+        project_url=f"https://chatgpt.com/g/{project_id}-bigcherry/project",
+        anchor_page=anchor,
+        navigation_timeout=3,
+        ready_timeout=4,
+    )
+
+    assert calls == [
+        ("new-tab", (anchor, None)),
+        ("navigate", "https://chatgpt.com/projects"),
+        ("find-project", "BigCherry"),
+        ("composer", 4),
+    ]
+    assert opened["projectUrl"] == selected_url
+
+
+@pytest.mark.asyncio
+async def test_new_session_rejects_projects_ui_identity_mismatch(monkeypatch) -> None:
+    browser = GptAutoCdpBrowserController(SimpleNamespace())
+    page = CdpPageRef("page-1", "target-1", 7, "about:blank", "")
+    configured_id = "g-p-configured"
+    discovered_url = "https://chatgpt.com/g/g-p-different-project/project"
+    closed: list[CdpPageRef] = []
+
+    async def new_window():
+        return page
+
+    async def navigate(_page, _url):
+        return page
+
+    async def evaluate(_page, _function, _name=None):
+        return True
+
+    discovered = CdpPageRef(page.handle, page.target_id, page.window_id, discovered_url, "")
+
+    async def pages():
+        return (page,)
+
+    async def page_by_handle(_handle):
+        return discovered
+
+    async def close(closed_page):
+        closed.append(closed_page)
 
     monkeypatch.setattr(browser, "new_window", new_window)
     monkeypatch.setattr(browser, "navigate", navigate)
-    monkeypatch.setattr(browser, "snapshot", snapshot)
-    monkeypatch.setattr(browser, "wait_for_composer", composer_ready)
+    monkeypatch.setattr(browser, "evaluate", evaluate)
+    monkeypatch.setattr(browser, "pages", pages)
+    monkeypatch.setattr(browser, "page_by_handle", page_by_handle)
+    monkeypatch.setattr(browser, "close", close)
 
-    opened = await browser.open_project_page(
-        project_name="ignored-when-url-is-configured",
-        project_url="https://chat.openai.com/g/g-p-test-project",
+    with pytest.raises(RuntimeError, match="does not match configured project identity"):
+        await browser.open_project_page(
+            project_name="BigCherry",
+            project_url=f"https://chatgpt.com/g/{configured_id}-bigcherry/project",
+            anchor_page=None,
+            navigation_timeout=0.01,
+            ready_timeout=4,
+        )
+
+    assert closed == [page]
+
+
+@pytest.mark.asyncio
+async def test_new_session_adopts_ui_opened_target_and_closes_projects_tab(monkeypatch) -> None:
+    browser = GptAutoCdpBrowserController(SimpleNamespace())
+    projects_page = CdpPageRef("projects", "projects-target", 7, "about:blank", "")
+    project_id = "g-p-6a7bbf85d06c8191835b0d64958b4d7a"
+    opened_page = CdpPageRef(
+        "chat", "chat-target", 7,
+        f"https://chatgpt.com/g/{project_id}-bigcherry/project", "BigCherry",
+    )
+    closed: list[CdpPageRef] = []
+    page_scans = 0
+
+    async def new_window():
+        return projects_page
+
+    async def navigate(_page, _url):
+        return projects_page
+
+    async def evaluate(_page, _function, _name=None):
+        return True
+
+    async def pages():
+        nonlocal page_scans
+        page_scans += 1
+        return (projects_page,) if page_scans == 1 else (projects_page, opened_page)
+
+    async def page_by_handle(_handle):
+        return CdpPageRef(
+            projects_page.handle, projects_page.target_id, projects_page.window_id,
+            "https://chatgpt.com/projects", "Projects",
+        )
+
+    async def wait_for_composer(page, *, timeout):
+        assert page == opened_page
+        assert timeout == 4
+        return {"composerPresent": True, "composerEditable": True}
+
+    async def close(page):
+        closed.append(page)
+
+    monkeypatch.setattr(browser, "new_window", new_window)
+    monkeypatch.setattr(browser, "navigate", navigate)
+    monkeypatch.setattr(browser, "evaluate", evaluate)
+    monkeypatch.setattr(browser, "pages", pages)
+    monkeypatch.setattr(browser, "page_by_handle", page_by_handle)
+    monkeypatch.setattr(browser, "wait_for_composer", wait_for_composer)
+    monkeypatch.setattr(browser, "close", close)
+
+    result = await browser.open_project_page(
+        project_name="BigCherry",
+        project_url=f"https://chatgpt.com/g/{project_id}-bigcherry/project",
         anchor_page=None,
         navigation_timeout=3,
         ready_timeout=4,
     )
 
-    assert navigated == ["https://chatgpt.com/g/g-p-test-project/project"]
-    assert opened["projectUrl"] == navigated[0]
-
-
-@pytest.mark.asyncio
-async def test_project_redirect_to_global_chat_is_closed_and_rejected(monkeypatch) -> None:
-    browser = GptAutoCdpBrowserController(SimpleNamespace())
-    page = CdpPageRef("page-1", "target-1", 1, "about:blank", "")
-    closed: list[str] = []
-
-    async def new_window() -> CdpPageRef:
-        return page
-
-    async def navigate(_page: CdpPageRef, _url: str) -> CdpPageRef:
-        return page
-
-    async def snapshot(_page: CdpPageRef) -> dict[str, str]:
-        return {"url": "https://chatgpt.com/"}
-
-    async def close(closed_page: CdpPageRef) -> None:
-        closed.append(closed_page.handle)
-
-    monkeypatch.setattr(browser, "new_window", new_window)
-    monkeypatch.setattr(browser, "navigate", navigate)
-    monkeypatch.setattr(browser, "snapshot", snapshot)
-    monkeypatch.setattr(browser, "close", close)
-
-    with pytest.raises(RuntimeError, match="Project is unavailable"):
-        await browser.open_project_page(
-            project_name="unused",
-            project_url="https://chatgpt.com/g/g-p-test-project",
-            anchor_page=None,
-            navigation_timeout=3,
-            ready_timeout=4,
-        )
-
-    assert closed == ["page-1"]
+    assert result["page"] == opened_page
+    assert closed == [projects_page]
 
 
 @pytest.mark.asyncio

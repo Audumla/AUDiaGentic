@@ -94,13 +94,14 @@ async def test_initial_chat_discovers_project_by_active_project_name(monkeypatch
     assert runtime.bridge.calls[3][1]["url"] == chat.project_url
 
 
-def test_project_name_uses_workspace_then_config_then_directory(tmp_path: Path):
+def test_project_name_uses_config_then_workspace_then_directory(tmp_path: Path):
     assert resolve_project_name(tmp_path) == tmp_path.name
+    assert resolve_project_name(tmp_path, workspace_name="Workspace Name") == "Workspace Name"
     config_dir = tmp_path / ".audiagentic" / "config"
     config_dir.mkdir(parents=True)
     (config_dir / "project.yaml").write_text("project-name: Big Cherry\n", encoding="utf-8")
     assert resolve_project_name(tmp_path) == "Big Cherry"
-    assert resolve_project_name(tmp_path, workspace_name="Workspace Name") == "Workspace Name"
+    assert resolve_project_name(tmp_path, workspace_name="bigcherry") == "Big Cherry"
 
 
 def test_session_transport_uses_admitted_project_name(monkeypatch, tmp_path: Path):

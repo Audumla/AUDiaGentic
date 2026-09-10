@@ -50,7 +50,10 @@ def canonical_chat_url(url: str) -> str | None:
     session_id = parse_provider_session_id(url)
     if not project or not session_id:
         return None
-    return f"https://chatgpt.com/g/{project}/c/{session_id}"
+    project_route = _PROJECT_RE.search(parts.path)
+    if project_route is None:
+        return None
+    return f"https://chatgpt.com/g/{project_route.group(1)}/c/{session_id}"
 
 
 def url_matches_provider_session(url: str, provider_session_id: str) -> bool:
