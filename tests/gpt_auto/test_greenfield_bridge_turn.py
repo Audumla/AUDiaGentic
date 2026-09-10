@@ -1554,6 +1554,35 @@ async def test_configured_dom_failure_policy_fails_the_workflow():
 
 
 @pytest.mark.asyncio
+async def test_fresh_completion_outranks_stale_delivery_error_marker():
+    chat = _Chat()
+    baseline = snap()
+    complete_with_stale_error = snap(
+        users=1,
+        assistants=1,
+        user="Review SH10",
+        assistant="Looks sound",
+        complete=True,
+        extra_signals=("error-page",),
+    )
+
+    async def completed_snapshot():
+        return complete_with_stale_error
+
+    chat.snapshot = completed_snapshot
+    chat.state = ChatState.BUSY
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-stale-error", body="Review SH10"),
+        lambda _: None,
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+    result = await turn._await_response(baseline, complete_with_stale_error)
+    assert result == "Looks sound"
+
+
+@pytest.mark.asyncio
 async def test_provider_failure_policy_keeps_dom_evidence_without_message_bodies():
     chat = _Chat()
     failed = snap(users=1, user="Review SH10", extra_signals=("error-page",))

@@ -231,6 +231,10 @@ settings:
         any-of-groups:
           - [completion-control, more-actions-menu]
           - [canvas-edit-control, canvas-open-editor-control, not-generating]
-        none-of: [streaming-indicator, thinking-indicator, error-page, error-alert, auth-required]
+        # A stale delivery-error panel can remain visible after ChatGPT has
+        # produced the replacement answer.  Fresh assistant correlation plus
+        # the structural completion witnesses must outrank that advisory
+        # error marker; auth-required remains a hard veto.
+        none-of: [streaming-indicator, thinking-indicator, auth-required]
       response-failed:
         any-of: [error-page, error-alert, auth-required]

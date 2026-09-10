@@ -100,13 +100,13 @@ def valid_config() -> dict:
             "evidence-policies": {
                 "response-started": {"any-of": ["assistant-fresh", "stop-control"]},
                 "response-active": {"any-of": ["text-changed", "stop-control"]},
-                "response-complete": {
+        "response-complete": {
                     "all-of": ["assistant-fresh", "text-present"],
                     "any-of-groups": [
                         ["completion-control", "more-actions-menu"],
                         ["canvas-edit-control", "canvas-open-editor-control", "not-generating"],
                     ],
-                    "none-of": ["error-page"],
+            "none-of": [],
                 },
                 "response-failed": {"any-of": ["error-page"]},
             },
