@@ -680,16 +680,29 @@ class PersistentChat:
             "delivery-timeout-retry" in snapshot.dom_signals
             and not self._reconciliation_delivery_retry_attempted
         ):
-            self._reconciliation_delivery_retry_attempted = True
-            try:
-                if await self.retry_delivery_timeout():
-                    await asyncio.sleep(self.config.turn.poll_interval_seconds)
-                    snapshot = await self.snapshot(allow_recovering=True)
-            except Exception as exc:  # noqa: BLE001 - preserve recovery evidence
+            _, prompt_reason, _ = _unresolved_prompt_match_diagnostics(self, snapshot)
+            retry_is_request_owned = prompt_reason in {
+                "prompt-id-match",
+                "prompt-text-digest-match",
+                "prompt-id-mismatch-text-digest-match",
+            }
+            if retry_is_request_owned:
+                self._reconciliation_delivery_retry_attempted = True
+                try:
+                    if await self.retry_delivery_timeout():
+                        await asyncio.sleep(self.config.turn.poll_interval_seconds)
+                        snapshot = await self.snapshot(allow_recovering=True)
+                except Exception as exc:  # noqa: BLE001 - preserve recovery evidence
+                    self._set_unresolved_recovery(
+                        "delivery-timeout-retry-failed",
+                        exception_type=type(exc).__name__,
+                        exception=str(exc),
+                    )
+                    return False
+            else:
                 self._set_unresolved_recovery(
-                    "delivery-timeout-retry-failed",
-                    exception_type=type(exc).__name__,
-                    exception=str(exc),
+                    "delivery-timeout-retry-not-request-owned",
+                    observed_prompt_reason=prompt_reason,
                 )
                 return False
         # A retained CDP page can have a stale React/DOM snapshot even though

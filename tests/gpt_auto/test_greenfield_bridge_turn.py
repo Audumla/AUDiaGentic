@@ -474,6 +474,25 @@ async def test_initial_blank_page_probe_is_disabled_and_activity_vetoes_refresh(
         await turn._await_response(snap(users=1, user="Review AU01"), active_blank)
     assert refreshes == []
 
+    # The veto is latched: activity that disappears must still prevent a
+    # later blank-page probe for this same turn.
+    chat = _Chat()
+    chat.config.turn.initial_response_refresh_enabled = True
+    chat.config.turn.initial_response_observation_grace_seconds = 0
+    quiet_blank = replace(blank, generating=False)
+    chat._snapshots = iter([active_blank, quiet_blank, quiet_blank])
+    refreshes = []
+    chat._refresh_for_reconciliation = refresh
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-refresh-latched-veto", body="Review AU01"), lambda _: None
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+    with pytest.raises(AudiaGenticError):
+        await turn._await_response(snap(users=1, user="Review AU01"), active_blank)
+    assert refreshes == []
+    assert turn._response_activity_observed is True
+
 
 @pytest.mark.asyncio
 async def test_stale_dom_response_conflict_refreshes_without_resubmitting() -> None:
