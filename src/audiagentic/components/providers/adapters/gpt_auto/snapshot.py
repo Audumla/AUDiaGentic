@@ -73,6 +73,9 @@ class ChatSnapshot:
     latest_assistant_text: str | None
     dom_signals: frozenset[str]
     error_present: bool
+    # Assistant message owning the structural completion controls. These
+    # controls are otherwise conversation-global DOM evidence.
+    terminal_witness_assistant_id: str | None = None
     # The bounded conversation label ChatGPT renders in the left navigation.
     # It is provider metadata, not response content; keeping it on the atomic
     # snapshot lets the gateway persist changes as soon as the label appears.
@@ -117,6 +120,7 @@ class ChatSnapshot:
                 if present
             ),
             error_present=bool(value.get("errorPresent")),
+            terminal_witness_assistant_id=_text(value.get("terminalWitnessAssistantId")),
             generating=bool(value.get("generating")),
             latest_user_id=_text(value.get("latestUserId")),
             user_message_ids=tuple(
