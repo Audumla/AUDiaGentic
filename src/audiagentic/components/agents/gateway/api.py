@@ -1300,6 +1300,7 @@ def list_execution_sessions(
     project_root: Path,
     *,
     state: str | None = None,
+    _live_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """List persisted gateway sessions in stable lifecycle/ID order, with a 'live' flag for
     sessions whose transport is held by THIS process's SessionRuntime.
@@ -1312,8 +1313,11 @@ def list_execution_sessions(
     from audiagentic.components.agents.gateway.session import sessions_store as session_store
     from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
 
-    runtime = peek_session_runtime()
-    live_ids = set(runtime.live_session_ids()) if runtime is not None else set()
+    if _live_ids is None:
+        runtime = peek_session_runtime()
+        live_ids = set(runtime.live_session_ids()) if runtime is not None else set()
+    else:
+        live_ids = set(_live_ids)
     records = session_store.list_session_records(project_root)
     if state is not None:
         records = [r for r in records if r["state"] == state]
@@ -1688,9 +1692,10 @@ def gateway_overview(project_root: Path) -> dict[str, Any]:
             reverse=True,
         )[:5]
     ]
-    sessions = list_execution_sessions(project_root)
     runtime = peek_session_runtime()
-    machine_live_count = len(runtime.live_session_ids()) if runtime is not None else 0
+    live_ids = set(runtime.live_session_ids()) if runtime is not None else set()
+    sessions = list_execution_sessions(project_root, _live_ids=live_ids)
+    machine_live_count = len(live_ids)
 
     # Provider descriptor load diagnostics
     from audiagentic.components.providers.providers_api import (
