@@ -1228,26 +1228,39 @@ class GptAutoTurn:
                 "delivery-timeout-retry" in current.dom_signals
                 and not self._delivery_timeout_retry_attempted
                 and response_ref is None
+                # A control already present at the request baseline belongs
+                # to an earlier/provider turn; only a post-submit edge may
+                # be activated by this observer.
+                and "delivery-timeout-retry" not in baseline.dom_signals
             ):
-                self._delivery_timeout_retry_attempted = True
-                retry = getattr(self.chat, "retry_delivery_timeout", None)
-                retried = bool(await retry()) if callable(retry) else False
-                logger.info(
-                    "gpt-auto delivery-timeout recovery attempted=%s",
-                    retried,
-                    extra={"turn-id": self.request.turn_id},
+                # Retry controls are document-scoped in ChatGPT's DOM. Only
+                # activate one when the current latest user node is this
+                # request's admitted prompt; a human/later gateway turn must
+                # never be clicked by this observer.
+                retry_is_request_owned = (
+                    prompt_message_id is not None
+                    and current.latest_user_id == prompt_message_id
                 )
-                await self._emit(
-                    TransportObservationKind.IN_PROGRESS,
-                    {
-                        "model_activity": "delivery-timeout-retry",
-                        "recovery": "provider-retry",
-                        "succeeded": retried,
-                    },
-                )
-                if retried:
-                    await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
-                    continue
+                if retry_is_request_owned:
+                    self._delivery_timeout_retry_attempted = True
+                    retry = getattr(self.chat, "retry_delivery_timeout", None)
+                    retried = bool(await retry()) if callable(retry) else False
+                    logger.info(
+                        "gpt-auto delivery-timeout recovery attempted=%s",
+                        retried,
+                        extra={"turn-id": self.request.turn_id},
+                    )
+                    await self._emit(
+                        TransportObservationKind.IN_PROGRESS,
+                        {
+                            "model_activity": "delivery-timeout-retry",
+                            "recovery": "provider-retry",
+                            "succeeded": retried,
+                        },
+                    )
+                    if retried:
+                        await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
+                        continue
             # Authentication is always a hard provider boundary, even if a
             # project overlay accidentally removes it from response-failed.
             if facts.get("auth-required"):
