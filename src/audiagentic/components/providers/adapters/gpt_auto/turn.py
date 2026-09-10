@@ -1174,8 +1174,14 @@ class GptAutoTurn:
                 if retried:
                     await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
                     continue
+            # Evaluate completion before provider failure.  ChatGPT can leave
+            # a delivery-timeout/error panel in the DOM after a retry has
+            # already produced a fresh, structurally complete answer.  That
+            # stale marker must not pre-empt durable completion evidence.
+            complete = self.chat.config.workflow.policy("response-complete").evaluate(facts)
+            completion_candidate = complete.satisfied and bool(current.latest_assistant_text)
             failed = self.chat.config.workflow.policy("response-failed").evaluate(facts)
-            if failed.satisfied:
+            if failed.satisfied and not completion_candidate:
                 logger.warning(
                     "gpt-auto response failure policy matched",
                     extra={"turn-id": self.request.turn_id, "evidence": sorted(failed.matched)},
@@ -1207,7 +1213,6 @@ class GptAutoTurn:
                     {"model_activity": "response-started"},
                 )
                 emitted = True
-            complete = self.chat.config.workflow.policy("response-complete").evaluate(facts)
             if complete.satisfied and current.generating:
                 # stop-control (the usual source of a raw .generating=True)
                 # is proven live-unreliable -- it can stick indefinitely
