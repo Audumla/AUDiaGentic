@@ -75,7 +75,7 @@ async def test_reconcile_retries_delivery_timeout_without_resubmitting() -> None
     chat.retry_delivery_timeout = fake_retry  # type: ignore[method-assign]
 
     assert await chat._reconcile_unresolved_turn() is False
-    await asyncio.sleep(0.01)
+    await asyncio.sleep(0.05)
     assert await chat._reconcile_unresolved_turn() is True
     assert calls == 1
 
@@ -86,7 +86,13 @@ async def test_reconcile_does_not_retry_foreign_turn_delivery_control() -> None:
     foreign = _terminal_snapshot(
         dom_signals=frozenset({"delivery-timeout-retry", "error-alert"})
     )
-    foreign = replace(foreign, latest_user_id="u2", user_message_ids=("u1", "u2"))
+    foreign = replace(
+        foreign,
+        latest_user_id="u2",
+        latest_user_text="later turn",
+        user_message_ids=("u1", "u2"),
+        user_message_texts=("hi", "later turn"),
+    )
     calls = 0
 
     async def fake_snapshot(*, allow_recovering: bool = False) -> ChatSnapshot:
@@ -106,6 +112,65 @@ async def test_reconcile_does_not_retry_foreign_turn_delivery_control() -> None:
 
 
 @pytest.mark.asyncio
+async def test_reconcile_does_not_retry_completed_turn_with_stale_error() -> None:
+    chat = _chat(response_stability_seconds=0.001)
+    complete_stale = _terminal_snapshot(
+        dom_signals=frozenset(
+            {
+                "completion-control",
+                "more-actions-menu",
+                "delivery-timeout-retry",
+                "error-alert",
+            }
+        )
+    )
+    snapshots = iter([complete_stale, complete_stale, complete_stale])
+    calls = 0
+
+    async def fake_snapshot(*, allow_recovering: bool = False) -> ChatSnapshot:
+        return next(snapshots)
+
+    async def fake_retry() -> bool:
+        nonlocal calls
+        calls += 1
+        return True
+
+    chat.snapshot = fake_snapshot  # type: ignore[method-assign]
+    chat.retry_delivery_timeout = fake_retry  # type: ignore[method-assign]
+
+    assert await chat._reconcile_unresolved_turn() is False
+    await asyncio.sleep(0.05)
+    assert await chat._reconcile_unresolved_turn() is True
+    assert calls == 0
+
+
+@pytest.mark.asyncio
+async def test_reconcile_authentication_vetoes_delivery_retry() -> None:
+    chat = _chat(response_stability_seconds=0.001)
+    blocked = _terminal_snapshot(
+        dom_signals=frozenset(
+            {"completion-control", "more-actions-menu", "delivery-timeout-retry", "auth-required"}
+        )
+    )
+    calls = 0
+
+    async def fake_snapshot(*, allow_recovering: bool = False) -> ChatSnapshot:
+        return blocked
+
+    async def fake_retry() -> bool:
+        nonlocal calls
+        calls += 1
+        return True
+
+    chat.snapshot = fake_snapshot  # type: ignore[method-assign]
+    chat.retry_delivery_timeout = fake_retry  # type: ignore[method-assign]
+
+    assert await chat._reconcile_unresolved_turn() is False
+    assert calls == 0
+    assert chat._unresolved_recovery_reason == "authentication-required"
+
+
+@pytest.mark.asyncio
 async def test_reconcile_accepts_retried_assistant_id_for_exact_prompt() -> None:
     chat = _chat(response_stability_seconds=0.001)
     chat.unresolved_assistant_message_id = "a-old"
@@ -121,7 +186,7 @@ async def test_reconcile_accepts_retried_assistant_id_for_exact_prompt() -> None
 
     chat.snapshot = fake_snapshot  # type: ignore[method-assign]
     assert await chat._reconcile_unresolved_turn() is False
-    await asyncio.sleep(0.01)
+    await asyncio.sleep(0.05)
     assert await chat._reconcile_unresolved_turn() is True
 
 
@@ -316,7 +381,7 @@ async def test_reconcile_materializes_virtualized_completed_response_before_bloc
     chat._binding_token_is_current = binding_current  # type: ignore[method-assign]
 
     assert await chat._reconcile_unresolved_turn() is False
-    await asyncio.sleep(0.01)
+    await asyncio.sleep(0.05)
     assert await chat._reconcile_unresolved_turn() is True
     assert materializations == [True]
     assert releases == [True]
@@ -406,7 +471,7 @@ async def test_quiescent_fresh_assistant_releases_session_when_response_body_sta
     chat._binding_token_is_current = binding_current  # type: ignore[method-assign]
 
     assert await chat._reconcile_unresolved_turn() is False
-    await asyncio.sleep(0.01)
+    await asyncio.sleep(0.05)
     assert await chat._reconcile_unresolved_turn() is True
     assert chat.unresolved_turn_pending is False
     assert updates[-1].metadata == {
@@ -434,7 +499,7 @@ async def test_reconciliation_clear_is_persisted_before_memory_is_exposed_ready(
     chat.checkpoint_sink = checkpoint
 
     assert await chat._reconcile_unresolved_turn() is False
-    await asyncio.sleep(0.01)
+    await asyncio.sleep(0.05)
     assert await chat._reconcile_unresolved_turn() is True
     assert writes == [({"unresolved-turn-pending": False}, True)]
     assert chat.unresolved_turn_pending is False
@@ -606,7 +671,7 @@ async def test_hanging_warning_sink_cannot_block_durable_clear():
     chat._binding_token_is_current = binding_current  # type: ignore[method-assign]
 
     assert await chat._reconcile_unresolved_turn() is False
-    await asyncio.sleep(0.01)
+    await asyncio.sleep(0.05)
     assert await asyncio.wait_for(chat._reconcile_unresolved_turn(), timeout=2.0) is True
     assert durable == [{"unresolved-turn-pending": False}]
     assert chat.unresolved_turn_pending is False
@@ -633,7 +698,7 @@ async def test_page_loss_after_durable_clear_becomes_page_recovery_not_turn_ambi
     chat.checkpoint_sink = checkpoint
 
     assert await chat._reconcile_unresolved_turn() is False
-    await asyncio.sleep(0.01)
+    await asyncio.sleep(0.05)
     assert await chat._reconcile_unresolved_turn() is True
     assert chat.unresolved_turn_pending is False
     assert chat.page_handle is None
@@ -671,7 +736,7 @@ async def test_same_target_navigation_before_clear_keeps_unresolved_fence():
     chat.checkpoint_sink = checkpoint
 
     assert await chat._reconcile_unresolved_turn() is False
-    await asyncio.sleep(0.01)
+    await asyncio.sleep(0.05)
     assert await chat._reconcile_unresolved_turn() is False
     assert chat._unresolved_recovery_reason == "provider-conversation-changed-during-reconciliation"
     assert chat.unresolved_turn_pending is True

@@ -1139,6 +1139,18 @@ class GptAutoTurn:
                                 "gpt-auto snapshot after completion-control materialization failed",
                                 extra={"turn-id": self.request.turn_id, "error": str(exc)},
                             )
+                    # Focus emulation is temporary and must never leak into
+                    # later turns, regardless of materialization outcome.
+                    release_focus = getattr(self.chat, "release_focus_emulation", None)
+                    if callable(release_focus):
+                        try:
+                            await release_focus()
+                        except Exception:  # noqa: BLE001 - cleanup is best effort
+                            logger.debug(
+                                "gpt-auto completion materialization focus release failed",
+                                extra={"turn-id": self.request.turn_id},
+                                exc_info=True,
+                            )
             refresh_cfg = self.chat.config.turn
             refresh_enabled = bool(
                 getattr(refresh_cfg, "initial_response_refresh_enabled", False)
@@ -1308,13 +1320,11 @@ class GptAutoTurn:
                 )
             focus_cfg = self.chat.config.turn
             focus_enabled = bool(getattr(focus_cfg, "stale_progress_focus_enabled", False))
-            focus_attempts = int(getattr(focus_cfg, "stale_progress_focus_attempts", 0))
             focus_after = float(
                 getattr(focus_cfg, "stale_progress_focus_after_seconds", 0.0)
             )
             if (
                 focus_enabled
-                and focus_attempts > 0
                 and not self._stale_progress_focus_attempted
                 and now - last_progress_at >= focus_after
                 and not completion_candidate
@@ -1334,6 +1344,17 @@ class GptAutoTurn:
                             extra={"turn-id": self.request.turn_id},
                             exc_info=True,
                         )
+                    finally:
+                        release_focus = getattr(self.chat, "release_focus_emulation", None)
+                        if callable(release_focus):
+                            try:
+                                await release_focus()
+                            except Exception:  # noqa: BLE001 - cleanup is best effort
+                                logger.debug(
+                                    "gpt-auto stale-progress focus release failed",
+                                    extra={"turn-id": self.request.turn_id},
+                                    exc_info=True,
+                                )
                 await self._emit_timing("stale-progress-focus-attempted")
                 logger.info(
                     "gpt-auto stale-progress focus probe attempted=%s",
