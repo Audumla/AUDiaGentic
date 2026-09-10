@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -77,6 +78,31 @@ async def test_reconcile_retries_delivery_timeout_without_resubmitting() -> None
     await asyncio.sleep(0.01)
     assert await chat._reconcile_unresolved_turn() is True
     assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_reconcile_does_not_retry_foreign_turn_delivery_control() -> None:
+    chat = _chat(response_stability_seconds=0.001)
+    foreign = _terminal_snapshot(
+        dom_signals=frozenset({"delivery-timeout-retry", "error-alert"})
+    )
+    foreign = replace(foreign, latest_user_id="u2", user_message_ids=("u1", "u2"))
+    calls = 0
+
+    async def fake_snapshot(*, allow_recovering: bool = False) -> ChatSnapshot:
+        return foreign
+
+    async def fake_retry() -> bool:
+        nonlocal calls
+        calls += 1
+        return True
+
+    chat.snapshot = fake_snapshot  # type: ignore[method-assign]
+    chat.retry_delivery_timeout = fake_retry  # type: ignore[method-assign]
+
+    assert await chat._reconcile_unresolved_turn() is False
+    assert calls == 0
+    assert chat._unresolved_recovery_reason == "delivery-timeout-retry-not-request-owned"
 
 
 @pytest.mark.asyncio
