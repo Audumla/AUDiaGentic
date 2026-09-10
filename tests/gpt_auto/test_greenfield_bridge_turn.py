@@ -495,6 +495,56 @@ async def test_initial_blank_page_probe_is_disabled_and_activity_vetoes_refresh(
 
 
 @pytest.mark.asyncio
+async def test_active_turn_does_not_click_foreign_delivery_retry_control():
+    chat = _Chat()
+    foreign = replace(
+        snap(users=2, user="Later manual turn", user_id="later-user"),
+        dom_signals=frozenset({"delivery-timeout-retry", "error-alert"}),
+    )
+    chat._snapshots = iter([foreign, foreign, foreign])
+    retries: list[bool] = []
+
+    async def retry() -> bool:
+        retries.append(True)
+        return True
+
+    chat.retry_delivery_timeout = retry
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-foreign-retry", body="Review AU01"), lambda _: None
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+    with pytest.raises(AudiaGenticError):
+        await turn._await_response(snap(users=1, user="Review AU01"), foreign)
+    assert retries == []
+
+
+@pytest.mark.asyncio
+async def test_active_turn_does_not_click_retry_present_before_submission():
+    chat = _Chat()
+    stale_retry = replace(
+        snap(users=1, user="Review AU01", user_id="prompt-1"),
+        dom_signals=frozenset({"delivery-timeout-retry", "error-alert"}),
+    )
+    chat._snapshots = iter([stale_retry, stale_retry, stale_retry])
+    retries: list[bool] = []
+
+    async def retry() -> bool:
+        retries.append(True)
+        return True
+
+    chat.retry_delivery_timeout = retry
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-stale-retry", body="Review AU01"), lambda _: None
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+    with pytest.raises(AudiaGenticError):
+        await turn._await_response(stale_retry, stale_retry)
+    assert retries == []
+
+
+@pytest.mark.asyncio
 async def test_stale_dom_response_conflict_refreshes_without_resubmitting() -> None:
     """A renderer bump must recover the original turn, not fail it.
 
