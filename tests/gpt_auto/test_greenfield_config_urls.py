@@ -289,7 +289,9 @@ def test_live_workflow_declares_delivery_timeout_retry_signal() -> None:
     )
     signals = {item["name"]: item for item in config.workflow.bridge_signals()}
     assert signals["delivery-timeout-retry"]["selectors"] == [
-        'button[data-testid="regenerate-thread-error-button"]'
+        'button[data-testid="regenerate-thread-error-button"]',
+        'button[aria-label="Retry"]',
+        'button[data-testid*="regenerate"][data-testid*="error"]',
     ]
 
 
