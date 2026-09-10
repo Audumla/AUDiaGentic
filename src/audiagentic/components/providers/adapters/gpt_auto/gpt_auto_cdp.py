@@ -133,6 +133,13 @@ _SNAPSHOT_FN = r"""
       })
     );
   }
+  // Bind structural completion evidence to the assistant turn whose action
+  // bar was inspected. A later unrelated turn must not complete an earlier
+  // request merely because its controls are document-global.
+  const terminalWitnessAssistantId = (
+    domSignals["completion-control"] || domSignals["more-actions-menu"] ||
+    domSignals["canvas-edit-control"] || domSignals["canvas-open-editor-control"]
+  ) ? (latestAssistant?.getAttribute("data-message-id") || null) : null;
   // GP19: this bound was 20000, which is small enough that a genuinely
   // long real prompt/response can never satisfy exact-text correlation
   // matching even with otherwise-perfect DOM extraction (a distinct latent
@@ -278,6 +285,7 @@ _SNAPSHOT_FN = r"""
     latestUserId: userRefs.length ? userRefs[userRefs.length - 1].messageId : null,
     latestAssistantId: latestAssistant?.getAttribute("data-message-id") || null,
     latestUserText: lastText(userRefs), latestAssistantText: lastText(assistantRefs), generating, domSignals,
+    terminalWitnessAssistantId,
     toolActivityCounts,
     errorPresent: !!document.querySelector('.error-page, [data-testid*="error"]')
   };

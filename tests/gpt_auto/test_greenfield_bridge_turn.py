@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -18,6 +19,7 @@ from audiagentic.components.providers.adapters.gpt_auto.turn import (
     GptAutoTurn,
     TurnState,
     _facts,
+    _scope_response_snapshot,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.agent_session import (
@@ -1580,6 +1582,61 @@ async def test_fresh_completion_outranks_stale_delivery_error_marker():
     turn._prompt_message_id = "prompt-1"
     result = await turn._await_response(baseline, complete_with_stale_error)
     assert result == "Looks sound"
+
+
+def test_terminal_witnesses_are_scoped_to_correlated_assistant():
+    baseline = snap(users=1, user="Request A", user_id="prompt-a")
+    raw = snap(
+        users=2,
+        assistants=2,
+        user="Request B",
+        assistant="Answer B",
+        user_id="prompt-b",
+        assistant_id="assistant-b",
+        complete=True,
+    )
+    raw = replace(
+        raw,
+        message_refs=(
+            ChatMessageRef(role="user", message_id="prompt-a", text="Request A", sequence=0),
+            ChatMessageRef(role="assistant", message_id="assistant-a", text="Answer A", sequence=1),
+            ChatMessageRef(role="user", message_id="prompt-b", text="Request B", sequence=2),
+            ChatMessageRef(role="assistant", message_id="assistant-b", text="Answer B", sequence=3),
+        ),
+        terminal_witness_assistant_id="assistant-b",
+    )
+    scoped, response_ref = _scope_response_snapshot(baseline, raw, prompt_message_id="prompt-a")
+    assert response_ref is not None
+    assert response_ref.message_id == "assistant-a"
+    assert not (scoped.dom_signals & {"completion-control", "more-actions-menu"})
+
+
+@pytest.mark.asyncio
+async def test_auth_required_is_hard_veto_over_completion_evidence():
+    chat = _Chat()
+    baseline = snap()
+    blocked = snap(
+        users=1,
+        assistants=1,
+        user="Review SH10",
+        assistant="Looks sound",
+        complete=True,
+        extra_signals=("auth-required",),
+    )
+    async def auth_snapshot():
+        return blocked
+
+    chat.snapshot = auth_snapshot
+    chat.state = ChatState.BUSY
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-auth-veto", body="Review SH10"),
+        lambda _: None,
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+    with pytest.raises(AudiaGenticError, match="authentication is required"):
+        await turn._await_response(baseline, blocked)
 
 
 @pytest.mark.asyncio
