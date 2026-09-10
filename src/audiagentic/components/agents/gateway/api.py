@@ -1670,6 +1670,7 @@ def gateway_overview(project_root: Path) -> dict[str, Any]:
     though persisted state still shows what happened).
     """
     from audiagentic.components.agents.gateway.session import sessions_store as session_store
+    from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
 
     records = store.list_records(project_root)
     by_state: dict[str, int] = {}
@@ -1688,6 +1689,8 @@ def gateway_overview(project_root: Path) -> dict[str, Any]:
         )[:5]
     ]
     sessions = list_execution_sessions(project_root)
+    runtime = peek_session_runtime()
+    machine_live_count = len(runtime.live_session_ids()) if runtime is not None else 0
 
     # Provider descriptor load diagnostics
     from audiagentic.components.providers.providers_api import (
@@ -1716,6 +1719,10 @@ def gateway_overview(project_root: Path) -> dict[str, Any]:
         "queues": get_queue_manager().project_queue_depths(project_root),
         "sessions": {
             "active-count": sum(1 for s in sessions if s["live"]),
+            # active-count is intentionally project-scoped; this machine-wide
+            # count explains lifecycle restart/quiescence decisions without
+            # exposing other projects' session IDs.
+            "machine-live-count": machine_live_count,
             "sessions": [
                 {
                     "session-id": s["session-id"],

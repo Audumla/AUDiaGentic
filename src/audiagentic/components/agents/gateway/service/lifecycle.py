@@ -69,6 +69,11 @@ def gateway_quiescence_facts(service_root: Path | None = None) -> dict[str, Any]
     return {
         "pending-requests": pending,
         "running-requests": running,
+        # Explicitly machine-scoped: overview.active-count is project-scoped
+        # and must not be compared to this value without its scope label.
+        "live-sessions-machine": live_sessions,
+        # Retain the original key for existing lifecycle consumers while the
+        # clarified name rolls through the public diagnostics boundary.
         "live-sessions": live_sessions,
         "ingress-pending": backlog["pending"],
         "active-gateway-operations": active_operations,
