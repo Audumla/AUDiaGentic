@@ -104,7 +104,10 @@ settings:
       delivery-timeout-retry:
         # Conversation-scoped delivery timeout; never a generic error click.
         scope: document
-        selectors: ['button[data-testid="regenerate-thread-error-button"]']
+        selectors:
+          - 'button[data-testid="regenerate-thread-error-button"]'
+          - 'button[aria-label="Retry"]'
+          - 'button[data-testid*="regenerate"][data-testid*="error"]'
         visible: true
         text-contains-any: ['retry']
       auth-required:

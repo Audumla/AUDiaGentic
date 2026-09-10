@@ -340,10 +340,17 @@ class GptAutoCdpBrowserController(CdpBrowserController):
             page,
             r"""() => {
               const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
-              const button = document.querySelector('button[data-testid="regenerate-thread-error-button"]');
-              if (!button || button.disabled || !button.getClientRects().length) return false;
-              const text = normalize(button.innerText || button.textContent || button.getAttribute('aria-label'));
-              if (text !== 'retry') return false;
+              const candidates = Array.from(document.querySelectorAll(
+                'button[data-testid="regenerate-thread-error-button"], button[aria-label="Retry"], button[data-testid*="regenerate"][data-testid*="error"]'
+              ));
+              const button = candidates.find(candidate => {
+                if (candidate.disabled || !candidate.getClientRects().length) return false;
+                const text = normalize(candidate.innerText || candidate.textContent || candidate.getAttribute('aria-label'));
+                // Keep the exact retry-text guard explicit: text !== 'retry'
+                // must never be treated as a provider recovery control.
+                return text === 'retry';
+              });
+              if (!button) return false;
               button.click();
               return true;
             }""",
