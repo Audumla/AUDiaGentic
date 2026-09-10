@@ -48,6 +48,11 @@ settings:
     initial-response-refresh-enabled: false
     initial-response-refresh-attempts: 1
     initial-response-refresh-cooldown-seconds: 30
+    # If a submitted turn stops producing observable progress, perform one
+    # read-only focus/materialization probe.  This is not a submission retry.
+    stale-progress-focus-enabled: true
+    stale-progress-focus-after-seconds: 30
+    stale-progress-focus-attempts: 1
   workflow:
     dom-signals:
       stop-control:

@@ -545,6 +545,58 @@ async def test_active_turn_does_not_click_retry_present_before_submission():
 
 
 @pytest.mark.asyncio
+async def test_stale_progress_focus_probe_materializes_once_without_resubmitting():
+    chat = _Chat()
+    chat.config.turn.stale_progress_focus_enabled = True
+    chat.config.turn.stale_progress_focus_after_seconds = 0
+    chat.config.turn.stale_progress_focus_attempts = 1
+    stale = snap(users=1, user="Review AU01")
+    complete = snap(users=1, assistants=1, user="Review AU01", assistant="Done", complete=True)
+    chat._snapshots = iter([stale, complete, complete, complete, complete])
+    focused: list[bool] = []
+
+    async def materialize() -> bool:
+        focused.append(True)
+        return True
+
+    chat.materialize_latest_assistant_turn = materialize
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-stale-focus", body="Review AU01"), lambda _: None
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+    result = await turn._await_response(stale, stale)
+    assert result == "Done"
+    assert focused == [True]
+    assert turn._stale_progress_focus_attempted is True
+
+
+@pytest.mark.asyncio
+async def test_stale_progress_focus_probe_is_configurable_and_disabled():
+    chat = _Chat()
+    chat.config.turn.stale_progress_focus_enabled = False
+    chat.config.turn.stale_progress_focus_after_seconds = 0
+    stale = snap(users=1, user="Review AU01")
+    chat._snapshots = iter([stale])
+    focused: list[bool] = []
+
+    async def materialize() -> bool:
+        focused.append(True)
+        return True
+
+    chat.materialize_latest_assistant_turn = materialize
+    turn = GptAutoTurn(
+        chat, SessionPrompt(turn_id="turn-stale-focus-disabled", body="Review AU01"), lambda _: None
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+    with pytest.raises(AudiaGenticError):
+        await turn._await_response(stale, stale)
+    assert focused == []
+    assert turn._stale_progress_focus_attempted is False
+
+
+@pytest.mark.asyncio
 async def test_stale_dom_response_conflict_refreshes_without_resubmitting() -> None:
     """A renderer bump must recover the original turn, not fail it.
 

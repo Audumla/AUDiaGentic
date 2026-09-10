@@ -307,6 +307,7 @@ class GptAutoTurn:
         self._timing_events: set[str] = set()
         self._initial_refresh_attempted = False
         self._initial_refresh_succeeded: bool | None = None
+        self._stale_progress_focus_attempted = False
         # Once provider activity is observed, never let a later stale/blank
         # page qualify for the initial refresh experiment.
         self._response_activity_observed = False
@@ -1007,6 +1008,7 @@ class GptAutoTurn:
         emitted = False
         final_outcome: ObservationOutcome | None = None
         observation_started_at = loop.time()
+        last_progress_at = observation_started_at
         # GP47 (2026-08-19): _advance_with_trace only logs on a tracker STATE
         # TRANSITION. A turn that stalls for the full response-total-timeout
         # (observed live: completion evidence present but never promoted past
@@ -1224,10 +1226,31 @@ class GptAutoTurn:
                 if response_ref.text:
                     await self._emit_timing("first-assistant-text")
             facts = _facts(baseline, previous, current)
+            # Resolve hard vetoes and terminal evidence before any provider
+            # side effect.  A stale Retry control must never regenerate an
+            # answer that already satisfies the request-owned completion
+            # witness.
+            complete = self.chat.config.workflow.policy("response-complete").evaluate(facts)
+            completion_candidate = complete.satisfied and bool(current.latest_assistant_text)
+            # Authentication is a hard veto even for reduced/test workflow
+            # configurations that do not declare a standalone auth policy.
+            if facts.get("auth-required"):
+                raise AudiaGenticError(
+                    code="EXT-GPTAUTO-003",
+                    kind="providers",
+                    message="gpt-auto authentication is required",
+                    details={
+                        "turn-id": self.request.turn_id,
+                        "failure-reason": "authentication-required",
+                        "evidence": ["auth-required"],
+                        **self._diagnostics(),
+                    },
+                )
             if (
                 "delivery-timeout-retry" in current.dom_signals
                 and not self._delivery_timeout_retry_attempted
                 and response_ref is None
+                and not completion_candidate
                 # A control already present at the request baseline belongs
                 # to an earlier/provider turn; only a post-submit edge may
                 # be activated by this observer.
@@ -1254,33 +1277,15 @@ class GptAutoTurn:
                         TransportObservationKind.IN_PROGRESS,
                         {
                             "model_activity": "delivery-timeout-retry",
-                            "recovery": "provider-retry",
-                            "succeeded": retried,
                         },
                     )
                     if retried:
                         await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
                         continue
-            # Authentication is always a hard provider boundary, even if a
-            # project overlay accidentally removes it from response-failed.
-            if facts.get("auth-required"):
-                raise AudiaGenticError(
-                    code="EXT-GPTAUTO-003",
-                    kind="providers",
-                    message="gpt-auto authentication is required",
-                    details={
-                        "turn-id": self.request.turn_id,
-                        "failure-reason": "authentication-required",
-                        "evidence": ["auth-required"],
-                        **self._diagnostics(),
-                    },
-                )
             # Evaluate completion before provider failure.  ChatGPT can leave
             # a delivery-timeout/error panel in the DOM after a retry has
             # already produced a fresh, structurally complete answer.  That
             # stale marker must not pre-empt durable completion evidence.
-            complete = self.chat.config.workflow.policy("response-complete").evaluate(facts)
-            completion_candidate = complete.satisfied and bool(current.latest_assistant_text)
             failed = self.chat.config.workflow.policy("response-failed").evaluate(facts)
             if failed.satisfied and not completion_candidate:
                 logger.warning(
@@ -1301,6 +1306,43 @@ class GptAutoTurn:
                         **self._diagnostics(),
                     },
                 )
+            focus_cfg = self.chat.config.turn
+            focus_enabled = bool(getattr(focus_cfg, "stale_progress_focus_enabled", False))
+            focus_attempts = int(getattr(focus_cfg, "stale_progress_focus_attempts", 0))
+            focus_after = float(
+                getattr(focus_cfg, "stale_progress_focus_after_seconds", 0.0)
+            )
+            if (
+                focus_enabled
+                and focus_attempts > 0
+                and not self._stale_progress_focus_attempted
+                and now - last_progress_at >= focus_after
+                and not completion_candidate
+                and not failed.satisfied
+                and not current.generating
+                and not current.tool_activity_counts
+            ):
+                self._stale_progress_focus_attempted = True
+                materialize = getattr(self.chat, "materialize_latest_assistant_turn", None)
+                focused = False
+                if callable(materialize):
+                    try:
+                        focused = bool(await materialize())
+                    except Exception:  # noqa: BLE001 - focus is a best-effort probe
+                        logger.info(
+                            "gpt-auto stale-progress focus probe failed",
+                            extra={"turn-id": self.request.turn_id},
+                            exc_info=True,
+                        )
+                await self._emit_timing("stale-progress-focus-attempted")
+                logger.info(
+                    "gpt-auto stale-progress focus probe attempted=%s",
+                    focused,
+                    extra={"turn-id": self.request.turn_id},
+                )
+                if focused:
+                    await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
+                    continue
             started = self.chat.config.workflow.policy("response-started").evaluate(facts)
             if started.satisfied and not response_started:
                 response_started = True
@@ -1353,6 +1395,12 @@ class GptAutoTurn:
                 or current.user_message_ids != previous.user_message_ids
                 or tool_activity_edge
             )
+            if (
+                progress_edge
+                or current.generating != previous.generating
+                or current.dom_signals != previous.dom_signals
+            ):
+                last_progress_at = now
             current_soft = current.dom_signals & self._SOFT_LIVENESS_SIGNALS
             previous_soft = previous.dom_signals & self._SOFT_LIVENESS_SIGNALS
             soft_edge = current_soft != previous_soft or current.generating != previous.generating
@@ -1712,6 +1760,7 @@ class GptAutoTurn:
             "delivery-timeout-retry-attempted": self._delivery_timeout_retry_attempted,
             "initial-refresh-attempted": self._initial_refresh_attempted,
             "initial-refresh-succeeded": self._initial_refresh_succeeded,
+            "stale-progress-focus-attempted": self._stale_progress_focus_attempted,
             **_message_ids(self),
         }
         if self._composer_verification_mismatch:
