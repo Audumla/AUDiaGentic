@@ -1174,6 +1174,20 @@ class GptAutoTurn:
                 if retried:
                     await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
                     continue
+            # Authentication is always a hard provider boundary, even if a
+            # project overlay accidentally removes it from response-failed.
+            if facts.get("auth-required"):
+                raise AudiaGenticError(
+                    code="EXT-GPTAUTO-003",
+                    kind="providers",
+                    message="gpt-auto authentication is required",
+                    details={
+                        "turn-id": self.request.turn_id,
+                        "failure-reason": "authentication-required",
+                        "evidence": ["auth-required"],
+                        **self._diagnostics(),
+                    },
+                )
             # Evaluate completion before provider failure.  ChatGPT can leave
             # a delivery-timeout/error panel in the DOM after a retry has
             # already produced a fresh, structurally complete answer.  That
@@ -1785,10 +1799,10 @@ def _scope_response_snapshot(
     """Project a raw snapshot onto this request's own response, not
     whatever is conversation-global-latest.
 
-    dom_signals/generating are left untouched -- those describe genuine
-    page-wide activity/liveness and must keep reflecting reality; only the
-    assistant identity/text facts the response-completion policies key off
-    of are re-pointed at this request's own span.
+    Activity remains page-wide, but structural terminal witnesses are scoped
+    to the assistant message that owns their action bar. A later unrelated
+    turn must not complete this request merely because its controls are now
+    the document-global latest controls.
     """
     response_ref = _response_ref_for_prompt(snapshot, prompt_message_id)
     if response_ref is None:
@@ -1800,11 +1814,22 @@ def _scope_response_snapshot(
             ),
             None,
         )
+    dom_signals = snapshot.dom_signals
+    if (
+        snapshot.terminal_witness_assistant_id
+        and snapshot.terminal_witness_assistant_id != response_ref.message_id
+    ):
+        dom_signals = frozenset(
+            signal
+            for signal in dom_signals
+            if signal not in GptAutoTurn._TERMINAL_WITNESS_SIGNALS
+        )
     return (
         replace(
             snapshot,
             latest_assistant_id=response_ref.message_id,
             latest_assistant_text=response_ref.text,
+            dom_signals=dom_signals,
         ),
         response_ref,
     )
