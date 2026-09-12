@@ -584,7 +584,17 @@ def find_item(project_root: Path, item_id: str) -> Path | None:
             if not frontmatter:
                 continue
             kind = "review" if item_id.startswith("RV") else "item"
-            validate_record_path(path, frontmatter, kind)
+            try:
+                validate_record_path(path, frontmatter, kind)
+            except (PlanningIntegrityError, AudiaGenticError):
+                # Repository-wide audits report unrelated corrupt legacy
+                # records, but exact lookup must still be able to address a
+                # valid requested identity so that it can be repaired. Never
+                # suppress corruption when the path or frontmatter names the
+                # requested record itself.
+                if path.stem == item_id or frontmatter.get("id") == item_id:
+                    raise
+                continue
             if path.stem != item_id:
                 continue
             matches.append(path)
