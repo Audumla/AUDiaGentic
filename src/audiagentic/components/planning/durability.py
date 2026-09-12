@@ -179,6 +179,13 @@ def _reconcile_pending_mutations(project_root: Path) -> int:
     repaired = 0
     for tx_dir in sorted(path for path in root.iterdir() if path.is_dir()):
         manifest_path = tx_dir / "manifest.json"
+        # Payloads are staged before the manifest is durable.  A process
+        # failure in that window must not turn an incomplete staging directory
+        # into a fatal recovery error or expose it as a transaction.  Once the
+        # manifest exists, the directory is a valid roll-forward candidate.
+        if not manifest_path.exists() and tx_dir.name.startswith(".staging-"):
+            shutil.rmtree(tx_dir)
+            continue
         manifest = _read_json(manifest_path)
         _apply_manifest(project_root, tx_dir, manifest)
         _persist_event_from_manifest(project_root, manifest)
@@ -200,7 +207,7 @@ def commit_mutation(
     with _journal_lock(project_root):
         _reconcile_pending_mutations(project_root)
         tx_id = uuid.uuid4().hex
-        tx_dir = transaction_root(project_root) / tx_id
+        tx_dir = transaction_root(project_root) / f".staging-{tx_id}"
         tx_dir.mkdir(parents=True, exist_ok=False)
         write_intents: list[dict[str, Any]] = []
         for index, (path, content) in enumerate(writes.items()):

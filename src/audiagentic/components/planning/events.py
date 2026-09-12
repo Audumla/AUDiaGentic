@@ -114,6 +114,7 @@ def drain_planning_outbox(project_root: Path) -> dict[str, int]:
                 dict(record["payload"]),
                 metadata=dict(record.get("metadata") or {}),
                 mode=DeliveryMode.SYNC,
+                propagate_subscriber_errors=True,
             )
             path.unlink(missing_ok=True)
             delivered += 1

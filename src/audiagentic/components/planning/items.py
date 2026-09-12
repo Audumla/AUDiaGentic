@@ -160,6 +160,10 @@ def list_items(
     plan: exact directory name like 'code-cleanup' (omit for all plans).
     id_prefix: case-insensitive item-ID prefix (e.g. 'CC' matches CC01, CC20, ...).
     """
+    # Recovery is a precondition of every public read, not only of a later
+    # mutation. This prevents a first read after a crash from observing a
+    # half-applied move and then constructing a stale replacement.
+    durability.reconcile_pending_mutations(project_root)
     valid_filters = {"active", "all", *item_store.VALID_STATES}
     if state is not None and state not in valid_filters:
         raise AudiaGenticError(
@@ -333,6 +337,7 @@ def get_item(
     list of {timestamp, actor, description} dicts.  By default the history is
     omitted to keep the response compact — callers that need it must opt in.
     """
+    durability.reconcile_pending_mutations(project_root)
     path = item_store.require_item(project_root, item_id)
     fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
     item_store.ensure_not_review(fm, item_id, "VAL-PLN-018")

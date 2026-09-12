@@ -165,6 +165,7 @@ contributions:
         - files: Files to create/update
         - validation: How to validate the implementation
           (include comprehensive tests where possible)
+        - acceptance_criteria: Observable conditions required before completion
         - effort_risk: Complexity and risk assessment
         - standards: Applicable standards/rules
         - notes: Key design principles and additional context

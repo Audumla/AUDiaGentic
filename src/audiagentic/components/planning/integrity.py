@@ -16,8 +16,16 @@ from audiagentic.components.planning.identity import (
 from audiagentic.foundation.workflow.frontmatter import parse_frontmatter
 
 _REVIEW_LINK_RE = re.compile(r"(?<![A-Za-z0-9])RV\d+(?![A-Za-z0-9])")
-_ITEM_FILENAME_RE = re.compile(r"^[A-Z]+\d+$", re.IGNORECASE)
-_REVIEW_FILENAME_RE = re.compile(r"^RV\d+$", re.IGNORECASE)
+
+
+def _looks_like_frontmatter(path: Path) -> bool:
+    """Identify Markdown records without treating auxiliary plan docs as items."""
+    try:
+        with path.open(encoding="utf-8") as handle:
+            first = handle.readline().strip()
+    except OSError as exc:
+        raise PlanningIntegrityError(f"cannot inspect planning record: {path}") from exc
+    return first == "---"
 
 
 @dataclass(frozen=True)
@@ -50,7 +58,7 @@ def _item_paths(project_root: Path) -> list[Path]:
         if not state_dir.exists():
             continue
         for path in state_dir.glob("*/*.md"):
-            if not _ITEM_FILENAME_RE.fullmatch(path.stem):
+            if not _looks_like_frontmatter(path):
                 continue
             paths.append(planning_paths.assert_contained(state_dir, path))
     return sorted(paths)
@@ -65,7 +73,7 @@ def _review_paths(project_root: Path) -> list[Path]:
         if not state_dir.exists():
             continue
         for path in state_dir.glob("*/reviews/*/*.md"):
-            if not _REVIEW_FILENAME_RE.fullmatch(path.stem):
+            if not _looks_like_frontmatter(path):
                 continue
             paths.append(planning_paths.assert_contained(state_dir, path))
     return sorted(paths)

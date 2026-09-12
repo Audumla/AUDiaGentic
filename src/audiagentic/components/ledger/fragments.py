@@ -11,6 +11,7 @@ from typing import Any
 from audiagentic.components.ledger.event_outbox import drain as drain_event_outbox
 from audiagentic.components.ledger.event_outbox import enqueue as enqueue_event_delivery
 from audiagentic.components.ledger.events import publish_ledger_event_recorded
+from audiagentic.components.ledger.paths import ledger_fragments_dir
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import validate_with_schema
 from audiagentic.foundation.io import atomic_write_text
@@ -29,7 +30,7 @@ def _validate_change_event(payload: dict[str, Any]) -> None:
 
 
 def _fragment_dir(project_root: Path) -> Path:
-    return project_root / ".audiagentic" / "runtime" / "ledger" / "fragments"
+    return ledger_fragments_dir(project_root)
 
 
 def _generate_event_id(desc: str | None = None) -> str:
@@ -88,10 +89,11 @@ def record_change_event(project_root: Path, event: dict[str, Any]) -> dict[str, 
             drain_event_outbox(project_root, publisher=publish_ledger_event_recorded)
         return {"fragment-path": str(fragment_path), "event-id": event_id, "status": "exists"}
 
-    atomic_write_text(fragment_path, json.dumps(event, indent=2, sort_keys=True))
-
     plan_item_ids = event.get("plan-item-ids")
     if isinstance(plan_item_ids, list) and plan_item_ids:
+        # Persist the projection intent first.  If the process dies before the
+        # fragment write, the outbox remains but its drain refuses to publish
+        # until the authoritative fragment appears.
         enqueue_event_delivery(
             project_root,
             event_id,
@@ -99,6 +101,10 @@ def record_change_event(project_root: Path, event: dict[str, Any]) -> dict[str, 
             source=event.get("source"),
             timestamp_utc=event.get("timestamp-utc"),
         )
+
+    atomic_write_text(fragment_path, json.dumps(event, indent=2, sort_keys=True))
+
+    if isinstance(plan_item_ids, list) and plan_item_ids:
         drain_event_outbox(project_root, publisher=publish_ledger_event_recorded)
 
     return {"fragment-path": str(fragment_path), "event-id": event_id, "status": "created"}

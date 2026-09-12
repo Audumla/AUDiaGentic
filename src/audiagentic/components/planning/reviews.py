@@ -2,9 +2,8 @@
 
 Reviews are items stored under the active/completed plan trees at:
   <state>/<plan>/reviews/<parent-id>/RV01.md
-A review may target either a pending item in active/ or a completed item in
-completed/; create_review resolves the parent across both trees, then creates
-the new review in active/ until the review itself is closed.
+A review must target an active item; completed items cannot receive or reopen
+active reviews. Create_review stores new reviews in active/ until closure.
 Reviews use the same structure as regular items but with review-of frontmatter
 and their own workflow (created → considered → closed), defined in workflows.yaml.
 """
@@ -69,7 +68,8 @@ def create_review(project_root: Path, review: dict[str, Any]) -> dict[str, Any]:
 
     Required: review-of (parent item ID), title.
     Optional: notes, findings, conclusion, reviewed-by/reviewed_by/reviewer_id.
-    Parent item may live in active/ or completed/.
+    The parent item must be active; completed items cannot receive active
+    reviews.
     ID is auto-generated (e.g. RV01).
     Returns {id, title, review-of, plan, path}
     """
@@ -208,6 +208,7 @@ def list_reviews(
     review_of: parent item ID to filter by (omit for all).
     id_prefix: case-insensitive review-ID prefix (e.g. 'RV').
     """
+    durability.reconcile_pending_mutations(project_root)
     valid_filters = {"open", "all", "created", "considered", "closed"}
     if state is not None and state not in valid_filters:
         raise AudiaGenticError(
@@ -334,6 +335,7 @@ def list_reviews_page(
 
 def get_review(project_root: Path, review_id: str) -> dict[str, Any]:
     """Read a review by ID, returning frontmatter + parsed body sections."""
+    durability.reconcile_pending_mutations(project_root)
     path = item_store.require_item(project_root, review_id)
     fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
     item_store.ensure_review(fm, review_id, "VAL-PLN-022")

@@ -88,7 +88,7 @@ def test_runtime_roots_reject_ancestor_symlink_escape(tmp_path: Path) -> None:
     except OSError:
         pytest.skip("symlink creation is unavailable in this environment")
 
-    with pytest.raises(PlanningIntegrityError):
+    with pytest.raises(AudiaGenticError):
         durability.journal_root(tmp_path)
     with pytest.raises(AudiaGenticError):
         planning_events._outbox_dir(tmp_path)
@@ -127,6 +127,56 @@ def test_prepared_move_rolls_forward_on_reconciliation(tmp_path: Path, monkeypat
     assert durability.reconcile_pending_mutations(tmp_path) == 1
     assert durability.reconcile_pending_mutations(tmp_path) == 0
     assert target.read_text(encoding="utf-8") == "source"
+
+
+def test_manifestless_staging_is_discarded_on_reconciliation(tmp_path: Path, monkeypatch) -> None:
+    target = tmp_path / "target.md"
+    real_durable_json = durability._durable_json
+
+    def crash_before_manifest(path: Path, value) -> None:
+        if path.name == "manifest.json":
+            raise RuntimeError("simulated pre-manifest termination")
+        real_durable_json(path, value)
+
+    monkeypatch.setattr(durability, "_durable_json", crash_before_manifest)
+    with pytest.raises(RuntimeError, match="pre-manifest"):
+        durability.commit_mutation(
+            tmp_path,
+            {target: "payload"},
+            operation="test.pre-manifest",
+        )
+
+    assert list(durability.transaction_root(tmp_path).glob(".staging-*/write-*.payload"))
+    monkeypatch.setattr(durability, "_durable_json", real_durable_json)
+    assert durability.reconcile_pending_mutations(tmp_path) == 0
+    assert not list(durability.transaction_root(tmp_path).glob(".staging-*"))
+    assert not target.exists()
+
+
+def test_ledger_projection_intent_precedes_fragment_and_waits_for_fragment(tmp_path: Path, monkeypatch) -> None:
+    from audiagentic.components.ledger import fragments
+
+    real_write = fragments.atomic_write_text
+
+    def crash_fragment_write(*args, **kwargs):
+        raise RuntimeError("simulated fragment termination")
+
+    monkeypatch.setattr(fragments, "atomic_write_text", crash_fragment_write)
+    with pytest.raises(RuntimeError, match="fragment termination"):
+        fragments.record_change_event(
+            tmp_path,
+            {
+                "change-class": "audit",
+                "files": ["tests/unit/planning/test_planning_integrity.py"],
+                "technical-summary": "test",
+                "user-summary-candidate": "test",
+                "status": "unreleased",
+                "plan-item-ids": ["TST01"],
+            },
+        )
+    assert list(ledger_outbox.outbox_dir(tmp_path).glob("*.json"))
+    assert ledger_outbox.drain(tmp_path) == {"delivered": 0, "failed": 1}
+    monkeypatch.setattr(fragments, "atomic_write_text", real_write)
 
 
 def test_reconciliation_materializes_journaled_event_after_crash(tmp_path: Path, monkeypatch) -> None:
@@ -184,3 +234,49 @@ def test_planning_event_outbox_survives_publish_failure_and_retries(tmp_path: Pa
     monkeypatch.setattr(planning_events, "get_bus", original_get_bus)
     assert planning_events.drain_planning_outbox(tmp_path) == {"delivered": 1, "failed": 0}
     assert not list(outbox.glob("*.json"))
+
+
+def test_planning_event_outbox_retains_subscriber_failure(tmp_path: Path, monkeypatch) -> None:
+    planning_events.enqueue_planning_event(
+        tmp_path,
+        planning_events.PLANNING_ITEM_UPDATED,
+        {"id": "TST01"},
+        metadata={"subject": {"kind": "planning-item", "id": "TST01"}},
+        event_id="event-subscriber-failure",
+    )
+    outbox = tmp_path / ".audiagentic" / "runtime" / "planning" / "outbox"
+    original_get_bus = planning_events.get_bus
+
+    class FailingBus:
+        def publish(self, *args, **kwargs):
+            raise RuntimeError("subscriber failed")
+
+    monkeypatch.setattr(planning_events, "get_bus", lambda: FailingBus())
+    assert planning_events.drain_planning_outbox(tmp_path) == {"delivered": 0, "failed": 1}
+    assert list(outbox.glob("*.json"))
+    monkeypatch.setattr(planning_events, "get_bus", original_get_bus)
+
+
+def test_integrity_rejects_frontmatter_record_with_malformed_filename(tmp_path: Path) -> None:
+    _item(tmp_path)
+    source = tmp_path / "docs" / "planning" / "active" / "test-plan" / "TST01.md"
+    malformed = source.with_name("bad!.md")
+    malformed.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    source.unlink()
+    errors = integrity.validate_repository_integrity(tmp_path)
+    assert errors
+    assert "bad!.md" in errors[0]
+
+
+def test_completed_parent_cannot_reopen_closed_review(tmp_path: Path) -> None:
+    _item(tmp_path)
+    planning_api.create_review(tmp_path, {"id": "RV01", "review-of": "TST01", "title": "Review"})
+    planning_api.set_review_state(tmp_path, "RV01", "closed")
+    item_path = tmp_path / "docs" / "planning" / "active" / "test-plan" / "TST01.md"
+    completed = tmp_path / "docs" / "planning" / "completed" / "test-plan" / "TST01.md"
+    completed.parent.mkdir(parents=True, exist_ok=True)
+    item_text = item_path.read_text(encoding="utf-8").replace("state: pending", "state: completed")
+    item_path.unlink()
+    completed.write_text(item_text, encoding="utf-8")
+    with pytest.raises(AudiaGenticError, match="cannot have active reviews"):
+        planning_api.set_review_state(tmp_path, "RV01", "considered")
