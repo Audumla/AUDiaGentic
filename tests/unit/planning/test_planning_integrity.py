@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from audiagentic.components.ledger import archive as ledger_archive
 from audiagentic.components.ledger import event_outbox as ledger_outbox
 from audiagentic.components.ledger import fragments as ledger_fragments
 from audiagentic.components.ledger import sync as ledger_sync
@@ -315,6 +316,21 @@ def test_integrity_reports_unknown_current_item_state(tmp_path: Path) -> None:
     assert any("invalid identity" in error for error in errors)
 
 
+def test_integrity_reports_unknown_review_state(tmp_path: Path) -> None:
+    _item(tmp_path)
+    planning_api.create_review(tmp_path, {"id": "RV01", "review-of": "TST01", "title": "Review"})
+    review_path = (
+        tmp_path / "docs" / "planning" / "active" / "test-plan" / "reviews" / "TST01" / "RV01.md"
+    )
+    review_path.write_text(
+        review_path.read_text(encoding="utf-8").replace("state: created", "state: invented"),
+        encoding="utf-8",
+    )
+
+    errors = integrity.validate_repository_integrity(tmp_path)
+    assert any("review has invalid identity" in error for error in errors)
+
+
 def test_ledger_projection_reconciles_pending_planning_journal_first(tmp_path: Path, monkeypatch) -> None:
     path = _item(tmp_path)
     fm, body = item_store.parse_frontmatter(path.read_text(encoding="utf-8"))
@@ -366,6 +382,27 @@ def test_sync_drains_authoritative_ledger_outbox_before_consuming_fragments(tmp_
     assert not list(ledger_outbox.outbox_dir(tmp_path).glob("*.json"))
 
 
+def test_archive_recovers_outbox_only_event_before_archiving(tmp_path: Path) -> None:
+    _item(tmp_path)
+    event = {
+        "event-id": "chg_archive_recovery",
+        "change-class": "audit",
+        "files": ["tests/unit/planning/test_planning_integrity.py"],
+        "technical-summary": "archive recovery",
+        "user-summary-candidate": "archive recovery",
+        "status": "unreleased",
+        "plan-item-ids": ["TST01"],
+    }
+    ledger_outbox.enqueue(tmp_path, event["event-id"], ["TST01"], event=event)
+
+    result = ledger_archive.archive_current_ledger(tmp_path, "release-archive-recovery")
+
+    historical = tmp_path / "docs" / "releases" / "LEDGER.ndjson"
+    assert result["archived-events"] == 1
+    assert event["event-id"] in historical.read_text(encoding="utf-8")
+    assert not list(ledger_outbox.outbox_dir(tmp_path).glob("*.json"))
+
+
 def test_ledger_outbox_same_id_different_content_is_serialized(tmp_path: Path) -> None:
     from concurrent.futures import ThreadPoolExecutor
 
@@ -383,5 +420,31 @@ def test_ledger_outbox_same_id_different_content_is_serialized(tmp_path: Path) -
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         outcomes = list(pool.map(enqueue, ["first", "second"]))
+
+    assert sorted(outcomes) == ["accepted", "conflict"]
+
+
+def test_fragment_creation_same_id_different_content_is_serialized(tmp_path: Path) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    def record(summary: str):
+        try:
+            ledger_fragments.record_change_event(
+                tmp_path,
+                {
+                    "event-id": "chg_fragment_concurrent",
+                    "change-class": "audit",
+                    "files": ["tests/unit/planning/test_planning_integrity.py"],
+                    "technical-summary": summary,
+                    "user-summary-candidate": summary,
+                    "status": "unreleased",
+                },
+            )
+        except AudiaGenticError:
+            return "conflict"
+        return "accepted"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(record, ["first fragment", "second fragment"]))
 
     assert sorted(outcomes) == ["accepted", "conflict"]

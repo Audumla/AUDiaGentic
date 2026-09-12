@@ -90,8 +90,7 @@ def archive_current(project_root: Path, release_id: str) -> dict[str, Any]:
 
 
 def archive_for_release(project_root: Path, release_id: str) -> dict[str, Any]:
-    """Sync and archive the current ledger for a release finalization request."""
-    sync(project_root)
+    """Atomically recover, sync, and archive the current ledger."""
     try:
         return archive_current(project_root, release_id)
     except AudiaGenticError as exc:

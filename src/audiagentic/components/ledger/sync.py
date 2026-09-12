@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -93,6 +94,16 @@ def _release_lock(lock: StartupLock) -> None:
     lock.__exit__()
 
 
+@contextmanager
+def ledger_write_lock(project_root: Path):
+    """Hold the ledger lock across a complete authoritative operation."""
+    lock, warning = _acquire_lock(project_root)
+    try:
+        yield warning
+    finally:
+        _release_lock(lock)
+
+
 def _fragment_dir(project_root: Path) -> Path:
     return ledger_fragments_dir(project_root)
 
@@ -126,63 +137,67 @@ def sync_current_release_ledger(project_root: Path) -> SyncResult:
     from audiagentic.components.ledger.event_outbox import drain as drain_event_outbox
 
     drain_event_outbox(project_root)
-    lock, warning = _acquire_lock(project_root)
+    with ledger_write_lock(project_root) as warning:
+        return _sync_current_release_ledger_locked(project_root, warning)
+
+
+def _sync_current_release_ledger_locked(
+    project_root: Path, warning: str | None = None
+) -> SyncResult:
+    """Sync fragments while ``ledger_write_lock`` is already held."""
+    fragments = _load_fragments(project_root)
+    current_ids = {f["event-id"] for f in fragments}
+    manifest = _load_manifest(project_root)
+    synced_ids = set(manifest.get("fragment-ids", []))
+    # The manifest may be missing or stale (for example after an older
+    # no-op sync reset it to an empty set).  The current ledger itself is
+    # durable evidence and must be included before deciding whether an
+    # append is safe; otherwise one new fragment could replace history.
+    current_ledger = current_ledger_path(project_root)
     try:
-        fragments = _load_fragments(project_root)
-        current_ids = {f["event-id"] for f in fragments}
-        manifest = _load_manifest(project_root)
-        synced_ids = set(manifest.get("fragment-ids", []))
-        # The manifest may be missing or stale (for example after an older
-        # no-op sync reset it to an empty set).  The current ledger itself is
-        # durable evidence and must be included before deciding whether an
-        # append is safe; otherwise one new fragment could replace history.
-        current_ledger = current_ledger_path(project_root)
-        try:
-            existing_ledger_ids = {
-                entry["event-id"]
-                for entry in load_ndjson(current_ledger)
-                if isinstance(entry.get("event-id"), str)
-            }
-        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
-            raise AudiaGenticError(
-                code="CON-SYNCL-002",
-                kind="release",
-                message="current release ledger could not be parsed safely",
-                details={"path": str(current_ledger), "reason": str(exc)[:500]},
-            ) from exc
-        known_ids = synced_ids | existing_ledger_ids
-        # Fragments are purged after a successful sync.  An empty fragment
-        # directory therefore means "no new events", not "the ledger is
-        # empty".  Keep the manifest's durable identity set so a later
-        # incremental event is appended instead of replacing the current
-        # ledger with only that event.
-        all_synced_ids = known_ids | current_ids
-        new_ids = current_ids - known_ids
+        existing_ledger_ids = {
+            entry["event-id"]
+            for entry in load_ndjson(current_ledger)
+            if isinstance(entry.get("event-id"), str)
+        }
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        raise AudiaGenticError(
+            code="CON-SYNCL-002",
+            kind="release",
+            message="current release ledger could not be parsed safely",
+            details={"path": str(current_ledger), "reason": str(exc)[:500]},
+        ) from exc
+    known_ids = synced_ids | existing_ledger_ids
+    # Fragments are purged after a successful sync.  An empty fragment
+    # directory therefore means "no new events", not "the ledger is
+    # empty".  Keep the manifest's durable identity set so a later
+    # incremental event is appended instead of replacing the current
+    # ledger with only that event.
+    all_synced_ids = known_ids | current_ids
+    new_ids = current_ids - known_ids
 
-        if not fragments or not new_ids:
-            atomic_write_text(ledger_manifest_path(project_root), json.dumps({
-                "synced-at": now_iso_z(),
-                "fragment-count": len(all_synced_ids),
-                "fragment-ids": sorted(all_synced_ids),
-                "ledger-path": str(current_ledger_path(project_root)),
-            }, indent=2))
+    if not fragments or not new_ids:
+        atomic_write_text(ledger_manifest_path(project_root), json.dumps({
+            "synced-at": now_iso_z(),
+            "fragment-count": len(all_synced_ids),
+            "fragment-ids": sorted(all_synced_ids),
+            "ledger-path": str(current_ledger_path(project_root)),
+        }, indent=2))
+    else:
+        if new_ids and known_ids:
+            new_fragments = [f for f in fragments if f["event-id"] in new_ids]
+            atomic_write_ndjson(current_ledger_path(project_root), new_fragments, append=True)
         else:
-            if new_ids and known_ids:
-                new_fragments = [f for f in fragments if f["event-id"] in new_ids]
-                atomic_write_ndjson(current_ledger_path(project_root), new_fragments, append=True)
-            else:
-                atomic_write_ndjson(current_ledger_path(project_root), fragments)
+            atomic_write_ndjson(current_ledger_path(project_root), fragments)
 
-            atomic_write_text(ledger_manifest_path(project_root), json.dumps({
-                "synced-at": now_iso_z(),
-                "fragment-count": len(all_synced_ids),
-                "fragment-ids": sorted(all_synced_ids),
-                "ledger-path": str(current_ledger_path(project_root)),
-            }, indent=2))
+        atomic_write_text(ledger_manifest_path(project_root), json.dumps({
+            "synced-at": now_iso_z(),
+            "fragment-count": len(all_synced_ids),
+            "fragment-ids": sorted(all_synced_ids),
+            "ledger-path": str(current_ledger_path(project_root)),
+        }, indent=2))
 
-        purged = _purge_synced_fragments(project_root, current_ids)
-    finally:
-        _release_lock(lock)
+    purged = _purge_synced_fragments(project_root, current_ids)
 
     return SyncResult(
         ledger_path=current_ledger_path(project_root),
