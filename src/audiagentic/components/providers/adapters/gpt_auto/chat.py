@@ -1088,6 +1088,34 @@ class PersistentChat:
         """Refresh the retained conversation page at most once per turn."""
         if self._reconciliation_refresh_attempted or not self.page_handle:
             return False
+
+    async def _refresh_for_response_recovery(self) -> bool:
+        """Reload this bound conversation without submitting a new prompt.
+
+        The turn owns the episode/attempt budget; this primitive only performs
+        the provider navigation against the already-bound page. Keeping it
+        separate from unresolved admission reconciliation prevents the old
+        one-shot diagnostic guard from silently limiting live response
+        recovery.
+        """
+        if not self.page_handle:
+            return False
+        browser = getattr(self.runtime, "gpt_browser", None)
+        url = self.chat_url or self._last_url
+        if browser is None or not url:
+            return False
+        try:
+            page = await browser.page_by_handle(self.page_handle)
+            await browser.navigate(page, url)
+            await asyncio.sleep(self.config.turn.poll_interval_seconds)
+            return True
+        except Exception as exc:  # noqa: BLE001 - caller records bounded evidence
+            self._set_unresolved_recovery(
+                "response-refresh-failed",
+                exception_type=type(exc).__name__,
+                exception=str(exc),
+            )
+            return False
         browser = getattr(self.runtime, "gpt_browser", None)
         if browser is None:
             return False
@@ -1354,8 +1382,12 @@ class PersistentChat:
                 # The page may still be present after a proof timeout.  Do not
                 # navigate away from it: the prompt may already have landed.
                 if self.unresolved_turn_pending:
-                    if not await self._reconcile_unresolved_turn():
-                        return True
+                    async with self._reconciliation_lock:
+                        if await self._release_after_terminal_provider_error(error):
+                            self._move(ChatState.READY)
+                            return True
+                        if not await self._reconcile_unresolved_turn():
+                            return True
                 await self._wait_ready()
                 self._move(ChatState.READY)
                 return True
@@ -1368,6 +1400,77 @@ class PersistentChat:
             if self.state is ChatState.RECOVERING:
                 self._move(ChatState.FAILED)
             return False
+
+    async def _release_after_terminal_provider_error(self, error: BaseException) -> bool:
+        """Release an unresolved fence after a request-owned provider error.
+
+        A response-failure policy match is already a provider terminal
+        decision made by the active turn watcher.  Requiring a later assistant
+        response to reconcile that same turn is incorrect: the provider has
+        explicitly rejected it, and the next prompt may safely reuse the
+        conversation once the composer is idle.  Keep this path narrow so
+        ambiguous submission, auth, and active-generation failures remain
+        fail-closed.
+        """
+        if not isinstance(error, AudiaGenticError):
+            return False
+        details = error.details or {}
+        if (
+            error.code != "EXT-GPTAUTO-003"
+            or details.get("failure-reason") != "provider-failure-policy-matched"
+            or details.get("phase") != "response-observation"
+        ):
+            return False
+        evidence = details.get("evidence")
+        if not isinstance(evidence, (list, tuple, set)):
+            return False
+        evidence = {str(item) for item in evidence}
+        if not evidence.intersection({"error-page", "error-alert"}):
+            return False
+        if "auth-required" in evidence:
+            return False
+        stable: ChatSnapshot | None = None
+        binding_token: tuple[object, ...] | None = None
+        for _ in range(2):
+            try:
+                snapshot = await self.snapshot(allow_recovering=True)
+            except Exception:
+                return False
+            busy_signals = {
+                "streaming-indicator",
+                "thinking-indicator",
+                "busy-indicator",
+            }
+            if (
+                "auth-required" in snapshot.dom_signals
+                or snapshot.generating
+                or not snapshot.composer_present
+                or not snapshot.composer_editable
+                or not (
+                    snapshot.error_present
+                    or snapshot.dom_signals.intersection({"error-page", "error-alert"})
+                )
+                or snapshot.dom_signals.intersection(busy_signals)
+            ):
+                return False
+            if not _terminal_error_request_owned(self, snapshot):
+                return False
+            if stable is not None and snapshot != stable:
+                return False
+            if binding_token is None:
+                binding_token = self._binding_token(snapshot)
+            stable = snapshot
+            await asyncio.sleep(self.config.turn.response_stability_seconds)
+        if binding_token is None or not await self._binding_token_is_current(binding_token):
+            return False
+        await self.persist_unresolved_clear()
+        self.clear_unresolved_turn()
+        self._reconciled_binding_token = binding_token
+        self._set_unresolved_recovery(
+            "request-owned-provider-error-released",
+            evidence=sorted(evidence.intersection({"error-page", "error-alert"})),
+        )
+        return True
 
     def bridge_replaced(self) -> None:
         """Invalidate bridge-local binding before runtime-level recovery."""
@@ -1630,6 +1733,21 @@ def _reconciliation_evidence_clear(
         and not snapshot.error_present
         and not snapshot.dom_signals.intersection(busy_signals | failed_signals)
     )
+
+
+def _terminal_error_request_owned(chat: PersistentChat, snapshot: ChatSnapshot) -> bool:
+    """Require the explicit provider error to belong to this admitted turn."""
+    if chat.unresolved_prompt_message_id:
+        return snapshot.latest_user_id == chat.unresolved_prompt_message_id
+    if not chat.unresolved_prompt_text_digest or not snapshot.latest_user_text:
+        return False
+    if (
+        PromptFingerprint.from_text(snapshot.latest_user_text).digest
+        != chat.unresolved_prompt_text_digest
+    ):
+        return False
+    baseline_count = chat._checkpoint_metadata.get("unresolved-baseline-user-count")
+    return baseline_count is None or snapshot.user_count > int(baseline_count)
 
 
 def _metadata_text(metadata: dict[str, object], key: str) -> str | None:
