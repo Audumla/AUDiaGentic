@@ -66,7 +66,7 @@ def test_from_project_dict_resolves_a_sparse_overlay_specifying_only_project_url
     assert config.project_url == "https://chatgpt.com/g/g-p-test-project"
     # Values not mentioned in the overlay come from gpt-auto-defaults.yaml.
     assert config.browser.remote_debugging_port == 9222
-    assert config.turn.response_timeout_seconds == 3600
+    assert config.turn.response_timeout_seconds == 0
     assert config.workflow.policy("response-complete").all_of
 
 
@@ -146,14 +146,14 @@ def test_v2_contract_version_accepted_directly_without_migration() -> None:
     assert config.contract_version == CURRENT_CONTRACT_VERSION
 
 
-def test_unsupported_contract_version_is_rejected_clearly() -> None:
+def test_v3_contract_version_is_accepted_for_unbounded_response_observation() -> None:
     data = copy.deepcopy(valid_config())
     data["contract-version"] = "v3"
 
-    with pytest.raises(AudiaGenticError) as exc_info:
-        GptAutoConfig.from_dict(data)
+    config = GptAutoConfig.from_dict(data)
 
-    assert exc_info.value.code == "VAL-GPTAUTO-001"
+    assert config.contract_version == CURRENT_CONTRACT_VERSION
+    assert config.turn.response_observation_unbounded is True
 
 
 # ── GP26: machine-level config validation entry points ──────────────────────
@@ -227,7 +227,7 @@ def test_validate_project_config_returns_effective_config(
     config = validate_project_gpt_auto_config(project)
 
     assert config.project_url == "https://chatgpt.com/g/g-p-test-project"
-    assert config.turn.response_timeout_seconds == 3600
+    assert config.turn.response_timeout_seconds == 0
 
 
 def test_validate_project_config_without_settings_resolves_to_defaults(
@@ -236,7 +236,7 @@ def test_validate_project_config_without_settings_resolves_to_defaults(
     monkeypatch.setenv("AUDIAGENTIC_HOME", str(tmp_path / "audihome"))
     config = validate_project_gpt_auto_config(tmp_path)
 
-    assert config.turn.response_timeout_seconds == 3600
+    assert config.turn.response_timeout_seconds == 0
 
 
 def test_metadata_only_project_provider_file_resolves_to_defaults(
@@ -259,7 +259,7 @@ def test_metadata_only_project_provider_file_resolves_to_defaults(
     config = validate_project_gpt_auto_config(provider_dir.parents[2])
 
     assert config.project_url is None
-    assert config.turn.response_timeout_seconds == 3600
+    assert config.turn.response_timeout_seconds == 0
 
 
 def test_runtime_provider_metadata_enabled_flag_is_not_runtime_setting(
@@ -283,7 +283,7 @@ def test_runtime_provider_metadata_enabled_flag_is_not_runtime_setting(
     config = GptAutoConfig.from_project_dict(runtime_config)
 
     assert isinstance(runtime_config["enabled"], bool)
-    assert config.turn.response_timeout_seconds == 3600
+    assert config.turn.response_timeout_seconds == 0
 
 
 def test_metadata_only_provider_file_still_rejects_unknown_runtime_keys(

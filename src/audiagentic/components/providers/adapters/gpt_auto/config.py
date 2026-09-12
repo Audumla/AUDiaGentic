@@ -74,9 +74,11 @@ def discover_browser_candidates() -> tuple[Path, ...]:
 # explicitly. migrate_v1_to_v2() lets an older project config keep working
 # (filling sane defaults) instead of hard-failing the whole shared gateway
 # the moment gpt_auto's own schema grows -- the exact bigcherry incident
-# GP09 was raised about.
-CURRENT_CONTRACT_VERSION = "v2"
-SUPPORTED_CONTRACT_VERSIONS = ("v1", "v2")
+# GP09 was raised about. v3 makes response observation unbounded: response
+# recovery, once implemented, owns inactivity/interruption exhaustion rather
+# than an absolute response timer.
+CURRENT_CONTRACT_VERSION = "v3"
+SUPPORTED_CONTRACT_VERSIONS = ("v1", "v2", "v3")
 _V1_SUBMISSION_PROOF_DEFAULTS = {
     "submission-proof-progress-lease-seconds": 300,
     "submission-proof-absolute-ceiling-seconds": 900,
@@ -161,6 +163,10 @@ class TurnConfig:
     # it never submits or retries a prompt.
     stale_progress_focus_enabled: bool
     stale_progress_focus_after_seconds: float
+    # v3 removes response timers as terminal authority. Keep this explicit
+    # on the resolved object so v1/v2 project overlays remain compatible
+    # while the packaged v3 contract cannot accidentally re-enable them.
+    response_observation_unbounded: bool = False
 
 
 class DomSignalScope(StrEnum):
@@ -381,6 +387,7 @@ class GptAutoConfig:
             stale_progress_focus_after_seconds=_optional_non_negative(
                 turn_data, "stale-progress-focus-after-seconds", default=30.0
             ),
+            response_observation_unbounded=declared_version == "v3",
         )
         workflow = _workflow_config(_mapping(settings, "workflow"))
         return cls(CURRENT_CONTRACT_VERSION, project_url, browser, cdp, chat, turn, workflow)
