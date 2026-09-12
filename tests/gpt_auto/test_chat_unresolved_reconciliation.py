@@ -6,9 +6,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from audiagentic.components.providers.adapters.gpt_auto.chat import PersistentChat
+from audiagentic.components.providers.adapters.gpt_auto.chat import ChatState, PersistentChat
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatSnapshot
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 from .test_greenfield_config_urls import valid_config
 
@@ -49,6 +50,73 @@ def _terminal_snapshot(*, dom_signals: frozenset[str]) -> ChatSnapshot:
         user_message_ids=("u1",),
         user_message_texts=("hi",),
     )
+
+
+@pytest.mark.asyncio
+async def test_retain_releases_fence_after_stable_request_owned_provider_error() -> None:
+    """A confirmed provider rejection must not poison a healthy chat."""
+    chat = _chat(response_stability_seconds=0.001)
+    chat.state = ChatState.FAILED
+    error_snapshot = ChatSnapshot(
+        url="https://chatgpt.com/c/abc",
+        composer_present=True,
+        composer_editable=True,
+        user_count=1,
+        assistant_count=1,
+        latest_assistant_id="a1",
+        latest_user_text="hi",
+        latest_assistant_text="older response",
+        dom_signals=frozenset({"error-page"}),
+        error_present=True,
+        generating=False,
+        latest_user_id="u1",
+        user_message_ids=("u1",),
+        user_message_texts=("hi",),
+    )
+    snapshots = iter([error_snapshot, error_snapshot])
+    persisted: list[dict[str, object]] = []
+    chat.checkpoint_sink = persisted.append
+
+    async def fake_snapshot(*, allow_recovering: bool = False) -> ChatSnapshot:
+        return next(snapshots)
+
+    chat.snapshot = fake_snapshot  # type: ignore[method-assign]
+    chat._binding_token_is_current = (  # type: ignore[method-assign]
+        lambda _token: asyncio.sleep(0, result=True)
+    )
+    retained = await chat.retain_after_turn_failure(
+        AudiaGenticError(
+            code="EXT-GPTAUTO-003",
+            kind="providers",
+            message="provider failure policy matched",
+            details={
+                "failure-reason": "provider-failure-policy-matched",
+                "phase": "response-observation",
+                "evidence": ["error-page"],
+            },
+        )
+    )
+
+    assert retained is True
+    assert chat.state.value == "ready"
+    assert chat.unresolved_turn_pending is False
+    assert persisted == [{"unresolved-turn-pending": False}]
+
+
+@pytest.mark.asyncio
+async def test_retain_keeps_fence_for_ambiguous_provider_error() -> None:
+    chat = _chat(response_stability_seconds=0.001)
+    chat.state = ChatState.FAILED
+    retained = await chat.retain_after_turn_failure(
+        AudiaGenticError(
+            code="EXT-GPTAUTO-004",
+            kind="providers",
+            message="response correlation was ambiguous",
+            details={"failure-reason": "unresolved-turn-not-reconciled"},
+        )
+    )
+    assert retained is True
+    assert chat.unresolved_turn_pending is True
 
 
 @pytest.mark.asyncio
