@@ -63,6 +63,16 @@ def test_completed_item_cannot_be_mutated_to_remove_completion_evidence(tmp_path
     assert exc_info.value.code == "VAL-PLN-034"
 
 
+def test_item_cannot_be_completed_with_open_reviews(tmp_path):
+    planning_api.create_item(tmp_path, _make_item())
+    planning_api.create_review(tmp_path, {"review-of": "TST01", "title": "Review"})
+
+    with pytest.raises(AudiaGenticError) as exc_info:
+        planning_api.set_state(tmp_path, "TST01", "completed")
+
+    assert exc_info.value.code == "VAL-PLN-041"
+
+
 def test_review_create_and_parent_delete_share_collection_then_item_order(tmp_path, monkeypatch):
     planning_api.create_item(tmp_path, _make_item())
     order = []
@@ -1165,10 +1175,11 @@ def test_set_state_to_completed_preserves_plan_dir_with_reviews(tmp_path):
         },
     )
     planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Review 1"})
+    planning_api.set_review_state(tmp_path, "RV01", "closed")
     planning_api.set_state(tmp_path, "ITM01", "completed")
-    active_plan_dir = _active_dir(tmp_path) / "test-plan"
-    assert active_plan_dir.exists()
-    assert (active_plan_dir / "reviews" / "ITM01" / "RV01.md").exists()
+    completed_plan_dir = _completed_dir(tmp_path) / "test-plan"
+    assert completed_plan_dir.exists()
+    assert (completed_plan_dir / "reviews" / "ITM01" / "RV01.md").exists()
 
 
 def test_set_state_from_completed_cleans_up_empty_completed_plan_dir(tmp_path):
@@ -1233,8 +1244,8 @@ def test_set_review_state_to_closed_cleans_up_empty_active_plan_dir(tmp_path):
         },
     )
     planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Review 1"})
-    planning_api.set_state(tmp_path, "ITM01", "completed")
     planning_api.set_review_state(tmp_path, "RV01", "closed")
+    planning_api.set_state(tmp_path, "ITM01", "completed")
 
     assert not (_active_dir(tmp_path) / "test-plan").exists()
     assert (_completed_dir(tmp_path) / "test-plan" / "ITM01.md").exists()

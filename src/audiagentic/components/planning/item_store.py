@@ -44,6 +44,7 @@ __all__ = [
     "VALID_STATES",
     "active_states",
     "terminal_states",
+    "initial_state",
     "append_change_log",
     "append_ledger_event",
     "item_identity_write_lock",
@@ -247,6 +248,19 @@ def terminal_states(kind: str = "item") -> set[str]:
     return _get_state_set(kind, "terminal")
 
 
+def initial_state(kind: str = "item") -> str:
+    """Return the workflow-defined initial state for a planning kind."""
+    workflow = load_workflow(_WORKFLOWS_PATH, kind)
+    initial = workflow.get("initial")
+    if not isinstance(initial, str) or not initial or not is_known_state(workflow, initial):
+        raise AudiaGenticError(
+            code="VAL-PLN-039",
+            kind="validation",
+            message=f"invalid initial state for {kind} workflow",
+        )
+    return initial
+
+
 def check_transition(kind: str, old: str, new: str) -> None:
     """Validate an ``old -> new`` state transition for a planning kind.
 
@@ -443,7 +457,7 @@ def next_review_id(project_root: Path, slug: str, parent_id: str) -> str:
     ):
         if not directory.exists():
             continue
-        for path in directory.glob("*/reviews/**/*.md"):
+        for path in directory.glob("*/reviews/*/*.md"):
             match = re.match(r"^RV(\d+)$", path.stem)
             if match:
                 num = int(match.group(1))
@@ -462,11 +476,19 @@ def find_item(project_root: Path, item_id: str) -> Path | None:
     ):
         if not directory.exists():
             continue
-        for pattern in ("*/*.md", "*/reviews/*/*.md"):
-            for path in directory.glob(pattern):
-                if path.stem == item_id:
-                    planning_paths.assert_contained(directory, path)
-                    matches.append(path)
+        pattern = "*/reviews/*/*.md" if item_id.startswith("RV") else "*/*.md"
+        for path in directory.glob(pattern):
+            if path.stem != item_id:
+                continue
+            planning_paths.assert_contained(directory, path)
+            frontmatter, _body = parse_frontmatter(path.read_text(encoding="utf-8"))
+            if frontmatter.get("id") != path.stem:
+                raise AudiaGenticError(
+                    code="VAL-PLN-035",
+                    kind="validation",
+                    message="planning record identity does not match its filename",
+                )
+            matches.append(path)
     if len(matches) > 1:
         raise AudiaGenticError(code="VAL-PLN-036", kind="validation", message="duplicate planning identity")
     return matches[0] if matches else None
@@ -495,6 +517,7 @@ def review_paths(project_root: Path, parent_id: str) -> list[Path]:
             continue
         for path in directory.glob(f"*/reviews/{parent_id}/*.md"):
             if path.stem.startswith("RV"):
+                planning_paths.assert_contained(directory, path)
                 matches.append(path)
     return matches
 
@@ -503,8 +526,8 @@ def ensure_not_review(fm: dict[str, Any], item_id: str, code: str) -> None:
     """Reject item-scoped operations (update_item/get_item/delete_item/set_state)
     against a review file.
 
-    Reviews and plan items share the same filename-based lookup (find_item
-    rglobs by <id>.md regardless of directory), and their body section
+    Reviews and plan items share the same filename-based lookup, limited to
+    their canonical directories, and their body section
     templates are incompatible: an item has description/steps/files/
     validation/effort_risk/standards/notes, a review has notes/findings/
     conclusion. Rendering a review through the item template silently
