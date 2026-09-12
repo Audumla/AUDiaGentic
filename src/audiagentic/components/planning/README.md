@@ -81,6 +81,13 @@ completed items retain evidence and have no active reviews.
 An item cannot be completed while a linked review is still `created` or
 `considered`; resolve and close those reviews first.
 
+The workflow contract is authoritative in `workflows.yaml`: items start in
+`pending`, may move between the listed item states only through its declared
+transitions, and reviews start in `created` and follow the declared
+`created`/`considered`/`closed` transitions. The placement map, not a state-name
+special case, selects `active/` versus `completed/`.
+Items start in `pending`; reviews start in `created`.
+
 Each newly created review is recorded in the parent's `Reviews` section. That
 link is part of the local repository integrity contract: review mutations fail
 closed when the review, parent, plan, or backlink disagree. Planning writes use

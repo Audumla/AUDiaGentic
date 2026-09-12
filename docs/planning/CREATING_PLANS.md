@@ -225,10 +225,9 @@ hasn't finished writing.
 
 Reviews are linked to plan items for quality gates. Use `plan_create_review` to create one.
 Reviews have a lifecycle: `created` → `considered` → `closed`.
-The parent item may be pending in `active/` or completed in `completed/`.
-Use reviews on completed or already-implemented items when you need to capture
-post-implementation findings, audits, regressions, or code review feedback
-without reopening history or cloning the original item.
+The parent item must be active in `active/`. Completed items cannot receive or
+reopen active reviews; create a new planning item when post-completion findings,
+audits, regressions, or code review feedback need independent tracking.
 
 An open review (`created`/`considered`) on a pending item is a **gate**: the implementer
 must address or dispute it before the item can be completed (see section 5). Reviewers
