@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.planning import events, item_store, planning_paths
-from audiagentic.components.planning.identity import validate_review_id
+from audiagentic.components.planning.identity import validate_item_id, validate_plan_slug, validate_review_id
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_text
 from audiagentic.foundation.workflow.frontmatter import (
@@ -63,6 +63,7 @@ def create_review(project_root: Path, review: dict[str, Any]) -> dict[str, Any]:
             kind="validation",
             message="review 'review-of' (or 'review_of') is required",
         )
+    validate_item_id(parent_id)
     if not title:
         raise AudiaGenticError(
             code="VAL-PLN-009", kind="validation", message="review 'title' is required"
@@ -178,6 +179,10 @@ def list_reviews(
         ]
 
     slug = plan if plan else None
+    if slug is not None:
+        validate_plan_slug(slug)
+    if review_of is not None:
+        validate_item_id(review_of)
     prefix = id_prefix.upper() if id_prefix else None
     results: list[dict[str, Any]] = []
 
@@ -189,7 +194,7 @@ def list_reviews(
             parts = path.relative_to(search_dir).parts
             if len(parts) < 3 or parts[1] != "reviews":
                 continue
-            if slug and not fnmatch.fnmatch(parts[0], slug):
+            if slug and parts[0] != slug:
                 continue
             if review_of and parts[2] != review_of:
                 continue
