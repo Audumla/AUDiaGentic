@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.planning import events, item_store, planning_paths
+from audiagentic.components.planning.identity import validate_review_id
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_text
 from audiagentic.foundation.workflow.frontmatter import (
@@ -66,6 +67,8 @@ def create_review(project_root: Path, review: dict[str, Any]) -> dict[str, Any]:
         raise AudiaGenticError(
             code="VAL-PLN-009", kind="validation", message="review 'title' is required"
         )
+    if review_id is not None:
+        validate_review_id(review_id)
 
     # Verify parent item exists
     parent_path = item_store.find_item(project_root, parent_id)

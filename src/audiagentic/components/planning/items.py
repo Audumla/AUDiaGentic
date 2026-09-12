@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.planning import events, item_store, planning_paths
+from audiagentic.components.planning.identity import validate_item_id, validate_plan_slug
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_text
 from audiagentic.foundation.workflow.frontmatter import parse_frontmatter, parse_title
@@ -34,10 +35,13 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
         raise AudiaGenticError(
             code="VAL-PLN-003", kind="validation", message="item 'plan' is required"
         )
+    validate_plan_slug(plan)
     if not title:
         raise AudiaGenticError(
             code="VAL-PLN-004", kind="validation", message="item 'title' is required"
         )
+    if item_id is not None:
+        validate_item_id(item_id)
 
     created_by = (
         item.get("created-by") or item.get("created_by") or item.get("creator_id") or "agent"
