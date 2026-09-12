@@ -92,17 +92,28 @@ def drain(project_root: Path, *, publisher: Any | None = None) -> dict[str, int]
             root = Path(record["project-root"])
             if root.resolve() != project_root.resolve():
                 raise ValueError("ledger event outbox project root mismatch")
-            fragment = ledger_fragments_dir(root) / f"{record['event-id']}.json"
-            if not fragment.exists():
-                event = record.get("event")
-                if not isinstance(event, dict) or event.get("event-id") != record["event-id"]:
-                    # Legacy intents without the authoritative event cannot
-                    # safely be materialized; retain them for explicit retry.
-                    failed += 1
-                    break
-                atomic_write_text(fragment, json.dumps(event, indent=2, sort_keys=True))
+            event_id = str(record["event-id"])
+            event = record.get("event")
+            with fragment_write_lock(root, event_id):
+                fragment = ledger_fragments_dir(root) / f"{event_id}.json"
+                if not fragment.exists():
+                    if not isinstance(event, dict) or event.get("event-id") != event_id:
+                        # Legacy intents without the authoritative event cannot
+                        # safely be materialized; retain them for explicit retry.
+                        failed += 1
+                        break
+                    atomic_write_text(fragment, json.dumps(event, indent=2, sort_keys=True))
+                elif isinstance(event, dict):
+                    try:
+                        existing_fragment = json.loads(fragment.read_text(encoding="utf-8"))
+                    except (OSError, json.JSONDecodeError) as exc:
+                        raise ValueError(f"ledger fragment is corrupt: {fragment}") from exc
+                    if existing_fragment != event:
+                        raise ValueError(
+                            f"ledger fragment ID already exists with different content: {event_id}"
+                        )
             publisher(
-                str(record["event-id"]),
+                event_id,
                 list(record["plan-item-ids"]),
                 root,
                 source=record.get("source"),

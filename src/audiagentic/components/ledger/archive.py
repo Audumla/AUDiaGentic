@@ -41,11 +41,22 @@ def _purge_fragments(project_root: Path, event_ids: set[str]) -> int:
 
 
 def archive_current_ledger(project_root: Path, release_id: str) -> dict[str, Any]:
-    # Direct archive callers must observe the same authoritative outbox
-    # boundary as sync/archive-for-release.
+    # Direct archive callers must observe the same authoritative outbox and
+    # fragment-sync boundary as sync/archive-for-release.
     from audiagentic.components.ledger.event_outbox import drain as drain_event_outbox
+    from audiagentic.components.ledger.sync import (
+        _sync_current_release_ledger_locked,
+        ledger_write_lock,
+    )
 
-    drain_event_outbox(project_root)
+    with ledger_write_lock(project_root) as warning:
+        drain_event_outbox(project_root)
+        _sync_current_release_ledger_locked(project_root, warning)
+        return _archive_current_ledger_locked(project_root, release_id)
+
+
+def _archive_current_ledger_locked(project_root: Path, release_id: str) -> dict[str, Any]:
+    """Archive while the shared ledger write lock is already held."""
     current_path = current_ledger_path(project_root)
     historical_path = historical_ledger_path(project_root)
 
