@@ -970,11 +970,11 @@ def test_list_reviews_filters_by_review_of(tmp_path):
 def test_list_reviews_id_prefix_filter(tmp_path):
     planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
     planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Review 1"})
-    planning_api.create_review(tmp_path, {"id": "OTHER01", "review-of": "ITM01", "title": "Odd id"})
+    planning_api.create_review(tmp_path, {"id": "RV02", "review-of": "ITM01", "title": "Second review"})
 
     reviews = planning_api.list_reviews(tmp_path, id_prefix="rv")
     ids = {r["id"] for r in reviews}
-    assert ids == {"RV01"}
+    assert ids == {"RV01", "RV02"}
 
 
 def test_list_reviews_page_defaults_to_open_state(tmp_path):
