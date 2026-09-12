@@ -34,6 +34,18 @@ from audiagentic.foundation.workflow.frontmatter import (
 logger = logging.getLogger(__name__)
 
 
+def _validate_review_path_metadata(path: Path, fm: dict[str, Any]) -> None:
+    """Reject a review whose frontmatter disagrees with its canonical path."""
+    parent_id = path.parent.name
+    slug = path.parent.parent.parent.name
+    if fm.get("id") != path.stem or fm.get("review-of") != parent_id or fm.get("plan") != slug:
+        raise AudiaGenticError(
+            code="VAL-PLN-035",
+            kind="validation",
+            message="review metadata does not match its canonical path",
+        )
+
+
 def _parse_review_sections(body: str) -> dict[str, str]:
     """Extract review sections (notes/findings/conclusion), last occurrence wins."""
     sections: dict[str, str] = {}
@@ -85,6 +97,12 @@ def create_review(project_root: Path, review: dict[str, Any]) -> dict[str, Any]:
 
     slug = parent_path.parent.name
     parent_fm, _ = parse_frontmatter(parent_path.read_text(encoding="utf-8"))
+    if parent_fm.get("plan") != slug:
+        raise AudiaGenticError(
+            code="VAL-PLN-035",
+            kind="validation",
+            message="parent item metadata does not match its canonical path",
+        )
 
     if not review_id:
         review_id = item_store.next_review_id(project_root, slug, parent_path.stem)
@@ -101,7 +119,7 @@ def create_review(project_root: Path, review: dict[str, Any]) -> dict[str, Any]:
         "id": review_id,
         "review-of": parent_path.stem,
         "plan": parent_fm.get("plan", slug),
-        "state": "created",
+        "state": item_store.initial_state("review"),
         "reviewed-by": review.get("reviewed-by")
         or review.get("reviewed_by")
         or review.get("reviewer_id")
@@ -133,10 +151,11 @@ def create_review(project_root: Path, review: dict[str, Any]) -> dict[str, Any]:
 
     payload = {
         "id": review_id,
+        "review-id": review_id,
         "title": title,
         "review-of": parent_id,
         "plan": slug,
-        "state": "created",
+        "state": fm["state"],
         "reviewed-by": fm.get("reviewed-by", ""),
         "path": str(target.relative_to(project_root)),
     }
@@ -162,8 +181,7 @@ def list_reviews(
     """List reviews, optionally filtered by state, plan, parent item, or ID prefix.
 
     state: 'created'/'considered'/'open' → active; 'closed' → completed; None → all.
-    plan: directory name like 'code-cleanup' (omit for all plans). Supports
-        glob wildcards (e.g. 'code-*') via fnmatch.
+    plan: exact directory name like 'code-cleanup' (omit for all plans).
     review_of: parent item ID to filter by (omit for all).
     id_prefix: case-insensitive review-ID prefix (e.g. 'RV').
     """
@@ -193,17 +211,20 @@ def list_reviews(
     for search_dir in search_dirs:
         if not search_dir.exists():
             continue
-        for path in sorted(search_dir.rglob("*.md")):
+        for path in sorted(search_dir.glob("*/reviews/*/*.md")):
             # Reviews live under <plan>/reviews/<parent-id>/
             parts = path.relative_to(search_dir).parts
-            if len(parts) < 3 or parts[1] != "reviews":
+            if len(parts) != 4 or parts[1] != "reviews":
                 continue
             if slug and parts[0] != slug:
                 continue
             if review_of and parts[2] != review_of:
                 continue
+            planning_paths.assert_contained(search_dir, path)
             fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
             review_id = fm.get("id", path.stem)
+            validate_review_id(path.stem)
+            _validate_review_path_metadata(path, fm)
             persisted_state = fm.get("state", "created")
             if state not in (None, "all", "open") and persisted_state != state:
                 continue
@@ -293,6 +314,7 @@ def get_review(project_root: Path, review_id: str) -> dict[str, Any]:
     path = item_store.require_item(project_root, review_id)
     fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
     item_store.ensure_review(fm, review_id, "VAL-PLN-022")
+    _validate_review_path_metadata(path, fm)
     sections = item_store.parse_item_sections(body)
     sections.update(_parse_review_sections(body))
     title = parse_title(body)
@@ -343,6 +365,7 @@ def set_review_state(project_root: Path, review_id: str, new_state: str) -> dict
         events.PLANNING_REVIEW_STATE_CHANGED,
         {
             **result,
+            "review-id": review_id,
             "review-of": parent_id,
             "plan": slug,
             "old_state": old_state,
@@ -429,6 +452,7 @@ def update_review(project_root: Path, review_id: str, updates: dict[str, Any]) -
         events.PLANNING_REVIEW_UPDATED,
         {
             **result,
+            "review-id": review_id,
             "review-of": fm.get("review-of", ""),
             "plan": fm.get("plan", ""),
             "updated_keys": list(updates.keys()),
@@ -451,6 +475,7 @@ def delete_review(project_root: Path, review_id: str) -> dict[str, Any]:
     source_state_dir = path.parent.parent.parent.parent
     payload = {
         "id": review_id,
+        "review-id": review_id,
         "review-of": fm.get("review-of", ""),
         "plan": slug,
         "state": fm.get("state", "created"),

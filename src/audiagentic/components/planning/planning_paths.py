@@ -22,9 +22,24 @@ _DEFAULT_PATHS: dict[str, str] = {
 
 
 def _resolve(project_root: Path, key: str) -> Path:
-    from audiagentic.foundation.paths import resolve_component_path
+    from audiagentic.components.planning.planning_api import active_implementation_id
+    from audiagentic.foundation.features.registry import get_implementation
+    from audiagentic.foundation.paths.safety import ensure_contained
 
-    return resolve_component_path(project_root, _COMPONENT_ID, key, _DEFAULT_PATHS)
+    implementation_id = active_implementation_id(project_root)
+    if implementation_id:
+        descriptor = get_implementation(_COMPONENT_ID, implementation_id)
+        paths = descriptor.raw.get("paths") if descriptor is not None else None
+        value = paths.get(key) if isinstance(paths, dict) else None
+        if not value:
+            raise AudiaGenticError(
+                code="VAL-PLN-039",
+                kind="validation",
+                message="active planning implementation path is not configured",
+            )
+    else:
+        value = _DEFAULT_PATHS[key]
+    return ensure_contained(project_root, value)
 
 
 def plans_root(project_root: Path) -> Path:

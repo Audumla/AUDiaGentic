@@ -50,7 +50,8 @@ created review always starts in `active/` with review state `created`; moving
 the review itself to `closed` archives it under `completed/`.
 
 Each item has YAML frontmatter (`id`, `order`, `plan`, `state`, `priority`, `work`)
-and standard markdown sections: Description, Steps, Files, Validation, Effort & Risk, Notes.
+and standard markdown sections: Description, Steps, Files, Validation, Acceptance
+Criteria, Effort & Risk, Standards, and Notes.
 
 ## States
 
@@ -75,6 +76,9 @@ States and transitions are defined in `workflows.yaml`; the Python code reads th
 Reviews may target completed items as well as pending ones. This is useful for
 post-implementation audits, regressions found after completion, and code review
 feedback against already-landed work.
+
+An item cannot be completed while a linked review is still `created` or
+`considered`; resolve and close those reviews first.
 
 ## Implementations
 

@@ -34,3 +34,4 @@ VAL-PLN-036: "More than one planning record has the same identity. Resolve the d
 VAL-PLN-037: "A plan item cannot be deleted while linked reviews exist. Delete the reviews explicitly first."
 VAL-PLN-038: "The resolved planning path escapes the configured planning root. Check plan and record identities and configured paths."
 VAL-PLN-039: "The active planning implementation could not be resolved unambiguously. Check implementation registration, defaults, and project selection state."
+VAL-PLN-041: "A plan item cannot be completed while it has open reviews. Resolve or close the reviews first."
