@@ -17,7 +17,13 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.planning import planning_paths
-from audiagentic.components.planning.identity import validate_record_id
+from audiagentic.components.planning.contracts import PlanningIntegrityError
+from audiagentic.components.planning.identity import (
+    validate_item_id,
+    validate_plan_slug,
+    validate_record_id,
+    validate_review_id,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import load_yaml_file
 from audiagentic.foundation.paths.safety import resolve_user_path
@@ -71,6 +77,7 @@ __all__ = [
     "require_item",
     "review_paths",
     "state_dir",
+    "validate_record_path",
 ]
 
 logger = logging.getLogger(__name__)
@@ -198,6 +205,9 @@ def serialize_planning_collection_item_write(func):
     @wraps(func)
     def wrapped(project_root: Path, item_id: str, *args, **kwargs):
         with planning_collection_item_write_lock(project_root, item_id):
+            from audiagentic.components.planning.durability import reconcile_pending_mutations
+
+            reconcile_pending_mutations(project_root)
             return func(project_root, item_id, *args, **kwargs)
 
     return wrapped
@@ -212,7 +222,15 @@ def serialize_review_create(func):
         with planning_collection_write_lock(project_root):
             if parent_id:
                 with item_identity_write_lock(project_root, str(parent_id)):
+                    from audiagentic.components.planning.durability import (
+                        reconcile_pending_mutations,
+                    )
+
+                    reconcile_pending_mutations(project_root)
                     return func(project_root, review, *args, **kwargs)
+            from audiagentic.components.planning.durability import reconcile_pending_mutations
+
+            reconcile_pending_mutations(project_root)
             return func(project_root, review, *args, **kwargs)
 
     return wrapped
@@ -235,6 +253,9 @@ def serialize_planning_collection_write(func):
     @wraps(func)
     def wrapped(project_root: Path, *args, **kwargs):
         with planning_collection_write_lock(project_root):
+            from audiagentic.components.planning.durability import reconcile_pending_mutations
+
+            reconcile_pending_mutations(project_root)
             return func(project_root, *args, **kwargs)
 
     return wrapped
@@ -326,6 +347,55 @@ def state_dir(project_root: Path, state: str, kind: str = "item") -> Path:
     if bucket == "completed":
         return planning_paths.plans_completed_dir(project_root)
     raise AudiaGenticError(code="VAL-PLN-006", kind="validation", message=f"invalid state: {state!r}")
+
+
+def validate_record_path(path: Path, fm: dict[str, Any], kind: str) -> None:
+    """Validate a current-schema record against its filename and placement.
+
+    This is the single canonical check used by public reads, mutations, and
+    integrity auditing. Legacy Markdown notes with non-workflow states remain
+    outside the current planning record index and are not interpreted as live
+    planning records.
+    """
+    record_id = fm.get("id")
+    plan = fm.get("plan")
+    if kind == "item":
+        validate_item_id(record_id)
+        validate_plan_slug(plan)
+        if "review-of" in fm:
+            raise PlanningIntegrityError("review metadata cannot be treated as a plan item")
+        if path.stem != record_id or path.parent.name != plan:
+            raise PlanningIntegrityError("item metadata does not match its canonical path")
+        state = fm.get("state", initial_state("item"))
+        if (
+            state not in VALID_STATES
+            or path.parent.parent.name != placement_for_state("item", state)
+        ):
+            raise PlanningIntegrityError("item state does not match its canonical placement")
+        return
+    if kind == "review":
+        validate_review_id(record_id)
+        validate_plan_slug(plan)
+        parent_id = fm.get("review-of")
+        validate_item_id(parent_id)
+        if (
+            path.stem != record_id
+            or path.parent.name != parent_id
+            or path.parent.parent.name != "reviews"
+            or path.parent.parent.parent.name != plan
+        ):
+            raise PlanningIntegrityError("review metadata does not match its canonical path")
+        state = fm.get("state", initial_state("review"))
+        if state not in (
+            _get_state_set("review", "active") | _get_state_set("review", "terminal")
+        ):
+            raise PlanningIntegrityError("review has an unknown workflow state")
+        if path.parent.parent.parent.parent.name != placement_for_state("review", state):
+            raise PlanningIntegrityError("review state does not match its canonical placement")
+        return
+    raise AudiaGenticError(
+        code="VAL-PLN-035", kind="validation", message=f"unknown planning record kind: {kind}"
+    )
 
 
 def parse_item_sections(body: str) -> dict[str, str]:
@@ -509,16 +579,14 @@ def find_item(project_root: Path, item_id: str) -> Path | None:
             continue
         pattern = "*/reviews/*/*.md" if item_id.startswith("RV") else "*/*.md"
         for path in directory.glob(pattern):
-            if path.stem != item_id:
-                continue
             planning_paths.assert_contained(directory, path)
             frontmatter, _body = parse_frontmatter(path.read_text(encoding="utf-8"))
-            if frontmatter.get("id") != path.stem:
-                raise AudiaGenticError(
-                    code="VAL-PLN-035",
-                    kind="validation",
-                    message="planning record identity does not match its filename",
-                )
+            if not frontmatter:
+                continue
+            kind = "review" if item_id.startswith("RV") else "item"
+            validate_record_path(path, frontmatter, kind)
+            if path.stem != item_id:
+                continue
             matches.append(path)
     if len(matches) > 1:
         raise AudiaGenticError(code="VAL-PLN-036", kind="validation", message="duplicate planning identity")

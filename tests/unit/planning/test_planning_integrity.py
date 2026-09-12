@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 
 from audiagentic.components.ledger import event_outbox as ledger_outbox
-from audiagentic.components.planning import durability, integrity, planning_api
+from audiagentic.components.ledger import fragments as ledger_fragments
+from audiagentic.components.planning import durability, integrity, item_store, planning_api
 from audiagentic.components.planning import events as planning_events
 from audiagentic.components.planning.contracts import PlanningIntegrityError
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -94,6 +95,10 @@ def test_runtime_roots_reject_ancestor_symlink_escape(tmp_path: Path) -> None:
         planning_events._outbox_dir(tmp_path)
     with pytest.raises(AudiaGenticError):
         ledger_outbox.outbox_dir(tmp_path)
+    with pytest.raises(AudiaGenticError):
+        item_store._lock_path(tmp_path, "item-TST01")
+    with pytest.raises(AudiaGenticError):
+        ledger_fragments._fragment_dir(tmp_path)
 
 
 def test_ledger_projection_failure_remains_retryable(tmp_path: Path) -> None:
@@ -151,6 +156,11 @@ def test_manifestless_staging_is_discarded_on_reconciliation(tmp_path: Path, mon
     assert durability.reconcile_pending_mutations(tmp_path) == 0
     assert not list(durability.transaction_root(tmp_path).glob(".staging-*"))
     assert not target.exists()
+    legacy = durability.transaction_root(tmp_path) / ("a" * 32)
+    legacy.mkdir()
+    (legacy / "write-000.payload").write_text("orphan", encoding="utf-8")
+    assert durability.reconcile_pending_mutations(tmp_path) == 0
+    assert not legacy.exists()
 
 
 def test_ledger_projection_intent_precedes_fragment_and_waits_for_fragment(tmp_path: Path, monkeypatch) -> None:
@@ -176,7 +186,11 @@ def test_ledger_projection_intent_precedes_fragment_and_waits_for_fragment(tmp_p
         )
     assert list(ledger_outbox.outbox_dir(tmp_path).glob("*.json"))
     assert ledger_outbox.drain(tmp_path) == {"delivered": 0, "failed": 1}
+    fragment = ledger_fragments._fragment_dir(tmp_path) / f"{next(ledger_outbox.outbox_dir(tmp_path).glob('*.json')).stem}.json"
+    assert fragment.exists()
     monkeypatch.setattr(fragments, "atomic_write_text", real_write)
+    _item(tmp_path)
+    assert ledger_outbox.drain(tmp_path) == {"delivered": 1, "failed": 0}
 
 
 def test_reconciliation_materializes_journaled_event_after_crash(tmp_path: Path, monkeypatch) -> None:
@@ -280,3 +294,13 @@ def test_completed_parent_cannot_reopen_closed_review(tmp_path: Path) -> None:
     completed.write_text(item_text, encoding="utf-8")
     with pytest.raises(AudiaGenticError, match="cannot have active reviews"):
         planning_api.set_review_state(tmp_path, "RV01", "considered")
+
+
+def test_public_item_read_rejects_state_placement_corruption(tmp_path: Path) -> None:
+    path = _item(tmp_path)
+    completed = tmp_path / "docs" / "planning" / "completed" / "test-plan" / "TST01.md"
+    completed.parent.mkdir(parents=True, exist_ok=True)
+    completed.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+    path.unlink()
+    with pytest.raises(PlanningIntegrityError, match="canonical placement"):
+        planning_api.get_item(tmp_path, "TST01")

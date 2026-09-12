@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import uuid
 from collections.abc import Iterable, Mapping
@@ -25,6 +26,7 @@ from audiagentic.foundation.system.process import StartupLock
 
 _JOURNAL_DIR = ".audiagentic/runtime/planning"
 _TXNS_DIR = "txns"
+_LEGACY_TXN_DIR_RE = re.compile(r"^[0-9a-f]{32}$")
 
 
 def journal_root(project_root: Path) -> Path:
@@ -183,7 +185,9 @@ def _reconcile_pending_mutations(project_root: Path) -> int:
         # failure in that window must not turn an incomplete staging directory
         # into a fatal recovery error or expose it as a transaction.  Once the
         # manifest exists, the directory is a valid roll-forward candidate.
-        if not manifest_path.exists() and tx_dir.name.startswith(".staging-"):
+        if not manifest_path.exists() and (
+            tx_dir.name.startswith(".staging-") or _LEGACY_TXN_DIR_RE.fullmatch(tx_dir.name)
+        ):
             shutil.rmtree(tx_dir)
             continue
         manifest = _read_json(manifest_path)

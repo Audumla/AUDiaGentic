@@ -197,12 +197,9 @@ def list_items(
                 continue
             planning_paths.assert_contained(search_dir, path)
             fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
-            if fm.get("id") != path.stem:
-                raise AudiaGenticError(
-                    code="VAL-PLN-035",
-                    kind="validation",
-                    message="planning record identity does not match its filename",
-                )
+            if not fm:
+                continue
+            item_store.validate_record_path(path, fm, "item")
             item_id = fm.get("id", path.stem)
             persisted_state = fm.get("state", "pending")
             if state not in (None, "all", "active") and persisted_state != state:

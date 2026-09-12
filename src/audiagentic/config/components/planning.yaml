@@ -100,8 +100,10 @@ mcp-servers:
         plan and title; work is optional (S/M/L). IDs are normally generated, but compatible
         explicit uppercase item IDs are allowed and must be globally unique.
         Filter lists by plan or ID prefix; item/review defaults are active/open. Transition
-        state explicitly; close handled reviews and complete items only after non-empty
-        Validation and Acceptance Criteria are recorded and all linked reviews are closed.
+        state explicitly. Reviews may target active items only; completed items cannot
+        receive or reopen active reviews. Close handled reviews and complete items only
+        after non-empty Validation and Acceptance Criteria are recorded and all linked
+        reviews are closed.
     tool-descriptions:
       plan_list_standards: List configured planning standards.
       plan_create_item: "Create an item. Required: plan, title. Optional: id, work (S/M/L), skill, order, Validation, Acceptance Criteria, and other sections."
