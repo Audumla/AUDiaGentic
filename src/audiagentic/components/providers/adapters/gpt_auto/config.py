@@ -163,6 +163,9 @@ class TurnConfig:
     # it never submits or retries a prompt.
     stale_progress_focus_enabled: bool
     stale_progress_focus_after_seconds: float
+    response_no_activity_refresh_seconds: float = 240.0
+    response_refresh_attempts: int = 3
+    response_refresh_final_grace_seconds: float = 600.0
     # v3 removes response timers as terminal authority. Keep this explicit
     # on the resolved object so v1/v2 project overlays remain compatible
     # while the packaged v3 contract cannot accidentally re-enable them.
@@ -346,8 +349,22 @@ class GptAutoConfig:
                 "initial-response-refresh-cooldown-seconds",
                 "stale-progress-focus-enabled",
                 "stale-progress-focus-after-seconds",
+                "response-no-activity-refresh-seconds",
+                "response-refresh-attempts",
+                "response-refresh-final-grace-seconds",
             },
             "turn",
+            required={
+                "submission-timeout-seconds",
+                "response-start-timeout-seconds",
+                "response-stall-timeout-seconds",
+                "response-timeout-seconds",
+                "poll-interval-seconds",
+                "response-stability-seconds",
+                "response-generating-override-stability-seconds",
+                "submission-proof-progress-lease-seconds",
+                "submission-proof-absolute-ceiling-seconds",
+            },
         )
         turn = TurnConfig(
             submission_timeout_seconds=_positive(turn_data, "submission-timeout-seconds"),
@@ -388,6 +405,15 @@ class GptAutoConfig:
                 turn_data, "stale-progress-focus-after-seconds", default=30.0
             ),
             response_observation_unbounded=declared_version == "v3",
+            response_no_activity_refresh_seconds=_optional_non_negative(
+                turn_data, "response-no-activity-refresh-seconds", default=240.0
+            ),
+            response_refresh_attempts=_optional_non_negative_int(
+                turn_data, "response-refresh-attempts", default=3
+            ),
+            response_refresh_final_grace_seconds=_optional_non_negative(
+                turn_data, "response-refresh-final-grace-seconds", default=600.0
+            ),
         )
         workflow = _workflow_config(_mapping(settings, "workflow"))
         return cls(CURRENT_CONTRACT_VERSION, project_url, browser, cdp, chat, turn, workflow)

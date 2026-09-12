@@ -36,6 +36,9 @@ settings:
     response-start-timeout-seconds: 0
     response-stall-timeout-seconds: 0
     response-timeout-seconds: 0
+    response-no-activity-refresh-seconds: 240
+    response-refresh-attempts: 3
+    response-refresh-final-grace-seconds: 600
     poll-interval-seconds: 1
     response-stability-seconds: 6
     # A completion witness while ChatGPT still reports generation is active
@@ -107,6 +110,13 @@ settings:
         selectors: ['[role="alert"]']
         visible: true
         text-contains-any: ['error', 'failed', 'went wrong', 'try again', 'retry', 'rate limit', 'too many requests']
+      connection-interrupted:
+        # Provider interruption is a recovery trigger, not a generic
+        # terminal error. Match the exact user-visible interruption text.
+        scope: document
+        selectors: ['[role="alert"]']
+        visible: true
+        text-contains-any: ['Connection interrupted. Waiting for the complete answer']
       delivery-timeout-retry:
         # Conversation-scoped delivery timeout; never a generic error click.
         scope: document
