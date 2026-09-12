@@ -15,7 +15,8 @@ A guide for agents creating, implementing, and managing plan items in `docs/plan
 ## 2. Creating a plan item
 
 **Before creating, check for an existing item covering the same work**: run
-`plan_list_items(state='active')` and scan titles/plans for overlap — including
+`plan_list_groups()` or a plan-scoped `plan_list_items(plan='<plan>')` call and scan
+titles/plans for overlap — including
 *other* plans, since one root cause (a standards change, a review finding) often
 spawns items in parallel sessions. If an item already covers it, update that item
 (via a review, per section 8) instead of creating a duplicate. Two half-specified
@@ -23,7 +24,8 @@ duplicates are worse than either alone: implementers pick one at random and the
 deltas in the other are silently lost.
 
 Use `plan_create_item` to add a new item. Required fields: `plan` (directory name), `title`.
-The `id` is auto-generated — **do not supply it**.
+The `id` is auto-generated when omitted. Compatible explicit IDs may be supplied when
+needed, but they must use the canonical uppercase item-ID format and be globally unique.
 
 Plan-item and review IDs are globally unique across every plan and lifecycle
 state. Never create or copy a planning Markdown file by hand. If the
@@ -180,6 +182,8 @@ Each plan item supports these sections:
 - **Validation** — How to verify the work is correct. Write criteria as **executable
   checks** (a command, a grep, a named test) with an observable pass/fail — "works
   correctly" is not a criterion. The implementer is required to run each one literally
+- **Acceptance Criteria** — Observable conditions that must be true before the item can
+  be completed.
 - **Effort & Risk** — Complexity assessment and risks
 - **Standards** — Relevant architecture/design standards. **Required for any item whose
   Files touch `src/`**; write `none apply` explicitly if that is the considered answer

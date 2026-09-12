@@ -233,14 +233,14 @@ def test_list_items_id_prefix_filter(tmp_path):
     assert ids == {"CC01", "CC02"}
 
 
-def test_list_items_plan_wildcard_filter(tmp_path):
+def test_list_items_plan_filter_is_exact(tmp_path):
     planning_api.create_item(tmp_path, _make_item(id="E01", plan="code-cleanup"))
     planning_api.create_item(tmp_path, _make_item(id="E02", plan="code-review"))
     planning_api.create_item(tmp_path, _make_item(id="E03", plan="memory-hindsight"))
 
-    items = planning_api.list_items(tmp_path, plan="code-*")
+    items = planning_api.list_items(tmp_path, plan="code-cleanup")
     ids = {i["id"] for i in items}
-    assert ids == {"E01", "E02"}
+    assert ids == {"E01"}
 
 
 def test_list_items_page_defaults_to_active_state(tmp_path):

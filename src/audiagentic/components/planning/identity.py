@@ -13,7 +13,7 @@ _REVIEW_RE = re.compile(r"^RV[0-9]+$")
 def _validate(value: object, pattern: re.Pattern[str], kind: str) -> str:
     if not isinstance(value, str) or pattern.fullmatch(value) is None:
         raise AudiaGenticError(
-            code="VAL-PLN-030",
+            code="VAL-PLN-035",
             kind="validation",
             message=f"invalid planning {kind}",
             details={"kind": kind},
@@ -28,7 +28,7 @@ def validate_plan_slug(value: object) -> str:
 def validate_item_id(value: object) -> str:
     result = _validate(value, _ITEM_RE, "item ID")
     if result.startswith("RV"):
-        raise AudiaGenticError(code="VAL-PLN-031", kind="validation", message="review IDs are not item IDs")
+        raise AudiaGenticError(code="VAL-PLN-035", kind="validation", message="review IDs are not item IDs")
     return result
 
 

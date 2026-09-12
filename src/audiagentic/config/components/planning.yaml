@@ -96,10 +96,11 @@ mcp-servers:
     description: Plan item management — create, list, update, transition, and remove items; create and manage reviews
     propagate: providers
     instructions: >
-      Use plan_list_standards when standards context is needed. Create items with
-      plan and title; work is optional (S/M/L), and compatible supplied IDs are allowed.
-      Filter lists by plan or ID prefix; item/review defaults are active/open. Transition
-      state explicitly; close handled reviews and complete items only after validation.
+        Use plan_list_standards when standards context is needed. Create items with
+        plan and title; work is optional (S/M/L). IDs are normally generated, but compatible
+        explicit uppercase item IDs are allowed and must be globally unique.
+        Filter lists by plan or ID prefix; item/review defaults are active/open. Transition
+        state explicitly; close handled reviews and complete items only after validation.
     tool-descriptions:
       plan_list_standards: List configured planning standards.
       plan_create_item: "Create an item. Required: plan, title. Optional: id, work (S/M/L), skill, order, and sections."

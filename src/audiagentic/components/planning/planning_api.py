@@ -198,7 +198,9 @@ def list_standards(project_root: Path) -> list[dict[str, Any]]:
     """
     try:
         from audiagentic.foundation.features.registry import get_implementation
-        impl_id = "planning-local-docs"
+        impl_id = active_implementation_id(project_root)
+        if not impl_id:
+            return []
         desc = get_implementation("agent-planning", impl_id)
         if desc is not None:
             standards = desc.raw.get("standards", [])
