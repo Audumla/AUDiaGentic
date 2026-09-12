@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.planning import planning_paths
+from audiagentic.components.planning.identity import validate_record_id
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import load_yaml_file
 from audiagentic.foundation.system.process import StartupLock
@@ -418,14 +419,19 @@ def next_review_id(project_root: Path, slug: str, parent_id: str) -> str:
 
 
 def find_item(project_root: Path, item_id: str) -> Path | None:
+    validate_record_id(item_id)
+    matches: list[Path] = []
     for directory in (
         planning_paths.plans_active_dir(project_root),
         planning_paths.plans_completed_dir(project_root),
     ):
         if directory.exists():
-            for path in directory.rglob(f"{item_id}.md"):
-                return path
-    return None
+            for path in directory.rglob("*.md"):
+                if path.stem == item_id:
+                    matches.append(path)
+    if len(matches) > 1:
+        raise AudiaGenticError(code="VAL-PLN-032", kind="validation", message="duplicate planning identity")
+    return matches[0] if matches else None
 
 
 def require_item(project_root: Path, item_id: str) -> Path:
