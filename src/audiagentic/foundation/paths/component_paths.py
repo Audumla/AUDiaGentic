@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import make_error
+from audiagentic.foundation.paths.safety import ensure_contained
 
 logger = logging.getLogger(__name__)
 
@@ -100,4 +101,4 @@ def resolve_component_path(
             message=f"path key {key!r} not defined for component {component_id!r}",
             details={"component": component_id, "key": key},
         )
-    return project_root / value
+    return ensure_contained(project_root, value)

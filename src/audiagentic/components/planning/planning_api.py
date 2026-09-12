@@ -64,10 +64,48 @@ _COMPONENT_ID = "agent-planning"
 
 
 def active_implementation_id(project_root: Path) -> str:
-    """Return the enabled implementation ID, or the descriptor-defined default."""
-    from audiagentic.foundation.features.registry import resolve_active_implementation
+    """Return the active planning implementation or fail closed."""
+    from audiagentic.foundation.features.registry import get_implementations
+    from audiagentic.foundation.features.state import get_component_state
 
-    return resolve_active_implementation(project_root, _COMPONENT_ID) or ""
+    try:
+        implementations = get_implementations(_COMPONENT_ID)
+        if not implementations:
+            return ""
+
+        component_state = get_component_state(project_root, _COMPONENT_ID)
+        enabled = [
+            implementation_id
+            for implementation_id, state in (component_state.get("implementations") or {}).items()
+            if implementation_id in implementations
+            and isinstance(state, dict)
+            and state.get("enabled") is True
+        ]
+        if len(enabled) > 1:
+            raise ValueError("multiple planning implementations are enabled")
+        if enabled:
+            return enabled[0]
+
+        defaults = [
+            implementation_id
+            for implementation_id, descriptor in implementations.items()
+            if descriptor.raw.get("default") is True
+        ]
+        if len(defaults) > 1:
+            raise ValueError("multiple planning implementations are default")
+        if defaults:
+            return defaults[0]
+        if len(implementations) == 1:
+            return next(iter(implementations))
+        raise ValueError("planning implementation selection is ambiguous")
+    except AudiaGenticError:
+        raise
+    except Exception as exc:
+        raise AudiaGenticError(
+            code="VAL-PLN-039",
+            kind="validation",
+            message="active planning implementation could not be resolved",
+        ) from exc
 
 
 def planning_status(project_root: Path) -> ComponentStatusPayload:
@@ -196,16 +234,23 @@ def list_standards(project_root: Path) -> list[dict[str, Any]]:
     Reads the standards list from the active implementation descriptor's YAML.
     Returns a list of dicts with id, title, path, and description fields.
     """
-    try:
-        from audiagentic.foundation.features.registry import get_implementation
-        impl_id = active_implementation_id(project_root)
-        if not impl_id:
-            return []
-        desc = get_implementation("agent-planning", impl_id)
-        if desc is not None:
-            standards = desc.raw.get("standards", [])
-            if standards:
-                return standards
-    except Exception:
-        logger.debug("Could not load standards from implementation config", exc_info=True)
-    return []
+    from audiagentic.foundation.features.registry import get_implementation
+
+    impl_id = active_implementation_id(project_root)
+    if not impl_id:
+        return []
+    desc = get_implementation(_COMPONENT_ID, impl_id)
+    if desc is None:
+        raise AudiaGenticError(
+            code="VAL-PLN-039",
+            kind="validation",
+            message="active planning implementation descriptor is missing",
+        )
+    standards = desc.raw.get("standards", [])
+    if not isinstance(standards, list):
+        raise AudiaGenticError(
+            code="VAL-PLN-039",
+            kind="validation",
+            message="active planning implementation standards are malformed",
+        )
+    return standards

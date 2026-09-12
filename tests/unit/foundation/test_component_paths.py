@@ -27,6 +27,15 @@ def test_component_config_paths_override_defaults(tmp_path: Path):
     assert resolve_component_path(tmp_path, "sample", "index", _DEFAULTS) == tmp_path / "docs/data/index.md"
 
 
+def test_component_config_path_must_remain_inside_project_root(tmp_path: Path):
+    marker = tmp_path / ".audiagentic" / "components" / "sample.yaml"
+    marker.parent.mkdir(parents=True)
+    marker.write_text("paths:\n  data-dir: ../outside\n", encoding="utf-8")
+
+    with pytest.raises(AudiaGenticError, match="IO-PATH-001"):
+        resolve_component_path(tmp_path, "sample", "data-dir", _DEFAULTS)
+
+
 def test_undefined_key_raises_val_paths_001(tmp_path: Path):
     with pytest.raises(AudiaGenticError, match="VAL-PATHS-001"):
         resolve_component_path(tmp_path, "sample", "nonexistent-key", _DEFAULTS)

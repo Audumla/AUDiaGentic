@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from audiagentic.components.planning import events as planning_events
-from audiagentic.components.planning import planning_api, planning_paths
+from audiagentic.components.planning import item_store, planning_api, planning_paths
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 # ---------------------------------------------------------------------------
@@ -51,6 +51,43 @@ def test_set_state_to_completed_requires_validation_and_acceptance_criteria(tmp_
     )
     result = planning_api.set_state(tmp_path, "TST01", "completed")
     assert result["state"] == "completed"
+
+
+def test_completed_item_cannot_be_mutated_to_remove_completion_evidence(tmp_path):
+    planning_api.create_item(tmp_path, _make_item())
+    planning_api.set_state(tmp_path, "TST01", "completed")
+
+    with pytest.raises(AudiaGenticError) as exc_info:
+        planning_api.update_item(tmp_path, "TST01", {"validation": ""})
+
+    assert exc_info.value.code == "VAL-PLN-034"
+
+
+def test_review_create_and_parent_delete_share_collection_then_item_order(tmp_path, monkeypatch):
+    planning_api.create_item(tmp_path, _make_item())
+    order = []
+
+    class _Lock:
+        def __init__(self, name):
+            self.name = name
+
+        def __enter__(self):
+            order.append(self.name)
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(item_store, "planning_collection_write_lock", lambda _root: _Lock("collection"))
+    monkeypatch.setattr(item_store, "item_identity_write_lock", lambda _root, _id: _Lock("item"))
+
+    planning_api.create_review(tmp_path, {"review-of": "TST01", "title": "Review"})
+    assert order == ["collection", "item"]
+
+    order.clear()
+    with pytest.raises(AudiaGenticError) as exc_info:
+        planning_api.delete_item(tmp_path, "TST01")
+    assert exc_info.value.code == "VAL-PLN-037"
+    assert order == ["collection", "item"]
 
 
 # ---------------------------------------------------------------------------

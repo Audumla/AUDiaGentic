@@ -46,7 +46,7 @@ def _parse_review_sections(body: str) -> dict[str, str]:
     return sections
 
 
-@item_store.serialize_planning_collection_write
+@item_store.serialize_review_create
 def create_review(project_root: Path, review: dict[str, Any]) -> dict[str, Any]:
     """Create a new review linked to a plan item.
 
