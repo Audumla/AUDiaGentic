@@ -308,6 +308,20 @@ def test_public_item_read_rejects_state_placement_corruption(tmp_path: Path) -> 
         planning_api.get_item(tmp_path, "TST01")
 
 
+def test_exact_item_lookup_skips_unrelated_legacy_corruption(tmp_path: Path) -> None:
+    _item(tmp_path)
+    legacy = tmp_path / "docs" / "planning" / "completed" / "old-plan" / "OLD01.md"
+    legacy.parent.mkdir(parents=True, exist_ok=True)
+    legacy.write_text(
+        "---\nid: OLD01\nplan: old-plan\nstate: done\n---\n\n# Legacy\n",
+        encoding="utf-8",
+    )
+
+    assert planning_api.get_item(tmp_path, "TST01")["id"] == "TST01"
+    with pytest.raises(PlanningIntegrityError):
+        planning_api.get_item(tmp_path, "OLD01")
+
+
 def test_integrity_reports_unknown_current_item_state(tmp_path: Path) -> None:
     path = _item(tmp_path)
     path.write_text(path.read_text(encoding="utf-8").replace("state: pending", "state: invented"), encoding="utf-8")

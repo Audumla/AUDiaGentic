@@ -98,6 +98,10 @@ The exact workflow contract is:
   `active/` and `closed` in `completed/`.
 - Review transitions: `created` → `considered`, `closed`; `considered` →
   `created`, `closed`; `closed` → `created`, `considered`.
+- Item placement mapping: `pending` → `active/`; `in_progress` → `active/`;
+  `completed` → `completed/`; `superseded` → `completed/`; `deprecated` →
+  `completed/`. Review placement mapping: `created` → `active/`; `considered` →
+  `active/`; `closed` → `completed/`.
 - Completion requires non-empty `Validation` and `Acceptance Criteria`, with
   all linked reviews `closed`.
 
