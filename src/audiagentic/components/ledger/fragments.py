@@ -62,7 +62,13 @@ def record_change_event(project_root: Path, event: dict[str, Any]) -> dict[str, 
     _validate_change_event(event)
     event_id = event["event-id"]
     with fragment_write_lock(project_root, event_id):
-        return _record_change_event_locked(project_root, event)
+        result = _record_change_event_locked(project_root, event)
+
+    # Drain only after releasing the fragment lock. The drain path uses the
+    # same per-event lock while materializing/verifying the fragment.
+    if isinstance(event.get("plan-item-ids"), list) and event["plan-item-ids"]:
+        drain_event_outbox(project_root, publisher=publish_ledger_event_recorded)
+    return result
 
 
 def _record_change_event_locked(project_root: Path, event: dict[str, Any]) -> dict[str, Any]:
@@ -94,7 +100,6 @@ def _record_change_event_locked(project_root: Path, event: dict[str, Any]) -> di
                 timestamp_utc=event.get("timestamp-utc"),
                 event=event,
             )
-            drain_event_outbox(project_root, publisher=publish_ledger_event_recorded)
         return {"fragment-path": str(fragment_path), "event-id": event_id, "status": "exists"}
 
     plan_item_ids = event.get("plan-item-ids")
@@ -112,8 +117,5 @@ def _record_change_event_locked(project_root: Path, event: dict[str, Any]) -> di
         )
 
     atomic_write_text(fragment_path, json.dumps(event, indent=2, sort_keys=True))
-
-    if isinstance(plan_item_ids, list) and plan_item_ids:
-        drain_event_outbox(project_root, publisher=publish_ledger_event_recorded)
 
     return {"fragment-path": str(fragment_path), "event-id": event_id, "status": "created"}

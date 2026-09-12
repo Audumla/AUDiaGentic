@@ -362,6 +362,27 @@ def test_ledger_projection_reconciles_pending_planning_journal_first(tmp_path: P
     assert not list(durability.transaction_root(tmp_path).iterdir())
 
 
+def test_ledger_projection_drains_after_fragment_lock_is_released(tmp_path: Path) -> None:
+    _item(tmp_path)
+    result = ledger_fragments.record_change_event(
+        tmp_path,
+        {
+            "event-id": "chg_immediate_projection",
+            "change-class": "audit",
+            "files": ["tests/unit/planning/test_planning_integrity.py"],
+            "technical-summary": "immediate projection",
+            "user-summary-candidate": "immediate projection",
+            "status": "unreleased",
+            "plan-item-ids": ["TST01"],
+        },
+    )
+
+    assert result["status"] == "created"
+    assert not list(ledger_outbox.outbox_dir(tmp_path).glob("*.json"))
+    item_path = tmp_path / "docs" / "planning" / "active" / "test-plan" / "TST01.md"
+    assert "- chg_immediate_projection" in item_path.read_text(encoding="utf-8")
+
+
 def test_sync_drains_authoritative_ledger_outbox_before_consuming_fragments(tmp_path: Path) -> None:
     _item(tmp_path)
     event = {
