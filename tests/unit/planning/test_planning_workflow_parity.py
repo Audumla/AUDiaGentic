@@ -19,10 +19,14 @@ def test_documented_planning_states_match_runtime_workflow() -> None:
     )
     creating_plans = (ROOT / "docs/planning/CREATING_PLANS.md").read_text(encoding="utf-8")
     readme_flat = re.sub(r"\s+", " ", planning_readme)
+    creating_flat = re.sub(r"\s+", " ", creating_plans)
+    config_flat = re.sub(r"\s+", " ", planning_config)
     assert "acceptance_criteria:" in planning_config
     assert "completed items cannot receive or" in planning_readme.lower()
     assert "completed items cannot receive or" in creating_plans.lower()
-    assert "all linked reviews are closed" in re.sub(r"\s+", " ", planning_config.lower())
+    assert "all linked reviews are closed" in config_flat.lower()
+    assert "completion requires non-empty `validation` and `acceptance criteria`" in creating_flat.lower()
+    assert "completion requires non-empty validation and acceptance criteria" in config_flat.lower()
     for kind in ("item", "review"):
         definition = workflow["kinds"][kind]["workflows"]["standard"]
         assert f"start in `{definition['initial']}`" in planning_readme
@@ -35,3 +39,10 @@ def test_documented_planning_states_match_runtime_workflow() -> None:
             assert set(targets).issubset(set(definition["values"]))
             transition = f"`{source}` → " + ", ".join(f"`{target}`" for target in targets)
             assert transition in readme_flat
+    assert "Item initial state: `pending`" in creating_flat
+    assert "Review initial state: `created`" in creating_flat
+    assert "pending/in_progress are placed in active/" in config_flat
+    assert "created/considered are placed in active/" in config_flat
+    for source, targets in workflow["kinds"]["review"]["workflows"]["standard"]["transitions"].items():
+        ascii_transition = f"{source} -> " + ", ".join(targets)
+        assert ascii_transition in config_flat

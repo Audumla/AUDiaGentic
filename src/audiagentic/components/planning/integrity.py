@@ -115,11 +115,9 @@ def build_integrity_index(project_root: Path) -> PlanningIntegrityIndex:
         fm, body = _read(path)
         from audiagentic.components.planning import item_store
 
-        # Older planning notes use states outside the current workflow and are
-        # not live records. Keep them out of the operational index so one
-        # legacy note cannot block a valid current review mutation.
-        if fm.get("state", item_store.initial_state("item")) not in item_store.VALID_STATES:
-            continue
+        # Do not classify a file as legacy merely because its state is invalid.
+        # Unknown states are corruption and must be retained in the audit
+        # output; invalid records are excluded from the operational index below.
         item_id = fm.get("id")
         plan = fm.get("plan")
         if not isinstance(item_id, str) or not isinstance(plan, str):
@@ -150,9 +148,7 @@ def build_integrity_index(project_root: Path) -> PlanningIntegrityIndex:
         fm, body = _read(path)
         from audiagentic.components.planning import item_store
 
-        review_states = item_store.active_states("review") | item_store.terminal_states("review")
-        if fm.get("state", item_store.initial_state("review")) not in review_states:
-            continue
+        # Unknown review states are likewise reported as invalid records.
         review_id = fm.get("id")
         plan = fm.get("plan")
         parent_id = fm.get("review-of")

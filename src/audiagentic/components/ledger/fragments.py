@@ -10,6 +10,7 @@ from typing import Any
 
 from audiagentic.components.ledger.event_outbox import drain as drain_event_outbox
 from audiagentic.components.ledger.event_outbox import enqueue as enqueue_event_delivery
+from audiagentic.components.ledger.event_outbox import fragment_write_lock
 from audiagentic.components.ledger.events import publish_ledger_event_recorded
 from audiagentic.components.ledger.paths import ledger_fragments_dir
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -59,6 +60,12 @@ def record_change_event(project_root: Path, event: dict[str, Any]) -> dict[str, 
         desc = event.get("user-summary-candidate", "")
         event["event-id"] = _generate_event_id(_sanitize_filename(desc) if desc else None)
     _validate_change_event(event)
+    event_id = event["event-id"]
+    with fragment_write_lock(project_root, event_id):
+        return _record_change_event_locked(project_root, event)
+
+
+def _record_change_event_locked(project_root: Path, event: dict[str, Any]) -> dict[str, Any]:
     event_id = event["event-id"]
     fragment_path = _fragment_dir(project_root) / f"{event_id}.json"
 

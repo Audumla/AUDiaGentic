@@ -235,7 +235,13 @@ def _on_ledger_event_recorded(
         if not isinstance(item_id, str):
             continue
         try:
-            with item_store.item_identity_write_lock(project_root, item_id):
+            with item_store.planning_collection_item_write_lock(project_root, item_id):
+                from audiagentic.components.planning.durability import reconcile_pending_mutations
+
+                # Projection is a planning write boundary. Recover any
+                # prepared move before reading the item so this subscriber
+                # cannot overwrite a transaction's expected preimage.
+                reconcile_pending_mutations(project_root)
                 item_path = item_store.require_item(project_root, item_id)
                 fm, body = item_store.parse_frontmatter(
                     item_path.read_text(encoding="utf-8")

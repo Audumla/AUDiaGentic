@@ -7,6 +7,7 @@ import pytest
 
 from audiagentic.components.ledger import event_outbox as ledger_outbox
 from audiagentic.components.ledger import fragments as ledger_fragments
+from audiagentic.components.ledger import sync as ledger_sync
 from audiagentic.components.planning import durability, integrity, item_store, planning_api
 from audiagentic.components.planning import events as planning_events
 from audiagentic.components.planning.contracts import PlanningIntegrityError
@@ -304,3 +305,83 @@ def test_public_item_read_rejects_state_placement_corruption(tmp_path: Path) -> 
     path.unlink()
     with pytest.raises(PlanningIntegrityError, match="canonical placement"):
         planning_api.get_item(tmp_path, "TST01")
+
+
+def test_integrity_reports_unknown_current_item_state(tmp_path: Path) -> None:
+    path = _item(tmp_path)
+    path.write_text(path.read_text(encoding="utf-8").replace("state: pending", "state: invented"), encoding="utf-8")
+
+    errors = integrity.validate_repository_integrity(tmp_path)
+    assert any("invalid identity" in error for error in errors)
+
+
+def test_ledger_projection_reconciles_pending_planning_journal_first(tmp_path: Path, monkeypatch) -> None:
+    path = _item(tmp_path)
+    fm, body = item_store.parse_frontmatter(path.read_text(encoding="utf-8"))
+    updated_body = item_store.append_change_log(body, "now", "test", "journaled update")
+    real_apply = durability._apply_manifest
+
+    def apply_then_crash(root: Path, tx_dir: Path, manifest):
+        real_apply(root, tx_dir, manifest)
+        raise RuntimeError("simulated pending journal")
+
+    monkeypatch.setattr(durability, "_apply_manifest", apply_then_crash)
+    with pytest.raises(RuntimeError, match="pending journal"):
+        durability.commit_mutation(
+            tmp_path,
+            {path: item_store.render_item(fm, updated_body)},
+            operation="test.pending-projection",
+        )
+    monkeypatch.setattr(durability, "_apply_manifest", real_apply)
+
+    planning_events._on_ledger_event_recorded(
+        "ledger.event.recorded",
+        {"project_root": tmp_path, "event-id": "chg_pending_projection", "plan-item-ids": ["TST01"]},
+        {},
+    )
+
+    result = path.read_text(encoding="utf-8")
+    assert "journaled update" in result
+    assert "- chg_pending_projection" in result
+    assert not list(durability.transaction_root(tmp_path).iterdir())
+
+
+def test_sync_drains_authoritative_ledger_outbox_before_consuming_fragments(tmp_path: Path) -> None:
+    _item(tmp_path)
+    event = {
+        "event-id": "chg_sync_recovery",
+        "change-class": "audit",
+        "files": ["tests/unit/planning/test_planning_integrity.py"],
+        "technical-summary": "sync recovery",
+        "user-summary-candidate": "sync recovery",
+        "status": "unreleased",
+        "plan-item-ids": ["TST01"],
+    }
+    ledger_outbox.enqueue(tmp_path, event["event-id"], ["TST01"], event=event)
+
+    result = ledger_sync.sync_current_release_ledger(tmp_path)
+
+    assert result.fragment_count == 1
+    assert event["event-id"] in (tmp_path / "docs" / "releases" / "CURRENT_RELEASE_LEDGER.ndjson").read_text(encoding="utf-8")
+    assert not list(ledger_outbox.outbox_dir(tmp_path).glob("*.json"))
+
+
+def test_ledger_outbox_same_id_different_content_is_serialized(tmp_path: Path) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    def enqueue(summary: str):
+        try:
+            ledger_outbox.enqueue(
+                tmp_path,
+                "chg_concurrent",
+                ["TST01"],
+                event={"event-id": "chg_concurrent", "technical-summary": summary},
+            )
+        except ValueError:
+            return "conflict"
+        return "accepted"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(enqueue, ["first", "second"]))
+
+    assert sorted(outcomes) == ["accepted", "conflict"]

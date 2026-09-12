@@ -41,6 +41,11 @@ def _purge_fragments(project_root: Path, event_ids: set[str]) -> int:
 
 
 def archive_current_ledger(project_root: Path, release_id: str) -> dict[str, Any]:
+    # Direct archive callers must observe the same authoritative outbox
+    # boundary as sync/archive-for-release.
+    from audiagentic.components.ledger.event_outbox import drain as drain_event_outbox
+
+    drain_event_outbox(project_root)
     current_path = current_ledger_path(project_root)
     historical_path = historical_ledger_path(project_root)
 

@@ -81,6 +81,9 @@ completed items retain evidence and have no active reviews.
 An item cannot be completed while a linked review is still `created` or
 `considered`; resolve and close those reviews first.
 
+Completion gate: an item may enter `completed` only when both `Validation` and
+`Acceptance Criteria` are non-empty and every linked review is `closed`.
+
 The workflow contract is authoritative in `workflows.yaml`: items start in
 `pending`, may move between the listed item states only through its declared
 transitions, and reviews start in `created` and follow the declared

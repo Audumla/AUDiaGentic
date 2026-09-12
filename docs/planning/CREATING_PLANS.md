@@ -85,6 +85,22 @@ to verify against.
 Do not mark a parent item completed just because its reviews were incorporated.
 Keep unfinished work pending or in a terminal discard state. Do not leave handled reviews in `created` or `considered`.
 
+The exact workflow contract is:
+
+- Item initial state: `pending`; placements are `pending`/`in_progress` in
+  `active/` and `completed`/`superseded`/`deprecated` in `completed/`.
+- Item transitions: `pending` → `in_progress`, `completed`, `superseded`,
+  `deprecated`; `in_progress` → `pending`, `completed`, `superseded`,
+  `deprecated`; `completed` → `pending`, `in_progress`, `superseded`,
+  `deprecated`; `superseded` → `pending`, `in_progress`; `deprecated` →
+  `pending`, `in_progress`.
+- Review initial state: `created`; placements are `created`/`considered` in
+  `active/` and `closed` in `completed/`.
+- Review transitions: `created` → `considered`, `closed`; `considered` →
+  `created`, `closed`; `closed` → `created`, `considered`.
+- Completion requires non-empty `Validation` and `Acceptance Criteria`, with
+  all linked reviews `closed`.
+
 ---
 
 ## 5. Implementing a plan item
