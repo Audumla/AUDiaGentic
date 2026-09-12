@@ -131,18 +131,19 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
         "created-at": now,
         "path": str(target.relative_to(project_root)),
     }
-    durability.commit_mutation(
-        project_root,
-        {target: item_store.render_item(fm, body)},
-        operation="planning.item.create",
-    )
-    events.publish_planning_event(
+    event_intent = events.build_planning_event(
         events.PLANNING_ITEM_CREATED,
         payload,
         subject_kind="planning-item",
         subject_id=item_id,
-        project_root=project_root,
     )
+    durability.commit_mutation(
+        project_root,
+        {target: item_store.render_item(fm, body)},
+        operation="planning.item.create",
+        planning_event=event_intent,
+    )
+    events.publish_planning_event_intent(project_root, event_intent)
     logger.info("plan item created", extra={"item_id": item_id, "plan": slug})
     return {key: payload[key] for key in ("id", "title", "plan", "path")}
 
@@ -389,18 +390,36 @@ def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any
 
     target = target_dir / path.parent.name / path.name
     target = planning_paths.assert_contained(target_dir, target)
+    event_intent = events.build_planning_event(
+        events.PLANNING_ITEM_STATE_CHANGED,
+        {
+            "ok": True,
+            "id": item_id,
+            "state": canonical_state,
+            "path": str(target.relative_to(project_root)),
+            "item-id": item_id,
+            "old_state": old_state,
+            "new_state": canonical_state,
+            "plan": path.parent.name,
+            "created-by": fm.get("created-by", ""),
+        },
+        subject_kind="planning-item",
+        subject_id=item_id,
+    )
     if target != path:
         durability.commit_mutation(
             project_root,
             {target: item_store.render_item(fm, body)},
             [path],
             operation="planning.item.state",
+            planning_event=event_intent,
         )
     else:
         durability.commit_mutation(
             project_root,
             {target: item_store.render_item(fm, body)},
             operation="planning.item.state",
+            planning_event=event_intent,
         )
 
     # Clean up empty plan dirs in the source state (item was moved away)
@@ -416,20 +435,7 @@ def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any
         "state": canonical_state,
         "path": str(target.relative_to(project_root)),
     }
-    events.publish_planning_event(
-        events.PLANNING_ITEM_STATE_CHANGED,
-        {
-            **result,
-            "item-id": item_id,
-            "old_state": old_state,
-            "new_state": canonical_state,
-            "plan": path.parent.name,
-            "created-by": fm.get("created-by", ""),
-        },
-        subject_kind="planning-item",
-        subject_id=item_id,
-        project_root=project_root,
-    )
+    events.publish_planning_event_intent(project_root, event_intent)
     logger.info("plan item state changed", extra={"item_id": item_id, "state": canonical_state})
     return result
 
@@ -597,17 +603,12 @@ def update_item(
         change_desc,
     )
 
-    durability.commit_mutation(
-        project_root,
-        {path: item_store.render_item(fm, new_body)},
-        operation="planning.item.update",
-    )
-
-    result = {"ok": True, "id": item_id, "path": str(path.relative_to(project_root))}
-    events.publish_planning_event(
+    event_intent = events.build_planning_event(
         events.PLANNING_ITEM_UPDATED,
         {
-            **result,
+            "ok": True,
+            "id": item_id,
+            "path": str(path.relative_to(project_root)),
             "item-id": item_id,
             "plan": path.parent.name,
             "updated_keys": list(updates.keys()),
@@ -615,8 +616,16 @@ def update_item(
         },
         subject_kind="planning-item",
         subject_id=item_id,
-        project_root=project_root,
     )
+    durability.commit_mutation(
+        project_root,
+        {path: item_store.render_item(fm, new_body)},
+        operation="planning.item.update",
+        planning_event=event_intent,
+    )
+
+    result = {"ok": True, "id": item_id, "path": str(path.relative_to(project_root))}
+    events.publish_planning_event_intent(project_root, event_intent)
     logger.info("plan item updated", extra={"item_id": item_id})
     return result
 
@@ -644,19 +653,20 @@ def delete_item(project_root: Path, item_id: str) -> dict[str, Any]:
         "created-by": fm.get("created-by", ""),
         "path": str(path.relative_to(project_root)),
     }
+    event_intent = events.build_planning_event(
+        events.PLANNING_ITEM_DELETED,
+        payload,
+        subject_kind="planning-item",
+        subject_id=item_id,
+    )
     durability.commit_mutation(
         project_root,
         {},
         [path],
         operation="planning.item.delete",
+        planning_event=event_intent,
     )
-    events.publish_planning_event(
-        events.PLANNING_ITEM_DELETED,
-        payload,
-        subject_kind="planning-item",
-        subject_id=item_id,
-        project_root=project_root,
-    )
+    events.publish_planning_event_intent(project_root, event_intent)
     logger.info("plan item deleted", extra={"item_id": item_id})
     state_dirs = [
         planning_paths.plans_active_dir(project_root),

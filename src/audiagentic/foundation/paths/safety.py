@@ -9,6 +9,7 @@ Error codes:
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
@@ -113,6 +114,8 @@ def _normalise(p: Path) -> Path:
 
     Handles Windows drive letters correctly (e.g. ``C:\\`` → ``c:\\``).
     """
+    if os.name != "nt":
+        return p
     parts = list(p.parts)
     if parts and len(parts[0]) >= 1 and ":" in parts[0]:
         # Windows drive letter at the front — lowercase it.

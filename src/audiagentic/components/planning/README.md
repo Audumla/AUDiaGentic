@@ -45,9 +45,11 @@ docs/planning/
   completed/<plan>/reviews/<ITEM-ID>/RV##.md
 ```
 
-New reviews may be created for either pending or completed items. A newly
-created review always starts in `active/` with review state `created`; moving
-the review itself to `closed` archives it under `completed/`.
+New reviews may be created for active items. Completed items cannot receive or
+reopen an active review; create a new planning item when post-completion work
+needs independent review. A newly created review starts in `active/` with
+review state `created`; moving the review itself to `closed` archives it under
+`completed/`.
 
 Each item has YAML frontmatter (`id`, `order`, `plan`, `state`, `priority`, `work`)
 and standard markdown sections: Description, Steps, Files, Validation, Acceptance
@@ -73,9 +75,8 @@ States and transitions are defined in `workflows.yaml`; the Python code reads th
 | `considered` | `active/` | Triaged / incorporated but still open |
 | `closed` | `completed/` | Review handled and archived |
 
-Reviews may target completed items as well as pending ones. This is useful for
-post-implementation audits, regressions found after completion, and code review
-feedback against already-landed work.
+Reviews target active items. This keeps the completed-item invariant truthful:
+completed items retain evidence and have no active reviews.
 
 An item cannot be completed while a linked review is still `created` or
 `considered`; resolve and close those reviews first.
