@@ -105,6 +105,7 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
 
     slug = plan
     target = planning_paths.plans_active_dir(project_root) / slug / f"{item_id}.md"
+    target = planning_paths.assert_contained(planning_paths.plans_active_dir(project_root), target)
     target.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(target, item_store.render_item(fm, body))
 
@@ -362,6 +363,7 @@ def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any
     )
 
     target = target_dir / path.parent.name / path.name
+    target = planning_paths.assert_contained(target_dir, target)
     if target != path:
         target.parent.mkdir(parents=True, exist_ok=True)
         atomic_write_text(target, item_store.render_item(fm, body))
