@@ -27,7 +27,7 @@ Items are markdown documents with YAML frontmatter and structured body sections.
 ## Item structure
 
 ```
-docs/planning/plans/
+docs/planning/
   active/
     <plan-name>/
       <ID>.md       ← pending items
@@ -78,6 +78,6 @@ feedback against already-landed work.
 
 ## Implementations
 
-Declared in `config/components/planning/`. The `local-docs` implementation stores items
-as markdown files in the project tree. Future implementations may back the same MCP interface
-with a hosted issue tracker (Jira, Linear, GitHub Projects).
+Declared in `config/components/planning/`. The `planning-local-docs` implementation stores
+items as markdown files in the project tree. The current runtime contract is local Markdown;
+hosted backends require a separate implementation adapter before they can be selected.

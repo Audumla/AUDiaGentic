@@ -21,6 +21,8 @@ skill: <basic|intermediate|advanced — optional, set later if unknown>
 
 ## Validation
 
+## Acceptance Criteria
+
 ## Effort & Risk
 
 ## Standards
