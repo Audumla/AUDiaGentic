@@ -158,6 +158,8 @@ def list_items(
         ]
 
     slug = plan if plan else None
+    if slug is not None:
+        validate_plan_slug(slug)
     prefix = id_prefix.upper() if id_prefix else None
     results: list[dict[str, Any]] = []
 
@@ -165,7 +167,7 @@ def list_items(
         if not search_dir.exists():
             continue
         for path in sorted(search_dir.rglob("*.md")):
-            if slug and not fnmatch.fnmatch(path.parent.name, slug):
+            if slug and path.parent.name != slug:
                 continue
             fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
             item_id = fm.get("id", path.stem)
