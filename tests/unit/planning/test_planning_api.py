@@ -18,7 +18,14 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 def _make_item(**kwargs) -> dict:
-    base = {"id": "TST01", "plan": "test-plan", "title": "Test item", "created-by": "agent"}
+    base = {
+        "id": "TST01",
+        "plan": "test-plan",
+        "title": "Test item",
+        "created-by": "agent",
+        "validation": "pytest passes",
+        "acceptance_criteria": "item is complete",
+    }
     base.update(kwargs)
     return base
 
@@ -32,7 +39,7 @@ def _completed_dir(root):
 
 
 def test_set_state_to_completed_requires_validation_and_acceptance_criteria(tmp_path):
-    planning_api.create_item(tmp_path, _make_item())
+    planning_api.create_item(tmp_path, _make_item(validation="", acceptance_criteria=""))
     with pytest.raises(AudiaGenticError) as exc_info:
         planning_api.set_state(tmp_path, "TST01", "completed")
     assert exc_info.value.code == "VAL-PLN-034"
@@ -593,7 +600,15 @@ def test_list_items_grouped_returns_groups(tmp_path):
 
 def test_list_items_grouped_with_state_filter(tmp_path):
     planning_api.create_item(tmp_path, {"plan": "test-plan", "title": "Active"})
-    planning_api.create_item(tmp_path, {"plan": "test-plan", "title": "Done"})
+    planning_api.create_item(
+        tmp_path,
+        {
+            "plan": "test-plan",
+            "title": "Done",
+            "validation": "pytest passes",
+            "acceptance_criteria": "item is complete",
+        },
+    )
     planning_api.set_state(tmp_path, "TE02", "completed")
     result = planning_api.list_items_grouped(tmp_path, state="completed")
     assert len(result) == 1
@@ -651,7 +666,16 @@ def test_next_item_id_uses_established_plan_prefix(tmp_path):
 
 
 def test_next_item_id_uses_established_prefix_from_completed_items(tmp_path):
-    planning_api.create_item(tmp_path, {"id": "CC01", "plan": "code-cleanup", "title": "First"})
+    planning_api.create_item(
+        tmp_path,
+        {
+            "id": "CC01",
+            "plan": "code-cleanup",
+            "title": "First",
+            "validation": "pytest passes",
+            "acceptance_criteria": "item is complete",
+        },
+    )
     planning_api.set_state(tmp_path, "CC01", "completed")
     result = planning_api.create_item(tmp_path, {"plan": "code-cleanup", "title": "Second"})
     assert result["id"] == "CC02"
@@ -1093,7 +1117,16 @@ def test_set_state_to_completed_preserves_plan_dir_with_other_items(tmp_path):
 
 
 def test_set_state_to_completed_preserves_plan_dir_with_reviews(tmp_path):
-    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    planning_api.create_item(
+        tmp_path,
+        {
+            "id": "ITM01",
+            "plan": "test-plan",
+            "title": "Item 1",
+            "validation": "pytest passes",
+            "acceptance_criteria": "item is complete",
+        },
+    )
     planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Review 1"})
     planning_api.set_state(tmp_path, "ITM01", "completed")
     active_plan_dir = _active_dir(tmp_path) / "test-plan"
@@ -1152,7 +1185,16 @@ def test_set_review_state_moves_review_between_states(tmp_path):
 
 
 def test_set_review_state_to_closed_cleans_up_empty_active_plan_dir(tmp_path):
-    planning_api.create_item(tmp_path, {"id": "ITM01", "plan": "test-plan", "title": "Item 1"})
+    planning_api.create_item(
+        tmp_path,
+        {
+            "id": "ITM01",
+            "plan": "test-plan",
+            "title": "Item 1",
+            "validation": "pytest passes",
+            "acceptance_criteria": "item is complete",
+        },
+    )
     planning_api.create_review(tmp_path, {"review-of": "ITM01", "title": "Review 1"})
     planning_api.set_state(tmp_path, "ITM01", "completed")
     planning_api.set_review_state(tmp_path, "RV01", "closed")
