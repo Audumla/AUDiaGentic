@@ -20,6 +20,7 @@ from audiagentic.components.planning import planning_paths
 from audiagentic.components.planning.identity import validate_record_id
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import load_yaml_file
+from audiagentic.foundation.paths.safety import resolve_user_path
 from audiagentic.foundation.system.process import StartupLock
 from audiagentic.foundation.workflow import (
     is_known_state,
@@ -143,7 +144,11 @@ def _lock_path(project_root: Path, lock_key: str) -> Path:
     lock file, which works across independent stdio MCP server processes.
     """
     safe_key = re.sub(r"[^A-Za-z0-9_.-]+", "_", lock_key)
-    return project_root / ".audiagentic" / "runtime" / "planning" / "locks" / f"{safe_key}.lock"
+    return resolve_user_path(
+        Path(".audiagentic") / "runtime" / "planning" / "locks" / f"{safe_key}.lock",
+        project_root=project_root,
+        field_name="Planning item lock",
+    )
 
 
 def _item_lock(project_root: Path, item_id: str) -> threading.RLock:

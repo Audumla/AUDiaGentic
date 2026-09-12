@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.ledger.paths import ledger_fragments_dir
 from audiagentic.foundation.event import DeliveryMode
 from audiagentic.foundation.io import atomic_write_json
 from audiagentic.foundation.paths.safety import resolve_user_path
@@ -58,6 +59,13 @@ def drain(project_root: Path, *, publisher: Any | None = None) -> dict[str, int]
     for path in sorted(directory.glob("*.json")):
         try:
             record = json.loads(path.read_text(encoding="utf-8"))
+            # record_change_event queues the projection before writing the
+            # fragment.  Do not publish an intent whose authoritative event
+            # is not durable yet; the next drain will retry it.
+            fragment = ledger_fragments_dir(project_root) / f"{record['event-id']}.json"
+            if not fragment.exists():
+                failed += 1
+                break
             root = Path(record["project-root"])
             publisher(
                 str(record["event-id"]),
