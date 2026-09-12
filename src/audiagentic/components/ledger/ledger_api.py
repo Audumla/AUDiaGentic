@@ -12,6 +12,7 @@ from typing import Any
 from audiagentic.components.ledger.archive import archive_current_ledger
 from audiagentic.components.ledger.audit import generate_audit_and_checkin
 from audiagentic.components.ledger.current_summary import regenerate_current_release
+from audiagentic.components.ledger.event_outbox import drain as drain_event_outbox
 from audiagentic.components.ledger.fragments import record_change_event as _record
 from audiagentic.components.ledger.paths import (
     current_ledger_path,
@@ -27,6 +28,7 @@ from audiagentic.foundation.io import load_ndjson
 
 def record_change(project_root: Path, event: dict[str, Any], *, sync: bool = False) -> dict[str, Any]:
     """Validate and record a change event fragment, optionally syncing the current ledger."""
+    drain_event_outbox(project_root)
     result = _record(project_root, event)
     if not sync:
         return result
@@ -36,6 +38,7 @@ def record_change(project_root: Path, event: dict[str, Any], *, sync: bool = Fal
 
 def record_changes(project_root: Path, events: list[dict[str, Any]], *, sync: bool = False) -> dict[str, Any]:
     """Record multiple change event fragments, optionally syncing once at the end."""
+    drain_event_outbox(project_root)
     results = [_record(project_root, event) for event in events]
     payload: dict[str, Any] = {
         "count": len(results),
@@ -232,6 +235,7 @@ def get_fragment(event_id: str, project_root: Path) -> dict[str, Any]:
 
 def get_status(project_root: Path) -> dict[str, Any]:
     """Return ledger installation state and current fragment/sync status."""
+    drain_event_outbox(project_root)
     marker = ledger_component_marker(project_root)
     manifest = ledger_manifest_path(project_root)
     fragments_dir = ledger_fragments_dir(project_root)

@@ -18,6 +18,12 @@ kinds:
         state-sets:
           terminal: [completed, superseded, deprecated]
           active: [pending, in_progress]
+        placement:
+          pending: active
+          in_progress: active
+          completed: completed
+          superseded: completed
+          deprecated: completed
   review:
     default-workflow: standard
     workflows:
@@ -31,3 +37,7 @@ kinds:
         state-sets:
           terminal: [closed]
           active: [created, considered]
+        placement:
+          created: active
+          considered: active
+          closed: completed

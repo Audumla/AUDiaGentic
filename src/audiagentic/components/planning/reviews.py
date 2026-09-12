@@ -16,14 +16,19 @@ import re
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.planning import events, item_store, planning_paths
+from audiagentic.components.planning import (
+    durability,
+    events,
+    integrity,
+    item_store,
+    planning_paths,
+)
 from audiagentic.components.planning.identity import (
     validate_item_id,
     validate_plan_slug,
     validate_review_id,
 )
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import atomic_write_text
 from audiagentic.foundation.workflow.frontmatter import (
     build_sectioned_body,
     parse_custom_headings,
@@ -146,8 +151,9 @@ def create_review(project_root: Path, review: dict[str, Any]) -> dict[str, Any]:
         / f"{review_id}.md"
     )
     target = planning_paths.assert_contained(planning_paths.plans_active_dir(project_root), target)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_text(target, item_store.render_item(fm, body))
+    parent_body = item_store.parse_frontmatter(parent_path.read_text(encoding="utf-8"))[1]
+    parent_body, _linked = item_store.append_review_link(parent_body, review_id)
+    parent_rendered = item_store.render_item(parent_fm, parent_body)
 
     payload = {
         "id": review_id,
@@ -159,11 +165,20 @@ def create_review(project_root: Path, review: dict[str, Any]) -> dict[str, Any]:
         "reviewed-by": fm.get("reviewed-by", ""),
         "path": str(target.relative_to(project_root)),
     }
+    durability.commit_mutation(
+        project_root,
+        {
+            target: item_store.render_item(fm, body),
+            parent_path: parent_rendered,
+        },
+        operation="planning.review.create",
+    )
     events.publish_planning_event(
         events.PLANNING_REVIEW_CREATED,
         payload,
         subject_kind="planning-review",
         subject_id=review_id,
+        project_root=project_root,
     )
     logger.info(
         "review created", extra={"review_id": review_id, "review_of": parent_id, "plan": slug}
@@ -314,6 +329,7 @@ def get_review(project_root: Path, review_id: str) -> dict[str, Any]:
     path = item_store.require_item(project_root, review_id)
     fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
     item_store.ensure_review(fm, review_id, "VAL-PLN-022")
+    integrity.require_canonical_review_context(project_root, review_id)
     _validate_review_path_metadata(path, fm)
     sections = item_store.parse_item_sections(body)
     sections.update(_parse_review_sections(body))
@@ -326,7 +342,7 @@ def get_review(project_root: Path, review_id: str) -> dict[str, Any]:
     }
 
 
-@item_store.serialize_item_update
+@item_store.serialize_planning_collection_item_write
 def set_review_state(project_root: Path, review_id: str, new_state: str) -> dict[str, Any]:
     """Transition a review to a new state.
 
@@ -337,6 +353,8 @@ def set_review_state(project_root: Path, review_id: str, new_state: str) -> dict
     path = item_store.require_item(project_root, review_id)
     fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
     item_store.ensure_review(fm, review_id, "VAL-PLN-013")
+    integrity.require_canonical_review_context(project_root, review_id)
+    _validate_review_path_metadata(path, fm)
     old_state = fm.get("state", "created")
     item_store.check_transition("review", old_state, new_state)
 
@@ -344,19 +362,22 @@ def set_review_state(project_root: Path, review_id: str, new_state: str) -> dict
     parent_id = path.parent.name
     source_state_dir = path.parent.parent.parent.parent
 
-    target_dir = (
-        planning_paths.plans_completed_dir(project_root)
-        if new_state == "closed"
-        else planning_paths.plans_active_dir(project_root)
-    )
+    target_dir = item_store.state_dir(project_root, new_state, kind="review")
     fm["state"] = new_state
     target = target_dir / slug / "reviews" / parent_id / path.name
     if target != path:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write_text(target, item_store.render_item(fm, body))
-        path.unlink()
+        durability.commit_mutation(
+            project_root,
+            {target: item_store.render_item(fm, body)},
+            [path],
+            operation="planning.review.state",
+        )
     else:
-        atomic_write_text(target, item_store.render_item(fm, body))
+        durability.commit_mutation(
+            project_root,
+            {target: item_store.render_item(fm, body)},
+            operation="planning.review.state",
+        )
 
     item_store.cleanup_empty_plan_dirs(project_root, slug, [source_state_dir])
 
@@ -374,12 +395,13 @@ def set_review_state(project_root: Path, review_id: str, new_state: str) -> dict
         },
         subject_kind="planning-review",
         subject_id=review_id,
+        project_root=project_root,
     )
     logger.info("review state changed", extra={"review_id": review_id, "state": new_state})
     return result
 
 
-@item_store.serialize_item_update
+@item_store.serialize_planning_collection_item_write
 def update_review(project_root: Path, review_id: str, updates: dict[str, Any]) -> dict[str, Any]:
     """Update frontmatter fields and/or body sections of a review.
 
@@ -410,6 +432,8 @@ def update_review(project_root: Path, review_id: str, updates: dict[str, Any]) -
     path = item_store.require_item(project_root, review_id)
     fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
     item_store.ensure_review(fm, review_id, "VAL-PLN-023")
+    integrity.require_canonical_review_context(project_root, review_id)
+    _validate_review_path_metadata(path, fm)
     title = parse_title(body) or review_id
 
     # Start from every heading in the file, so custom sections survive the
@@ -445,7 +469,11 @@ def update_review(project_root: Path, review_id: str, updates: dict[str, Any]) -
         title = updates["title"]
 
     new_body = build_sectioned_body(title, sections, item_store.REVIEW_SECTIONS, custom_headings)
-    atomic_write_text(path, item_store.render_item(fm, new_body))
+    durability.commit_mutation(
+        project_root,
+        {path: item_store.render_item(fm, new_body)},
+        operation="planning.review.update",
+    )
 
     result = {"id": review_id, "path": str(path.relative_to(project_root))}
     events.publish_planning_event(
@@ -460,17 +488,20 @@ def update_review(project_root: Path, review_id: str, updates: dict[str, Any]) -
         },
         subject_kind="planning-review",
         subject_id=review_id,
+        project_root=project_root,
     )
     logger.info("review updated", extra={"review_id": review_id})
     return result
 
 
-@item_store.serialize_item_update
+@item_store.serialize_planning_collection_item_write
 def delete_review(project_root: Path, review_id: str) -> dict[str, Any]:
     """Permanently delete a review."""
     path = item_store.require_item(project_root, review_id)
-    fm, _body = parse_frontmatter(path.read_text(encoding="utf-8"))
+    fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
     item_store.ensure_review(fm, review_id, "VAL-PLN-024")
+    context = integrity.require_canonical_review_context(project_root, review_id)
+    _validate_review_path_metadata(path, fm)
     slug = path.parent.parent.parent.name
     source_state_dir = path.parent.parent.parent.parent
     payload = {
@@ -482,12 +513,22 @@ def delete_review(project_root: Path, review_id: str) -> dict[str, Any]:
         "reviewed-by": fm.get("reviewed-by", ""),
         "path": str(path.relative_to(project_root)),
     }
-    path.unlink()
+    parent_body = context.parent.get("_body", "")
+    parent_body, _removed = item_store.remove_review_link(parent_body, review_id)
+    parent_fm = {key: value for key, value in context.parent.items() if key != "_body"}
+    parent_rendered = item_store.render_item(parent_fm, parent_body)
+    durability.commit_mutation(
+        project_root,
+        {context.parent_path: parent_rendered},
+        [path],
+        operation="planning.review.delete",
+    )
     events.publish_planning_event(
         events.PLANNING_REVIEW_DELETED,
         payload,
         subject_kind="planning-review",
         subject_id=review_id,
+        project_root=project_root,
     )
     logger.info("review deleted", extra={"review_id": review_id})
     item_store.cleanup_empty_plan_dirs(project_root, slug, [source_state_dir])

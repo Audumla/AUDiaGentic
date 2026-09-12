@@ -45,8 +45,11 @@ __all__ = [
     "active_states",
     "terminal_states",
     "initial_state",
+    "placement_for_state",
     "append_change_log",
     "append_ledger_event",
+    "append_review_link",
+    "remove_review_link",
     "item_identity_write_lock",
     "serialize_item_update",
     "build_item_body",
@@ -261,6 +264,33 @@ def initial_state(kind: str = "item") -> str:
     return initial
 
 
+def placement_for_state(kind: str, state: str) -> str:
+    """Return the physical bucket for a workflow state.
+
+    The current Markdown backend intentionally has only ``active`` and
+    ``completed`` trees.  A workflow may still add semantic states without
+    creating one directory per state; placement is derived from state sets and
+    an optional explicit mapping rather than comparing a state name to
+    ``closed`` or ``completed`` in CRUD code.
+    """
+    workflow = load_workflow(_WORKFLOWS_PATH, kind)
+    if not is_known_state(workflow, state):
+        raise AudiaGenticError(
+            code="VAL-PLN-006",
+            kind="validation",
+            message=f"invalid {kind} state: {state!r}",
+            details={"valid": list(workflow.get("values", []))},
+        )
+    placement = workflow.get("placement") or {}
+    if isinstance(placement, dict):
+        explicit = placement.get(state)
+        if explicit in {"active", "completed"}:
+            return str(explicit)
+    if state in terminal_states(kind):
+        return "completed"
+    return "active"
+
+
 def check_transition(kind: str, old: str, new: str) -> None:
     """Validate an ``old -> new`` state transition for a planning kind.
 
@@ -284,17 +314,13 @@ def check_transition(kind: str, old: str, new: str) -> None:
         )
 
 
-def state_dir(project_root: Path, state: str) -> Path:
-    if state in active_states("item"):
+def state_dir(project_root: Path, state: str, kind: str = "item") -> Path:
+    bucket = placement_for_state(kind, state)
+    if bucket == "active":
         return planning_paths.plans_active_dir(project_root)
-    if state in terminal_states("item"):
+    if bucket == "completed":
         return planning_paths.plans_completed_dir(project_root)
-    raise AudiaGenticError(
-        code="VAL-PLN-006",
-        kind="validation",
-        message=f"invalid state: {state!r}",
-        details={"valid": sorted(VALID_STATES)},
-    )
+    raise AudiaGenticError(code="VAL-PLN-006", kind="validation", message=f"invalid state: {state!r}")
 
 
 def parse_item_sections(body: str) -> dict[str, str]:
@@ -682,6 +708,67 @@ def append_ledger_event(body: str, event_id: str) -> tuple[str, bool]:
 
     updated = "\n".join(rebuilt).rstrip() + "\n"
     return updated, not already_present
+
+
+_REVIEW_LINK_HEADING = "## Reviews"
+_REVIEW_LINK_RE = re.compile(r"^\s*[-+*]\s+(RV\d+)\s*$")
+
+
+def _review_section_bounds(lines: list[str]) -> tuple[int, int] | None:
+    for index, line in enumerate(lines):
+        if line.strip().lower() == _REVIEW_LINK_HEADING.lower():
+            end = len(lines)
+            for next_index in range(index + 1, len(lines)):
+                if _HEADING_RE.match(lines[next_index]):
+                    end = next_index
+                    break
+            return index, end
+    return None
+
+
+def append_review_link(body: str, review_id: str) -> tuple[str, bool]:
+    """Add one canonical review ID to an item's ``Reviews`` section."""
+    lines = body.splitlines()
+    bounds = _review_section_bounds(lines)
+    if bounds is None:
+        if lines and lines[-1].strip():
+            lines.append("")
+        lines.extend([_REVIEW_LINK_HEADING, "", f"- {review_id}"])
+        return "\n".join(lines).rstrip() + "\n", True
+    start, end = bounds
+    for line in lines[start + 1 : end]:
+        match = _REVIEW_LINK_RE.match(line)
+        if match and match.group(1) == review_id:
+            return body, False
+    insertion = end
+    while insertion > start + 1 and not lines[insertion - 1].strip():
+        insertion -= 1
+    lines[insertion:insertion] = [f"- {review_id}"]
+    return "\n".join(lines).rstrip() + "\n", True
+
+
+def remove_review_link(body: str, review_id: str) -> tuple[str, bool]:
+    """Remove a review ID from an item's ``Reviews`` section."""
+    lines = body.splitlines()
+    bounds = _review_section_bounds(lines)
+    if bounds is None:
+        return body, False
+    start, end = bounds
+    filtered = [
+        line
+        for line in lines[start + 1 : end]
+        if not (_REVIEW_LINK_RE.match(line) and _REVIEW_LINK_RE.match(line).group(1) == review_id)
+    ]
+    if len(filtered) == end - start - 1:
+        return body, False
+    # Drop the section when its only content was the removed link.
+    if not any(line.strip() for line in filtered):
+        del lines[start:end]
+        while start < len(lines) and not lines[start].strip():
+            del lines[start]
+    else:
+        lines[start + 1 : end] = filtered
+    return "\n".join(lines).rstrip() + "\n", True
 
 
 def parse_change_log(body: str) -> list[dict[str, str]]:

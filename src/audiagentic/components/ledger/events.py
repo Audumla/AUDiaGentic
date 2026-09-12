@@ -21,7 +21,9 @@ def publish_ledger_event_recorded(
     *,
     source: Any = None,
     timestamp_utc: str | None = None,
-) -> None:
+    raise_on_failure: bool = False,
+    delivery_mode: DeliveryMode = DeliveryMode.ASYNC,
+) -> bool:
     """Publish ledger.event.recorded after a change event is successfully recorded.
 
     Used to drive automatic ledger-to-plan linkage: the planning component
@@ -42,11 +44,15 @@ def publish_ledger_event_recorded(
                 "subject": {"kind": "ledger-event", "id": event_id},
                 "provenance": {"source": source, "timestamp-utc": timestamp_utc},
             },
-            mode=DeliveryMode.ASYNC,
+            mode=delivery_mode,
         )
+        return True
     except Exception:  # noqa: BLE001
         logger.error(
             "failed to publish ledger.event.recorded",
             extra={"event-id": event_id, "plan-item-ids": plan_item_ids},
             exc_info=True,
         )
+        if raise_on_failure:
+            raise
+        return False

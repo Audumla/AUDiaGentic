@@ -24,6 +24,10 @@ PageLimit = Annotated[int, Field(ge=1, le=100)]
 Offset = Annotated[int, Field(ge=0)]
 
 
+class PlanningIntegrityError(ValueError):
+    """Persisted planning data violates a cross-record invariant."""
+
+
 class _PlanningModel(BaseModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 

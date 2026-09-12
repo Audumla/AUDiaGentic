@@ -22,10 +22,12 @@ _DEFAULT_PATHS: dict[str, str] = {
 
 
 def _resolve(project_root: Path, key: str) -> Path:
+    from audiagentic.components.planning.durability import reconcile_pending_mutations
     from audiagentic.components.planning.planning_api import active_implementation_id
     from audiagentic.foundation.features.registry import get_implementation
-    from audiagentic.foundation.paths.safety import ensure_contained
+    from audiagentic.foundation.paths.safety import resolve_user_path
 
+    reconcile_pending_mutations(project_root)
     implementation_id = active_implementation_id(project_root)
     if implementation_id:
         descriptor = get_implementation(_COMPONENT_ID, implementation_id)
@@ -39,7 +41,7 @@ def _resolve(project_root: Path, key: str) -> Path:
             )
     else:
         value = _DEFAULT_PATHS[key]
-    return ensure_contained(project_root, value)
+    return resolve_user_path(value, project_root=project_root, field_name=f"Planning {key}")
 
 
 def plans_root(project_root: Path) -> Path:
