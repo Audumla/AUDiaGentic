@@ -8,10 +8,16 @@ from typing import Any
 
 from audiagentic.components.planning import planning_paths
 from audiagentic.components.planning.contracts import PlanningIntegrityError
-from audiagentic.components.planning.identity import validate_item_id, validate_review_id
+from audiagentic.components.planning.identity import (
+    validate_item_id,
+    validate_plan_slug,
+    validate_review_id,
+)
 from audiagentic.foundation.workflow.frontmatter import parse_frontmatter
 
 _REVIEW_LINK_RE = re.compile(r"(?<![A-Za-z0-9])RV\d+(?![A-Za-z0-9])")
+_ITEM_FILENAME_RE = re.compile(r"^[A-Z]+\d+$", re.IGNORECASE)
+_REVIEW_FILENAME_RE = re.compile(r"^RV\d+$", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -44,6 +50,8 @@ def _item_paths(project_root: Path) -> list[Path]:
         if not state_dir.exists():
             continue
         for path in state_dir.glob("*/*.md"):
+            if not _ITEM_FILENAME_RE.fullmatch(path.stem):
+                continue
             paths.append(planning_paths.assert_contained(state_dir, path))
     return sorted(paths)
 
@@ -57,6 +65,8 @@ def _review_paths(project_root: Path) -> list[Path]:
         if not state_dir.exists():
             continue
         for path in state_dir.glob("*/reviews/*/*.md"):
+            if not _REVIEW_FILENAME_RE.fullmatch(path.stem):
+                continue
             paths.append(planning_paths.assert_contained(state_dir, path))
     return sorted(paths)
 
@@ -90,6 +100,7 @@ def build_integrity_index(project_root: Path) -> PlanningIntegrityIndex:
     review_paths: dict[str, Path] = {}
     reviews: dict[str, dict[str, Any]] = {}
     review_backlinks: dict[str, list[tuple[str, str]]] = {}
+    item_ids: dict[str, tuple[str, str]] = {}
 
     for path in _item_paths(project_root):
         fm, body = _read(path)
@@ -97,12 +108,20 @@ def build_integrity_index(project_root: Path) -> PlanningIntegrityIndex:
         plan = fm.get("plan")
         if not isinstance(item_id, str) or not isinstance(plan, str):
             raise PlanningIntegrityError(f"item has incomplete identity: {path}")
+        try:
+            validate_item_id(item_id)
+            validate_plan_slug(plan)
+        except Exception as exc:
+            raise PlanningIntegrityError(f"item has invalid identity: {path}") from exc
         key = (plan, item_id)
         if key in item_paths:
             raise PlanningIntegrityError(f"duplicate item identity {plan}/{item_id}")
+        if item_id in item_ids:
+            raise PlanningIntegrityError(f"duplicate item identity {item_id}")
         if path.stem != item_id or path.parent.name != plan:
             raise PlanningIntegrityError(f"item path metadata mismatch: {path}")
         item_paths[key] = path
+        item_ids[item_id] = key
         items[key] = {**fm, "_body": body}
         for review_id in review_links(body):
             review_backlinks.setdefault(review_id, []).append(key)
@@ -115,6 +134,11 @@ def build_integrity_index(project_root: Path) -> PlanningIntegrityIndex:
         if not isinstance(review_id, str) or not isinstance(plan, str) or not isinstance(parent_id, str):
             raise PlanningIntegrityError(f"review has incomplete identity: {path}")
         validate_review_id(review_id)
+        try:
+            validate_plan_slug(plan)
+            validate_item_id(parent_id)
+        except Exception as exc:
+            raise PlanningIntegrityError(f"review has invalid identity: {path}") from exc
         if review_id in review_paths:
             raise PlanningIntegrityError(f"duplicate review identity {review_id}")
         if (

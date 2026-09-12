@@ -92,6 +92,7 @@ class EventBusProtocol(ABC):
         payload: dict[str, Any],
         metadata: dict[str, Any] | None = None,
         mode: DeliveryMode = DeliveryMode.SYNC,
+        propagate_subscriber_errors: bool = False,
     ) -> None:
         pass
 
@@ -100,6 +101,7 @@ class EventBusProtocol(ABC):
         self,
         envelope: EventEnvelope,
         mode: DeliveryMode = DeliveryMode.SYNC,
+        propagate_subscriber_errors: bool = False,
     ) -> None:
         pass
 
@@ -207,6 +209,7 @@ class EventBus(EventBusProtocol):
         payload: dict[str, Any],
         metadata: dict[str, Any] | None = None,
         mode: DeliveryMode = DeliveryMode.SYNC,
+        propagate_subscriber_errors: bool = False,
     ) -> None:
         metadata = metadata or {}
 
@@ -216,19 +219,24 @@ class EventBus(EventBusProtocol):
             metadata=metadata,
             source_component=self._source_component,
         )
-        self.publish_envelope(envelope, mode=mode)
+        self.publish_envelope(
+            envelope,
+            mode=mode,
+            propagate_subscriber_errors=propagate_subscriber_errors,
+        )
 
     def publish_envelope(
         self,
         envelope: EventEnvelope,
         mode: DeliveryMode = DeliveryMode.SYNC,
+        propagate_subscriber_errors: bool = False,
     ) -> None:
         """Publish an already-created canonical event envelope."""
         self._require_open("publish")
         self._check_cycle(envelope)
 
         if mode == DeliveryMode.SYNC:
-            self._dispatch_sync(envelope)
+            self._dispatch_sync(envelope, propagate_subscriber_errors=propagate_subscriber_errors)
         else:
             self._dispatch_async(envelope)
 
@@ -284,7 +292,12 @@ class EventBus(EventBusProtocol):
                 return len(self._subscriptions.get(pattern, []))
             return sum(len(handles) for handles in self._subscriptions.values())
 
-    def _dispatch_sync(self, envelope: EventEnvelope) -> None:
+    def _dispatch_sync(
+        self,
+        envelope: EventEnvelope,
+        *,
+        propagate_subscriber_errors: bool = False,
+    ) -> None:
         """Dispatch event synchronously to all matching subscribers.
 
         Subscriber isolation invariant: handler failures are wrapped in
@@ -317,6 +330,8 @@ class EventBus(EventBusProtocol):
                         "error_code": error.code,
                     },
                 )
+                if propagate_subscriber_errors:
+                    raise error from e
 
     def _dispatch_async(self, envelope: EventEnvelope) -> None:
         """Dispatch event asynchronously to all matching subscribers."""

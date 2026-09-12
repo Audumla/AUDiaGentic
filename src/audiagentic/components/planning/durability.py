@@ -20,17 +20,27 @@ from typing import Any
 
 from audiagentic.components.planning.contracts import PlanningIntegrityError
 from audiagentic.foundation.io import atomic_write_bytes, atomic_write_json
+from audiagentic.foundation.paths.safety import resolve_user_path
+from audiagentic.foundation.system.process import StartupLock
 
 _JOURNAL_DIR = ".audiagentic/runtime/planning"
 _TXNS_DIR = "txns"
 
 
 def journal_root(project_root: Path) -> Path:
-    return project_root / _JOURNAL_DIR
+    return resolve_user_path(_JOURNAL_DIR, project_root=project_root, field_name="Planning journal")
 
 
 def transaction_root(project_root: Path) -> Path:
-    return journal_root(project_root) / _TXNS_DIR
+    return resolve_user_path(
+        Path(_JOURNAL_DIR) / _TXNS_DIR,
+        project_root=project_root,
+        field_name="Planning transaction journal",
+    )
+
+
+def _journal_lock(project_root: Path) -> StartupLock:
+    return StartupLock(journal_root(project_root) / "journal.lock", timeout=30.0)
 
 
 def _resolved(root: Path, path: Path) -> Path:
@@ -157,6 +167,12 @@ def _persist_event_from_manifest(project_root: Path, manifest: Mapping[str, Any]
 
 def reconcile_pending_mutations(project_root: Path) -> int:
     """Roll forward all prepared transactions; return the count repaired."""
+    with _journal_lock(project_root):
+        return _reconcile_pending_mutations(project_root)
+
+
+def _reconcile_pending_mutations(project_root: Path) -> int:
+    """Roll forward pending transactions while the journal lock is held."""
     root = transaction_root(project_root)
     if not root.exists():
         return 0
@@ -181,50 +197,51 @@ def commit_mutation(
     planning_event: Mapping[str, Any] | None = None,
 ) -> str:
     """Durably apply a set of writes/deletes and return its transaction ID."""
-    reconcile_pending_mutations(project_root)
-    tx_id = uuid.uuid4().hex
-    tx_dir = transaction_root(project_root) / tx_id
-    tx_dir.mkdir(parents=True, exist_ok=False)
-    write_intents: list[dict[str, Any]] = []
-    for index, (path, content) in enumerate(writes.items()):
-        data = content.encode("utf-8") if isinstance(content, str) else bytes(content)
-        payload_name = f"write-{index:03d}.payload"
-        atomic_write_bytes(tx_dir / payload_name, data)
-        resolved_path = _resolved(project_root, path)
-        previous = _sha256(resolved_path.read_bytes()) if resolved_path.exists() else None
-        write_intents.append(
-            {
-                "relative-path": _relative(project_root, path),
-                "payload": payload_name,
-                "sha256": _sha256(data),
-                "previous-sha256": previous,
-            }
-        )
-    delete_intents: list[dict[str, Any]] = []
-    for path in deletes:
-        resolved = _resolved(project_root, path)
-        expected = _sha256(resolved.read_bytes()) if resolved.exists() else None
-        delete_intents.append({"relative-path": _relative(project_root, resolved), "sha256": expected})
-    manifest: dict[str, Any] = {
-        "version": 1,
-        "mutation-id": tx_id,
-        "operation": operation,
-        "phase": "prepared",
-        "writes": write_intents,
-        "deletes": delete_intents,
-    }
-    if planning_event is not None:
-        manifest["planning-event"] = dict(planning_event)
-    _durable_json(tx_dir / "manifest.json", manifest)
-    try:
-        _apply_manifest(project_root, tx_dir, manifest)
-        _persist_event_from_manifest(project_root, manifest)
-        _durable_json(tx_dir / "manifest.json", {**manifest, "phase": "committed"})
-        shutil.rmtree(tx_dir)
-    except Exception:
-        # Leave the prepared transaction for a later first-use reconciliation.
-        raise
-    return tx_id
+    with _journal_lock(project_root):
+        _reconcile_pending_mutations(project_root)
+        tx_id = uuid.uuid4().hex
+        tx_dir = transaction_root(project_root) / tx_id
+        tx_dir.mkdir(parents=True, exist_ok=False)
+        write_intents: list[dict[str, Any]] = []
+        for index, (path, content) in enumerate(writes.items()):
+            data = content.encode("utf-8") if isinstance(content, str) else bytes(content)
+            payload_name = f"write-{index:03d}.payload"
+            atomic_write_bytes(tx_dir / payload_name, data)
+            resolved_path = _resolved(project_root, path)
+            previous = _sha256(resolved_path.read_bytes()) if resolved_path.exists() else None
+            write_intents.append(
+                {
+                    "relative-path": _relative(project_root, path),
+                    "payload": payload_name,
+                    "sha256": _sha256(data),
+                    "previous-sha256": previous,
+                }
+            )
+        delete_intents: list[dict[str, Any]] = []
+        for path in deletes:
+            resolved = _resolved(project_root, path)
+            expected = _sha256(resolved.read_bytes()) if resolved.exists() else None
+            delete_intents.append({"relative-path": _relative(project_root, resolved), "sha256": expected})
+        manifest: dict[str, Any] = {
+            "version": 1,
+            "mutation-id": tx_id,
+            "operation": operation,
+            "phase": "prepared",
+            "writes": write_intents,
+            "deletes": delete_intents,
+        }
+        if planning_event is not None:
+            manifest["planning-event"] = dict(planning_event)
+        _durable_json(tx_dir / "manifest.json", manifest)
+        try:
+            _apply_manifest(project_root, tx_dir, manifest)
+            _persist_event_from_manifest(project_root, manifest)
+            _durable_json(tx_dir / "manifest.json", {**manifest, "phase": "committed"})
+            shutil.rmtree(tx_dir)
+        except Exception:
+            # Leave the prepared transaction for a later first-use reconciliation.
+            raise
+        return tx_id
 
 
 __all__ = ["commit_mutation", "journal_root", "reconcile_pending_mutations", "transaction_root"]
