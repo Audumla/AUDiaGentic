@@ -91,6 +91,11 @@ transitions, and reviews start in `created` and follow the declared
 special case, selects `active/` versus `completed/`.
 Items start in `pending`; reviews start in `created`.
 
+Item placement mapping: `pending` → `active/`; `in_progress` → `active/`;
+`completed` → `completed/`; `superseded` → `completed/`; `deprecated` →
+`completed/`. Review placement mapping: `created` → `active/`; `considered` →
+`active/`; `closed` → `completed/`.
+
 Item transitions: `pending` → `in_progress`, `completed`, `superseded`,
 `deprecated`; `in_progress` → `pending`, `completed`, `superseded`,
 `deprecated`; `completed` → `pending`, `in_progress`, `superseded`,

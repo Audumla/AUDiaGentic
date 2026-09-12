@@ -112,6 +112,10 @@ mcp-servers:
         in_progress, superseded, deprecated; superseded -> pending, in_progress; and
         deprecated -> pending, in_progress. Review transitions are created -> considered,
         closed; considered -> created, closed; and closed -> created, considered.
+        Item placement mapping is pending -> active/, in_progress -> active/,
+        completed -> completed/, superseded -> completed/, deprecated -> completed/.
+        Review placement mapping is created -> active/, considered -> active/,
+        closed -> completed/.
         Completion requires non-empty Validation and Acceptance Criteria and all linked
         reviews closed.
     tool-descriptions:
