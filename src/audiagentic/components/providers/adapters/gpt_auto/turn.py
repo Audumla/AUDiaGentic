@@ -219,14 +219,20 @@ class _ResponseCompletionPolicy:
 
     @property
     def start_bound_seconds(self) -> float:
+        if getattr(self.turn_config, "response_observation_unbounded", False):
+            return float("inf")
         return self._or_infinite(self.turn_config.response_start_timeout_seconds)
 
     @property
     def progress_lease_seconds(self) -> float:
+        if getattr(self.turn_config, "response_observation_unbounded", False):
+            return float("inf")
         return self._or_infinite(self.turn_config.response_stall_timeout_seconds)
 
     @property
     def soft_grace_cap_seconds(self) -> float:
+        if getattr(self.turn_config, "response_observation_unbounded", False):
+            return float("inf")
         stall = self.turn_config.response_stall_timeout_seconds
         return (stall / 5) if stall else float("inf")
 
@@ -246,6 +252,8 @@ class _ResponseCompletionPolicy:
 
     @property
     def candidate_max_verification_window_seconds(self) -> float:
+        if getattr(self.turn_config, "response_observation_unbounded", False):
+            return float("inf")
         stall = self.turn_config.response_stall_timeout_seconds
         configured_override = getattr(
             self.turn_config, "response_generating_override_stability_seconds", None
@@ -262,11 +270,15 @@ class _ResponseCompletionPolicy:
 
     @property
     def suspect_grace_seconds(self) -> float:
+        if getattr(self.turn_config, "response_observation_unbounded", False):
+            return float("inf")
         stall = self.turn_config.response_stall_timeout_seconds
         return (stall / 5) if stall else float("inf")
 
     @property
     def absolute_ceiling_seconds(self) -> float:
+        if getattr(self.turn_config, "response_observation_unbounded", False):
+            return float("inf")
         return self._or_infinite(self.turn_config.response_timeout_seconds)
 
 
