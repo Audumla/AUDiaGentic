@@ -88,6 +88,15 @@ transitions, and reviews start in `created` and follow the declared
 special case, selects `active/` versus `completed/`.
 Items start in `pending`; reviews start in `created`.
 
+Item transitions: `pending` → `in_progress`, `completed`, `superseded`,
+`deprecated`; `in_progress` → `pending`, `completed`, `superseded`,
+`deprecated`; `completed` → `pending`, `in_progress`, `superseded`,
+`deprecated`; `superseded` → `pending`, `in_progress`; `deprecated` →
+`pending`, `in_progress`.
+
+Review transitions: `created` → `considered`, `closed`; `considered` →
+`created`, `closed`; `closed` → `created`, `considered`.
+
 Each newly created review is recorded in the parent's `Reviews` section. That
 link is part of the local repository integrity contract: review mutations fail
 closed when the review, parent, plan, or backlink disagree. Planning writes use

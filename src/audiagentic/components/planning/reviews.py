@@ -40,14 +40,7 @@ logger = logging.getLogger(__name__)
 
 def _validate_review_path_metadata(path: Path, fm: dict[str, Any]) -> None:
     """Reject a review whose frontmatter disagrees with its canonical path."""
-    parent_id = path.parent.name
-    slug = path.parent.parent.parent.name
-    if fm.get("id") != path.stem or fm.get("review-of") != parent_id or fm.get("plan") != slug:
-        raise AudiaGenticError(
-            code="VAL-PLN-035",
-            kind="validation",
-            message="review metadata does not match its canonical path",
-        )
+    item_store.validate_record_path(path, fm, "review")
 
 
 def _parse_review_sections(body: str) -> dict[str, str]:
@@ -246,8 +239,10 @@ def list_reviews(
                 continue
             planning_paths.assert_contained(search_dir, path)
             fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
+            if not fm:
+                continue
             review_id = fm.get("id", path.stem)
-            validate_review_id(path.stem)
+            item_store.validate_record_path(path, fm, "review")
             _validate_review_path_metadata(path, fm)
             persisted_state = fm.get("state", "created")
             if state not in (None, "all", "open") and persisted_state != state:

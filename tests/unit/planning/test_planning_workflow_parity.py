@@ -1,6 +1,7 @@
 """Keep planning documentation and tool guidance aligned with workflows.yaml."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from audiagentic.foundation.io import load_yaml_file
@@ -16,8 +17,12 @@ def test_documented_planning_states_match_runtime_workflow() -> None:
     planning_config = (ROOT / "src/audiagentic/config/components/planning.yaml").read_text(
         encoding="utf-8"
     )
+    creating_plans = (ROOT / "docs/planning/CREATING_PLANS.md").read_text(encoding="utf-8")
+    readme_flat = re.sub(r"\s+", " ", planning_readme)
     assert "acceptance_criteria:" in planning_config
     assert "completed items cannot receive or" in planning_readme.lower()
+    assert "completed items cannot receive or" in creating_plans.lower()
+    assert "all linked reviews are closed" in re.sub(r"\s+", " ", planning_config.lower())
     for kind in ("item", "review"):
         definition = workflow["kinds"][kind]["workflows"]["standard"]
         assert f"start in `{definition['initial']}`" in planning_readme
@@ -28,3 +33,5 @@ def test_documented_planning_states_match_runtime_workflow() -> None:
         for source, targets in definition["transitions"].items():
             assert source in definition["values"]
             assert set(targets).issubset(set(definition["values"]))
+            transition = f"`{source}` → " + ", ".join(f"`{target}`" for target in targets)
+            assert transition in readme_flat

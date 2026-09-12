@@ -85,6 +85,7 @@ def record_change_event(project_root: Path, event: dict[str, Any]) -> dict[str, 
                 plan_item_ids,
                 source=event.get("source"),
                 timestamp_utc=event.get("timestamp-utc"),
+                event=event,
             )
             drain_event_outbox(project_root, publisher=publish_ledger_event_recorded)
         return {"fragment-path": str(fragment_path), "event-id": event_id, "status": "exists"}
@@ -100,6 +101,7 @@ def record_change_event(project_root: Path, event: dict[str, Any]) -> dict[str, 
             plan_item_ids,
             source=event.get("source"),
             timestamp_utc=event.get("timestamp-utc"),
+            event=event,
         )
 
     atomic_write_text(fragment_path, json.dumps(event, indent=2, sort_keys=True))
