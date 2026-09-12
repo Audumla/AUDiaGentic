@@ -4,8 +4,8 @@ id: agent-planning
 display-name: Agent Planning
 description: >
   Plan item management — track multi-step implementation work across sessions.
-  Implementations may back this with local markdown files, a hosted issue tracker,
-  or any other planning store; only one is active at a time.
+  The supported implementation currently stores records in local Markdown files;
+  additional stores require their own registered adapter and contract.
 implementation-cardinality: exclusive
 status-hook: audiagentic.components.planning.planning_api.planning_status
 lifecycle-observer: audiagentic.components.planning.events
@@ -100,7 +100,8 @@ mcp-servers:
         plan and title; work is optional (S/M/L). IDs are normally generated, but compatible
         explicit uppercase item IDs are allowed and must be globally unique.
         Filter lists by plan or ID prefix; item/review defaults are active/open. Transition
-        state explicitly; close handled reviews and complete items only after validation.
+        state explicitly; close handled reviews and complete items only after validation
+        and acceptance criteria are recorded.
     tool-descriptions:
       plan_list_standards: List configured planning standards.
       plan_create_item: "Create an item. Required: plan, title. Optional: id, work (S/M/L), skill, order, and sections."
