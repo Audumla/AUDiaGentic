@@ -80,6 +80,14 @@ feedback against already-landed work.
 An item cannot be completed while a linked review is still `created` or
 `considered`; resolve and close those reviews first.
 
+Each newly created review is recorded in the parent's `Reviews` section. That
+link is part of the local repository integrity contract: review mutations fail
+closed when the review, parent, plan, or backlink disagree. Planning writes use
+a local roll-forward journal under `.audiagentic/runtime/planning/`; a later
+planning API use reconciles prepared moves before serving the request. Planning
+events and ledger-to-plan projections use durable outboxes with at-least-once
+delivery; consumers must be idempotent.
+
 ## Implementations
 
 Declared in `config/components/planning/`. The `planning-local-docs` implementation stores

@@ -55,6 +55,29 @@ def ensure_contained(
     return resolved
 
 
+def resolve_user_path(
+    requested_path: str | Path,
+    *,
+    project_root: str | Path,
+    field_name: str = "Path",
+) -> Path:
+    """Resolve a user/configuration path under *project_root*.
+
+    This named wrapper is the shared boundary for component-local paths.  It
+    deliberately delegates to :func:`ensure_contained`, so callers cannot
+    accidentally reintroduce a lexical-only or fail-open resolver.
+    """
+    try:
+        return ensure_contained(project_root, requested_path)
+    except AudiaGenticError as exc:
+        raise AudiaGenticError(
+            code=exc.code,
+            kind=exc.kind,
+            message=f"{field_name} resolves outside the project root",
+            details={**(exc.details or {}), "field": field_name},
+        ) from exc
+
+
 def _check_contained(
     root: Path,
     resolved: Path,
