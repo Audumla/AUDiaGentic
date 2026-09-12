@@ -21,6 +21,11 @@ def test_documented_planning_states_match_runtime_workflow() -> None:
     readme_flat = re.sub(r"\s+", " ", planning_readme)
     creating_flat = re.sub(r"\s+", " ", creating_plans)
     config_flat = re.sub(r"\s+", " ", planning_config)
+    surfaces = {
+        "README": readme_flat,
+        "CREATING_PLANS": creating_flat,
+        "planning.yaml": config_flat,
+    }
     assert "acceptance_criteria:" in planning_config
     assert "completed items cannot receive or" in planning_readme.lower()
     assert "completed items cannot receive or" in creating_plans.lower()
@@ -29,16 +34,20 @@ def test_documented_planning_states_match_runtime_workflow() -> None:
     assert "completion requires non-empty validation and acceptance criteria" in config_flat.lower()
     for kind in ("item", "review"):
         definition = workflow["kinds"][kind]["workflows"]["standard"]
-        assert f"start in `{definition['initial']}`" in planning_readme
-        for state in definition["values"]:
-            assert f"{chr(96)}{state}{chr(96)}" in planning_readme
-        for _state, placement in definition["placement"].items():
-            assert f"{chr(96)}{placement}/{chr(96)}" in planning_readme
+        for surface_name, surface in surfaces.items():
+            assert definition["initial"] in surface, f"{surface_name} omits {kind} initial state"
+            for state in definition["values"]:
+                assert state in surface, f"{surface_name} omits {kind} state {state}"
+            for _state, placement in definition["placement"].items():
+                assert placement in surface, f"{surface_name} omits {kind} placement {placement}"
         for source, targets in definition["transitions"].items():
             assert source in definition["values"]
             assert set(targets).issubset(set(definition["values"]))
             transition = f"`{source}` → " + ", ".join(f"`{target}`" for target in targets)
+            ascii_transition = f"{source} -> " + ", ".join(targets)
             assert transition in readme_flat
+            assert transition in creating_flat
+            assert ascii_transition in config_flat
     assert "Item initial state: `pending`" in creating_flat
     assert "Review initial state: `created`" in creating_flat
     assert "pending/in_progress are placed in active/" in config_flat
