@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,7 @@ from audiagentic.components.ledger.paths import ledger_fragments_dir
 from audiagentic.foundation.event import DeliveryMode
 from audiagentic.foundation.io import atomic_write_json, atomic_write_text
 from audiagentic.foundation.paths.safety import resolve_user_path
+from audiagentic.foundation.system.process import StartupLock
 
 
 def outbox_dir(project_root: Path) -> Path:
@@ -17,6 +19,25 @@ def outbox_dir(project_root: Path) -> Path:
         project_root=project_root,
         field_name="Ledger event outbox",
     )
+
+
+def _outbox_lock(project_root: Path, event_id: str) -> StartupLock:
+    directory = outbox_dir(project_root)
+    directory.mkdir(parents=True, exist_ok=True)
+    return StartupLock(directory / f".{event_id}.lock", timeout=30.0)
+
+
+@contextmanager
+def fragment_write_lock(project_root: Path, event_id: str):
+    """Serialize fragment existence checks and writes for one event ID."""
+    directory = resolve_user_path(
+        Path(".audiagentic") / "runtime" / "ledger" / "fragment-locks",
+        project_root=project_root,
+        field_name="Ledger fragment lock",
+    )
+    directory.mkdir(parents=True, exist_ok=True)
+    with StartupLock(directory / f"{event_id}.lock", timeout=30.0):
+        yield
 
 
 def enqueue(
@@ -39,16 +60,19 @@ def enqueue(
     if event is not None:
         record["event"] = dict(event)
     path = outbox_dir(project_root) / f"{event_id}.json"
-    if path.exists():
-        existing = json.loads(path.read_text(encoding="utf-8"))
-        if event is not None and "event" not in existing:
-            existing = {**existing, "event": dict(event)}
-            atomic_write_json(path, existing)
-        if existing != record:
-            raise ValueError(f"ledger event outbox ID already exists with different content: {event_id}")
+    # Serialize the complete read/compare/write sequence. This makes the
+    # same-ID/different-content rule deterministic across processes.
+    with _outbox_lock(project_root, event_id):
+        if path.exists():
+            existing = json.loads(path.read_text(encoding="utf-8"))
+            if event is not None and "event" not in existing:
+                existing = {**existing, "event": dict(event)}
+                atomic_write_json(path, existing)
+            if existing != record:
+                raise ValueError(f"ledger event outbox ID already exists with different content: {event_id}")
+            return path
+        atomic_write_json(path, record)
         return path
-    atomic_write_json(path, record)
-    return path
 
 
 def drain(project_root: Path, *, publisher: Any | None = None) -> dict[str, int]:
@@ -95,4 +119,4 @@ def drain(project_root: Path, *, publisher: Any | None = None) -> dict[str, int]
     return {"delivered": delivered, "failed": failed}
 
 
-__all__ = ["drain", "enqueue", "outbox_dir"]
+__all__ = ["drain", "enqueue", "fragment_write_lock", "outbox_dir"]
