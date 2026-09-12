@@ -175,6 +175,40 @@ def planning_collection_write_lock(project_root: Path):
         yield
 
 
+@contextmanager
+def planning_collection_item_write_lock(project_root: Path, item_id: str):
+    """Acquire collection then item locks for parent/review coordination."""
+    with planning_collection_write_lock(project_root):
+        with item_identity_write_lock(project_root, item_id):
+            yield
+
+
+def serialize_planning_collection_item_write(func):
+    """Decorate a mutator with the collection-to-item lock ordering."""
+
+    @wraps(func)
+    def wrapped(project_root: Path, item_id: str, *args, **kwargs):
+        with planning_collection_item_write_lock(project_root, item_id):
+            return func(project_root, item_id, *args, **kwargs)
+
+    return wrapped
+
+
+def serialize_review_create(func):
+    """Serialize review creation as collection then parent-item mutation."""
+
+    @wraps(func)
+    def wrapped(project_root: Path, review: dict[str, Any], *args, **kwargs):
+        parent_id = review.get("review-of") or review.get("review_of")
+        with planning_collection_write_lock(project_root):
+            if parent_id:
+                with item_identity_write_lock(project_root, str(parent_id)):
+                    return func(project_root, review, *args, **kwargs)
+            return func(project_root, review, *args, **kwargs)
+
+    return wrapped
+
+
 def serialize_item_update(func):
     """Decorate an item mutator with the same per-item write lock."""
 
@@ -426,8 +460,10 @@ def find_item(project_root: Path, item_id: str) -> Path | None:
         planning_paths.plans_active_dir(project_root),
         planning_paths.plans_completed_dir(project_root),
     ):
-        if directory.exists():
-            for path in directory.rglob("*.md"):
+        if not directory.exists():
+            continue
+        for pattern in ("*/*.md", "*/reviews/*/*.md"):
+            for path in directory.glob(pattern):
                 if path.stem == item_id:
                     planning_paths.assert_contained(directory, path)
                     matches.append(path)

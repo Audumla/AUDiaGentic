@@ -19,6 +19,22 @@ from audiagentic.foundation.workflow.frontmatter import parse_frontmatter, parse
 logger = logging.getLogger(__name__)
 
 
+def _require_completion_sections(sections: dict[str, Any]) -> None:
+    """Reject completed items whose completion evidence was blanked."""
+    missing = [
+        name
+        for name in ("validation", "acceptance_criteria")
+        if not str(sections.get(name, "")).strip()
+    ]
+    if missing:
+        raise AudiaGenticError(
+            code="VAL-PLN-034",
+            kind="validation",
+            message="completed items require non-empty validation and acceptance criteria",
+            details={"missing_sections": missing},
+        )
+
+
 @item_store.serialize_planning_collection_write
 def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
     """Create a new plan item. Required keys: plan, title.
@@ -338,19 +354,7 @@ def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any
     old_state = fm.get("state", "pending")
     item_store.check_transition("item", old_state, canonical_state)
     if canonical_state == "completed":
-        sections = item_store.parse_item_sections(body)
-        missing = [
-            name
-            for name in ("validation", "acceptance_criteria")
-            if not str(sections.get(name, "")).strip()
-        ]
-        if missing:
-            raise AudiaGenticError(
-                code="VAL-PLN-034",
-                kind="validation",
-                message="completed items require non-empty validation and acceptance criteria",
-                details={"missing_sections": missing},
-            )
+        _require_completion_sections(item_store.parse_item_sections(body))
     fm["state"] = canonical_state
 
     # Append change log entry for the state transition
@@ -547,6 +551,8 @@ def update_item(
         title = parse_title(body) or item_id
 
     new_body = item_store.build_item_body(title, sections, custom_headings)
+    if fm.get("state") == "completed":
+        _require_completion_sections(item_store.parse_item_sections(new_body))
 
     # Append change log entry
     now = datetime.now(timezone.utc).isoformat()
@@ -579,7 +585,7 @@ def update_item(
     return result
 
 
-@item_store.serialize_item_update
+@item_store.serialize_planning_collection_item_write
 def delete_item(project_root: Path, item_id: str) -> dict[str, Any]:
     """Permanently delete a plan item."""
     path = item_store.require_item(project_root, item_id)
