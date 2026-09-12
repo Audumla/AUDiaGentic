@@ -1,12 +1,15 @@
 """Planning component event helpers."""
 from __future__ import annotations
 
+import json
 import logging
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.event import DeliveryMode, get_bus
+from audiagentic.foundation.io import atomic_write_json
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +29,79 @@ LEDGER_EVENT_RECORDED = "ledger.event.recorded"
 
 _registered_bus: Any | None = None
 
+_OUTBOX_RELATIVE = Path(".audiagentic") / "runtime" / "planning" / "outbox"
+
+
+def _outbox_dir(project_root: Path) -> Path:
+    return project_root / _OUTBOX_RELATIVE
+
+
+def enqueue_planning_event(
+    project_root: Path,
+    event_type: str,
+    payload: dict[str, Any],
+    *,
+    metadata: dict[str, Any] | None = None,
+    event_id: str | None = None,
+) -> str:
+    """Persist one planning event before attempting publication.
+
+    The file is the delivery authority.  Publication is at-least-once: a
+    process failure after subscriber execution and before acknowledgement may
+    cause a duplicate, so consumers must use stable subject/event IDs.
+    """
+    stable_id = event_id or str(uuid.uuid4())
+    durable_payload = dict(payload)
+    durable_payload.setdefault("planning-event-id", stable_id)
+    record = {
+        "planning-event-id": stable_id,
+        "event-type": event_type,
+        "payload": durable_payload,
+        "metadata": dict(metadata or {}),
+    }
+    directory = _outbox_dir(project_root)
+    path = directory / f"{stable_id}.json"
+    if path.exists():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(f"planning event outbox entry is corrupt: {path}") from exc
+        if existing != record:
+            raise ValueError(f"planning event ID already exists with different content: {stable_id}")
+        return stable_id
+    atomic_write_json(path, record)
+    return stable_id
+
+
+def drain_planning_outbox(project_root: Path) -> dict[str, int]:
+    """Publish durable planning events and acknowledge successful delivery."""
+    delivered = failed = 0
+    directory = _outbox_dir(project_root)
+    if not directory.exists():
+        return {"delivered": 0, "failed": 0}
+    for path in sorted(directory.glob("*.json")):
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(record, dict):
+                raise ValueError("event record is not an object")
+            get_bus().publish(
+                str(record["event-type"]),
+                dict(record["payload"]),
+                metadata=dict(record.get("metadata") or {}),
+                mode=DeliveryMode.SYNC,
+            )
+            path.unlink(missing_ok=True)
+            delivered += 1
+        except Exception:  # noqa: BLE001 - retain entry for reconciliation
+            failed += 1
+            logger.error(
+                "failed to drain planning event outbox",
+                extra={"path": str(path)},
+                exc_info=True,
+            )
+            break
+    return {"delivered": delivered, "failed": failed}
+
 
 def publish_planning_event(
     event_type: str,
@@ -33,16 +109,40 @@ def publish_planning_event(
     *,
     subject_kind: str,
     subject_id: str,
+    project_root: Path | None = None,
 ) -> None:
-    """Publish a best-effort planning event after storage mutation succeeds."""
+    """Persist and publish a planning event after storage mutation succeeds.
+
+    ``project_root`` is required for durable delivery.  It remains optional to
+    preserve compatibility for low-level callers that only have an in-memory
+    event context; those callers retain the historical best-effort behavior.
+    """
+    metadata = {
+        "source_component": COMPONENT_ID,
+        "subject": {"kind": subject_kind, "id": subject_id},
+    }
+    if project_root is not None:
+        try:
+            enqueue_planning_event(
+                project_root,
+                event_type,
+                payload,
+                metadata=metadata,
+            )
+            drain_planning_outbox(project_root)
+            return
+        except Exception:  # noqa: BLE001 - durable entry remains for retry
+            logger.error(
+                "failed to persist or publish planning event",
+                extra={"event_type": event_type, "subject_id": subject_id},
+                exc_info=True,
+            )
+            return
     try:
         get_bus().publish(
             event_type,
             payload,
-            metadata={
-                "source_component": COMPONENT_ID,
-                "subject": {"kind": subject_kind, "id": subject_id},
-            },
+            metadata=metadata,
             mode=DeliveryMode.ASYNC,
         )
     except Exception:  # noqa: BLE001

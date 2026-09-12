@@ -10,10 +10,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from audiagentic.components.planning import events, item_store, planning_paths
+from audiagentic.components.planning import durability, events, item_store, planning_paths
 from audiagentic.components.planning.identity import validate_item_id, validate_plan_slug
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import atomic_write_text
 from audiagentic.foundation.workflow.frontmatter import parse_frontmatter, parse_title
 
 logger = logging.getLogger(__name__)
@@ -122,9 +121,6 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
     slug = plan
     target = planning_paths.plans_active_dir(project_root) / slug / f"{item_id}.md"
     target = planning_paths.assert_contained(planning_paths.plans_active_dir(project_root), target)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_text(target, item_store.render_item(fm, body))
-
     payload = {
         "id": item_id,
         "item-id": item_id,
@@ -135,11 +131,17 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
         "created-at": now,
         "path": str(target.relative_to(project_root)),
     }
+    durability.commit_mutation(
+        project_root,
+        {target: item_store.render_item(fm, body)},
+        operation="planning.item.create",
+    )
     events.publish_planning_event(
         events.PLANNING_ITEM_CREATED,
         payload,
         subject_kind="planning-item",
         subject_id=item_id,
+        project_root=project_root,
     )
     logger.info("plan item created", extra={"item_id": item_id, "plan": slug})
     return {key: payload[key] for key in ("id", "title", "plan", "path")}
@@ -340,7 +342,7 @@ def get_item(
     return result
 
 
-@item_store.serialize_item_update
+@item_store.serialize_planning_collection_item_write
 def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any]:
     """Transition item to new_state, moving to the appropriate folder."""
     target_dir = item_store.state_dir(project_root, new_state)  # raises on invalid state
@@ -388,11 +390,18 @@ def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any
     target = target_dir / path.parent.name / path.name
     target = planning_paths.assert_contained(target_dir, target)
     if target != path:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write_text(target, item_store.render_item(fm, body))
-        path.unlink()
+        durability.commit_mutation(
+            project_root,
+            {target: item_store.render_item(fm, body)},
+            [path],
+            operation="planning.item.state",
+        )
     else:
-        atomic_write_text(target, item_store.render_item(fm, body))
+        durability.commit_mutation(
+            project_root,
+            {target: item_store.render_item(fm, body)},
+            operation="planning.item.state",
+        )
 
     # Clean up empty plan dirs in the source state (item was moved away)
     source_dir = item_store.state_dir(
@@ -419,12 +428,13 @@ def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any
         },
         subject_kind="planning-item",
         subject_id=item_id,
+        project_root=project_root,
     )
     logger.info("plan item state changed", extra={"item_id": item_id, "state": canonical_state})
     return result
 
 
-@item_store.serialize_item_update
+@item_store.serialize_planning_collection_item_write
 def update_item(
     project_root: Path,
     item_id: str,
@@ -587,7 +597,11 @@ def update_item(
         change_desc,
     )
 
-    atomic_write_text(path, item_store.render_item(fm, new_body))
+    durability.commit_mutation(
+        project_root,
+        {path: item_store.render_item(fm, new_body)},
+        operation="planning.item.update",
+    )
 
     result = {"ok": True, "id": item_id, "path": str(path.relative_to(project_root))}
     events.publish_planning_event(
@@ -601,6 +615,7 @@ def update_item(
         },
         subject_kind="planning-item",
         subject_id=item_id,
+        project_root=project_root,
     )
     logger.info("plan item updated", extra={"item_id": item_id})
     return result
@@ -629,12 +644,18 @@ def delete_item(project_root: Path, item_id: str) -> dict[str, Any]:
         "created-by": fm.get("created-by", ""),
         "path": str(path.relative_to(project_root)),
     }
-    path.unlink()
+    durability.commit_mutation(
+        project_root,
+        {},
+        [path],
+        operation="planning.item.delete",
+    )
     events.publish_planning_event(
         events.PLANNING_ITEM_DELETED,
         payload,
         subject_kind="planning-item",
         subject_id=item_id,
+        project_root=project_root,
     )
     logger.info("plan item deleted", extra={"item_id": item_id})
     state_dirs = [
