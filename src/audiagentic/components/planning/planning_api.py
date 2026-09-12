@@ -74,9 +74,21 @@ def active_implementation_id(project_root: Path) -> str:
             return ""
 
         component_state = get_component_state(project_root, _COMPONENT_ID)
+        configured_implementations = component_state.get("implementations") or {}
+        if not isinstance(configured_implementations, dict):
+            raise ValueError("planning implementation state is malformed")
+        unknown_enabled = [
+            implementation_id
+            for implementation_id, state in configured_implementations.items()
+            if isinstance(state, dict)
+            and state.get("enabled") is True
+            and implementation_id not in implementations
+        ]
+        if unknown_enabled:
+            raise ValueError("planning state enables an unknown implementation")
         enabled = [
             implementation_id
-            for implementation_id, state in (component_state.get("implementations") or {}).items()
+            for implementation_id, state in configured_implementations.items()
             if implementation_id in implementations
             and isinstance(state, dict)
             and state.get("enabled") is True
@@ -119,15 +131,41 @@ def planning_status(project_root: Path) -> ComponentStatusPayload:
     Whether the active implementation was explicitly selected (vs. picked as a
     fallback default) is reported under ``details.implementation``.
     """
-    from audiagentic.foundation.features.config_status import implementation_status_payload
+    from audiagentic.foundation.components import is_enabled
+    from audiagentic.foundation.features.config_status import implementation_config_status
+    from audiagentic.foundation.features.registry import (
+        get_implementation,
+        is_default_implementation,
+    )
 
-    return implementation_status_payload(
-        project_root,
-        _COMPONENT_ID,
-        extra_details={
-            "pending_items": len(list_items(project_root, state="active")),
-            "completed_items": len(list_items(project_root, state="completed")),
-        },
+    active = active_implementation_id(project_root)
+    details: dict[str, Any] = {
+        "pending_items": len(list_items(project_root, state="active")),
+        "completed_items": len(list_items(project_root, state="completed")),
+    }
+    if not active:
+        return ComponentStatusPayload(
+            enabled=is_enabled(_COMPONENT_ID, project_root),
+            configured=False,
+            active_implementation=None,
+            details=details,
+        )
+
+    status = implementation_config_status(project_root, _COMPONENT_ID, active)
+    descriptor = get_implementation(_COMPONENT_ID, active)
+    details["implementation"] = {
+        "enabled": status.enabled,
+        "is_default": bool(descriptor and is_default_implementation(descriptor)),
+    }
+    return ComponentStatusPayload(
+        enabled=is_enabled(_COMPONENT_ID, project_root),
+        configured=status.configured,
+        active_implementation=active,
+        missing_required=[
+            {"option": missing.key, "description": missing.description}
+            for missing in status.missing_required
+        ],
+        details=details,
     )
 
 

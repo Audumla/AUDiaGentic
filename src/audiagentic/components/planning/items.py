@@ -81,7 +81,7 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
         "id": item_id,
         "order": item.get("order", 0),
         "plan": plan,
-        "state": "pending",
+        "state": item_store.initial_state("item"),
         "created-at": now,
         "breadth": item.get("breadth", ""),
         "skill": item.get("skill", ""),
@@ -127,9 +127,10 @@ def create_item(project_root: Path, item: dict[str, Any]) -> dict[str, Any]:
 
     payload = {
         "id": item_id,
+        "item-id": item_id,
         "title": title,
         "plan": slug,
-        "state": "pending",
+        "state": fm["state"],
         "created-by": created_by,
         "created-at": now,
         "path": str(target.relative_to(project_root)),
@@ -153,9 +154,7 @@ def list_items(
     """List plan items, optionally filtered by state, plan name, or ID prefix.
 
     state: 'active'/'pending'/'in_progress' → active folder; 'completed'/'superseded'/'deprecated' → completed folder; None → all.
-    plan: directory name like 'code-cleanup' (omit for all plans). Supports
-        glob wildcards (e.g. 'code-*') via fnmatch; a literal name matches
-        only that plan, same as before.
+    plan: exact directory name like 'code-cleanup' (omit for all plans).
     id_prefix: case-insensitive item-ID prefix (e.g. 'CC' matches CC01, CC20, ...).
     """
     valid_filters = {"active", "all", *item_store.VALID_STATES}
@@ -189,7 +188,14 @@ def list_items(
                 continue
             if slug and path.parent.name != slug:
                 continue
+            planning_paths.assert_contained(search_dir, path)
             fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
+            if fm.get("id") != path.stem:
+                raise AudiaGenticError(
+                    code="VAL-PLN-035",
+                    kind="validation",
+                    message="planning record identity does not match its filename",
+                )
             item_id = fm.get("id", path.stem)
             persisted_state = fm.get("state", "pending")
             if state not in (None, "all", "active") and persisted_state != state:
@@ -355,6 +361,19 @@ def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any
     item_store.check_transition("item", old_state, canonical_state)
     if canonical_state == "completed":
         _require_completion_sections(item_store.parse_item_sections(body))
+        open_reviews = [
+            review_path
+            for review_path in item_store.review_paths(project_root, item_id)
+            if parse_frontmatter(review_path.read_text(encoding="utf-8"))[0].get("state")
+            in item_store.active_states("review")
+        ]
+        if open_reviews:
+            raise AudiaGenticError(
+                code="VAL-PLN-041",
+                kind="validation",
+                message="completed items cannot have open reviews",
+                details={"open_review_count": len(open_reviews)},
+            )
     fm["state"] = canonical_state
 
     # Append change log entry for the state transition
@@ -392,6 +411,7 @@ def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any
         events.PLANNING_ITEM_STATE_CHANGED,
         {
             **result,
+            "item-id": item_id,
             "old_state": old_state,
             "new_state": canonical_state,
             "plan": path.parent.name,
@@ -574,6 +594,7 @@ def update_item(
         events.PLANNING_ITEM_UPDATED,
         {
             **result,
+            "item-id": item_id,
             "plan": path.parent.name,
             "updated_keys": list(updates.keys()),
             "created-by": fm.get("created-by", ""),
@@ -602,6 +623,7 @@ def delete_item(project_root: Path, item_id: str) -> dict[str, Any]:
     slug = path.parent.name
     payload = {
         "id": item_id,
+        "item-id": item_id,
         "plan": slug,
         "state": fm.get("state", "pending"),
         "created-by": fm.get("created-by", ""),

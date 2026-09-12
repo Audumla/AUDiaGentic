@@ -37,6 +37,16 @@ def _read(path: Path) -> tuple[dict[str, Any], str]:
     return parse_frontmatter(path.read_text(encoding="utf-8"))
 
 
+def _sections(body: str) -> dict[str, str]:
+    matches = list(_SECTION_RE.finditer(body))
+    result: dict[str, str] = {}
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(body)
+        key = re.sub(r"[^a-z0-9]+", " ", match.group(1).lower()).strip()
+        result[key] = body[match.end() : end].strip()
+    return result
+
+
 def _string_values(value: Any):
     if isinstance(value, str):
         yield value
@@ -93,6 +103,10 @@ def validate_plan_set(
         _frontmatter, body = parsed[path]
         if active_root not in path.parents:
             continue
+
+        sections = _sections(body)
+        if ("src/" in body or ".py" in body) and not sections.get("standards"):
+            errors.append(f"active code item has empty or missing Standards section: {path}")
 
         if reference_re:
             prose = _FENCED_BLOCK_RE.sub("", body)
@@ -198,6 +212,16 @@ def test_pending_drafts_may_omit_completion_sections(tmp_path):
     _write_item(
         tmp_path,
         "TS01",
-        body="# Item\n\nTouches `src/example.py`.\n\n## Validation\n\n## Acceptance criteria\n\nDone.\n\n## Standards\n",
+        body="# Item\n\nTouches `docs/example.md`.\n\n## Validation\n\n## Acceptance criteria\n\nDone.\n\n## Standards\n",
     )
     assert validate_plan_set(tmp_path) == []
+
+
+def test_active_code_item_requires_standards(tmp_path):
+    _write_item(
+        tmp_path,
+        "TS01",
+        body="# Item\n\nTouches `src/example.py`.\n\n## Validation\n\nRun.\n\n## Acceptance criteria\n\nPass.\n\n## Standards\n",
+    )
+    errors = validate_plan_set(tmp_path)
+    assert any("Standards" in error for error in errors)
