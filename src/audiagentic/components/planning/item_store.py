@@ -64,6 +64,7 @@ __all__ = [
     "parse_title",
     "render_item",
     "require_item",
+    "review_paths",
     "state_dir",
 ]
 
@@ -430,7 +431,7 @@ def find_item(project_root: Path, item_id: str) -> Path | None:
                 if path.stem == item_id:
                     matches.append(path)
     if len(matches) > 1:
-        raise AudiaGenticError(code="VAL-PLN-032", kind="validation", message="duplicate planning identity")
+        raise AudiaGenticError(code="VAL-PLN-036", kind="validation", message="duplicate planning identity")
     return matches[0] if matches else None
 
 
@@ -443,6 +444,22 @@ def require_item(project_root: Path, item_id: str) -> Path:
             message="plan item not found",
         )
     return path
+
+
+def review_paths(project_root: Path, parent_id: str) -> list[Path]:
+    """Return all review records linked to a top-level item."""
+    validate_record_id(parent_id)
+    matches: list[Path] = []
+    for directory in (
+        planning_paths.plans_active_dir(project_root),
+        planning_paths.plans_completed_dir(project_root),
+    ):
+        if not directory.exists():
+            continue
+        for path in directory.glob(f"*/reviews/{parent_id}/*.md"):
+            if path.stem.startswith("RV"):
+                matches.append(path)
+    return matches
 
 
 def ensure_not_review(fm: dict[str, Any], item_id: str, code: str) -> None:

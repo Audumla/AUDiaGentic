@@ -11,7 +11,6 @@ and their own workflow (created → considered → closed), defined in workflows
 
 from __future__ import annotations
 
-import fnmatch
 import logging
 import re
 from pathlib import Path

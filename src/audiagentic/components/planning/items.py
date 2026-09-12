@@ -5,7 +5,6 @@ Storage layout, ID allocation, and markdown round-trips live in item_store.
 
 from __future__ import annotations
 
-import fnmatch
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -167,6 +166,10 @@ def list_items(
         if not search_dir.exists():
             continue
         for path in sorted(search_dir.rglob("*.md")):
+            # Reviews are nested below <plan>/reviews/<parent-id>/ and are
+            # exposed only through the review API.
+            if len(path.relative_to(search_dir).parts) != 2:
+                continue
             if slug and path.parent.name != slug:
                 continue
             fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
@@ -333,6 +336,20 @@ def set_state(project_root: Path, item_id: str, new_state: str) -> dict[str, Any
     canonical_state = new_state
     old_state = fm.get("state", "pending")
     item_store.check_transition("item", old_state, canonical_state)
+    if canonical_state == "completed":
+        sections = item_store.parse_item_sections(body)
+        missing = [
+            name
+            for name in ("validation", "acceptance_criteria")
+            if not str(sections.get(name, "")).strip()
+        ]
+        if missing:
+            raise AudiaGenticError(
+                code="VAL-PLN-034",
+                kind="validation",
+                message="completed items require non-empty validation and acceptance criteria",
+                details={"missing_sections": missing},
+            )
     fm["state"] = canonical_state
 
     # Append change log entry for the state transition
@@ -566,6 +583,14 @@ def delete_item(project_root: Path, item_id: str) -> dict[str, Any]:
     path = item_store.require_item(project_root, item_id)
     fm, _body = parse_frontmatter(path.read_text(encoding="utf-8"))
     item_store.ensure_not_review(fm, item_id, "VAL-PLN-021")
+    linked_reviews = item_store.review_paths(project_root, item_id)
+    if linked_reviews:
+        raise AudiaGenticError(
+            code="VAL-PLN-037",
+            kind="validation",
+            message="cannot delete plan item while reviews exist",
+            details={"review_count": len(linked_reviews)},
+        )
     slug = path.parent.name
     payload = {
         "id": item_id,
