@@ -12,7 +12,7 @@
 # same content (confirmed via diff, 2026-08-17) modulo project-url and some
 # comment-text drift -- exactly the duplication GP09 was raised about.
 settings:
-  contract-version: v1
+  contract-version: v3
   browser:
     executable: 'C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe'
     remote-debugging-port: 9222
@@ -31,9 +31,11 @@ settings:
     navigation-timeout-seconds: 30
   turn:
     submission-timeout-seconds: 15
-    response-start-timeout-seconds: 120
+    # Response observation has no provider-side hard deadline. AS122 owns
+    # bounded refresh recovery and terminal exhaustion.
+    response-start-timeout-seconds: 0
     response-stall-timeout-seconds: 0
-    response-timeout-seconds: 3600
+    response-timeout-seconds: 0
     poll-interval-seconds: 1
     response-stability-seconds: 6
     # A completion witness while ChatGPT still reports generation is active
