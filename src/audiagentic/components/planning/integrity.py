@@ -10,7 +10,6 @@ from audiagentic.components.planning import planning_paths
 from audiagentic.components.planning.contracts import PlanningIntegrityError
 from audiagentic.components.planning.identity import (
     validate_item_id,
-    validate_plan_slug,
     validate_review_id,
 )
 from audiagentic.foundation.workflow.frontmatter import parse_frontmatter
@@ -47,6 +46,7 @@ class PlanningIntegrityIndex:
     review_paths: dict[str, Path]
     reviews: dict[str, dict[str, Any]]
     review_backlinks: dict[str, list[tuple[str, str]]]
+    invalid_records: tuple[str, ...] = ()
 
 
 def _item_paths(project_root: Path) -> list[Path]:
@@ -109,25 +109,37 @@ def build_integrity_index(project_root: Path) -> PlanningIntegrityIndex:
     reviews: dict[str, dict[str, Any]] = {}
     review_backlinks: dict[str, list[tuple[str, str]]] = {}
     item_ids: dict[str, tuple[str, str]] = {}
+    invalid_records: list[str] = []
 
     for path in _item_paths(project_root):
         fm, body = _read(path)
+        from audiagentic.components.planning import item_store
+
+        # Older planning notes use states outside the current workflow and are
+        # not live records. Keep them out of the operational index so one
+        # legacy note cannot block a valid current review mutation.
+        if fm.get("state", item_store.initial_state("item")) not in item_store.VALID_STATES:
+            continue
         item_id = fm.get("id")
         plan = fm.get("plan")
         if not isinstance(item_id, str) or not isinstance(plan, str):
-            raise PlanningIntegrityError(f"item has incomplete identity: {path}")
+            invalid_records.append(f"item has incomplete identity: {path}")
+            continue
         try:
-            validate_item_id(item_id)
-            validate_plan_slug(plan)
-        except Exception as exc:
-            raise PlanningIntegrityError(f"item has invalid identity: {path}") from exc
+            item_store.validate_record_path(path, fm, "item")
+        except Exception:
+            invalid_records.append(f"item has invalid identity: {path}")
+            continue
         key = (plan, item_id)
         if key in item_paths:
-            raise PlanningIntegrityError(f"duplicate item identity {plan}/{item_id}")
+            invalid_records.append(f"duplicate item identity {plan}/{item_id}")
+            continue
         if item_id in item_ids:
-            raise PlanningIntegrityError(f"duplicate item identity {item_id}")
+            invalid_records.append(f"duplicate item identity {item_id}")
+            continue
         if path.stem != item_id or path.parent.name != plan:
-            raise PlanningIntegrityError(f"item path metadata mismatch: {path}")
+            invalid_records.append(f"item path metadata mismatch: {path}")
+            continue
         item_paths[key] = path
         item_ids[item_id] = key
         items[key] = {**fm, "_body": body}
@@ -136,29 +148,38 @@ def build_integrity_index(project_root: Path) -> PlanningIntegrityIndex:
 
     for path in _review_paths(project_root):
         fm, body = _read(path)
+        from audiagentic.components.planning import item_store
+
+        review_states = item_store.active_states("review") | item_store.terminal_states("review")
+        if fm.get("state", item_store.initial_state("review")) not in review_states:
+            continue
         review_id = fm.get("id")
         plan = fm.get("plan")
         parent_id = fm.get("review-of")
         if not isinstance(review_id, str) or not isinstance(plan, str) or not isinstance(parent_id, str):
-            raise PlanningIntegrityError(f"review has incomplete identity: {path}")
-        validate_review_id(review_id)
+            invalid_records.append(f"review has incomplete identity: {path}")
+            continue
         try:
-            validate_plan_slug(plan)
-            validate_item_id(parent_id)
-        except Exception as exc:
-            raise PlanningIntegrityError(f"review has invalid identity: {path}") from exc
+            item_store.validate_record_path(path, fm, "review")
+        except Exception:
+            invalid_records.append(f"review has invalid identity: {path}")
+            continue
         if review_id in review_paths:
-            raise PlanningIntegrityError(f"duplicate review identity {review_id}")
+            invalid_records.append(f"duplicate review identity {review_id}")
+            continue
         if (
             path.stem != review_id
             or path.parent.name != parent_id
             or path.parent.parent.parent.name != plan
         ):
-            raise PlanningIntegrityError(f"review path metadata mismatch: {path}")
+            invalid_records.append(f"review path metadata mismatch: {path}")
+            continue
         review_paths[review_id] = path
         reviews[review_id] = {**fm, "_body": body}
 
-    return PlanningIntegrityIndex(item_paths, items, review_paths, reviews, review_backlinks)
+    return PlanningIntegrityIndex(
+        item_paths, items, review_paths, reviews, review_backlinks, tuple(invalid_records)
+    )
 
 
 def require_canonical_review_context(
@@ -210,6 +231,7 @@ def validate_repository_integrity(project_root: Path) -> list[str]:
     except PlanningIntegrityError as exc:
         return [str(exc)]
 
+    errors.extend(index.invalid_records)
     for key, item in index.items.items():
         state = str(item.get("state", ""))
         if state == "completed":

@@ -7,7 +7,7 @@ from typing import Any
 
 from audiagentic.components.ledger.paths import ledger_fragments_dir
 from audiagentic.foundation.event import DeliveryMode
-from audiagentic.foundation.io import atomic_write_json
+from audiagentic.foundation.io import atomic_write_json, atomic_write_text
 from audiagentic.foundation.paths.safety import resolve_user_path
 
 
@@ -26,6 +26,7 @@ def enqueue(
     *,
     source: Any = None,
     timestamp_utc: str | None = None,
+    event: dict[str, Any] | None = None,
 ) -> Path:
     """Persist one retryable projection intent before publishing it."""
     record = {
@@ -35,9 +36,14 @@ def enqueue(
         "source": source,
         "timestamp-utc": timestamp_utc,
     }
+    if event is not None:
+        record["event"] = dict(event)
     path = outbox_dir(project_root) / f"{event_id}.json"
     if path.exists():
         existing = json.loads(path.read_text(encoding="utf-8"))
+        if event is not None and "event" not in existing:
+            existing = {**existing, "event": dict(event)}
+            atomic_write_json(path, existing)
         if existing != record:
             raise ValueError(f"ledger event outbox ID already exists with different content: {event_id}")
         return path
@@ -59,14 +65,18 @@ def drain(project_root: Path, *, publisher: Any | None = None) -> dict[str, int]
     for path in sorted(directory.glob("*.json")):
         try:
             record = json.loads(path.read_text(encoding="utf-8"))
-            # record_change_event queues the projection before writing the
-            # fragment.  Do not publish an intent whose authoritative event
-            # is not durable yet; the next drain will retry it.
-            fragment = ledger_fragments_dir(project_root) / f"{record['event-id']}.json"
-            if not fragment.exists():
-                failed += 1
-                break
             root = Path(record["project-root"])
+            if root.resolve() != project_root.resolve():
+                raise ValueError("ledger event outbox project root mismatch")
+            fragment = ledger_fragments_dir(root) / f"{record['event-id']}.json"
+            if not fragment.exists():
+                event = record.get("event")
+                if not isinstance(event, dict) or event.get("event-id") != record["event-id"]:
+                    # Legacy intents without the authoritative event cannot
+                    # safely be materialized; retain them for explicit retry.
+                    failed += 1
+                    break
+                atomic_write_text(fragment, json.dumps(event, indent=2, sort_keys=True))
             publisher(
                 str(record["event-id"]),
                 list(record["plan-item-ids"]),
