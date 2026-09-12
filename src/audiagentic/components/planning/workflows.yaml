@@ -1,7 +1,7 @@
 # Planning state workflows. Loaded by planning_api.py via the shared
 # foundation.workflow.transitions primitives. Item and review state sets and
-# their legal transitions are defined here, not hardcoded in Python. The host
-# still owns folder placement (active/ vs completed/) and input aliases.
+# their legal transitions are defined here, not hardcoded in Python. The
+# workflow's placement map is canonical for active/ vs completed/ storage.
 kinds:
   item:
     default-workflow: standard

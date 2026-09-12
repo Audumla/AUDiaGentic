@@ -10,6 +10,7 @@ from typing import Any
 
 from audiagentic.foundation.event import DeliveryMode, get_bus
 from audiagentic.foundation.io import atomic_write_json
+from audiagentic.foundation.paths.safety import resolve_user_path
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,31 @@ _OUTBOX_RELATIVE = Path(".audiagentic") / "runtime" / "planning" / "outbox"
 
 
 def _outbox_dir(project_root: Path) -> Path:
-    return project_root / _OUTBOX_RELATIVE
+    return resolve_user_path(
+        _OUTBOX_RELATIVE,
+        project_root=project_root,
+        field_name="Planning event outbox",
+    )
+
+
+def build_planning_event(
+    event_type: str,
+    payload: dict[str, Any],
+    *,
+    subject_kind: str,
+    subject_id: str,
+    event_id: str | None = None,
+) -> dict[str, Any]:
+    """Build a stable event intent that can be journaled with a mutation."""
+    return {
+        "event-id": event_id or str(uuid.uuid4()),
+        "event-type": event_type,
+        "payload": dict(payload),
+        "metadata": {
+            "source_component": COMPONENT_ID,
+            "subject": {"kind": subject_kind, "id": subject_id},
+        },
+    }
 
 
 def enqueue_planning_event(
@@ -110,6 +135,7 @@ def publish_planning_event(
     subject_kind: str,
     subject_id: str,
     project_root: Path | None = None,
+    event_id: str | None = None,
 ) -> None:
     """Persist and publish a planning event after storage mutation succeeds.
 
@@ -117,17 +143,21 @@ def publish_planning_event(
     preserve compatibility for low-level callers that only have an in-memory
     event context; those callers retain the historical best-effort behavior.
     """
-    metadata = {
-        "source_component": COMPONENT_ID,
-        "subject": {"kind": subject_kind, "id": subject_id},
-    }
+    intent = build_planning_event(
+        event_type,
+        payload,
+        subject_kind=subject_kind,
+        subject_id=subject_id,
+        event_id=event_id,
+    )
     if project_root is not None:
         try:
             enqueue_planning_event(
                 project_root,
                 event_type,
                 payload,
-                metadata=metadata,
+                metadata=intent["metadata"],
+                event_id=intent["event-id"],
             )
             drain_planning_outbox(project_root)
             return
@@ -142,7 +172,7 @@ def publish_planning_event(
         get_bus().publish(
             event_type,
             payload,
-            metadata=metadata,
+            metadata=intent["metadata"],
             mode=DeliveryMode.ASYNC,
         )
     except Exception:  # noqa: BLE001
@@ -151,6 +181,19 @@ def publish_planning_event(
             extra={"event_type": event_type, "subject_id": subject_id},
             exc_info=True,
         )
+
+
+def publish_planning_event_intent(project_root: Path, intent: dict[str, Any]) -> None:
+    """Publish a previously journaled event using its stable identity."""
+    subject = intent["metadata"]["subject"]
+    publish_planning_event(
+        str(intent["event-type"]),
+        dict(intent["payload"]),
+        subject_kind=str(subject["kind"]),
+        subject_id=str(subject["id"]),
+        project_root=project_root,
+        event_id=str(intent["event-id"]),
+    )
 
 
 def _on_ledger_event_recorded(
@@ -174,6 +217,7 @@ def _on_ledger_event_recorded(
 
     event_id = payload.get("event-id")
     plan_item_ids = payload.get("plan-item-ids", [])
+    durable_projection = payload.get("durable-projection") is True
 
     if not isinstance(event_id, str) or not isinstance(plan_item_ids, list):
         logger.error(
@@ -185,6 +229,7 @@ def _on_ledger_event_recorded(
     from audiagentic.components.planning import item_store
     from audiagentic.foundation.io import atomic_write_text
 
+    failures: list[str] = []
     for item_id in plan_item_ids:
         if not isinstance(item_id, str):
             continue
@@ -219,11 +264,14 @@ def _on_ledger_event_recorded(
                 extra={"item_id": item_id, "event_id": event_id},
             )
         except Exception:  # noqa: BLE001
+            failures.append(str(item_id))
             logger.error(
                 "failed to link ledger event to plan item — skipping",
                 extra={"item_id": item_id, "event_id": event_id},
                 exc_info=True,
             )
+    if failures and durable_projection:
+        raise RuntimeError(f"ledger projection failed for item IDs: {', '.join(failures)}")
 
 
 def register() -> None:

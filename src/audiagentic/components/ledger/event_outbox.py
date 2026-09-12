@@ -7,10 +7,15 @@ from typing import Any
 
 from audiagentic.foundation.event import DeliveryMode
 from audiagentic.foundation.io import atomic_write_json
+from audiagentic.foundation.paths.safety import resolve_user_path
 
 
 def outbox_dir(project_root: Path) -> Path:
-    return project_root / ".audiagentic" / "runtime" / "ledger" / "event-outbox"
+    return resolve_user_path(
+        Path(".audiagentic") / "runtime" / "ledger" / "event-outbox",
+        project_root=project_root,
+        field_name="Ledger event outbox",
+    )
 
 
 def enqueue(
@@ -62,6 +67,7 @@ def drain(project_root: Path, *, publisher: Any | None = None) -> dict[str, int]
                 timestamp_utc=record.get("timestamp-utc"),
                 raise_on_failure=True,
                 delivery_mode=DeliveryMode.SYNC,
+                propagate_subscriber_errors=True,
             )
             path.unlink(missing_ok=True)
             delivered += 1
