@@ -31,6 +31,21 @@ def _completed_dir(root):
     return planning_paths.plans_completed_dir(root)
 
 
+def test_set_state_to_completed_requires_validation_and_acceptance_criteria(tmp_path):
+    planning_api.create_item(tmp_path, _make_item())
+    with pytest.raises(AudiaGenticError) as exc_info:
+        planning_api.set_state(tmp_path, "TST01", "completed")
+    assert exc_info.value.code == "VAL-PLN-034"
+
+    planning_api.update_item(
+        tmp_path,
+        "TST01",
+        {"validation": "pytest passes", "acceptance_criteria": "item is complete"},
+    )
+    result = planning_api.set_state(tmp_path, "TST01", "completed")
+    assert result["state"] == "completed"
+
+
 # ---------------------------------------------------------------------------
 # create_item
 # ---------------------------------------------------------------------------

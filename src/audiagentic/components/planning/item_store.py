@@ -429,6 +429,7 @@ def find_item(project_root: Path, item_id: str) -> Path | None:
         if directory.exists():
             for path in directory.rglob("*.md"):
                 if path.stem == item_id:
+                    planning_paths.assert_contained(directory, path)
                     matches.append(path)
     if len(matches) > 1:
         raise AudiaGenticError(code="VAL-PLN-036", kind="validation", message="duplicate planning identity")
