@@ -17,7 +17,11 @@ from pathlib import Path
 from typing import Any
 
 from audiagentic.components.planning import events, item_store, planning_paths
-from audiagentic.components.planning.identity import validate_item_id, validate_plan_slug, validate_review_id
+from audiagentic.components.planning.identity import (
+    validate_item_id,
+    validate_plan_slug,
+    validate_review_id,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_text
 from audiagentic.foundation.workflow.frontmatter import (
@@ -123,6 +127,7 @@ def create_review(project_root: Path, review: dict[str, Any]) -> dict[str, Any]:
         / parent_path.stem
         / f"{review_id}.md"
     )
+    target = planning_paths.assert_contained(planning_paths.plans_active_dir(project_root), target)
     target.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(target, item_store.render_item(fm, body))
 

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
+
 _COMPONENT_ID = "agent-planning"
 
 _DEFAULT_PATHS: dict[str, str] = {
@@ -43,3 +45,18 @@ def plans_completed_dir(project_root: Path) -> Path:
 def plans_template_path(project_root: Path) -> Path:
     """Return the plan item template file path."""
     return _resolve(project_root, "template")
+
+
+def assert_contained(root: Path, candidate: Path) -> Path:
+    """Return candidate only when its resolved path is below root."""
+    resolved_root = root.resolve(strict=False)
+    resolved_candidate = candidate.resolve(strict=False)
+    try:
+        resolved_candidate.relative_to(resolved_root)
+    except ValueError as exc:
+        raise AudiaGenticError(
+            code="VAL-PLN-038",
+            kind="validation",
+            message="planning path escapes its configured root",
+        ) from exc
+    return resolved_candidate

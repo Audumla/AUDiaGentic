@@ -31,3 +31,4 @@ VAL-PLN-031: "The append list contains duplicate section names. Provide each sec
 VAL-PLN-035: "The planning identity is invalid. Use lowercase kebab-case plan slugs, uppercase item IDs, and RV-prefixed review IDs without path or glob characters."
 VAL-PLN-036: "More than one planning record has the same identity. Resolve the duplicate records before retrying."
 VAL-PLN-037: "A plan item cannot be deleted while linked reviews exist. Delete the reviews explicitly first."
+VAL-PLN-038: "The resolved planning path escapes the configured planning root. Check plan and record identities and configured paths."
