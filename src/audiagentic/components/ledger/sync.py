@@ -119,6 +119,13 @@ def _load_manifest(project_root: Path) -> dict[str, Any]:
 
 
 def sync_current_release_ledger(project_root: Path) -> SyncResult:
+    # The outbox is authoritative for projection intents. Drain it before
+    # consuming fragments so a crash between intent and fragment creation is
+    # repaired on every sync entry point, including bootstrap and release
+    # archival callers that invoke this internal helper directly.
+    from audiagentic.components.ledger.event_outbox import drain as drain_event_outbox
+
+    drain_event_outbox(project_root)
     lock, warning = _acquire_lock(project_root)
     try:
         fragments = _load_fragments(project_root)

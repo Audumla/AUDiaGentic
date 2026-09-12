@@ -104,6 +104,16 @@ mcp-servers:
         receive or reopen active reviews. Close handled reviews and complete items only
         after non-empty Validation and Acceptance Criteria are recorded and all linked
         reviews are closed.
+        Workflow contract: items start in pending; pending/in_progress are placed in
+        active/ and completed/superseded/deprecated in completed/. Reviews start in
+        created; created/considered are placed in active/ and closed in completed/.
+        Item transitions are pending -> in_progress, completed, superseded, deprecated;
+        in_progress -> pending, completed, superseded, deprecated; completed -> pending,
+        in_progress, superseded, deprecated; superseded -> pending, in_progress; and
+        deprecated -> pending, in_progress. Review transitions are created -> considered,
+        closed; considered -> created, closed; and closed -> created, considered.
+        Completion requires non-empty Validation and Acceptance Criteria and all linked
+        reviews closed.
     tool-descriptions:
       plan_list_standards: List configured planning standards.
       plan_create_item: "Create an item. Required: plan, title. Optional: id, work (S/M/L), skill, order, Validation, Acceptance Criteria, and other sections."
