@@ -7,7 +7,7 @@ import hashlib
 import logging
 from dataclasses import dataclass, replace
 from enum import StrEnum
-from typing import Any
+from typing import Any, NoReturn
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
@@ -1021,6 +1021,10 @@ class GptAutoTurn:
         final_outcome: ObservationOutcome | None = None
         observation_started_at = loop.time()
         last_progress_at = observation_started_at
+        last_real_activity_at = observation_started_at
+        recovery_refresh_attempts = 0
+        final_recovery_grace_started_at: float | None = None
+        interruption_was_present = False
         # GP47 (2026-08-19): _advance_with_trace only logs on a tracker STATE
         # TRANSITION. A turn that stalls for the full response-total-timeout
         # (observed live: completion evidence present but never promoted past
@@ -1428,6 +1432,52 @@ class GptAutoTurn:
                 or current.user_message_ids != previous.user_message_ids
                 or tool_activity_edge
             )
+            # Only correlated message/count/tool changes are real activity.
+            # Widget and generating transitions remain advisory and cannot
+            # indefinitely defer recovery.
+            if progress_edge:
+                last_real_activity_at = now
+                recovery_refresh_attempts = 0
+                final_recovery_grace_started_at = None
+            interruption_present = "connection-interrupted" in current.dom_signals
+            interruption_edge = interruption_present and not interruption_was_present
+            interruption_was_present = interruption_present
+            recovery_cfg = self.chat.config.turn
+            max_refreshes = int(getattr(recovery_cfg, "response_refresh_attempts", 0))
+            silence_seconds = float(
+                getattr(recovery_cfg, "response_no_activity_refresh_seconds", 0.0)
+            )
+            if (
+                max_refreshes > 0
+                and recovery_refresh_attempts < max_refreshes
+                and not completion_candidate
+                and (interruption_edge or now - last_real_activity_at >= silence_seconds)
+            ):
+                refresh = getattr(self.chat, "_refresh_for_response_recovery", None)
+                refreshed = bool(await refresh()) if callable(refresh) else False
+                recovery_refresh_attempts += 1
+                await self._emit_timing("response-refresh-attempted")
+                logger.info(
+                    "gpt-auto response recovery refresh attempted=%s attempt=%d trigger=%s",
+                    refreshed,
+                    recovery_refresh_attempts,
+                    "provider-interruption" if interruption_edge else "no-real-activity",
+                    extra={"turn-id": self.request.turn_id},
+                )
+                if recovery_refresh_attempts >= max_refreshes:
+                    final_recovery_grace_started_at = now
+                if refreshed:
+                    await asyncio.sleep(recovery_cfg.poll_interval_seconds)
+                    continue
+            final_grace_seconds = float(
+                getattr(recovery_cfg, "response_refresh_final_grace_seconds", 0.0)
+            )
+            if (
+                recovery_refresh_attempts >= max_refreshes > 0
+                and final_recovery_grace_started_at is not None
+                and now - final_recovery_grace_started_at >= final_grace_seconds
+            ):
+                self._raise_response_recovery_exhausted(recovery_refresh_attempts)
             if (
                 progress_edge
                 or current.generating != previous.generating
@@ -1702,6 +1752,22 @@ class GptAutoTurn:
                 "failure-reason": "response-policy-timeout",
                 "timeout-policy": policy,
                 "submission-confirmed": True,
+                **self._diagnostics(),
+            },
+        )
+
+    def _raise_response_recovery_exhausted(self, attempts: int) -> NoReturn:
+        """Fail only after the configurable refresh/grace recovery budget."""
+        self._move(TurnState.TIMED_OUT)
+        raise AudiaGenticError(
+            code="EXT-GPTAUTO-004",
+            kind="providers",
+            message="gpt-auto response recovery exhausted",
+            details={
+                "turn-id": self.request.turn_id,
+                "failure-reason": "response-recovery-exhausted",
+                "refresh-attempts": attempts,
+                "phase": "response-observation",
                 **self._diagnostics(),
             },
         )
