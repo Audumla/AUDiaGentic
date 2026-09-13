@@ -20,6 +20,21 @@ Multi-agent workflow orchestration system for AI coding agents. Provides the inf
 | Runtime | `src/audiagentic/runtime/` | Lifecycle management, state |
 | Components | `src/audiagentic/components/optional/` | Providers, coding LSP, ledger, agent jobs, release, source control |
 
+## Installation
+
+For a released build, install the package from PyPI:
+
+```bash
+python3 -m venv ~/.venvs/audiagentic
+source ~/.venvs/audiagentic/bin/activate
+python -m pip install --upgrade audiagentic
+```
+
+The GitHub Release workflow builds and attaches the wheel and source archive
+to each release. PyPI publishing is opt-in; repository maintainers enable it
+with `PYPI_PUBLISH=true` and the `PYPI_API_TOKEN` Actions secret. See
+[`docs/releases/PYPI_PUBLISHING.md`](docs/releases/PYPI_PUBLISHING.md).
+
 ## Docker test path
 
 Use the existing Docker base image as the normal test path. Do not rebuild test images for routine validation unless the image inputs changed.
