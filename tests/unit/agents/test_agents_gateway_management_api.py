@@ -180,6 +180,10 @@ def test_gateway_restart_stops_then_reacquires_service(tmp_path: Path, monkeypat
         "audiagentic.components.agents.gateway.service.bootstrap.start_or_attach_gateway",
         lambda: next(clients),
     )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.service.bootstrap.attach_existing_gateway",
+        lambda: next(clients),
+    )
 
     result = gateway_restart(tmp_path, force=True)
 
@@ -209,9 +213,14 @@ def test_gateway_restart_waits_for_draining_owner_to_retire(tmp_path: Path, monk
     def start():
         nonlocal calls
         calls += 1
-        if calls == 1:
-            return _Client("old")
-        if calls < 4:
+        return _Client("old")
+
+    attach_calls = 0
+
+    def attach():
+        nonlocal attach_calls
+        attach_calls += 1
+        if attach_calls < 3:
             from audiagentic.foundation.contracts.errors import AudiaGenticError
 
             raise AudiaGenticError(
@@ -223,12 +232,17 @@ def test_gateway_restart_waits_for_draining_owner_to_retire(tmp_path: Path, monk
         "audiagentic.components.agents.gateway.service.bootstrap.start_or_attach_gateway",
         start,
     )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.service.bootstrap.attach_existing_gateway",
+        attach,
+    )
     monkeypatch.setenv("AUDIAGENTIC_GATEWAY_RESTART_WAIT_SECONDS", "2")
     monkeypatch.setattr("audiagentic.components.agents.gateway.management_api.time.sleep", lambda _: None)
 
     result = gateway_restart(tmp_path)
 
-    assert calls == 4
+    assert calls == 1
+    assert attach_calls == 3
     assert result["restarted"] is True
 
 

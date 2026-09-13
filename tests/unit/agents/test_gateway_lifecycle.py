@@ -6,6 +6,7 @@ import sys
 import threading
 import time
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 
@@ -15,6 +16,7 @@ from audiagentic.components.agents.gateway.service.lifecycle import (
     GatewayLifecycleController,
     recover_unprovable_owner,
 )
+from audiagentic.components.agents.gateway.session import sessions
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.system.managed_process import current_process_evidence
 from audiagentic.foundation.system.managed_service import ManagedServiceStore
@@ -74,6 +76,20 @@ def test_dashboard_restart_hands_off_busy_work(claimed_store, monkeypatch, busy)
     assert shutdowns == [True]
 
 
+def test_restart_releases_initiating_lease_before_shutdown(claimed_store, monkeypatch):
+    store, record = claimed_store
+    monkeypatch.setattr(lifecycle_mod, "gateway_quiescence_facts", lambda root=None: dict(BUSY))
+    lease_record, lease = store.acquire_lease(
+        "restart-client", ttl_seconds=60, expected_epoch=record.owner_epoch
+    )
+    controller, shutdowns = _controller(store, lease_record)
+    controller.restart_enabled = True
+
+    assert controller.request_restart(initiating_lease_id=lease.lease_id) == {"restarting": True}
+    assert store.read().active_lease_count == 0
+    assert shutdowns == [True]
+
+
 def test_embedded_host_refuses_restart(claimed_store):
     store, record = claimed_store
     controller, shutdowns = _controller(store, record)
@@ -84,8 +100,6 @@ def test_embedded_host_refuses_restart(claimed_store):
 
 @pytest.mark.parametrize("turn_active,pending,allowed", [(False,0,True),(True,0,False),(False,1,False)])
 def test_restart_distinguishes_idle_handles_from_session_work(claimed_store, monkeypatch, turn_active, pending, allowed):
-    from types import SimpleNamespace
-    from audiagentic.components.agents.gateway.session import sessions
     store, record = claimed_store
     monkeypatch.setattr(lifecycle_mod, "gateway_quiescence_facts", lambda root=None: {**QUIET,"live-sessions":1,"quiescent":False})
     runtime = SimpleNamespace(session_snapshot_all=lambda: {"ses_idle":{"turn-active":turn_active,"pending-turns":pending}})
