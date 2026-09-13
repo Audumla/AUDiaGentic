@@ -1165,6 +1165,60 @@ async def test_terminal_verification_adopts_same_response_slot_replacement() -> 
 
 
 @pytest.mark.asyncio
+async def test_stale_error_does_not_fail_after_id_only_remount() -> None:
+    """A remount preserves fresh completion evidence over stale error markers."""
+    chat = _Chat()
+    final_snapshot = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        assistant="final response",
+        assistant_id="assistant-final",
+        complete=True,
+    )
+    stale_remount = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        assistant="final response",
+        assistant_id="assistant-final",
+        complete=True,
+        extra_signals=("error-page",),
+    )
+    chat._snapshots = iter(
+        [
+            snap(),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01", generating=True),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="final response",
+                assistant_id="assistant-candidate",
+                complete=True,
+                extra_signals=("error-page",),
+            ),
+            stale_remount,
+            final_snapshot,
+        ]
+        + [final_snapshot] * 20
+    )
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-stale-error-remount", body="Review AU01"),
+        lambda _observation: None,
+    )
+
+    result = await turn.run()
+
+    assert result.final_summary == "final response"
+    assert chat.runtime.bridge.submit_calls == 1
+    assert turn._response_message_id == "assistant-final"
+
+
+@pytest.mark.asyncio
 async def test_ambiguous_response_identity_recovers_without_resubmitting() -> None:
     """Coexisting assistant nodes remain ambiguous and fail closed by recovery."""
     chat = _Chat()
