@@ -12,6 +12,7 @@ from audiagentic.components.ledger.paths import (
     releases_dir,
 )
 from audiagentic.components.ledger.validation import load_persisted_events
+from audiagentic.components.ledger.validation import validate_release_id
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_ndjson, atomic_write_text
 
@@ -91,6 +92,7 @@ def _purge_fragments(project_root: Path, event_ids: set[str]) -> int:
 
 
 def archive_current_ledger(project_root: Path, release_id: str) -> dict[str, Any]:
+    validate_release_id(release_id)
     # Direct archive callers must observe the same authoritative outbox and
     # fragment-sync boundary as sync/archive-for-release.
     from audiagentic.components.ledger.event_outbox import drain as drain_event_outbox

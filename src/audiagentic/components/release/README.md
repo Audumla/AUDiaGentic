@@ -23,3 +23,11 @@ snapshot. The standard GitHub workflow updates the GitHub release body from
 `docs/releases/RELEASE_NOTES.md` after finalization. Re-running finalization
 refreshes derived notes without duplicating changelog or version-history
 sections.
+
+The installed release-please workflow is language-neutral: `release-type`
+controls release-please versioning, while the workflow provides ledger
+archival and GitHub release-note publication only. It does not assume Python,
+Node, Java, Go, or Rust build commands and does not publish to a registry.
+Target projects own their artifact-build and registry-publish jobs. The
+AUDiaGentic repository has a separate Python/OIDC-PyPI workflow for its own
+package release.
