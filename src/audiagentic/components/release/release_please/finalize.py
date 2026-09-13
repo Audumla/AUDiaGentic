@@ -27,7 +27,7 @@ def render_release_docs(
             message="LEDGER.ndjson not found — ledger may not have been archived",
             details={"path": str(historical_path)},
         )
-    events = load_persisted_events(historical_path)
+    events = load_persisted_events(historical_path, role="historical")
     selected = release_events(events, release_id, released_event_ids)
     labels = {
         "feature": "Features", "code-fix": "Fixes", "refactor": "Improvements",

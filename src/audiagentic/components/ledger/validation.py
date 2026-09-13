@@ -23,7 +23,7 @@ def validate_release_id(release_id: object) -> str:
     return release_id
 
 
-def validate_persisted_event(event: object, *, location: str) -> dict[str, Any]:
+def validate_persisted_event(event: object, *, location: str, role: str | None = None) -> dict[str, Any]:
     """Validate one persisted ledger event and raise a typed integrity error."""
     if not isinstance(event, dict):
         raise AudiaGenticError(
@@ -38,10 +38,22 @@ def validate_persisted_event(event: object, *, location: str) -> dict[str, Any]:
             message="persisted ledger entry failed schema validation",
             details={"location": location, "event-id": event.get("event-id"), "errors": errors},
         )
+    if role == "current" and (event.get("status") != "unreleased" or "release-id" in event):
+        raise AudiaGenticError(
+            code="CON-LEDGER-005", kind="release",
+            message="current ledger may contain only unreleased events without release-id",
+            details={"location": location, "event-id": event.get("event-id")},
+        )
+    if role == "historical" and (event.get("status") != "released" or not event.get("release-id")):
+        raise AudiaGenticError(
+            code="CON-LEDGER-006", kind="release",
+            message="historical ledger may contain only released events with release-id",
+            details={"location": location, "event-id": event.get("event-id")},
+        )
     return event
 
 
-def load_persisted_events(path: Path) -> list[dict[str, Any]]:
+def load_persisted_events(path: Path, *, role: str | None = None) -> list[dict[str, Any]]:
     """Load and validate every non-empty NDJSON line; never silently drop data."""
     if not path.exists():
         return []
@@ -57,5 +69,5 @@ def load_persisted_events(path: Path) -> list[dict[str, Any]]:
                 message="persisted ledger contains invalid JSON",
                 details={"path": str(path), "line": line_number},
             ) from exc
-        events.append(validate_persisted_event(value, location=f"{path}:{line_number}"))
+        events.append(validate_persisted_event(value, location=f"{path}:{line_number}", role=role))
     return events

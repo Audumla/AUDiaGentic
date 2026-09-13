@@ -78,7 +78,8 @@ class TestArchiveLedgerLocally:
         historical.write_text(
             json.dumps({"event-id": "evt_old", "change-class": "docs",
                         "files": ["README.md"], "technical-summary": "old event",
-                        "user-summary-candidate": "Old event", "status": "unreleased"}) + "\n"
+                        "user-summary-candidate": "Old event", "status": "released",
+                        "release-id": "rel_old"}) + "\n"
         )
 
         result = _archive_ledger_locally(project_with_ledger, "rel_0002")
