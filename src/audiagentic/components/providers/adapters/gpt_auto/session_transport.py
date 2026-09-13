@@ -114,8 +114,6 @@ class GptAutoSessionTransport:
             raise RuntimeError(
                 "gpt-auto unresolved turn does not belong to the recovered request"
             )
-        if not metadata.get("prompt-message-id"):
-            raise RuntimeError("gpt-auto unresolved turn has no exact prompt identity")
         turn = GptAutoTurn(self.chat, request, sink)
         self._active_turn = turn
         try:

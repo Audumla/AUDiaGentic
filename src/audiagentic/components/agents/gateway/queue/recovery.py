@@ -152,6 +152,11 @@ def recovery_runner(record: dict[str, Any]):
     provider_id = record.get("resolved-provider-id") or runtime.get("provider-id")
     if not isinstance(provider_id, str) or not provider_id:
         raise ValueError("recovered request has no resolved provider")
+    provider_metadata = record.get("provider-metadata")
+    unresolved_pending = (
+        isinstance(provider_metadata, dict)
+        and provider_metadata.get("unresolved-turn-pending") is True
+    )
     return functools.partial(
         _dispatch.dispatch_request,
         dispatch_prompt="",
@@ -161,7 +166,11 @@ def recovery_runner(record: dict[str, Any]):
         component_profile="",
         provider_isolation_tier=_resolve_provider_isolation_tier(provider_id),
         worker_timeout_seconds=float(record.get("timeout-seconds") or 300.0),
-        resume_existing=bool(record.get("recovery-required")),
+        # A running CAS happens before the side-effect checkpoint. If the
+        # process died before that checkpoint, the prompt is proven unsent and
+        # may continue through the ordinary admission path. Observation-only
+        # recovery is reserved for a durable pending checkpoint.
+        resume_existing=bool(record.get("recovery-required")) and unresolved_pending,
     )
 
 
