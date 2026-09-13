@@ -8,6 +8,9 @@ import pytest
 
 from audiagentic.components.providers.adapters.gpt_auto.chat import ChatState, PersistentChat
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
+from audiagentic.components.providers.adapters.gpt_auto.session_transport import (
+    GptAutoSessionTransport,
+)
 from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatSnapshot
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
@@ -50,6 +53,16 @@ def _terminal_snapshot(*, dom_signals: frozenset[str]) -> ChatSnapshot:
         user_message_ids=("u1",),
         user_message_texts=("hi",),
     )
+
+
+def test_recovery_transport_rejects_foreign_unresolved_request() -> None:
+    chat = _chat()
+    chat._checkpoint_metadata["unresolved-turn-id"] = "req-original"
+    transport = GptAutoSessionTransport(chat)
+    request = SimpleNamespace(turn_id="req-foreign")
+
+    with pytest.raises(RuntimeError, match="does not belong to the recovered request"):
+        asyncio.run(transport.resume_existing(request, lambda _observation: None))
 
 
 @pytest.mark.asyncio

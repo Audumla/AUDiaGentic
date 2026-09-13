@@ -8,6 +8,7 @@ import pytest
 from audiagentic.components.agents.gateway import api as api
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.queue import recovery as recovery
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 
 def test_gateway_api_does_not_expose_second_recovery_authority() -> None:
@@ -16,6 +17,7 @@ def test_gateway_api_does_not_expose_second_recovery_authority() -> None:
 
 def _record(project_root: Path, prompt: str = "hello") -> dict:
     record = store.build_record(execution_profile_id="default", prompt_body=prompt)
+    record["provider-transport-kind"] = "provider-session"
     store.write_record(project_root, record)
     return record
 
@@ -108,6 +110,80 @@ def test_recovery_interrupts_stale_running_claim_and_acknowledges_cancel(tmp_pat
     assert recovered["recovery"]["outcome"] == "in-place"
     assert recovered["cancel-acknowledged-by"] is None
     assert store.active_work_path(service_root, record["request-id"]).exists()
+
+
+def test_recovery_defers_stale_worker_without_replaying_side_effect(tmp_path: Path) -> None:
+    service_root = tmp_path / "service"
+    project_root = tmp_path / "project"
+    record = _record(project_root)
+    record["provider-transport-kind"] = "worker"
+    store.write_record(project_root, record)
+    claimed = store.claim_dispatch(
+        project_root,
+        record["request-id"],
+        owner_epoch="old-epoch",
+        expected_revision=record["revision"],
+        service_root=service_root,
+    )
+    store.start_owned_attempt(
+        project_root,
+        record["request-id"],
+        owner_epoch="old-epoch",
+        worker_id="worker-a",
+        expected_revision=claimed["revision"],
+    )
+
+    report = recovery.recover_gateway_requests(service_root, live_owner_epoch="new-epoch")
+
+    assert report.running == ()
+    assert report.deferred == ((project_root, record["request-id"]),)
+    recovered = store.read_record(project_root, record["request-id"])
+    assert recovered["state"] == "running"
+    assert recovered["dispatch-owner-epoch"] == "old-epoch"
+    assert store.active_work_path(service_root, record["request-id"]).exists()
+
+
+def test_recovery_repairs_index_after_request_takeover_race(tmp_path: Path, monkeypatch) -> None:
+    service_root = tmp_path / "service"
+    project_root = tmp_path / "project"
+    record = _record(project_root)
+    claimed = store.claim_dispatch(
+        project_root,
+        record["request-id"],
+        owner_epoch="old-epoch",
+        expected_revision=record["revision"],
+        service_root=service_root,
+    )
+    store.start_owned_attempt(
+        project_root,
+        record["request-id"],
+        owner_epoch="old-epoch",
+        worker_id="worker-a",
+        expected_revision=claimed["revision"],
+    )
+    real_takeover = recovery.work_index.takeover_owner
+    calls = 0
+
+    def fail_once(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise AudiaGenticError(
+                "CON-AGW-106", "agents", "injected index takeover race"
+            )
+        return real_takeover(*args, **kwargs)
+
+    monkeypatch.setattr(recovery.work_index, "takeover_owner", fail_once)
+    report = recovery.recover_gateway_requests(service_root, live_owner_epoch="new-epoch")
+
+    assert report.running == ((project_root, record["request-id"]),)
+    assert calls == 2
+    assert store.read_record(project_root, record["request-id"])["dispatch-owner-epoch"] == "new-epoch"
+    entries, quarantined = recovery.work_index.recover_work_index_entries(
+        service_root, live_owner_epoch="new-epoch"
+    )
+    assert quarantined == 0
+    assert entries[0].owner_epoch == "new-epoch"
 
 
 def test_cancel_acknowledgement_is_first_writer_wins(tmp_path: Path) -> None:
