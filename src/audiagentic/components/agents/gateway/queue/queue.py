@@ -949,7 +949,6 @@ class GatewayQueueManager:
                         or current.get("dispatch-owner-epoch") != entry.owner_epoch
                         or current.get("worker-id") != worker_id
                         or current.get("attempt-epoch") != attempt_epoch
-                        or current.get("cancel-requested")
                     ):
                         return
                     with pq.lock:

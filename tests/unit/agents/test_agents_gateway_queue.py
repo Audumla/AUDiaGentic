@@ -131,6 +131,59 @@ def test_recovery_deferred_stays_running_and_retries_same_request(tmp_path: Path
     )
 
 
+def test_cancelled_recovery_backoff_is_not_stranded(tmp_path: Path):
+    """Cancellation during deferred recovery still gets a worker pass."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(execution_profile_id="recovery-cancel", prompt_body="x")
+    store.write_record(project, record)
+    deferred = threading.Event()
+    calls = 0
+
+    def runner(project_root: Path, current: dict) -> dict:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            deferred.set()
+            raise RecoveryDeferred(
+                AudiaGenticError(
+                    code="EXT-AGW-118",
+                    kind="agents",
+                    message="provider reattach unavailable",
+                )
+            )
+        assert current["cancel-requested"] is True
+        return store.transition_record(
+            project_root,
+            current["request-id"],
+            "cancelled",
+            updates={"finished-at": now_iso_z()},
+        )
+
+    manager.enqueue(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 0.02,
+            "provider-session-recovery-max-delay-seconds": 0.02,
+        },
+        runner,
+    )
+    assert deferred.wait(timeout=2)
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        current = store.read_record(project, record["request-id"])
+        if (current.get("recovery") or {}).get("phase") == "rehydrate-retry":
+            break
+        time.sleep(0.01)
+    manager.cancel(project, "recovery-cancel", record["request-id"])
+    terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
+    assert terminal["state"] == "cancelled"
+    assert calls == 2
+
+
 def test_project_queue_depths_excludes_other_projects(tmp_path: Path):
     manager = queue_mod.GatewayQueueManager()
     project_a = tmp_path / "project-a"

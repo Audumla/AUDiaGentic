@@ -725,7 +725,13 @@ def _dispatch_session_request(
                 details={"request-id": request_id},
             )
         session_id = str(session_id)
-        _raise_if_cancelled(project_root, request_id)
+        if resume_existing and store.read_record(project_root, request_id).get("cancel-requested"):
+            # Recovered work may already have sent this turn. Reattach first,
+            # signal cancellation against the exact turn, and let the
+            # provider resume path establish the authoritative outcome.
+            runtime.request_cancel(request_id, session_id=session_id)
+        else:
+            _raise_if_cancelled(project_root, request_id)
         store.record_gateway_timeline(
             project_root,
             request_id,
@@ -777,6 +783,16 @@ def _dispatch_session_request(
     except _CancelledDuringDispatch:
         if guard_held:
             preparation_guard.release()
+        if resume_existing:
+            raise RecoveryDeferred(
+                AudiaGenticError(
+                    code="CON-AGW-CANCELLED",
+                    kind="agents",
+                    message="recovered turn cancellation requires provider reconciliation",
+                    details={"session-id": session_id, "request-id": request_id},
+                ),
+                phase="cancel-reconcile",
+            )
         if request_runtime is not None:
             _cleanup_request_runtime(request_runtime)
         return _transition_owned_attempt(project_root, record, "cancelled")
