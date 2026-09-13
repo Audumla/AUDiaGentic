@@ -893,12 +893,12 @@ async def test_same_response_slot_id_replacement_is_adopted_without_refresh() ->
     )
     refresh_calls = 0
 
-    async def refresh_same_conversation() -> bool:
+    async def refresh_same_conversation(*_args, **_kwargs) -> bool:
         nonlocal refresh_calls
         refresh_calls += 1
         return True
 
-    chat._refresh_for_reconciliation = refresh_same_conversation
+    chat.refresh_bound_conversation = refresh_same_conversation
     turn = GptAutoTurn(
         chat,
         SessionPrompt(turn_id="turn-stale-dom", body="Review AU01"),
@@ -932,7 +932,6 @@ def test_same_response_slot_replacement_requires_one_prompt_owned_assistant() ->
     assert _same_response_slot_replacement(
         current,
         prompt_message_id="prompt-1",
-        expected_user_count=1,
         old_assistant_id="assistant-old",
         new_assistant_id="assistant-new",
     )
@@ -949,7 +948,6 @@ def test_same_response_slot_replacement_requires_one_prompt_owned_assistant() ->
     assert not _same_response_slot_replacement(
         with_later_user,
         prompt_message_id="prompt-1",
-        expected_user_count=1,
         old_assistant_id="assistant-old",
         new_assistant_id="assistant-new",
     )
@@ -964,10 +962,77 @@ def test_same_response_slot_replacement_requires_one_prompt_owned_assistant() ->
     assert not _same_response_slot_replacement(
         with_two_assistants,
         prompt_message_id="prompt-1",
-        expected_user_count=1,
         old_assistant_id="assistant-old",
         new_assistant_id="assistant-new",
     )
+
+
+@pytest.mark.asyncio
+async def test_repeated_id_only_replacements_cannot_bypass_recovery() -> None:
+    """Renderer churn alone must not reset the no-activity recovery budget."""
+    chat = _Chat()
+    chat.config.turn.response_no_activity_refresh_seconds = 0.01
+    chat.config.turn.response_refresh_attempts = 1
+    chat.config.turn.response_refresh_final_grace_seconds = 0
+    churn = [
+        snap(
+            users=1,
+            assistants=1,
+            user="Review AU01",
+            assistant="same response",
+            assistant_id=f"assistant-churn-{index}",
+            complete=True,
+        )
+        for index in range(2, 32)
+    ]
+    prefix = [
+        snap(),
+        snap(users=1, user="Review AU01"),
+        snap(users=1, user="Review AU01"),
+        snap(users=1, user="Review AU01", generating=True),
+        snap(
+            users=1,
+            assistants=1,
+            user="Review AU01",
+            assistant="same response",
+            assistant_id="assistant-churn-1",
+        ),
+        snap(
+            users=1,
+            assistants=1,
+            user="Review AU01",
+            assistant="same response",
+            assistant_id="assistant-churn-1",
+            complete=True,
+        ),
+    ]
+
+    def snapshot_stream():
+        yield from prefix
+        while True:
+            yield from churn
+
+    chat._snapshots = iter(snapshot_stream())
+    refresh_calls = 0
+
+    async def refresh_same_conversation(*_args, **_kwargs) -> bool:
+        nonlocal refresh_calls
+        refresh_calls += 1
+        return True
+
+    chat.refresh_bound_conversation = refresh_same_conversation
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-repeated-id-churn", body="Review AU01"),
+        lambda _observation: None,
+    )
+
+    with pytest.raises(AudiaGenticError) as captured:
+        await turn.run()
+
+    assert captured.value.details["failure-reason"] == "response-recovery-exhausted"
+    assert refresh_calls == 1
+    assert chat.runtime.bridge.submit_calls == 1
 
 
 @pytest.mark.asyncio
