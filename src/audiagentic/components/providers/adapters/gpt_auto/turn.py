@@ -1478,6 +1478,7 @@ class GptAutoTurn:
                 and bool(current.latest_assistant_text)
                 and not id_only_replacement
             )
+            completion_evidence_present = complete.satisfied and bool(current.latest_assistant_text)
             # Authentication is a hard veto even for reduced/test workflow
             # configurations that do not declare a standalone auth policy.
             if facts.get("auth-required"):
@@ -1534,7 +1535,7 @@ class GptAutoTurn:
             # stale marker must not pre-empt durable completion evidence.
             provider_interruption = "provider-interruption" in current.dom_signals
             failed = self.chat.config.workflow.policy("response-failed").evaluate(facts)
-            if failed.satisfied and not completion_candidate:
+            if failed.satisfied and not completion_evidence_present:
                 logger.warning(
                     "gpt-auto response failure policy matched",
                     extra={"turn-id": self.request.turn_id, "evidence": sorted(failed.matched)},
