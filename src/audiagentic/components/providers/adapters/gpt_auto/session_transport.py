@@ -5,6 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.agents.gateway.session.client_defaults import (
+    _bounded_cause_message,
+)
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.agent_session import (
     ControlDisposition,
@@ -75,13 +78,43 @@ class GptAutoSessionTransport:
         try:
             await self.chat.ensure_ready()
         except Exception as exc:
-            retained = await self.chat.retain_after_turn_failure(exc)
+            metadata_fn = getattr(self.chat, "unresolved_metadata", None)
+            metadata = metadata_fn() if callable(metadata_fn) else {}
+            unresolved = bool(metadata.get("unresolved-turn-pending"))
+            failure = AudiaGenticError(
+                code="EXT-GPTAUTO-004",
+                kind="providers",
+                message="gpt-auto turn admission failed before provider submission",
+                details={
+                    "failure-stage": "readiness",
+                    "submission-state": "not_started",
+                    "retryable-same-session": False,
+                    "previous-turn-unresolved": unresolved,
+                    "cause-type": type(exc).__name__,
+                    "cause-message": _bounded_cause_message(exc),
+                    "request-id": request.turn_id,
+                    "session-id": getattr(self.chat, "ag_session_id", None),
+                },
+            )
+            retained = await self.chat.retain_after_turn_failure(failure)
+            details = dict(failure.details or {})
+            details["retryable-same-session"] = bool(
+                retained
+                and not unresolved
+                and getattr(self.chat, "state", None) not in {ChatState.FAILED, ChatState.CLOSED}
+            )
+            failure = AudiaGenticError(
+                code=failure.code,
+                kind=failure.kind,
+                message=failure.message,
+                details=details,
+            )
             self._turn_failure_disposition = (
                 SessionFailureDisposition.RETAIN
                 if retained
                 else SessionFailureDisposition.TERMINATE
             )
-            raise
+            raise failure from exc
         self._turn_failure_disposition = SessionFailureDisposition.TERMINATE
         turn = GptAutoTurn(self.chat, request, sink)
         self._active_turn = turn
