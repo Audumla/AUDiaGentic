@@ -24,6 +24,9 @@ settings:
     physical-tab-idle-timeout-seconds: 7200
     physical-tab-reaper-interval-seconds: 300
   cdp:
+    # CDP target location. For a remote browser use e.g.
+    # http://10.0.0.25:9222 and set up private transport (SSH/VPN).
+    endpoint: http://127.0.0.1:9222
     connect-timeout-seconds: 15
     protocol-timeout-seconds: 30
     recovery-timeout-seconds: 30
