@@ -810,6 +810,7 @@ class SessionRuntime:
         request_runtime_root: Path | None = None,
         mcp_entries=(),
         project_name: str | None = None,
+        resume_existing: bool = False,
     ) -> dict[str, Any]:
         """Reattach an active durable generation after a runtime restart.
 
@@ -852,6 +853,7 @@ class SessionRuntime:
                 request_runtime_root=request_runtime_root,
                 mcp_entries=tuple(mcp_entries),
                 project_name=project_name,
+                resume_existing=resume_existing,
             ),
             timeout=None,
         )
@@ -1139,6 +1141,7 @@ class SessionRuntime:
         request_runtime_root: Path | None,
         mcp_entries,
         project_name: str | None,
+        resume_existing: bool,
     ) -> dict[str, Any]:
         # The loop serializes this check with every other session operation;
         # concurrent continuations cannot open two browser/provider handles.
@@ -1278,6 +1281,10 @@ class SessionRuntime:
                     details={"session-id": session_id, "provider-id": provider_id},
                 )
             transport = prepared.transport
+            if resume_existing:
+                defer_recovery = getattr(transport, "defer_unresolved_reconciliation", None)
+                if callable(defer_recovery):
+                    defer_recovery()
             open_result = await transport.open()
         except asyncio.CancelledError:
             if transport is not None:
@@ -2551,7 +2558,8 @@ class SessionRuntime:
                 # that case retain the live handle and its browser/session
                 # binding; all other transports keep the historical terminal
                 # failure behaviour.
-                if self._retain_after_turn_failure(handle):
+                retain_for_recovery = resume_existing and getattr(exc, "code", None) == "CON-AGW-124"
+                if retain_for_recovery or self._retain_after_turn_failure(handle):
                     try:
                         session_store.record_session_timeline(
                             project_root,

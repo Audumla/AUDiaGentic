@@ -110,6 +110,10 @@ class GptAutoSessionTransport:
         metadata = self.chat.unresolved_metadata()
         if not metadata.get("unresolved-turn-pending"):
             raise RuntimeError("gpt-auto has no durable unresolved turn to recover")
+        if metadata.get("unresolved-turn-id") != request.turn_id:
+            raise RuntimeError(
+                "gpt-auto unresolved turn does not belong to the recovered request"
+            )
         if not metadata.get("prompt-message-id"):
             raise RuntimeError("gpt-auto unresolved turn has no exact prompt identity")
         turn = GptAutoTurn(self.chat, request, sink)
@@ -126,6 +130,10 @@ class GptAutoSessionTransport:
             raise
         finally:
             self._active_turn = None
+
+    def defer_unresolved_reconciliation(self) -> None:
+        """Keep the durable checkpoint for ``resume_existing`` to consume."""
+        self.chat.defer_unresolved_reconciliation()
 
     async def control(self, request: SessionControlRequest) -> SessionControlResult:
         if request.action is SessionControlAction.CANCEL_TURN:
