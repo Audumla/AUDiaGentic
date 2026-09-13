@@ -1,9 +1,10 @@
 # AUDiaGentic Provider Capability Reference
 
 Status: canonical code-facing reference resource  
-Last registry rebuild recorded: 2026-07-17. Individual facts carry their
-own validation timestamp; treat this package as evidence with explicit
-freshness, not as a claim that every upstream capability is current today.
+Package files last synchronized: 2026-09-13. The latest registry rebuild
+recorded in the evidence remains 2026-07-17. Individual facts carry their own
+validation timestamp; treat this package as evidence with explicit freshness,
+not as a claim that every upstream capability is current today.
 
 This package describes the provider, harness, endpoint, transport, configuration, control, telemetry, and operation capabilities known to AUDiaGentic. It is **curated evidence and design reference** — not executable implementation code and not runtime configuration.
 
@@ -17,7 +18,7 @@ expected and must not be “fixed” by copying one registry into the other.
 
 Nothing in this package is runtime authority. Runtime behavior is enabled only by:
 
-1. **Provider descriptors** (`config/providers/*.yaml`) — MA20 capability declarations and operational fields, loaded by the providers component.
+1. **Provider descriptors** (`src/audiagentic/config/providers/*.yaml`) — MA20 capability declarations and operational fields, loaded by the providers component.
 2. **MA19 `capability_facts`** in those same descriptors — typed evidence records.
 
 This package is the knowledge source that humans and agents **project into** those descriptors (see each file's projection notes). Runtime code MUST NOT load `registries/*.yaml`, profiles, or matrices from this package; an architecture guard enforces the no-runtime-import rule (MA19 validation 9/10).

@@ -3,13 +3,13 @@
   "files": [
     {
       "path": "README.md",
-      "sha256": "c4ed5e55ba767c5fd2d37107c49f99b4338c3c45a0d914fc76c2a339016cd255",
-      "bytes": 5340
+      "sha256": "c4c422e085ce1cb636c724c4f0a78a808577bb92f7ed1bb37a8064fd5456036d",
+      "bytes": 5430
     },
     {
       "path": "architecture/reference-architecture.md",
-      "sha256": "47e40488cd60b86d73df27525f3eaa4435d32387f25f508c02355b94a9ec4a7c",
-      "bytes": 3129
+      "sha256": "31aa67b772b07679563fc297dac8886faf5f80c896a98155f2b9dc317ce63252",
+      "bytes": 3145
     },
     {
       "path": "architecture/resource-consumption.md",
@@ -58,8 +58,8 @@
     },
     {
       "path": "harnesses/profiles/codex.md",
-      "sha256": "60b36b7df4a2117ef1215e2afb6408439454f78cfb4cb880965b69f44fc158b7",
-      "bytes": 15982
+      "sha256": "216658ba53de409d4bd3ab0bbe6b2aad9e963d7b0a5921d3e6c8fd003526fb50",
+      "bytes": 15988
     },
     {
       "path": "harnesses/profiles/copilot.md",
@@ -73,8 +73,8 @@
     },
     {
       "path": "harnesses/profiles/gemini.md",
-      "sha256": "733498ebaab9e744f726978730500c8f9baac3e99bea0cbb43a05856dd927712",
-      "bytes": 5654
+      "sha256": "00cc90c8946eb900da30f60a57705086a3380f5b260fb0156d4078aa0816b990",
+      "bytes": 5634
     },
     {
       "path": "harnesses/profiles/kilo.md",
@@ -83,8 +83,8 @@
     },
     {
       "path": "harnesses/profiles/opencode.md",
-      "sha256": "1116ba9d1a24f3a96f2d603f60f42fba9097bb99e5ece837d767f0b1596f5bba",
-      "bytes": 12256
+      "sha256": "e3ea5a92f5f9d94e35842de30f9d3639ee345868ac6b695e04d1b3574463e764",
+      "bytes": 12238
     },
     {
       "path": "harnesses/profiles/openhands.md",
@@ -113,8 +113,8 @@
     },
     {
       "path": "model/capability-id-taxonomy.md",
-      "sha256": "b1120126f730dc3446425fb268463c8f31bcb0360d12f8cad1fd2f1847426a7a",
-      "bytes": 7480
+      "sha256": "da98bcbfd6d9241a751726477a2d903de1e9bb4069f654310dd825a7668d5b79",
+      "bytes": 7528
     },
     {
       "path": "model/capability-operation-contract.md",
@@ -123,8 +123,8 @@
     },
     {
       "path": "protocols/acp-capabilities.md",
-      "sha256": "12af8bbd840aa21cd9f8998b7b82a17ace5a62b9c19a50e21a5642086dccc87c",
-      "bytes": 32336
+      "sha256": "ebffe0a7eca95c3b835afe67786134e5f668847e0625ad170cdeb7d02a369389",
+      "bytes": 32567
     },
     {
       "path": "registries/capabilities.yaml",

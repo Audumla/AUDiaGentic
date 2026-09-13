@@ -27,6 +27,11 @@ For the audit boundary and known findings, see
 - Use repository-relative links and verify that local link targets exist.
 - Never place secrets, tokens, raw prompts, or machine-specific credentials in
   documentation or examples.
+- Do not commit resolved user/workspace paths, machine names, private network
+  addresses, temporary-directory paths, or copied local runtime records. Use
+  repository-relative paths for project files and `<user-home>`,
+  `<private-endpoint>`, or another clearly marked placeholder for environment
+  details that are necessary to explain a public interface.
 
 ## Current high-value entry points
 
