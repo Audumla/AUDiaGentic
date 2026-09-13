@@ -67,8 +67,13 @@ def test_non_gpt_does_not_bind(tmp_path):
     assert not (tmp_path / "service").exists()
 
 
-def test_proven_unsent_failure_never_replaces_default(tmp_path):
-    error = AudiaGenticError(code="EXT-GPTAUTO-003", kind="providers", message="timeout", details={"failure-reason":"composer-operation-timeout","submission-ambiguous":False})
+def test_proven_presubmit_failure_never_replaces_default(tmp_path):
+    error = AudiaGenticError(code="EXT-GPTAUTO-004", kind="providers", message="timeout", details={
+        "failure-stage": "readiness", "submission-state": "not_started",
+        "retryable-same-session": True,
+    })
+    assert defaults.structured_presubmit_failure(error)
+    assert defaults.proven_same_session_presubmit_retryable_failure(error)
     with selection(tmp_path) as chosen:
         chosen.commit({"session-id":"ses_original"})
         path = chosen.path
@@ -76,6 +81,22 @@ def test_proven_unsent_failure_never_replaces_default(tmp_path):
         assert defaults.replace_failed_default(tmp_path, {}, error, recover_url=False) is None
         attach.assert_not_called()
     assert defaults._read(path)["session-id"] == "ses_original"
+
+
+def test_presubmit_retry_requires_explicit_same_session_proof():
+    base = {"failure-stage": "readiness", "submission-state": "not_started"}
+    assert not defaults.proven_same_session_presubmit_retryable_failure(
+        AudiaGenticError("EXT-GPTAUTO-004", "providers", "blocked", {**base, "retryable-same-session": False})
+    )
+    assert not defaults.structured_presubmit_failure(RuntimeError("not typed"))
+
+
+def test_presubmit_cause_is_bounded_and_redacted():
+    cause = RuntimeError("https://private.example/x C:\\Users\\mgs\\secret " + "x" * 500)
+    value = defaults._bounded_cause_message(cause)
+    assert len(value) <= 240
+    assert "private.example" not in value
+    assert "C:\\Users" not in value
 
 
 def test_missing_session_retains_chat_recovery_reference(tmp_path):

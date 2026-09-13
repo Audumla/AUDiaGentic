@@ -423,7 +423,7 @@ def _dispatch_session_request(
     preparation_guard = client_defaults.preparation_guard(record)
     preparation_guard.acquire()
     guard_held = True
-    prompt_started = False
+    runtime_invoked = False
     try:
         if not resume_existing:
             record = client_defaults.redirect_if_replaced(project_root, record)
@@ -758,7 +758,9 @@ def _dispatch_session_request(
         client_defaults.remember(project_root, record)
         preparation_guard.release()
         guard_held = False
-        prompt_started = True
+        # This only proves that SessionRuntime was entered.  Provider
+        # submission state comes from the transport's typed failure contract.
+        runtime_invoked = True
         dispatch_claim = None
         if session_start is not None and store.read_record(project_root, request_id)["state"] == "queued":
             def _claim_session_turn() -> dict[str, Any]:
@@ -808,10 +810,24 @@ def _dispatch_session_request(
                 # retry and keeps the durable request/session identity.
                 raise RecoveryDeferred(
                     exc,
-                    phase="rehydrate-retry" if not prompt_started else "observe-retry",
+                    phase="rehydrate-retry" if not runtime_invoked else "observe-retry",
                 ) from exc
         cancelled = store.read_record(project_root, request_id).get("cancel-requested")
-        if client_defaults.proven_unsent_composer_failure(exc) and not cancelled and not _unsent_retry_used:
+        if (
+            client_defaults.structured_presubmit_failure(exc)
+            and (exc.details or {}).get("previous-turn-unresolved") is True
+            and not cancelled
+        ):
+            # The current prompt was never submitted, but the preceding
+            # provider turn still has an unresolved Send fence.  Keep this
+            # request queued on the same session until reconciliation proves
+            # the session safe; never replay it or rotate the client's default.
+            raise RecoveryDeferred(
+                exc,
+                phase="presubmit-reconcile",
+                side_effect_state="not-started",
+            ) from exc
+        if client_defaults.proven_same_session_presubmit_retryable_failure(exc) and not cancelled and not _unsent_retry_used:
             store.append_owned_attempt(
                 project_root, request_id, owner_epoch=record["dispatch-owner-epoch"],
                 worker_id=record["worker-id"], attempt_epoch=record["attempt-epoch"],
@@ -833,12 +849,12 @@ def _dispatch_session_request(
         if not resume_existing and not store.read_record(project_root, request_id).get("cancel-requested"):
             replacement = client_defaults.replace_failed_default(
                 project_root, record, exc,
-                recover_url=not prompt_started and _default_recovery_attempt == 0 and not (record.get("metadata") or {}).get("provider-chat-url"),
-                attach_request=not prompt_started and _default_recovery_attempt < 2,
-            ) if _default_recovery_attempt < 2 or prompt_started else None
+                recover_url=not runtime_invoked and _default_recovery_attempt == 0 and not (record.get("metadata") or {}).get("provider-chat-url"),
+                attach_request=not runtime_invoked and _default_recovery_attempt < 2,
+            ) if _default_recovery_attempt < 2 or runtime_invoked else None
             if replacement is not None:
                 record = replacement
-                if not prompt_started:
+                if not runtime_invoked:
                     return _dispatch_session_request(project_root, record, dispatch_prompt=dispatch_prompt, context_fingerprint=context_fingerprint, _default_recovery_attempt=_default_recovery_attempt + 1)
         exc = _explain_stale_session_runtime_error(project_root, session_id, exc)
         if request_runtime is not None:
@@ -892,12 +908,12 @@ def _dispatch_session_request(
         if isinstance(exc, Exception) and not resume_existing and _default_recovery_attempt < 2 and not store.read_record(project_root, request_id).get("cancel-requested"):
             replacement = client_defaults.replace_failed_default(
                 project_root, record, wrapped,
-                recover_url=not prompt_started and _default_recovery_attempt == 0 and not (record.get("metadata") or {}).get("provider-chat-url"),
-                attach_request=not prompt_started,
+                recover_url=not runtime_invoked and _default_recovery_attempt == 0 and not (record.get("metadata") or {}).get("provider-chat-url"),
+                attach_request=not runtime_invoked,
             )
             if replacement is not None:
                 record = replacement
-                if not prompt_started:
+                if not runtime_invoked:
                     return _dispatch_session_request(project_root, record, dispatch_prompt=dispatch_prompt, context_fingerprint=context_fingerprint, _default_recovery_attempt=_default_recovery_attempt + 1)
         store.append_owned_attempt(
             project_root,

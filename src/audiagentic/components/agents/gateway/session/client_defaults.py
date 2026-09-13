@@ -8,12 +8,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import threading
 import weakref
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import atomic_write_json
@@ -68,7 +70,10 @@ def _read(path: Path) -> dict[str, Any]:
 
 
 def chat_url(metadata: dict[str, Any]) -> str | None:
-    from audiagentic.components.providers.adapters.gpt_auto.urls import canonical_chat_url, parse_project_id
+    from audiagentic.components.providers.adapters.gpt_auto.urls import (
+        canonical_chat_url,
+        parse_project_id,
+    )
 
     for key in ("chat-url", "provider-chat-url"):
         value = metadata.get(key)
@@ -90,13 +95,34 @@ def warning(code: str, message: str, session_id: str | None = None) -> dict[str,
     return result
 
 
-def proven_unsent_composer_failure(error: Exception) -> bool:
-    """Only explicit provider proof allows retrying a stateful prompt."""
+_PRESUBMIT_STAGES = frozenset({"readiness", "turn_setup"})
+
+
+def _bounded_cause_message(error: BaseException) -> str:
+    """Keep provider admission causes useful without leaking private context."""
+    message = re.sub(r"\s+", " ", str(error)).strip()
+    message = re.sub(r"(?i)https?://\S+", "[redacted-url]", message)
+    message = re.sub(r"(?i)(?:[A-Z]:\\|/)[^\s]+", "[redacted-path]", message)
+    return message[:240]
+
+
+def structured_presubmit_failure(error: Exception) -> bool:
+    """Return whether a typed error proves provider submission did not start."""
+    if not isinstance(error, AudiaGenticError):
+        return False
+    details = error.details
     return (
-        isinstance(error, AudiaGenticError)
-        and error.code == "EXT-GPTAUTO-003"
-        and error.details.get("failure-reason") == "composer-operation-timeout"
-        and error.details.get("submission-ambiguous") is False
+        isinstance(details, dict)
+        and details.get("failure-stage") in _PRESUBMIT_STAGES
+        and details.get("submission-state") == "not_started"
+    )
+
+
+def proven_same_session_presubmit_retryable_failure(error: Exception) -> bool:
+    """Only explicit, typed proof permits retrying a stateful prompt in place."""
+    return (
+        structured_presubmit_failure(error)
+        and error.details.get("retryable-same-session") is True
     )
 
 
@@ -243,17 +269,19 @@ def _attach(project_root: Path, record: dict[str, Any], target: str, note: dict[
 
 def replace_failed_default(project_root: Path, record: dict[str, Any], error: Exception, *, recover_url: bool, attach_request: bool = True) -> dict[str, Any] | None:
     """Prepare a replacement before prompt submission; preserve prior failure evidence."""
-    if proven_unsent_composer_failure(error):
+    # Any structured pre-submit failure belongs to the current session.  A
+    # false retryable flag means admission is blocked by unresolved provider
+    # state, not that another default session should be substituted.
+    if structured_presubmit_failure(error):
         return None
     identity = record.get("client-default-session")
     if not isinstance(identity, dict) or not identity.get("automatic"):
         return None
-    from audiagentic.components.agents.gateway.session import sessions_store
-
     # Preserve the cause before replacing the default; the public warning
     # intentionally omits exception text, but protected attempt history must
     # retain it for diagnosis even when the fallback later succeeds.
     from audiagentic.components.agents.gateway import store
+    from audiagentic.components.agents.gateway.session import sessions_store
     store.append_owned_attempt(
         project_root, record["request-id"],
         owner_epoch=record["dispatch-owner-epoch"], worker_id=record["worker-id"],
