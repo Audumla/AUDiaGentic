@@ -495,7 +495,13 @@ class GatewayServiceApplication:
             _reject_unknown(arguments, set())
             if self._operations_active():
                 raise service_conflict_error(30, "gateway has active operator operations; retry when idle")
-            return self._lifecycle_controller().request_restart()
+            epoch = self._service_store.read().owner_epoch
+            return {
+                **self._lifecycle_controller().request_restart(
+                    initiating_lease_id=lease_id
+                ),
+                "owner-epoch": epoch,
+            }
         raise service_validation_error(1, "unknown gateway service operation", operation=operation)
 
     def restart_dashboard_gateway(self) -> dict[str, Any]:

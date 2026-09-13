@@ -31,6 +31,37 @@ _config_error = make_error_factory("CFG", "AGSV", "gateway-service")
 
 def start_or_attach_gateway() -> StandaloneGatewayClient:
     """Start one compatible machine-wide gateway or attach to its proven owner."""
+    lifecycle, endpoint, token_path, declaration, store = _gateway_lifecycle()
+    client_instance_id = f"gateway-client-{uuid.uuid4().hex[:16]}"
+    result = lifecycle.start_or_attach(
+        declaration,
+        client_instance_id=client_instance_id,
+        lease_ttl_seconds=_LEASE_TTL_SECONDS,
+        lease_facts={"client": "audiagentic"},
+    )
+    return _client_for_result(
+        endpoint, token_path, result, client_instance_id=client_instance_id
+    )
+
+
+def attach_existing_gateway() -> StandaloneGatewayClient:
+    """Attach to the current owner without ever launching a replacement."""
+    lifecycle, endpoint, token_path, declaration, _store = _gateway_lifecycle()
+    client_instance_id = f"gateway-client-{uuid.uuid4().hex[:16]}"
+    result = lifecycle.attach_existing(
+        declaration,
+        client_instance_id=client_instance_id,
+        lease_ttl_seconds=_LEASE_TTL_SECONDS,
+        lease_facts={"client": "audiagentic"},
+    )
+    return _client_for_result(
+        endpoint, token_path, result, client_instance_id=client_instance_id
+    )
+
+
+def _gateway_lifecycle() -> tuple[
+    ManagedServiceLifecycle, str, Path, Any, ManagedServiceStore
+]:
     port = _configured_port()
     store = ManagedServiceStore(GATEWAY_SERVICE_KEY)
     endpoint_info = EndpointInfo(
@@ -72,13 +103,16 @@ def start_or_attach_gateway() -> StandaloneGatewayClient:
             request_stop=lambda _record: None,
         ),
     )
-    client_instance_id = f"gateway-client-{uuid.uuid4().hex[:16]}"
-    result = lifecycle.start_or_attach(
-        declaration,
-        client_instance_id=client_instance_id,
-        lease_ttl_seconds=_LEASE_TTL_SECONDS,
-        lease_facts={"client": "audiagentic"},
-    )
+    return lifecycle, endpoint, token_path, declaration, store
+
+
+def _client_for_result(
+    endpoint: str,
+    token_path: Path,
+    result: Any,
+    *,
+    client_instance_id: str,
+) -> StandaloneGatewayClient:
     client = StandaloneGatewayClient(
         endpoint,
         load_auth_token(token_path),
@@ -118,4 +152,4 @@ def _configured_port() -> int:
     return port
 
 
-__all__ = ["start_or_attach_gateway"]
+__all__ = ["attach_existing_gateway", "start_or_attach_gateway"]

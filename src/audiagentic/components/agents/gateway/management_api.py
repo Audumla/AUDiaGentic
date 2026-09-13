@@ -289,7 +289,10 @@ def gateway_restart(project_root: Path, *, force: bool = False) -> dict[str, Any
     remains machine-scoped. The managed lifecycle performs a durable handoff
     before the replacement starts; no unrelated MCP stdio processes are touched.
     """
-    from audiagentic.components.agents.gateway.service.bootstrap import start_or_attach_gateway
+    from audiagentic.components.agents.gateway.service.bootstrap import (
+        attach_existing_gateway,
+        start_or_attach_gateway,
+    )
 
     del force
     client = start_or_attach_gateway()
@@ -298,20 +301,40 @@ def gateway_restart(project_root: Path, *, force: bool = False) -> dict[str, Any
     finally:
         client.close()
 
+    old_epoch = restarting.get("owner-epoch")
     deadline = time.monotonic() + _restart_wait_seconds()
     replacement = None
+    last_error: AudiaGenticError | None = None
     while replacement is None:
         try:
-            replacement = start_or_attach_gateway()
+            # The retiring host owns the replacement launch.  This waiter is
+            # attach-only so a delayed/failed handoff cannot create a second
+            # process generation behind the host's back.
+            candidate = attach_existing_gateway()
+            status = candidate.service_status(project_root)
+            if old_epoch is not None and status.get("owner-epoch") == old_epoch:
+                candidate.close()
+                raise AudiaGenticError(
+                    "CON-MSVC-030",
+                    "agents",
+                    "gateway replacement has not changed owner epoch",
+                )
+            replacement = candidate
         except AudiaGenticError as exc:
             # The old generation is expected to remain observable while it
             # drains and retires. Retry only those lifecycle race outcomes;
             # all configuration/auth/protocol errors remain fail-closed.
-            if exc.code not in {"CON-MSVC-026", "CON-MSVC-027", "CON-MSVC-028"}:
+            if exc.code not in {
+                "CON-MSVC-026",
+                "CON-MSVC-027",
+                "CON-MSVC-028",
+                "CON-MSVC-030",
+            }:
                 raise
+            last_error = exc
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise
+                raise last_error
             time.sleep(min(_RESTART_POLL_SECONDS, remaining))
     try:
         status = replacement.service_status(project_root)

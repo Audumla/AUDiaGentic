@@ -161,7 +161,9 @@ class GatewayLifecycleController:
         logger.info("gateway drain cancelled; resumed")
         return self._store.status()
 
-    def request_restart(self, *, force: bool = False) -> dict[str, Any]:
+    def request_restart(
+        self, *, force: bool = False, initiating_lease_id: str | None = None
+    ) -> dict[str, Any]:
         """Drain admission and hand non-terminal work to the next generation."""
         del force
         if not self.restart_enabled:
@@ -169,6 +171,13 @@ class GatewayLifecycleController:
         if self.restart_requested:
             return {"restarting": True}
         self.request_drain()
+        if initiating_lease_id is not None:
+            # The restart RPC is invoked while holding the caller lease.  End
+            # that lease before stopping the host so owner retirement cannot
+            # be vetoed by the RPC client's finally/close racing shutdown.
+            self._store.release_lease(
+                initiating_lease_id, expected_epoch=self._owner_epoch
+            )
         self.restart_requested = True
         self._exit_reason = "operator-restart"
         self._stop_event.set()

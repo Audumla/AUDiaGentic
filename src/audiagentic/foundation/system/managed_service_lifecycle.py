@@ -41,6 +41,24 @@ class ManagedServiceLifecycle:
             lease_facts=lease_facts,
         )
 
+    def attach_existing(
+        self,
+        declaration: ManagedServiceDeclaration,
+        *,
+        client_instance_id: str,
+        lease_ttl_seconds: float,
+        correlation_id: str | None = None,
+        lease_facts: Mapping[str, Any] | None = None,
+    ) -> StartOrAttachResult:
+        """Attach a live owner without allowing a launch fallback."""
+        return self._starter.attach_existing(
+            declaration,
+            client_instance_id=client_instance_id,
+            lease_ttl_seconds=lease_ttl_seconds,
+            correlation_id=correlation_id,
+            lease_facts=lease_facts,
+        )
+
     def request_drain(
         self, *, expected_revision: int, expected_epoch: str
     ) -> ManagedServiceRecord:

@@ -69,6 +69,51 @@ def test_automatic_gateway_declares_one_foundation_managed_service(monkeypatch, 
     assert captured["kwargs"]["lease_ttl_seconds"] == 120.0
 
 
+def test_automatic_gateway_attach_existing_never_calls_start(monkeypatch, tmp_path):
+    captured = {}
+
+    class FakeStore:
+        def __init__(self, key):
+            self.key = key
+            self.root = tmp_path / "service"
+
+    class FakeLifecycle:
+        def __init__(self, store, hooks):
+            pass
+
+        def start_or_attach(self, *args, **kwargs):
+            raise AssertionError("attach-only path must not start")
+
+        def attach_existing(self, declaration, **kwargs):
+            captured["declaration"] = declaration
+            captured["kwargs"] = kwargs
+            return SimpleNamespace(
+                lease=SimpleNamespace(lease_id="lease-a"),
+                record=SimpleNamespace(
+                    owner_epoch="epoch-a",
+                    process=SimpleNamespace(scope="shared-service-host"),
+                ),
+            )
+
+    class FakeClient:
+        def __init__(self, endpoint, token, **kwargs):
+            captured["client"] = (endpoint, token, kwargs)
+
+        def adopt_managed_lease(self, lease_id, owner_epoch, *, lifetime_scope):
+            captured["adopted"] = (lease_id, owner_epoch, lifetime_scope)
+
+    monkeypatch.setenv("AUDIAGENTIC_GATEWAY_PORT", "9123")
+    monkeypatch.setattr(bootstrap, "ManagedServiceStore", FakeStore)
+    monkeypatch.setattr(bootstrap, "ManagedServiceLifecycle", FakeLifecycle)
+    monkeypatch.setattr(bootstrap, "StandaloneGatewayClient", FakeClient)
+    monkeypatch.setattr(bootstrap, "load_auth_token", lambda path: "token")
+
+    result = bootstrap.attach_existing_gateway()
+
+    assert isinstance(result, FakeClient)
+    assert captured["adopted"] == ("lease-a", "epoch-a", "shared-service-host")
+
+
 @pytest.mark.parametrize("value", ["zero", "0", "65536"])
 def test_automatic_gateway_rejects_invalid_port(monkeypatch, value):
     monkeypatch.setenv("AUDIAGENTIC_GATEWAY_PORT", value)
