@@ -2,11 +2,25 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.contracts.schema_registry import validate_with_schema
+
+_SAFE_RELEASE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+def validate_release_id(release_id: object) -> str:
+    """Validate a release identity before it can be persisted or used in paths."""
+    if not isinstance(release_id, str) or not _SAFE_RELEASE_ID.fullmatch(release_id):
+        raise AudiaGenticError(
+            code="CON-ARCHIVE-005", kind="release",
+            message="release-id must be a non-empty safe identifier",
+            details={"release-id": release_id},
+        )
+    return release_id
 
 
 def validate_persisted_event(event: object, *, location: str) -> dict[str, Any]:

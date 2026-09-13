@@ -49,6 +49,14 @@ def stamp_ledger_for_commit(project_root: Path) -> dict[str, list[str]]:
     Returns a dict mapping commit SHA to the list of stamped event-ids.
     No-ops cleanly if git is unavailable or the ledger does not exist.
     """
+    # Enforce the policy at execution time as well as installation time. A
+    # stale or manually retained hook must not re-enter the release ledger.
+    from audiagentic.components.source_control.source_control_bootstrap import (
+        post_commit_ledger_stamp_enabled,
+    )
+    if not post_commit_ledger_stamp_enabled(project_root):
+        return {}
+
     sha = _get_head_sha(project_root)
     if not sha:
         return {}
