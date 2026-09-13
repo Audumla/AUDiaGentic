@@ -409,6 +409,75 @@ class GptAutoTurn:
                 self._set_chat_state(ChatState.READY)
             self._done.set()
 
+    async def resume_existing(self) -> SessionTurnResult:
+        """Resume observation of a previously submitted turn, with zero send."""
+        self.chat.active_turn_id = self.request.turn_id
+        try:
+            await self._emit_timing("restart-recovery-start")
+            self._set_chat_state(ChatState.BUSY)
+            checkpoint = self.chat.unresolved_metadata()
+            self._prompt_message_id = checkpoint.get("prompt-message-id")
+            self._response_message_id = checkpoint.get("assistant-message-id")
+            if not isinstance(self._prompt_message_id, str) or not self._prompt_message_id:
+                raise AudiaGenticError(
+                    "EXT-GPTAUTO-004", "providers",
+                    "gpt-auto cannot recover a turn without its exact prompt identity",
+                    {"failure-reason": "prompt-identity-unavailable", **self._diagnostics()},
+                )
+            self.side_effect_attempted = True
+            self.submission_confirmed = True
+            await self.chat.ensure_ready()
+            current = await self.chat.snapshot()
+            response_ref = _response_ref_for_prompt(current, self._prompt_message_id)
+            # Build a synthetic pre-response baseline when the assistant
+            # already exists. This lets the normal response observer prove a
+            # response that completed while the gateway was down without
+            # mistaking the existing answer for an unrelated old turn.
+            baseline = current
+            if response_ref is not None:
+                response_index = next(
+                    index for index, ref in enumerate(current.message_refs)
+                    if ref is response_ref
+                )
+                prior_refs = current.message_refs[:response_index]
+                prior_assistants = tuple(ref for ref in prior_refs if ref.role == "assistant")
+                baseline = replace(
+                    current,
+                    assistant_count=max(0, current.assistant_count - 1),
+                    latest_assistant_id=prior_assistants[-1].message_id if prior_assistants else None,
+                    latest_assistant_text=prior_assistants[-1].text if prior_assistants else None,
+                    assistant_message_ids=tuple(ref.message_id for ref in prior_assistants if ref.message_id),
+                    assistant_message_texts=tuple(ref.text or "" for ref in prior_assistants),
+                    message_refs=prior_refs,
+                )
+                self._response_message_id = response_ref.message_id
+            self._baseline_snapshot = baseline
+            self._move(TurnState.SUBMITTED)
+            self._move(TurnState.AWAITING_RESPONSE)
+            final = await self._await_response(baseline, current)
+            if final is None:
+                raise RuntimeError("recovered response observation ended without a result")
+            await self._publish_message_ids(strict=False)
+            persist_clear = getattr(self.chat, "persist_unresolved_clear", None)
+            if persist_clear is not None:
+                await persist_clear()
+            clear_unresolved = getattr(self.chat, "clear_unresolved_turn", None)
+            if clear_unresolved is not None:
+                clear_unresolved()
+            self._move(TurnState.COMPLETE)
+            await self._emit(TransportObservationKind.TERMINAL, {"stop_reason": "end-turn"})
+            result = self._result("end-turn")
+            return SessionTurnResult(**{**result.__dict__, "final_summary": final})
+        except asyncio.CancelledError:
+            if not _ENGINE.is_terminal(self.state.value):
+                self._move(TurnState.CANCELLED)
+            raise
+        finally:
+            self.chat.active_turn_id = None
+            if self.chat.state not in {ChatState.FAILED, ChatState.CLOSED, ChatState.RECOVERING}:
+                self._set_chat_state(ChatState.READY)
+            self._done.set()
+
     async def wait_done(self, timeout: float) -> None:
         await asyncio.wait_for(self._done.wait(), timeout=timeout)
 

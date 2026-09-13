@@ -68,13 +68,12 @@ class TestCrashWindowA_RecordButNoIndex:
 class TestCrashWindowB_AdmittedBeforeClaim:
     """C7 core scenario: admitted work discovered before claim via work-index."""
 
-    def test_admitted_but_unclaimed_recovered_as_replay_required(
+    def test_admitted_but_unclaimed_recovered_in_place(
         self, tmp_path: Path,
     ) -> None:
         """Request admitted and index written, but crash before claim.
 
-        Recovery must terminalize as interrupted + CON-AGW-102 + replay-required
-        and MUST NOT enqueue the old prompt.
+        Recovery must preserve the queued request and return it for scheduling.
         """
         service_root = tmp_path / "service"
         project_root = tmp_path / "project"
@@ -97,15 +96,14 @@ class TestCrashWindowB_AdmittedBeforeClaim:
         )
 
         recovered = store.read_record(project_root, request_id)
-        assert recovered["state"] == "interrupted"
-        assert recovered.get("replay-required") is True
-        assert recovered["error"]["code"] == "CON-AGW-102"
-        assert report.replay_required >= 1
+        assert recovered["state"] == "queued"
+        assert recovered["recovery-required"] is False
+        assert report.queued == ((project_root, request_id),)
 
-    def test_admitted_unclaimed_never_reenqueues(
+    def test_admitted_unclaimed_is_returned_for_requeue(
         self, tmp_path: Path,
     ) -> None:
-        """After recovery, the request must not be in the queue."""
+        """After recovery, the request is returned to the replacement queue."""
         service_root = tmp_path / "service"
         project_root = tmp_path / "project"
 
@@ -117,13 +115,13 @@ class TestCrashWindowB_AdmittedBeforeClaim:
             phase="admitted",
         )
 
-        recovery_mod.recover_gateway_requests(
+        report = recovery_mod.recover_gateway_requests(
             service_root, live_owner_epoch="new-epoch",
         )
 
         recovered = store.read_record(project_root, request_id)
-        assert recovered["state"] == "interrupted"
-        assert recovered.get("replay-required") is True
+        assert recovered["state"] == "queued"
+        assert report.queued == ((project_root, request_id),)
 
 # ---------------------------------------------------------------------------
 # Crash window C: claim succeeded, index updated to claimed, but start failed
@@ -157,18 +155,18 @@ class TestCrashWindowC_ClaimedBeforeStart:
         )
 
         recovered = store.read_record(project_root, request_id)
-        assert recovered["state"] == "interrupted"
-        assert report.replay_required >= 1 or report.interrupted >= 1
+        assert recovered["state"] == "queued"
+        assert report.queued == ((project_root, request_id),)
 
 # ---------------------------------------------------------------------------
 # Crash window D: running but no terminal state reached
 # ---------------------------------------------------------------------------
 
 class TestCrashWindowD_RunningNotTerminal:
-    """Request was running when crash happened — interrupted, not replay-required."""
+    """Request remains running and is resumed by the replacement owner."""
 
     def test_running_interrupted_not_replay(self, tmp_path: Path) -> None:
-        """Running request is interrupted with CON-AGW-084, no replay."""
+        """Running request is recovered in place without a terminal event."""
         service_root = tmp_path / "service"
         project_root = tmp_path / "project"
 
@@ -197,9 +195,10 @@ class TestCrashWindowD_RunningNotTerminal:
         )
 
         recovered = store.read_record(project_root, record["request-id"])
-        assert recovered["state"] == "interrupted"
-        assert recovered["error"]["code"] == "CON-AGW-084"
-        assert report.interrupted >= 1
+        assert recovered["state"] == "running"
+        assert recovered["recovery-required"] is True
+        assert recovered["dispatch-owner-epoch"] == "new-epoch"
+        assert report.running == ((project_root, record["request-id"]),)
 
 # ---------------------------------------------------------------------------
 # Crash window E: terminal transition succeeds but index cleanup fails
@@ -618,7 +617,7 @@ class TestRecoveryIdempotency:
             service_root, live_owner_epoch="new-epoch",
         )
 
-        assert first.interrupted >= 1
-        assert second.examined == 0
+        assert len(first.running) >= 1
+        assert second.skipped_live >= 1
         assert second.replay_required == 0
         assert second.interrupted == 0

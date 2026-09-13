@@ -1,10 +1,9 @@
-"""SH07 C11: interrupted recovery event propagation — production-path integration.
+"""SH07 C11: recovery ownership takeover — production-path integration.
 
-Tests the full recovery→interrupted-event→agent_jobs-mapping chain with real disk
-I/O, a fresh QueueManager (matching the production QueueManager singleton), and
-direct event-bus subscription. No process kill required; the recovery path is
-exercised by creating stale active-work entries and calling recover_gateway_requests
-which is the same function the service host invokes before ingress.
+Tests the recovery ownership handoff with real disk I/O and the same recovery
+entry point used by the service host before ingress. Non-terminal work remains
+non-terminal and is returned to the replacement scheduler; it is not converted
+to an interrupted terminal event merely because the old owner disappeared.
 
 This complements the unit tests in test_agents_gateway_c11_interrupted.py by
 validating the production-path fixtures: real project root, real store writes,
@@ -14,12 +13,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from audiagentic.components.agents.gateway import store as store
-from audiagentic.components.agents.gateway.event_topics import EXECUTION_INTERRUPTED_TOPIC
-from audiagentic.components.agents.gateway.queue import recovery as recovery
 from audiagentic.components.agents.configuration.management import (
     create_execution_profile,
 )
+from audiagentic.components.agents.gateway import store as store
+from audiagentic.components.agents.gateway.event_topics import EXECUTION_INTERRUPTED_TOPIC
+from audiagentic.components.agents.gateway.queue import recovery as recovery
 from audiagentic.foundation.event import get_bus
 from audiagentic.foundation.features.base import ImplementationState
 from audiagentic.foundation.features.state import set_implementation_state
@@ -51,15 +50,12 @@ def _make_profile(project_root: Path) -> None:
 # ---------------------------------------------------------------------------
 
 class TestC11RecoveryEventPropagation:
-    """Production-path: recovery transitions stale requests to interrupted,
-    publishes exactly one agents.execution.interrupted event per stale request,
-    and agent_jobs maps it to failed-equivalent."""
+    """Production-path: recovery transfers stale ownership in place."""
 
-    def test_stale_running_request_interrupted_event_published(
+    def test_stale_running_request_is_taken_over_in_place(
         self, tmp_path: Path,
     ) -> None:
-        """A stale running request recovered by a new epoch publishes one
-        agents.execution.interrupted event with correct payload fields."""
+        """A stale running request remains running under the new owner."""
         service_root = tmp_path / "service"
         project_root = tmp_path / "project"
         _make_profile(project_root)
@@ -86,7 +82,7 @@ class TestC11RecoveryEventPropagation:
         )
         # Active-work entry now exists
 
-        # Subscribe to the interrupted topic on the shared event bus
+        # A takeover is not a terminal event.
         events: list[dict] = []
 
         def on_interrupted(event_type: str, payload: dict, metadata: dict) -> None:
@@ -102,31 +98,19 @@ class TestC11RecoveryEventPropagation:
             get_bus().unsubscribe(handle)
 
         # Verify recovery outcome
-        assert report.interrupted == 1
+        assert report.running == ((project_root, request_id),)
+        assert report.interrupted == 0
         recovered = store.read_record(project_root, request_id)
-        assert recovered["state"] == "interrupted"
-        assert recovered["error"]["code"] == "CON-AGW-084"
-        assert not store.active_work_path(service_root, request_id).exists()
+        assert recovered["state"] == "running"
+        assert recovered["dispatch-owner-epoch"] == "new-epoch"
+        assert recovered["recovery-required"] is True
+        assert store.active_work_path(service_root, request_id).exists()
+        assert events == []
 
-        # Verify exactly one interrupted event was published
-        assert len(events) == 1
-        ev = events[0]
-        assert ev["request-id"] == request_id
-        assert ev["state"] == "interrupted"
-        assert ev["execution-profile-id"] == "default"
-        # Terminal payload fields present (may be None for provider-id/model-id
-        # since the request was interrupted before provider dispatch)
-        assert "provider-id" in ev
-        assert "model-id" in ev
-        assert "error" in ev
-        assert "attempt_count" in ev
-        assert "replay_required" in ev
-
-    def test_stale_queued_request_interrupted_event_with_replay_required(
+    def test_stale_queued_request_is_requeued_in_place(
         self, tmp_path: Path,
     ) -> None:
-        """A stale queued request recovered by a new epoch publishes one
-        agents.execution.interrupted event with replay_required=true."""
+        """A stale queued request remains queued under the new owner."""
         service_root = tmp_path / "service"
         project_root = tmp_path / "project"
         _make_profile(project_root)
@@ -144,32 +128,14 @@ class TestC11RecoveryEventPropagation:
             service_root=service_root,
         )
 
-        events: list[dict] = []
+        report = recovery.recover_gateway_requests(service_root, live_owner_epoch="new-epoch")
 
-        def on_interrupted(event_type: str, payload: dict, metadata: dict) -> None:
-            events.append(payload)
-
-        handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, on_interrupted)
-        try:
-            report = recovery.recover_gateway_requests(
-                service_root, live_owner_epoch="new-epoch"
-            )
-        finally:
-            get_bus().unsubscribe(handle)
-
-        # Queued → replay_required counter
-        assert report.replay_required == 1
+        assert report.queued == ((project_root, request_id),)
+        assert report.replay_required == 0
         recovered = store.read_record(project_root, request_id)
-        assert recovered["state"] == "interrupted"
-        assert recovered["replay-required"] is True
-        assert recovered["error"]["code"] == "CON-AGW-102"
-
-        # Exactly one event, with replay_required=true
-        assert len(events) == 1
-        ev = events[0]
-        assert ev["request-id"] == request_id
-        assert ev["state"] == "interrupted"
-        assert ev["replay_required"] is True
+        assert recovered["state"] == "queued"
+        assert recovered["dispatch-owner-epoch"] == "new-epoch"
+        assert recovered["recovery-required"] is False
 
     def test_no_stale_requests_publishes_no_event(self, tmp_path: Path) -> None:
         """If recovery finds no stale requests, no interrupted event is published."""
@@ -211,8 +177,7 @@ class TestC11RecoveryEventPropagation:
     def test_second_recovery_pass_publishes_no_duplicate_event(
         self, tmp_path: Path,
     ) -> None:
-        """After recovery interrupts a stale request, a second recovery pass
-        on the same service root does not republish an interrupted event."""
+        """After takeover, a second recovery pass does not duplicate work."""
         service_root = tmp_path / "service"
         project_root = tmp_path / "project"
         _make_profile(project_root)
@@ -244,21 +209,22 @@ class TestC11RecoveryEventPropagation:
 
         handle = get_bus().subscribe(EXECUTION_INTERRUPTED_TOPIC, on_interrupted)
         try:
-            # First pass: interrupt the stale request
-            recovery.recover_gateway_requests(
+            # First pass: transfer the stale owner
+            first_report = recovery.recover_gateway_requests(
                 service_root, live_owner_epoch="new-epoch"
             )
-            first_count = len(events)
 
-            # Second pass: already terminal, cleared — no new event
-            recovery.recover_gateway_requests(
+            # Second pass: the new owner is live — no duplicate recovery
+            second_report = recovery.recover_gateway_requests(
                 service_root, live_owner_epoch="new-epoch"
             )
         finally:
             get_bus().unsubscribe(handle)
 
-        assert first_count == 1
-        assert len(events) == 1  # no duplicate from second pass
+        assert first_report.running == ((project_root, request_id),)
+        assert second_report.running == ()
+        assert second_report.skipped_live >= 1
+        assert events == []
 
     def test_agent_jobs_outcome_map_handles_interrupted(
         self, tmp_path: Path,

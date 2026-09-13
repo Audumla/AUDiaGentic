@@ -297,6 +297,7 @@ def test_session_workers_share_one_profile_compute_slot(tmp_path: Path):
             execution_profile_id="session-profile",
             prompt_body=str(index),
             session_id=f"session-{index}",
+            provider_transport_kind="provider-session",
         )
         for index in range(2)
     ]
@@ -337,6 +338,7 @@ def test_cancelled_session_waiter_is_not_misclassified_as_failed(tmp_path: Path)
         execution_profile_id="session-profile",
         prompt_body="cancel me",
         session_id="same-session",
+        provider_transport_kind="provider-session",
     )
     store.write_record(tmp_path, record)
     manager.enqueue(tmp_path, record, {"virtual-capacity": 1}, runner)
@@ -397,6 +399,7 @@ def test_legacy_session_capacity_is_ignored_while_project_capacity_applies(tmp_p
             execution_profile_id="session-scoped",
             prompt_body=str(index),
             session_id="same-session",
+            provider_transport_kind="provider-session",
         )
         for index in range(2)
     ]

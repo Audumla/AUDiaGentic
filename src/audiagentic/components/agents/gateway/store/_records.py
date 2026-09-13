@@ -661,6 +661,7 @@ def read_record(
         and "activity-source" in payload
         and "activity-lease-expires-at" in payload
         and "activity" in payload
+        and "recovery-required" in payload
         and isinstance(payload.get("activity"), dict)
         and isinstance(payload["activity"].get("provider"), dict)
         and "first-at" in payload["activity"]["provider"]
