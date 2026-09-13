@@ -692,6 +692,7 @@ def _dispatch_session_request(
                         request_runtime_root=rehydrate_root,
                         mcp_entries=providers_api.collect_management_mcp_launch_entries(project_root),
                         project_name=project_name,
+                        resume_existing=resume_existing,
                     )
 
             # Global/profile policy is applied only to the in-memory handle;
@@ -773,6 +774,20 @@ def _dispatch_session_request(
     except AudiaGenticError as exc:
         if guard_held:
             preparation_guard.release()
+        if resume_existing and exc.code == "CON-AGW-124":
+            # A provider without an observation-resume seam cannot prove that
+            # the old generation's side effect was absent. Keep the request
+            # running and the active-work marker intact; a later explicit
+            # provider-aware recovery may resolve it, but this generation
+            # must never terminalize or replay it.
+            store.record_gateway_timeline(
+                project_root,
+                request_id,
+                "recovery.deferred-provider-unsupported",
+                state="running",
+                attributes={"request-id": request_id, "provider-id": provider_id},
+            )
+            return store.read_record(project_root, request_id)
         cancelled = store.read_record(project_root, request_id).get("cancel-requested")
         if client_defaults.proven_unsent_composer_failure(exc) and not cancelled and not _unsent_retry_used:
             store.append_owned_attempt(

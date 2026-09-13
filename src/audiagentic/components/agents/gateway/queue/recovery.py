@@ -10,6 +10,7 @@ from typing import Any
 
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.queue import work_index as work_index
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ class RecoveryReport:
     quarantined: int = 0
     queued: tuple[tuple[Path, str], ...] = ()
     running: tuple[tuple[Path, str], ...] = ()
+    deferred: tuple[tuple[Path, str], ...] = ()
 
 
 def _quarantine_entry(path: Path, *, reason_code: str) -> None:
@@ -77,31 +79,63 @@ def _takeover_stale_request(
 
     if record["state"] not in {"queued", "running"}:
         return None, None
+    if (
+        record["state"] == "running"
+        and record.get("provider-transport-kind") != "provider-session"
+    ):
+        # An isolated worker has no attach/resume seam.  Re-running its frozen
+        # prompt after a gateway crash could duplicate an already-started
+        # external side effect, so leave the request running and its original
+        # ownership marker intact for explicit evidence-based recovery.
+        logger.warning(
+            "deferring stale worker request recovery because execution cannot be reattached",
+            extra={"request-id": request_id},
+        )
+        return "deferred", (project_root, request_id)
     worker_id = f"recovery_{uuid.uuid4().hex[:16]}" if record["state"] == "running" else None
-    updated = store.takeover_nonterminal_owner(
-        project_root,
-        request_id,
-        expected_owner_epoch=record_epoch,
-        new_owner_epoch=live_owner_epoch,
-        new_worker_id=worker_id,
-        handoff_id=(record.get("recovery") or {}).get("handoff-id") if isinstance(record.get("recovery"), dict) else None,
-    )
-    if record_epoch is not None:
+    try:
+        updated = store.takeover_nonterminal_owner(
+            project_root,
+            request_id,
+            expected_owner_epoch=record_epoch,
+            new_owner_epoch=live_owner_epoch,
+            new_worker_id=worker_id,
+            handoff_id=(record.get("recovery") or {}).get("handoff-id") if isinstance(record.get("recovery"), dict) else None,
+        )
+    except AudiaGenticError as exc:
+        # A prior generation may have committed the request half of takeover
+        # before crashing. Treat the already-current owner as idempotent and
+        # repair the remaining durable markers below; never overwrite a
+        # different live owner.
+        if exc.code != "CON-AGW-083":
+            raise
+        updated = store.read_record(project_root, request_id)
+        if updated.get("dispatch-owner-epoch") != live_owner_epoch:
+            raise
+    try:
         work_index.takeover_owner(
             service_root,
             request_id,
             expected_owner_epoch=record_epoch,
             new_owner_epoch=live_owner_epoch,
         )
-    else:
-        # An admitted entry has no old owner. Claim its index for the new
-        # generation so a second startup cannot schedule it twice.
+    except AudiaGenticError as exc:
+        if exc.code != "CON-AGW-106":
+            raise
+        # The request record is the authoritative owner fence. A crash between
+        # the two writes leaves an older index epoch; repair it under the
+        # exclusive current service owner rather than losing the work item.
         work_index.takeover_owner(
             service_root,
             request_id,
             expected_owner_epoch=None,
             new_owner_epoch=live_owner_epoch,
         )
+    # Keep the hashed active-work marker aligned as well. This write is
+    # idempotent and lets the next generation recover after any later crash.
+    store.record_active_work(
+        service_root, project_root, request_id, owner_epoch=live_owner_epoch
+    )
     return updated["state"], (project_root, request_id)
 
 
@@ -147,6 +181,7 @@ def recover_gateway_requests(service_root: Path, *, live_owner_epoch: str) -> Re
     examined = replay_required = interrupted = cleared = skipped_live = quarantined = 0
     recovered_queued: list[tuple[Path, str]] = []
     recovered_running: list[tuple[Path, str]] = []
+    deferred: list[tuple[Path, str]] = []
     processed_request_ids: set[str] = set()
 
     # --- Path 1: active-work entries (existing, hashed filenames) ---------------
@@ -192,7 +227,12 @@ def recover_gateway_requests(service_root: Path, *, live_owner_epoch: str) -> Re
                 live_owner_epoch=live_owner_epoch,
             )
             if item is not None:
-                (recovered_queued if state == "queued" else recovered_running).append(item)
+                if state == "queued":
+                    recovered_queued.append(item)
+                elif state == "running":
+                    recovered_running.append(item)
+                else:
+                    deferred.append(item)
 
     # --- Path 2: work-index entries (C7: admission-before-claim gap) -------------
     index_entries, idx_quarantined = work_index.recover_work_index_entries(
@@ -244,7 +284,12 @@ def recover_gateway_requests(service_root: Path, *, live_owner_epoch: str) -> Re
             live_owner_epoch=live_owner_epoch,
         )
         if item is not None:
-            (recovered_queued if state == "queued" else recovered_running).append(item)
+            if state == "queued":
+                recovered_queued.append(item)
+            elif state == "running":
+                recovered_running.append(item)
+            else:
+                deferred.append(item)
 
     return RecoveryReport(
         examined=examined,
@@ -255,4 +300,5 @@ def recover_gateway_requests(service_root: Path, *, live_owner_epoch: str) -> Re
         quarantined=quarantined,
         queued=tuple(recovered_queued),
         running=tuple(recovered_running),
+        deferred=tuple(deferred),
     )

@@ -8,12 +8,27 @@ registry, or custom validation -- these are thin wrappers over the shared
 """
 from __future__ import annotations
 
+import os
+import time
 from pathlib import Path
 from typing import Any
 
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 
 _COMPONENT_ID = "agents"
+_RESTART_WAIT_SECONDS_ENV = "AUDIAGENTIC_GATEWAY_RESTART_WAIT_SECONDS"
+_RESTART_POLL_SECONDS = 0.25
+
+
+def _restart_wait_seconds() -> float:
+    raw = os.environ.get(_RESTART_WAIT_SECONDS_ENV, "60")
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise ValueError(f"{_RESTART_WAIT_SECONDS_ENV} must be a number") from exc
+    if value <= 0:
+        raise ValueError(f"{_RESTART_WAIT_SECONDS_ENV} must be positive")
+    return value
 
 
 def active_implementation_id(project_root: Path) -> str:
@@ -283,7 +298,21 @@ def gateway_restart(project_root: Path, *, force: bool = False) -> dict[str, Any
     finally:
         client.close()
 
-    replacement = start_or_attach_gateway()
+    deadline = time.monotonic() + _restart_wait_seconds()
+    replacement = None
+    while replacement is None:
+        try:
+            replacement = start_or_attach_gateway()
+        except AudiaGenticError as exc:
+            # The old generation is expected to remain observable while it
+            # drains and retires. Retry only those lifecycle race outcomes;
+            # all configuration/auth/protocol errors remain fail-closed.
+            if exc.code not in {"CON-MSVC-026", "CON-MSVC-027", "CON-MSVC-028"}:
+                raise
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise
+            time.sleep(min(_RESTART_POLL_SECONDS, remaining))
     try:
         status = replacement.service_status(project_root)
     finally:

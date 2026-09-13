@@ -144,6 +144,7 @@ class PersistentChat:
         self._unresolved_recovery_details: dict[str, object] = {}
         self._reconciliation_refresh_attempted = False
         self._reconciliation_delivery_retry_attempted = False
+        self._defer_unresolved_reconciliation = False
         self._checkpoint_metadata: dict[str, object] = {
             key: metadata[key]
             for key in (
@@ -369,7 +370,11 @@ class PersistentChat:
         ):
             self._move(ChatState.FAILED)
             raise RuntimeError("gpt-auto resumed page has conflicting provider session id")
-        if self.provider_session_id and self.unresolved_turn_pending:
+        if (
+            self.provider_session_id
+            and self.unresolved_turn_pending
+            and not self._defer_unresolved_reconciliation
+        ):
             # A resumed conversation with an unresolved Send is not ordinary
             # READY.  Keep admission closed until the exact prompt/response
             # outcome is reconciled (or leave it RECOVERING for lazy retry).
@@ -380,6 +385,15 @@ class PersistentChat:
             if reconciled and not await self._reconciled_binding_is_current():
                 return
         self._move(ChatState.READY)
+
+    def defer_unresolved_reconciliation(self) -> None:
+        """Leave the checkpoint for the request-owned recovery turn.
+
+        Gateway restart recovery must first reattach the exact conversation.
+        The request-owned ``resume_existing`` turn is the only authority that
+        may observe, persist the response artifact, and clear this checkpoint.
+        """
+        self._defer_unresolved_reconciliation = True
 
     def _bind_page(self, page: dict) -> None:
         page_handle = str(page["pageHandle"])
