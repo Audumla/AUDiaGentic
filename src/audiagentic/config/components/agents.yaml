@@ -231,7 +231,7 @@ mcp-servers:
       observability (list/overview), and session management
     propagate: providers
     instructions: >
-      agent_task_submit is the sole submission surface (RV891) — pass an
+      agent_task_submit is the sole submission surface — pass an
       agent_id (an Agent Definition: an execution profile plus a role bundled
       under one stable ID) and it resolves the profile for you. Direct
       execution_profile_id submission bypassing Agent Definition resolution

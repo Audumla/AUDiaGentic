@@ -2,6 +2,11 @@
 
 # Pi ACP Status-Mapping Report
 
+> Historical probe report. The date and plan-item references describe the
+> investigation snapshot, not the current Pi implementation or gateway
+> status. Revalidate paths and capabilities against the current source and
+> provider registry before using this report as implementation guidance.
+
 **Date:** 2025-07-11  
 **Plan items:** AS19, AS21, AS27  
 **Scope:** Pi ACP implementation, AS28 neutral session transport, and the smallest code-level path to map Pi activity/tool/permission/terminal evidence without protocol leakage.

@@ -193,6 +193,9 @@ shared lower-layer seams, not general component-to-component exceptions.
 
 ## Related guidance
 
+- [Documentation status and maintenance boundary](../DOCUMENTATION_STATUS.md)
+- [Gateway shared-service architecture](../design/gateway-shared-service.md)
+- [Gateway execution context](../design/gateway-execution-context.md)
 - [Architecture Implementation Guidelines](ARCHITECTURE_GUIDELINES.md)
 - [Observability Standards](OBSERVABILITY_STANDARDS.md)
 - [Creating Components](CREATING_A_COMPONENT.md)

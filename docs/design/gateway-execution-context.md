@@ -1,9 +1,10 @@
-# Gateway job execution context — envelope and manifest schema (SH02 draft)
+# Gateway job execution context — envelope and manifest schema (SH02)
 
-Status: **draft v0.4** — 2026-07-17 (RV565 + RV566 + RV567 sponsor reviews
-applied). This document defines the **shell** of the contract. Later items
-that need more fields (SH06, SH07, RO roles, …) define and implement them
-then, via a schema version bump — nothing speculative lands here.
+Status: **contract baseline v1** — 2026-07-17 (RV565 + RV566 + RV567 sponsor
+reviews applied; SH02 completed). This document defines the **shell** of the
+contract. The SH06 and SH07 consumers are complete in the current migration
+baseline; genuinely new concerns, such as role selection or multi-root
+workspaces, require an owning item and a schema version bump before they land.
 
 Design rule (RV566): the envelope is **today's working submit contract made
 explicit and versioned** — the agent profile remains the source of provider,

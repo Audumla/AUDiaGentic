@@ -2,6 +2,10 @@
 
 # Pi RPC Capability Probe — AS27
 
+> Historical probe snapshot from 2025-07-19. The installed version and local
+> package path below are not current support claims; re-run the probe against
+> the installed artifact before using it to make implementation decisions.
+
 **Probe date:** 2025-07-19  
 **Installed version:** `@earendil-works/pi-coding-agent` **0.80.10**  
 **Package location:** `C:\Users\mgs\AppData\Roaming\npm\node_modules\@earendil-works\pi-coding-agent\dist\`  
