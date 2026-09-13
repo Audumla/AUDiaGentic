@@ -102,6 +102,11 @@ def valid_config() -> dict:
                     "selectors": [".error-page"],
                     "visible": True,
                 },
+                "error-alert": {
+                    "scope": "document",
+                    "selectors": ['[role="alert"]'],
+                    "visible": True,
+                },
             },
             "evidence-policies": {
                 "response-started": {"any-of": ["assistant-fresh", "stop-control"]},
@@ -114,7 +119,7 @@ def valid_config() -> dict:
                     ],
             "none-of": [],
                 },
-                "response-failed": {"any-of": ["error-page"]},
+                "response-failed": {"any-of": ["error-page", "error-alert"]},
             },
         },
     }

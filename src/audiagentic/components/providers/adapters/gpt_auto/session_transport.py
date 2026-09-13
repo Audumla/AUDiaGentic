@@ -161,26 +161,19 @@ class GptAutoSessionTransport:
         self.chat.clear_turn_pending()
 
     async def reconcile_activity_gap(self) -> dict[str, Any]:
-        """Revalidate and, once, bump a quiet CDP conversation without resending."""
+        """Revalidate a quiet conversation without owning turn recovery."""
         if self._closed:
             return {"status": "unavailable", "reason": "transport-closed"}
-        # First repair a recycled/closed page binding. Any resulting activity
-        # is still observed by the normal turn relay and must renew the
-        # gateway lease independently.
         await self.chat._validate_page_binding()
-        # A request with no accepted activity has no provider lease to expire,
-        # so the watchdog gives the retained page one bounded, read-only
-        # refresh opportunity. _refresh_for_reconciliation() is fenced by the
-        # chat object and can therefore never refresh repeatedly or submit a
-        # second prompt.
-        refreshed = False
-        refresh = getattr(self.chat, "_refresh_for_reconciliation", None)
-        if callable(refresh) and getattr(self.chat, "active_turn_id", None):
-            refreshed = bool(await refresh())
+
+        # Active-turn response recovery is owned exclusively by
+        # GptAutoTurn._await_response(). The watchdog may repair/revalidate
+        # page binding, but must not create a second refresh authority outside
+        # the turn's spacing, attempt, and final-grace policy.
         return {
             "status": "reconciled",
             "state": self.chat.state.value,
-            "action": "page-refresh" if refreshed else "page-revalidated",
+            "action": "page-revalidated",
         }
 
 

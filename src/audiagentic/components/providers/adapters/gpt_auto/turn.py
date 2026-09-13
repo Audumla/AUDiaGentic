@@ -299,6 +299,7 @@ class GptAutoTurn:
         self._response_recovery_refresh_attempts = 0
         self._response_recovery_last_refresh_at: float | None = None
         self._response_recovery_final_grace_started_at: float | None = None
+        self._dropped_observations = 0
 
     def _move(self, target: TurnState) -> None:
         failure = _ENGINE.check(self.state.value, target.value)
@@ -488,16 +489,46 @@ class GptAutoTurn:
             return self._result("cancelled")
         if final is None:
             raise RuntimeError("cancelled response wait returned without cancelled state")
-        self._move(TurnState.COMPLETE)
         self._phase = "terminal-observation"
-        await self._publish_message_ids(strict=True)
+        # Response identity was already strictly persisted when correlated.
+        # A repeat projection after terminal proof must not downgrade the
+        # proven provider answer.
+        await self._publish_message_ids(strict=False)
         clear_unresolved = getattr(self.chat, "clear_unresolved_turn", None)
-        if clear_unresolved is not None:
-            clear_unresolved()
-            persist_clear = getattr(self.chat, "persist_unresolved_clear", None)
+        persist_clear = getattr(self.chat, "persist_unresolved_clear", None)
+        try:
             if persist_clear is not None:
                 await persist_clear()
-        await self._emit(TransportObservationKind.TERMINAL, {"stop_reason": "end-turn"})
+        except Exception:  # noqa: BLE001 - provider completion is already proven
+            self._terminal_evidence["checkpoint-clear-persisted"] = False
+            if self.chat.state not in {
+                ChatState.CLOSED,
+                ChatState.FAILED,
+                ChatState.RECOVERING,
+            }:
+                self._set_chat_state(ChatState.RECOVERING)
+            logger.exception(
+                "gpt-auto terminal checkpoint clear failed; retaining unresolved fence",
+                extra={"turn-id": self.request.turn_id},
+            )
+        else:
+            if clear_unresolved is not None:
+                clear_unresolved()
+            self._terminal_evidence["checkpoint-clear-persisted"] = True
+
+        self._move(TurnState.COMPLETE)
+
+        try:
+            await self._emit(
+                TransportObservationKind.TERMINAL,
+                {"stop_reason": "end-turn"},
+            )
+        except Exception:  # noqa: BLE001 - terminal telemetry is non-authoritative
+            self._dropped_observations += 1
+            logger.exception(
+                "gpt-auto terminal observation sink failed after proven completion",
+                extra={"turn-id": self.request.turn_id},
+            )
         result = self._result("end-turn")
         return SessionTurnResult(**{**result.__dict__, "final_summary": final})
 
@@ -1009,7 +1040,9 @@ class GptAutoTurn:
         last_refresh_at: float | None = None
         recovery_refresh_attempts = 0
         final_recovery_grace_started_at: float | None = None
-        interruption_was_present = False
+        # A banner present in the pre-submit snapshot belongs to the prior
+        # provider state; only a post-submit edge is a new interruption.
+        interruption_was_present = "provider-interruption" in baseline.dom_signals
         last_interruption_activity_at: float | None = None
         initial_response_ref = (
             _response_ref_for_prompt(current, prompt_message_id)
@@ -1440,7 +1473,7 @@ class GptAutoTurn:
             # stale marker must not pre-empt durable completion evidence.
             provider_interruption = "provider-interruption" in current.dom_signals
             failed = self.chat.config.workflow.policy("response-failed").evaluate(facts)
-            if failed.satisfied and not completion_candidate and not provider_interruption:
+            if failed.satisfied and not completion_candidate:
                 logger.warning(
                     "gpt-auto response failure policy matched",
                     extra={"turn-id": self.request.turn_id, "evidence": sorted(failed.matched)},
@@ -2017,7 +2050,7 @@ class GptAutoTurn:
             turn_id=self.request.turn_id,
             stop_reason=reason,
             observations_delivered=self._delivered,
-            dropped_observations=0,
+            dropped_observations=self._dropped_observations,
             correlation_quality=CorrelationQuality.REQUEST_SCOPED,
             metadata=metadata,
         )
