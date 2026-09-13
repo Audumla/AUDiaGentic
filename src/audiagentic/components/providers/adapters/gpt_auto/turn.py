@@ -35,7 +35,13 @@ from .observation_engine import (
 )
 from .prompt_fingerprint import PromptFingerprint, match_prompt
 from .snapshot import ChatMessageRef, ChatProgressBlock, ChatSnapshot
-from .urls import canonical_project_url, parse_project_id, parse_provider_session_id
+from .urls import (
+    canonical_chat_url,
+    canonical_project_url,
+    parse_project_id,
+    parse_provider_session_id,
+    url_matches_provider_session,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1060,6 +1066,28 @@ class GptAutoTurn:
         request_activity_response_text = (
             initial_response_ref.text if initial_response_ref is not None else None
         )
+        expected_user_count = current.user_count
+
+        def _replacement_proven(raw: ChatSnapshot, new_id: str) -> bool:
+            """Require both the ordered turn boundary and bound conversation."""
+            old_id = self._response_message_id
+            provider_id = self.chat.provider_session_id
+            if not old_id or not prompt_message_id or not provider_id:
+                return False
+            if not url_matches_provider_session(raw.url, provider_id):
+                return False
+            observed_url = canonical_chat_url(raw.url)
+            bound_url = canonical_chat_url(self.chat.chat_url or "")
+            if observed_url is None or (bound_url and observed_url != bound_url):
+                return False
+            return _same_response_slot_replacement(
+                raw,
+                prompt_message_id=prompt_message_id,
+                expected_user_count=expected_user_count,
+                old_assistant_id=old_id,
+                new_assistant_id=new_id,
+            )
+
         seen_progress_blocks: Counter[ChatProgressBlock] = Counter()
         # GP47 (2026-08-19): _advance_with_trace only logs on a tracker STATE
         # TRANSITION. A turn that stalls for the full response-total-timeout
@@ -1363,15 +1391,30 @@ class GptAutoTurn:
                         mark_assistant(response_ref.message_id)
                     await self._publish_message_ids(strict=True)
                 elif self._response_message_id != response_ref.message_id:
-                    # A stale ChatGPT DOM can expose a provisional assistant
-                    # node and then expose the final node after the retained
-                    # conversation is refreshed.  Treat that as an
-                    # observation conflict, not proof that the provider turn
-                    # died: perform one bounded same-URL refresh and restart
-                    # correlation without ever submitting the prompt again.
                     expected_assistant_id = self._response_message_id
+                    observed_assistant_id = response_ref.message_id
+                    if _replacement_proven(raw_current, observed_assistant_id):
+                        self._response_message_id = observed_assistant_id
+                        mark_assistant = getattr(self.chat, "mark_assistant_observed", None)
+                        if mark_assistant is not None:
+                            mark_assistant(observed_assistant_id)
+                        await self._publish_message_ids(strict=True)
+                        request_activity_response_id = observed_assistant_id
+                        logger.info(
+                            "gpt-auto adopted structurally proven assistant-id replacement",
+                            extra={
+                                "turn-id": self.request.turn_id,
+                                "old-assistant-id": expected_assistant_id,
+                                "new-assistant-id": observed_assistant_id,
+                            },
+                        )
+                        # The replacement is renderer churn, not model
+                        # progress. Re-establish terminal stability against
+                        # the new node without resubmitting the prompt.
+                        tracker = ObservationTracker(policy=policy, now=loop.time())
+                        previous = current
+                        continue
                     if await self._refresh_after_response_correlation_conflict():
-                        self._response_message_id = None
                         logger.info(
                             "gpt-auto refreshed retained conversation after response "
                             "correlation conflict; continuing the original turn",
@@ -1382,22 +1425,18 @@ class GptAutoTurn:
                             },
                         )
                         continue
-                    # Never silently follow a later, unrelated turn once the
-                    # single refresh allowance is exhausted.  The transport
-                    # retains the binding and reports this as recoverable
-                    # observation uncertainty to the gateway.
-                    raise AudiaGenticError(
-                        code="EXT-GPTAUTO-004",
-                        kind="providers",
-                        message="gpt-auto observed a conflicting response correlation",
-                        details={
-                            "turn-id": self.request.turn_id,
-                            "failure-reason": "frozen-response-correlation-conflict",
-                            "expected-assistant-id": expected_assistant_id,
-                            "observed-assistant-id": response_ref.message_id,
-                            **self._diagnostics(),
-                        },
-                    )
+                    # Correlation uncertainty is recoverable and must not be
+                    # converted into an immediate request failure. The
+                    # existing response-recovery budget decides when this
+                    # bound conversation has genuinely exhausted recovery.
+                    if await _attempt_response_recovery(
+                        loop.time(),
+                        interruption_present="provider-interruption" in current.dom_signals,
+                        completion_candidate=False,
+                    ):
+                        continue
+                    await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
+                    continue
                 if response_ref.text:
                     await self._emit_timing("first-assistant-text")
             # Recovery clocks are reset only by evidence correlated to this
@@ -1760,8 +1799,25 @@ class GptAutoTurn:
                     and verify_message_id != self._response_message_id
                 ):
                     expected_assistant_id = self._response_message_id
+                    if _replacement_proven(raw_verify, verify_message_id):
+                        self._response_message_id = verify_message_id
+                        mark_assistant = getattr(self.chat, "mark_assistant_observed", None)
+                        if mark_assistant is not None:
+                            mark_assistant(verify_message_id)
+                        await self._publish_message_ids(strict=True)
+                        logger.info(
+                            "gpt-auto adopted structurally proven assistant-id replacement "
+                            "during terminal verification",
+                            extra={
+                                "turn-id": self.request.turn_id,
+                                "old-assistant-id": expected_assistant_id,
+                                "new-assistant-id": verify_message_id,
+                            },
+                        )
+                        tracker = ObservationTracker(policy=policy, now=loop.time())
+                        previous = current
+                        continue
                     if await self._refresh_after_response_correlation_conflict():
-                        self._response_message_id = None
                         tracker = ObservationTracker(policy=policy, now=loop.time())
                         previous = current
                         logger.info(
@@ -1774,19 +1830,14 @@ class GptAutoTurn:
                             },
                         )
                         continue
-                    raise AudiaGenticError(
-                        code="EXT-GPTAUTO-004",
-                        kind="providers",
-                        message="gpt-auto observed a conflicting response correlation",
-                        details={
-                            "turn-id": self.request.turn_id,
-                            "failure-reason": "frozen-response-correlation-conflict",
-                            "expected-assistant-id": expected_assistant_id,
-                            "observed-assistant-id": verify_message_id,
-                            "verification": True,
-                            **self._diagnostics(),
-                        },
-                    )
+                    if await _attempt_response_recovery(
+                        loop.time(),
+                        interruption_present="provider-interruption" in verify.dom_signals,
+                        completion_candidate=False,
+                    ):
+                        continue
+                    await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
+                    continue
                 terminal_verified_ok = (
                     verified.satisfied
                     and verify_message_id is not None
@@ -2199,6 +2250,54 @@ def _response_ref_for_prompt(
         if ref.role == "assistant":
             return ref
     return None
+
+
+def _same_response_slot_replacement(
+    snapshot: ChatSnapshot,
+    *,
+    prompt_message_id: str,
+    expected_user_count: int,
+    old_assistant_id: str,
+    new_assistant_id: str,
+) -> bool:
+    """Prove that a changed assistant UUID is renderer replacement.
+
+    ChatGPT's ``data-message-id`` identifies a rendered assistant node, not
+    necessarily a stable logical turn.  The ordered prompt-to-assistant span
+    is the stronger identity: one exact prompt, no later user, and exactly one
+    assistant in that span.  Multiple assistant nodes or a later user make the
+    observation ambiguous and must remain fail-closed.
+    """
+    if not new_assistant_id or new_assistant_id == old_assistant_id:
+        return False
+    if snapshot.user_count != expected_user_count:
+        return False
+    if snapshot.latest_user_id != prompt_message_id:
+        return False
+
+    prompt_indexes = [
+        index
+        for index, ref in enumerate(snapshot.message_refs)
+        if ref.role == "user" and ref.message_id == prompt_message_id
+    ]
+    if len(prompt_indexes) != 1:
+        return False
+
+    tail = snapshot.message_refs[prompt_indexes[0] + 1 :]
+    if any(ref.role == "user" for ref in tail):
+        return False
+    assistants = [ref for ref in tail if ref.role == "assistant"]
+    if len(assistants) != 1 or assistants[0].message_id != new_assistant_id:
+        return False
+
+    # If both DOM nodes are present, this is ambiguity rather than a proven
+    # remount/replacement.
+    if any(
+        ref.role == "assistant" and ref.message_id == old_assistant_id
+        for ref in snapshot.message_refs
+    ):
+        return False
+    return snapshot.latest_assistant_id == new_assistant_id
 
 
 def _scope_response_snapshot(
