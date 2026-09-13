@@ -47,26 +47,24 @@ def render_release_docs(
 
     changelog_path = releases / "CHANGELOG.md"
     existing = changelog_path.read_text(encoding="utf-8") if changelog_path.exists() else "# Changelog\n"
-    if f"## {release_id}" in existing:
-        return {
-            "release-id": release_id,
-            "changelog": str(changelog_path),
-            "release-notes": str(releases / "RELEASE_NOTES.md"),
-            "version-history": str(releases / "VERSION_HISTORY.md"),
-            "skipped": "already rendered",
-        }
-    atomic_write_text(changelog_path, existing.rstrip() + "\n\n" + change_block)
+    already_rendered = f"## {release_id}" in existing
+    if not already_rendered:
+        atomic_write_text(changelog_path, existing.rstrip() + "\n\n" + change_block)
 
     release_notes_path = releases / "RELEASE_NOTES.md"
     atomic_write_text(release_notes_path, f"# Release Notes\n\n{change_block}")
 
     version_history_path = releases / "VERSION_HISTORY.md"
     existing_vh = version_history_path.read_text(encoding="utf-8") if version_history_path.exists() else "# Version History\n"
-    atomic_write_text(version_history_path, existing_vh.rstrip() + "\n\n" + change_block)
+    if f"## {release_id}" not in existing_vh:
+        atomic_write_text(version_history_path, existing_vh.rstrip() + "\n\n" + change_block)
 
-    return {
+    result = {
         "release-id": release_id,
         "changelog": str(changelog_path),
         "release-notes": str(release_notes_path),
         "version-history": str(version_history_path),
     }
+    if already_rendered:
+        result["skipped"] = "changelog and version history already rendered; release notes refreshed"
+    return result
