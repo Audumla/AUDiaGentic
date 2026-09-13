@@ -1,5 +1,6 @@
 """Restart controls stay authenticated and replace code only after host cleanup."""
 import json
+import os
 import threading
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -8,8 +9,43 @@ from urllib.request import Request, urlopen
 
 import pytest
 
+from audiagentic.commands import gateway as gateway_command
 from audiagentic.components.agents.gateway.service import process
 from audiagentic.components.agents.gateway.service.http_transport import GatewayHTTPServer
+
+
+def test_foreground_gateway_reexecutes_after_handoff_cleanup(monkeypatch):
+    events = []
+
+    def close():
+        events.append(("close", os.environ.get("AUDIAGENTIC_GATEWAY_RESTART_HANDOFF")))
+
+    host = SimpleNamespace(
+        endpoint="http://127.0.0.1:8765",
+        token_path="token",
+        lifecycle=SimpleNamespace(restart_enabled=False, restart_requested=True),
+        serve_forever=lambda: events.append(("serve", None)),
+        close=close,
+    )
+    monkeypatch.setattr(
+        "audiagentic.components.agents.gateway.service.host.GatewayServiceHost.create",
+        lambda **kwargs: host,
+    )
+    monkeypatch.setattr(gateway_command, "_install_shutdown_signals", lambda _host: SimpleNamespace(forced_fallback=False))
+    exec_calls = []
+    monkeypatch.setattr(gateway_command.os, "execv", lambda executable, args: exec_calls.append((executable, args)))
+    monkeypatch.setattr(gateway_command.sys, "argv", ["launcher", "gateway", "serve", "--port", "8765"])
+    monkeypatch.delenv("AUDIAGENTIC_GATEWAY_RESTART_HANDOFF", raising=False)
+
+    result = gateway_command.cmd_gateway(SimpleNamespace(gateway_cmd="serve", host="127.0.0.1", port=8765, token_file=None), None)
+
+    assert result == 0
+    assert events == [("serve", None), ("close", "1")]
+    assert host.lifecycle.restart_enabled
+    assert exec_calls == [
+        (gateway_command.sys.executable, [gateway_command.sys.executable, "-m", "audiagentic.launcher", "gateway", "serve", "--port", "8765"])
+    ]
+    assert "AUDIAGENTIC_GATEWAY_RESTART_HANDOFF" not in os.environ
 
 
 def test_restart_reexecutes_after_close_with_original_args(monkeypatch):

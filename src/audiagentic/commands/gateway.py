@@ -110,6 +110,11 @@ def cmd_gateway(args: argparse.Namespace, project_root: Path) -> int:
         port=args.port,
         token_path=Path(args.token_file).resolve() if args.token_file else None,
     )
+    # ``gateway serve`` is also used as the foreground development host.  It
+    # must expose the same live restart contract as the detached managed host;
+    # the process below re-execs itself only after the old host has completed
+    # its durable handoff cleanup.
+    host.lifecycle.restart_enabled = True
     print(f"gateway endpoint: {host.endpoint}")
     print(f"gateway token file: {host.token_path}")
     shutdown_state = _install_shutdown_signals(host)
@@ -118,7 +123,15 @@ def cmd_gateway(args: argparse.Namespace, project_root: Path) -> int:
     except KeyboardInterrupt:
         return 0
     finally:
+        if host.lifecycle.restart_requested:
+            os.environ["AUDIAGENTIC_GATEWAY_RESTART_HANDOFF"] = "1"
         host.close()
+    if host.lifecycle.restart_requested:
+        os.environ.pop("AUDIAGENTIC_GATEWAY_RESTART_HANDOFF", None)
+        os.execv(
+            sys.executable,
+            [sys.executable, "-m", "audiagentic.launcher", *sys.argv[1:]],
+        )
     return 1 if shutdown_state.forced_fallback else 0
 
 
