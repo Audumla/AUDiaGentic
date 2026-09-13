@@ -1788,7 +1788,7 @@ class GptAutoTurn:
                         extra={"turn-id": self.request.turn_id},
                     )
                 # The independent verification snapshot must corroborate the
-                # frozen assistant identity as well as the response text. A
+                # request-owned assistant identity as well as the response text. A
                 # stale/duplicate tab can otherwise present identical text
                 # under a different message id and silently overwrite the
                 # request's correlation proof.
