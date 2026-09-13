@@ -153,11 +153,7 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
     if not isinstance(provider_id, str) or not provider_id:
         raise ValueError("recovered request has no resolved provider")
     provider_metadata = record.get("provider-metadata")
-    if (
-        not isinstance(provider_metadata, dict)
-        and project_root is not None
-        and isinstance(record.get("session-id"), str)
-    ):
+    if project_root is not None and isinstance(record.get("session-id"), str):
         # GPT checkpoint metadata is owned by the durable session record. The
         # request projection may not have received the last provider update
         # before the gateway generation ended, so never infer proven-unsent
@@ -171,6 +167,9 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
         except Exception:  # noqa: BLE001 - recovery will fail closed later
             session_record = None
         if session_record is not None:
+            # The session record owns the pre-Send side-effect fence.  The
+            # request-level provider metadata is only a best-effort relay and
+            # may be stale or absent when the gateway generation ends.
             provider_metadata = sessions_store.session_provider_metadata(session_record)
     unresolved_pending = (
         isinstance(provider_metadata, dict)

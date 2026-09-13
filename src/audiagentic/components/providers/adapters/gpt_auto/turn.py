@@ -414,8 +414,15 @@ class GptAutoTurn:
         self.chat.active_turn_id = self.request.turn_id
         try:
             await self._emit_timing("restart-recovery-start")
-            self._set_chat_state(ChatState.BUSY)
             checkpoint = self.chat.unresolved_metadata()
+            defer_recovery = getattr(self.chat, "defer_unresolved_reconciliation", None)
+            if callable(defer_recovery):
+                defer_recovery()
+            # Rehydration opens the exact retained conversation in READY.  Do
+            # binding/readiness validation before BUSY; ensure_ready() is not
+            # legal once the turn has entered BUSY.
+            await self.chat.ensure_ready()
+            self._set_chat_state(ChatState.BUSY)
             self._prompt_message_id = checkpoint.get("prompt-message-id")
             self._response_message_id = checkpoint.get("assistant-message-id")
             unresolved_turn_id = checkpoint.get("unresolved-turn-id")
@@ -428,7 +435,6 @@ class GptAutoTurn:
                 )
             self.side_effect_attempted = True
             self.submission_confirmed = True
-            await self.chat.ensure_ready()
             current = await self.chat.snapshot()
             if not isinstance(self._prompt_message_id, str) or not self._prompt_message_id:
                 # The checkpoint is written before Send and prompt identity is
@@ -436,29 +442,15 @@ class GptAutoTurn:
                 # window, recover the latest *new* user node only when its
                 # content and baseline count match this request; otherwise
                 # remain unresolved without clicking Send.
-                baseline_count = checkpoint.get("unresolved-baseline-user-count")
-                try:
-                    baseline_count_value = int(baseline_count)
-                except (TypeError, ValueError):
-                    baseline_count_value = current.user_count
-                candidate_id = current.latest_user_id
-                candidate_text = current.latest_user_correlation_text() or ""
-                if (
-                    current.user_count <= baseline_count_value
-                    or not candidate_id
-                    or not match_prompt(self.request.body, candidate_text)
-                ):
-                    raise AudiaGenticError(
-                        "EXT-GPTAUTO-004", "providers",
-                        "gpt-auto could not correlate the recovered prompt safely",
-                        {"failure-reason": "prompt-identity-unavailable", **self._diagnostics()},
-                    )
-                self._prompt_message_id = candidate_id
+                current = await self._await_recovered_prompt_identity(
+                    checkpoint, current
+                )
+                self._prompt_message_id = current.latest_user_id
                 derived_prompt_id = True
                 mark_prompt = getattr(self.chat, "mark_prompt_submitted", None)
                 if mark_prompt is not None:
                     mark_prompt(
-                        candidate_id,
+                        current.latest_user_id,
                         checkpoint.get("unresolved-baseline-assistant-id"),
                         self.request.body,
                     )
@@ -487,9 +479,9 @@ class GptAutoTurn:
                 self._response_message_id = response_ref.message_id
             self._baseline_snapshot = baseline
             if derived_prompt_id:
-                persist_checkpoint = getattr(self.chat, "persist_unresolved_checkpoint", None)
-                if persist_checkpoint is not None:
-                    await persist_checkpoint(turn_id=self.request.turn_id, baseline=baseline)
+                persist_identity = getattr(self.chat, "persist_unresolved_identity", None)
+                if persist_identity is not None:
+                    await persist_identity()
             self._move(TurnState.SUBMITTED)
             self._move(TurnState.AWAITING_RESPONSE)
             final = await self._await_response(baseline, current)
@@ -515,6 +507,49 @@ class GptAutoTurn:
             if self.chat.state not in {ChatState.FAILED, ChatState.CLOSED, ChatState.RECOVERING}:
                 self._set_chat_state(ChatState.READY)
             self._done.set()
+
+    async def _await_recovered_prompt_identity(
+        self, checkpoint: dict[str, object], initial: ChatSnapshot
+    ) -> ChatSnapshot:
+        """Wait through renderer lag before classifying a pre-ID recovery."""
+        baseline_count = checkpoint.get("unresolved-baseline-user-count")
+        try:
+            baseline_count_value = int(baseline_count)
+        except (TypeError, ValueError) as exc:
+            raise AudiaGenticError(
+                "EXT-GPTAUTO-004", "providers",
+                "gpt-auto could not correlate the recovered prompt safely",
+                {"failure-reason": "recovery-baseline-unavailable", **self._diagnostics()},
+            ) from exc
+        loop = asyncio.get_running_loop()
+        ceiling = max(
+            self.chat.config.turn.poll_interval_seconds,
+            self.chat.config.turn.submission_proof_absolute_ceiling_seconds,
+        )
+        deadline = loop.time() + ceiling
+        current = initial
+        while True:
+            candidate_id = current.latest_user_id
+            candidate_text = current.latest_user_correlation_text() or ""
+            if current.user_count > baseline_count_value and candidate_id:
+                if not match_prompt(self.request.body, candidate_text):
+                    raise AudiaGenticError(
+                        "EXT-GPTAUTO-004", "providers",
+                        "gpt-auto recovered a conflicting prompt identity",
+                        {"failure-reason": "recovered-prompt-mismatch", **self._diagnostics()},
+                    )
+                return current
+            if loop.time() >= deadline:
+                raise AudiaGenticError(
+                    "EXT-GPTAUTO-004", "providers",
+                    "gpt-auto could not correlate the recovered prompt safely",
+                    {"failure-reason": "prompt-identity-unavailable", **self._diagnostics()},
+                )
+            await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
+            try:
+                current = await self.chat.snapshot()
+            except Exception:  # noqa: BLE001 - renderer lag is not proof of failure
+                continue
 
     async def wait_done(self, timeout: float) -> None:
         await asyncio.wait_for(self._done.wait(), timeout=timeout)
