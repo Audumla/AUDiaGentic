@@ -100,8 +100,8 @@ def test_recovery_deferred_stays_running_and_retries_same_request(tmp_path: Path
         record,
         {
             "virtual-capacity": 1,
-            "provider-session-recovery-initial-delay-seconds": 0.01,
-            "provider-session-recovery-max-delay-seconds": 0.01,
+            "provider-session-recovery-initial-delay-seconds": 0.5,
+            "provider-session-recovery-max-delay-seconds": 0.5,
         },
         runner,
     )
@@ -118,11 +118,13 @@ def test_recovery_deferred_stays_running_and_retries_same_request(tmp_path: Path
     assert current["recovery-required"] is True
     assert current["recovery"]["attempt"] == 1
     assert current["recovery"]["side-effect-state"] == "may-have-started"
+    assert manager.recovery_pending_count(project) == 1
 
     terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
     assert terminal["state"] == "completed"
     assert terminal["output"] == "recovered"
     assert calls == [record["request-id"], record["request-id"]]
+    assert manager.recovery_pending_count(project) == 0
     events = load_ndjson(gateway_timeline_path(project, record["request-id"]))
     assert any(event.get("event") == "recovery.retry-scheduled" for event in events)
     assert not any(
@@ -182,6 +184,51 @@ def test_cancelled_recovery_backoff_is_not_stranded(tmp_path: Path):
     terminal = manager.wait(project, record["request-id"], timeout_seconds=3)
     assert terminal["state"] == "cancelled"
     assert calls == 2
+
+
+def test_queue_shutdown_cancels_delayed_recovery_retry(tmp_path: Path):
+    """A retired queue cannot reattach after its delayed retry is cancelled."""
+    manager = queue_mod.GatewayQueueManager()
+    project = tmp_path / "project"
+    project.mkdir()
+    record = store.build_record(execution_profile_id="recovery-shutdown", prompt_body="x")
+    store.write_record(project, record)
+    deferred = threading.Event()
+    calls = 0
+
+    def runner(_project_root: Path, _current: dict) -> dict:
+        nonlocal calls
+        calls += 1
+        deferred.set()
+        raise RecoveryDeferred(
+            AudiaGenticError(
+                code="EXT-AGW-118",
+                kind="agents",
+                message="provider reattach unavailable",
+            )
+        )
+
+    manager.enqueue(
+        project,
+        record,
+        {
+            "virtual-capacity": 1,
+            "provider-session-recovery-initial-delay-seconds": 10,
+            "provider-session-recovery-max-delay-seconds": 10,
+        },
+        runner,
+    )
+    assert deferred.wait(timeout=2)
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        if manager.recovery_pending_count(project) == 1:
+            break
+        time.sleep(0.01)
+    manager.shutdown()
+    time.sleep(0.05)
+    assert manager.recovery_pending_count(project) == 0
+    assert calls == 1
+    assert store.read_record(project, record["request-id"])["state"] == "running"
 
 
 def test_project_queue_depths_excludes_other_projects(tmp_path: Path):

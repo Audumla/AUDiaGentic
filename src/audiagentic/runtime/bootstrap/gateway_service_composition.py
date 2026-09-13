@@ -109,6 +109,9 @@ def _uninstall_gateway_queue_manager(_manager: Any) -> None:
     from audiagentic.components.agents.gateway import api as gateway_api
     from audiagentic.components.agents.gateway.queue import queue as queue_mod
 
+    shutdown = getattr(_manager, "shutdown", None)
+    if callable(shutdown):
+        shutdown()
     gateway_api.set_queue_manager(queue_mod.GatewayQueueManager())
 
 

@@ -21,6 +21,7 @@ from audiagentic.components.agents.gateway.mapping import first_present
 from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
+from audiagentic.foundation.transports.agent_session import SessionFailureDisposition
 
 logger = logging.getLogger(__name__)
 
@@ -800,13 +801,15 @@ def _dispatch_session_request(
         if guard_held:
             preparation_guard.release()
         if resume_existing:
-            # Rehydrate/open failures cannot prove that the old generation
-            # did not submit the turn.  The queue owns the non-terminal retry
-            # and keeps the durable request/session identity unchanged.
-            raise RecoveryDeferred(
-                exc,
-                phase="rehydrate-retry" if not prompt_started else "observe-retry",
-            ) from exc
+            disposition = runtime.session_failure_disposition(session_id)
+            if disposition is not SessionFailureDisposition.TERMINAL_FAILED:
+                # Rehydrate/open failures cannot prove that the old generation
+                # did not submit the turn. The queue owns the non-terminal
+                # retry and keeps the durable request/session identity.
+                raise RecoveryDeferred(
+                    exc,
+                    phase="rehydrate-retry" if not prompt_started else "observe-retry",
+                ) from exc
         cancelled = store.read_record(project_root, request_id).get("cancel-requested")
         if client_defaults.proven_unsent_composer_failure(exc) and not cancelled and not _unsent_retry_used:
             store.append_owned_attempt(

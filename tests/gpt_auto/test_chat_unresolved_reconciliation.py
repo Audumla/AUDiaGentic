@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from audiagentic.components.providers.adapters.gpt_auto import session_transport as transport_module
 from audiagentic.components.providers.adapters.gpt_auto.chat import ChatState, PersistentChat
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
 from audiagentic.components.providers.adapters.gpt_auto.session_transport import (
@@ -13,6 +14,14 @@ from audiagentic.components.providers.adapters.gpt_auto.session_transport import
 )
 from audiagentic.components.providers.adapters.gpt_auto.snapshot import ChatSnapshot
 from audiagentic.foundation.contracts.errors import AudiaGenticError
+from audiagentic.foundation.transports.agent_session import (
+    ControlDisposition,
+    CorrelationQuality,
+    SessionControlAction,
+    SessionControlRequest,
+    SessionFailureDisposition,
+    SessionPrompt,
+)
 
 from .test_greenfield_config_urls import valid_config
 
@@ -63,6 +72,85 @@ def test_recovery_transport_rejects_foreign_unresolved_request() -> None:
 
     with pytest.raises(RuntimeError, match="does not belong to the recovered request"):
         asyncio.run(transport.resume_existing(request, lambda _observation: None))
+
+
+@pytest.mark.asyncio
+async def test_cancel_during_gateway_gap_is_latched_until_rehydrated_turn_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chat = _chat()
+    chat._checkpoint_metadata["unresolved-turn-id"] = "req-1"
+    transport = GptAutoSessionTransport(chat)
+    cancel = SessionControlRequest(
+        ag_session_id=chat.ag_session_id,
+        turn_id="req-1",
+        action=SessionControlAction.CANCEL_TURN,
+    )
+
+    result = await transport.control(cancel)
+
+    assert result.disposition is ControlDisposition.ACCEPTED
+    assert result.correlation_quality is CorrelationQuality.REQUEST_SCOPED
+
+    class _ResumedTurn:
+        def __init__(self, *_args) -> None:
+            self.cancelled = False
+
+        def cancel(self) -> None:
+            self.cancelled = True
+
+        async def resume_existing(self):
+            assert self.cancelled is True
+            return SimpleNamespace(stop_reason="cancelled")
+
+    monkeypatch.setattr(transport_module, "GptAutoTurn", _ResumedTurn)
+    result = await transport.resume_existing(
+        SessionPrompt(turn_id="req-1", body="already submitted"),
+        lambda _observation: None,
+    )
+
+    assert result.stop_reason == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_resume_existing_exposes_definitive_provider_failure_as_terminal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chat = _chat()
+    chat._checkpoint_metadata["unresolved-turn-id"] = "req-1"
+
+    async def retain_and_clear(_error) -> bool:
+        chat.clear_unresolved_turn()
+        return True
+
+    chat.retain_after_turn_failure = retain_and_clear  # type: ignore[method-assign]
+
+    class _FailedTurn:
+        def __init__(self, *_args) -> None:
+            pass
+
+        async def resume_existing(self):
+            raise AudiaGenticError(
+                "EXT-GPTAUTO-003",
+                "providers",
+                "provider failure policy matched",
+                {
+                    "failure-reason": "provider-failure-policy-matched",
+                    "phase": "response-observation",
+                    "evidence": ["error-page"],
+                },
+            )
+
+    monkeypatch.setattr(transport_module, "GptAutoTurn", _FailedTurn)
+    transport = GptAutoSessionTransport(chat)
+
+    with pytest.raises(AudiaGenticError, match="provider failure policy matched"):
+        await transport.resume_existing(
+            SessionPrompt(turn_id="req-1", body="already submitted"),
+            lambda _observation: None,
+        )
+
+    assert transport.turn_failure_disposition() is SessionFailureDisposition.TERMINAL_FAILED
 
 
 @pytest.mark.asyncio

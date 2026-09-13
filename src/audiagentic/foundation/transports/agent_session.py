@@ -229,6 +229,7 @@ class SessionFailureDisposition(StrEnum):
     """
 
     RETAIN = "retain"
+    TERMINAL_FAILED = "terminal-failed"
     TERMINATE = "terminate"
 
 

@@ -348,6 +348,18 @@ class GatewayQueueManager:
         self._pending_authority: PendingAuthority[QueuedDispatch] = PendingAuthority()
         self._active_requests: dict[str, tuple[Path, str]] = {}
         self._recovery_timers: dict[str, threading.Timer] = {}
+        self._recovery_pending: dict[str, Path] = {}
+        self._shutdown_event = threading.Event()
+
+    def shutdown(self) -> None:
+        """Stop delayed recovery work owned by this queue generation."""
+        self._shutdown_event.set()
+        with self._manager_lock:
+            timers = tuple(self._recovery_timers.values())
+            self._recovery_timers.clear()
+            self._recovery_pending.clear()
+        for timer in timers:
+            timer.cancel()
 
     def _runtime_state(self, snapshot: profiles_mod.ResolvedExecutionProfile) -> _RuntimeState:
         profile_identity = ProfileGenerationIdentity(
@@ -612,7 +624,7 @@ class GatewayQueueManager:
         authority rotates only the project that actually starts work, so an
         unavailable project head cannot starve another project with capacity.
         """
-        while True:
+        while not self._shutdown_event.is_set():
             started = False
             for candidate in self._pending_authority.candidates():
                 entry = candidate.value
@@ -714,21 +726,31 @@ class GatewayQueueManager:
 
         def _recover() -> None:
             bound: _QueueReservation | None = None
+            entered_worker = False
             try:
                 while bound is None:
+                    if self._shutdown_event.is_set():
+                        return
                     with pq.lock:
                         bound = self._try_reserve_source(entry, pq)
                     if bound is None:
                         time.sleep(0.1)
+                if self._shutdown_event.is_set():
+                    return
+                entered_worker = True
                 self._run_one(pq, entry, bound)
             except Exception:  # noqa: BLE001 - recovery must not kill the service
                 logger.exception(
                     "recovered gateway request could not be scheduled",
                     extra={"request-id": entry.request_id},
                 )
-                with pq.lock:
-                    pq.running.discard(entry.request_id)
-                self._active_requests.pop(entry.request_id, None)
+            finally:
+                if not entered_worker:
+                    if bound is not None:
+                        self._release_reservation(bound)
+                    with pq.lock:
+                        pq.running.discard(entry.request_id)
+                    self._active_requests.pop(entry.request_id, None)
 
         threading.Thread(
             target=_recover,
@@ -931,9 +953,12 @@ class GatewayQueueManager:
         def _launch() -> None:
             with self._manager_lock:
                 self._recovery_timers.pop(entry.request_id, None)
+                self._recovery_pending.pop(entry.request_id, None)
             bound: _QueueReservation | None = None
             entered_worker = False
             try:
+                if self._shutdown_event.is_set():
+                    return
                 current = store.read_record(entry.project_root, entry.request_id)
                 if (
                     current.get("state") != "running"
@@ -943,6 +968,8 @@ class GatewayQueueManager:
                 ):
                     return
                 while bound is None:
+                    if self._shutdown_event.is_set():
+                        return
                     current = store.read_record(entry.project_root, entry.request_id)
                     if (
                         current.get("state") != "running"
@@ -962,6 +989,8 @@ class GatewayQueueManager:
                     self._active_requests[entry.request_id] = (
                         entry.project_root, entry.execution_profile_id
                     )
+                if self._shutdown_event.is_set():
+                    return
                 entered_worker = True
                 self._run_one(pq, entry, bound)
             except Exception:  # noqa: BLE001 - recovery must not kill the service
@@ -980,11 +1009,25 @@ class GatewayQueueManager:
         timer = threading.Timer(max(0.0, delay_seconds), _launch)
         timer.daemon = True
         with self._manager_lock:
+            if self._shutdown_event.is_set():
+                return
             existing = self._recovery_timers.get(entry.request_id)
             if existing is not None:
                 return
             self._recovery_timers[entry.request_id] = timer
+            self._recovery_pending[entry.request_id] = entry.project_root
         timer.start()
+
+    def recovery_pending_count(self, project_root: Path | None = None) -> int:
+        """Count requests waiting for delayed recovery, excluding capacity work."""
+        with self._manager_lock:
+            if project_root is None:
+                return len(self._recovery_pending)
+            project_key = project_root.resolve()
+            return sum(
+                1 for root in self._recovery_pending.values()
+                if root.resolve() == project_key
+            )
 
     def _reserve_session_when_available(
         self, entry: QueuedDispatch, pq: _RuntimeState, template: _QueueReservation,
@@ -1026,7 +1069,7 @@ class GatewayQueueManager:
                 and current.get("recovery-required") is True
                 and current.get("dispatch-owner-epoch") == owner_epoch
             )
-            if request_id in pq.cancel_requested:
+            if request_id in pq.cancel_requested and not recovered_running:
                 logger.info(
                     "gateway request cancelled before dispatch", extra={"request-id": request_id}
                 )
@@ -1418,7 +1461,8 @@ class GatewayQueueManager:
                 pq.cancel_requested.discard(request_id)
             self._active_requests.pop(request_id, None)
             _TURNCB.clear(request_id)
-            self._drain_all()
+            if not self._shutdown_event.is_set():
+                self._drain_all()
             if retry_plan is not None:
                 self._schedule_recovery_retry(
                     pq,

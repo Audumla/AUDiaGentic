@@ -38,6 +38,7 @@ class GptAutoSessionTransport:
         self._active_turn: GptAutoTurn | None = None
         self._closed = False
         self._turn_failure_disposition = SessionFailureDisposition.TERMINATE
+        self._pending_cancel_turn_id: str | None = None
 
     @property
     def ag_session_id(self) -> str:
@@ -122,12 +123,25 @@ class GptAutoSessionTransport:
             )
         turn = GptAutoTurn(self.chat, request, sink)
         self._active_turn = turn
+        if self._pending_cancel_turn_id == request.turn_id:
+            self._pending_cancel_turn_id = None
+            turn.cancel()
         try:
             return await turn.resume_existing()
         except Exception as exc:
             retained = await self.chat.retain_after_turn_failure(exc)
+            details = getattr(exc, "details", {})
+            definitively_failed = (
+                retained
+                and getattr(exc, "code", None) == "EXT-GPTAUTO-003"
+                and isinstance(details, dict)
+                and details.get("failure-reason") == "provider-failure-policy-matched"
+                and not self.chat.unresolved_metadata().get("unresolved-turn-pending")
+            )
             self._turn_failure_disposition = (
-                SessionFailureDisposition.RETAIN
+                SessionFailureDisposition.TERMINAL_FAILED
+                if definitively_failed
+                else SessionFailureDisposition.RETAIN
                 if retained
                 else SessionFailureDisposition.TERMINATE
             )
@@ -142,12 +156,21 @@ class GptAutoSessionTransport:
     async def control(self, request: SessionControlRequest) -> SessionControlResult:
         if request.action is SessionControlAction.CANCEL_TURN:
             if self._active_turn is None:
+                metadata = self.chat.unresolved_metadata()
+                if (
+                    metadata.get("unresolved-turn-pending")
+                    and metadata.get("unresolved-turn-id") == request.turn_id
+                ):
+                    self._pending_cancel_turn_id = request.turn_id
+                    return SessionControlResult(
+                        ControlDisposition.ACCEPTED, CorrelationQuality.REQUEST_SCOPED
+                    )
                 return SessionControlResult(
-                    ControlDisposition.ALREADY_TERMINAL, CorrelationQuality.REQUEST_SCOPED
+                    ControlDisposition.UNCERTAIN, CorrelationQuality.UNCERTAIN
                 )
             if request.turn_id != self._active_turn.request.turn_id:
                 return SessionControlResult(
-                    ControlDisposition.ALREADY_TERMINAL, CorrelationQuality.REQUEST_SCOPED
+                    ControlDisposition.UNCERTAIN, CorrelationQuality.UNCERTAIN
                 )
             self._active_turn.cancel()
             return SessionControlResult(
