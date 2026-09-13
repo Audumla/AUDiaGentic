@@ -53,44 +53,13 @@ def _get_current_version(project_root: Path) -> str:
 
 
 def _archive_ledger_locally(project_root: Path, release_id: str) -> dict[str, Any]:
-    """Archive the current ledger to LEDGER.ndjson for this release.
+    """Archive through the ledger component's canonical release boundary."""
+    from audiagentic.components.ledger.ledger_api import archive_for_release
 
-    This mirrors the event-driven ledger archival but runs synchronously
-    without requiring the ledger component's event bus.
-    """
-    from audiagentic.foundation.io import atomic_write_text, load_ndjson
-
-    releases_dir = project_root / "docs" / "releases"
-    releases_dir.mkdir(parents=True, exist_ok=True)
-
-    current_ledger_path = releases_dir / "CURRENT_RELEASE_LEDGER.ndjson"
-    historical_path = releases_dir / "LEDGER.ndjson"
-
-    if not current_ledger_path.exists():
-        raise make_error(
-            prefix="VAL", component="release", number=13,
-            kind="release",
-            message="CURRENT_RELEASE_LEDGER.ndjson not found — sync the ledger first",
-        )
-
-    events = load_ndjson(current_ledger_path)
-
-    # Archive: move current to historical (append if historical exists)
-    if historical_path.exists():
-        existing = load_ndjson(historical_path)
-        all_events = existing + events
-    else:
-        all_events = events
-
-    atomic_write_text(historical_path, "\n".join(json.dumps(e) for e in all_events) + "\n")
-
-    # Clear current ledger
-    atomic_write_text(current_ledger_path, "[]\n")
-
+    result = archive_for_release(project_root, release_id)
     return {
-        "release-id": release_id,
-        "archived-events": len(events),
-        "ledger": str(historical_path.relative_to(project_root)),
+        **result,
+        "ledger": result["historical-ledger"],
         "cleared-current": True,
     }
 

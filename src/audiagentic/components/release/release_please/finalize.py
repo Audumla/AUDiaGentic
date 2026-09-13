@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from audiagentic.components.ledger.ledger_api import release_events
 from audiagentic.foundation.contracts.errors import make_error
 from audiagentic.foundation.io import atomic_write_text, load_ndjson
 
@@ -26,21 +27,23 @@ def render_release_docs(
             details={"path": str(historical_path)},
         )
     events = load_ndjson(historical_path)
-
-    if released_event_ids:
-        id_set = set(released_event_ids)
-        release_events = [e for e in events if e.get("event-id") in id_set]
-    else:
-        release_events = [e for e in events if e.get("release-id") == release_id or not e.get("release-id")]
-
-    change_lines = [f"## {release_id}"]
-    for event in sorted(release_events, key=lambda e: e.get("event-id", "")):
-        summary = event.get("user-summary-candidate") or event.get("technical-summary")
+    selected = release_events(events, release_id, released_event_ids)
+    labels = {
+        "feature": "Features", "code-fix": "Fixes", "refactor": "Improvements",
+        "docs": "Documentation", "tests": "Testing", "config": "Configuration",
+        "release": "Release", "audit": "Audits", "workflow": "Workflow",
+    }
+    grouped: dict[str, list[str]] = {}
+    for event in selected:
+        summary = (event.get("user-summary-candidate") or event.get("technical-summary") or "").strip()
         if summary:
-            change_lines.append(f"- {summary}")
-        else:
-            change_lines.append("- (no summary)")
-    change_block = "\n".join(change_lines) + "\n"
+            grouped.setdefault(labels.get(event.get("change-class"), "Changes"), []).append(summary)
+    change_lines = [f"## {release_id}", ""]
+    for label in sorted(grouped):
+        change_lines.append(f"### {label}")
+        change_lines.extend(f"- {summary}" for summary in grouped[label])
+        change_lines.append("")
+    change_block = "\n".join(change_lines).rstrip() + "\n"
 
     changelog_path = releases / "CHANGELOG.md"
     existing = changelog_path.read_text(encoding="utf-8") if changelog_path.exists() else "# Changelog\n"
