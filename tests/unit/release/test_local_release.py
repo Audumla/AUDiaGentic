@@ -38,8 +38,11 @@ def project_with_ledger(tmp_path: Path) -> Path:
     ledger.write_text(
         json.dumps({
             "event-id": "evt_001",
+            "change-class": "feature",
+            "files": ["src/example.py"],
             "technical-summary": "added feature",
             "user-summary-candidate": "Added a new feature",
+            "status": "unreleased",
         }) + "\n"
     )
     return tmp_path
@@ -73,7 +76,9 @@ class TestArchiveLedgerLocally:
     def test_appends_to_existing_historical(self, project_with_ledger):
         historical = project_with_ledger / "docs" / "releases" / "LEDGER.ndjson"
         historical.write_text(
-            json.dumps({"event-id": "evt_old", "technical-summary": "old event"}) + "\n"
+            json.dumps({"event-id": "evt_old", "change-class": "docs",
+                        "files": ["README.md"], "technical-summary": "old event",
+                        "user-summary-candidate": "Old event", "status": "unreleased"}) + "\n"
         )
 
         result = _archive_ledger_locally(project_with_ledger, "rel_0002")

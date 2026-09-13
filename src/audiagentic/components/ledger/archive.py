@@ -11,8 +11,9 @@ from audiagentic.components.ledger.paths import (
     historical_ledger_path,
     releases_dir,
 )
+from audiagentic.components.ledger.validation import load_persisted_events
 from audiagentic.foundation.contracts.errors import AudiaGenticError
-from audiagentic.foundation.io import atomic_write_ndjson, atomic_write_text, load_ndjson
+from audiagentic.foundation.io import atomic_write_ndjson, atomic_write_text
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +110,7 @@ def _archive_current_ledger_locked(project_root: Path, release_id: str) -> dict[
     current_path = current_ledger_path(project_root)
     historical_path = historical_ledger_path(project_root)
 
-    events = load_ndjson(current_path)
+    events = load_persisted_events(current_path)
     if not events:
         raise AudiaGenticError(
             code="CON-ARCHIVE-001",
@@ -122,7 +123,7 @@ def _archive_current_ledger_locked(project_root: Path, release_id: str) -> dict[
     released_events = [{**e, "status": "released", "release-id": release_id} for e in events]
     released_ids = {e["event-id"] for e in released_events}
 
-    historical = load_ndjson(historical_path)
+    historical = load_persisted_events(historical_path)
     merged = _merge_historical_events(historical, released_events)
 
     atomic_write_ndjson(historical_path, merged)

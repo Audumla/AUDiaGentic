@@ -22,6 +22,7 @@ from audiagentic.components.ledger.paths import (
     releases_dir,
 )
 from audiagentic.components.ledger.sync import sync_current_release_ledger
+from audiagentic.components.ledger.validation import load_persisted_events
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.io import load_ndjson
 
@@ -91,12 +92,31 @@ def archive_current(project_root: Path, release_id: str) -> dict[str, Any]:
 
 def archive_for_release(project_root: Path, release_id: str) -> dict[str, Any]:
     """Atomically recover, sync, and archive the current ledger."""
+    # A retry for an already-finalized release must be a read-only projection
+    # of that release.  Check this before draining or touching current events,
+    # otherwise next-release events can be stolen by the retry.
+    historical_path = releases_dir(project_root) / "LEDGER.ndjson"
+    if historical_path.exists():
+        historical = load_persisted_events(historical_path)
+        snapshot_ids = [
+            event["event-id"]
+            for event in historical
+            if event.get("release-id") == release_id and isinstance(event.get("event-id"), str)
+        ]
+        if snapshot_ids:
+            return {
+                "release-id": release_id,
+                "archived-events": len(snapshot_ids),
+                "purged-fragments": 0,
+                "historical-ledger": str(historical_path),
+                "released-event-ids": snapshot_ids,
+                "idempotent-retry": True,
+            }
     try:
         return archive_current(project_root, release_id)
     except AudiaGenticError as exc:
         if exc.code not in {"RLS-BUSINESS-020", "CON-ARCHIVE-001"}:
             raise
-        historical_path = project_root / "docs" / "releases" / "LEDGER.ndjson"
         historical = load_ndjson(historical_path)
         if not any(event.get("release-id") == release_id for event in historical):
             raise
@@ -107,6 +127,8 @@ def archive_for_release(project_root: Path, release_id: str) -> dict[str, Any]:
             "historical-ledger": str(historical_path),
             "released-event-ids": [],
         }
+
+
 
 
 def release_events(

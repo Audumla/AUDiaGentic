@@ -1,1 +1,7 @@
 CON-LEDGER-001: "No event found with the given ID in the current release ledger. Check the event ID and ensure the event has been synced."
+CON-LEDGER-002: "A persisted ledger line was not an event object. Repair the ledger record before retrying release finalization."
+CON-LEDGER-003: "A persisted ledger event failed the change-event contract. Repair the indicated record before retrying release finalization."
+CON-LEDGER-004: "A persisted ledger line was not valid JSON. Repair the indicated line before retrying release finalization."
+CON-ARCHIVE-002: "A historical ledger entry is missing a valid event ID. Repair the historical record before retrying archival."
+CON-ARCHIVE-003: "Two ledger records use the same event ID with different content. Resolve the conflict before retrying archival."
+CON-ARCHIVE-004: "An event ID is already assigned to another release. Do not reassign released ledger history."

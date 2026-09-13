@@ -58,6 +58,9 @@
     },
     "release-id": {
       "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
       "description": "Stamped by archive when status transitions to released."
     },
     "git-commits": {
@@ -69,5 +72,15 @@
       "uniqueItems": true,
       "description": "Git commit SHAs from post-commit hook. Append-only. Do not set manually."
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "released"}}},
+      "then": {"required": ["release-id"]}
+    },
+    {
+      "if": {"required": ["release-id"]},
+      "then": {"properties": {"status": {"const": "released"}}}
+    }
+  ]
 }

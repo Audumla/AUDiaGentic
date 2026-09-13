@@ -11,9 +11,11 @@ def test_release_notes_group_ledger_events_by_release_language(tmp_path: Path) -
     releases.mkdir(parents=True)
     events = [
         {"event-id": "chg_b", "release-id": "v1", "change-class": "code-fix",
-         "user-summary-candidate": "Fixed startup handling."},
+         "files": ["src/start.py"], "technical-summary": "Fixed startup handling.",
+         "user-summary-candidate": "Fixed startup handling.", "status": "released"},
         {"event-id": "chg_a", "release-id": "v1", "change-class": "feature",
-         "user-summary-candidate": "Added release summaries."},
+         "files": ["src/release.py"], "technical-summary": "Added release summaries.",
+         "user-summary-candidate": "Added release summaries.", "status": "released"},
     ]
     (releases / "LEDGER.ndjson").write_text(
         "".join(json.dumps(event) + "\n" for event in events), encoding="utf-8"
