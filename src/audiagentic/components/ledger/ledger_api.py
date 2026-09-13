@@ -109,6 +109,27 @@ def archive_for_release(project_root: Path, release_id: str) -> dict[str, Any]:
         }
 
 
+def release_events(
+    historical: list[dict[str, Any]],
+    release_id: str,
+    released_event_ids: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Select released events for the release component's standard templates."""
+    if released_event_ids:
+        selected_ids = set(released_event_ids)
+        return sorted(
+            (event for event in historical if event.get("event-id") in selected_ids),
+            key=lambda event: event.get("event-id", ""),
+        )
+    return sorted(
+        (
+            event for event in historical
+            if event.get("release-id") == release_id
+        ),
+        key=lambda event: event.get("event-id", ""),
+    )
+
+
 def _union_find_cluster(keys: list[frozenset[str]]) -> list[list[int]]:
     """Cluster indices by transitive key overlap (union-find).
 

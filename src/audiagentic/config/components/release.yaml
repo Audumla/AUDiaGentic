@@ -57,3 +57,5 @@ contributions:
         Do not edit generated release artifacts (CHANGELOG.md, RELEASE_NOTES.md) directly.
         Run finalize_release only after ledger audit review is complete.
         The ledger is archived as part of finalization — this cannot be undone.
+        Release finalization is one-way: source-control commit stamping is not
+        part of release finalization, preventing ledger/archive feedback loops.
