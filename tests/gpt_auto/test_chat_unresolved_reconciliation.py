@@ -26,7 +26,7 @@ from audiagentic.foundation.transports.agent_session import (
 from .test_greenfield_config_urls import valid_config
 
 
-def _chat(*, response_stability_seconds: float = 6.0) -> PersistentChat:
+def _chat(*, response_stability_seconds: float = 6.0, unresolved: bool = True) -> PersistentChat:
     config_dict = valid_config()
     config_dict["turn"]["response-stability-seconds"] = response_stability_seconds
     chat = PersistentChat(
@@ -36,13 +36,71 @@ def _chat(*, response_stability_seconds: float = 6.0) -> PersistentChat:
         runtime=object(),  # unused: test snapshots are injected directly
         config=GptAutoConfig.from_dict(config_dict),
         binding_sink=lambda update: None,
-        resume_provider_metadata={
-            "unresolved-turn-pending": True,
-            "prompt-message-id": "u1",
-        },
+        resume_provider_metadata=(
+            {"unresolved-turn-pending": True, "prompt-message-id": "u1"}
+            if unresolved else {}
+        ),
     )
     chat.page_handle = "page-1"
     return chat
+
+
+@pytest.mark.asyncio
+async def test_readiness_failure_is_typed_as_not_started_and_retryable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chat = _chat(unresolved=False)
+    transport = GptAutoSessionTransport(chat)
+    retained_errors: list[AudiaGenticError] = []
+
+    async def fail_ready() -> None:
+        raise RuntimeError("private readiness detail")
+
+    async def retain(error: AudiaGenticError) -> bool:
+        retained_errors.append(error)
+        return True
+
+    chat.ensure_ready = fail_ready  # type: ignore[method-assign]
+    chat.retain_after_turn_failure = retain  # type: ignore[method-assign]
+
+    with pytest.raises(AudiaGenticError) as raised:
+        await transport.prompt(
+            SessionPrompt(turn_id="req-1", body="hello"),
+            lambda _observation: None,
+        )
+
+    error = raised.value
+    assert error.code == "EXT-GPTAUTO-004"
+    assert error.details["failure-stage"] == "readiness"
+    assert error.details["submission-state"] == "not_started"
+    assert error.details["retryable-same-session"] is True
+    assert error.__cause__ is not None
+    assert retained_errors[0].details["retryable-same-session"] is False
+    assert transport.turn_failure_disposition() is SessionFailureDisposition.RETAIN
+
+
+@pytest.mark.asyncio
+async def test_unresolved_prior_turn_blocks_presubmit_replay(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chat = _chat(unresolved=True)
+    transport = GptAutoSessionTransport(chat)
+
+    async def fail_ready() -> None:
+        raise RuntimeError("not ready")
+
+    chat.ensure_ready = fail_ready  # type: ignore[method-assign]
+    chat.retain_after_turn_failure = lambda _error: asyncio.sleep(0, result=True)  # type: ignore[method-assign]
+
+    with pytest.raises(AudiaGenticError) as raised:
+        await transport.prompt(
+            SessionPrompt(turn_id="req-2", body="hello"),
+            lambda _observation: None,
+        )
+
+    assert raised.value.details["submission-state"] == "not_started"
+    assert raised.value.details["previous-turn-unresolved"] is True
+    assert raised.value.details["retryable-same-session"] is False
 
 
 def _terminal_snapshot(*, dom_signals: frozenset[str]) -> ChatSnapshot:

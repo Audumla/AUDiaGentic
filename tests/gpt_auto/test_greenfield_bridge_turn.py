@@ -2498,7 +2498,9 @@ async def test_admission_failure_marks_recoverable_session_for_gateway_retention
         raise admission_error
 
     async def retain_after_turn_failure(error):
-        assert error is admission_error
+        assert error.code == admission_error.code
+        assert error.details["failure-stage"] == "readiness"
+        assert error.details["submission-state"] == "not_started"
         return True
 
     chat.ensure_ready = ensure_ready
