@@ -188,6 +188,15 @@ class PersistentChat:
         if asyncio.iscoroutine(result):
             await result
 
+    async def persist_unresolved_identity(self) -> None:
+        """Persist prompt identity without rewriting the pre-send baseline."""
+        sink = self.checkpoint_sink
+        if sink is None:
+            return
+        result = sink(self.unresolved_metadata())
+        if inspect.isawaitable(result):
+            await result
+
     async def persist_unresolved_clear(self) -> None:
         """Durably clear the checkpoint only after terminal proof."""
         sink = self.checkpoint_sink

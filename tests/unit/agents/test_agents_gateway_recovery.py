@@ -200,6 +200,8 @@ def test_recovery_runner_reads_session_checkpoint_for_resume_mode(
             "recovery-required": True,
             "resolved-provider-id": "gpt-auto",
             "gateway-profile-runtime": {"provider-id": "gpt-auto", "params": {}},
+            # Deliberately disagree with the authoritative session record.
+            "provider-metadata": {"unresolved-turn-pending": not pending},
         }
     )
     monkeypatch.setattr(
