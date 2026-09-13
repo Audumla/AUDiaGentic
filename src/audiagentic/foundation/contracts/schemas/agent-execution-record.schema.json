@@ -382,7 +382,11 @@
         "from-owner-epoch": {"type": ["string", "null"]},
         "handoff-id": {"type": ["string", "null"]},
         "attempt": {"type": "integer", "minimum": 0},
-        "last-error": {"type": ["string", "null"], "maxLength": 256}
+        "last-error": {"type": ["string", "null"], "maxLength": 256},
+        "phase": {"type": "string", "maxLength": 64},
+        "side-effect-state": {"type": "string", "maxLength": 64},
+        "next-retry-at": {"type": ["string", "null"]},
+        "retry-delay-seconds": {"type": "number", "minimum": 0}
       },
       "additionalProperties": false
     },

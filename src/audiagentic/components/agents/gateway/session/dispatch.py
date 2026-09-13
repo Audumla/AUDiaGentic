@@ -18,6 +18,7 @@ from typing import Any
 
 from audiagentic.components.agents.gateway import store as store
 from audiagentic.components.agents.gateway.mapping import first_present
+from audiagentic.components.agents.gateway.queue.recovery_control import RecoveryDeferred
 from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.time import now_iso_z
 
@@ -423,7 +424,8 @@ def _dispatch_session_request(
     guard_held = True
     prompt_started = False
     try:
-        record = client_defaults.redirect_if_replaced(project_root, record)
+        if not resume_existing:
+            record = client_defaults.redirect_if_replaced(project_root, record)
         session_id = record.get("session-id")
         if session_id is None:
             raise AudiaGenticError(
@@ -780,20 +782,11 @@ def _dispatch_session_request(
     except AudiaGenticError as exc:
         if guard_held:
             preparation_guard.release()
-        if resume_existing and exc.code == "CON-AGW-124":
-            # A provider without an observation-resume seam cannot prove that
-            # the old generation's side effect was absent. Keep the request
-            # running and the active-work marker intact; a later explicit
-            # provider-aware recovery may resolve it, but this generation
-            # must never terminalize or replay it.
-            store.record_gateway_timeline(
-                project_root,
-                request_id,
-                "recovery.deferred-provider-unsupported",
-                state="running",
-                attributes={"request-id": request_id, "provider-id": provider_id},
-            )
-            return store.read_record(project_root, request_id)
+        if resume_existing and not prompt_started:
+            # Rehydrate/open failures cannot prove that the old generation
+            # did not submit the turn.  The queue owns the non-terminal retry
+            # and keeps the durable request/session identity unchanged.
+            raise RecoveryDeferred(exc) from exc
         cancelled = store.read_record(project_root, request_id).get("cancel-requested")
         if client_defaults.proven_unsent_composer_failure(exc) and not cancelled and not _unsent_retry_used:
             store.append_owned_attempt(
@@ -809,9 +802,12 @@ def _dispatch_session_request(
             return _dispatch_session_request(
                 project_root, record, dispatch_prompt=dispatch_prompt,
                 context_fingerprint=context_fingerprint,
-                _default_recovery_attempt=_default_recovery_attempt, _unsent_retry_used=True,
+                _default_recovery_attempt=_default_recovery_attempt,
+                _unsent_retry_used=True,
+                session_start=session_start,
+                resume_existing=resume_existing,
             )
-        if not store.read_record(project_root, request_id).get("cancel-requested"):
+        if not resume_existing and not store.read_record(project_root, request_id).get("cancel-requested"):
             replacement = client_defaults.replace_failed_default(
                 project_root, record, exc,
                 recover_url=not prompt_started and _default_recovery_attempt == 0 and not (record.get("metadata") or {}).get("provider-chat-url"),
@@ -847,6 +843,14 @@ def _dispatch_session_request(
     except BaseException as exc:
         if guard_held:
             preparation_guard.release()
+        if resume_existing and not prompt_started:
+            wrapped = AudiaGenticError(
+                code="INT-AGW-098",
+                kind="agents",
+                message=f"session recovery failed: {exc}",
+                details={"original-type": type(exc).__name__},
+            )
+            raise RecoveryDeferred(wrapped) from exc
         # Safety net: wrap any non-AudiaGenticError so _redact_error preserves
         # the message (INT-AGW-098 boundary handler — prevents raw exceptions
         # like provider-specific errors from being silently redacted).
@@ -862,7 +866,7 @@ def _dispatch_session_request(
             message=f"session dispatch failed: {exc}",
             details={"original-type": type(exc).__name__},
         )
-        if isinstance(exc, Exception) and _default_recovery_attempt < 2 and not store.read_record(project_root, request_id).get("cancel-requested"):
+        if isinstance(exc, Exception) and not resume_existing and _default_recovery_attempt < 2 and not store.read_record(project_root, request_id).get("cancel-requested"):
             replacement = client_defaults.replace_failed_default(
                 project_root, record, wrapped,
                 recover_url=not prompt_started and _default_recovery_attempt == 0 and not (record.get("metadata") or {}).get("provider-chat-url"),
@@ -958,7 +962,7 @@ def _dispatch_session_request(
                     "assistant-output-available": bool(output_text and output_text.strip()),
                 },
             )
-        if error is not None:
+        if error is not None and not resume_existing:
             record = client_defaults.replace_failed_default(
                 project_root, record, error, recover_url=False, attach_request=False,
             ) or record
@@ -1040,9 +1044,10 @@ def _dispatch_session_request(
             message="provider session completed without an assistant response",
             details={"stop-reason": result.stop_reason or "unknown"},
         )
-        record = client_defaults.replace_failed_default(
-            project_root, record, error, recover_url=False, attach_request=False,
-        ) or record
+        if not resume_existing:
+            record = client_defaults.replace_failed_default(
+                project_root, record, error, recover_url=False, attach_request=False,
+            ) or record
         store.append_owned_attempt(
             project_root,
             request_id,
