@@ -418,16 +418,50 @@ class GptAutoTurn:
             checkpoint = self.chat.unresolved_metadata()
             self._prompt_message_id = checkpoint.get("prompt-message-id")
             self._response_message_id = checkpoint.get("assistant-message-id")
-            if not isinstance(self._prompt_message_id, str) or not self._prompt_message_id:
+            unresolved_turn_id = checkpoint.get("unresolved-turn-id")
+            derived_prompt_id = False
+            if unresolved_turn_id != self.request.turn_id:
                 raise AudiaGenticError(
                     "EXT-GPTAUTO-004", "providers",
-                    "gpt-auto cannot recover a turn without its exact prompt identity",
-                    {"failure-reason": "prompt-identity-unavailable", **self._diagnostics()},
+                    "gpt-auto unresolved checkpoint does not match the recovered request",
+                    {"failure-reason": "unresolved-turn-request-mismatch", **self._diagnostics()},
                 )
             self.side_effect_attempted = True
             self.submission_confirmed = True
             await self.chat.ensure_ready()
             current = await self.chat.snapshot()
+            if not isinstance(self._prompt_message_id, str) or not self._prompt_message_id:
+                # The checkpoint is written before Send and prompt identity is
+                # published afterward. If the generation ended in that small
+                # window, recover the latest *new* user node only when its
+                # content and baseline count match this request; otherwise
+                # remain unresolved without clicking Send.
+                baseline_count = checkpoint.get("unresolved-baseline-user-count")
+                try:
+                    baseline_count_value = int(baseline_count)
+                except (TypeError, ValueError):
+                    baseline_count_value = current.user_count
+                candidate_id = current.latest_user_id
+                candidate_text = current.latest_user_correlation_text() or ""
+                if (
+                    current.user_count <= baseline_count_value
+                    or not candidate_id
+                    or not match_prompt(self.request.body, candidate_text)
+                ):
+                    raise AudiaGenticError(
+                        "EXT-GPTAUTO-004", "providers",
+                        "gpt-auto could not correlate the recovered prompt safely",
+                        {"failure-reason": "prompt-identity-unavailable", **self._diagnostics()},
+                    )
+                self._prompt_message_id = candidate_id
+                derived_prompt_id = True
+                mark_prompt = getattr(self.chat, "mark_prompt_submitted", None)
+                if mark_prompt is not None:
+                    mark_prompt(
+                        candidate_id,
+                        checkpoint.get("unresolved-baseline-assistant-id"),
+                        self.request.body,
+                    )
             response_ref = _response_ref_for_prompt(current, self._prompt_message_id)
             # Build a synthetic pre-response baseline when the assistant
             # already exists. This lets the normal response observer prove a
@@ -452,6 +486,10 @@ class GptAutoTurn:
                 )
                 self._response_message_id = response_ref.message_id
             self._baseline_snapshot = baseline
+            if derived_prompt_id:
+                persist_checkpoint = getattr(self.chat, "persist_unresolved_checkpoint", None)
+                if persist_checkpoint is not None:
+                    await persist_checkpoint(turn_id=self.request.turn_id, baseline=baseline)
             self._move(TurnState.SUBMITTED)
             self._move(TurnState.AWAITING_RESPONSE)
             final = await self._await_response(baseline, current)
