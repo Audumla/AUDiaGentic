@@ -176,7 +176,10 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
         and record.get("provider-transport-kind") == "provider-session"
     )
     if provider_session and not isinstance(session_metadata, dict):
-        raise ValueError("recovered provider session has no authoritative session metadata")
+        # Keep the request in observation-only recovery when the session
+        # metadata read is unavailable.  Startup must not fail the gateway or
+        # fall back to a potentially duplicating ordinary prompt dispatch.
+        session_metadata = {}
     return functools.partial(
         _dispatch.dispatch_request,
         dispatch_prompt="",
