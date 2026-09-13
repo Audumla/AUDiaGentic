@@ -1,27 +1,29 @@
 # PyPI publishing
 
 The release workflow builds a wheel and source archive for every release and
-uploads both to the GitHub Release. It publishes to PyPI only when explicitly
-enabled.
+uploads both to the GitHub Release. It also publishes to PyPI using GitHub
+Trusted Publishing (OIDC), without a long-lived PyPI API token.
 
-## One-time repository setup
+## One-time PyPI setup
 
-Create a PyPI API token scoped to the `audiagentic` project, then configure it
-in GitHub. Using GitHub CLI:
+Create the `audiagentic` project on PyPI, or open its publishing settings if it
+already exists. Add a GitHub Trusted Publisher with:
 
-```bash
-gh variable set PYPI_PUBLISH --repo Audumla/AUDiaGentic --body true
-gh secret set PYPI_API_TOKEN --repo Audumla/AUDiaGentic
+```text
+ owner: Audumla
+ repository: AUDiaGentic
+ workflow: .github/workflows/release.yml
+ environment: (leave empty)
 ```
 
-The second command prompts for the token and does not store it in the
-repository. Do not commit the token or place it in project `.env` files.
+PyPI may label this a pending publisher until the first matching workflow run.
+No GitHub secret or `PYPI_PUBLISH` variable is required.
 
 ## Publishing
 
 Merge a release-producing change to `main` (or run the supported release
 workflow on a `proof-release-*` branch). Release-please creates the tag; the
-release job then builds and publishes the artifacts.
+release job then builds, uploads the GitHub assets, and publishes to PyPI.
 
 ## Installing and updating
 

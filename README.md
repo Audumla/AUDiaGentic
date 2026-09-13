@@ -31,8 +31,8 @@ python -m pip install --upgrade audiagentic
 ```
 
 The GitHub Release workflow builds and attaches the wheel and source archive
-to each release. PyPI publishing is opt-in; repository maintainers enable it
-with `PYPI_PUBLISH=true` and the `PYPI_API_TOKEN` Actions secret. See
+to each release and publishes them to PyPI using GitHub Trusted Publishing.
+See
 [`docs/releases/PYPI_PUBLISHING.md`](docs/releases/PYPI_PUBLISHING.md).
 
 ## Docker test path
