@@ -1066,8 +1066,6 @@ class GptAutoTurn:
         request_activity_response_text = (
             initial_response_ref.text if initial_response_ref is not None else None
         )
-        expected_user_count = current.user_count
-
         def _replacement_proven(raw: ChatSnapshot, new_id: str) -> bool:
             """Require both the ordered turn boundary and bound conversation."""
             old_id = self._response_message_id
@@ -1078,12 +1076,15 @@ class GptAutoTurn:
                 return False
             observed_url = canonical_chat_url(raw.url)
             bound_url = canonical_chat_url(self.chat.chat_url or "")
-            if observed_url is None or (bound_url and observed_url != bound_url):
+            if (
+                observed_url is None
+                or not bound_url
+                or parse_project_id(raw.url) != parse_project_id(self.chat.chat_url or "")
+            ):
                 return False
             return _same_response_slot_replacement(
                 raw,
                 prompt_message_id=prompt_message_id,
-                expected_user_count=expected_user_count,
                 old_assistant_id=old_id,
                 new_assistant_id=new_id,
             )
@@ -1383,6 +1384,8 @@ class GptAutoTurn:
                                 exc_info=True,
                             )
             now = loop.time()
+            adopted_same_slot_replacement = False
+            verification_replacement_adopted = False
             if response_ref is not None and response_ref.message_id:
                 if self._response_message_id is None:
                     self._response_message_id = response_ref.message_id
@@ -1408,13 +1411,14 @@ class GptAutoTurn:
                                 "new-assistant-id": observed_assistant_id,
                             },
                         )
+                        adopted_same_slot_replacement = True
                         # The replacement is renderer churn, not model
                         # progress. Re-establish terminal stability against
-                        # the new node without resubmitting the prompt.
+                        # the new node without resubmitting the prompt. Keep
+                        # processing this observation so recovery accounting
+                        # cannot be bypassed by repeated ID-only remounts.
                         tracker = ObservationTracker(policy=policy, now=loop.time())
-                        previous = current
-                        continue
-                    if await self._refresh_after_response_correlation_conflict():
+                    elif await self._refresh_after_response_correlation_conflict():
                         logger.info(
                             "gpt-auto refreshed retained conversation after response "
                             "correlation conflict; continuing the original turn",
@@ -1464,7 +1468,15 @@ class GptAutoTurn:
             # answer that already satisfies the request-owned completion
             # witness.
             complete = self.chat.config.workflow.policy("response-complete").evaluate(facts)
-            completion_candidate = complete.satisfied and bool(current.latest_assistant_text)
+            id_only_replacement = (
+                adopted_same_slot_replacement
+                and current.latest_assistant_text == previous.latest_assistant_text
+            )
+            completion_candidate = (
+                complete.satisfied
+                and bool(current.latest_assistant_text)
+                and not id_only_replacement
+            )
             # Authentication is a hard veto even for reduced/test workflow
             # configurations that do not declare a standalone auth policy.
             if facts.get("auth-required"):
@@ -1628,7 +1640,10 @@ class GptAutoTurn:
                 )
 
             progress_edge = (
-                current.latest_assistant_id != previous.latest_assistant_id
+                (
+                    current.latest_assistant_id != previous.latest_assistant_id
+                    and not adopted_same_slot_replacement
+                )
                 or current.latest_assistant_text != previous.latest_assistant_text
                 or bool(progress_labels)
             )
@@ -1695,7 +1710,7 @@ class GptAutoTurn:
                     )
                 emitted = True
 
-            terminal_candidate = complete.satisfied and bool(current.latest_assistant_text)
+            terminal_candidate = completion_candidate
             terminal_verified_ok = False
             response_message_id = current.latest_assistant_id
             response_text = current.latest_assistant_text
@@ -1805,6 +1820,10 @@ class GptAutoTurn:
                         if mark_assistant is not None:
                             mark_assistant(verify_message_id)
                         await self._publish_message_ids(strict=True)
+                        adopted_same_slot_replacement = True
+                        verification_replacement_adopted = True
+                        request_activity_response_id = verify_message_id
+                        request_activity_response_text = verify.latest_assistant_text
                         logger.info(
                             "gpt-auto adopted structurally proven assistant-id replacement "
                             "during terminal verification",
@@ -1815,9 +1834,11 @@ class GptAutoTurn:
                             },
                         )
                         tracker = ObservationTracker(policy=policy, now=loop.time())
-                        previous = current
-                        continue
-                    if await self._refresh_after_response_correlation_conflict():
+                        # The verification node has just been remounted. Do
+                        # not accept the old candidate immediately; the next
+                        # observation must re-establish terminal stability.
+                        completion_candidate = False
+                    elif await self._refresh_after_response_correlation_conflict():
                         tracker = ObservationTracker(policy=policy, now=loop.time())
                         previous = current
                         logger.info(
@@ -1920,7 +1941,7 @@ class GptAutoTurn:
                 return response_text
             if outcome is not None:
                 tracker = ObservationTracker(policy=policy, now=loop.time())
-            previous = current
+            previous = verify if verification_replacement_adopted else current
             await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
 
     def _raise_response_recovery_exhausted(self, attempts: int) -> NoReturn:
@@ -2256,7 +2277,6 @@ def _same_response_slot_replacement(
     snapshot: ChatSnapshot,
     *,
     prompt_message_id: str,
-    expected_user_count: int,
     old_assistant_id: str,
     new_assistant_id: str,
 ) -> bool:
@@ -2269,8 +2289,6 @@ def _same_response_slot_replacement(
     observation ambiguous and must remain fail-closed.
     """
     if not new_assistant_id or new_assistant_id == old_assistant_id:
-        return False
-    if snapshot.user_count != expected_user_count:
         return False
     if snapshot.latest_user_id != prompt_message_id:
         return False
