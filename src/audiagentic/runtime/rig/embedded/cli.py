@@ -9,8 +9,10 @@ from typing import cast
 from audiagentic.foundation.cli_io import print_json, print_message
 from audiagentic.runtime.rig.embedded.process import build_command
 
-DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 42001
+from audiagentic.foundation.config.local_runtime import DEFAULT_LOCAL_HOST, DEFAULT_RIG_PORT
+
+DEFAULT_HOST = DEFAULT_LOCAL_HOST
+DEFAULT_PORT = DEFAULT_RIG_PORT
 
 
 def print_result(result: object, as_json: bool) -> None:
@@ -112,8 +114,8 @@ def launch_foreground(args: argparse.Namespace) -> int:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Launch AUDiaGentic embedded llama rig.")
-    parser.add_argument("--host", default=DEFAULT_HOST)
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="Use 0 to auto-pick a free local port.")
+    parser.add_argument("--host", default=os.environ.get("AUDIAGENTIC_RIG_HOST", DEFAULT_HOST))
+    parser.add_argument("--port", type=int, default=int(os.environ.get("AUDIAGENTIC_RIG_PORT", DEFAULT_PORT)), help="Use 0 to auto-pick a free local port.")
     parser.add_argument("--background", action="store_true", help="Start detached, wait for health, then return.")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON result.")
     parser.add_argument("--server-bin")

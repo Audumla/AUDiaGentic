@@ -25,7 +25,7 @@ from audiagentic.foundation.system.managed_service_lifecycle import (
     ManagedServiceLifecycle,
     ServiceHandshake,
 )
-from audiagentic.runtime.rig.constants import DEFAULT_HOST
+from audiagentic.foundation.config.local_runtime import local_rig_host
 from audiagentic.runtime.rig.embedded.launch import prepare_launch
 from audiagentic.runtime.rig.embedded.process import build_command
 from audiagentic.runtime.rig.http import probe_models_endpoint
@@ -83,8 +83,9 @@ def start_or_attach_embedded_rig(
     profile therefore fails as incompatible while the proven existing process
     remains untouched.
     """
-    endpoint = f"http://{DEFAULT_HOST}:{rig_port}/v1"
-    endpoint_info = EndpointInfo("openai-compatible", f"{DEFAULT_HOST}:{rig_port}/v1")
+    host = local_rig_host()
+    endpoint = f"http://{host}:{rig_port}/v1"
+    endpoint_info = EndpointInfo("openai-compatible", f"{host}:{rig_port}/v1")
     protocol_version = _protocol_version(profile_name)
     plan = prepare_launch(
         model_profile=profile_name,
@@ -103,7 +104,7 @@ def start_or_attach_embedded_rig(
             tuple(build_command(
                 binary=plan.binary,
                 model_arg=plan.model_arg,
-                host=DEFAULT_HOST,
+                host=host,
                 port=rig_port,
                 device=plan.device,
                 server_cfg=plan.server_cfg,

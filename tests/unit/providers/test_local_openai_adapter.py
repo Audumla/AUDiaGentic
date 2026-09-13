@@ -151,8 +151,8 @@ class TestLocalOpenAiAdapter(unittest.TestCase):
 
     def test_fetch_api_key_from_env_fallback(self):
         """_fetch_api_key falls back to OPENAI_API_KEY."""
-        cfg = {"OPENAI_API_KEY": "env-key"}
-        self.assertEqual(adapter._fetch_api_key(cfg), "env-key")
+        with unittest.mock.patch.dict("os.environ", {"OPENAI_API_KEY": "env-key"}):
+            self.assertEqual(adapter._fetch_api_key({}), "env-key")
 
     def test_resolve_base_url(self):
         """_resolve_base_url reads from config."""
@@ -163,6 +163,10 @@ class TestLocalOpenAiAdapter(unittest.TestCase):
         """_resolve_base_url defaults to OpenAI."""
         cfg = {}
         self.assertEqual(adapter._resolve_base_url(cfg), "https://api.openai.com")
+
+    def test_resolve_base_url_environment_fallback(self):
+        with unittest.mock.patch.dict("os.environ", {"AUDIAGENTIC_LOCAL_PROVIDER_BASE_URL": "http://llama:9000/"}):
+            self.assertEqual(adapter._resolve_base_url({}), "http://llama:9000")
 
 
 if __name__ == "__main__":

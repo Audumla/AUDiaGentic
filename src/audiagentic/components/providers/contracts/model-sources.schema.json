@@ -50,6 +50,11 @@
         "base-url": {
           "type": "string"
         },
+        "base-url-env": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "Environment variable containing a machine-local endpoint; its value is never persisted."
+        },
         "api-key-ref": {
           "type": "string",
           "description": "Secret reference (e.g. env:VAR_NAME), never a literal credential."

@@ -40,10 +40,11 @@ def require_harness_rig_port(harness_cfg: dict[str, Any]) -> int:
             "Set it in config/provisioning/harness/ag.yaml or override config.",
             field="rig.port",
         )
+    from audiagentic.foundation.config.local_runtime import local_rig_port
     try:
-        return int(raw)
-    except (TypeError, ValueError) as exc:
-        raise _harness_config_error(4, f"Invalid harness config value for rig.port: {raw!r}", value=raw) from exc
+        return local_rig_port(raw)
+    except AudiaGenticError as exc:
+        raise _harness_config_error(4, str(exc), value=raw) from exc
 
 
 __all__ = ["require_harness_rig_port"]
