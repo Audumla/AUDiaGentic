@@ -142,7 +142,11 @@ class GatewayServiceApplication:
         return self._dashboard_action_token
 
     def dashboard_project_image(self, project_id: str, encoded: str | None = None) -> bytes:
-        from audiagentic.components.agents.gateway.service.dashboard_images import image_path, project_image_id, save_image
+        from audiagentic.components.agents.gateway.service.dashboard_images import (
+            image_path,
+            project_image_id,
+            save_image,
+        )
         from audiagentic.components.agents.gateway.service.known_projects import load_known_projects
 
         known = load_known_projects(self._service_store.root / "known-projects.json")
@@ -487,6 +491,11 @@ class GatewayServiceApplication:
             if not isinstance(force, bool):
                 raise service_validation_error(26, "service_stop force must be a boolean")
             return self._lifecycle_controller().request_stop(force=force)
+        if operation == "service_restart":
+            _reject_unknown(arguments, set())
+            if self._operations_active():
+                raise service_conflict_error(30, "gateway has active operator operations; retry when idle")
+            return self._lifecycle_controller().request_restart()
         raise service_validation_error(1, "unknown gateway service operation", operation=operation)
 
     def restart_dashboard_gateway(self) -> dict[str, Any]:
