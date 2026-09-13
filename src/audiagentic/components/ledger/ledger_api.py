@@ -93,70 +93,60 @@ def archive_current(project_root: Path, release_id: str) -> dict[str, Any]:
 def archive_for_release(project_root: Path, release_id: str) -> dict[str, Any]:
     """Atomically recover, sync, and archive the current ledger."""
     validate_release_id(release_id)
-    # A retry for an already-finalized release must be a read-only projection
-    # of that release.  Check this before draining or touching current events,
-    # otherwise next-release events can be stolen by the retry.
     historical_path = releases_dir(project_root) / "LEDGER.ndjson"
-    if historical_path.exists():
-        historical = load_persisted_events(historical_path)
-        from audiagentic.components.ledger.archive import _merge_historical_events, _purge_fragments
+    # The existence check, retry projection, outbox drain, sync, and archive
+    # decision share one non-reentrant critical section. This prevents an
+    # overlapping retry from absorbing events that arrived for the next
+    # release after the first retry archived its snapshot.
+    from audiagentic.components.ledger.archive import (
+        _archive_identity,
+        _archive_current_ledger_locked,
+        _merge_historical_events,
+        _purge_fragments,
+    )
+    from audiagentic.foundation.io import atomic_write_ndjson, atomic_write_text
+
+    with ledger_write_lock(project_root) as warning:
+        historical = load_persisted_events(historical_path, role="historical")
         historical = _merge_historical_events(historical, [])
-        snapshot_ids = [
-            event["event-id"]
-            for event in historical
+        snapshot = {
+            event["event-id"]: event for event in historical
             if event.get("release-id") == release_id
-            and event.get("status") == "released"
-            and isinstance(event.get("event-id"), str)
-        ]
-        if snapshot_ids:
-            from audiagentic.components.ledger.paths import current_ledger_path
-            from audiagentic.foundation.io import atomic_write_ndjson, atomic_write_text
+        }
+        if snapshot:
             current_path = current_ledger_path(project_root)
-            snapshot = {event["event-id"]: event for event in historical if event.get("event-id") in snapshot_ids}
-            with ledger_write_lock(project_root):
-                current = load_persisted_events(current_path)
-                archived_current = [event for event in current if event.get("event-id") in snapshot]
-                remaining = [event for event in current if event.get("event-id") not in snapshot]
-                if archived_current:
-                    from audiagentic.components.ledger.archive import _archive_identity
-                    for event in archived_current:
-                        if _archive_identity(event) != _archive_identity(snapshot[event["event-id"]]):
-                            raise AudiaGenticError(
-                                code="CON-ARCHIVE-003", kind="release",
-                                message="current ledger conflicts with an archived event identity",
-                                details={"event-id": event["event-id"]},
-                            )
-                    if remaining:
-                        atomic_write_ndjson(current_path, remaining)
-                    else:
-                        atomic_write_text(current_path, "[]\n")
-                    purged = _purge_fragments(project_root, set(snapshot_ids))
+            current = load_persisted_events(current_path, role="current")
+            archived_current = [event for event in current if event.get("event-id") in snapshot]
+            remaining = [event for event in current if event.get("event-id") not in snapshot]
+            for event in archived_current:
+                if _archive_identity(event) != _archive_identity(snapshot[event["event-id"]]):
+                    raise AudiaGenticError(
+                        code="CON-ARCHIVE-003", kind="release",
+                        message="current ledger conflicts with an archived event identity",
+                        details={"event-id": event["event-id"]},
+                    )
+            if archived_current:
+                if remaining:
+                    atomic_write_ndjson(current_path, remaining)
                 else:
-                    purged = 0
+                    atomic_write_text(current_path, "[]\n")
+                purged = _purge_fragments(project_root, set(snapshot))
+            else:
+                purged = 0
             return {
                 "release-id": release_id,
-                "archived-events": len(snapshot_ids),
+                "archived-events": len(snapshot),
                 "purged-fragments": purged,
                 "historical-ledger": str(historical_path),
-                "released-event-ids": snapshot_ids,
+                "released-event-ids": sorted(snapshot),
                 "idempotent-retry": True,
                 "recovered-current": bool(archived_current),
             }
-    try:
-        return archive_current(project_root, release_id)
-    except AudiaGenticError as exc:
-        if exc.code not in {"RLS-BUSINESS-020", "CON-ARCHIVE-001"}:
-            raise
-        historical = load_persisted_events(historical_path)
-        if not any(event.get("release-id") == release_id for event in historical):
-            raise
-        return {
-            "release-id": release_id,
-            "archived-events": 0,
-            "purged-fragments": 0,
-            "historical-ledger": str(historical_path),
-            "released-event-ids": [],
-        }
+
+        drain_event_outbox(project_root)
+        from audiagentic.components.ledger.sync import _sync_current_release_ledger_locked
+        _sync_current_release_ledger_locked(project_root, warning)
+        return _archive_current_ledger_locked(project_root, release_id)
 
 
 
