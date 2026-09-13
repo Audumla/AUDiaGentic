@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.1](https://github.com/Audumla/AUDiaGentic/compare/v0.2.0...v0.2.1) (2026-09-13)
+
+
+### Bug Fixes
+
+* **release:** install dependencies before finalization ([fc150f3](https://github.com/Audumla/AUDiaGentic/commit/fc150f34a4b490fccff1217dfbca9ad0b9d01250))
+* **release:** repair legacy ledger entry ([d571271](https://github.com/Audumla/AUDiaGentic/commit/d57127131f322aefad44a3d73189c6092f79e475))
+* **source-control:** disable commit ledger stamping ([85c5ede](https://github.com/Audumla/AUDiaGentic/commit/85c5ede3b26d9c1c31a51a5c0898fbb16e75d712))
+
 ## [0.2.0](https://github.com/Audumla/AUDiaGentic/compare/v0.1.1...v0.2.0) (2026-09-01)
 
 
