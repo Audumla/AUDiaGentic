@@ -9,6 +9,9 @@
 #   3. Project-local — <project>/.audiagentic/config/harness/ag.yaml
 #
 # Set exclusive_local: true in the project-local file to skip the user-global tier.
+# Machine-local overrides: AUDIAGENTIC_RIG_HOST, AUDIAGENTIC_RIG_PORT,
+# AUDIAGENTIC_LOCAL_PROVIDER_BASE_URL, AUDIAGENTIC_HOME, and
+# AUDIAGENTIC_REPO_ROOT.
 
 # Harness selection.
 # Each harness is an isolated adaptor under runtime/harness/<type>/.
