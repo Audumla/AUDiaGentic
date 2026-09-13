@@ -96,36 +96,32 @@ mcp-servers:
     description: Plan item management — create, list, update, transition, and remove items; create and manage reviews
     propagate: providers
     instructions: >
-        Use plan_list_standards when standards context is needed. Create items with
-        plan and title; work is optional (S/M/L). IDs are normally generated, but compatible
-        explicit uppercase item IDs are allowed and must be globally unique.
-        Filter lists by plan or ID prefix; item/review defaults are active/open. Transition
-        state explicitly. Reviews may target active items only; completed items cannot
-        receive or reopen active reviews. Close handled reviews and complete items only
-        after non-empty Validation and Acceptance Criteria are recorded and all linked
-        reviews are closed.
-        Workflow contract: items start in pending; pending/in_progress are placed in
-        active/ and completed/superseded/deprecated in completed/. Reviews start in
-        created; created/considered are placed in active/ and closed in completed/.
-        Item transitions are pending -> in_progress, completed, superseded, deprecated;
+        Use plan_list_standards only when standards context is needed. Create items with
+        plan and title; work is optional (S/M/L), and explicit uppercase IDs must be
+        globally unique. Lists default to active items/open reviews; filter by plan or
+        ID prefix and paginate as needed. Transition state explicitly. Reviews target
+        active items only; completed items cannot receive or reopen active reviews.
+        Completion requires non-empty Validation and Acceptance Criteria; all linked
+        reviews are closed; and implementation/validation is complete. The canonical
+        contract is in workflows.yaml: items start in pending and reviews in created;
+        item transitions are pending -> in_progress, completed, superseded, deprecated;
         in_progress -> pending, completed, superseded, deprecated; completed -> pending,
-        in_progress, superseded, deprecated; superseded -> pending, in_progress; and
-        deprecated -> pending, in_progress. Review transitions are created -> considered,
-        closed; considered -> created, closed; and closed -> created, considered.
-        Item placement mapping is pending -> active/, in_progress -> active/,
-        completed -> completed/, superseded -> completed/, deprecated -> completed/.
-        Review placement mapping is created -> active/, considered -> active/,
-        closed -> completed/.
-        Completion requires non-empty Validation and Acceptance Criteria and all linked
-        reviews closed.
+        in_progress, superseded, deprecated; superseded -> pending, in_progress; deprecated
+        -> pending, in_progress. Review transitions are created -> considered, closed;
+        considered -> created, closed; closed -> created, considered. Placement is
+        pending -> active/, in_progress -> active/, completed -> completed/, superseded
+        -> completed/, deprecated -> completed/, created -> active/, considered -> active/,
+        closed -> completed/. Equivalently, pending/in_progress are placed in active/;
+        created/considered are placed in active/; completed/superseded/deprecated and
+        closed are placed in completed/.
     tool-descriptions:
       plan_list_standards: List configured planning standards.
-      plan_create_item: "Create an item. Required: plan, title. Optional: id, work (S/M/L), skill, order, Validation, Acceptance Criteria, and other sections."
+      plan_create_item: "Create an item (required: plan, title; optional: id, work, skill, order, and content sections)."
       plan_list_groups: "List plan groups; filter by state/plan and paginate with limit/offset."
       plan_list_items: "List items; provide plan or id_prefix. Default state is active; paginate with limit/offset."
       plan_get_item: Read an item; set include_history=true for change history.
       plan_set_state: Transition to pending, in_progress, completed, superseded, or deprecated.
-      plan_update_item: Update editable fields; append is section names also present in updates.
+      plan_update_item: Update item fields; use append for sections to append.
       plan_delete_item: Permanently delete a plan item by ID.
       plan_create_review: "Create a review; required: review-of and title."
       plan_list_reviews: List reviews; default state is open; paginate with limit/offset.
@@ -151,11 +147,11 @@ contributions:
         - Reviewing or updating the state of outstanding items
 
         ## Item lifecycle
-        1. Create items with plan_create_item — lands in docs/planning/active/<plan>/
-        2. Revise content with plan_update_item as work progresses; for a findings-driven correction (not routine progress), record a plan_create_review first, then close it once incorporated
-        3. After review triage, close handled reviews with plan_set_review_state(review_id, 'closed')
-        4. Mark done with plan_set_state(item_id, 'completed') only when implementation and validation are done
-        5. Keep unfinished work pending or in terminal discard states (superseded, deprecated); remove stale items with plan_delete_item
+        1. Create with plan_create_item; revise with plan_update_item.
+        2. For findings-driven corrections, create a review before changing the item.
+        3. Close handled reviews with plan_set_review_state(review_id, 'closed').
+        4. Complete only after implementation, validation, non-empty Validation and Acceptance Criteria, and closed linked reviews.
+        5. Keep unfinished work pending; use superseded/deprecated for terminal discard states and delete only stale items.
 
         ## Item ID convention
         Combine a short uppercase plan prefix with a sequence number: CC07, LSP01, ML01.
