@@ -603,6 +603,48 @@ async def test_interruption_present_at_baseline_is_not_a_new_refresh_edge():
 
 
 @pytest.mark.asyncio
+async def test_interruption_reappearing_after_submission_proof_refreshes_immediately():
+    """A banner that disappears during proof and returns is a new edge."""
+    chat = _Chat()
+    chat.config.turn.response_no_activity_refresh_seconds = 240
+    chat.config.turn.response_refresh_attempts = 15
+    chat.config.turn.response_refresh_final_grace_seconds = 600
+    baseline = replace(
+        snap(users=1, user="Review AU01", user_id="prompt-1"),
+        dom_signals=frozenset({"provider-interruption"}),
+    )
+    proof = snap(users=1, user="Review AU01", user_id="prompt-1")
+    interrupted = replace(proof, dom_signals=frozenset({"provider-interruption"}))
+    completed = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        user_id="prompt-1",
+        assistant="Recovered after reappearance",
+        assistant_id="assistant-1",
+        complete=True,
+    )
+    chat._snapshots = iter([interrupted, completed, completed, completed])
+    refreshes = []
+
+    async def refresh():
+        refreshes.append(True)
+        return True
+
+    chat._refresh_for_response_recovery = refresh
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-interruption-reappearance", body="Review AU01"),
+        lambda _: None,
+    )
+    turn.state = TurnState.AWAITING_RESPONSE
+    turn._prompt_message_id = "prompt-1"
+
+    assert await turn._await_response(baseline, proof) == "Recovered after reappearance"
+    assert refreshes == [True]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("error_signal", ["error-page", "error-alert"])
 async def test_interruption_does_not_mask_terminal_provider_error(error_signal):
     """Independent provider failure evidence must not be hidden by interruption."""
