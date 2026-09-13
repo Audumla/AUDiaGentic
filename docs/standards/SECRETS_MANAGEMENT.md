@@ -54,7 +54,7 @@ Vendor keys use the vendor's convention. Internal keys are `AUDIAGENTIC_`-prefix
 | Development (tests) | `.audiagentic/secrets/test.env` (auto-loaded by `tests/conftest.py`) |
 | Development (production-like) | `.audiagentic/secrets/prod.env` (set `AUDIAGENTIC_ENV=prod`) |
 | CI | Provider secret management (GitHub Actions secrets, etc.) |
-| Docker | `tests/docker/provider-lifecycle.env` (copy from `.env.example`) |
+| Docker | `tests/docker/provider-lifecycle.env` (copy from `tests/docker/provider-lifecycle.env.example`) |
 | GitHub OAuth | `~/.audiagentic/credentials/github_token.json` (`0o600`); env vars take priority |
 | Gateway token | `<service_root>/auth.token` (`0o600`) |
 

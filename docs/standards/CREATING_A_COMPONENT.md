@@ -9,10 +9,10 @@ A **component** is an installable product capability ("Agent planning", "Coding 
 Optional sub-tiers, only needed when the capability has swappable backends or per-item sub-capabilities:
 
 ```text
-Component        config/components/<id>.yaml          the installable unit
-  Implementation config/components/<id>/<impl>.yaml   a swappable backend (one active if `exclusive`)
-  Feature        config/components/<id>/<feat>.yaml   an optional sub-capability (e.g. a language)
-    Binding        config/components/<id>/<bind>.yaml   declares impl X supports feature Y + projection
+Component        src/audiagentic/config/components/<id>.yaml          the installable unit
+  Implementation src/audiagentic/config/components/<id>/<impl>.yaml   a swappable backend (one active if `exclusive`)
+  Feature        src/audiagentic/config/components/<id>/<feat>.yaml   an optional sub-capability (e.g. a language)
+    Binding        src/audiagentic/config/components/<id>/<bind>.yaml   declares impl X supports feature Y + projection
 ```
 
 **Options** are typed, validated settings attachable to any tier. The simplest component is one YAML descriptor + one MCP server module — skip the feature tier entirely unless you need it.
@@ -21,7 +21,7 @@ Component        config/components/<id>.yaml          the installable unit
 
 ```text
 src/audiagentic/
-  config/components/
+  src/audiagentic/config/components/
     <id>.yaml                 # component descriptor (REQUIRED)
     <id>/                     # optional feature-layer descriptors (scanned recursively)
       implementations/<impl>.yaml
@@ -40,18 +40,18 @@ The MCP module may translate transport parameters/context and serialize the
 public result. It must not import component stores, queues, dispatchers,
 adapters, or service internals; those remain behind the framework-neutral API.
 
-Descriptor under `config/components/` is **data**; package under `components/` is **code**. YAML names dotted module paths; the runtime imports them lazily.
+Descriptor under `src/audiagentic/config/components/` is **data**; package under `components/` is **code**. YAML names dotted module paths; the runtime imports them lazily.
 
 ### Error text ownership
 
 - Raise canonical `AudiaGenticError` messages from code via `make_error()` / `make_error_factory(...)`.
-- Put follow-up remediation text in `config/components/<id>/error-resolutions.yaml`.
+- Put follow-up remediation text in `src/audiagentic/config/components/<id>/error-resolutions.yaml`.
 - Do not use `error-resolutions.yaml` as both the raised message source and the remediation source. One file, one meaning.
 - If you ever need config-driven canonical messages, add a separate explicit mechanism instead of overloading `error-resolutions.yaml`.
 
 ## 3. Discovery
 
-`foundation/components/loader.py::register_all_components()` globs `config/components/*.yaml` and nested descriptor YAML recursively, reads each file's `type`, and registers it. `type: component` → `ComponentDescriptor`; `type: feature|implementation|binding` → handed to `foundation/features/loader.py`. It validates IDs/links and imports each declared `lifecycle-observer` module.
+`foundation/components/loader.py::register_all_components()` globs `src/audiagentic/config/components/*.yaml` and nested descriptor YAML recursively, reads each file's `type`, and registers it. `type: component` → `ComponentDescriptor`; `type: feature|implementation|binding` → handed to `foundation/features/loader.py`. It validates IDs/links and imports each declared `lifecycle-observer` module.
 
 Hard constraints:
 - **No Python import lists / registries by hand** — dropping the YAML *is* the registration (Std §5).
@@ -60,7 +60,7 @@ Hard constraints:
 
 ## 4. Component descriptor
 
-Minimal (`config/components/my-thing.yaml`):
+Minimal (`src/audiagentic/config/components/my-thing.yaml`):
 
 ```yaml
 type: component
@@ -304,7 +304,7 @@ Keep observers idempotent — `register_all_components()` may run multiple times
 
 ## 12. Recipe — add component `my-thing`
 
-1. **Descriptor.** `config/components/my-thing.yaml` with `type: component`, `id`, `display-name`, `description` (marker auto-derived; §4).
+1. **Descriptor.** `src/audiagentic/config/components/my-thing.yaml` with `type: component`, `id`, `display-name`, `description` (marker auto-derived; §4).
 2. **Package.** `components/my_thing/` with `__init__.py`, `my_thing_api.py` (pure logic), `README.md`.
 3. **MCP server.** `my_thing_mcp.py` via `mcp_server(__name__)`/`run_mcp_server(...)`; declare under `mcp-servers:` with `direct-tools`, `propagate`, `instructions` (§6). If implementation-backed (step 5), the management server must expose generic `get_config`/`set_config` (§6) — never implementation-specific tools.
 4. **Harness guidance.** Add `harness-instructions:` for rules/context (tool catalog auto-generates — don't write one) and `contributions:` doctrine (§7).
@@ -322,7 +322,6 @@ Keep observers idempotent — `register_all_components()` may run multiple times
 ## 13. Reference components
 
 - **`planning.yaml`** + `components/planning/` — clean two-server (mgmt + activity) component, `contributions`, `exclusive`, one implementation.
-- **`coding-lsp.yaml`** + `config/components/coding-lsp/` — full feature tier: role-grouped `implementations/`, `features/`, and `bindings/`; dependencies live on implementations/features, while bindings carry projection glue.
+- **`coding-lsp.yaml`** + `src/audiagentic/config/components/coding-lsp/` — full feature tier: role-grouped `implementations/`, `features/`, and `bindings/`; dependencies live on implementations/features, while bindings carry projection glue.
 - **`project.yaml`** / **`session.yaml`** — always-on `core: true` components.
-
 

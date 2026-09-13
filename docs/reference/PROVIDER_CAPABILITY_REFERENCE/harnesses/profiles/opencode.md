@@ -48,7 +48,7 @@
 | Field | Value |
 |---|---|
 | **Sanitized source** | `opencode providers list` shows "Google api"; `opencode models google` returns `Error: Provider not found: google`; setting `GOOGLE_API_KEY` env var does NOT enable the provider — same error persists |
-| **Sanitized summary** | Google is listed as a supported credential provider (API key method, distinct from OAuth). The provider requires configuration via `opencode providers login -p google`. Standard env var key injection (`GOOGLE_API_KEY`) is confirmed NOT accepted by isolated probe with env var present and provider still unavailable. Model set granularity EXPECTED: **all models per vendor**. Cannot verify model list without credentials on this machine. |
+| **Sanitized summary** | Google is listed as a supported credential provider (API key method, distinct from OAuth). The provider requires configuration via `opencode providers login -p google`. Standard env var key injection (`GOOGLE_API_KEY`) is confirmed NOT accepted by isolated probe with env var present and provider still unavailable. Model set granularity EXPECTED: **all models per vendor**. Model list requires authenticated verification. |
 | **Support state** | **verified native** (API key credential required via OpenCode login; env var key injection blocked — confirmed by isolated probe) |
 | **Key mechanism** | API key stored via `opencode providers login`; stored in `~\.local\share\opencode\auth.json`. No env var path. |
 
@@ -61,7 +61,7 @@
 | Field | Value |
 |---|---|
 | **Sanitized source** | `opencode providers list` output contains 6 entries (OpenAI, OpenCode Zen, Anthropic, GitHub Copilot, Google, DeepSeek); OpenRouter is NOT listed among supported credential providers. No negative config test has been run. |
-| **Sanitized summary** | OpenRouter is not a native credential provider in OpenCode v1.17.18. It cannot be enabled via `opencode providers login`. The only potential path is adding a custom openai-compatible provider entry to `.opencode/config.json` with an OpenRouter base URL and API key, which would use the `@ai-sdk/openai-compatible` adapter (same as custom `brutus`/`ymir` providers in catalog). This path requires structured config writes and has not been verified. |
+| **Sanitized summary** | OpenRouter is not a native credential provider in OpenCode v1.17.18. It cannot be enabled via `opencode providers login`. The only potential path is adding a custom openai-compatible provider entry to `.opencode/config.json` with an OpenRouter base URL and API key, which would use the `@ai-sdk/openai-compatible` adapter (same as custom private providers in the catalog). This path requires structured config writes and has not been verified. |
 | **Support state** | **blocked: native support absent; custom-entries path unverified** — `.opencode/config.json` write gated by MO03 path/container unification; no negative authoritative test confirms unsupported status |
 | **Missing evidence** | Whether a custom openai-compatible provider entry with OpenRouter base URL and API key is accepted by the installed OpenCode version. Requires structured config write test, blocked until MO03 resolves. |
 

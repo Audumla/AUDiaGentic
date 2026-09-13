@@ -320,10 +320,10 @@ tool version and platform.
 - [ ] `runtime/harness/<type>/install/` and `runner/` implement the full
       contract in `interface.py`.
 - [ ] `components/providers/adapters/<type>/adapter.py` exists (one-shot run)
-      and the provider descriptor (`config/providers/<type>.yaml`) is
+      and the provider descriptor (`src/audiagentic/config/providers/<type>.yaml`) is
       registered with its own `mcp_config` (durable, standalone-usage config).
 - [ ] Add `<type>` to `harness.order` in
-      `config/provisioning/harness/ag.yaml` (or leave it for
+      `src/audiagentic/config/provisioning/harness/ag.yaml` (or leave it for
       user/project-local override only, if not a default candidate).
 - [ ] Smoke mode disables the CLI's own extension/plugin auto-discovery.
 - [ ] If launch-time MCP curation is needed: `mcp_surface.py` implements

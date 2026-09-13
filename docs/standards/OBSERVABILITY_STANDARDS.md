@@ -53,7 +53,7 @@ reactive and debuggable.
 (e.g., `JOB_TIMELINE_EVENTS`, "job.state-propagated", "queue.cancelled-before-dispatch")
 are NOT bus topics and stay outside the topic registry (ARCHITECTURE_STANDARDS §17). 
 They are local observability artifacts, not inter-component communication.
-Bus topics are registered in `config/components/<component>/events.yaml`;
+Bus topics are registered in `src/audiagentic/config/components/<component>/events.yaml`;
 the project-scoped `.audiagentic/config/interoperability/event-subscriptions.yaml`
 is a separate configuration concern (project-local subscriptions) and should not
 be conflated with the package-owned topic registries.

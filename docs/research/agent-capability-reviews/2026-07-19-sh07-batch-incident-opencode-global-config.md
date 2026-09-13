@@ -14,7 +14,7 @@ Sessions showed `close-reason: failed`, turn-count 0, but each had a
 
 ## Root cause chain
 
-1. `C:\Users\mgs\.config\opencode\opencode.json` (user-global) had been
+1. `<user-home>/.config/opencode/opencode.json` (user-global) had been
    replaced by a 98-byte stub `{"provider": {"anthropic": {}, "audiagentic": {}}}`
    with mtime exactly at the first worker launch (07:28Z).
 2. The stub content matches config-probe experiments an earlier RV739
@@ -23,7 +23,7 @@ Sessions showed `close-reason: failed`, turn-count 0, but each had a
    `OPENCODE_CONFIG` at `_source_config_path()` — the real global path).
 3. The project `.opencode/opencode.json` has no `provider` block, so gateway
    ACP launches omit `enabled_providers` and opencode falls back to the
-   user-global config — which no longer defined `brutus`. Model resolution fell
+   user-global config — which no longer defined the private provider. Model resolution fell
    through to the cloud `opencode` provider (`big-pickle`/`gpt-5.4-nano`) and
    failed with `AI_APICallError: Invalid API key`.
 4. The gateway redacts provider errors to `UNKNOWN`, so none of this was
@@ -35,8 +35,8 @@ Sessions showed `close-reason: failed`, turn-count 0, but each had a
   store: a stored `read` tool output in `opencode.db` (part
   `prt_f79253f7a00180dkHdAeP7n07D`) contained the full 150-line file from the
   Jul 17 RV739 investigation. Line-number prefixes stripped, JSON validated.
-- Restored to `C:\Users\mgs\.config\opencode\opencode.json` (brutus at
-  `http://10.10.100.10:41080/v1` with the coder-quality model family, ymir,
+- Restored to `<user-home>/.config/opencode/opencode.json` (local provider at
+  a private OpenAI-compatible endpoint with the coder-quality model family, ymir,
   enabled_providers, hindsight plugin, agent defaults). The stub was preserved
   as `opencode.json.clobbered-20260719`.
 - All three lanes resubmitted and completed successfully.

@@ -84,7 +84,7 @@ preferred path; reach for a Python `DeclaredStepRecipe` only when a source-gate 
 programmatic composition genuinely needs it.
 
 ```yaml
-# config/components/<component>/recipes/<name>.yaml
+# src/audiagentic/config/components/<component>/recipes/<name>.yaml
 recipe-id: mycap-codex
 recipe-version: "1.0.0"
 parameters:
@@ -107,7 +107,7 @@ from audiagentic.foundation.toolchains.recipe_execution import execute_recipe_mo
 result = execute_recipe_mode(recipe_path, {"URL": url, "TOKEN": token}, "apply")
 ```
 
-Validated by `config/recipes/declarative-recipe.schema.json`. Adding a new
+Validated by `src/audiagentic/config/recipes/declarative-recipe.schema.json`. Adding a new
 provider integration is a YAML drop-in, not new code.
 
 **Programmatic form** — same steps behind a source gate, when Python is warranted:
@@ -230,7 +230,7 @@ integration into two owners and holds **no** hand-rolled per-provider writer:
   never formats another harness's config.
 - **Hindsight-owned artifacts** (`~/.hindsight/*`: the Codex hook scripts +
   `codex.json`, the Pi host block in `config.json`) are **declarative YAML
-  recipes** under `config/components/memory/recipes/`, run through
+  recipes** under `src/audiagentic/config/components/memory/recipes/`, run through
   `execute_recipe_mode`. `provision.py` holds only a data catalogue
   (`_ARTIFACT_RECIPES = {provider_id: recipe.yaml}`) and a provider-agnostic
   parameter builder — resolution picks the first supported family in fixed order,
@@ -276,7 +276,7 @@ Doctrine that got it here:
 
 - Declarative YAML recipe: loader `foundation/toolchains/recipe_loader.py`,
   materializer `recipe_materializer.py`, runner `recipe_execution.py`
-  (`execute_recipe_mode`); schema `config/recipes/declarative-recipe.schema.json`
+  (`execute_recipe_mode`); schema `src/audiagentic/config/recipes/declarative-recipe.schema.json`
 - Step vocabulary + factory: `foundation/steps/` (`factory.py` registry,
   `structured.py` config/write/download steps, `shell.py`)
 - Contract + orchestration: `foundation/toolchains/recipe_contract.py`
@@ -287,6 +287,6 @@ Doctrine that got it here:
 - Provider surfaces: `components/providers/surfaces/`
 - Worked example (config-first, zero per-provider code):
   `components/memory/hindsight/provision.py` +
-  `config/components/memory/recipes/`
+  `src/audiagentic/config/components/memory/recipes/`
 - Doctrine: `ARCHITECTURE_STANDARDS.md` §1 (layer boundaries), §10 (no
   speculative abstractions / duplicate paths).

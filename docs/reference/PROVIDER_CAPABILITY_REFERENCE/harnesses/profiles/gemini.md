@@ -39,7 +39,7 @@
 
 | Field | Value |
 |---|---|
-| **Sanitized source** | gemini CLI v0.49.0 returns `IneligibleTierError` for free/individual tier with message "migrate to Antigravity". antigravity v2.2.1 installed; CLI binary is `agy` (not in current shell PATH). Auth: `"oauth-personal"` Google account login at `~/.gemini/settings.json`. Config surface: `~/.gemini/antigravity-cli/settings.json`. Bundled docs at `~/.gemini/antigravity-cli/builtin/skills/antigravity_guide/references/` confirm CLI-only model selection via `-m/--model` flag (same as gemini). |
+| **Sanitized source** | gemini CLI v0.49.0 returns `IneligibleTierError` for free/individual tier with message "migrate to Antigravity". antigravity v2.2.1 was inspected; its CLI binary is `agy`. Auth: `"oauth-personal"` Google account login at `~/.gemini/settings.json`. Config surface: `~/.gemini/antigravity-cli/settings.json`. Bundled docs at `~/.gemini/antigravity-cli/builtin/skills/antigravity_guide/references/` confirm CLI-only model selection via `-m/--model` flag (same as gemini). |
 | **Sanitized summary** | Google/Gemini models are the native vendor. Antigrativity is the active tool (gemini CLI deprecated for free tier). Authentication through Google OAuth personal account. Model selection via `-m <model-id>` on CLI or UI in IDE variant. `gemini gemma` subcommand available for local Gemma model routing via LiteRT-LM. No external vendor integration surface visible in config, help text, or bundled documentation. |
 | **Support state** | verified native (Google account oauth-personal; antigravity v2.2.1 active, gemini CLI deprecated) |
 

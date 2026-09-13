@@ -40,8 +40,8 @@ an integrity problem. Preserve the original dates, conclusions, and evidence.
 
 ## Audit findings recorded so far
 
-- A repository-wide Markdown-link scan on 2026-09-13 covered 1,773 Markdown
-  files and 112 local links. It found no genuine missing local target; the one
+- A repository-wide Markdown-link scan on 2026-09-13 covered 1,774 Markdown
+  files and 111 local links. It found no genuine missing local target; the one
   apparent hit was `managed_id` inside inline code in a historical planning
   record, not a Markdown link.
 - A case-insensitive filename audit found no duplicate paths under `docs/`, so
@@ -71,6 +71,22 @@ an integrity problem. Preserve the original dates, conclusions, and evidence.
 - The provider capability reference contains deliberately dated evidence;
   each fact's validation timestamp must be respected rather than inferred from
   the package's rebuild date.
+- A structural audit found all 1,774 Markdown files have an H1 heading. Eight
+  planning Markdown files intentionally do not use plan-item frontmatter:
+  indexes, migration checklists, implementation-plan supplements, and other
+  supporting records. Lifecycle items under `docs/planning/active/` remain
+  frontmatter-managed through the planning component.
+- Local-environment scrub on 2026-09-13 removed absolute user/workspace paths,
+  private endpoint addresses, temporary-file locations, and machine-specific
+  provider labels from durable documentation. Repository-relative paths and
+  generic loopback/configuration examples remain where they explain a public
+  interface. Vendor documentation may use the abstract `~` home marker or
+  `<private-endpoint>` placeholder to describe a required configuration surface;
+  it must not contain a resolved user path, machine name, private address, or
+  credential. No credentials or personal filesystem paths belong in docs.
+- A private-network literal scan found no RFC1918 addresses or local-hostname
+  records in `docs/`; loopback examples remain only where they document a
+  loopback-bound public service interface.
 - Testing guidance is maintained at `tests/TESTING.md`, outside `docs/`; the
   canonical docs map links to it instead of recreating a second test guide.
 
@@ -84,5 +100,7 @@ Before changing current-facing documentation:
    practical.
 4. Label retained historical material instead of rewriting its chronology.
 5. Run `git diff --check` and a local-link scan for Markdown targets.
-6. Record substantive documentation changes in the release ledger with the
+6. Check changed heading anchors when renaming sections; file existence alone
+   does not prove that an intra-document link still resolves.
+7. Record substantive documentation changes in the release ledger with the
    related plan-item ID.

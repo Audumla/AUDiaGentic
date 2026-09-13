@@ -2,7 +2,7 @@
 id: DOC01
 order: 0
 plan: documentation-cleanup
-state: in_progress
+state: completed
 created-at: '2026-09-13T10:08:37.350011+00:00'
 breadth: ''
 skill: advanced
@@ -61,17 +61,9 @@ Large documentation surface with generated release artifacts and historical plan
 
 Prefer one canonical explanation per active workflow. Do not maintain legacy compatibility language when the current contract has replaced it; label historical records as historical instead.
 
-Initial audit completed. The docs tree contains 1,765 Markdown files: canonical active guidance is concentrated in design, standards, reference, and examples; planning/release/research areas include historical or generated records and require ownership-aware handling. Fixed broken root README links and added docs/README.md as the canonical map. Broader audit remains open.
-
-Validation update 2026-09-13: docs/examples/fixtures schema validation passes, and the repository-wide Markdown link scan found zero genuine missing targets. Full tests/unit/contracts currently has three unrelated failures: missing RES-GPTAUTO-006 provider resolution and unexpected agents-config schema ID in validate_ids (source/config integrity scope, not docs; existing user changes preserved).
-
-Prefer one canonical explanation per active workflow. Do not maintain legacy compatibility language when the current contract has replaced it; label historical records as historical instead.
-
 Progress through 2026-09-13: added docs/README.md plus design, standards, reference, examples, planning, and releases indexes; added DOCUMENTATION_STATUS.md; corrected root README dead links and component path; corrected gateway status/freshness labels; clarified fixture semantics; removed the unreferenced case-colliding duplicate release sample; repaired the valid change-event fixture to match its schema. Historical reports and completed planning records are explicitly bounded rather than rewritten.
 
-Validation: 1,772 Markdown files and 108 local links scanned with zero genuine missing targets; docs/examples/fixtures schema validation passes; tests/unit/contracts/test_schema_validation.py passes (3 passed). Full tests/unit/contracts remains blocked by three unrelated source/config integrity failures: missing RES-GPTAUTO-006 provider resolution and unexpected agents-config schema ID in validate_ids. Existing user worktree changes preserved.
-
-Fresh audit after latest indexes/reference corrections (2026-09-13): 1,773 Markdown files, 112 local links, zero genuine missing targets, zero case-insensitive filename duplicates; provider capability manifest declares 42 files and all 42 exist. Existing source/config integrity failures in the full contracts suite remain outside docs scope.
+Validation: 1,774 Markdown files and 111 local links scanned with zero missing targets; zero case-insensitive filename duplicates; provider capability manifest declares 42 files and all 42 exist. Existing source/config integrity failures in the full contracts suite remain outside docs scope.
 
 Latest validation: removed-layout sweep across docs/examples, docs/design, docs/standards, and docs/reference found no src/core, components/optional, deleted CLI-registry, or deleted docs-tree references. All 52 JSON fixtures parse; schema validator reports no findings.
 
@@ -81,11 +73,17 @@ Provider-reference freshness pass: validation-report.md now identifies its 2026-
 
 Semantic authority-wording sweep 2026-09-13: no remaining unqualified current/authoritative claims were found in current-facing design, standards, reference, or examples beyond the intentionally canonical package README whose runtime-authority boundary is explicit.
 
-Final targeted docs-owned validation 2026-09-13: scaffold plus schema tests pass together (7 passed); git diff --check passes. Current-facing sweep has no removed-layout references, no candidate-status labels, and no unlabelled pre-2026 probe dates.
-
 Final targeted docs-owned validation 2026-09-13: provider reference manifest synchronized with all 42 package files (0 hash/byte mismatches); schema validation reports status ok with no findings; scaffold plus schema tests pass together (7 passed); git diff --check passes. Current-facing sweep has no removed-layout references, no candidate-status labels, and no unlabelled pre-2026 probe dates. Unrelated full-suite failures remain outside this docs scope: missing RES-GPTAUTO-006 provider error resolution and agents-config schema-ID expectations in validate_ids tests.
 
-Additional corpus audit 2026-09-13: repository-wide Markdown link scan now finds 111 local links and 0 missing targets. Corrected two malformed historical planning code examples that contained link-like syntax and were semantically misleading. Provider manifest remains synchronized (42/42); schema validation and focused scaffold/schema tests remain green.
+Additional corpus audit 2026-09-13: corrected two malformed historical planning code examples and cleared the final Markdown-link parser collision. Repository-wide scan now finds 111 local links and 0 missing targets.
+
+All-files local-environment scrub 2026-09-13: scanned every file under docs/ (not only Markdown) for resolved workspace/user paths, private endpoint addresses, and machine-specific locations. Four generated current-ledger records were redacted to safe placeholders; final scan reports 0 matching hits. Generic vendor home markers (~) and loopback interface examples remain only where they document public configuration contracts.
+
+Revalidated after the latest edits: all 1,774 Markdown files remain present; current-facing config/terminology sweep has no obsolete root config paths or legacy AgentTask/agent_jobs names; all-files resolved-local-details scan across docs/ reports 0 hits. Generic vendor home markers and loopback examples remain intentionally bounded by docs/README.md and DOCUMENTATION_STATUS.md.
+
+Privacy sweep completed: removed resolved workspace paths, personal home paths, private endpoint literals, and operator-specific local-environment wording from docs. Remaining machine-scoped references are generic architecture/history terminology, not local identifiers. Schema validation and focused documentation/example tests pass; local-link scan remains clean.
+
+Final corpus verification 2026-09-13: current docs tree contains 1,774 Markdown files; all 1,774 have H1 headings; 111 repository-local Markdown links were detected with zero missing targets; resolved workspace/personal-path/private-endpoint scan reports 0 hits; schema validator reports no findings; focused scaffold and schema tests pass (7 passed).
 
 ## Change Log
 
@@ -103,3 +101,8 @@ Additional corpus audit 2026-09-13: repository-wide Markdown link scan now finds
 - 2026-09-13T10:34:13.599511+00:00 (updated-by): Updated: section:notes
 - 2026-09-13T10:38:40.155298+00:00 (updated-by): Updated: section:notes
 - 2026-09-13T10:42:06.356705+00:00 (updated-by): Updated: section:notes
+- 2026-09-13T10:57:48.397810+00:00 (updated-by): Updated: section:notes
+- 2026-09-13T10:59:18.216399+00:00 (updated-by): Updated: section:notes
+- 2026-09-13T11:06:13.531250+00:00 (updated-by): Updated: section:notes
+- 2026-09-13T11:10:05.321820+00:00 (updated-by): Updated: section:notes
+- 2026-09-13T11:12:10.485955+00:00 (state-transition): State: in_progress → completed

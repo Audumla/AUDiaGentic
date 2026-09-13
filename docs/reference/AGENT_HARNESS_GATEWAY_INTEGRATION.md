@@ -1,5 +1,9 @@
 # Agent Harness Gateway Integration Guide
 
+> **Status:** Current integration baseline. Verify provider versions, pinned
+> provisioning data, and the cited tests against the source tree before adding
+> or enabling a harness; this guide does not itself grant runtime support.
+
 This guide is the implementation checklist for making an agent harness usable
 through the gateway. It is provider-neutral, with Pi used as the concrete
 example. A harness is not gateway-ready merely because its command starts: the
