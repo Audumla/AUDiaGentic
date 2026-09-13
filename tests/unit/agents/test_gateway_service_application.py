@@ -89,6 +89,7 @@ def test_closed_operation_router_calls_public_application(tmp_path: Path) -> Non
         **authorization,
     ) == {
         "operation": "submit", "root": str(tmp_path), "prompt_body": "hello",
+        "logical_client_id": "client-a",
         "_dispatch_owner_epoch": "epoch-unit",
         "_dispatch_service_root": str(service._service_store.root),
         "_client_instance_id": "client-a",
@@ -113,6 +114,14 @@ def test_closed_operation_router_calls_public_application(tmp_path: Path) -> Non
     )
     assert submitted["component_profile"] == "client-profile"
     assert submitted["workspace_name"] == "Workspace Name"
+
+    isolated = service.invoke(
+        "submit_execution_request",
+        str(tmp_path),
+        {"prompt_body": "isolated", "logical_client_id": "ide-chat-b"},
+        **authorization,
+    )
+    assert isolated["logical_client_id"] == "ide-chat-b"
 
     seeded = service.invoke(
         "submit_execution_request",

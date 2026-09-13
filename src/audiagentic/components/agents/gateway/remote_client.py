@@ -39,6 +39,7 @@ class StandaloneGatewayClient:
         request_timeout: float = 30.0,
         lease_ttl_seconds: float = 120.0,
         client_instance_id: str | None = None,
+        logical_client_id: str | None = None,
     ) -> None:
         self._endpoint = _validate_endpoint(endpoint)
         if not auth_token or any(character.isspace() for character in auth_token):
@@ -55,6 +56,10 @@ class StandaloneGatewayClient:
         self._request_timeout = request_timeout
         self._lease_ttl_seconds = lease_ttl_seconds
         self._client_instance_id = client_instance_id or f"client_{uuid.uuid4().hex[:16]}"
+        # Lease identity is physical transport ownership.  Default-session
+        # selection uses this separate stable identity so two logical callers
+        # sharing one service cannot accidentally inherit one another's chat.
+        self._logical_client_id = logical_client_id or f"logical-client_{uuid.uuid4().hex[:16]}"
         self._lease_id: str | None = None
         self._owner_epoch: str | None = None
         self._renew_at = 0.0
@@ -150,6 +155,7 @@ class StandaloneGatewayClient:
             from audiagentic.foundation.paths.names import get_active_profile
 
             kwargs["component_profile"] = get_active_profile()
+        kwargs.setdefault("logical_client_id", self._logical_client_id)
         return cast(dict[str, Any], self._call("submit_execution_request", project_root, kwargs))
 
     def get_execution_request(self, project_root: Path, request_id: str) -> dict[str, Any]:

@@ -582,6 +582,7 @@ def dispatch_request(
     component_profile: str,
     provider_isolation_tier: str,
     worker_timeout_seconds: float,
+    session_start: Any | None = None,
 ) -> dict[str, Any]:
     """Dispatch a queued/running gateway request record to completion.
 
@@ -644,6 +645,7 @@ def dispatch_request(
             dispatch_prompt=dispatch_prompt,
             preallocated_session_id=preallocated_session_id,
             context_fingerprint=context_fingerprint,
+            session_start=session_start,
         )
 
     try:

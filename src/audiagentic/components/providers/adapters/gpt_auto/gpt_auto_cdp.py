@@ -67,6 +67,100 @@ _SNAPSHOT_FN = r"""
   const assistantTurn = latestAssistant ? (
     latestAssistant.closest(".agent-turn") || latestAssistant.closest("article") || latestAssistant.parentElement?.parentElement
   ) : latestAgentTurn;
+  // Progress rows are rendered as visible, short-lived status blocks in the
+  // assistant turn. They may say "Inspected ...", "Fetching ...",
+  // "Analyzing ...", or "Evaluated ..." without changing the assistant
+  // message text. Return only a bounded kind/digest projection: raw paths,
+  // tool names, arguments, and results never cross the CDP boundary.
+  const normalizeProgress = value => String(value || "").replace(/\s+/g, " ").trim();
+  const progressKind = (value, structural = false) => {
+    const text = normalizeProgress(value).toLowerCase();
+    if (!text) return null;
+    const prefixes = [
+      ["inspected", "inspected"],
+      ["fetching", "fetching"],
+      ["analyzing", "analyzing"],
+      ["analysing", "analyzing"],
+      ["evaluated", "evaluated"],
+      ["thinking", "thinking"]
+    ];
+    for (const [prefix, kind] of prefixes) {
+      if (text === prefix || text.startsWith(prefix + " ") || text.startsWith(prefix + ".") || text.startsWith(prefix + "…")) return kind;
+    }
+    if (structural) {
+      if (text.includes("called tool")) return "called-tool";
+      if (text.includes("talked to app")) return "talked-to-app";
+      if (text.includes("searching the web") || text.includes("search the web") || text.includes("web search")) return "searching-web";
+      if (text.includes("read resource") || text.includes("reading resource")) return "read-resource";
+    }
+    return null;
+  };
+  const progressDigest = value => {
+    const text = normalizeProgress(value).slice(0, 4096);
+    let a = 0x811c9dc5 >>> 0;
+    let b = 0x9e3779b9 >>> 0;
+    for (let i = 0; i < text.length; i++) {
+      const code = text.charCodeAt(i);
+      a = Math.imul((a ^ code) >>> 0, 0x01000193) >>> 0;
+      b = Math.imul((b ^ code) >>> 0, 0x85ebca6b) >>> 0;
+    }
+    return a.toString(16).padStart(8, "0") + b.toString(16).padStart(8, "0");
+  };
+  const structuralProgressSelector = [
+    '[class~="group/tool-message"]',
+    '[data-testid*="tool" i]',
+    '[data-testid*="connector" i]',
+    '[data-testid*="progress" i]',
+    '[role="status"]',
+    '[aria-live="polite"]',
+    '[aria-live="assertive"]'
+  ].join(",");
+  const userEntries = messageEntries.filter(entry => entry.role === "user" && entry.messageId);
+  const ownerPromptFor = node => {
+    let owner = null;
+    for (const entry of userEntries) {
+      if (entry.el === node || entry.el.contains(node)) owner = entry.messageId;
+      else if (entry.el.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING) owner = entry.messageId;
+    }
+    return owner;
+  };
+  const progressBlocks = [];
+  for (const turn of agentTurns) {
+    const assistantNode = Array.from(turn.querySelectorAll('[data-message-author-role="assistant"]')).find(el =>
+      !(el.getAttribute("data-message-id") || "").startsWith("request-placeholder-request-")
+    );
+    const ownerAssistantMessageId = assistantNode?.getAttribute("data-message-id") || null;
+    const candidates = new Set(Array.from(turn.querySelectorAll(structuralProgressSelector)));
+    for (const node of turn.querySelectorAll("*")) {
+      if (!shown(node) || node.closest('[data-message-author-role="user"]')) continue;
+      const structural = node.matches(structuralProgressSelector);
+      const kind = progressKind(node.innerText || node.textContent, structural);
+      if (!kind) continue;
+      if (!structural && Array.from(node.children).some(child => shown(child) && progressKind(child.innerText || child.textContent, false))) continue;
+      candidates.add(node);
+    }
+    for (const node of candidates) {
+      if (!shown(node)) continue;
+      const structural = node.matches(structuralProgressSelector);
+      const kind = progressKind(node.innerText || node.textContent, structural);
+      const ownerPromptMessageId = ownerPromptFor(node);
+      if (!kind || !ownerPromptMessageId) continue;
+      const stateMaterial = [
+        node.innerText || node.textContent,
+        node.getAttribute("aria-label"),
+        node.getAttribute("aria-busy"),
+        node.getAttribute("aria-expanded"),
+        node.getAttribute("data-state"),
+        node.getAttribute("data-status")
+      ].map(normalizeProgress).join("\x1f");
+      progressBlocks.push({
+        ownerPromptMessageId: String(ownerPromptMessageId).slice(0, 256),
+        ownerAssistantMessageId: ownerAssistantMessageId ? String(ownerAssistantMessageId).slice(0, 256) : null,
+        kind,
+        digest: progressDigest(stateMaterial)
+      });
+    }
+  }
   // ChatGPT renders connector/tool work as bounded affordances such as
   // "Called tool", "Talked to App", "Searching the web", "Read resource",
   // and "Thinking" inside the current .agent-turn. These nodes often appear
@@ -127,9 +221,12 @@ _SNAPSHOT_FN = r"""
       Array.from(root.querySelectorAll(selector)).some(el => {
         if (spec.visible && !shown(el)) return false;
         const fragments = spec.textContainsAny || [];
-        if (!fragments.length) return true;
-        const content = (el.innerText || el.textContent || "").toLowerCase();
-        return fragments.some(fragment => content.includes(String(fragment).toLowerCase()));
+        const exact = spec.textEqualsAny || [];
+        const content = (el.innerText || el.textContent || "").trim();
+        if (exact.length && exact.some(fragment => content === String(fragment).trim())) return true;
+        if (!fragments.length) return !exact.length;
+        const lowered = content.toLowerCase();
+        return fragments.some(fragment => lowered.includes(String(fragment).toLowerCase()));
       })
     );
   }
@@ -287,6 +384,7 @@ _SNAPSHOT_FN = r"""
     latestUserText: lastText(userRefs), latestAssistantText: lastText(assistantRefs), generating, domSignals,
     terminalWitnessAssistantId,
     toolActivityCounts,
+    progressBlocks: progressBlocks.slice(-128),
     errorPresent: !!document.querySelector('.error-page, [data-testid*="error"]')
   };
 }

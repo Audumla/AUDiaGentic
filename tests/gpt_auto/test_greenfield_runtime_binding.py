@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -8,7 +10,9 @@ from audiagentic.components.agents.gateway.session import sessions_store
 from audiagentic.components.providers.adapters.gpt_auto.browser_process import (
     BrowserProcessController,
 )
+from audiagentic.components.providers.adapters.gpt_auto.chat import ChatState, PersistentChat
 from audiagentic.components.providers.adapters.gpt_auto.config import GptAutoConfig
+from audiagentic.components.providers.adapters.gpt_auto.runtime import GptAutoProviderRuntime
 from audiagentic.components.providers.adapters.gpt_auto.runtime_registry import (
     _runtimes,
     get_runtime,
@@ -131,6 +135,118 @@ async def test_runtime_shutdown_reports_failures_on_supported_python_versions():
     # Failed entries remain registered for a later retry.
     assert _runtimes
     _runtimes.clear()
+
+
+class _IdleTabBridge:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict]] = []
+
+    async def call(self, method: str, params: dict):
+        self.calls.append((method, params))
+        return {"ok": True}
+
+
+class _IdleTabRuntime:
+    def __init__(self, bridge: _IdleTabBridge) -> None:
+        self.bridge = bridge
+        self.released: list[str] = []
+
+    def release_page(self, _chat, handle: str | None) -> None:
+        if handle:
+            self.released.append(handle)
+
+
+def _idle_chat(runtime: _IdleTabRuntime) -> PersistentChat:
+    chat = PersistentChat(
+        ag_session_id="ses-idle",
+        project_name="project",
+        project_url="https://chatgpt.com/g/g-p-project",
+        runtime=runtime,  # type: ignore[arg-type]
+        config=GptAutoConfig.from_dict(valid_config()),
+        binding_sink=lambda _update: None,
+        provider_session_id="conversation-1",
+        chat_url="https://chatgpt.com/g/g-p-project/c/conversation-1",
+    )
+    chat.page_handle = "page-1"
+    chat.target_id = "target-1"
+    chat.state = ChatState.READY
+    chat._last_validated_activity_monotonic = 100.0
+    return chat
+
+
+@pytest.mark.asyncio
+async def test_idle_tab_reaper_closes_physical_page_but_preserves_session_binding() -> None:
+    bridge = _IdleTabBridge()
+    runtime = _IdleTabRuntime(bridge)
+    chat = _idle_chat(runtime)
+
+    reclaimed = await chat.close_physical_page_if_idle(now=7_301.0, idle_timeout_seconds=7_200.0)
+
+    assert reclaimed is True
+    assert bridge.calls == [("close_page", {"pageHandle": "page-1"})]
+    assert runtime.released == ["page-1"]
+    assert chat.page_handle is None
+    assert chat.target_id is None
+    assert chat.provider_session_id == "conversation-1"
+    assert chat.chat_url == "https://chatgpt.com/g/g-p-project/c/conversation-1"
+    assert chat.state is ChatState.READY
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("guard", ["active", "pending", "unresolved", "recent", "not-ready"])
+async def test_idle_tab_reaper_never_closes_ineligible_page(guard: str) -> None:
+    bridge = _IdleTabBridge()
+    runtime = _IdleTabRuntime(bridge)
+    chat = _idle_chat(runtime)
+    if guard == "active":
+        chat.active_turn_id = "req-1"
+    elif guard == "pending":
+        chat.pending_turns = 1
+    elif guard == "unresolved":
+        chat.unresolved_turn_pending = True
+    elif guard == "recent":
+        chat._last_validated_activity_monotonic = 7_000.0
+    else:
+        chat.state = ChatState.BUSY
+
+    reclaimed = await chat.close_physical_page_if_idle(now=7_301.0, idle_timeout_seconds=7_200.0)
+
+    assert reclaimed is False
+    assert bridge.calls == []
+    assert chat.page_handle == "page-1"
+
+
+@pytest.mark.asyncio
+async def test_runtime_idle_sweep_uses_configured_interval_and_threshold() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+    config = replace(
+        config,
+        browser=replace(
+            config.browser,
+            physical_tab_reaper_interval_seconds=0.001,
+            physical_tab_idle_timeout_seconds=17.0,
+        ),
+    )
+    runtime = GptAutoProviderRuntime(config)
+    bridge = object()
+    runtime._bridge = bridge  # type: ignore[assignment]
+    calls: list[tuple[float, float]] = []
+
+    class Chat:
+        ag_session_id = "ses-sweep"
+
+        async def close_physical_page_if_idle(self, *, now: float, idle_timeout_seconds: float) -> bool:
+            calls.append((now, idle_timeout_seconds))
+            return False
+
+    runtime._chats["ses-sweep"] = Chat()  # type: ignore[assignment]
+    task = asyncio.create_task(runtime._reap_idle_tabs(bridge))  # type: ignore[arg-type]
+    await asyncio.sleep(0.01)
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+
+    assert calls
+    assert all(timeout == 17.0 for _now, timeout in calls)
 
 
 async def _true() -> bool:

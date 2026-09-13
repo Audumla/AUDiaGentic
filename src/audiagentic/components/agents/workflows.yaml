@@ -11,7 +11,10 @@ kinds:
         values:
           [queued, running, completed, failed, cancelled, rejected, interrupted]
         transitions:
-          queued: [running, cancelled, rejected, interrupted]
+          # A session-backed request can be admitted and queue-claimed while
+          # waiting for its session turn lock. It may fail before that lock
+          # is acquired, but it must never be reported running in that gap.
+          queued: [running, failed, cancelled, rejected, interrupted]
           running: [completed, failed, cancelled, interrupted]
           completed: []
           failed: []

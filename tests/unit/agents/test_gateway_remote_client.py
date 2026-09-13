@@ -152,3 +152,20 @@ def test_submit_forwards_calling_component_profile(monkeypatch, tmp_path) -> Non
 
     assert client.submit_execution_request(tmp_path, prompt_body="hello") == {"state": "queued"}
     assert captured["params"]["component_profile"] == "calling-profile"
+    assert captured["params"]["logical_client_id"] == client._logical_client_id
+
+
+def test_standalone_logical_client_identity_can_be_explicit(monkeypatch, tmp_path) -> None:
+    client = StandaloneGatewayClient(
+        "http://127.0.0.1:9000", "token", logical_client_id="ide-chat-a"
+    )
+    captured: dict = {}
+    monkeypatch.setattr(
+        client,
+        "_call",
+        lambda operation, root, params, **_kwargs: captured.update(params=params) or {"state": "queued"},
+    )
+
+    client.submit_execution_request(tmp_path, prompt_body="hello")
+
+    assert captured["params"]["logical_client_id"] == "ide-chat-a"

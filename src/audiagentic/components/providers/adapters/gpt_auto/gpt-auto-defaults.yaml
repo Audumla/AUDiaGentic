@@ -21,6 +21,8 @@ settings:
     force-kill: false
     dedicated-window: true
     close-tabs-on-session-close: false
+    physical-tab-idle-timeout-seconds: 7200
+    physical-tab-reaper-interval-seconds: 300
   cdp:
     connect-timeout-seconds: 15
     protocol-timeout-seconds: 30
@@ -37,8 +39,12 @@ settings:
     response-stall-timeout-seconds: 0
     response-timeout-seconds: 0
     response-no-activity-refresh-seconds: 240
-    response-refresh-attempts: 3
+    response-refresh-attempts: 15
     response-refresh-final-grace-seconds: 600
+    # The interruption banner is not proof of failure. Emit a synthetic
+    # request activity edge at this cadence so clients/gateway leases remain
+    # alive while the provider may still complete the answer.
+    response-interruption-activity-interval-seconds: 30
     poll-interval-seconds: 1
     response-stability-seconds: 6
     # A completion witness while ChatGPT still reports generation is active
@@ -110,13 +116,13 @@ settings:
         selectors: ['[role="alert"]']
         visible: true
         text-contains-any: ['error', 'failed', 'went wrong', 'try again', 'retry', 'rate limit', 'too many requests']
-      connection-interrupted:
+      provider-interruption:
         # Provider interruption is a recovery trigger, not a generic
         # terminal error. Match the exact user-visible interruption text.
         scope: document
         selectors: ['[role="alert"]']
         visible: true
-        text-contains-any: ['Connection interrupted. Waiting for the complete answer']
+        text-equals-any: ['Connection interrupted. Waiting for the complete answer']
       delivery-timeout-retry:
         # Conversation-scoped delivery timeout; never a generic error click.
         scope: document

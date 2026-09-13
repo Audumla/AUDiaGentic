@@ -35,7 +35,18 @@ Important invariants:
 - completion requires fresh non-empty assistant text, configured positive
   completion evidence, absence of configured active/failure evidence, and a
   final stable verification snapshot.
-- response-start, activity-stall, and total-response deadlines are distinct;
+- response observation has no provider-side start, stall, or total hard
+  deadline. A request-owned inactivity interval triggers a bounded number of
+  same-tab refresh attempts, followed by configurable final grace. Legacy
+  response timer fields remain parse-compatible but cannot terminate a turn;
+  submission proof retains its independent bounded safety policy.
+  When the provider shows `Connection interrupted. Waiting for the complete
+  answer`, the turn remains non-terminal and emits `connection-refreshing`
+  activity at the configured cadence so the client/gateway lease stays alive;
+  this synthetic activity never resets the real recovery clock or refresh
+  budget. The packaged defaults are a 240-second refresh interval, 15
+  refreshes, a 30-second interruption activity cadence, and 600 seconds of
+  final grace.
   zero disables stall/total policies where the schema permits it.
 - a submitted turn is never automatically sent again during recovery.
 - the Gateway serializes turns within one session; the provider adds no second queue.
@@ -44,7 +55,9 @@ Run deterministic coverage with `pytest tests/gpt_auto`. The opt-in live gateway
 acceptance is `python tests/gpt_auto/test_session_transport_live.py`.
 
 The `gpt-auto` execution profile disables Gateway session idle/max-lifetime
-caps so a durable conversation can remain open for days. It does not add a
-competing Gateway turn wall-clock timer; the provider's configured response
-absolute ceiling is the authoritative safety boundary. Session lifetime and
-turn lifetime remain separate policies.
+caps so a durable conversation can remain open for days. A background runtime
+reaper may close only the physical tab after the configured idle period
+(7200 seconds by default); the durable provider session URL and default
+binding remain intact and the next request reopens that exact conversation.
+Session lifetime, physical-tab lifetime, and turn recovery remain separate
+policies.

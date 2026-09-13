@@ -302,13 +302,19 @@ class GatewayServiceApplication:
             submitted = _validated_submission_arguments(root, arguments)
             from .client_icons import assign_client_icon
 
-            icon = assign_client_icon(self._service_store.root, self._service_store.get_lease(lease_id).client_instance_id)
+            client_instance_id = self._service_store.get_lease(lease_id).client_instance_id
+            # A service lease is the default logical-client boundary for
+            # callers that do not provide a finer-grained identity. This
+            # preserves per-client defaults while keeping transport/lease
+            # ownership separate from an optional caller identity.
+            submitted.setdefault("logical_client_id", client_instance_id)
+            icon = assign_client_icon(self._service_store.root, client_instance_id)
             submitted["metadata"] = {**(submitted.get("metadata") or {}), "client-icon": icon}
             return self._application.submit_execution_request(
                 root,
                 **submitted,
                 _dispatch_owner_epoch=owner_epoch,
-                _client_instance_id=self._service_store.get_lease(lease_id).client_instance_id,
+                _client_instance_id=client_instance_id,
                 _dispatch_service_root=str(self._service_store.root),
             )
         if operation == "get_execution_request":
@@ -566,6 +572,7 @@ _SUBMISSION_ARGUMENTS = {
     "execution_context_fingerprint",
     "component_profile",
     "provider_chat_url",
+    "logical_client_id",
 }
 
 # Older MCP façades may continue to serialize the removed caller-controlled
@@ -601,6 +608,16 @@ def _validated_submission_arguments(
         arguments["workspace_name"] = _optional_string(arguments, "workspace_name")
     if "provider_chat_url" in arguments:
         arguments["provider_chat_url"] = _optional_string(arguments, "provider_chat_url")
+    if "logical_client_id" in arguments:
+        logical_client_id = _optional_string(arguments, "logical_client_id")
+        if logical_client_id is not None and (
+            len(logical_client_id) > 200
+            or any(ord(character) < 32 for character in logical_client_id)
+        ):
+            raise service_validation_error(
+                23, "logical_client_id must be a single-line string of at most 200 characters"
+            )
+        arguments["logical_client_id"] = logical_client_id.strip() if logical_client_id else None
     metadata = dict(metadata or {})
     envelope = SubmissionEnvelope.from_mapping(
         {
