@@ -326,11 +326,9 @@ class StandaloneGatewayClient:
     def service_stop(self, project_root: Path, *, force: bool = False) -> dict[str, Any]:
         return cast(dict[str, Any], self._call("service_stop", project_root, {"force": force}))
 
-    def dashboard_restart(self) -> dict[str, Any]:
-        """Request the managed handoff restart; never use service_stop()."""
-        return _response_mapping(
-            self._request("/dashboard/restart", {}, method="POST", timeout=5.0)
-        )
+    def dashboard_restart(self, project_root: Path) -> dict[str, Any]:
+        """Request the managed handoff restart through the authenticated service API."""
+        return cast(dict[str, Any], self._call("service_restart", project_root, {}))
 
     # Gateway operator operations have a deliberately separate client
     # surface; they are not part of the activity GatewayClient protocol.

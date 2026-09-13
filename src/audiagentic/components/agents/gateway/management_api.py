@@ -279,7 +279,7 @@ def gateway_restart(project_root: Path, *, force: bool = False) -> dict[str, Any
     del force
     client = start_or_attach_gateway()
     try:
-        restarting = client.dashboard_restart()
+        restarting = client.dashboard_restart(project_root)
     finally:
         client.close()
 

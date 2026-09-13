@@ -163,8 +163,9 @@ def test_gateway_restart_stops_then_reacquires_service(tmp_path: Path, monkeypat
             self.label = label
             self.closed = False
 
-        def dashboard_restart(self) -> dict:
+        def dashboard_restart(self, project_root: Path) -> dict:
             assert self.label == "old"
+            assert project_root == tmp_path
             return {"restarting": True}
 
         def service_status(self, project_root: Path) -> dict:
