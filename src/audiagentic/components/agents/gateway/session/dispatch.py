@@ -444,6 +444,12 @@ def _dispatch_session_request(
         is_new_session = admitted_session.get("created-by-request-id") == request_id
         if record.get("client-default-session"):
             is_new_session = not admitted_session.get("binding") and not runtime.session_runtime_status(session_id).get("available")
+        if resume_existing:
+            # Recovery must never use the request-creator fast path.  That
+            # path opens a fresh provider transport and can lose the durable
+            # session binding/checkpoint when the request-level relay was
+            # interrupted before publication.
+            is_new_session = False
         if is_new_session:
             # keep-alive: open a new session bound to this profile
             request_runtime_root.mkdir(parents=True, exist_ok=True)

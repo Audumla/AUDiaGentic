@@ -1174,6 +1174,24 @@ class SessionRuntime:
         surface_id = (binding or {}).get("surface-id")
         if not isinstance(provider_ref, str) or not provider_ref.strip():
             metadata = session_store.session_provider_metadata(record)
+            if resume_existing:
+                # There is no stable provider conversation identity to open.
+                # Never create a replacement tab or replay the prompt; retain
+                # the request for a later provider-aware recovery pass.
+                raise AudiaGenticError(
+                    code="CON-AGW-124",
+                    kind="agents",
+                    message=(
+                        "provider-session recovery is deferred because the durable "
+                        "provider conversation binding is not available"
+                    ),
+                    details={
+                        "session-id": session_id,
+                        "recovery-state": metadata.get("recovery-state"),
+                        "turn-id": metadata.get("unresolved-turn-id"),
+                        "failure-reason": "provider-session-ref-unavailable",
+                    },
+                )
             # Gated on a provider capability probe (does bound_provider's
             # adapter declare a non-ACP session transport, e.g. gpt-auto's
             # CDP seam) rather than a surface_id or provider_id literal --
