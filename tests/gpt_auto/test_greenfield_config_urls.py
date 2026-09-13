@@ -297,6 +297,40 @@ def test_live_workflow_declares_delivery_timeout_retry_signal() -> None:
     ]
 
 
+def test_recovery_and_physical_tab_defaults_are_configurable() -> None:
+    config = GptAutoConfig.from_dict(valid_config())
+
+    assert config.turn.response_no_activity_refresh_seconds == 240.0
+    assert config.turn.response_refresh_attempts == 15
+    assert config.turn.response_interruption_activity_interval_seconds == 30
+    assert config.turn.response_refresh_final_grace_seconds == 600.0
+    assert config.browser.physical_tab_idle_timeout_seconds == 7200.0
+    assert config.browser.physical_tab_reaper_interval_seconds == 300.0
+
+    overridden = valid_config()
+    overridden["turn"]["response-interruption-activity-interval-seconds"] = 12
+    configured = GptAutoConfig.from_dict(overridden)
+    assert configured.turn.response_interruption_activity_interval_seconds == 12.0
+
+
+def test_interruption_signal_uses_exact_text_matching() -> None:
+    data = valid_config()
+    data["workflow"]["dom-signals"]["provider-interruption"] = {
+        "scope": "document",
+        "selectors": ["[role=alert]"],
+        "visible": True,
+        "text-equals-any": ["Connection interrupted. Waiting for the complete answer"],
+    }
+    config = GptAutoConfig.from_dict(data)
+    signal = next(
+        item for item in config.workflow.bridge_signals() if item["name"] == "provider-interruption"
+    )
+
+    assert signal["textEqualsAny"] == [
+        "Connection interrupted. Waiting for the complete answer"
+    ]
+
+
 def _synthetic_snapshot(
     dom_signals: list[str], *, assistant_id: str | None = "a1", generating: bool = False
 ) -> ChatSnapshot:

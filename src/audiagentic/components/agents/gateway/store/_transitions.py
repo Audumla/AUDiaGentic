@@ -832,6 +832,155 @@ def start_owned_attempt(
         return updated
 
 
+def prepare_owned_session_attempt(
+    project_root: Path,
+    request_id: str,
+    *,
+    owner_epoch: str,
+    worker_id: str,
+    expected_revision: int,
+    resolved_source_id: str | None = None,
+    resolved_model_id: str | None = None,
+    resolved_model_selector: str | None = None,
+    resolved_capacity_generation: str | None = None,
+) -> dict[str, Any]:
+    """Assign an owned session attempt without claiming RUNNING yet.
+
+    Queue admission/claim may launch a session worker before that worker owns
+    the session's turn lock. This durable preparation records the worker and
+    attempt fence while preserving QUEUED; ``start_owned_session_attempt`` is
+    the only transition to RUNNING and is called under that turn lock.
+    """
+    if not owner_epoch or not worker_id:
+        raise AudiaGenticError(
+            "VAL-AGW-070", "agents", "owner epoch and worker_id are required", {}
+        )
+    with _request_lock(project_root, request_id):
+        record = _read_record_locked(project_root, request_id)
+        _check_expected_identity(
+            record,
+            expected_revision=expected_revision,
+            expected_dispatch_owner_epoch=owner_epoch,
+            expected_worker_id=None,
+            expected_attempt_epoch=None,
+        )
+        if record["state"] != "queued":
+            raise AudiaGenticError(
+                "CON-AGW-087", "agents", "gateway session request is no longer queued", {}
+            )
+        if record.get("cancel-requested"):
+            raise AudiaGenticError(
+                "CON-AGW-CANCELLED", "agents", "gateway session request was cancelled", {}
+            )
+        timestamp = now_iso_z()
+        updated = dict(record)
+        updated.update(
+            {
+                "worker-id": worker_id,
+                "attempt-epoch": record["attempt-epoch"] + 1,
+                "updated-at": timestamp,
+                "revision": record["revision"] + 1,
+            }
+        )
+        if resolved_source_id is not None:
+            updated["resolved-source-id"] = resolved_source_id
+        if resolved_model_id is not None:
+            updated["resolved-model-id"] = resolved_model_id
+        if resolved_model_selector is not None:
+            updated["resolved-model-selector"] = resolved_model_selector
+        if resolved_capacity_generation is not None:
+            updated["resolved-capacity-generation"] = resolved_capacity_generation
+        write_record(project_root, updated)
+        record_gateway_timeline(
+            project_root,
+            request_id,
+            "session-attempt.prepared",
+            state="queued",
+            attributes={
+                "dispatch-owner-epoch": owner_epoch,
+                "worker-id": worker_id,
+                "attempt-epoch": updated["attempt-epoch"],
+            },
+        )
+        return updated
+
+
+def start_owned_session_attempt(
+    project_root: Path,
+    request_id: str,
+    *,
+    owner_epoch: str,
+    worker_id: str,
+    attempt_epoch: int,
+) -> dict[str, Any]:
+    """Atomically claim RUNNING after the session turn lock is owned."""
+    _require_owned_identity(owner_epoch, worker_id, attempt_epoch)
+    with _request_lock(project_root, request_id):
+        record = _read_record_locked(project_root, request_id)
+        _check_expected_identity(
+            record,
+            expected_revision=None,
+            expected_dispatch_owner_epoch=owner_epoch,
+            expected_worker_id=worker_id,
+            expected_attempt_epoch=attempt_epoch,
+        )
+        if record["state"] == "running":
+            return record
+        if record["state"] != "queued":
+            raise AudiaGenticError(
+                "CON-AGW-087", "agents", "gateway session request is not dispatchable", {}
+            )
+        if record.get("cancel-requested"):
+            raise AudiaGenticError(
+                "CON-AGW-CANCELLED", "agents", "gateway session request was cancelled", {}
+            )
+        timestamp = now_iso_z()
+        updated = dict(record)
+        updated.update(
+            {
+                "state": "running",
+                "started-at": timestamp,
+                "updated-at": timestamp,
+                "watchdog-state": "active",
+                "watchdog-reason": "awaiting-verified-activity",
+                "revision": record["revision"] + 1,
+            }
+        )
+        write_record(project_root, updated)
+        service_root = (
+            Path(record["dispatch-service-root"])
+            if isinstance(record.get("dispatch-service-root"), str)
+            and record.get("dispatch-service-root")
+            else None
+        )
+        if service_root is not None:
+            try:
+                update_work_index_phase(
+                    service_root,
+                    request_id,
+                    from_phase="claimed",
+                    to_phase="running",
+                    owner_epoch=owner_epoch,
+                )
+            except OSError:
+                logger.warning(
+                    "work-index phase update failed at session turn start (non-fatal)",
+                    extra={"request-id": request_id},
+                )
+        record_gateway_timeline(
+            project_root,
+            request_id,
+            "session-attempt.started",
+            state="running",
+            attributes={
+                "dispatch-owner-epoch": owner_epoch,
+                "worker-id": worker_id,
+                "attempt-epoch": attempt_epoch,
+            },
+        )
+        return updated
+
+
 def append_owned_attempt(
     project_root: Path,
     request_id: str,
@@ -1190,11 +1339,13 @@ def update_owned_running_session(
     warnings: list[dict[str, Any]] | None = None,
     recovery_chat_url: str | None = None,
 ) -> dict[str, Any]:
-    """Attach the live session id while the current attempt is still running.
+    """Attach the live session id to the current owned session attempt.
 
-    Keep-alive requests open their session before the first turn completes.
-    Runtime diagnostics need that session id immediately, while the terminal
-    result write remains responsible for final output/completion fields.
+    Keep-alive requests may open their provider session while the request is
+    still queued behind the session turn lock. Runtime diagnostics need that
+    session id immediately, while the terminal result write remains
+    responsible for final output/completion fields. The owner/worker/attempt
+    fence prevents a stale pre-lock worker from mutating a successor.
     """
     _require_owned_identity(owner_epoch, worker_id, attempt_epoch)
     if not session_id:
@@ -1213,11 +1364,11 @@ def update_owned_running_session(
             expected_worker_id=worker_id,
             expected_attempt_epoch=attempt_epoch,
         )
-        if record["state"] != "running":
+        if record["state"] not in {"queued", "running"}:
             raise AudiaGenticError(
                 "CON-AGW-087",
                 "agents",
-                "gateway request is not running",
+                "gateway request is not an active session attempt",
                 {"request-id": request_id, "state": record["state"]},
             )
         if record.get("session-id") == session_id and provider_metadata is None and warnings is None:

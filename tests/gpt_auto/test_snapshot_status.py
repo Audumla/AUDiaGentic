@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from audiagentic.components.providers.adapters.gpt_auto.snapshot import (
     ChatMessageRef,
+    ChatProgressBlock,
     ChatSnapshot,
     PageObservationState,
 )
@@ -144,6 +145,35 @@ def test_bridge_snapshot_preserves_web_and_resource_activity_counts() -> None:
         ("searching-web", 1),
         ("thinking", 1),
     )
+
+
+def test_bridge_snapshot_preserves_safe_request_scoped_progress_blocks() -> None:
+    snapshot = ChatSnapshot.from_bridge(
+        {
+            "url": "https://chatgpt.com/g/g-p-test/c/c1",
+            "progressBlocks": [
+                {
+                    "ownerPromptMessageId": "prompt-1",
+                    "ownerAssistantMessageId": "answer-1",
+                    "kind": "inspected",
+                    "digest": "0123456789abcdef",
+                    "text": "Inspected /private/path",
+                },
+                {
+                    "ownerPromptMessageId": "prompt-1",
+                    "kind": "fetching",
+                    "digest": "ABCDEF0123456789",
+                },
+                {"ownerPromptMessageId": "prompt-1", "kind": "unknown", "digest": "0" * 16},
+            ],
+        }
+    )
+
+    assert snapshot.progress_blocks == (
+        ChatProgressBlock("prompt-1", "answer-1", "inspected", "0123456789abcdef"),
+        ChatProgressBlock("prompt-1", None, "fetching", "abcdef0123456789"),
+    )
+    assert not hasattr(snapshot.progress_blocks[0], "text")
 
 
 def test_bridge_snapshot_preserves_ordered_assistant_message_sequence() -> None:

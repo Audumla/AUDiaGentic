@@ -32,8 +32,23 @@ def preparation_guard(record: dict[str, Any]) -> Any:
         return _guards.setdefault(key, threading.RLock())
 
 
-def scope_key(client_id: str, project_root: Path, agent_id: str) -> str:
-    parts = [client_id, os.path.normcase(str(project_root.resolve())), agent_id]
+_SCOPE_SCHEMA_GENERATION = 2
+
+
+def scope_key(
+    logical_client_id: str,
+    project_root: Path,
+    agent_id: str,
+    provider_surface: str = "gpt-auto",
+) -> str:
+    """Return the v2 default scope; transport/lease identity is not enough."""
+    parts = [
+        _SCOPE_SCHEMA_GENERATION,
+        logical_client_id,
+        os.path.normcase(str(project_root.resolve())),
+        agent_id,
+        provider_surface,
+    ]
     return hashlib.sha256(json.dumps(parts).encode()).hexdigest()
 
 
@@ -93,10 +108,20 @@ class Selection:
     binding: dict[str, Any] = field(default_factory=dict)
     automatic: bool = False
     warnings: list[dict[str, str]] = field(default_factory=list)
+    logical_client_id: str | None = None
+    provider_surface: str | None = None
 
     @property
     def identity(self) -> dict[str, Any] | None:
-        return {"key": self.path.stem, "automatic": self.automatic} if self.path else None
+        if self.path is None:
+            return None
+        return {
+            "key": self.path.stem,
+            "automatic": self.automatic,
+            "schema-generation": _SCOPE_SCHEMA_GENERATION,
+            "logical-client-id": self.logical_client_id,
+            "provider-surface": self.provider_surface,
+        }
 
     def commit(self, record: dict[str, Any]) -> None:
         if self.path is None:
@@ -104,6 +129,11 @@ class Selection:
         if not self.binding or self.automatic:
             data = dict(self.binding)
             data["session-id"] = record["session-id"]
+            data["schema-generation"] = _SCOPE_SCHEMA_GENERATION
+            if self.logical_client_id:
+                data["logical-client-id"] = self.logical_client_id
+            if self.provider_surface:
+                data["provider-surface"] = self.provider_surface
             if self.provider_chat_url:
                 data["chat-url"] = self.provider_chat_url
             self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -119,12 +149,32 @@ def select(
     if not (service_root and client_id and agent_id and provider_id.startswith("gpt-auto")):
         yield Selection(session_id, provider_chat_url)
         return
-    path = _path(Path(service_root), scope_key(client_id, project_root, agent_id))
+    path = _path(
+        Path(service_root),
+        scope_key(client_id, project_root, agent_id, provider_id),
+    )
     path.parent.mkdir(parents=True, exist_ok=True)
     with StartupLock(path.with_suffix(".lock")):
         binding = _read(path)
+        if binding and (
+            binding.get("schema-generation") != _SCOPE_SCHEMA_GENERATION
+            or binding.get("logical-client-id") != client_id
+            or binding.get("provider-surface") != provider_id
+        ):
+            # Legacy bindings do not carry an unambiguous logical owner.
+            # Also ignore a v2 file whose identity was copied or tampered
+            # with; never silently adopt another client's provider session.
+            binding = {}
         automatic = not (session_id or provider_chat_url or new_session)
-        selection = Selection(session_id, provider_chat_url, path, binding, automatic)
+        selection = Selection(
+            session_id,
+            provider_chat_url,
+            path,
+            binding,
+            automatic,
+            logical_client_id=client_id,
+            provider_surface=provider_id,
+        )
         if automatic and binding.get("session-id"):
             from audiagentic.components.agents.gateway.session import sessions_store
 

@@ -85,6 +85,7 @@ class GptAutoProviderRuntime:
         self._page_owners: dict[str, str] = {}
         self._conversation_owners: dict[str, str] = {}
         self._event_task: asyncio.Task[None] | None = None
+        self._tab_reaper_task: asyncio.Task[None] | None = None
         self._dedicated_window_anchor: str | None = None
         self._dedicated_window_id: int | None = None
         self._dedicated_window_lock = asyncio.Lock()
@@ -143,6 +144,7 @@ class GptAutoProviderRuntime:
                 self._gpt_browser = GptAutoCdpBrowserController(bridge)
                 self._move(ProviderState.AVAILABLE)
                 self._event_task = asyncio.create_task(self._route_events(bridge))
+                self._tab_reaper_task = asyncio.create_task(self._reap_idle_tabs(bridge))
             except Exception:
                 if self.state in {ProviderState.CONNECTING, ProviderState.STARTING}:
                     self._move(ProviderState.FAILED)
@@ -164,6 +166,7 @@ class GptAutoProviderRuntime:
                 self._gpt_browser = GptAutoCdpBrowserController(bridge)
                 self._move(ProviderState.AVAILABLE)
                 self._event_task = asyncio.create_task(self._route_events(bridge))
+                self._tab_reaper_task = asyncio.create_task(self._reap_idle_tabs(bridge))
                 return True
             except Exception:
                 if self.state is ProviderState.CONNECTING:
@@ -542,7 +545,41 @@ class GptAutoProviderRuntime:
             # destructive operation through shutdown_browser().
             if self._event_task and not self._event_task.done():
                 self._event_task.cancel()
+            if self._tab_reaper_task and not self._tab_reaper_task.done():
+                self._tab_reaper_task.cancel()
+            self._tab_reaper_task = None
             self._move(ProviderState.STOPPED)
+
+    async def _reap_idle_tabs(self, bridge: PythonCdpBridge) -> None:
+        """Reclaim only stale physical GPT tabs; retain every logical binding."""
+        # getattr keeps lightweight test/runtime compatibility objects safe
+        # while the parsed production config supplies the explicit values.
+        interval = float(
+            getattr(self.config.browser, "physical_tab_reaper_interval_seconds", 300.0)
+        )
+        threshold = float(
+            getattr(self.config.browser, "physical_tab_idle_timeout_seconds", 7200.0)
+        )
+        try:
+            while self._bridge is bridge:
+                await asyncio.sleep(interval)
+                if self._bridge is not bridge:
+                    return
+                now = asyncio.get_running_loop().time()
+                for chat in tuple(self._chats.values()):
+                    try:
+                        await chat.close_physical_page_if_idle(
+                            now=now,
+                            idle_timeout_seconds=threshold,
+                        )
+                    except Exception:  # noqa: BLE001 - isolate one tab
+                        logger.warning(
+                            "gpt-auto idle physical-tab sweep failed",
+                            extra={"session-id": chat.ag_session_id},
+                            exc_info=True,
+                        )
+        except asyncio.CancelledError:
+            raise
 
     async def shutdown_browser(self) -> None:
         """Explicitly terminate only a browser process this runtime launched."""

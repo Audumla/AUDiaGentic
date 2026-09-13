@@ -61,6 +61,29 @@ class ChatMessageRef:
     structural_hr_count: int = 0
 
 
+_PROGRESS_KINDS = frozenset({
+    "inspected",
+    "fetching",
+    "analyzing",
+    "evaluated",
+    "thinking",
+    "called-tool",
+    "talked-to-app",
+    "searching-web",
+    "read-resource",
+})
+
+
+@dataclass(frozen=True)
+class ChatProgressBlock:
+    """Safe, request-addressable projection of one visible progress block."""
+
+    owner_prompt_message_id: str
+    owner_assistant_message_id: str | None
+    kind: str
+    digest: str
+
+
 @dataclass(frozen=True)
 class ChatSnapshot:
     url: str
@@ -98,6 +121,7 @@ class ChatSnapshot:
     # provider output. A changed count is verified evidence that the provider
     # is still working even when the assistant text is unchanged.
     tool_activity_counts: tuple[tuple[str, int], ...] = ()
+    progress_blocks: tuple[ChatProgressBlock, ...] = ()
 
     @classmethod
     def from_bridge(cls, value: dict[str, Any]) -> ChatSnapshot:
@@ -173,6 +197,7 @@ class ChatSnapshot:
                     and count >= 0
                 )
             ),
+            progress_blocks=_progress_blocks(value.get("progressBlocks")),
         )
 
     def latest_user_ref(self) -> ChatMessageRef | None:
@@ -277,6 +302,43 @@ class ChatSnapshot:
         if complete:
             markers.add("completion-visible")
         return PageObservation(state=state, markers=frozenset(markers))
+
+
+def _bounded_token(value: Any, limit: int = 256) -> str | None:
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    return value[:limit] if value else None
+
+
+def _progress_blocks(value: Any) -> tuple[ChatProgressBlock, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    result: list[ChatProgressBlock] = []
+    for item in value[:128]:
+        if not isinstance(item, dict):
+            continue
+        owner_prompt = _bounded_token(item.get("ownerPromptMessageId"))
+        owner_assistant = _bounded_token(item.get("ownerAssistantMessageId"))
+        kind = _bounded_token(item.get("kind"), 32)
+        digest = _bounded_token(item.get("digest"), 16)
+        if (
+            not owner_prompt
+            or kind not in _PROGRESS_KINDS
+            or not digest
+            or len(digest) != 16
+            or any(character not in "0123456789abcdefABCDEF" for character in digest)
+        ):
+            continue
+        result.append(
+            ChatProgressBlock(
+                owner_prompt_message_id=owner_prompt,
+                owner_assistant_message_id=owner_assistant,
+                kind=kind,
+                digest=digest.lower(),
+            )
+        )
+    return tuple(result)
 
 
 def _text(value: Any) -> str | None:
