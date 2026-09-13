@@ -1418,29 +1418,30 @@ class GptAutoTurn:
                         # processing this observation so recovery accounting
                         # cannot be bypassed by repeated ID-only remounts.
                         tracker = ObservationTracker(policy=policy, now=loop.time())
-                    elif await self._refresh_after_response_correlation_conflict():
-                        logger.info(
-                            "gpt-auto refreshed retained conversation after response "
-                            "correlation conflict; continuing the original turn",
-                            extra={
-                                "turn-id": self.request.turn_id,
-                                "expected-assistant-id": expected_assistant_id,
-                                "observed-assistant-id": response_ref.message_id,
-                            },
-                        )
+                    else:
+                        if await self._refresh_after_response_correlation_conflict():
+                            logger.info(
+                                "gpt-auto refreshed retained conversation after response "
+                                "correlation conflict; continuing the original turn",
+                                extra={
+                                    "turn-id": self.request.turn_id,
+                                    "expected-assistant-id": expected_assistant_id,
+                                    "observed-assistant-id": response_ref.message_id,
+                                },
+                            )
+                            continue
+                        # Correlation uncertainty is recoverable and must not
+                        # be converted into an immediate request failure. The
+                        # existing response-recovery budget decides when this
+                        # bound conversation has genuinely exhausted recovery.
+                        if await _attempt_response_recovery(
+                            loop.time(),
+                            interruption_present="provider-interruption" in current.dom_signals,
+                            completion_candidate=False,
+                        ):
+                            continue
+                        await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
                         continue
-                    # Correlation uncertainty is recoverable and must not be
-                    # converted into an immediate request failure. The
-                    # existing response-recovery budget decides when this
-                    # bound conversation has genuinely exhausted recovery.
-                    if await _attempt_response_recovery(
-                        loop.time(),
-                        interruption_present="provider-interruption" in current.dom_signals,
-                        completion_candidate=False,
-                    ):
-                        continue
-                    await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
-                    continue
                 if response_ref.text:
                     await self._emit_timing("first-assistant-text")
             # Recovery clocks are reset only by evidence correlated to this
@@ -1838,27 +1839,28 @@ class GptAutoTurn:
                         # not accept the old candidate immediately; the next
                         # observation must re-establish terminal stability.
                         completion_candidate = False
-                    elif await self._refresh_after_response_correlation_conflict():
-                        tracker = ObservationTracker(policy=policy, now=loop.time())
-                        previous = current
-                        logger.info(
-                            "gpt-auto refreshed retained conversation after terminal "
-                            "verification correlation conflict; restarting verification",
-                            extra={
-                                "turn-id": self.request.turn_id,
-                                "expected-assistant-id": expected_assistant_id,
-                                "observed-assistant-id": verify_message_id,
-                            },
-                        )
+                    else:
+                        if await self._refresh_after_response_correlation_conflict():
+                            tracker = ObservationTracker(policy=policy, now=loop.time())
+                            previous = current
+                            logger.info(
+                                "gpt-auto refreshed retained conversation after terminal "
+                                "verification correlation conflict; restarting verification",
+                                extra={
+                                    "turn-id": self.request.turn_id,
+                                    "expected-assistant-id": expected_assistant_id,
+                                    "observed-assistant-id": verify_message_id,
+                                },
+                            )
+                            continue
+                        if await _attempt_response_recovery(
+                            loop.time(),
+                            interruption_present="provider-interruption" in verify.dom_signals,
+                            completion_candidate=False,
+                        ):
+                            continue
+                        await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
                         continue
-                    if await _attempt_response_recovery(
-                        loop.time(),
-                        interruption_present="provider-interruption" in verify.dom_signals,
-                        completion_candidate=False,
-                    ):
-                        continue
-                    await asyncio.sleep(self.chat.config.turn.poll_interval_seconds)
-                    continue
                 terminal_verified_ok = (
                     verified.satisfied
                     and verify_message_id is not None
