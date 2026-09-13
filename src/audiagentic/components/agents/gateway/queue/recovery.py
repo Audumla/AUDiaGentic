@@ -152,7 +152,7 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
     provider_id = record.get("resolved-provider-id") or runtime.get("provider-id")
     if not isinstance(provider_id, str) or not provider_id:
         raise ValueError("recovered request has no resolved provider")
-    provider_metadata = record.get("provider-metadata")
+    session_metadata: dict[str, Any] | None = None
     if project_root is not None and isinstance(record.get("session-id"), str):
         # GPT checkpoint metadata is owned by the durable session record. The
         # request projection may not have received the last provider update
@@ -170,11 +170,13 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
             # The session record owns the pre-Send side-effect fence.  The
             # request-level provider metadata is only a best-effort relay and
             # may be stale or absent when the gateway generation ends.
-            provider_metadata = sessions_store.session_provider_metadata(session_record)
-    unresolved_pending = (
-        isinstance(provider_metadata, dict)
-        and provider_metadata.get("unresolved-turn-pending") is True
+            session_metadata = sessions_store.session_provider_metadata(session_record)
+    provider_session = (
+        record.get("state") == "running"
+        and record.get("provider-transport-kind") == "provider-session"
     )
+    if provider_session and not isinstance(session_metadata, dict):
+        raise ValueError("recovered provider session has no authoritative session metadata")
     return functools.partial(
         _dispatch.dispatch_request,
         dispatch_prompt="",
@@ -184,11 +186,16 @@ def recovery_runner(record: dict[str, Any], *, project_root: Path | None = None)
         component_profile="",
         provider_isolation_tier=_resolve_provider_isolation_tier(provider_id),
         worker_timeout_seconds=float(record.get("timeout-seconds") or 300.0),
-        # A running CAS happens before the side-effect checkpoint. If the
-        # process died before that checkpoint, the prompt is proven unsent and
-        # may continue through the ordinary admission path. Observation-only
-        # recovery is reserved for a durable pending checkpoint.
-        resume_existing=bool(record.get("recovery-required")) and unresolved_pending,
+        # A stale provider-session turn is never replayed from a gateway
+        # process merely because the request projection lacks a checkpoint.
+        # The provider recovery seam can distinguish a durable pending turn;
+        # unsupported/no-checkpoint recovery stays nonterminal instead of
+        # risking a duplicate prompt. Worker-backed work is deferred above.
+        resume_existing=(
+            bool(record.get("recovery-required"))
+            and provider_session
+            and isinstance(session_metadata, dict)
+        ),
     )
 
 

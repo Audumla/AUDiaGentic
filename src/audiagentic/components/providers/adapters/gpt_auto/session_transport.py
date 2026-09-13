@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from audiagentic.foundation.contracts.errors import AudiaGenticError
 from audiagentic.foundation.transports.agent_session import (
     ControlDisposition,
     CorrelationQuality,
@@ -109,7 +110,12 @@ class GptAutoSessionTransport:
             raise RuntimeError("gpt-auto chat is not ready")
         metadata = self.chat.unresolved_metadata()
         if not metadata.get("unresolved-turn-pending"):
-            raise RuntimeError("gpt-auto has no durable unresolved turn to recover")
+            raise AudiaGenticError(
+                "CON-AGW-124",
+                "agents",
+                "gpt-auto cannot prove a stale provider-session turn was unsent",
+                {"failure-reason": "unresolved-checkpoint-unavailable"},
+            )
         if metadata.get("unresolved-turn-id") != request.turn_id:
             raise RuntimeError(
                 "gpt-auto unresolved turn does not belong to the recovered request"
