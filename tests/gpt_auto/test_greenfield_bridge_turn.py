@@ -913,6 +913,67 @@ async def test_same_response_slot_id_replacement_is_adopted_without_refresh() ->
     assert turn._response_message_id == "assistant-final"
 
 
+@pytest.mark.asyncio
+async def test_text_progress_after_recovery_budget_does_not_fail_replacement() -> None:
+    """A proven replacement with new text still wins over stale recovery state."""
+    chat = _Chat()
+    final_snapshot = snap(
+        users=1,
+        assistants=1,
+        user="Review AU01",
+        assistant="final response",
+        assistant_id="assistant-final",
+        complete=True,
+    )
+    chat._snapshots = iter(
+        [
+            snap(),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01"),
+            snap(users=1, user="Review AU01", generating=True),
+            snap(
+                users=1,
+                assistants=1,
+                user="Review AU01",
+                assistant="partial response",
+                assistant_id="assistant-provisional",
+            ),
+            final_snapshot,
+        ]
+        + [final_snapshot] * 20
+    )
+    refresh_calls = 0
+
+    async def refresh_same_conversation(*_args, **_kwargs) -> bool:
+        nonlocal refresh_calls
+        refresh_calls += 1
+        return True
+
+    chat.refresh_bound_conversation = refresh_same_conversation
+    turn = GptAutoTurn(
+        chat,
+        SessionPrompt(turn_id="turn-replacement-after-recovery", body="Review AU01"),
+        lambda _observation: None,
+    )
+
+    original_snapshot = chat.snapshot
+
+    async def snapshot_with_exhausted_recovery():
+        observed = await original_snapshot()
+        if observed.latest_assistant_id == "assistant-provisional":
+            turn._response_recovery_refresh_attempts = 1
+            turn._response_recovery_final_grace_started_at = 0.0
+        return observed
+
+    chat.snapshot = snapshot_with_exhausted_recovery
+
+    result = await turn.run()
+
+    assert result.final_summary == "final response"
+    assert refresh_calls == 0
+    assert chat.runtime.bridge.submit_calls == 1
+
+
 def test_same_response_slot_replacement_requires_one_prompt_owned_assistant() -> None:
     current = replace(
         snap(
