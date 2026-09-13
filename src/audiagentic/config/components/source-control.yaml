@@ -7,6 +7,10 @@ context-hook: audiagentic.components.source_control.source_control_api.context
 depends-on:
   - project
 
+# Disabled by default: commit-triggered ledger stamping previously caused
+# release/ledger feedback loops. Enable only for an explicitly governed setup.
+post-commit-ledger-stamp: false
+
 files:
   - path: .audiagentic/skills/ag-check-in-prep/skill.md
     lifecycle: required-managed

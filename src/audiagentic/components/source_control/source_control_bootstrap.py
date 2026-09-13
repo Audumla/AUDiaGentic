@@ -1,6 +1,7 @@
 """Source control component bootstrap.
 
-Detects git and gh CLI availability and manages the post-commit ledger-stamp hook.
+Detects git and gh CLI availability and manages the opt-in post-commit
+ledger-stamp hook.
 External MCP server registration is handled generically by mcp.config_builder via
 the external-mcp-servers declarations in source-control.yaml.
 """
@@ -73,6 +74,13 @@ def ledger_integration_enabled(project_root: Path) -> bool:
     return is_installed("agent-ledger", project_root)
 
 
+def post_commit_ledger_stamp_enabled(project_root: Path) -> bool:
+    """Return whether commit-triggered ledger stamping is explicitly enabled."""
+    del project_root  # The component policy is packaged/project-independent.
+    cfg = load_yaml_file(component_yaml_path(_COMPONENT_ID))
+    return bool(cfg.get("post-commit-ledger-stamp", False))
+
+
 EVENT_INSTALLED = "lifecycle.component.installed"
 EVENT_UNINSTALLED = "lifecycle.component.uninstalled"
 
@@ -87,7 +95,11 @@ def on_component_lifecycle(event_type: str, payload: dict, metadata: dict) -> No
         return
 
     if event_type == EVENT_INSTALLED:
-        install_post_commit_hook(project_root)
+        if post_commit_ledger_stamp_enabled(project_root):
+            install_post_commit_hook(project_root)
+        else:
+            # Remove a previously managed hook when policy is disabled.
+            remove_post_commit_hook(project_root)
     elif event_type == EVENT_UNINSTALLED:
         remove_post_commit_hook(project_root)
 
@@ -185,6 +197,12 @@ def install_post_commit_hook(
     Returns dict with keys: installed (bool), path, ownership_mode (whole-file|block|collision|skipped),
     reason, dry_run_changes. On collision a warning is logged; bytes never overwritten.
     """
+    if not post_commit_ledger_stamp_enabled(project_root):
+        return {
+            "installed": False,
+            "reason": "post-commit ledger stamping disabled by policy",
+            "ownership_mode": "skipped",
+        }
     if not ledger_integration_enabled(project_root):
         return {
             "installed": False,
