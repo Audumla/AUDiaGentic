@@ -739,6 +739,22 @@ class SessionRuntime:
             return {"available": False}
         return self._call(self._session_runtime_status(session_id), timeout=10)
 
+    def session_failure_disposition(self, session_id: str) -> SessionFailureDisposition:
+        """Return the provider's disposition for the most recent failed turn."""
+        if self._loop is None:
+            return SessionFailureDisposition.TERMINATE
+
+        async def _read() -> SessionFailureDisposition:
+            handle = self._handles.get(session_id)
+            if handle is None:
+                return SessionFailureDisposition.TERMINATE
+            try:
+                return SessionFailureDisposition(handle.transport.turn_failure_disposition())
+            except (AttributeError, TypeError, ValueError):
+                return SessionFailureDisposition.TERMINATE
+
+        return self._call(_read(), timeout=10)
+
     def reconcile_active_transport(self, session_id: str, request_id: str) -> dict[str, Any]:
         """Ask a live transport to revalidate an active turn's binding.
 
@@ -2732,7 +2748,10 @@ class SessionRuntime:
         """Ask a provider state machine whether a failed turn is resumable."""
         try:
             disposition = handle.transport.turn_failure_disposition()
-            return SessionFailureDisposition(disposition) is SessionFailureDisposition.RETAIN
+            return SessionFailureDisposition(disposition) in {
+                SessionFailureDisposition.RETAIN,
+                SessionFailureDisposition.TERMINAL_FAILED,
+            }
         except (AttributeError, TypeError, ValueError):
             # Existing transports and test doubles predate this optional
             # capability; their safe default is to terminate the session.

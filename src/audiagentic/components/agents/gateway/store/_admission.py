@@ -10,8 +10,8 @@ import hashlib
 import json
 import logging
 import uuid
-from pathlib import Path
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from audiagentic.components.agents.agents_paths import (
@@ -59,6 +59,27 @@ def clear_active_work(service_root: Path | None, request_id: str) -> None:
     if service_root is None:
         return
     active_work_path(service_root, request_id).unlink(missing_ok=True)
+
+
+def count_active_work(service_root: Path) -> int:
+    """Count valid durable non-terminal work across all gateway projects."""
+    count = 0
+    active_root = service_root / _shared.ACTIVE_WORK_DIR
+    if not active_root.exists():
+        return 0
+    for path in active_root.glob("req_*.json"):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            project_value = payload.get("project-root")
+            request_id = payload.get("request-id")
+            if not isinstance(project_value, str) or not isinstance(request_id, str):
+                continue
+            record = _records.read_record(Path(project_value), request_id)
+        except (OSError, ValueError, AudiaGenticError):
+            continue
+        if record.get("state") in {"queued", "running"}:
+            count += 1
+    return count
 
 
 def hash_idempotency_key(idempotency_key: str) -> str:

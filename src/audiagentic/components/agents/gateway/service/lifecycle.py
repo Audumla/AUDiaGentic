@@ -52,16 +52,20 @@ def gateway_quiescence_facts(service_root: Path | None = None) -> dict[str, Any]
     """Redacted domain quiescence facts. Foundation never inspects internals —
     this is the gateway-owned callback data contract (SH10 step 2)."""
     from audiagentic.components.agents.gateway import api as api
+    from audiagentic.components.agents.gateway import store
     from audiagentic.components.agents.gateway.ingress import ingress_backlog
     from audiagentic.components.agents.gateway.session.sessions import peek_session_runtime
 
-    depths = api.get_queue_manager().project_queue_depths(service_root) if service_root is not None else {}
+    queue_manager = api.get_queue_manager()
+    depths = queue_manager.project_queue_depths(service_root) if service_root is not None else {}
     pending = sum(d.get("pending", 0) for d in depths.values())
     running = sum(d.get("running", 0) for d in depths.values())
     runtime = peek_session_runtime()
     live_sessions = len(runtime.live_session_ids()) if runtime is not None else 0
     backlog = ingress_backlog(service_root)
     active_operations = 0
+    recovery_pending = queue_manager.recovery_pending_count(service_root)
+    durable_active_work = store.count_active_work(service_root) if service_root is not None else 0
     if service_root is not None:
         from audiagentic.components.agents.gateway.operations import ManagementOperationStore
 
@@ -77,9 +81,13 @@ def gateway_quiescence_facts(service_root: Path | None = None) -> dict[str, Any]
         "live-sessions": live_sessions,
         "ingress-pending": backlog["pending"],
         "active-gateway-operations": active_operations,
+        "recovery-pending": recovery_pending,
+        "durable-active-work": durable_active_work,
         "quiescent": (
             pending == 0
             and running == 0
+            and recovery_pending == 0
+            and durable_active_work == 0
             and live_sessions == 0
             and backlog["pending"] == 0
             and active_operations == 0

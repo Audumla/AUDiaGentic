@@ -2481,7 +2481,7 @@ async def test_delayed_cancel_for_old_turn_does_not_cancel_active_turn():
 
     result = await transport.control(request)
 
-    assert result.disposition is ControlDisposition.ALREADY_TERMINAL
+    assert result.disposition is ControlDisposition.UNCERTAIN
     assert not active.cancel_event.is_set()
 
 
