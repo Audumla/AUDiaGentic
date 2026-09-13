@@ -151,6 +151,14 @@ def transition_record(
                     record.get("diagnostics"),
                     classify_error(updates.get("error")),
                 )
+        if new_state in _shared.TERMINAL_STATES:
+            updated["recovery-required"] = False
+            recovery = updated.get("recovery")
+            if isinstance(recovery, dict):
+                recovery = dict(recovery)
+                recovery["next-retry-at"] = None
+                recovery["retry-delay-seconds"] = 0
+                updated["recovery"] = recovery
         write_record(project_root, updated)
         record_gateway_timeline(
             project_root,
