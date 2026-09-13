@@ -163,7 +163,7 @@ class TestCrashWindowC_ClaimedBeforeStart:
 # ---------------------------------------------------------------------------
 
 class TestCrashWindowD_RunningNotTerminal:
-    """Request remains running and is resumed by the replacement owner."""
+    """Worker-backed request remains running until explicit safe recovery."""
 
     def test_running_interrupted_not_replay(self, tmp_path: Path) -> None:
         """Running request is recovered in place without a terminal event."""
@@ -196,9 +196,9 @@ class TestCrashWindowD_RunningNotTerminal:
 
         recovered = store.read_record(project_root, record["request-id"])
         assert recovered["state"] == "running"
-        assert recovered["recovery-required"] is True
-        assert recovered["dispatch-owner-epoch"] == "new-epoch"
-        assert report.running == ((project_root, record["request-id"]),)
+        assert recovered["recovery-required"] is False
+        assert recovered["dispatch-owner-epoch"] == "old-epoch"
+        assert report.deferred == ((project_root, record["request-id"]),)
 
 # ---------------------------------------------------------------------------
 # Crash window E: terminal transition succeeds but index cleanup fails
@@ -617,7 +617,8 @@ class TestRecoveryIdempotency:
             service_root, live_owner_epoch="new-epoch",
         )
 
-        assert len(first.running) >= 1
-        assert second.skipped_live >= 1
+        assert first.deferred == ((project_root, record["request-id"]),)
+        assert second.deferred == ((project_root, record["request-id"]),)
+        assert second.skipped_live == 0
         assert second.replay_required == 0
         assert second.interrupted == 0
