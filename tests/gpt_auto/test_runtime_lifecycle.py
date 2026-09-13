@@ -32,6 +32,58 @@ from audiagentic.foundation.contracts.errors import AudiaGenticError
 from .test_greenfield_config_urls import valid_config
 
 
+@pytest.mark.asyncio
+async def test_unavailable_remote_cdp_never_starts_a_local_browser(monkeypatch) -> None:
+    value = valid_config()
+    value["cdp"]["endpoint"] = "http://192.0.2.10:9222"
+    value["browser"]["executable"] = r"C:\remote-browser-is-not-used.exe"
+    config = GptAutoConfig.from_dict(value)
+    runtime = GptAutoProviderRuntime(config)
+    launched = False
+
+    async def unavailable() -> bool:
+        return False
+
+    async def should_not_launch():
+        nonlocal launched
+        launched = True
+        raise AssertionError("remote CDP must not launch a local browser")
+
+    monkeypatch.setattr(runtime, "_cdp_available", unavailable)
+    monkeypatch.setattr(runtime._browser, "ensure_browser_for_cdp", should_not_launch)
+
+    with pytest.raises(RuntimeError, match="configured remote CDP endpoint is unavailable"):
+        await runtime.ensure_available()
+
+    assert not launched
+    assert runtime.state is ProviderState.FAILED
+
+
+@pytest.mark.asyncio
+async def test_cdp_readiness_probes_the_configured_endpoint(monkeypatch) -> None:
+    value = valid_config()
+    value["cdp"]["endpoint"] = "http://192.0.2.10:9444"
+    config = GptAutoConfig.from_dict(value)
+    runtime = GptAutoProviderRuntime(config)
+    calls = []
+
+    class _Writer:
+        def close(self) -> None:
+            pass
+
+        async def wait_closed(self) -> None:
+            pass
+
+    async def open_connection(host, port):
+        calls.append((host, port))
+        return object(), _Writer()
+
+    monkeypatch.setattr(runtime_module.asyncio, "open_connection", open_connection)
+
+    assert await runtime._cdp_available()
+    assert calls == [("192.0.2.10", 9444)]
+
+
 def test_unresolved_recovery_can_match_prompt_text_without_provider_message_id() -> None:
     config = GptAutoConfig.from_dict(valid_config())
     chat = PersistentChat(

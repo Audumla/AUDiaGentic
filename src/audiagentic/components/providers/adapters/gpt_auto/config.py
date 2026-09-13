@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import sys
 from dataclasses import dataclass
@@ -127,10 +128,21 @@ class BrowserConfig:
 
 @dataclass(frozen=True)
 class CdpConfig:
+    endpoint: str
     connect_timeout_seconds: float
     protocol_timeout_seconds: float
     recovery_timeout_seconds: float
     devtools_active_port_file: Path | None
+
+    @property
+    def is_remote(self) -> bool:
+        hostname = urlparse(self.endpoint).hostname
+        if hostname is None or hostname.lower() == "localhost":
+            return False
+        try:
+            return not ipaddress.ip_address(hostname).is_loopback
+        except ValueError:
+            return True
 
 
 @dataclass(frozen=True)
@@ -232,7 +244,7 @@ class GptAutoConfig:
 
     @property
     def cdp_url(self) -> str:
-        return f"http://127.0.0.1:{self.browser.remote_debugging_port}"
+        return self.cdp.endpoint
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> GptAutoConfig:
@@ -284,13 +296,6 @@ class GptAutoConfig:
             },
         )
         executable = Path(_string(browser_data, "executable"))
-        if not executable.is_file():
-            candidates = discover_browser_candidates()
-            if candidates:
-                hint = "; detected on this machine: " + ", ".join(str(c) for c in candidates)
-            else:
-                hint = "; no supported browser (Brave/Chrome) was detected on this machine"
-            _invalid(f"browser.executable must name an existing file (got {executable}){hint}")
         port = _integer(browser_data, "remote-debugging-port")
         if not 1 <= port <= 65535:
             _invalid("browser.remote-debugging-port must be between 1 and 65535")
@@ -322,6 +327,7 @@ class GptAutoConfig:
         _exact_keys(
             cdp_data,
             {
+                "endpoint",
                 "connect-timeout-seconds",
                 "protocol-timeout-seconds",
                 "recovery-timeout-seconds",
@@ -329,17 +335,28 @@ class GptAutoConfig:
             },
             "cdp",
         )
+        endpoint = _cdp_endpoint(_string(cdp_data, "endpoint"))
         active_port = cdp_data.get("devtools-active-port-file")
         if active_port is not None and (
             not isinstance(active_port, str) or not active_port or "\x00" in active_port
         ):
             _invalid("cdp.devtools-active-port-file must be null or a valid path string")
         cdp = CdpConfig(
+            endpoint=endpoint,
             connect_timeout_seconds=_positive(cdp_data, "connect-timeout-seconds"),
             protocol_timeout_seconds=_positive(cdp_data, "protocol-timeout-seconds"),
             recovery_timeout_seconds=_positive(cdp_data, "recovery-timeout-seconds"),
             devtools_active_port_file=Path(active_port) if active_port else None,
         )
+        if not cdp.is_remote and not executable.is_file():
+            candidates = discover_browser_candidates()
+            if candidates:
+                hint = "; detected on this machine: " + ", ".join(str(c) for c in candidates)
+            else:
+                hint = "; no supported browser (Brave/Chrome) was detected on this machine"
+            _invalid(f"browser.executable must name an existing file (got {executable}){hint}")
+        if cdp.is_remote and active_port:
+            _invalid("cdp.devtools-active-port-file is only valid for a local CDP endpoint")
 
         chat_data = _mapping(settings, "chat")
         _exact_keys(chat_data, {"ready-timeout-seconds", "navigation-timeout-seconds"}, "chat")
@@ -800,5 +817,22 @@ def _chatgpt_url(value: Any) -> str:
         _invalid("project-url must be a ChatGPT URL")
     if not parse_project_id(value):
         _invalid("project-url must identify a ChatGPT Project")
+    return value.rstrip("/")
+
+
+def _cdp_endpoint(value: str) -> str:
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https", "ws", "wss"}:
+        _invalid("cdp.endpoint must use http, https, ws, or wss")
+    if parsed.hostname is None or parsed.username or parsed.password:
+        _invalid("cdp.endpoint must contain a host and no user credentials")
+    if parsed.path not in {"", "/"} or parsed.params or parsed.query or parsed.fragment:
+        _invalid("cdp.endpoint must identify the CDP origin without a path or query")
+    try:
+        port = parsed.port
+    except ValueError:
+        _invalid("cdp.endpoint must contain a valid port")
+    if port is not None and not 1 <= port <= 65535:
+        _invalid("cdp.endpoint port must be between 1 and 65535")
     return value.rstrip("/")
 
